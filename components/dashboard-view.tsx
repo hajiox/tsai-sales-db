@@ -7,11 +7,12 @@ import { supabase } from "../lib/supabase"
 
 export default function DashboardView() {
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
-  const [todayRegisterCount, setTodayRegisterCount] = useState<number | null>(null)
+  const [registerCount, setRegisterCount] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   )
   const [ecTotalAmount, setEcTotalAmount] = useState<number | null>(null)
+  const [floorSales, setFloorSales] = useState<number | null>(null)
 
   useEffect(() => {
     const fetchMonthlySales = async () => {
@@ -52,25 +53,31 @@ export default function DashboardView() {
   }, [])
 
   useEffect(() => {
-    const fetchRegisterCount = async () => {
-      const today = new Date().toISOString().split("T")[0]
-
+    const fetchFloorAndRegister = async () => {
       const { data, error } = await supabase
         .from("daily_sales_report")
-        .select("register_count")
-        .eq("date", today)
+        .select("floor_sales, register_count")
+        .eq("date", selectedDate)
 
       if (error) {
-        console.error("Error fetching register count", error)
+        console.error("Error fetching floor sales/register count", error)
         return
       }
 
-      const total = (data || []).reduce((sum, row) => sum + (row.register_count || 0), 0)
-      setTodayRegisterCount(total)
+      const totalFloor = (data || []).reduce(
+        (sum, row) => sum + (row.floor_sales || 0),
+        0,
+      )
+      const totalRegister = (data || []).reduce(
+        (sum, row) => sum + (row.register_count || 0),
+        0,
+      )
+      setFloorSales(totalFloor)
+      setRegisterCount(totalRegister)
     }
 
-    fetchRegisterCount()
-  }, [])
+    fetchFloorAndRegister()
+  }, [selectedDate])
 
   useEffect(() => {
     const fetchEcTotal = async () => {
@@ -141,8 +148,10 @@ export default function DashboardView() {
             <Yen className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">¥0</div>
-            <p className="text-xs text-gray-500 mt-1">データなし</p>
+            <div className="text-2xl font-bold">
+              {formatCurrency((floorSales || 0) + (ecTotalAmount || 0))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
           </CardContent>
         </Card>
 
@@ -167,12 +176,8 @@ export default function DashboardView() {
             <Users className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {todayRegisterCount !== null ? todayRegisterCount : 0}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {todayRegisterCount !== null ? "今日" : "データなし"}
-            </p>
+            <div className="text-2xl font-bold">{registerCount ?? 0}</div>
+            <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
           </CardContent>
         </Card>
 
