@@ -16,7 +16,7 @@ export default function DashboardView() {
 
   useEffect(() => {
     const fetchMonthlySales = async () => {
-      const start = new Date()
+      const start = new Date(selectedDate)
       start.setDate(1)
       const end = new Date(start)
       end.setMonth(end.getMonth() + 1)
@@ -50,7 +50,7 @@ export default function DashboardView() {
     }
 
     fetchMonthlySales()
-  }, [])
+  }, [selectedDate])
 
   useEffect(() => {
     const fetchFloorAndRegister = async () => {
