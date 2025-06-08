@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, CheckCircle, Search } from "lucide-react"
+import { CalendarIcon, CheckCircle } from "lucide-react"
 import { supabase, type DailySalesReport } from "../lib/supabase"
 
 const salesChannels = [
@@ -22,9 +22,10 @@ const salesChannels = [
 ]
 
 export default function SalesEditView() {
-  const [searchDate, setSearchDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0],
+  )
   const [selectedRecord, setSelectedRecord] = useState<DailySalesReport | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [reportData, setReportData] = useState<DailySalesReport | null>(null)
 
@@ -108,52 +109,55 @@ EC合計: ${totalEcCount}件 / ${formatCurrency(totalEcAmount)}
 ${data.remarks ? `備考: ${data.remarks}` : ""}`
   }
 
-  const searchRecord = async () => {
-    setIsLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from("daily_sales_report")
-        .select("*")
-        .eq("date", formatDate(searchDate))
-        .single()
+  useEffect(() => {
+    const fetchRecord = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("daily_sales_report")
+          .select("*")
+          .eq("date", selectedDate)
+          .single()
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          alert("指定された日付のデータが見つかりません")
-        } else {
-          throw error
+        if (error) {
+          if (error.code === "PGRST116") {
+            alert("指定された日付のデータが見つかりません")
+          } else {
+            throw error
+          }
+          setSelectedRecord(null)
+          return
         }
-        setSelectedRecord(null)
-        return
-      }
 
-      setSelectedRecord(data)
-      setFormData({
-        floor_sales: data.floor_sales.toString(),
-        floor_total: data.floor_total.toString(),
-        cash_income: data.cash_income.toString(),
-        register_count: data.register_count.toString(),
-        remarks: data.remarks,
-        amazon_count: data.amazon_count.toString(),
-        amazon_amount: data.amazon_amount.toString(),
-        rakuten_count: data.rakuten_count.toString(),
-        rakuten_amount: data.rakuten_amount.toString(),
-        yahoo_count: data.yahoo_count.toString(),
-        yahoo_amount: data.yahoo_amount.toString(),
-        mercari_count: data.mercari_count.toString(),
-        mercari_amount: data.mercari_amount.toString(),
-        base_count: data.base_count.toString(),
-        base_amount: data.base_amount.toString(),
-        qoo10_count: data.qoo10_count.toString(),
-        qoo10_amount: data.qoo10_amount.toString(),
-      })
-    } catch (error) {
-      console.error("Error searching record:", error)
-      alert("データの検索に失敗しました")
-    } finally {
-      setIsLoading(false)
+        setSelectedRecord(data)
+        setFormData({
+          floor_sales: data.floor_sales.toString(),
+          floor_total: data.floor_total.toString(),
+          cash_income: data.cash_income.toString(),
+          register_count: data.register_count.toString(),
+          remarks: data.remarks,
+          amazon_count: data.amazon_count.toString(),
+          amazon_amount: data.amazon_amount.toString(),
+          rakuten_count: data.rakuten_count.toString(),
+          rakuten_amount: data.rakuten_amount.toString(),
+          yahoo_count: data.yahoo_count.toString(),
+          yahoo_amount: data.yahoo_amount.toString(),
+          mercari_count: data.mercari_count.toString(),
+          mercari_amount: data.mercari_amount.toString(),
+          base_count: data.base_count.toString(),
+          base_amount: data.base_amount.toString(),
+          qoo10_count: data.qoo10_count.toString(),
+          qoo10_amount: data.qoo10_amount.toString(),
+        })
+      } catch (error) {
+        console.error("Error searching record:", error)
+        alert("データの検索に失敗しました")
+      } finally {
+        /* noop */
+      }
     }
-  }
+
+    fetchRecord()
+  }, [selectedDate])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -208,36 +212,33 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
         <p className="text-sm text-gray-600">過去の売上データを検索・修正できます</p>
       </div>
 
-      {/* Search Section */}
+      {/* Date Selector */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">データ検索</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 items-end">
-            <div className="space-y-2 flex-1">
-              <Label className="text-sm font-medium">検索日付</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal text-sm h-9">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formatDateJapanese(searchDate)}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={searchDate}
-                    onSelect={(date) => date && setSearchDate(date)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <Button onClick={searchRecord} disabled={isLoading} className="text-sm h-9">
-              <Search className="mr-2 h-4 w-4" />
-              {isLoading ? "検索中..." : "検索"}
-            </Button>
+          <div className="space-y-2 w-full">
+            <Label className="text-sm font-medium">対象日付</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-left font-normal text-sm h-9"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {formatDateJapanese(new Date(selectedDate))}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={new Date(selectedDate)}
+                  onSelect={(date) => date && setSelectedDate(formatDate(date))}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
           </div>
         </CardContent>
       </Card>

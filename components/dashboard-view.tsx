@@ -7,7 +7,13 @@ import { supabase } from "../lib/supabase"
 
 export default function DashboardView() {
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
-  const [todayRegisterCount, setTodayRegisterCount] = useState<number | null>(null)
+  const [todayRegisterCount, setTodayRegisterCount] = useState<number | null>(
+    null,
+  )
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0],
+  )
+  const [ecTotalAmount, setEcTotalAmount] = useState<number | null>(null)
 
   useEffect(() => {
     const fetchMonthlySales = async () => {
@@ -68,6 +74,38 @@ export default function DashboardView() {
     fetchRegisterCount()
   }, [])
 
+  useEffect(() => {
+    const fetchEcTotal = async () => {
+      const { data, error } = await supabase
+        .from("daily_sales_report")
+        .select(
+          "amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount",
+        )
+        .eq("date", selectedDate)
+
+      if (error) {
+        console.error("Error fetching ec total amount", error)
+        return
+      }
+
+      const total = (data || []).reduce(
+        (sum, row) =>
+          sum +
+          (row.amazon_amount || 0) +
+          (row.rakuten_amount || 0) +
+          (row.yahoo_amount || 0) +
+          (row.mercari_amount || 0) +
+          (row.base_amount || 0) +
+          (row.qoo10_amount || 0),
+        0,
+      )
+
+      setEcTotalAmount(total)
+    }
+
+    fetchEcTotal()
+  }, [selectedDate])
+
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("ja-JP", {
       style: "currency",
@@ -77,9 +115,24 @@ export default function DashboardView() {
 
   return (
     <div>
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">ダッシュボード</h2>
-        <p className="text-sm text-gray-600">売上データの概要と分析</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">ダッシュボード</h2>
+          <p className="text-sm text-gray-600">売上データの概要と分析</p>
+        </div>
+        <div className="text-right">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="border rounded text-xs p-1 mb-1"
+          />
+          {ecTotalAmount !== null && (
+            <div className="text-sm text-right font-semibold text-gray-700 mb-2">
+              今日のEC売上合計：{formatCurrency(ecTotalAmount)}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -131,8 +184,10 @@ export default function DashboardView() {
             <BarChart3 className="h-4 w-4 text-gray-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">¥0</div>
-            <p className="text-xs text-gray-500 mt-1">今日</p>
+            <div className="text-2xl font-bold">
+              {ecTotalAmount !== null ? formatCurrency(ecTotalAmount) : "¥0"}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
           </CardContent>
         </Card>
       </div>
