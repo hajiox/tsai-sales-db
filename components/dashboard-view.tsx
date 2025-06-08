@@ -7,6 +7,9 @@ import { supabase } from "../lib/supabase"
 
 export default function DashboardView() {
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
+  const [monthlyFloorSales, setMonthlyFloorSales] = useState<number | null>(null)
+  const [monthlyEcTotal, setMonthlyEcTotal] = useState<number | null>(null)
+  const [monthlyRegisterCount, setMonthlyRegisterCount] = useState<number | null>(null)
   const [registerCount, setRegisterCount] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
@@ -15,41 +18,52 @@ export default function DashboardView() {
   const [floorSales, setFloorSales] = useState<number | null>(null)
 
   useEffect(() => {
-    const fetchMonthlySales = async () => {
-      const start = new Date(selectedDate)
+    const fetchMonthlyData = async () => {
+      const start = new Date(`${selectedDate}T00:00:00`)
       start.setDate(1)
-      const end = new Date(start)
-      end.setMonth(end.getMonth() + 1)
 
       const startDate = start.toISOString().split("T")[0]
-      const endDate = end.toISOString().split("T")[0]
 
       const { data, error } = await supabase
         .from("daily_sales_report")
-        .select("floor_sales, amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount")
+        .select(
+          "floor_sales, register_count, amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount",
+        )
         .gte("date", startDate)
-        .lt("date", endDate)
+        .lte("date", selectedDate)
 
       if (error) {
-        console.error("Error fetching monthly sales", error)
+        console.error("Error fetching monthly data", error)
         return
       }
 
-      const total = (data || []).reduce((sum, row) => {
-        const ecAmount =
-          row.amazon_amount +
-          row.rakuten_amount +
-          row.yahoo_amount +
-          row.mercari_amount +
-          row.base_amount +
-          row.qoo10_amount
-        return sum + row.floor_sales + ecAmount
-      }, 0)
+      const floor = (data || []).reduce(
+        (sum, row) => sum + (row.floor_sales || 0),
+        0,
+      )
+      const register = (data || []).reduce(
+        (sum, row) => sum + (row.register_count || 0),
+        0,
+      )
+      const ec = (data || []).reduce(
+        (sum, row) =>
+          sum +
+          (row.amazon_amount || 0) +
+          (row.rakuten_amount || 0) +
+          (row.yahoo_amount || 0) +
+          (row.mercari_amount || 0) +
+          (row.base_amount || 0) +
+          (row.qoo10_amount || 0),
+        0,
+      )
 
-      setMonthlySales(total)
+      setMonthlyFloorSales(floor)
+      setMonthlyRegisterCount(register)
+      setMonthlyEcTotal(ec)
+      setMonthlySales(floor + ec)
     }
 
-    fetchMonthlySales()
+    fetchMonthlyData()
   }, [selectedDate])
 
   useEffect(() => {
@@ -141,58 +155,110 @@ export default function DashboardView() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">今日の売上</CardTitle>
-            <Yen className="h-4 w-4 text-gray-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency((floorSales || 0) + (ecTotalAmount || 0))}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
-          </CardContent>
-        </Card>
+      <div className="space-y-4 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">フロア売上</CardTitle>
+              <Yen className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatCurrency(floorSales || 0)}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">月間売上</CardTitle>
-            <TrendingUp className="h-4 w-4 text-gray-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {monthlySales !== null ? formatCurrency(monthlySales) : "¥0"}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {monthlySales !== null ? "今月" : "データなし"}
-            </p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">レジ通過人数</CardTitle>
+              <Users className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{registerCount ?? 0}</div>
+              <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">レジ通過人数</CardTitle>
-            <Users className="h-4 w-4 text-gray-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{registerCount ?? 0}</div>
-            <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">EC売上</CardTitle>
+              <BarChart3 className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {ecTotalAmount !== null ? formatCurrency(ecTotalAmount) : "¥0"}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">EC売上</CardTitle>
-            <BarChart3 className="h-4 w-4 text-gray-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {ecTotalAmount !== null ? formatCurrency(ecTotalAmount) : "¥0"}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">売上日計</CardTitle>
+              <TrendingUp className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatCurrency((floorSales || 0) + (ecTotalAmount || 0))}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">フロア累計</CardTitle>
+              <Yen className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {monthlyFloorSales !== null ? formatCurrency(monthlyFloorSales) : "¥0"}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">EC累計</CardTitle>
+              <BarChart3 className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {monthlyEcTotal !== null ? formatCurrency(monthlyEcTotal) : "¥0"}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">レジ累計</CardTitle>
+              <Users className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{monthlyRegisterCount ?? 0}</div>
+              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">売上総計</CardTitle>
+              <TrendingUp className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {monthlySales !== null ? formatCurrency(monthlySales) : "¥0"}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate}</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Charts Placeholder */}
