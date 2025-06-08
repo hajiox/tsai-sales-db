@@ -7,13 +7,11 @@ import { supabase } from "../lib/supabase"
 
 export default function DashboardView() {
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
-  const [todayRegisterCount, setTodayRegisterCount] = useState<number | null>(
-    null,
-  )
+  const [todayRegisterCount, setTodayRegisterCount] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   )
-  const [ec_total_amount, setEcTotalAmount] = useState<number | null>(null)
+  const [ecTotalAmount, setEcTotalAmount] = useState<number | null>(null)
 
   useEffect(() => {
     const fetchMonthlySales = async () => {
@@ -127,10 +125,11 @@ export default function DashboardView() {
             onChange={(e) => setSelectedDate(e.target.value)}
             className="border rounded text-xs p-1 mb-1"
           />
-          <div className="text-sm text-gray-600">
-            今日のEC売上合計：
-            {ec_total_amount !== null ? formatCurrency(ec_total_amount) : "¥0"}
-          </div>
+          {ecTotalAmount !== null && (
+            <div className="text-sm text-right font-semibold text-gray-700 mb-2">
+              今日のEC売上合計：{formatCurrency(ecTotalAmount)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -184,7 +183,7 @@ export default function DashboardView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {ec_total_amount !== null ? formatCurrency(ec_total_amount) : "¥0"}
+              {ecTotalAmount !== null ? formatCurrency(ecTotalAmount) : "¥0"}
             </div>
             <p className="text-xs text-gray-500 mt-1">{selectedDate}</p>
           </CardContent>
