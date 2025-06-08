@@ -75,139 +75,138 @@ export default function DashboardView() {
       currencyDisplay: "symbol",
     }).format(amount)
 
-  <div>
-  <div>
-    <h2 className="text-2xl font-semibold text-gray-900 mb-2">ダッシュボード</h2>
-    <p className="text-sm text-gray-600">売上データの概要と分析</p>
-  </div>
+  return (
+    <div>
+      <div>
+        <h2 className="text-2xl font-semibold text-gray-900 mb-2">ダッシュボード</h2>
+        <p className="text-sm text-gray-600">売上データの概要と分析</p>
+      </div>
 
-  {/* Summary Cards */}
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-    {/* 今日の売上 */}
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-gray-600">今日の売上</CardTitle>
-        <Yen className="h-4 w-4 text-gray-400" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">¥0</div>
-        <p className="text-xs text-gray-500 mt-1">データなし</p>
-      </CardContent>
-    </Card>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">今日の売上</CardTitle>
+            <Yen className="h-4 w-4 text-gray-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">¥0</div>
+            <p className="text-xs text-gray-500 mt-1">データなし</p>
+          </CardContent>
+        </Card>
 
-    {/* 月間売上 */}
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-gray-600">月間売上</CardTitle>
-        <TrendingUp className="h-4 w-4 text-gray-400" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">
-          {monthlySales !== null ? formatCurrency(monthlySales) : "¥0"}
-        </div>
-        <p className="text-xs text-gray-500 mt-1">
-          {monthlySales !== null ? "今月" : "データなし"}
-        </p>
-      </CardContent>
-    </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">月間売上</CardTitle>
+            <TrendingUp className="h-4 w-4 text-gray-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {monthlySales !== null ? formatCurrency(monthlySales) : "¥0"}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {monthlySales !== null ? "今月" : "データなし"}
+            </p>
+          </CardContent>
+        </Card>
 
-    {/* レジ通過人数 */}
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-gray-600">レジ通過人数</CardTitle>
-        <Users className="h-4 w-4 text-gray-400" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">
-          {todayRegisterCount !== null ? todayRegisterCount : 0}
-        </div>
-        <p className="text-xs text-gray-500 mt-1">
-          {todayRegisterCount !== null ? "今日" : "データなし"}
-        </p>
-      </CardContent>
-    </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">レジ通過人数</CardTitle>
+            <Users className="h-4 w-4 text-gray-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {todayRegisterCount !== null ? todayRegisterCount : 0}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {todayRegisterCount !== null ? "今日" : "データなし"}
+            </p>
+          </CardContent>
+        </Card>
 
-    {/* EC売上（仮） */}
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-gray-600">EC売上</CardTitle>
-        <BarChart3 className="h-4 w-4 text-gray-400" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">¥0</div>
-        <p className="text-xs text-gray-500 mt-1">今日</p>
-      </CardContent>
-    </Card>
-  </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">EC売上</CardTitle>
+            <BarChart3 className="h-4 w-4 text-gray-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">¥0</div>
+            <p className="text-xs text-gray-500 mt-1">今日</p>
+          </CardContent>
+        </Card>
+      </div>
 
-  {/* グラフエリア */}
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">売上推移</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-          <div className="text-center">
-            <BarChart3 className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">グラフは今後実装予定</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Charts Placeholder */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">売上推移</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+              <div className="text-center">
+                <BarChart3 className="h-12 w-12 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">グラフは今後実装予定</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">ECサイト別売上</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-          <div className="text-center">
-            <TrendingUp className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">チャートは今後実装予定</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">ECサイト別売上</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+              <div className="text-center">
+                <TrendingUp className="h-12 w-12 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">チャートは今後実装予定</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-  {/* AI分析エリア */}
-  <div className="space-y-4 mt-10">
-    <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
+      {/* AI Summary Boxes */}
+      <div className="space-y-4 mt-10">
+        <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
 
-    <Card className="bg-gray-50">
-      <CardContent className="p-4">
-        <h4 className="text-sm font-medium mb-2">
-          【AI】2025年6月　前月・前々月との比較分岐と考察（月末に自動更新）
-        </h4>
-        <p className="text-xs text-gray-600 leading-relaxed">
-          2025年6月の売上は前月比で5%増加しています。楽天とAmazonでの売上が好調で、季節商品や夏物需要の高まりが主因と考えられます。
-        </p>
-      </CardContent>
-    </Card>
+        <Card className="bg-gray-50">
+          <CardContent className="p-4">
+            <h4 className="text-sm font-medium mb-2">
+              【AI】2025年6月　前月・前々月との比較分岐と考察（月末に自動更新）
+            </h4>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              2025年6月の売上は前月比で5%増加。楽天とAmazonが好調で、夏物需要が要因と考えられる。
+            </p>
+          </CardContent>
+        </Card>
 
-    <Card className="bg-gray-50">
-      <CardContent className="p-4">
-        <h4 className="text-sm font-medium mb-2">
-          【AI】2025年6月　前年同月と比較分析と考察（月末に自動更新）
-        </h4>
-        <p className="text-xs text-gray-600 leading-relaxed">
-          前年同月比で総売上は12%増。特にYahoo!ショッピングとQoo10の成長が顕著でした。
-        </p>
-      </CardContent>
-    </Card>
+        <Card className="bg-gray-50">
+          <CardContent className="p-4">
+            <h4 className="text-sm font-medium mb-2">
+              【AI】2025年6月　前年同月と比較分析と考察（月末に自動更新）
+            </h4>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              総売上は前年比12%増。特にYahoo!とQoo10が好調。海外需要増も影響。
+            </p>
+          </CardContent>
+        </Card>
 
-    <Card className="bg-gray-50">
-      <CardContent className="p-4">
-        <h4 className="text-sm font-medium mb-2">
-          【AI】2025年6月　特に動きのあった日ベスト３のリストアップ（月末に自動更新）
-        </h4>
-        <p className="text-xs text-gray-600 leading-relaxed">
-          1位: 6月15日（土） - ¥358,500（週末セール）<br />
-          2位: 6月28日（金） - ¥325,200（イベント）<br />
-          3位: 6月5日（水） - ¥287,600（新商品）<br />
-        </p>
-      </CardContent>
-    </Card>
-  </div>
-</div>
+        <Card className="bg-gray-50">
+          <CardContent className="p-4">
+            <h4 className="text-sm font-medium mb-2">
+              【AI】2025年6月　特に動きのあった日ベスト３のリストアップ（月末に自動更新）
+            </h4>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              1位: 6月15日（土） - ¥358,500（週末セール）<br />
+              2位: 6月28日（金） - ¥325,200（イベント）<br />
+              3位: 6月5日（水） - ¥287,600（新商品）
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
