@@ -1,5 +1,5 @@
-import SalesReportForm from "../sales-report-form"
+import AdminDashboard from "../admin-dashboard"
 
 export default function Page() {
-  return <SalesReportForm />
+  return <AdminDashboard />
 }

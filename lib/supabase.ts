@@ -28,3 +28,26 @@ export type SalesData = {
   qoo10_total: number
   created_at?: string
 }
+
+export type DailySalesReport = {
+  id?: string
+  date: string
+  floor_sales: number
+  floor_total: number
+  cash_income: number
+  register_count: number
+  remarks: string
+  amazon_count: number
+  amazon_amount: number
+  rakuten_count: number
+  rakuten_amount: number
+  yahoo_count: number
+  yahoo_amount: number
+  mercari_count: number
+  mercari_amount: number
+  base_count: number
+  base_amount: number
+  qoo10_count: number
+  qoo10_amount: number
+  created_at?: string
+}
