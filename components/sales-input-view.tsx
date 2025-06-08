@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ja } from "date-fns/locale"
 import { CalendarIcon, CheckCircle } from "lucide-react"
 import { supabase, type DailySalesReport } from "../lib/supabase"
 
@@ -22,7 +23,7 @@ const salesChannels = [
 ]
 
 export default function SalesInputView() {
-  const [date, setDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [reportData, setReportData] = useState<DailySalesReport | null>(null)
 
@@ -112,7 +113,7 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
 
     try {
       const salesData: Omit<DailySalesReport, "id" | "created_at"> = {
-        date: formatDate(date),
+        date: formatDate(selectedDate),
         floor_sales: Number.parseInt(formData.floor_sales) || 0,
         floor_total: Number.parseInt(formData.floor_total) || 0,
         cash_income: Number.parseInt(formData.cash_income) || 0,
@@ -186,11 +187,18 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start text-left font-normal text-sm h-9">
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formatDateJapanese(date)}
+                    {formatDateJapanese(selectedDate)}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={date} onSelect={(date) => date && setDate(date)} initialFocus />
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => date && setSelectedDate(date)}
+                    locale="ja"
+                    locales={{ ja }}
+                    initialFocus
+                  />
                 </PopoverContent>
               </Popover>
             </div>
