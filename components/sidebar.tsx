@@ -32,7 +32,7 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
   return (
     <div className="w-64 bg-gray-900 text-white h-screen fixed left-0 top-0 flex flex-col">
       <div className="p-6 border-b border-gray-700">
-        <h1 className="text-lg font-semibold">売上管理システム</h1>
+        <h1 className="text-lg font-semibold">売上報告システム</h1>
       </div>
 
       <nav className="flex-1 p-4">

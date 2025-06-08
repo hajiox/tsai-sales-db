@@ -227,13 +227,13 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
                   className="w-full justify-start text-left font-normal text-sm h-9"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {formatDateJapanese(new Date(selectedDate))}
+                  {formatDateJapanese(new Date(`${selectedDate}T00:00:00`))}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
                 <Calendar
                   mode="single"
-                  selected={new Date(selectedDate)}
+                  selected={new Date(`${selectedDate}T00:00:00`)}
                   onSelect={(date) => date && setSelectedDate(formatDate(date))}
                   initialFocus
                 />
