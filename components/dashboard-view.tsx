@@ -7,9 +7,7 @@ import { supabase } from "../lib/supabase"
 
 export default function DashboardView() {
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
-  const [todayRegisterCount, setTodayRegisterCount] = useState<number | null>(
-    null,
-  )
+  const [todayRegisterCount, setTodayRegisterCount] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   )
