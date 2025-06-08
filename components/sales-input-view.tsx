@@ -195,8 +195,7 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
                     mode="single"
                     selected={selectedDate}
                     onSelect={(date) => date && setSelectedDate(date)}
-                    locale="ja"
-                    locales={{ ja }}
+                    locale={ja}
                     initialFocus
                   />
                 </PopoverContent>
