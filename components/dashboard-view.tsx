@@ -515,25 +515,25 @@ export default function DashboardView() {
               <div className="space-y-4">
                 <div>
                   <h4 className="font-semibold">簡易分析</h4>
-                  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-visible max-w-full">
                     {aiReport.summary}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前月・前々月との比較</h4>
-                  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-visible max-w-full">
                     {compareRecent || aiReport.compare_recent}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前年同月との比較</h4>
-                  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-visible max-w-full">
                     {aiReport.compare_last_year}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">特異日ベスト3</h4>
-                  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-visible max-w-full">
                     {aiReport.top3}
                   </p>
                 </div>
