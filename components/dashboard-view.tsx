@@ -32,6 +32,14 @@ export default function DashboardView() {
     date: string
     ec_sales: number
   }[]>([])
+  const [floorSalesYearData, setFloorSalesYearData] = useState<{
+    month: string
+    floor_sales: number
+  }[]>([])
+  const [ecSalesYearData, setEcSalesYearData] = useState<{
+    month: string
+    ec_sales: number
+  }[]>([])
 
   useEffect(() => {
     const fetchMonthlyData = async () => {
@@ -164,6 +172,82 @@ export default function DashboardView() {
     }
 
     fetchEcTotal()
+  }, [selectedDate])
+
+  useEffect(() => {
+    const fetchYearlyData = async () => {
+      const end = new Date(`${selectedDate}T00:00:00`)
+      const start = new Date(end)
+      start.setDate(1)
+      start.setMonth(start.getMonth() - 11)
+
+      const startDate = start.toISOString().split("T")[0]
+      const endDate = end.toISOString().split("T")[0]
+
+      const { data, error } = await supabase
+        .from("daily_sales_report")
+        .select(
+          "date, floor_sales, amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount",
+        )
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .order("date", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching yearly data", error)
+        return
+      }
+
+      const floorMap = new Map<string, number>()
+      const ecMap = new Map<string, number>()
+
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(start)
+        d.setMonth(start.getMonth() + i)
+        const key = d.toLocaleDateString("ja-JP", {
+          year: "numeric",
+          month: "numeric",
+        })
+        floorMap.set(key, 0)
+        ecMap.set(key, 0)
+      }
+
+      ;(data || []).forEach((row) => {
+        const d = new Date(row.date)
+        const key = d.toLocaleDateString("ja-JP", {
+          year: "numeric",
+          month: "numeric",
+        })
+        if (floorMap.has(key)) {
+          floorMap.set(key, (floorMap.get(key) || 0) + (row.floor_sales || 0))
+          ecMap.set(
+            key,
+            (ecMap.get(key) || 0) +
+              (row.amazon_amount || 0) +
+              (row.rakuten_amount || 0) +
+              (row.yahoo_amount || 0) +
+              (row.mercari_amount || 0) +
+              (row.base_amount || 0) +
+              (row.qoo10_amount || 0),
+          )
+        }
+      })
+
+      setFloorSalesYearData(
+        Array.from(floorMap.keys()).map((key) => ({
+          month: key,
+          floor_sales: floorMap.get(key) || 0,
+        })),
+      )
+      setEcSalesYearData(
+        Array.from(ecMap.keys()).map((key) => ({
+          month: key,
+          ec_sales: ecMap.get(key) || 0,
+        })),
+      )
+    }
+
+    fetchYearlyData()
   }, [selectedDate])
 
   const formatCurrency = (amount: number) =>
@@ -323,24 +407,60 @@ export default function DashboardView() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">EC売上（月間）</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ReBarChart data={ecSalesData} margin={{ left: 10, right: 10 }}>
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    <Bar dataKey="ec_sales" fill="#10b981" />
-                  </ReBarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">EC売上（月間）</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ReBarChart data={ecSalesData} margin={{ left: 10, right: 10 }}>
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                      <Bar dataKey="ec_sales" fill="#10b981" />
+                    </ReBarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">フロア売上（年間）</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ReBarChart data={floorSalesYearData} margin={{ left: 10, right: 10 }}>
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                      <Bar dataKey="floor_sales" fill="#3b82f6" />
+                    </ReBarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">EC売上（年間）</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ReBarChart data={ecSalesYearData} margin={{ left: 10, right: 10 }}>
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                      <Bar dataKey="ec_sales" fill="#10b981" />
+                    </ReBarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
         <Card>
           <CardHeader>
