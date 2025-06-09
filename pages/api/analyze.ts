@@ -184,24 +184,30 @@ export default async function handler(
         "You are a helpful assistant. Compare the provided monthly totals and give a short Japanese comment. Respond only with JSON like { \"result\": \"...\" }.",
         JSON.stringify(compareRecentData),
       )
-
-      const totals = summaryData.map((d) => ({
-        date: d.date,
-        total: d.floor + d.ec,
-      }))
-      const avg =
-        totals.reduce((sum, t) => sum + t.total, 0) / (totals.length || 1)
-      const picked = totals
-        .map((t) => ({ ...t, diff: Math.abs(t.total - avg) }))
-        .sort((a, b) => b.diff - a.diff)
-        .slice(0, 3)
-        .map(({ date, total }) => ({ date, total }))
-
-      top3Comment = await callOpenAI(
-        "You are a helpful assistant. Identify the days where sales were exceptionally high or low. Respond only with JSON like { \"result\": \"...\" }.",
-        JSON.stringify(picked),
-      )
     }
+
+    const totals = summaryData.map((d) => ({
+      date: d.date,
+      total: d.floor + d.ec,
+    }))
+    const avg = totals.reduce((sum, t) => sum + t.total, 0) / (totals.length || 1)
+    const picked = totals
+      .map((t) => ({
+        date: t.date,
+        total: Math.round(t.total),
+        deviation: Math.round(t.total - avg),
+        abs: Math.abs(t.total - avg),
+      }))
+      .sort((a, b) => b.abs - a.abs)
+      .slice(0, 3)
+      .map(({ date, total, deviation }) => ({ date, total, deviation }))
+
+    const top3Prompt = `以下は今月の売上で平均から大きく乖離した上位3日です。要因を推測し、簡潔にコメントしてください。\n${JSON.stringify(picked)}`
+    top3Comment = await callOpenAI(
+      "You are a helpful assistant. Respond only with plain Japanese text and do not use JSON or markdown.",
+      top3Prompt,
+      false,
+    )
 
     res.status(200).json({
       summary: summaryComment,
