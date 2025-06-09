@@ -380,9 +380,8 @@ export default function DashboardView() {
         </div>
       </div>
 
-      {/* Charts Placeholder */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <div className="grid grid-cols-2 gap-4">
+      {/* Charts */}
+      <div className="grid grid-cols-2 gap-4 mt-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">フロア売上（月間）</CardTitle>
@@ -434,7 +433,7 @@ export default function DashboardView() {
                     </ReBarChart>
                   </ResponsiveContainer>
                 </div>
-              </CardContent>
+            </CardContent>
           </Card>
 
           <Card>
@@ -454,21 +453,6 @@ export default function DashboardView() {
                 </div>
               </CardContent>
           </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">ECサイト別売上</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-              <div className="text-center">
-                <TrendingUp className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">チャートは今後実装予定</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* AI Summary Boxes */}
