@@ -1,18 +1,22 @@
 // lib/supabase.ts
-import { createBrowserClient } from '@supabase/auth-helpers-nextjs'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = 'https://zrerpexdsaxqztqqrwwv.supabase.co'
 const supabaseAnonKey =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpyZXJwZXhkc2F4cXp0cXFyd3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjAzOTgsImV4cCI6MjA2NDkzNjM5OH0.nVWvJfsSAC7dnNCuXLxoN5OvQ4ShQI5FOwipkMlKNec'
 
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
+export const supabase: SupabaseClient = createClientComponentClient({
+  supabaseUrl,
+  supabaseKey: supabaseAnonKey,
+})
 
 export const ALLOWED_EMAILS = ['aizubrandhall@gmail.com']
 
 export const isAllowed = (email?: string) =>
   ALLOWED_EMAILS.includes((email || '').toLowerCase())
 
-/* ---------- DB 型定義 ---------- */
+/* ---------- 型定義 ---------- */
 export type SalesData = {
   id?: string
   date: string
