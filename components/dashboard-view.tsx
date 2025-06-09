@@ -51,6 +51,11 @@ export default function DashboardView() {
   const [aiError, setAiError] = useState<boolean>(false)
   const [compareRecent, setCompareRecent] = useState<string>("")
 
+  const truncate = (text: string | null | undefined, max = 200) => {
+    if (!text) return ""
+    return text.length > max ? text.slice(0, max) + "…" : text
+  }
+
   useEffect(() => {
     const fetchMonthlyData = async () => {
       const start = new Date(`${selectedDate}T00:00:00`)
@@ -508,26 +513,26 @@ export default function DashboardView() {
         <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
 
         <Card className="bg-gray-50">
-          <CardContent className="p-4 text-sm text-gray-600">
+          <CardContent className="p-4 text-sm text-gray-600 whitespace-pre-wrap">
             {aiLoading && <p>分析中...</p>}
             {aiError && !aiLoading && <p>取得に失敗しました</p>}
             {!aiLoading && !aiError && aiReport && (
               <div className="space-y-4">
                 <div>
                   <h4 className="font-semibold">簡易分析</h4>
-                  <p>{aiReport.summary}</p>
+                  <p className="whitespace-pre-wrap">{truncate(aiReport.summary)}</p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前月・前々月との比較</h4>
-                  <p>{compareRecent || aiReport.compare_recent}</p>
+                  <p className="whitespace-pre-wrap">{truncate(compareRecent || aiReport.compare_recent)}</p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前年同月との比較</h4>
-                  <p>{aiReport.compare_last_year}</p>
+                  <p className="whitespace-pre-wrap">{truncate(aiReport.compare_last_year)}</p>
                 </div>
                 <div>
                   <h4 className="font-semibold">特異日ベスト3</h4>
-                  <p>{aiReport.top3}</p>
+                  <p className="whitespace-pre-wrap">{truncate(aiReport.top3)}</p>
                 </div>
               </div>
             )}
