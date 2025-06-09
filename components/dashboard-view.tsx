@@ -49,6 +49,7 @@ export default function DashboardView() {
   } | null>(null)
   const [aiLoading, setAiLoading] = useState<boolean>(true)
   const [aiError, setAiError] = useState<boolean>(false)
+  const [compareRecent, setCompareRecent] = useState<string>("")
 
   useEffect(() => {
     const fetchMonthlyData = async () => {
@@ -275,6 +276,21 @@ export default function DashboardView() {
 
     fetchAiComment()
   }, [])
+
+  useEffect(() => {
+    const fetchCompare = async () => {
+      try {
+        const res = await fetch(`/api/compare?date=${selectedDate}`)
+        if (!res.ok) throw new Error('fetch error')
+        const text = await res.text()
+        setCompareRecent(text)
+      } catch (e) {
+        console.error(e)
+      }
+    }
+
+    fetchCompare()
+  }, [selectedDate])
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("ja-JP", {
@@ -503,7 +519,7 @@ export default function DashboardView() {
                 </div>
                 <div>
                   <h4 className="font-semibold">前月・前々月との比較</h4>
-                  <p>{aiReport.compare_recent}</p>
+                  <p>{compareRecent || aiReport.compare_recent}</p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前年同月との比較</h4>
