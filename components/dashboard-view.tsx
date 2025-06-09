@@ -41,6 +41,10 @@ export default function DashboardView() {
     ec_sales: number
   }[]>([])
 
+  const [aiComment, setAiComment] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState<boolean>(true)
+  const [aiError, setAiError] = useState<boolean>(false)
+
   useEffect(() => {
     const fetchMonthlyData = async () => {
       const start = new Date(`${selectedDate}T00:00:00`)
@@ -243,6 +247,30 @@ export default function DashboardView() {
 
     fetchYearlyData()
   }, [selectedDate])
+
+  useEffect(() => {
+    const fetchAiComment = async () => {
+      try {
+        const res = await fetch('/api/analyze')
+        if (!res.ok) throw new Error('fetch error')
+        const data = await res.json()
+        let comment = ''
+        try {
+          comment = JSON.parse(data.result).result || ''
+        } catch {
+          comment = data.result
+        }
+        setAiComment(comment)
+      } catch (e) {
+        console.error(e)
+        setAiError(true)
+      } finally {
+        setAiLoading(false)
+      }
+    }
+
+    fetchAiComment()
+  }, [])
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("ja-JP", {
@@ -455,42 +483,15 @@ export default function DashboardView() {
           </Card>
       </div>
 
-      {/* AI Summary Boxes */}
+      {/* AI Summary Block */}
       <div className="space-y-4 mt-10">
         <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
 
         <Card className="bg-gray-50">
-          <CardContent className="p-4">
-            <h4 className="text-sm font-medium mb-2">
-              【AI】2025年6月　前月・前々月との比較分岐と考察（月末に自動更新）
-            </h4>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              2025年6月の売上は前月比で5%増加。楽天とAmazonが好調で、夏物需要が要因と考えられる。
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-50">
-          <CardContent className="p-4">
-            <h4 className="text-sm font-medium mb-2">
-              【AI】2025年6月　前年同月と比較分析と考察（月末に自動更新）
-            </h4>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              総売上は前年比12%増。特にYahoo!とQoo10が好調。海外需要増も影響。
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-50">
-          <CardContent className="p-4">
-            <h4 className="text-sm font-medium mb-2">
-              【AI】2025年6月　特に動きのあった日ベスト３のリストアップ（月末に自動更新）
-            </h4>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              1位: 6月15日（土） - ¥358,500（週末セール）<br />
-              2位: 6月28日（金） - ¥325,200（イベント）<br />
-              3位: 6月5日（水） - ¥287,600（新商品）
-            </p>
+          <CardContent className="p-4 text-sm text-gray-600">
+            {aiLoading && <p>分析中...</p>}
+            {aiError && !aiLoading && <p>取得に失敗しました</p>}
+            {!aiLoading && !aiError && <p>{aiComment}</p>}
           </CardContent>
         </Card>
       </div>
