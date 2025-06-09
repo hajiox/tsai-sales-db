@@ -2,6 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  BarChart as ReBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts"
 import { BarChart3, TrendingUp, Users, JapaneseYenIcon as Yen } from "lucide-react"
 import { supabase } from "../lib/supabase"
 
@@ -16,6 +24,10 @@ export default function DashboardView() {
   )
   const [ecTotalAmount, setEcTotalAmount] = useState<number | null>(null)
   const [floorSales, setFloorSales] = useState<number | null>(null)
+  const [floorSalesData, setFloorSalesData] = useState<{
+    date: string
+    floor_sales: number
+  }[]>([])
 
   useEffect(() => {
     const fetchMonthlyData = async () => {
@@ -27,10 +39,11 @@ export default function DashboardView() {
       const { data, error } = await supabase
         .from("daily_sales_report")
         .select(
-          "floor_sales, register_count, amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount",
+          "date, floor_sales, register_count, amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount",
         )
         .gte("date", startDate)
         .lte("date", selectedDate)
+        .order("date", { ascending: true })
 
       if (error) {
         console.error("Error fetching monthly data", error)
@@ -61,6 +74,15 @@ export default function DashboardView() {
       setMonthlyRegisterCount(register)
       setMonthlyEcTotal(ec)
       setMonthlySales(floor + ec)
+      setFloorSalesData(
+        (data || []).map((row) => ({
+          date: new Date(row.date).toLocaleDateString("ja-JP", {
+            month: "numeric",
+            day: "numeric",
+          }),
+          floor_sales: row.floor_sales || 0,
+        }))
+      )
     }
 
     fetchMonthlyData()
@@ -265,14 +287,18 @@ export default function DashboardView() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">売上推移</CardTitle>
+            <CardTitle className="text-lg">フロア売上（月間）</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-              <div className="text-center">
-                <BarChart3 className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">グラフは今後実装予定</p>
-              </div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ReBarChart data={floorSalesData} margin={{ left: 10, right: 10 }}>
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Bar dataKey="floor_sales" fill="#3b82f6" />
+                </ReBarChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
