@@ -1,9 +1,15 @@
 'use client'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import pkg from '@/package.json' assert { type: 'json' }
+
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || pkg.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || pkg.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 export const supabase = createClientComponentClient({
-  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  supabaseUrl,
+  supabaseKey,
 })
 
 export const ALLOWED_EMAILS = ['aizubrandhall@gmail.com']

@@ -2,8 +2,11 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const SUPABASE_URL  = process.env.SUPABASE_URL!
-const SUPABASE_KEY  = process.env.SUPABASE_ANON_KEY!
+import pkg from './package.json' assert { type: 'json' }
+
+const SUPABASE_URL = process.env.SUPABASE_URL || pkg.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_KEY =
+  process.env.SUPABASE_ANON_KEY || pkg.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const ALLOWED_EMAILS = ['aizubrandhall@gmail.com']
 
 export async function middleware(req: NextRequest) {
