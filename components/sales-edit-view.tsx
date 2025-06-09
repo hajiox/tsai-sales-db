@@ -30,7 +30,6 @@ export default function SalesEditView() {
 
   const [formData, setFormData] = useState({
     floor_sales: "",
-    floor_total: "",
     cash_income: "",
     register_count: "",
     remarks: "",
@@ -86,7 +85,6 @@ export default function SalesEditView() {
 ${data.date}
 
 フロア日計 / ${formatCurrency(data.floor_sales)}
-フロア累計 / ${formatCurrency(data.floor_total)}
 入　金 / ${formatCurrency(data.cash_income)}
 レジ通過人数 / 　${data.register_count} 人
 
@@ -128,7 +126,6 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
         setSelectedRecord(data)
         setFormData({
           floor_sales: data.floor_sales?.toString() ?? "",
-          floor_total: data.floor_total?.toString() ?? "",
           cash_income: data.cash_income?.toString() ?? "",
           register_count: data.register_count?.toString() ?? "",
           remarks: data.remarks ?? "",
@@ -165,7 +162,6 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
     try {
       const updatedData: Partial<DailySalesReport> = {
         floor_sales: Number.parseInt(formData.floor_sales) || 0,
-        floor_total: Number.parseInt(formData.floor_total) || 0,
         cash_income: Number.parseInt(formData.cash_income) || 0,
         register_count: Number.parseInt(formData.register_count) || 0,
         remarks: formData.remarks,
@@ -259,16 +255,6 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
                     type="number"
                     value={formData.floor_sales}
                     onChange={(e) => handleInputChange("floor_sales", e.target.value)}
-                    className="text-sm h-9"
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">フロア累計</Label>
-                  <Input
-                    type="number"
-                    value={formData.floor_total}
-                    onChange={(e) => handleInputChange("floor_total", e.target.value)}
                     className="text-sm h-9"
                     placeholder="0"
                   />
