@@ -1,18 +1,20 @@
-import { useRouter } from "next/router"
 import { supabase } from "../lib/supabase"
 
 export default function Login() {
-  const router = useRouter()
   const handleSignIn = () =>
     supabase.auth.signInWithOAuth({ provider: "google" })
   return (
-    <div className="h-screen flex items-center justify-center">
-      <button
-        className="px-6 py-3 bg-blue-600 text-white rounded"
-        onClick={handleSignIn}
-      >
-        Google でログイン
-      </button>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="bg-white p-10 rounded shadow-md text-center space-y-6">
+        <h1 className="text-2xl font-bold text-gray-800">TSA 売上報告システム</h1>
+        <p className="text-gray-600">Googleアカウントでログインしてください</p>
+        <button
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded shadow"
+          onClick={handleSignIn}
+        >
+          Googleでログイン
+        </button>
+      </div>
     </div>
   )
 }
