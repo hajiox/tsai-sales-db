@@ -41,7 +41,12 @@ export default function DashboardView() {
     ec_sales: number
   }[]>([])
 
-  const [aiComment, setAiComment] = useState<string | null>(null)
+  const [aiReport, setAiReport] = useState<{
+    summary: string
+    compare_recent: string
+    compare_last_year: string
+    top3: string
+  } | null>(null)
   const [aiLoading, setAiLoading] = useState<boolean>(true)
   const [aiError, setAiError] = useState<boolean>(false)
 
@@ -254,13 +259,12 @@ export default function DashboardView() {
         const res = await fetch('/api/analyze')
         if (!res.ok) throw new Error('fetch error')
         const data = await res.json()
-        let comment = ''
-        try {
-          comment = JSON.parse(data.result).result || ''
-        } catch {
-          comment = data.result
-        }
-        setAiComment(comment)
+        setAiReport({
+          summary: data.summary || '',
+          compare_recent: data.compare_recent || '',
+          compare_last_year: data.compare_last_year || '',
+          top3: data.top3 || '',
+        })
       } catch (e) {
         console.error(e)
         setAiError(true)
@@ -491,7 +495,26 @@ export default function DashboardView() {
           <CardContent className="p-4 text-sm text-gray-600">
             {aiLoading && <p>分析中...</p>}
             {aiError && !aiLoading && <p>取得に失敗しました</p>}
-            {!aiLoading && !aiError && <p>{aiComment}</p>}
+            {!aiLoading && !aiError && aiReport && (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold">簡易分析</h4>
+                  <p>{aiReport.summary}</p>
+                </div>
+                <div>
+                  <h4 className="font-semibold">前月・前々月との比較</h4>
+                  <p>{aiReport.compare_recent}</p>
+                </div>
+                <div>
+                  <h4 className="font-semibold">前年同月との比較</h4>
+                  <p>{aiReport.compare_last_year}</p>
+                </div>
+                <div>
+                  <h4 className="font-semibold">特異日ベスト3</h4>
+                  <p>{aiReport.top3}</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
