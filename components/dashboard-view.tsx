@@ -508,7 +508,7 @@ export default function DashboardView() {
         <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
 
         <Card className="bg-gray-50 overflow-visible">
-          <CardContent className="p-4 text-sm text-gray-600 whitespace-pre-wrap">
+          <CardContent className="p-4 text-sm text-gray-600 whitespace-pre-wrap overflow-visible">
             {aiLoading && <p>分析中...</p>}
             {aiError && !aiLoading && <p>取得に失敗しました</p>}
             {!aiLoading && !aiError && aiReport && (
