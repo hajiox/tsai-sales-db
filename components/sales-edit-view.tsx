@@ -22,12 +22,11 @@ const salesChannels = [
 ]
 
 export default function SalesEditView() {
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0],
-  )
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedRecord, setSelectedRecord] = useState<DailySalesReport | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
   const [reportData, setReportData] = useState<DailySalesReport | null>(null)
+  const [recordNotFound, setRecordNotFound] = useState(false)
 
   const [formData, setFormData] = useState({
     floor_sales: "",
@@ -51,10 +50,6 @@ export default function SalesEditView() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const formatDate = (date: Date) => {
-    return date.toISOString().split("T")[0]
   }
 
   const formatDateJapanese = (date: Date) => {
@@ -115,18 +110,20 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
         const { data, error } = await supabase
           .from("daily_sales_report")
           .select("*")
-          .eq("date", selectedDate)
+          .eq("date", selectedDate.toISOString().slice(0, 10))
           .single()
 
         if (error) {
           if (error.code === "PGRST116") {
-            alert("指定された日付のデータが見つかりません")
+            setRecordNotFound(true)
           } else {
             throw error
           }
           setSelectedRecord(null)
           return
         }
+
+        setRecordNotFound(false)
 
         setSelectedRecord(data)
         setFormData({
@@ -227,14 +224,14 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
                   className="w-full justify-start text-left font-normal text-sm h-9"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {formatDateJapanese(new Date(`${selectedDate}T00:00:00`))}
+                  {formatDateJapanese(selectedDate)}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
                 <Calendar
                   mode="single"
-                  selected={new Date(`${selectedDate}T00:00:00`)}
-                  onSelect={(date) => date && setSelectedDate(formatDate(date))}
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
                   initialFocus
                 />
               </PopoverContent>
@@ -244,6 +241,9 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
       </Card>
 
       {/* Edit Form */}
+      {recordNotFound && (
+        <p className="text-sm text-gray-500">指定された日付のデータは登録されていません。</p>
+      )}
       {selectedRecord && (
         <Card>
           <CardHeader>
