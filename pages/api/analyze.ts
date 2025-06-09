@@ -38,7 +38,11 @@ async function fetchMonthTotals(year: number, month: number): Promise<Totals> {
   )
 }
 
-async function callOpenAI(system: string, content: string): Promise<string> {
+async function callOpenAI(
+  system: string,
+  content: string,
+  parse: boolean = true,
+): Promise<string> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -64,6 +68,9 @@ async function callOpenAI(system: string, content: string): Promise<string> {
 
   const json = await res.json()
   const msg = json.choices?.[0]?.message?.content?.trim() || ""
+  if (!parse) {
+    return msg
+  }
   try {
     return JSON.parse(msg).result || msg
   } catch {
@@ -109,8 +116,9 @@ export default async function handler(
     }))
 
     const summaryComment = await callOpenAI(
-      "You are a helpful assistant. Provide a short Japanese comment about the provided sales data. Respond only with JSON like { \"result\": \"...\" }.",
+      "You are a helpful assistant. Provide a short Japanese comment about the provided sales data. Respond only with plain Japanese text and do not use JSON or markdown.",
       JSON.stringify(summaryData),
+      false,
     )
 
     // Determine month end
