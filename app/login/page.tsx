@@ -6,9 +6,7 @@ export default function Login() {
     <div className="flex h-screen items-center justify-center">
       <button
         className="rounded bg-black px-6 py-3 text-white"
-        onClick={() =>
-          supabase.auth.signInWithOAuth({ provider: 'google' })
-        }
+        onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })}
       >
         Google でログイン
       </button>

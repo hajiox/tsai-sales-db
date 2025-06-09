@@ -1,22 +1,21 @@
-// lib/supabase.ts
+'use client'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import pkg from '@/package.json' assert { type: 'json' }
 
-const supabaseUrl = 'https://zrerpexdsaxqztqqrwwv.supabase.co'
-const supabaseAnonKey =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpyZXJwZXhkc2F4cXp0cXFyd3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjAzOTgsImV4cCI6MjA2NDkzNjM5OH0.nVWvJfsSAC7dnNCuXLxoN5OvQ4ShQI5FOwipkMlKNec'
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || pkg.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || pkg.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase: SupabaseClient = createClientComponentClient({
+export const supabase = createClientComponentClient({
   supabaseUrl,
-  supabaseKey: supabaseAnonKey,
+  supabaseKey,
 })
 
 export const ALLOWED_EMAILS = ['aizubrandhall@gmail.com']
-
 export const isAllowed = (email?: string) =>
   ALLOWED_EMAILS.includes((email || '').toLowerCase())
 
-/* ---------- 型定義 ---------- */
 export type SalesData = {
   id?: string
   date: string
