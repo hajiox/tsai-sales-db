@@ -204,20 +204,14 @@ export default function DashboardView() {
       for (let i = 0; i < 12; i++) {
         const d = new Date(start)
         d.setMonth(start.getMonth() + i)
-        const key = d.toLocaleDateString("ja-JP", {
-          year: "numeric",
-          month: "numeric",
-        })
+        const key = new Date(d).toISOString().slice(0, 7).replace("-", "/")
         floorMap.set(key, 0)
         ecMap.set(key, 0)
       }
 
       ;(data || []).forEach((row) => {
         const d = new Date(row.date)
-        const key = d.toLocaleDateString("ja-JP", {
-          year: "numeric",
-          month: "numeric",
-        })
+        const key = new Date(d).toISOString().slice(0, 7).replace("-", "/")
         if (floorMap.has(key)) {
           floorMap.set(key, (floorMap.get(key) || 0) + (row.floor_sales || 0))
           ecMap.set(
@@ -388,7 +382,7 @@ export default function DashboardView() {
 
       {/* Charts Placeholder */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">フロア売上（月間）</CardTitle>
@@ -407,12 +401,12 @@ export default function DashboardView() {
             </CardContent>
           </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">EC売上（月間）</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">EC売上（月間）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <ReBarChart data={ecSalesData} margin={{ left: 10, right: 10 }}>
                       <XAxis dataKey="date" />
@@ -423,14 +417,14 @@ export default function DashboardView() {
                   </ResponsiveContainer>
                 </div>
               </CardContent>
-            </Card>
+          </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">フロア売上（年間）</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">フロア売上（年間）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <ReBarChart data={floorSalesYearData} margin={{ left: 10, right: 10 }}>
                       <XAxis dataKey="month" />
@@ -441,14 +435,14 @@ export default function DashboardView() {
                   </ResponsiveContainer>
                 </div>
               </CardContent>
-            </Card>
+          </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">EC売上（年間）</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">EC売上（年間）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <ReBarChart data={ecSalesYearData} margin={{ left: 10, right: 10 }}>
                       <XAxis dataKey="month" />
@@ -459,8 +453,8 @@ export default function DashboardView() {
                   </ResponsiveContainer>
                 </div>
               </CardContent>
-            </Card>
-          </div>
+          </Card>
+        </div>
 
         <Card>
           <CardHeader>
