@@ -28,6 +28,10 @@ export default function DashboardView() {
     date: string
     floor_sales: number
   }[]>([])
+  const [ecSalesData, setEcSalesData] = useState<{
+    date: string
+    ec_sales: number
+  }[]>([])
 
   useEffect(() => {
     const fetchMonthlyData = async () => {
@@ -81,6 +85,21 @@ export default function DashboardView() {
             day: "numeric",
           }),
           floor_sales: row.floor_sales || 0,
+        }))
+      )
+      setEcSalesData(
+        (data || []).map((row) => ({
+          date: new Date(row.date).toLocaleDateString("ja-JP", {
+            month: "numeric",
+            day: "numeric",
+          }),
+          ec_sales:
+            (row.amazon_amount || 0) +
+            (row.rakuten_amount || 0) +
+            (row.yahoo_amount || 0) +
+            (row.mercari_amount || 0) +
+            (row.base_amount || 0) +
+            (row.qoo10_amount || 0),
         }))
       )
     }
@@ -285,23 +304,43 @@ export default function DashboardView() {
 
       {/* Charts Placeholder */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">フロア売上（月間）</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ReBarChart data={floorSalesData} margin={{ left: 10, right: 10 }}>
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                  <Bar dataKey="floor_sales" fill="#3b82f6" />
-                </ReBarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">フロア売上（月間）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ReBarChart data={floorSalesData} margin={{ left: 10, right: 10 }}>
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Bar dataKey="floor_sales" fill="#3b82f6" />
+                  </ReBarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">EC売上（月間）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ReBarChart data={ecSalesData} margin={{ left: 10, right: 10 }}>
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Bar dataKey="ec_sales" fill="#10b981" />
+                  </ReBarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card>
           <CardHeader>
