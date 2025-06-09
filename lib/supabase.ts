@@ -6,6 +6,11 @@ const supabaseAnonKey =
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+export const ALLOWED_EMAILS = ["ts@ai.aizu-tv.com"]
+
+export const isAllowed = (email?: string) =>
+  ALLOWED_EMAILS.includes((email || "").toLowerCase())
+
 export type SalesData = {
   id?: string
   date: string
