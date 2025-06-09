@@ -36,20 +36,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).send("Failed to fetch data")
     }
 
-    const totals = monthRows.reduce(
+    const monthTotals = monthRows.reduce(
       (acc, row) => {
+        acc.amazon += row.amazon_amount || 0
+        acc.base += row.base_amount || 0
+        acc.yahoo += row.yahoo_amount || 0
+        acc.mercari += row.mercari_amount || 0
+        acc.rakuten += row.rakuten_amount || 0
+        acc.qoo10 += row.qoo10_amount || 0
         acc.floor += row.floor_sales || 0
-        acc.ec +=
-          (row.amazon_amount || 0) +
-          (row.base_amount || 0) +
-          (row.yahoo_amount || 0) +
-          (row.mercari_amount || 0) +
-          (row.rakuten_amount || 0) +
-          (row.qoo10_amount || 0)
         return acc
       },
-      { floor: 0, ec: 0 }
+      { amazon: 0, base: 0, yahoo: 0, mercari: 0, rakuten: 0, qoo10: 0, floor: 0 }
     )
+
+    const totals = {
+      floor: monthTotals.floor,
+      ec:
+        monthTotals.amazon +
+        monthTotals.base +
+        monthTotals.yahoo +
+        monthTotals.mercari +
+        monthTotals.rakuten +
+        monthTotals.qoo10,
+    }
 
     const lines = [
       "【会津ブランド館売上報告】",
@@ -59,17 +69,62 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `入　金 / ${formatCurrency(dayData.cash_income)}`,
       `レジ通過人数 / ${dayData.register_count}人`,
       "【WEB売上】",
-      `Amazon 売上 / ${dayData.amazon_count}件 ${formatCurrency(dayData.amazon_amount)}`,
-      `BASE   売上 / ${dayData.base_count}件 ${formatCurrency(dayData.base_amount)}`,
-      `Yahoo! 売上 / ${dayData.yahoo_count}件 ${formatCurrency(dayData.yahoo_amount)}`,
-      `メルカリ 売上 / ${dayData.mercari_count}件 ${formatCurrency(dayData.mercari_amount)}`,
-      `楽天 売上 / ${dayData.rakuten_count}件 ${formatCurrency(dayData.rakuten_amount)}`,
-      `Qoo10 売上 / ${dayData.qoo10_count}件 ${formatCurrency(dayData.qoo10_amount)}`,
-      "------------------------------",
-      `WEB売上累計 / ${formatCurrency(totals.ec)}`,
-      "【月内フロア＋WEB累計売上】",
-      `${formatCurrency(totals.floor + totals.ec)}`,
     ]
+
+    if (dayData.amazon_count > 0) {
+      lines.push(
+        `Amazon 売上 / ${dayData.amazon_count}件 ${formatCurrency(dayData.amazon_amount)}`,
+      )
+    }
+    if (dayData.base_count > 0) {
+      lines.push(
+        `BASE   売上 / ${dayData.base_count}件 ${formatCurrency(dayData.base_amount)}`,
+      )
+    }
+    if (dayData.yahoo_count > 0) {
+      lines.push(
+        `Yahoo! 売上 / ${dayData.yahoo_count}件 ${formatCurrency(dayData.yahoo_amount)}`,
+      )
+    }
+    if (dayData.mercari_count > 0) {
+      lines.push(
+        `メルカリ 売上 / ${dayData.mercari_count}件 ${formatCurrency(dayData.mercari_amount)}`,
+      )
+    }
+    if (dayData.rakuten_count > 0) {
+      lines.push(
+        `楽天 売上 / ${dayData.rakuten_count}件 ${formatCurrency(dayData.rakuten_amount)}`,
+      )
+    }
+    if (dayData.qoo10_count > 0) {
+      lines.push(
+        `Qoo10 売上 / ${dayData.qoo10_count}件 ${formatCurrency(dayData.qoo10_amount)}`,
+      )
+    }
+
+    if (monthTotals.amazon > 0) {
+      lines.push(`Amazon累計 / ${formatCurrency(monthTotals.amazon)}`)
+    }
+    if (monthTotals.base > 0) {
+      lines.push(`BASE累計   / ${formatCurrency(monthTotals.base)}`)
+    }
+    if (monthTotals.yahoo > 0) {
+      lines.push(`Yahoo!累計 / ${formatCurrency(monthTotals.yahoo)}`)
+    }
+    if (monthTotals.mercari > 0) {
+      lines.push(`メルカリ累計 / ${formatCurrency(monthTotals.mercari)}`)
+    }
+    if (monthTotals.rakuten > 0) {
+      lines.push(`楽天累計 / ${formatCurrency(monthTotals.rakuten)}`)
+    }
+    if (monthTotals.qoo10 > 0) {
+      lines.push(`Qoo10累計 / ${formatCurrency(monthTotals.qoo10)}`)
+    }
+
+    lines.push("------------------------------")
+    lines.push(`WEB売上累計 / ${formatCurrency(totals.ec)}`)
+    lines.push("【月内フロア＋WEB累計売上】")
+    lines.push(`${formatCurrency(totals.floor + totals.ec)}`)
 
     res.status(200).setHeader("Content-Type", "text/plain; charset=utf-8").send(lines.join("\n"))
   } catch (err) {
