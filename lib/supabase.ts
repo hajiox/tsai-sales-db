@@ -6,7 +6,7 @@ const supabaseAnonKey =
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-export const ALLOWED_EMAILS = ["ts@ai.aizu-tv.com"]
+export const ALLOWED_EMAILS = ["aizubrandhall@gmail.com"]
 
 export const isAllowed = (email?: string) =>
   ALLOWED_EMAILS.includes((email || "").toLowerCase())
