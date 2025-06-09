@@ -6,10 +6,10 @@ const supabaseAnonKey =
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-export const ALLOWED_EMAILS = ["aizubrandhall@gmail.com"]
+export const ALLOWED_EMAILS = ["aizubrandhall@gmail.com"];
 
 export const isAllowed = (email?: string) =>
-  ALLOWED_EMAILS.includes((email || "").toLowerCase())
+  ALLOWED_EMAILS.includes((email || "").toLowerCase());
 
 export type SalesData = {
   id?: string
