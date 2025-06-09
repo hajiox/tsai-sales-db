@@ -51,11 +51,6 @@ export default function DashboardView() {
   const [aiError, setAiError] = useState<boolean>(false)
   const [compareRecent, setCompareRecent] = useState<string>("")
 
-  const truncate = (text: string | null | undefined, max = 200) => {
-    if (!text) return ""
-    return text.length > max ? text.slice(0, max) + "…" : text
-  }
-
   useEffect(() => {
     const fetchMonthlyData = async () => {
       const start = new Date(`${selectedDate}T00:00:00`)
@@ -520,19 +515,27 @@ export default function DashboardView() {
               <div className="space-y-4">
                 <div>
                   <h4 className="font-semibold">簡易分析</h4>
-                  <p className="whitespace-pre-wrap">{truncate(aiReport.summary)}</p>
+                  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
+                    {aiReport.summary}
+                  </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前月・前々月との比較</h4>
-                  <p className="whitespace-pre-wrap">{truncate(compareRecent || aiReport.compare_recent)}</p>
+                  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
+                    {compareRecent || aiReport.compare_recent}
+                  </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前年同月との比較</h4>
-                  <p className="whitespace-pre-wrap">{truncate(aiReport.compare_last_year)}</p>
+                  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
+                    {aiReport.compare_last_year}
+                  </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">特異日ベスト3</h4>
-                  <p className="whitespace-pre-wrap">{truncate(aiReport.top3)}</p>
+                  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
+                    {aiReport.top3}
+                  </p>
                 </div>
               </div>
             )}
