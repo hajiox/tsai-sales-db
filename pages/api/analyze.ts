@@ -130,8 +130,30 @@ export default async function handler(
     let compareLastYearComment = ""
     let top3Comment = ""
 
+    const thisTotals = await fetchMonthTotals(now.getFullYear(), now.getMonth())
+    const lastYearTotals = await fetchMonthTotals(
+      now.getFullYear() - 1,
+      now.getMonth(),
+    )
+
+    const compareLastYearPrompt = `${now.getFullYear()}年${
+      now.getMonth() + 1
+    }月と${now.getFullYear() - 1}年${
+      now.getMonth() + 1
+    }月の売上比較です。以下のデータを参考に、傾向や気づきをコメントしてください。\n${JSON.stringify(
+      {
+        this_year: thisTotals,
+        last_year: lastYearTotals,
+      },
+    )}`
+
+    compareLastYearComment = await callOpenAI(
+      "You are a helpful assistant. Provide a short Japanese comment about the provided sales comparison. Respond only with plain Japanese text and do not use JSON or markdown.",
+      compareLastYearPrompt,
+      false,
+    )
+
     if (isMonthEnd) {
-      const thisTotals = await fetchMonthTotals(now.getFullYear(), now.getMonth())
       const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
       const lastTotals = await fetchMonthTotals(
         lastMonth.getFullYear(),
@@ -161,28 +183,6 @@ export default async function handler(
       compareRecentComment = await callOpenAI(
         "You are a helpful assistant. Compare the provided monthly totals and give a short Japanese comment. Respond only with JSON like { \"result\": \"...\" }.",
         JSON.stringify(compareRecentData),
-      )
-
-      const lastYear = new Date(now.getFullYear() - 1, now.getMonth(), 1)
-      const lastYearTotals = await fetchMonthTotals(
-        lastYear.getFullYear(),
-        lastYear.getMonth(),
-      )
-
-      const compareLastYearData = [
-        {
-          month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
-          ...thisTotals,
-        },
-        {
-          month: `${lastYear.getFullYear()}-${String(lastYear.getMonth() + 1).padStart(2, "0")}`,
-          ...lastYearTotals,
-        },
-      ]
-
-      compareLastYearComment = await callOpenAI(
-        "You are a helpful assistant. Compare this month's totals with the same month last year and provide a short Japanese comment. Respond only with JSON like { \"result\": \"...\" }.",
-        JSON.stringify(compareLastYearData),
       )
 
       const totals = summaryData.map((d) => ({
