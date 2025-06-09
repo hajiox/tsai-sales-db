@@ -507,7 +507,7 @@ export default function DashboardView() {
       <div className="space-y-4 mt-10">
         <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
 
-        <Card className="bg-gray-50">
+        <Card className="bg-gray-50 overflow-visible">
           <CardContent className="p-4 text-sm text-gray-600 whitespace-pre-wrap">
             {aiLoading && <p>分析中...</p>}
             {aiError && !aiLoading && <p>取得に失敗しました</p>}
@@ -515,25 +515,25 @@ export default function DashboardView() {
               <div className="space-y-4">
                 <div>
                   <h4 className="font-semibold">簡易分析</h4>
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-visible max-w-full">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                     {aiReport.summary}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前月・前々月との比較</h4>
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-visible max-w-full">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                     {compareRecent || aiReport.compare_recent}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">前年同月との比較</h4>
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-visible max-w-full">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                     {aiReport.compare_last_year}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-semibold">特異日ベスト3</h4>
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-visible max-w-full">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                     {aiReport.top3}
                   </p>
                 </div>
