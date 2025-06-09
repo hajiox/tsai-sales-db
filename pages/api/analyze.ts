@@ -55,7 +55,7 @@ async function callOpenAI(
         { role: "system", content: system },
         { role: "user", content },
       ],
-      max_tokens: 100,
+      max_tokens: 800,
       temperature: 0.5,
     }),
   })
