@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     const answer = completion.choices[0].message.content ?? ''
     return NextResponse.json({ ok: true, result: answer })
   } catch (err: any) {
-    console.error('analyze API error:', err)
+    console.error("analyze API error:", err)
     return NextResponse.json(
       { ok: false, error: String(err?.message || err) },
       { status: 500 },
