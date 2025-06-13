@@ -2,8 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { BarChart3, Edit, Plus } from "lucide-react"
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { useSession, signOut } from "next-auth/react"
 
 type NavigationItem = "dashboard" | "input" | "edit"
 
@@ -13,21 +12,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
-  const [session, setSession] = useState<any | null>(null)
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-    })
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess)
-    })
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [])
+  const { data: session } = useSession()
   const navigationItems = [
     {
       id: "dashboard" as NavigationItem,
@@ -80,7 +65,7 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
         <Button
           className="fixed bottom-4 left-4 z-50"
           variant="secondary"
-          onClick={() => supabase.auth.signOut()}
+          onClick={() => signOut({ callbackUrl: '/' })}
         >
           ログアウト
         </Button>
