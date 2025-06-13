@@ -5,18 +5,14 @@ import { Button } from './ui/button'
 
 export default function GenerateReportButton() {
   const [loading, setLoading] = useState(false)
-  const [report, setReport] = useState('')
+  const [report, setReport] = useState<string | null>(null)
 
-  const handleClick = async () => {
+  const generate = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/report')
-      const json = await res.json()
-      if (json.ok) {
-        setReport(json.report ?? '')
-      } else {
-        console.error(json.error)
-      }
+      const res = await fetch('/api/report', { method: 'POST' })
+      const text = await res.text()
+      setReport(text)
     } catch (e) {
       console.error(e)
     } finally {
@@ -24,17 +20,23 @@ export default function GenerateReportButton() {
     }
   }
 
-  return (
-    <div className="flex flex-col gap-2">
-      <Button onClick={handleClick} disabled={loading} className="w-max">
-        {loading ? '生成中…' : '売上報告を生成'}
-      </Button>
-      {loading && <p>生成中…</p>}
-      {!loading && report && (
-        <pre className="whitespace-pre-wrap bg-white p-4 rounded border">
-          {report}
-        </pre>
-      )}
-    </div>
+  const copy = async () => {
+    if (!report) return
+    try {
+      await navigator.clipboard.writeText(report)
+      console.log('コピーしました')
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  return report ? (
+    <Button onClick={copy} className="w-max">
+      コピーする
+    </Button>
+  ) : (
+    <Button onClick={generate} disabled={loading} className="w-max">
+      {loading ? '生成中…' : '売上報告を生成'}
+    </Button>
   )
 }

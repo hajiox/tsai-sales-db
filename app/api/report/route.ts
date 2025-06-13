@@ -1,10 +1,9 @@
-import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const formatCurrency = (n: number) =>
   `${new Intl.NumberFormat('ja-JP').format(n)}円`
 
-export async function GET() {
+export async function POST() {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -47,12 +46,20 @@ export async function GET() {
       { amazon: 0, base: 0, yahoo: 0, mercari: 0, rakuten: 0, qoo10: 0, floor: 0 }
     )
 
+    const webTotal =
+      totals.amazon +
+      totals.base +
+      totals.yahoo +
+      totals.mercari +
+      totals.rakuten +
+      totals.qoo10
+
     const reportLines = [
       '【会津ブランド館売上報告】',
       date,
       `フロア日計 / ${formatCurrency(latest.floor_sales)}`,
       `フロア累計 / ${formatCurrency(latest.floor_total)}`,
-      `入 金 / ${formatCurrency(latest.cash_income)}`,
+      `入\u3000金 / ${formatCurrency(latest.cash_income)}`,
       `レジ通過人数 / ${latest.register_count} 人`,
       '【WEB売上】',
       `Amazon 売上 / ${latest.amazon_count}件 ${formatCurrency(latest.amazon_amount)}`,
@@ -67,25 +74,17 @@ export async function GET() {
       `メルカリ累計 / ${formatCurrency(totals.mercari)}`,
       `楽天累計 / ${formatCurrency(totals.rakuten)}`,
       `Qoo10累計 / ${formatCurrency(totals.qoo10)}`,
-      '---------------------------------------',
-      `WEB売上累計 / ${formatCurrency(
-        totals.amazon + totals.base + totals.yahoo + totals.mercari + totals.rakuten + totals.qoo10
-      )}`,
+      `WEB売上累計 / ${formatCurrency(webTotal)}`,
       '【月内フロア＋WEB累計売上】',
-      formatCurrency(
-        totals.floor +
-          totals.amazon +
-          totals.base +
-          totals.yahoo +
-          totals.mercari +
-          totals.rakuten +
-          totals.qoo10
-      ),
+      formatCurrency(totals.floor + webTotal),
     ]
 
-    return NextResponse.json({ ok: true, report: reportLines.join('\n') })
+    return new Response(reportLines.join('\n'), {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
   } catch (e: any) {
     console.error('report_error', e)
-    return NextResponse.json({ ok: false, error: e.message })
+    return new Response('error', { status: 500 })
   }
 }
