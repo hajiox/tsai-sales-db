@@ -1,11 +1,20 @@
 import './globals.css'
-import { Providers } from '@/components/providers'
+import Header from '@/components/Header'
+import { SessionProvider } from 'next-auth/react'
+
+export const metadata = {
+  title: '売上報告システム',
+  description: '帳票の分析と集計',
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
       <body>
-        <Providers>{children}</Providers>
+        <SessionProvider>
+          <Header />
+          <main className="p-4">{children}</main>
+        </SessionProvider>
       </body>
     </html>
   )
