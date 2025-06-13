@@ -565,7 +565,7 @@ export default function DashboardView() {
                 <div>
                   <h4 className="font-semibold text-lg">分析結果</h4>
                   <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed max-w-full overflow-visible">
-                    {latestAiReport || "分析結果がありません。「AI分析を実行」ボタンを押して分析を開始してください。"}
+                    {latestAiReport ?? "分析結果がありません。「AI分析を実行」ボタンを押して分析を開始してください。"}
                   </pre>
                 </div>
               </div>

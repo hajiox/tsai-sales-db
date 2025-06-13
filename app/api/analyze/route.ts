@@ -8,7 +8,8 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 export async function POST(req: Request) {
   try {
     // ------- input -------
-    const { date } = await req.json();             // 例: "2025-06-13"
+    const body = await req.json().catch(() => ({}));
+    const date = (body.date ?? new Date().toISOString().slice(0, 10)) as string; // 例: "2025-06-13"
     const month = date.slice(0, 7);                // "yyyy-MM"
 
     // ------- env -------
