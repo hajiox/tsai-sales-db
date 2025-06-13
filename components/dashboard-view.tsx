@@ -359,11 +359,6 @@ export default function DashboardView() {
           <Button onClick={handleGenerate} className="mb-1 text-xs">
             売上報告を生成
           </Button>
-          {ecTotalAmount !== null && (
-            <div className="text-sm text-right font-semibold text-gray-700 mb-2">
-              今日のEC売上合計：{formatCurrency(ecTotalAmount)}
-            </div>
-          )}
         </div>
       </div>
 
