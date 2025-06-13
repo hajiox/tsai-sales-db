@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
+import { formatDateJST } from '@/lib/utils';
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
@@ -9,7 +10,7 @@ export async function POST(req: Request) {
   try {
     // ------- input -------
     const body = await req.json().catch(() => ({}));
-    const date = (body.date ?? new Date().toISOString().slice(0, 10)) as string; // 例: "2025-06-13"
+    const date = (body.date ?? formatDateJST(new Date())) as string; // 例: "2025-06-13"
     const month = date.slice(0, 7);                // "yyyy-MM"
 
     // ------- env -------
@@ -49,9 +50,9 @@ export async function POST(req: Request) {
     // ------- save -------
     await supabase
       .from('ai_reports')
-      .upsert({ month, summary }, { onConflict: 'month' });
+      .upsert({ month, content: summary }, { onConflict: 'month' });
 
-    return NextResponse.json({ ok: true, summary });
+    return NextResponse.json({ ok: true, result: summary });
   } catch (e: any) {
     console.error('analyze_error', e);
     return NextResponse.json({ ok: false, error: e.message });
