@@ -26,6 +26,7 @@ export default function SalesEditView() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedRecord, setSelectedRecord] = useState<DailySalesReport | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [reportData, setReportData] = useState<DailySalesReport | null>(null)
   const [recordNotFound, setRecordNotFound] = useState(false)
 
@@ -199,6 +200,32 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
     }
   }
 
+  const handleDelete = async () => {
+    if (!selectedRecord) return
+    if (!confirm("本当に削除しますか？")) return
+
+    setIsDeleting(true)
+
+    try {
+      const { error } = await supabase
+        .from("daily_sales_report")
+        .delete()
+        .eq("date", formatDateJST(selectedDate))
+
+      if (error) throw error
+
+      alert("削除しました")
+      setSelectedRecord(null)
+      setReportData(null)
+      setRecordNotFound(true)
+    } catch (error) {
+      console.error("Error deleting data:", error)
+      alert("データの削除に失敗しました")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -242,12 +269,13 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
         <p className="text-sm text-gray-500">指定された日付のデータは登録されていません。</p>
       )}
       {selectedRecord && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">売上データ修正</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleUpdate} className="space-y-6">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">売上データ修正</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdate} className="space-y-6">
               {/* Floor Sales Section */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
@@ -332,6 +360,15 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
             </form>
           </CardContent>
         </Card>
+        <Button
+          variant="destructive"
+          onClick={handleDelete}
+          disabled={isDeleting}
+          className="w-full text-sm h-10"
+        >
+          {isDeleting ? "削除中..." : "この日の売上データを削除する"}
+        </Button>
+      </div>
       )}
 
       {/* Report Display */}
