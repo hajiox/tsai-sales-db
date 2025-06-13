@@ -5,11 +5,13 @@ import Sidebar from "./components/sidebar"
 import DashboardView from "./components/dashboard-view"
 import SalesInputView from "./components/sales-input-view"
 import SalesEditView from "./components/sales-edit-view"
+import { useSession, signOut } from "next-auth/react"
 
 type NavigationItem = "dashboard" | "input" | "edit"
 
 export default function AdminDashboard() {
   const [activeView, setActiveView] = useState<NavigationItem>("dashboard")
+  const { data: session } = useSession()
 
   const renderContent = () => {
     switch (activeView) {
@@ -31,6 +33,15 @@ export default function AdminDashboard() {
       <main className="flex-1 ml-64 overflow-auto">
         <div className="p-8">{renderContent()}</div>
       </main>
+
+      {session && (
+        <button
+          onClick={() => signOut()}
+          className="fixed bottom-4 left-4 text-sm bg-white px-3 py-1 rounded shadow hover:bg-gray-100"
+        >
+          ログアウト
+        </button>
+      )}
     </div>
   )
 }
