@@ -11,6 +11,8 @@ const authorize = ({ email }: { email?: string }): UserInfo | null => {
 }
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET ?? "next-auth-secret",
+  trustHost: true,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "GOOGLE_CLIENT_ID",
