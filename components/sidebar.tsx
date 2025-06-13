@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { BarChart3, Edit, Plus } from "lucide-react"
+import { signOut, useSession } from "next-auth/react"
 
 type NavigationItem = "dashboard" | "input" | "edit"
 
@@ -11,6 +12,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
+  const { data: session } = useSession()
   const navigationItems = [
     {
       id: "dashboard" as NavigationItem,
@@ -56,8 +58,16 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
         </div>
       </nav>
 
-      <div className="p-4 border-t border-gray-700">
-        <p className="text-xs text-gray-400">会津ブランド館</p>
+  <div className="p-4 border-t border-gray-700">
+        <p className="text-xs text-gray-400 mb-2">会津ブランド館</p>
+        {session && (
+          <div className="flex flex-col space-y-2">
+            <p className="text-xs text-gray-300">{session.user?.email}</p>
+            <Button variant="ghost" className="w-full" onClick={() => signOut()}>
+              ログアウト
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )
