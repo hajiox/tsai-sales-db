@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabase"
 import { formatDateJST } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
+import GenerateButton from "./GenerateButton"
 
 export default function DashboardView() {
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
@@ -284,12 +285,6 @@ export default function DashboardView() {
     fetchCompare()
   }, [selectedDate])
 
-  const handleGenerate = async () => {
-    const res = await fetch(`/api/report?date=${formatDateJST(selectedDate)}`)
-    const txt = await res.text()
-    await navigator.clipboard.writeText(txt)
-    alert("売上報告をコピーしました")
-  }
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("ja-JP", {
@@ -356,9 +351,7 @@ export default function DashboardView() {
             onChange={(e) => setSelectedDate(new Date(e.target.value))}
             className="border rounded text-xs p-1 mb-1 mr-2"
           />
-          <Button onClick={handleGenerate} className="mb-1 text-xs">
-            売上報告を生成
-          </Button>
+          <GenerateButton />
         </div>
       </div>
 
