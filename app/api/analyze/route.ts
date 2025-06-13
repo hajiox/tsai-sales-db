@@ -1,53 +1,46 @@
 // app/api/analyze/route.ts
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 
-type ReqBody = {
-  mode: 'summary' | 'compare_recent' | 'compare_last_year' | 'top3'
-  payload: any
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
 
-export async function POST(req: NextRequest) {
-  /* ---------- env チェック ---------- */
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
-    return NextResponse.json(
-      { ok: false, error: 'OPENAI_API_KEY is not set' },
-      { status: 500 },
-    )
+export async function POST(req: Request) {
+  const { date } = await req.json() // 例: "2025-06-13"
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json({ ok: false, error: 'missing_openai_key' })
   }
 
-  const { mode, payload } = (await req.json()) as ReqBody
-  const openai = new OpenAI({ apiKey })
+  const month = date.slice(0, 7) // "yyyy-MM"
+  const { data: sales, error } = await supabase
+    .from('daily_sales_report')
+    .select('*')
+    .gte('date', `${month}-01`)
+    .lte('date', date)
 
-  try {
-    const prompt = buildPrompt(mode, payload)
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-    })
-    const answer = completion.choices[0].message.content ?? ''
-    return NextResponse.json({ ok: true, result: answer })
-  } catch (err: any) {
-    console.error("analyze API error:", err)
-    return NextResponse.json(
-      { ok: false, error: String(err?.message || err) },
-      { status: 500 },
-    )
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message })
   }
-}
 
-function buildPrompt(mode: ReqBody['mode'], data: any): string {
-  switch (mode) {
-    case 'summary':
-      return `以下の売上データを要約してください: ${JSON.stringify(data)}`
-    case 'compare_recent':
-      return `直近データと比較してください: ${JSON.stringify(data)}`
-    case 'compare_last_year':
-      return `昨年同時期と比較してください: ${JSON.stringify(data)}`
-    case 'top3':
-      return `最も特徴的な3点を抽出してください: ${JSON.stringify(data)}`
-    default:
-      return '入力が不正です'
-  }
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'user',
+        content: `以下は当月売上データです。JSON を読み取り、①今月の概況 ②前月比 ③前年同月比 ④特異日ベスト3 を日本語で簡潔にまとめてください。\n\n${JSON.stringify(
+          sales,
+        )}`,
+      },
+    ],
+  })
+
+  const summary = completion.choices[0]?.message?.content ?? '解析結果なし'
+
+  await supabase.from('ai_reports').upsert({ month, summary }, { onConflict: 'month' })
+
+  return NextResponse.json({ ok: true, summary })
 }
