@@ -8,7 +8,7 @@ import { supabase } from "../lib/supabase"
 import { formatDateJST } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import GenerateButton from "./GenerateButton"
+import GenerateReportButton from './GenerateReportButton'
 
 export default function DashboardView() {
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
@@ -351,7 +351,7 @@ export default function DashboardView() {
             onChange={(e) => setSelectedDate(new Date(e.target.value))}
             className="border rounded text-xs p-1 mb-1 mr-2"
           />
-          <GenerateButton />
+          <GenerateReportButton />
         </div>
       </div>
 
