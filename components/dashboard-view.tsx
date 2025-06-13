@@ -2,17 +2,11 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  BarChart as ReBarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts"
-import { BarChart3, TrendingUp, Users, JapaneseYenIcon as Yen } from "lucide-react"
+import { BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
+import { BarChart3, TrendingUp, Users, JapaneseYenIcon as Yen, Loader2 } from "lucide-react"
 import { supabase } from "../lib/supabase"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/use-toast"
 
 export default function DashboardView() {
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
@@ -23,22 +17,30 @@ export default function DashboardView() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [ecTotalAmount, setEcTotalAmount] = useState<number | null>(null)
   const [floorSales, setFloorSales] = useState<number | null>(null)
-  const [floorSalesData, setFloorSalesData] = useState<{
-    date: string
-    floor_sales: number
-  }[]>([])
-  const [ecSalesData, setEcSalesData] = useState<{
-    date: string
-    ec_sales: number
-  }[]>([])
-  const [floorSalesYearData, setFloorSalesYearData] = useState<{
-    month: string
-    floor_sales: number
-  }[]>([])
-  const [ecSalesYearData, setEcSalesYearData] = useState<{
-    month: string
-    ec_sales: number
-  }[]>([])
+  const [floorSalesData, setFloorSalesData] = useState<
+    {
+      date: string
+      floor_sales: number
+    }[]
+  >([])
+  const [ecSalesData, setEcSalesData] = useState<
+    {
+      date: string
+      ec_sales: number
+    }[]
+  >([])
+  const [floorSalesYearData, setFloorSalesYearData] = useState<
+    {
+      month: string
+      floor_sales: number
+    }[]
+  >([])
+  const [ecSalesYearData, setEcSalesYearData] = useState<
+    {
+      month: string
+      ec_sales: number
+    }[]
+  >([])
 
   const [aiReport, setAiReport] = useState<{
     summary: string
@@ -49,6 +51,8 @@ export default function DashboardView() {
   const [aiLoading, setAiLoading] = useState<boolean>(true)
   const [aiError, setAiError] = useState<boolean>(false)
   const [compareRecent, setCompareRecent] = useState<string>("")
+  const [aiReportLoading, setAiReportLoading] = useState<boolean>(false)
+  const [latestAiReport, setLatestAiReport] = useState<string>("")
 
   useEffect(() => {
     const fetchMonthlyData = async () => {
@@ -71,14 +75,8 @@ export default function DashboardView() {
         return
       }
 
-      const floor = (data || []).reduce(
-        (sum, row) => sum + (row.floor_sales || 0),
-        0,
-      )
-      const register = (data || []).reduce(
-        (sum, row) => sum + (row.register_count || 0),
-        0,
-      )
+      const floor = (data || []).reduce((sum, row) => sum + (row.floor_sales || 0), 0)
+      const register = (data || []).reduce((sum, row) => sum + (row.register_count || 0), 0)
       const ec = (data || []).reduce(
         (sum, row) =>
           sum +
@@ -102,7 +100,7 @@ export default function DashboardView() {
             day: "numeric",
           }),
           floor_sales: row.floor_sales || 0,
-        }))
+        })),
       )
       setEcSalesData(
         (data || []).map((row) => ({
@@ -117,7 +115,7 @@ export default function DashboardView() {
             (row.mercari_amount || 0) +
             (row.base_amount || 0) +
             (row.qoo10_amount || 0),
-        }))
+        })),
       )
     }
 
@@ -136,14 +134,8 @@ export default function DashboardView() {
         return
       }
 
-      const totalFloor = (data || []).reduce(
-        (sum, row) => sum + (row.floor_sales || 0),
-        0,
-      )
-      const totalRegister = (data || []).reduce(
-        (sum, row) => sum + (row.register_count || 0),
-        0,
-      )
+      const totalFloor = (data || []).reduce((sum, row) => sum + (row.floor_sales || 0), 0)
+      const totalRegister = (data || []).reduce((sum, row) => sum + (row.register_count || 0), 0)
       setFloorSales(totalFloor)
       setRegisterCount(totalRegister)
     }
@@ -155,9 +147,7 @@ export default function DashboardView() {
     const fetchEcTotal = async () => {
       const { data, error } = await supabase
         .from("daily_sales_report")
-        .select(
-          "amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount",
-        )
+        .select("amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount")
         .eq("date", selectedDate.toISOString().split("T")[0])
 
       if (error) {
@@ -217,7 +207,6 @@ export default function DashboardView() {
         floorMap.set(key, 0)
         ecMap.set(key, 0)
       }
-
       ;(data || []).forEach((row) => {
         const d = new Date(row.date)
         const key = new Date(d).toISOString().slice(0, 7).replace("-", "/")
@@ -254,35 +243,36 @@ export default function DashboardView() {
   }, [selectedDate])
 
   useEffect(() => {
-    const fetchAiComment = async () => {
+    const fetchLatestAiReport = async () => {
       try {
-        const res = await fetch('/api/analyze')
-        if (!res.ok) throw new Error('fetch error')
-        const data = await res.json()
-        setAiReport({
-          summary: data.summary || '',
-          compare_recent: data.compare_recent || '',
-          compare_last_year: data.compare_last_year || '',
-          top3: data.top3 || '',
-        })
+        setAiLoading(true)
+        const { data, error } = await supabase
+          .from("ai_reports")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(1)
+
+        if (error) throw error
+
+        if (data && data.length > 0) {
+          setLatestAiReport(data[0].content || "")
+        }
       } catch (e) {
-        console.error(e)
+        console.error("Error fetching latest AI report:", e)
         setAiError(true)
       } finally {
         setAiLoading(false)
       }
     }
 
-    fetchAiComment()
+    fetchLatestAiReport()
   }, [])
 
   useEffect(() => {
     const fetchCompare = async () => {
       try {
-        const res = await fetch(
-          `/api/compare?date=${selectedDate.toISOString().split("T")[0]}`,
-        )
-        if (!res.ok) throw new Error('fetch error')
+        const res = await fetch(`/api/compare?date=${selectedDate.toISOString().split("T")[0]}`)
+        if (!res.ok) throw new Error("fetch error")
         const text = await res.text()
         setCompareRecent(text)
       } catch (e) {
@@ -294,9 +284,7 @@ export default function DashboardView() {
   }, [selectedDate])
 
   const handleGenerate = async () => {
-    const res = await fetch(
-      `/api/report?date=${selectedDate.toISOString().slice(0, 10)}`,
-    )
+    const res = await fetch(`/api/report?date=${selectedDate.toISOString().slice(0, 10)}`)
     const txt = await res.text()
     await navigator.clipboard.writeText(txt)
     alert("売上報告をコピーしました")
@@ -308,6 +296,50 @@ export default function DashboardView() {
       currency: "JPY",
       currencyDisplay: "symbol",
     }).format(amount)
+
+  const handleRunAiAnalysis = async () => {
+    try {
+      setAiReportLoading(true)
+
+      // Send POST request to /api/analyze
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mode: "summary", payload: null }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      if (!data.ok) {
+        throw new Error(data.error || "Unknown error")
+      }
+
+      // Update the UI with the result
+      setLatestAiReport(data.result)
+
+      // Insert the result into ai_reports table
+      const { error: insertError } = await supabase.from("ai_reports").insert([{ content: data.result }])
+
+      if (insertError) {
+        console.error("Error inserting AI report:", insertError)
+      }
+    } catch (err: any) {
+      console.error("AI analysis error:", err)
+      toast({
+        variant: "destructive",
+        title: "分析エラー",
+        description: err.message || String(err),
+      })
+    } finally {
+      setAiReportLoading(false)
+    }
+  }
 
   return (
     <div>
@@ -343,12 +375,8 @@ export default function DashboardView() {
               <Yen className="h-4 w-4 text-gray-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(floorSales || 0)}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {selectedDate.toISOString().slice(0, 10)}
-              </p>
+              <div className="text-2xl font-bold">{formatCurrency(floorSales || 0)}</div>
+              <p className="text-xs text-gray-500 mt-1">{selectedDate.toISOString().slice(0, 10)}</p>
             </CardContent>
           </Card>
 
@@ -359,9 +387,7 @@ export default function DashboardView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{registerCount ?? 0}</div>
-              <p className="text-xs text-gray-500 mt-1">
-                {selectedDate.toISOString().slice(0, 10)}
-              </p>
+              <p className="text-xs text-gray-500 mt-1">{selectedDate.toISOString().slice(0, 10)}</p>
             </CardContent>
           </Card>
 
@@ -371,12 +397,8 @@ export default function DashboardView() {
               <BarChart3 className="h-4 w-4 text-gray-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {ecTotalAmount !== null ? formatCurrency(ecTotalAmount) : "¥0"}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {selectedDate.toISOString().slice(0, 10)}
-              </p>
+              <div className="text-2xl font-bold">{ecTotalAmount !== null ? formatCurrency(ecTotalAmount) : "¥0"}</div>
+              <p className="text-xs text-gray-500 mt-1">{selectedDate.toISOString().slice(0, 10)}</p>
             </CardContent>
           </Card>
 
@@ -386,12 +408,8 @@ export default function DashboardView() {
               <TrendingUp className="h-4 w-4 text-gray-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency((floorSales || 0) + (ecTotalAmount || 0))}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {selectedDate.toISOString().slice(0, 10)}
-              </p>
+              <div className="text-2xl font-bold">{formatCurrency((floorSales || 0) + (ecTotalAmount || 0))}</div>
+              <p className="text-xs text-gray-500 mt-1">{selectedDate.toISOString().slice(0, 10)}</p>
             </CardContent>
           </Card>
         </div>
@@ -406,9 +424,7 @@ export default function DashboardView() {
               <div className="text-2xl font-bold">
                 {monthlyFloorSales !== null ? formatCurrency(monthlyFloorSales) : "¥0"}
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                1日〜{selectedDate.toISOString().slice(0, 10)}
-              </p>
+              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate.toISOString().slice(0, 10)}</p>
             </CardContent>
           </Card>
 
@@ -421,9 +437,7 @@ export default function DashboardView() {
               <div className="text-2xl font-bold">
                 {monthlyEcTotal !== null ? formatCurrency(monthlyEcTotal) : "¥0"}
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                1日〜{selectedDate.toISOString().slice(0, 10)}
-              </p>
+              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate.toISOString().slice(0, 10)}</p>
             </CardContent>
           </Card>
 
@@ -434,9 +448,7 @@ export default function DashboardView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{monthlyRegisterCount ?? 0}</div>
-              <p className="text-xs text-gray-500 mt-1">
-                1日〜{selectedDate.toISOString().slice(0, 10)}
-              </p>
+              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate.toISOString().slice(0, 10)}</p>
             </CardContent>
           </Card>
 
@@ -446,12 +458,8 @@ export default function DashboardView() {
               <TrendingUp className="h-4 w-4 text-gray-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {monthlySales !== null ? formatCurrency(monthlySales) : "¥0"}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                1日〜{selectedDate.toISOString().slice(0, 10)}
-              </p>
+              <div className="text-2xl font-bold">{monthlySales !== null ? formatCurrency(monthlySales) : "¥0"}</div>
+              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate.toISOString().slice(0, 10)}</p>
             </CardContent>
           </Card>
         </div>
@@ -459,111 +467,105 @@ export default function DashboardView() {
 
       {/* Charts */}
       <div className="grid grid-cols-2 gap-4 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">フロア売上（月間）</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ReBarChart data={floorSalesData} margin={{ left: 10, right: 10 }}>
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    <Bar dataKey="floor_sales" fill="#3b82f6" />
-                  </ReBarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">フロア売上（月間）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ReBarChart data={floorSalesData} margin={{ left: 10, right: 10 }}>
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Bar dataKey="floor_sales" fill="#3b82f6" />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">EC売上（月間）</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ReBarChart data={ecSalesData} margin={{ left: 10, right: 10 }}>
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                      <Bar dataKey="ec_sales" fill="#10b981" />
-                    </ReBarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-          </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">EC売上（月間）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ReBarChart data={ecSalesData} margin={{ left: 10, right: 10 }}>
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Bar dataKey="ec_sales" fill="#10b981" />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">フロア売上（年間）</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ReBarChart data={floorSalesYearData} margin={{ left: 10, right: 10 }}>
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                      <Bar dataKey="floor_sales" fill="#3b82f6" />
-                    </ReBarChart>
-                  </ResponsiveContainer>
-                </div>
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">フロア売上（年間）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ReBarChart data={floorSalesYearData} margin={{ left: 10, right: 10 }}>
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Bar dataKey="floor_sales" fill="#3b82f6" />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">EC売上（年間）</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ReBarChart data={ecSalesYearData} margin={{ left: 10, right: 10 }}>
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                      <Bar dataKey="ec_sales" fill="#10b981" />
-                    </ReBarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-          </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">EC売上（年間）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ReBarChart data={ecSalesYearData} margin={{ left: 10, right: 10 }}>
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Bar dataKey="ec_sales" fill="#10b981" />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* AI Summary Block */}
       <div className="space-y-4 mt-10">
-        <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
+          <Button onClick={handleRunAiAnalysis} disabled={aiReportLoading}>
+            {aiReportLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                分析中...
+              </>
+            ) : (
+              "AI分析を実行"
+            )}
+          </Button>
+        </div>
 
         <Card className="bg-gray-50 overflow-visible">
           <CardContent className="p-4 text-sm text-gray-600 whitespace-pre-wrap overflow-visible">
-            {aiLoading && <p>分析中...</p>}
+            {aiLoading && <p>読み込み中...</p>}
             {aiError && !aiLoading && <p>取得に失敗しました</p>}
-            {!aiLoading && !aiError && aiReport && (
+            {!aiLoading && !aiError && (
               <div className="space-y-4">
                 <div>
-                  <h4 className="font-semibold">簡易分析</h4>
+                  <h4 className="font-semibold text-lg">分析結果</h4>
                   <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed max-w-full overflow-visible">
-                    {aiReport.summary}
-                  </pre>
-                </div>
-                <div>
-                  <h4 className="font-semibold">前月・前々月との比較</h4>
-                  <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed max-w-full overflow-visible">
-                    {compareRecent || aiReport.compare_recent}
-                  </pre>
-                </div>
-                <div>
-                  <h4 className="font-semibold">前年同月との比較</h4>
-                  <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed max-w-full overflow-visible">
-                    {aiReport.compare_last_year}
-                  </pre>
-                </div>
-                <div>
-                  <h4 className="font-semibold">特異日ベスト3</h4>
-                  <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed max-w-full overflow-visible">
-                    {aiReport.top3}
+                    {latestAiReport || "分析結果がありません。「AI分析を実行」ボタンを押して分析を開始してください。"}
                   </pre>
                 </div>
               </div>
