@@ -307,7 +307,9 @@ export default function DashboardView() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ mode: "summary", payload: null }),
+        body: JSON.stringify({
+          date: selectedDate.toISOString().slice(0, 10),
+        }),
       })
 
       if (!response.ok) {
@@ -321,14 +323,7 @@ export default function DashboardView() {
       }
 
       // Update the UI with the result
-      setLatestAiReport(data.result)
-
-      // Insert the result into ai_reports table
-      const { error: insertError } = await supabase.from("ai_reports").insert([{ content: data.result }])
-
-      if (insertError) {
-        console.error("Error inserting AI report:", insertError)
-      }
+      setLatestAiReport(data.summary)
     } catch (err: any) {
       console.error("AI analysis error:", err)
       toast({
