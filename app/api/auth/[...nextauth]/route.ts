@@ -1,7 +1,14 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
-const allowedEmails = ["aizubrandhall@gmail.com"];
+type UserInfo = { id: string; email: string }
+
+const authorize = ({ email }: { email?: string }): UserInfo | null => {
+  if (!email) return null
+  const normalized = email.toLowerCase()
+  if (normalized !== "aizubrandhall@gmail.com") return null
+  return { id: normalized, email: normalized }
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -12,17 +19,17 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user }) {
-      return allowedEmails.includes((user.email ?? "").toLowerCase());
+      return !!authorize({ email: user.email })
     },
-    async session({ session, token }) {
+    async session({ session }) {
       if (session.user) {
-        (session as any).role = allowedEmails.includes((session.user.email ?? "").toLowerCase()) ? "admin" : "user";
+        (session as any).role = authorize({ email: session.user.email }) ? "admin" : "user";
       }
       return session;
     },
     async jwt({ token }) {
       if (token.email) {
-        (token as any).role = allowedEmails.includes(token.email.toLowerCase()) ? "admin" : "user";
+        (token as any).role = authorize({ email: token.email }) ? "admin" : "user";
       }
       return token;
     },
