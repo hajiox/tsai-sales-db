@@ -11,6 +11,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, CheckCircle } from "lucide-react"
 import { supabase, type DailySalesReport } from "../lib/supabase"
+import { formatDateJST } from "@/lib/utils"
 
 const salesChannels = [
   { key: "amazon", name: "Amazon" },
@@ -108,7 +109,7 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
         const { data, error } = await supabase
           .from("daily_sales_report")
           .select("*")
-          .eq("date", selectedDate.toISOString().slice(0, 10))
+          .eq("date", formatDateJST(selectedDate))
           .single()
 
         if (error) {

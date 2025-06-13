@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ja } from "date-fns/locale"
 import { CalendarIcon, CheckCircle } from "lucide-react"
 import { supabase, type DailySalesReport } from "../lib/supabase"
+import { formatDateJST } from "@/lib/utils"
 
 const salesChannels = [
   { key: "amazon", name: "Amazon" },
@@ -51,7 +52,7 @@ export default function SalesInputView() {
   }
 
   const formatDate = (date: Date) => {
-    return date.toISOString().split("T")[0]
+    return formatDateJST(date)
   }
 
   const formatDateJapanese = (date: Date) => {

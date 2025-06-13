@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import { BarChart3, TrendingUp, Users, JapaneseYenIcon as Yen, Loader2 } from "lucide-react"
 import { supabase } from "../lib/supabase"
+import { formatDateJST } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
 
@@ -59,7 +60,7 @@ export default function DashboardView() {
       const start = new Date(selectedDate)
       start.setDate(1)
 
-      const startDate = start.toISOString().split("T")[0]
+      const startDate = formatDateJST(start)
 
       const { data, error } = await supabase
         .from("daily_sales_report")
@@ -67,7 +68,7 @@ export default function DashboardView() {
           "date, floor_sales, register_count, amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount",
         )
         .gte("date", startDate)
-        .lte("date", selectedDate.toISOString().split("T")[0])
+        .lte("date", formatDateJST(selectedDate))
         .order("date", { ascending: true })
 
       if (error) {
@@ -127,7 +128,7 @@ export default function DashboardView() {
       const { data, error } = await supabase
         .from("daily_sales_report")
         .select("floor_sales, register_count")
-        .eq("date", selectedDate.toISOString().split("T")[0])
+        .eq("date", formatDateJST(selectedDate))
 
       if (error) {
         console.error("Error fetching floor sales/register count", error)
@@ -148,7 +149,7 @@ export default function DashboardView() {
       const { data, error } = await supabase
         .from("daily_sales_report")
         .select("amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount")
-        .eq("date", selectedDate.toISOString().split("T")[0])
+        .eq("date", formatDateJST(selectedDate))
 
       if (error) {
         console.error("Error fetching ec total amount", error)
@@ -180,8 +181,8 @@ export default function DashboardView() {
       start.setDate(1)
       start.setMonth(start.getMonth() - 11)
 
-      const startDate = start.toISOString().split("T")[0]
-      const endDate = end.toISOString().split("T")[0]
+      const startDate = formatDateJST(start)
+      const endDate = formatDateJST(end)
 
       const { data, error } = await supabase
         .from("daily_sales_report")
@@ -203,13 +204,13 @@ export default function DashboardView() {
       for (let i = 0; i < 12; i++) {
         const d = new Date(start)
         d.setMonth(start.getMonth() + i)
-        const key = new Date(d).toISOString().slice(0, 7).replace("-", "/")
+        const key = formatDateJST(d).slice(0, 7).replace("-", "/")
         floorMap.set(key, 0)
         ecMap.set(key, 0)
       }
       ;(data || []).forEach((row) => {
         const d = new Date(row.date)
-        const key = new Date(d).toISOString().slice(0, 7).replace("-", "/")
+        const key = formatDateJST(d).slice(0, 7).replace("-", "/")
         if (floorMap.has(key)) {
           floorMap.set(key, (floorMap.get(key) || 0) + (row.floor_sales || 0))
           ecMap.set(
@@ -271,7 +272,7 @@ export default function DashboardView() {
   useEffect(() => {
     const fetchCompare = async () => {
       try {
-        const res = await fetch(`/api/compare?date=${selectedDate.toISOString().split("T")[0]}`)
+        const res = await fetch(`/api/compare?date=${formatDateJST(selectedDate)}`)
         if (!res.ok) throw new Error("fetch error")
         const text = await res.text()
         setCompareRecent(text)
@@ -284,7 +285,7 @@ export default function DashboardView() {
   }, [selectedDate])
 
   const handleGenerate = async () => {
-    const res = await fetch(`/api/report?date=${selectedDate.toISOString().slice(0, 10)}`)
+    const res = await fetch(`/api/report?date=${formatDateJST(selectedDate)}`)
     const txt = await res.text()
     await navigator.clipboard.writeText(txt)
     alert("売上報告をコピーしました")
@@ -307,7 +308,7 @@ export default function DashboardView() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ mode: "summary", payload: null }),
+        body: JSON.stringify({ date: formatDateJST(selectedDate) }),
       })
 
       if (!response.ok) {
@@ -351,7 +352,7 @@ export default function DashboardView() {
         <div className="text-right">
           <input
             type="date"
-            value={selectedDate.toISOString().slice(0, 10)}
+            value={formatDateJST(selectedDate)}
             onChange={(e) => setSelectedDate(new Date(e.target.value))}
             className="border rounded text-xs p-1 mb-1 mr-2"
           />
@@ -376,7 +377,7 @@ export default function DashboardView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(floorSales || 0)}</div>
-              <p className="text-xs text-gray-500 mt-1">{selectedDate.toISOString().slice(0, 10)}</p>
+              <p className="text-xs text-gray-500 mt-1">{formatDateJST(selectedDate)}</p>
             </CardContent>
           </Card>
 
@@ -387,7 +388,7 @@ export default function DashboardView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{registerCount ?? 0}</div>
-              <p className="text-xs text-gray-500 mt-1">{selectedDate.toISOString().slice(0, 10)}</p>
+              <p className="text-xs text-gray-500 mt-1">{formatDateJST(selectedDate)}</p>
             </CardContent>
           </Card>
 
@@ -398,7 +399,7 @@ export default function DashboardView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{ecTotalAmount !== null ? formatCurrency(ecTotalAmount) : "¥0"}</div>
-              <p className="text-xs text-gray-500 mt-1">{selectedDate.toISOString().slice(0, 10)}</p>
+              <p className="text-xs text-gray-500 mt-1">{formatDateJST(selectedDate)}</p>
             </CardContent>
           </Card>
 
@@ -409,7 +410,7 @@ export default function DashboardView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency((floorSales || 0) + (ecTotalAmount || 0))}</div>
-              <p className="text-xs text-gray-500 mt-1">{selectedDate.toISOString().slice(0, 10)}</p>
+              <p className="text-xs text-gray-500 mt-1">{formatDateJST(selectedDate)}</p>
             </CardContent>
           </Card>
         </div>
@@ -424,7 +425,7 @@ export default function DashboardView() {
               <div className="text-2xl font-bold">
                 {monthlyFloorSales !== null ? formatCurrency(monthlyFloorSales) : "¥0"}
               </div>
-              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate.toISOString().slice(0, 10)}</p>
+                <p className="text-xs text-gray-500 mt-1">1日〜{formatDateJST(selectedDate)}</p>
             </CardContent>
           </Card>
 
@@ -437,7 +438,7 @@ export default function DashboardView() {
               <div className="text-2xl font-bold">
                 {monthlyEcTotal !== null ? formatCurrency(monthlyEcTotal) : "¥0"}
               </div>
-              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate.toISOString().slice(0, 10)}</p>
+                <p className="text-xs text-gray-500 mt-1">1日〜{formatDateJST(selectedDate)}</p>
             </CardContent>
           </Card>
 
@@ -448,7 +449,7 @@ export default function DashboardView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{monthlyRegisterCount ?? 0}</div>
-              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate.toISOString().slice(0, 10)}</p>
+                <p className="text-xs text-gray-500 mt-1">1日〜{formatDateJST(selectedDate)}</p>
             </CardContent>
           </Card>
 
@@ -459,7 +460,7 @@ export default function DashboardView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{monthlySales !== null ? formatCurrency(monthlySales) : "¥0"}</div>
-              <p className="text-xs text-gray-500 mt-1">1日〜{selectedDate.toISOString().slice(0, 10)}</p>
+                <p className="text-xs text-gray-500 mt-1">1日〜{formatDateJST(selectedDate)}</p>
             </CardContent>
           </Card>
         </div>
