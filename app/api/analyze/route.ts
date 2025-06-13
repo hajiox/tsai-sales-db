@@ -43,7 +43,8 @@ export async function POST(req: Request) {
       ],
     });
 
-    const summary = choices[0]?.message.content ?? '解析結果なし';
+    const raw = choices[0]?.message.content ?? '';
+    const summary = raw.trim() === '' ? '解析結果なし' : raw;
 
     // ------- save -------
     await supabase
@@ -53,6 +54,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, summary });
   } catch (e: any) {
     console.error('analyze_error', e);
-    return NextResponse.json({ ok: false, error: e.message ?? 'unknown' });
+    return NextResponse.json({ ok: false, error: e.message });
   }
 }
