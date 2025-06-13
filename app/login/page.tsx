@@ -1,15 +1,13 @@
-"use client"
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { signIn, useSession } from "next-auth/react"
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import LoginButton from "./LoginButton";
 
-export default function Login() {
-  const { data: session } = useSession()
-  const router = useRouter()
-
-  useEffect(() => {
-    if (session) router.replace("/dashboard")
-  }, [session, router])
+export default async function LoginPage() {
+  const session = await getServerSession(authOptions);
+  if (session) {
+    redirect("/dashboard");
+  }
 
   return (
     <div className="flex min-h-screen items-start justify-center pt-20 bg-gray-100">
@@ -18,14 +16,9 @@ export default function Login() {
         <p className="mb-6 text-center text-sm text-gray-500">Technical Staff AI System</p>
         <p className="mb-4 text-center">Googleアカウントでログインしてください</p>
         <div className="flex justify-center">
-          <button
-            className="rounded bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700"
-            onClick={() => signIn("google")}
-          >
-            Googleでログイン
-          </button>
+          <LoginButton />
         </div>
       </div>
     </div>
-  )
+  );
 }
