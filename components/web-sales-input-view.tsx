@@ -1,5 +1,5 @@
 // components/web-sales-input-view.tsx
-// WEB販売管理システム：件数入力画面（既存件数を初期表示）
+// WEB販売管理システム：件数入力画面（report_date 修正済）
 
 "use client";
 
@@ -78,7 +78,6 @@ export default function WebSalesInputView() {
     try {
       const first = `${month}-01`;
       const upserts = rows.map((r) => ({
-        ...(r.id ? { id: r.id } : {}),
         report_date: first,
         product_id: r.product_id,
         amazon_count: r.amazon_count,
@@ -148,7 +147,7 @@ export default function WebSalesInputView() {
             const totalSales = (r.price ?? 0) * total;
 
             return (
-              <tr key={r.id} className="border-t">
+              <tr key={r.product_id} className="border-t">
                 <td>{r.product_name}</td>
                 <td>{r.series_name ?? "-"}</td>
                 <td className="text-right">{r.price ?? 0}</td>
@@ -158,7 +157,7 @@ export default function WebSalesInputView() {
                     type="number"
                     value={r.amazon_count ?? 0}
                     onChange={(e) =>
-                      update(r.id, "amazon_count", Number(e.target.value) || 0)
+                      update(r.product_id, "amazon_count", Number(e.target.value) || 0)
                     }
                     className="w-20 border rounded-sm p-1 text-right"
                   />
@@ -168,7 +167,7 @@ export default function WebSalesInputView() {
                     type="number"
                     value={r.rakuten_count ?? 0}
                     onChange={(e) =>
-                      update(r.id, "rakuten_count", Number(e.target.value) || 0)
+                      update(r.product_id, "rakuten_count", Number(e.target.value) || 0)
                     }
                     className="w-20 border rounded-sm p-1 text-right"
                   />
@@ -178,7 +177,7 @@ export default function WebSalesInputView() {
                     type="number"
                     value={r.yahoo_count ?? 0}
                     onChange={(e) =>
-                      update(r.id, "yahoo_count", Number(e.target.value) || 0)
+                      update(r.product_id, "yahoo_count", Number(e.target.value) || 0)
                     }
                     className="w-20 border rounded-sm p-1 text-right"
                   />
@@ -188,7 +187,7 @@ export default function WebSalesInputView() {
                     type="number"
                     value={r.mercari_count ?? 0}
                     onChange={(e) =>
-                      update(r.id, "mercari_count", Number(e.target.value) || 0)
+                      update(r.product_id, "mercari_count", Number(e.target.value) || 0)
                     }
                     className="w-20 border rounded-sm p-1 text-right"
                   />
@@ -198,7 +197,7 @@ export default function WebSalesInputView() {
                     type="number"
                     value={r.base_count ?? 0}
                     onChange={(e) =>
-                      update(r.id, "base_count", Number(e.target.value) || 0)
+                      update(r.product_id, "base_count", Number(e.target.value) || 0)
                     }
                     className="w-20 border rounded-sm p-1 text-right"
                   />
@@ -208,7 +207,7 @@ export default function WebSalesInputView() {
                     type="number"
                     value={r.qoo10_count ?? 0}
                     onChange={(e) =>
-                      update(r.id, "qoo10_count", Number(e.target.value) || 0)
+                      update(r.product_id, "qoo10_count", Number(e.target.value) || 0)
                     }
                     className="w-20 border rounded-sm p-1 text-right"
                   />
@@ -216,13 +215,4 @@ export default function WebSalesInputView() {
 
                 <td className="text-right font-bold">{total}</td>
                 <td className="text-right font-bold">
-                  ¥{totalSales.toLocaleString()}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    )}
-  </div>);
-}
+                  ¥{totalSales.toLo
