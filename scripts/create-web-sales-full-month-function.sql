@@ -13,8 +13,7 @@ returns table (
   base_count int4,
   qoo10_count int4
 )
-language sql stable
-as $$
+language sql stable as $$
 select
   w.id,
   p.id         as product_id,
@@ -22,12 +21,12 @@ select
   p.series     as series_name,
   p.series_code,
   p.price,
-  coalesce(w.amazon_count ,0) as amazon_count ,
-  coalesce(w.rakuten_count,0) as rakuten_count,
-  coalesce(w.yahoo_count  ,0) as yahoo_count  ,
-  coalesce(w.mercari_count,0) as mercari_count,
-  coalesce(w.base_count   ,0) as base_count   ,
-  coalesce(w.qoo10_count  ,0) as qoo10_count
+  coalesce(w.amazon_count ,0) amazon_count ,
+  coalesce(w.rakuten_count,0) rakuten_count,
+  coalesce(w.yahoo_count  ,0) yahoo_count  ,
+  coalesce(w.mercari_count,0) mercari_count,
+  coalesce(w.base_count   ,0) base_count   ,
+  coalesce(w.qoo10_count  ,0) qoo10_count
 from products p
 left join web_sales_summary w
   on w.product_id   = p.id
