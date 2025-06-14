@@ -7,10 +7,8 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  LineChart,
-  Line,
-  Legend,
 } from "recharts"
+import WebSalesSiteTrend from "./websales-site-trend"
 
 const productData = [
   { month: "1月", sales: 30 },
@@ -21,14 +19,6 @@ const productData = [
   { month: "6月", sales: 60 },
 ]
 
-const siteData = [
-  { month: "1月", Amazon: 10, BASE: 5, Yahoo: 8, 楽天: 12 },
-  { month: "2月", Amazon: 12, BASE: 7, Yahoo: 9, 楽天: 15 },
-  { month: "3月", Amazon: 15, BASE: 8, Yahoo: 7, 楽天: 10 },
-  { month: "4月", Amazon: 14, BASE: 9, Yahoo: 10, 楽天: 12 },
-  { month: "5月", Amazon: 16, BASE: 10, Yahoo: 11, 楽天: 18 },
-  { month: "6月", Amazon: 18, BASE: 12, Yahoo: 9, 楽天: 20 },
-]
 
 const compareData = [
   { month: "1月", current: 30, lastYear: 25 },
@@ -60,27 +50,7 @@ export default function WebSalesDashboard({ month }: { month: string }) {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>サイト別売上推移</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={siteData}>
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="Amazon" stroke="#3b82f6" />
-                  <Line type="monotone" dataKey="BASE" stroke="#10b981" />
-                  <Line type="monotone" dataKey="Yahoo" stroke="#f43f5e" />
-                  <Line type="monotone" dataKey="楽天" stroke="#f59e0b" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        <WebSalesSiteTrend />
       </div>
       <Card>
         <CardHeader>
