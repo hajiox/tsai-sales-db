@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 
 type Row = {
   id: string;
+  product_id: string;
   product_name: string;
   series_name: string | null;
   price: number | null;
@@ -32,7 +33,7 @@ export default function WebSalesInputView() {
     const { data, error } = await supabase
       .from("web_sales_summary")
       .select(
-        `id, product_name, series_name, price,
+        `id, product_id, product_name, series_name, price,
          amazon_count, rakuten_count, yahoo_count,
          mercari_count, base_count, qoo10_count`
       )
@@ -70,6 +71,11 @@ export default function WebSalesInputView() {
     setLoading(true);
     const updates = rows.map((r) => ({
       id: r.id,
+      product_id: r.product_id,
+      product_name: r.product_name,
+      series_name: r.series_name,
+      price: r.price,
+      report_month: `${month}-01`,
       amazon_count: r.amazon_count,
       rakuten_count: r.rakuten_count,
       yahoo_count: r.yahoo_count,
