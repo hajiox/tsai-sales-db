@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
 
 export type Product = {
-  id: number
+  id: string
   name: string
   series: string
   price: number
@@ -15,7 +15,7 @@ export type Product = {
 export type WebSalesSummary = {
   id?: number
   report_month: string
-  product_id: number
+  product_id: string
   amazon: number
   rakuten: number
   yahoo: number
@@ -67,12 +67,12 @@ export default function WebSalesInputView() {
 
     const map: Record<string, any> = {}
     ;(summary || []).forEach((s) => {
-      map[s.product_name] = s
+      map[s.product_id] = s
     })
 
     setRows(
       (products || []).map((p) => {
-        const s = map[p.name] || {}
+        const s = map[p.id] || {}
         return recalc({
           ...p,
           summary_id: s.id,
@@ -94,11 +94,11 @@ export default function WebSalesInputView() {
     loadData(reportMonth)
   }, [reportMonth])
 
-  const handleChange = (id: number, field: keyof WebSalesSummary, value: number) => {
+  const handleChange = (id: string, field: keyof WebSalesSummary, value: number) => {
     setRows((prev) => prev.map((r) => (r.id === id ? recalc({ ...r, [field]: value }) : r)))
   }
 
-  const toggleEdit = (id: number) => {
+  const toggleEdit = (id: string) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, editing: !r.editing } : r)))
   }
 
@@ -128,9 +128,7 @@ export default function WebSalesInputView() {
     for (const row of rows) {
       const payload = {
         report_month: `${reportMonth}-01`,
-        product_name: row.name,
-        series_name: row.series,
-        price: row.price,
+        product_id: row.id,
         amazon_count: row.amazon,
         rakuten_count: row.rakuten,
         yahoo_count: row.yahoo,
