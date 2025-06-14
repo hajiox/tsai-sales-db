@@ -48,6 +48,7 @@ export default function WebSalesInputView() {
       ...row,
       total_count: total,
       total_sales: total * row.price,
+      editing: row.editing ?? false,
     }
   }
 
