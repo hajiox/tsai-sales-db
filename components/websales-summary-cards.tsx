@@ -11,23 +11,27 @@ const SITES = [
   { key: "mercari", name: "メルカリ" },
   { key: "base", name: "BASE" },
   { key: "qoo10", name: "Qoo10" },
-  { key: "floor", name: "フロア" },
 ]
 
 type Totals = Record<string, { count: number; amount: number }>
 
-export default function WebSalesSummaryCards() {
+export default function WebSalesSummaryCards({ month }: { month: string }) {
   const [totals, setTotals] = useState<Totals | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
+      const start = `${month}-01`
+      const next = new Date(start)
+      next.setMonth(next.getMonth() + 1)
+      const end = next.toISOString().slice(0, 10)
+
       const { data, error } = await supabase
         .from("web_sales")
         .select(
-          "created_at, price, amazon, rakuten, yahoo, mercari, base, qoo10, floor"
+          "created_at, price, amazon, rakuten, yahoo, mercari, base, qoo10"
         )
-        .gte("created_at", "2025-04-01")
-        .lte("created_at", "2025-04-30")
+        .gte("created_at", start)
+        .lt("created_at", end)
 
       if (error) {
         console.error("fetch_error", error)
@@ -52,12 +56,12 @@ export default function WebSalesSummaryCards() {
     }
 
     fetchData()
-  }, [])
+  }, [month])
 
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-4">
       {SITES.map((s) => (
         <Card key={s.key}>
           <CardHeader>
