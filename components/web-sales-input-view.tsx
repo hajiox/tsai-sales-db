@@ -54,10 +54,19 @@ const WebSalesInputView = () => {
         .returns<SupabaseRpcResult[]>();
 
       if (error) {
+        console.error('Supabase RPC Error:', error);
         throw new Error(`Supabase RPC Error: ${error.message} (Code: ${error.code})`);
       }
 
       console.log(`Received ${data?.length || 0} rows from RPC function`);
+      console.log('First 3 rows of raw data:', data?.slice(0, 3));
+      
+      // 販売数が0以外のデータをカウント
+      const nonZeroSales = data?.filter(item => 
+        (item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0) + 
+        (item.mercari_count || 0) + (item.base_count || 0) + (item.qoo10_count || 0) > 0
+      );
+      console.log(`Non-zero sales rows: ${nonZeroSales?.length || 0}`);
 
       if (!data) {
         setRows([]);
