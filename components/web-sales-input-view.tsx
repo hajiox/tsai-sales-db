@@ -12,6 +12,7 @@ type Row = {
   product_id: string;
   product_name: string;
   series_name: string | null;
+  series_code: number;
   price: number | null;
   amazon_count: number;
   rakuten_count: number;
@@ -45,6 +46,7 @@ export default function WebSalesInputView() {
           product_id: r.product_id,
           product_name: r.product_name,
           series_name: r.series_name,
+          series_code: r.series_code,
           price: r.price,
           amazon_count: r.amazon_count ?? 0,
           rakuten_count: r.rakuten_count ?? 0,
@@ -71,7 +73,7 @@ export default function WebSalesInputView() {
     id: string,
     field: keyof Omit<
       Row,
-      "id" | "product_id" | "product_name" | "series_name" | "price"
+      "id" | "product_id" | "product_name" | "series_name" | "series_code" | "price"
     >,
     val: number
   ) =>
