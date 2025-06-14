@@ -186,13 +186,12 @@ export default function WebSalesInputView() {
               <th className="border px-2 py-1">合計件数</th>
               <th className="border px-2 py-1">合計売上</th>
               <th className="border px-2 py-1"></th>
-              <th className="border px-2 py-1"></th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={13} className="border px-2 py-4 text-center">
+                <td colSpan={12} className="border px-2 py-4 text-center">
                   商品がありません
                 </td>
               </tr>
@@ -236,16 +235,6 @@ export default function WebSalesInputView() {
                       className="px-1"
                     >
                       ✏️
-                    </Button>
-                  </td>
-                  <td className="border px-2 py-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDelete(r)}
-                      className="px-1"
-                    >
-                      🗑
                     </Button>
                   </td>
                 </tr>
