@@ -62,7 +62,7 @@ export default function WebSalesInputView() {
     const { data: summary } = await supabase
       .from("web_sales_summary")
       .select("*")
-      .eq("report_month", `${month}-01`)
+      .eq("report_month", `${reportMonth}-01`)
 
     const map: Record<number, any> = {}
     ;(summary || []).forEach((s) => {
