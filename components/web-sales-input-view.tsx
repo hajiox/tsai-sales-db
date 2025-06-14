@@ -100,119 +100,129 @@ export default function WebSalesInputView() {
     }
   };
 
-  return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <input
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="border rounded px-2 py-1"
-        />
-        <button
-          onClick={save}
-          disabled={loading}
-          className="bg-blue-600 text-white px-3 py-1 rounded disabled:opacity-50"
-        >
-          保存
-        </button>
-      </div>
+  return (<div className="p-6 space-y-4">
+    <div className="flex items-center gap-2">
+      <input
+        type="month"
+        value={month}
+        onChange={(e) => setMonth(e.target.value)}
+        className="border rounded px-2 py-1"
+      />
+      <button
+        onClick={save}
+        disabled={loading}
+        className="bg-blue-600 text-white px-3 py-1 rounded disabled:opacity-50"
+      >
+        保存
+      </button>
+    </div>
 
-      {loading ? (
-        <p>loading…</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left">商品名</th>
-              <th className="text-left">シリーズ名</th>
-              <th>単価</th>
-              <th>Amazon</th>
-              <th>楽天</th>
-              <th>Yahoo!</th>
-              <th>メルカリ</th>
-              <th>BASE</th>
-              <th>Qoo10</th>
-              <th>合計件数</th>
-              <th>合計売上</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const total =
-                (r.amazon_count ?? 0) +
-                (r.rakuten_count ?? 0) +
-                (r.yahoo_count ?? 0) +
-                (r.mercari_count ?? 0) +
-                (r.base_count ?? 0) +
-                (r.qoo10_count ?? 0);
-              const totalSales = (r.price ?? 0) * total;
+    {loading ? (
+      <p>loading…</p>
+    ) : (
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left">商品名</th>
+            <th className="text-left">シリーズ名</th>
+            <th>単価</th>
+            <th>Amazon</th>
+            <th>楽天</th>
+            <th>Yahoo!</th>
+            <th>メルカリ</th>
+            <th>BASE</th>
+            <th>Qoo10</th>
+            <th>合計件数</th>
+            <th>合計売上</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const total =
+              (r.amazon_count ?? 0) +
+              (r.rakuten_count ?? 0) +
+              (r.yahoo_count ?? 0) +
+              (r.mercari_count ?? 0) +
+              (r.base_count ?? 0) +
+              (r.qoo10_count ?? 0);
+            const totalSales = (r.price ?? 0) * total;
 
-              return (
-                <tr key={r.id} className="border-t">
-                  <td>{r.product_name}</td>
-                  <td>{r.series_name ?? "-"}</td>
-                  <td className="text-right">{r.price ?? 0}</td>
+            return (
+              <tr key={r.id} className="border-t">
+                <td>{r.product_name}</td>
+                <td>{r.series_name ?? "-"}</td>
+                <td className="text-right">{r.price ?? 0}</td>
 
-                  <td>
-                    <input
-                      type="number"
-                      value={r.amazon_count ?? 0}
-                      onChange={(e) =>
-                        update(r.id, "amazon_count", Number(e.target.value) || 0)
-                      }
-                      className="w-20 border rounded-sm p-1 text-right"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={r.rakuten_count ?? 0}
-                      onChange={(e) =>
-                        update(r.id, "rakuten_count", Number(e.target.value) || 0)
-                      }
-                      className="w-20 border rounded-sm p-1 text-right"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={r.yahoo_count ?? 0}
-                      onChange={(e) =>
-                        update(r.id, "yahoo_count", Number(e.target.value) || 0)
-                      }
-                      className="w-20 border rounded-sm p-1 text-right"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={r.mercari_count ?? 0}
-                      onChange={(e) =>
-                        update(r.id, "mercari_count", Number(e.target.value) || 0)
-                      }
-                      className="w-20 border rounded-sm p-1 text-right"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={r.base_count ?? 0}
-                      onChange={(e) =>
-                        update(r.id, "base_count", Number(e.target.value) || 0)
-                      }
-                      className="w-20 border rounded-sm p-1 text-right"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={r.qoo10_count ?? 0}
-                      onChange={(e) =>
-                        update(r.id, "qoo10_count", Number(e.target.value) || 0)
-                      }
-                      className="w-20 border rounded-sm p-1 text-right"
-                    />
-                  </td>
+                <td>
+                  <input
+                    type="number"
+                    value={r.amazon_count ?? 0}
+                    onChange={(e) =>
+                      update(r.id, "amazon_count", Number(e.target.value) || 0)
+                    }
+                    className="w-20 border rounded-sm p-1 text-right"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    value={r.rakuten_count ?? 0}
+                    onChange={(e) =>
+                      update(r.id, "rakuten_count", Number(e.target.value) || 0)
+                    }
+                    className="w-20 border rounded-sm p-1 text-right"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    value={r.yahoo_count ?? 0}
+                    onChange={(e) =>
+                      update(r.id, "yahoo_count", Number(e.target.value) || 0)
+                    }
+                    className="w-20 border rounded-sm p-1 text-right"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    value={r.mercari_count ?? 0}
+                    onChange={(e) =>
+                      update(r.id, "mercari_count", Number(e.target.value) || 0)
+                    }
+                    className="w-20 border rounded-sm p-1 text-right"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    value={r.base_count ?? 0}
+                    onChange={(e) =>
+                      update(r.id, "base_count", Number(e.target.value) || 0)
+                    }
+                    className="w-20 border rounded-sm p-1 text-right"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    value={r.qoo10_count ?? 0}
+                    onChange={(e) =>
+                      update(r.id, "qoo10_count", Number(e.target.value) || 0)
+                    }
+                    className="w-20 border rounded-sm p-1 text-right"
+                  />
+                </td>
 
-                  <td className="text-right font-bold">{total}</td>
+                <td className="text-right font-bold">{total}</td>
+                <td className="text-right font-bold">
+                  ¥{totalSales.toLocaleString()}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    )}
+  </div>);
+}
