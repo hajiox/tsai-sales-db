@@ -151,7 +151,7 @@ export default function WebSalesInputView() {
     }
     alert("保存しました")
     setRows((prev) => prev.map((r) => ({ ...r, editing: false })))
-    loadData(reportMonth)
+    await loadData(reportMonth)
   }
 
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
