@@ -31,19 +31,12 @@ export default function WebSalesDashboard() {
   const loadData = async (ym: string) => {
     setLoading(true);
     const firstDay = `${ym}-01`;
-    const { data, error } = await supabase
-      .from("web_sales_summary")
-      .select(
-        `id, product_id, product_name, series_name, price,
-         amazon_count, rakuten_count, yahoo_count,
-         mercari_count, base_count, qoo10_count`
-      )
-      .eq("report_month", firstDay) // ← '=' に統一
-      .order("series_name", { ascending: true })
-      .order("product_name", { ascending: true });
+    const { data, error } = await supabase.rpc("web_sales_full_month", {
+      target_month: firstDay,
+    });
 
     if (error) throw error;
-    setRows(data ?? []);
+    setRows((data as SummaryRow[]) ?? []);
     setLoading(false);
   };
 
