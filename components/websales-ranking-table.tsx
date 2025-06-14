@@ -14,7 +14,8 @@ interface Row {
 }
 
 export default function WebSalesRankingTable({ month }: Props) {
-  const [rows, setRows] = useState<Row[]>([])
+  const [bestRows, setBestRows] = useState<Row[]>([])
+  const [worstRows, setWorstRows] = useState<Row[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -63,8 +64,10 @@ export default function WebSalesRankingTable({ month }: Props) {
         total_amount: v.amount,
       }))
 
-      arr.sort((a, b) => b.total_count - a.total_count)
-      setRows(arr.slice(0, 10))
+      const desc = [...arr].sort((a, b) => b.total_count - a.total_count)
+      const asc = [...arr].sort((a, b) => a.total_count - b.total_count)
+      setBestRows(desc.slice(0, 20))
+      setWorstRows(asc.slice(0, 10))
     }
 
     fetchData()
@@ -73,27 +76,53 @@ export default function WebSalesRankingTable({ month }: Props) {
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
 
   return (
-    <div>
-      <table className="min-w-full text-sm border">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="border px-2 py-1">順位</th>
-            <th className="border px-2 py-1">商品名</th>
-            <th className="border px-2 py-1">件数</th>
-            <th className="border px-2 py-1">売上</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.product_name} className="text-center">
-              <td className="border px-2 py-1">{i + 1}位</td>
-              <td className="border px-2 py-1 text-left">{r.product_name}</td>
-              <td className="border px-2 py-1">{f(r.total_count)}</td>
-              <td className="border px-2 py-1">¥{f(r.total_amount)}</td>
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold mb-2">ベスト20</h3>
+        <table className="min-w-full text-sm border">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="border px-2 py-1">順位</th>
+              <th className="border px-2 py-1">商品名</th>
+              <th className="border px-2 py-1">件数</th>
+              <th className="border px-2 py-1">売上金額</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {bestRows.map((r, i) => (
+              <tr key={r.product_name} className="text-center">
+                <td className="border px-2 py-1">{i + 1}位</td>
+                <td className="border px-2 py-1 text-left">{r.product_name}</td>
+                <td className="border px-2 py-1">{f(r.total_count)}</td>
+                <td className="border px-2 py-1">¥{f(r.total_amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3 className="font-semibold mb-2">ワースト10</h3>
+        <table className="min-w-full text-sm border">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="border px-2 py-1">順位</th>
+              <th className="border px-2 py-1">商品名</th>
+              <th className="border px-2 py-1">件数</th>
+              <th className="border px-2 py-1">売上金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            {worstRows.map((r, i) => (
+              <tr key={r.product_name} className="text-center">
+                <td className="border px-2 py-1">{i + 1}位</td>
+                <td className="border px-2 py-1 text-left">{r.product_name}</td>
+                <td className="border px-2 py-1">{f(r.total_count)}</td>
+                <td className="border px-2 py-1">¥{f(r.total_amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

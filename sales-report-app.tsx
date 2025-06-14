@@ -5,7 +5,6 @@ import Sidebar from "./components/sidebar"
 import DashboardView from "./components/dashboard-view"
 import SalesInputView from "./components/sales-input-view"
 import SalesEditView from "./components/sales-edit-view"
-import CommonDashboard from "./components/common-dashboard"
 
 type NavigationItem = "dashboard" | "input" | "edit"
 
@@ -30,10 +29,7 @@ export default function SalesReportApp() {
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
 
       <div className="flex-1 ml-64 overflow-auto">
-        <div className="p-8 space-y-8">
-          <CommonDashboard />
-          {renderContent()}
-        </div>
+        <div className="p-8 space-y-8">{renderContent()}</div>
       </div>
     </div>
   )
