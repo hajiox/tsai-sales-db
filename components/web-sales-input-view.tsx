@@ -1,258 +1,215 @@
-"use client"
+// components/web-sales-input-view.tsx
+// WEB販売管理システム：件数入力画面（既存件数を初期表示）
 
-import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/supabase"
+"use client";
 
-export type Product = {
-  id: string
-  name: string
-  series: string
-  price: number
-}
+import { useEffect, useState } from "react";
+import { format } from "date-fns";
+import { supabase } from "@/lib/supabase";
 
-export type WebSalesSummary = {
-  id?: number
-  report_month: string
-  product_id: string
-  amazon: number
-  rakuten: number
-  yahoo: number
-  mercari: number
-  base: number
-  qoo10: number
-  total_count: number
-  total_sales: number
-}
-
-type Row = Product &
-  Omit<WebSalesSummary, "product_id" | "report_month"> & {
-    summary_id?: number
-    editing?: boolean
-  }
+type Row = {
+  id: string;
+  product_name: string;
+  series_name: string | null;
+  price: number | null;
+  amazon_count: number | null;
+  rakuten_count: number | null;
+  yahoo_count: number | null;
+  mercari_count: number | null;
+  base_count: number | null;
+  qoo10_count: number | null;
+};
 
 export default function WebSalesInputView() {
-  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7))
-  const [rows, setRows] = useState<Row[]>([])
+  const [month, setMonth] = useState<string>(format(new Date(), "yyyy-MM"));
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const recalc = (row: Row): Row => {
-    const total =
-      row.amazon +
-      row.rakuten +
-      row.yahoo +
-      row.mercari +
-      row.base +
-      row.qoo10
-    return {
-      ...row,
-      total_count: total,
-      total_sales: total * row.price,
-      editing: row.editing ?? false,
-    }
-  }
-
-  const loadData = async (month: string = reportMonth) => {
-    // Always sort by numeric series_code first then product_code so that
-    // "series_code=1" products appear at the top.
-    const { data: products } = await supabase
-      .from("products")
-      .select('*')
-      .order('series_code', { ascending: true })
-      .order('product_code', { ascending: true })
-    const { data: summary } = await supabase
-      .from('web_sales_summary')
-      .select('*')
-      .eq('report_month', `${month}-01`)
-
-    const map: Record<string, any> = {}
-    ;(summary || []).forEach((s) => {
-      map[s.product_id] = s
-    })
-
-    setRows(
-      (products || []).map((p) => {
-        const s = map[p.id] || {}
-        return recalc({
-          ...p,
-          summary_id: s.id,
-          amazon: s.amazon_count ?? 0,
-          rakuten: s.rakuten_count ?? 0,
-          yahoo: s.yahoo_count ?? 0,
-          mercari: s.mercari_count ?? 0,
-          base: s.base_count ?? 0,
-          qoo10: s.qoo10_count ?? 0,
-          total_count: s.total_count ?? 0,
-          total_sales: s.total_sales ?? 0,
-          editing: false,
-        })
-      })
-    )
-  }
+  // データ取得
+  const load = async (ym: string) => {
+    setLoading(true);
+    const firstDay = `${ym}-01`;
+    const { data, error } = await supabase
+      .from("web_sales_summary")
+      .select(
+        `id, product_name, series_name, price,
+         amazon_count, rakuten_count, yahoo_count,
+         mercari_count, base_count, qoo10_count`
+      )
+      .eq("report_month", firstDay)
+      .order("series_name", { ascending: true })
+      .order("product_name", { ascending: true });
+    if (error) throw error;
+    setRows(data ?? []);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    loadData(reportMonth)
-  }, [reportMonth])
+    load(month).catch(console.error);
+  }, [month]);
 
-  const handleChange = (id: string, field: keyof WebSalesSummary, value: number) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? recalc({ ...r, [field]: value }) : r)))
-  }
+  // 値更新ローカル保持
+  const update = (
+    id: string,
+    field:
+      | "amazon_count"
+      | "rakuten_count"
+      | "yahoo_count"
+      | "mercari_count"
+      | "base_count"
+      | "qoo10_count",
+    val: number
+  ) => {
+    setRows((r) =>
+      r.map((row) => (row.id === id ? { ...row, [field]: val } : row))
+    );
+  };
 
-  const toggleEdit = (id: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, editing: !r.editing } : r)))
-  }
-
-  const handleDelete = async (row: Row) => {
-    if (!row.summary_id) return
-    if (!confirm("削除しますか？")) return
-    await supabase.from("web_sales_summary").delete().eq("id", row.summary_id)
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === row.id
-          ? recalc({
-              ...r,
-              amazon: 0,
-              rakuten: 0,
-              yahoo: 0,
-              mercari: 0,
-              base: 0,
-              qoo10: 0,
-              summary_id: undefined,
-            })
-          : r
-      )
-    )
-  }
-
+  // 保存
   const save = async () => {
-    for (const row of rows) {
-      const payload = {
-        report_month: `${reportMonth}-01`,
-        product_id: row.id,
-        amazon_count: row.amazon,
-        rakuten_count: row.rakuten,
-        yahoo_count: row.yahoo,
-        mercari_count: row.mercari,
-        base_count: row.base,
-        qoo10_count: row.qoo10,
-        total_count: row.total_count,
-        total_sales: row.total_sales,
-      }
-      if (row.summary_id) {
-        await supabase.from("web_sales_summary").update(payload).eq("id", row.summary_id)
-      } else {
-        const { data } = await supabase
-          .from("web_sales_summary")
-          .insert(payload)
-          .select()
-          .single()
-        row.summary_id = data?.id
-      }
-    }
-    alert("保存しました")
-    setRows((prev) => prev.map((r) => ({ ...r, editing: false })))
-    await loadData(reportMonth)
-  }
-
-  const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
+    setLoading(true);
+    const updates = rows.map((r) => ({
+      id: r.id,
+      amazon_count: r.amazon_count,
+      rakuten_count: r.rakuten_count,
+      yahoo_count: r.yahoo_count,
+      mercari_count: r.mercari_count,
+      base_count: r.base_count,
+      qoo10_count: r.qoo10_count,
+    }));
+    const { error } = await supabase.from("web_sales_summary").upsert(updates);
+    if (error) alert(error.message);
+    setLoading(false);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 space-y-2">
-      <div className="flex justify-end">
-        <select
-          value={reportMonth}
-          onChange={(e) => setReportMonth(e.target.value)}
-          className="border rounded text-sm p-1"
+    <div className="p-6 space-y-4">
+      {/* 月選択 */}
+      <div className="flex items-center gap-2">
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="border rounded px-2 py-1"
+        />
+        <button
+          onClick={save}
+          disabled={loading}
+          className="bg-blue-600 text-white px-3 py-1 rounded disabled:opacity-50"
         >
-          {Array.from({ length: 12 }).map((_, i) => {
-            const d = new Date()
-            d.setMonth(d.getMonth() - i)
-            const v = d.toISOString().slice(0, 7)
-            return (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            )
-          })}
-        </select>
+          保存
+        </button>
       </div>
-      <div className="overflow-auto border">
-        <table className="min-w-full text-xs">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="border px-2 py-1">商品名</th>
-              <th className="border px-2 py-1">シリーズ名</th>
-              <th className="border px-2 py-1">単価</th>
-              <th className="border px-2 py-1">Amazon</th>
-              <th className="border px-2 py-1">楽天</th>
-              <th className="border px-2 py-1">Yahoo</th>
-              <th className="border px-2 py-1">メルカリ</th>
-              <th className="border px-2 py-1">BASE</th>
-              <th className="border px-2 py-1">Qoo10</th>
-              <th className="border px-2 py-1">合計件数</th>
-              <th className="border px-2 py-1">合計売上</th>
-              <th className="border px-2 py-1"></th>
+
+      {/* テーブル */}
+      {loading ? (
+        <p>loading…</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left">商品名</th>
+              <th className="text-left">シリーズ名</th>
+              <th>単価</th>
+              <th>Amazon</th>
+              <th>楽天</th>
+              <th>Yahoo!</th>
+              <th>メルカリ</th>
+              <th>BASE</th>
+              <th>Qoo10</th>
+              <th>合計件数</th>
+              <th>合計売上</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={12} className="border px-2 py-4 text-center">
-                  商品がありません
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.id} className="text-center">
-                  <td className="border px-2 py-1 text-left whitespace-nowrap">
-                    {r.name}
+            {rows.map((r) => {
+              const total =
+                (r.amazon_count ?? 0) +
+                (r.rakuten_count ?? 0) +
+                (r.yahoo_count ?? 0) +
+                (r.mercari_count ?? 0) +
+                (r.base_count ?? 0) +
+                (r.qoo10_count ?? 0);
+              const totalSales = (r.price ?? 0) * total;
+
+              return (
+                <tr key={r.id} className="border-t">
+                  <td>{r.product_name}</td>
+                  <td>{r.series_name ?? "-"}</td>
+                  <td className="text-right">{r.price ?? 0}</td>
+
+                  {/* 全 input：既存件数を defaultValue に設定 */}
+                  <td>
+                    <input
+                      type="number"
+                      defaultValue={r.amazon_count ?? 0}
+                      onChange={(e) =>
+                        update(r.id, "amazon_count", +e.target.value || 0)
+                      }
+                      className="w-14 text-right"
+                    />
                   </td>
-                  <td className="border px-2 py-1 text-left whitespace-nowrap">
-                    {r.series}
+                  <td>
+                    <input
+                      type="number"
+                      defaultValue={r.rakuten_count ?? 0}
+                      onChange={(e) =>
+                        update(r.id, "rakuten_count", +e.target.value || 0)
+                      }
+                      className="w-14 text-right"
+                    />
                   </td>
-                  <td className="border px-2 py-1">{f(r.price)}</td>
-                  {([
-                    "amazon",
-                    "rakuten",
-                    "yahoo",
-                    "mercari",
-                    "base",
-                    "qoo10",
-                  ] as (keyof WebSalesSummary)[]).map((key) => (
-                    <td key={key} className="border px-2 py-1">
-                      <Input
-                        type="number"
-                        defaultValue={r[key] ?? 0}
-                        disabled={!r.editing}
-                        onChange={(e) =>
-                          handleChange(r.id, key, parseInt(e.target.value) || 0)
-                        }
-                        className="w-20"
-                      />
-                    </td>
-                  ))}
-                  <td className="border px-2 py-1">{f(r.total_count)}</td>
-                  <td className="border px-2 py-1">¥{f(r.total_sales)}</td>
-                  <td className="border px-2 py-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => toggleEdit(r.id)}
-                      className="px-1"
-                    >
-                      ✏️
-                    </Button>
+                  <td>
+                    <input
+                      type="number"
+                      defaultValue={r.yahoo_count ?? 0}
+                      onChange={(e) =>
+                        update(r.id, "yahoo_count", +e.target.value || 0)
+                      }
+                      className="w-14 text-right"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      defaultValue={r.mercari_count ?? 0}
+                      onChange={(e) =>
+                        update(r.id, "mercari_count", +e.target.value || 0)
+                      }
+                      className="w-14 text-right"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      defaultValue={r.base_count ?? 0}
+                      onChange={(e) =>
+                        update(r.id, "base_count", +e.target.value || 0)
+                      }
+                      className="w-14 text-right"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      defaultValue={r.qoo10_count ?? 0}
+                      onChange={(e) =>
+                        update(r.id, "qoo10_count", +e.target.value || 0)
+                      }
+                      className="w-14 text-right"
+                    />
+                  </td>
+
+                  <td className="text-right font-bold">{total}</td>
+                  <td className="text-right font-bold">
+                    ¥{totalSales.toLocaleString()}
                   </td>
                 </tr>
-              ))
-            )}
+              );
+            })}
           </tbody>
         </table>
-      </div>
-      <div className="text-right">
-        <Button onClick={save}>保存</Button>
-      </div>
+      )}
     </div>
-  )
+  );
 }
-
