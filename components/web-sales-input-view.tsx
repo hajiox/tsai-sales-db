@@ -31,34 +31,28 @@ export default function WebSalesInputView() {
   const load = async (ym: string) => {
     setLoading(true);
     try {
-      const firstDay = `${ym}-01`;
-
-      // ❶ products 全件と、指定月の summary 行を LEFT JOIN
       const { data, error } = await supabase.rpc("web_sales_full_month", {
-        target_month: firstDay,
+        target_month: `${ym}-01`,
       });
       if (error) throw error;
-
-      // ❷ rows を state に（件数が null の所は 0 に）
       setRows(
         (data ?? []).map((r: any) => ({
-          id: r.id ?? "", // NULL の場合は '' のまま (新規行)
+          id: r.id ?? undefined,
           product_id: r.product_id,
           product_name: r.product_name,
           series_name: r.series_name,
-          series_code: r.series_code,
           price: r.price,
-          amazon_count: r.amazon_count ?? 0,
-          rakuten_count: r.rakuten_count ?? 0,
-          yahoo_count: r.yahoo_count ?? 0,
-          mercari_count: r.mercari_count ?? 0,
-          base_count: r.base_count ?? 0,
-          qoo10_count: r.qoo10_count ?? 0,
+          series_code: r.series_code,
+          amazon_count: r.amazon_count,
+          rakuten_count: r.rakuten_count,
+          yahoo_count: r.yahoo_count,
+          mercari_count: r.mercari_count,
+          base_count: r.base_count,
+          qoo10_count: r.qoo10_count,
         }))
       );
     } catch (e: any) {
       alert(e.message ?? e);
-      setRows([]);
     } finally {
       setLoading(false);
     }
