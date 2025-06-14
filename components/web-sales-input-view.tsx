@@ -22,13 +22,15 @@ export type WebSalesSummary = {
   mercari: number
   base: number
   qoo10: number
-  floor: number
   total_count: number
   total_sales: number
 }
 
 type Row = Product &
-  Omit<WebSalesSummary, "product_id" | "report_month"> & { summary_id?: number; editing?: boolean }
+  Omit<WebSalesSummary, "product_id" | "report_month"> & {
+    summary_id?: number
+    editing?: boolean
+  }
 
 export default function WebSalesInputView() {
   const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7))
@@ -41,8 +43,7 @@ export default function WebSalesInputView() {
       row.yahoo +
       row.mercari +
       row.base +
-      row.qoo10 +
-      row.floor
+      row.qoo10
     return { ...row, total_count: total, total_sales: total * row.price }
   }
 
@@ -76,7 +77,6 @@ export default function WebSalesInputView() {
           mercari: s.mercari || 0,
           base: s.base || 0,
           qoo10: s.qoo10 || 0,
-          floor: s.floor || 0,
           total_count: s.total_count || 0,
           total_sales: s.total_sales || 0,
           editing: false,
@@ -112,7 +112,6 @@ export default function WebSalesInputView() {
               mercari: 0,
               base: 0,
               qoo10: 0,
-              floor: 0,
               summary_id: undefined,
             })
           : r
@@ -131,7 +130,6 @@ export default function WebSalesInputView() {
         mercari: row.mercari,
         base: row.base,
         qoo10: row.qoo10,
-        floor: row.floor,
         total_count: row.total_count,
         total_sales: row.total_sales,
       }
@@ -185,7 +183,6 @@ export default function WebSalesInputView() {
               <th className="border px-2 py-1">メルカリ</th>
               <th className="border px-2 py-1">BASE</th>
               <th className="border px-2 py-1">Qoo10</th>
-              <th className="border px-2 py-1">フロア</th>
               <th className="border px-2 py-1">合計件数</th>
               <th className="border px-2 py-1">合計売上</th>
               <th className="border px-2 py-1"></th>
@@ -195,7 +192,7 @@ export default function WebSalesInputView() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={14} className="border px-2 py-4 text-center">
+                <td colSpan={13} className="border px-2 py-4 text-center">
                   商品がありません
                 </td>
               </tr>
@@ -216,7 +213,6 @@ export default function WebSalesInputView() {
                     "mercari",
                     "base",
                     "qoo10",
-                    "floor",
                   ] as (keyof WebSalesSummary)[]).map((key) => (
                     <td key={key} className="border px-2 py-1">
                       <Input
