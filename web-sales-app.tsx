@@ -8,6 +8,7 @@ import WebSalesEdit from "./components/websales-edit"
 import WebSalesAnalysis from "./components/websales-analysis"
 import CommonDashboard from "./components/common-dashboard"
 import WebSalesSummaryCards from "./components/websales-summary-cards"
+import WebSalesRankingTable from "./components/websales-ranking-table"
 
 export type WebView = "dashboard" | "input" | "edit" | "analysis"
 
@@ -44,6 +45,9 @@ export default function WebSalesApp() {
             />
           </div>
           <WebSalesSummaryCards month={month} />
+          {activeView === "dashboard" && (
+            <WebSalesRankingTable month={month} />
+          )}
           <CommonDashboard />
           {renderContent()}
         </div>
