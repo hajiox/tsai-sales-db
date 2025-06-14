@@ -1,9 +1,9 @@
 "use client"
 import { useState } from "react"
 import Sidebar from "@/components/sidebar"
-import WebSalesInput from "@/components/websales-input"
+import WebSalesAnalysis from "@/components/websales-analysis"
 
-export default function WebSalesInputPage() {
+export default function WebSalesAiPage() {
   const [month, setMonth] = useState<string>(new Date().toISOString().slice(0, 7))
   return (
     <div className="flex min-h-screen">
@@ -17,7 +17,7 @@ export default function WebSalesInputPage() {
             className="border rounded text-sm p-1"
           />
         </div>
-        <WebSalesInput month={month} />
+        <WebSalesAnalysis month={month} />
       </div>
     </div>
   )
