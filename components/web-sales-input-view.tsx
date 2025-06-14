@@ -222,7 +222,7 @@ export default function WebSalesInputView() {
                     <td key={key} className="border px-2 py-1">
                       <Input
                         type="number"
-                        value={r[key]}
+                        defaultValue={r[key] ?? 0}
                         disabled={!r.editing}
                         onChange={(e) =>
                           handleChange(r.id, key, parseInt(e.target.value) || 0)
