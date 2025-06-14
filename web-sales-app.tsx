@@ -3,7 +3,7 @@
 import { useState } from "react"
 import WebSalesSidebar from "./components/websales-sidebar"
 import WebSalesDashboard from "./components/websales-dashboard"
-import WebSalesInput from "./components/websales-input"
+import WebSalesInputView from "./components/web-sales-input-view"
 import WebSalesEdit from "./components/websales-edit"
 import WebSalesAnalysis from "./components/websales-analysis"
 import CommonDashboard from "./components/common-dashboard"
@@ -21,7 +21,7 @@ export default function WebSalesApp() {
       case "dashboard":
         return <WebSalesDashboard month={month} />
       case "input":
-        return <WebSalesInput month={month} />
+        return <WebSalesInputView />
       case "edit":
         return <WebSalesEdit month={month} />
       case "analysis":
