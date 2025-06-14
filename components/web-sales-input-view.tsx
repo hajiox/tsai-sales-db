@@ -144,65 +144,65 @@ export default function WebSalesInputView() {
                   <td>{r.series_name ?? "-"}</td>
                   <td className="text-right">{r.price ?? 0}</td>
 
-                  {/* 全 input：既存件数を defaultValue に設定 */}
+                  {/* 件数入力欄：rows state で値を制御 */}
                   <td>
                     <input
                       type="number"
-                      defaultValue={r.amazon_count ?? 0}
+                      value={r.amazon_count ?? 0}
                       onChange={(e) =>
-                        update(r.id, "amazon_count", +e.target.value || 0)
+                        update(r.id, "amazon_count", Number(e.target.value) || 0)
                       }
-                      className="w-14 text-right"
+                      className="w-20 border rounded-sm p-1 text-right"
                     />
                   </td>
                   <td>
                     <input
                       type="number"
-                      defaultValue={r.rakuten_count ?? 0}
+                      value={r.rakuten_count ?? 0}
                       onChange={(e) =>
-                        update(r.id, "rakuten_count", +e.target.value || 0)
+                        update(r.id, "rakuten_count", Number(e.target.value) || 0)
                       }
-                      className="w-14 text-right"
+                      className="w-20 border rounded-sm p-1 text-right"
                     />
                   </td>
                   <td>
                     <input
                       type="number"
-                      defaultValue={r.yahoo_count ?? 0}
+                      value={r.yahoo_count ?? 0}
                       onChange={(e) =>
-                        update(r.id, "yahoo_count", +e.target.value || 0)
+                        update(r.id, "yahoo_count", Number(e.target.value) || 0)
                       }
-                      className="w-14 text-right"
+                      className="w-20 border rounded-sm p-1 text-right"
                     />
                   </td>
                   <td>
                     <input
                       type="number"
-                      defaultValue={r.mercari_count ?? 0}
+                      value={r.mercari_count ?? 0}
                       onChange={(e) =>
-                        update(r.id, "mercari_count", +e.target.value || 0)
+                        update(r.id, "mercari_count", Number(e.target.value) || 0)
                       }
-                      className="w-14 text-right"
+                      className="w-20 border rounded-sm p-1 text-right"
                     />
                   </td>
                   <td>
                     <input
                       type="number"
-                      defaultValue={r.base_count ?? 0}
+                      value={r.base_count ?? 0}
                       onChange={(e) =>
-                        update(r.id, "base_count", +e.target.value || 0)
+                        update(r.id, "base_count", Number(e.target.value) || 0)
                       }
-                      className="w-14 text-right"
+                      className="w-20 border rounded-sm p-1 text-right"
                     />
                   </td>
                   <td>
                     <input
                       type="number"
-                      defaultValue={r.qoo10_count ?? 0}
+                      value={r.qoo10_count ?? 0}
                       onChange={(e) =>
-                        update(r.id, "qoo10_count", +e.target.value || 0)
+                        update(r.id, "qoo10_count", Number(e.target.value) || 0)
                       }
-                      className="w-14 text-right"
+                      className="w-20 border rounded-sm p-1 text-right"
                     />
                   </td>
 
