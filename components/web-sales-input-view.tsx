@@ -49,8 +49,9 @@ export default function WebSalesInputView() {
   const loadData = async (month: string = reportMonth) => {
     const { data: products } = await supabase
       .from("products")
-      .select("id, name, series, price")
-      .order("id")
+      .select('*')
+      .order('series_code', { ascending: true })
+      .order('product_code', { ascending: true })
     const { data: summary } = await supabase
       .from("web_sales_summary")
       .select("*")
