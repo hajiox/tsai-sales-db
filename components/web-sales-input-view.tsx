@@ -8,17 +8,17 @@ import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 
 type Row = {
-  id: string;
+  id?: string;
   product_id: string;
   product_name: string;
   series_name: string | null;
   price: number | null;
-  amazon_count: number | null;
-  rakuten_count: number | null;
-  yahoo_count: number | null;
-  mercari_count: number | null;
-  base_count: number | null;
-  qoo10_count: number | null;
+  amazon_count: number;
+  rakuten_count: number;
+  yahoo_count: number;
+  mercari_count: number;
+  base_count: number;
+  qoo10_count: number;
 };
 
 export default function WebSalesInputView() {
@@ -29,31 +29,37 @@ export default function WebSalesInputView() {
   // データ取得
   const load = async (ym: string) => {
     setLoading(true);
-    const firstDay = `${ym}-01`;
+    try {
+      const firstDay = `${ym}-01`;
 
-    // ❶ products 全件と、指定月の summary 行を LEFT JOIN
-    const { data, error } = await supabase.rpc("web_sales_full_month", {
-      target_month: firstDay,
-    });
-    if (error) throw error;
+      // ❶ products 全件と、指定月の summary 行を LEFT JOIN
+      const { data, error } = await supabase.rpc("web_sales_full_month", {
+        target_month: firstDay,
+      });
+      if (error) throw error;
 
-    // ❷ rows を state に（件数が null の所は 0 に）
-    setRows(
-      (data ?? []).map((r: any) => ({
-        id: r.id ?? "", // NULL の場合は '' のまま (新規行)
-        product_id: r.product_id,
-        product_name: r.product_name,
-        series_name: r.series_name,
-        price: r.price,
-        amazon_count: r.amazon_count ?? 0,
-        rakuten_count: r.rakuten_count ?? 0,
-        yahoo_count: r.yahoo_count ?? 0,
-        mercari_count: r.mercari_count ?? 0,
-        base_count: r.base_count ?? 0,
-        qoo10_count: r.qoo10_count ?? 0,
-      }))
-    );
-    setLoading(false);
+      // ❷ rows を state に（件数が null の所は 0 に）
+      setRows(
+        (data ?? []).map((r: any) => ({
+          id: r.id ?? "", // NULL の場合は '' のまま (新規行)
+          product_id: r.product_id,
+          product_name: r.product_name,
+          series_name: r.series_name,
+          price: r.price,
+          amazon_count: r.amazon_count ?? 0,
+          rakuten_count: r.rakuten_count ?? 0,
+          yahoo_count: r.yahoo_count ?? 0,
+          mercari_count: r.mercari_count ?? 0,
+          base_count: r.base_count ?? 0,
+          qoo10_count: r.qoo10_count ?? 0,
+        }))
+      );
+    } catch (e: any) {
+      alert(e.message ?? e);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -63,40 +69,45 @@ export default function WebSalesInputView() {
   // 値更新ローカル保持
   const update = (
     id: string,
-    field:
-      | "amazon_count"
-      | "rakuten_count"
-      | "yahoo_count"
-      | "mercari_count"
-      | "base_count"
-      | "qoo10_count",
+    field: keyof Omit<
+      Row,
+      "id" | "product_id" | "product_name" | "series_name" | "price"
+    >,
     val: number
-  ) => {
+  ) =>
     setRows((r) =>
-      r.map((row) => (row.id === id ? { ...row, [field]: val } : row))
+      r.map((row) => (row.product_id === id ? { ...row, [field]: val } : row))
     );
-  };
 
   // 保存
   const save = async () => {
     setLoading(true);
-    const updates = rows.map((r) => ({
-      ...(r.id ? { id: r.id } : {}), // 既存行だけ id を付ける
-      product_id: r.product_id,
-      product_name: r.product_name,
-      series_name: r.series_name,
-      price: r.price,
-      report_month: `${month}-01`,
-      amazon_count: r.amazon_count,
-      rakuten_count: r.rakuten_count,
-      yahoo_count: r.yahoo_count,
-      mercari_count: r.mercari_count,
-      base_count: r.base_count,
-      qoo10_count: r.qoo10_count,
-    }));
-    const { error } = await supabase.from("web_sales_summary").upsert(updates);
-    if (error) alert(error.message);
-    setLoading(false);
+    try {
+      const firstDay = `${month}-01`;
+      const payload = rows.map((r) => ({
+        ...(r.id ? { id: r.id } : {}),
+        product_id: r.product_id,
+        product_name: r.product_name,
+        series_name: r.series_name,
+        price: r.price,
+        report_month: firstDay,
+        amazon_count: r.amazon_count,
+        rakuten_count: r.rakuten_count,
+        yahoo_count: r.yahoo_count,
+        mercari_count: r.mercari_count,
+        base_count: r.base_count,
+        qoo10_count: r.qoo10_count,
+      }));
+      const { error } = await supabase
+        .from("web_sales_summary")
+        .upsert(payload, { onConflict: "product_id,report_month" });
+      if (error) throw error;
+      await load(month); // 再読込
+    } catch (e: any) {
+      alert(e.message ?? e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
