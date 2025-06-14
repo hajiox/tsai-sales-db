@@ -80,10 +80,16 @@ export default function WebSalesInputView() {
       const upserts = rows.map((r) => ({
         ...(r.id ? { id: r.id } : {}),
         report_date: first,
-        ...r,
+        product_id: r.product_id,
+        amazon_count: r.amazon_count,
+        rakuten_count: r.rakuten_count,
+        yahoo_count: r.yahoo_count,
+        mercari_count: r.mercari_count,
+        base_count: r.base_count,
+        qoo10_count: r.qoo10_count,
       }));
       const { error } = await supabase
-        .from("web_sales_summary") // 修正箇所
+        .from("web_sales_summary")
         .upsert(upserts, { onConflict: "product_id,report_date" });
       if (error) throw error;
       await load(month);
@@ -210,15 +216,3 @@ export default function WebSalesInputView() {
                   </td>
 
                   <td className="text-right font-bold">{total}</td>
-                  <td className="text-right font-bold">
-                    ¥{totalSales.toLocaleString()}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
