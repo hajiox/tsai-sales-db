@@ -47,6 +47,8 @@ export default function WebSalesInputView() {
   }
 
   const loadData = async (month: string = reportMonth) => {
+    // Always sort by numeric series_code first then product_code so that
+    // "series_code=1" products appear at the top.
     const { data: products } = await supabase
       .from("products")
       .select('*')
