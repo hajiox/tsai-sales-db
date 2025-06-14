@@ -63,25 +63,25 @@ export default function WebSalesInputView() {
     const { data: summary } = await supabase
       .from("web_sales_summary")
       .select("*")
-      .eq("report_month", `${reportMonth}-01`)
+      .eq("report_month", `${month}-01`)
 
-    const map: Record<number, any> = {}
+    const map: Record<string, any> = {}
     ;(summary || []).forEach((s) => {
-      map[s.product_id] = s
+      map[s.product_name] = s
     })
 
     setRows(
       (products || []).map((p) => {
-        const s = map[p.id] || {}
+        const s = map[p.name] || {}
         return recalc({
           ...p,
           summary_id: s.id,
-          amazon: s.amazon || 0,
-          rakuten: s.rakuten || 0,
-          yahoo: s.yahoo || 0,
-          mercari: s.mercari || 0,
-          base: s.base || 0,
-          qoo10: s.qoo10 || 0,
+          amazon: s.amazon_count ?? s.amazon ?? 0,
+          rakuten: s.rakuten_count ?? s.rakuten ?? 0,
+          yahoo: s.yahoo_count ?? s.yahoo ?? 0,
+          mercari: s.mercari_count ?? s.mercari ?? 0,
+          base: s.base_count ?? s.base ?? 0,
+          qoo10: s.qoo10_count ?? s.qoo10 ?? 0,
           total_count: s.total_count || 0,
           total_sales: s.total_sales || 0,
           editing: false,
@@ -126,15 +126,17 @@ export default function WebSalesInputView() {
 
   const save = async () => {
     for (const row of rows) {
-      const payload: WebSalesSummary = {
+      const payload = {
         report_month: `${reportMonth}-01`,
-        product_id: row.id,
-        amazon: row.amazon,
-        rakuten: row.rakuten,
-        yahoo: row.yahoo,
-        mercari: row.mercari,
-        base: row.base,
-        qoo10: row.qoo10,
+        product_name: row.name,
+        series_name: row.series,
+        price: row.price,
+        amazon_count: row.amazon,
+        rakuten_count: row.rakuten,
+        yahoo_count: row.yahoo,
+        mercari_count: row.mercari,
+        base_count: row.base,
+        qoo10_count: row.qoo10,
         total_count: row.total_count,
         total_sales: row.total_sales,
       }
