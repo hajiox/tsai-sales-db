@@ -61,9 +61,9 @@ export default function WebSalesInputView() {
       .order('series_code', { ascending: true })
       .order('product_code', { ascending: true })
     const { data: summary } = await supabase
-      .from("web_sales_summary")
-      .select("*")
-      .eq("report_month", `${month}-01`)
+      .from('web_sales_summary')
+      .select('*')
+      .eq('report_month', `${month}-01`)
 
     const map: Record<string, any> = {}
     ;(summary || []).forEach((s) => {
@@ -76,14 +76,14 @@ export default function WebSalesInputView() {
         return recalc({
           ...p,
           summary_id: s.id,
-          amazon: s.amazon_count ?? s.amazon ?? 0,
-          rakuten: s.rakuten_count ?? s.rakuten ?? 0,
-          yahoo: s.yahoo_count ?? s.yahoo ?? 0,
-          mercari: s.mercari_count ?? s.mercari ?? 0,
-          base: s.base_count ?? s.base ?? 0,
-          qoo10: s.qoo10_count ?? s.qoo10 ?? 0,
-          total_count: s.total_count || 0,
-          total_sales: s.total_sales || 0,
+          amazon: s.amazon_count ?? 0,
+          rakuten: s.rakuten_count ?? 0,
+          yahoo: s.yahoo_count ?? 0,
+          mercari: s.mercari_count ?? 0,
+          base: s.base_count ?? 0,
+          qoo10: s.qoo10_count ?? 0,
+          total_count: s.total_count ?? 0,
+          total_sales: s.total_sales ?? 0,
           editing: false,
         })
       })
