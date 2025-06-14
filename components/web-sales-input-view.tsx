@@ -8,7 +8,10 @@ import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 
 type Row = {
-  id?: string;
+  /**
+   * web_sales_summary.id。月次サマリーが存在しない場合は null
+   */
+  id: string | null;
   product_id: string;
   product_name: string;
   series_name: string | null;
@@ -31,48 +34,27 @@ export default function WebSalesInputView() {
   const load = async (ym: string) => {
     setLoading(true);
     try {
-      const first = `${ym}-01`;
-      const next = new Date(first);
-      next.setMonth(next.getMonth() + 1);
-      const nextStr = next.toISOString().slice(0, 10); // 次月 1 日
-
-      // 月内の raw 行をすべて取得
-      const { data, error } = await supabase
-        .from("web_sales")
-        .select(
-          "product_id, product_name, series_name, price, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count"
-        )
-        .gte("report_date", first)
-        .lt("report_date", nextStr);
+      const target_month = `${ym}-01`;
+      const { data, error } = await supabase.rpc("web_sales_full_month", {
+        target_month,
+      });
       if (error) throw error;
 
-      // product_id で集計して 1 行化
-      const map = new Map<string, Row>();
-      (data ?? []).forEach((r: any) => {
-        if (!map.has(r.product_id)) {
-          map.set(r.product_id, {
-            id: undefined, // 新規行なので undefined
-            product_id: r.product_id,
-            product_name: r.product_name,
-            series_name: r.series_name,
-            price: r.price,
-            amazon_count: 0,
-            rakuten_count: 0,
-            yahoo_count: 0,
-            mercari_count: 0,
-            base_count: 0,
-            qoo10_count: 0,
-          });
-        }
-        const row = map.get(r.product_id)!;
-        row.amazon_count += r.amazon_count ?? 0;
-        row.rakuten_count += r.rakuten_count ?? 0;
-        row.yahoo_count += r.yahoo_count ?? 0;
-        row.mercari_count += r.mercari_count ?? 0;
-        row.base_count += r.base_count ?? 0;
-        row.qoo10_count += r.qoo10_count ?? 0;
-      });
-      setRows([...map.values()]);
+      const mapped: Row[] = (data as any[] | null | undefined)?.map((r) => ({
+        id: r.id ?? null,
+        product_id: r.product_id,
+        product_name: r.product_name,
+        series_name: r.series_name,
+        series_code: r.series_code,
+        price: r.price,
+        amazon_count: r.amazon_count ?? 0,
+        rakuten_count: r.rakuten_count ?? 0,
+        yahoo_count: r.yahoo_count ?? 0,
+        mercari_count: r.mercari_count ?? 0,
+        base_count: r.base_count ?? 0,
+        qoo10_count: r.qoo10_count ?? 0,
+      })) ?? [];
+      setRows(mapped);
     } catch (e: any) {
       alert(e.message ?? e);
       setRows([]);
@@ -87,7 +69,7 @@ export default function WebSalesInputView() {
 
   // 値更新ローカル保持
   const update = (
-    id: string,
+    id: string | null,
     field: keyof Omit<
       Row,
       "id" | "product_id" | "product_name" | "series_name" | "series_code" | "price"
