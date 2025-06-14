@@ -43,7 +43,7 @@ export default function WebSalesApp() {
               className="border rounded text-sm p-1"
             />
           </div>
-          <WebSalesSummaryCards />
+          <WebSalesSummaryCards month={month} />
           <CommonDashboard />
           {renderContent()}
         </div>
