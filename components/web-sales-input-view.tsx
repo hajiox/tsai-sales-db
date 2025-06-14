@@ -44,7 +44,11 @@ export default function WebSalesInputView() {
       row.mercari +
       row.base +
       row.qoo10
-    return { ...row, total_count: total, total_sales: total * row.price }
+    return {
+      ...row,
+      total_count: total,
+      total_sales: total * row.price,
+    }
   }
 
   const loadData = async (month: string = reportMonth) => {
@@ -58,7 +62,7 @@ export default function WebSalesInputView() {
     const { data: summary } = await supabase
       .from("web_sales_summary")
       .select("*")
-      .eq("report_month", month)
+      .eq("report_month", `${month}-01`)
 
     const map: Record<number, any> = {}
     ;(summary || []).forEach((s) => {
@@ -122,7 +126,7 @@ export default function WebSalesInputView() {
   const save = async () => {
     for (const row of rows) {
       const payload: WebSalesSummary = {
-        report_month: reportMonth,
+        report_month: `${reportMonth}-01`,
         product_id: row.id,
         amazon: row.amazon,
         rakuten: row.rakuten,
@@ -146,6 +150,7 @@ export default function WebSalesInputView() {
     }
     alert("保存しました")
     setRows((prev) => prev.map((r) => ({ ...r, editing: false })))
+    loadData(reportMonth)
   }
 
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
