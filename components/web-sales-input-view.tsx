@@ -33,6 +33,13 @@ export type WebSalesSummary = {
 type Row = Product &
   Omit<WebSalesSummary, "product_id" | "report_month"> & { summary_id?: number; editing?: boolean }
 
+type NewProduct = {
+  tempId: string
+  product_name: string
+  series_name: string
+  price: number
+}
+
 export default function WebSalesInputView() {
   const [reportMonth, setReportMonth] = useState(
     new Date().toISOString().slice(0, 7)
@@ -40,45 +47,48 @@ export default function WebSalesInputView() {
   const [rows, setRows] = useState<Row[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [showProductModal, setShowProductModal] = useState(false)
+  const [newProductRows, setNewProductRows] = useState<NewProduct[]>([])
+
+  const loadData = async (month: string = reportMonth) => {
+    const { data: prod } = await supabase
+      .from("products")
+      .select("id, product_name, series_name, price")
+      .order("id")
+    const prodList = prod || []
+    setProducts(prodList)
+
+    const { data: sum } = await supabase
+      .from("web_sales_summary")
+      .select("*")
+      .eq("report_month", month)
+    const map: Record<number, any> = {}
+    ;(sum || []).forEach((r: any) => {
+      map[r.product_id] = r
+    })
+
+    setRows(
+      prodList.map((p) => {
+        const s = map[p.id] || {}
+        return {
+          ...p,
+          summary_id: s.id,
+          amazon: s.amazon || 0,
+          rakuten: s.rakuten || 0,
+          yahoo: s.yahoo || 0,
+          mercari: s.mercari || 0,
+          base: s.base || 0,
+          qoo10: s.qoo10 || 0,
+          floor: s.floor || 0,
+          total_count: s.total_count || 0,
+          total_sales: s.total_sales || 0,
+          editing: false,
+        }
+      })
+    )
+  }
 
   useEffect(() => {
-    const load = async () => {
-      const { data: prod } = await supabase
-        .from("products")
-        .select("id, product_name, series_name, price")
-        .order("id")
-      setProducts(prod || [])
-
-      const { data: sum } = await supabase
-        .from("web_sales_summary")
-        .select("*")
-        .eq("report_month", reportMonth)
-      const map: Record<number, any> = {}
-      ;(sum || []).forEach((r: any) => {
-        map[r.product_id] = r
-      })
-
-      setRows(
-        (prod || []).map((p) => {
-          const s = map[p.id] || {}
-          return {
-            ...p,
-            summary_id: s.id,
-            amazon: s.amazon || 0,
-            rakuten: s.rakuten || 0,
-            yahoo: s.yahoo || 0,
-            mercari: s.mercari || 0,
-            base: s.base || 0,
-            qoo10: s.qoo10 || 0,
-            floor: s.floor || 0,
-            total_count: s.total_count || 0,
-            total_sales: s.total_sales || 0,
-            editing: false,
-          }
-        })
-      )
-    }
-    load()
+    loadData(reportMonth)
   }, [reportMonth])
 
   const recalc = (row: Row): Row => {
@@ -130,6 +140,51 @@ export default function WebSalesInputView() {
         floor: 0,
         summary_id: undefined,
       }) } : r)))
+  }
+
+  const addNewProductRow = () => {
+    setNewProductRows((prev) => [
+      ...prev,
+      {
+        tempId: Math.random().toString(36).slice(2),
+        product_name: "",
+        series_name: "",
+        price: 0,
+      },
+    ])
+  }
+
+  const handleNewProductChange = (
+    tempId: string,
+    field: keyof NewProduct,
+    value: string | number,
+  ) => {
+    setNewProductRows((prev) =>
+      prev.map((r) => (r.tempId === tempId ? { ...r, [field]: value } : r)),
+    )
+  }
+
+  const saveNewProduct = async (row: NewProduct) => {
+    if (!row.product_name || !row.series_name || !row.price) {
+      alert("未入力項目があります")
+      return
+    }
+    const { error } = await supabase.from("products").insert({
+      product_name: row.product_name,
+      series_name: row.series_name,
+      price: row.price,
+    })
+    if (error) {
+      console.error(error)
+      alert("保存に失敗しました")
+      return
+    }
+    setNewProductRows((prev) => prev.filter((r) => r.tempId !== row.tempId))
+    await loadData(reportMonth)
+  }
+
+  const cancelNewProduct = (tempId: string) => {
+    setNewProductRows((prev) => prev.filter((r) => r.tempId !== tempId))
   }
 
   const addProduct = async () => {
@@ -323,13 +378,20 @@ export default function WebSalesInputView() {
                 ✕
               </Button>
             </div>
-            {products.map((p, idx) => (
-              <div key={p.id} className="grid grid-cols-4 gap-2 items-center">
-                <Input
+            {[...products, ...newProductRows].map((p) => {
+              const isNew = (p as any).tempId !== undefined
+              const key = isNew ? (p as NewProduct).tempId : (p as Product).id
+              return (
+                <div key={key} className="grid grid-cols-5 gap-2 items-center">
+                  <Input
                   value={p.product_name}
                   onChange={(e) => {
                     const v = e.target.value
-                    setProducts((prev) => prev.map((r) => (r.id === p.id ? { ...r, product_name: v } : r)))
+                    if (isNew) {
+                      handleNewProductChange((p as NewProduct).tempId, "product_name", v)
+                    } else {
+                      setProducts((prev) => prev.map((r) => (r.id === (p as Product).id ? { ...r, product_name: v } : r)))
+                    }
                   }}
                   className="col-span-2"
                 />
@@ -337,7 +399,11 @@ export default function WebSalesInputView() {
                   value={p.series_name}
                   onChange={(e) => {
                     const v = e.target.value
-                    setProducts((prev) => prev.map((r) => (r.id === p.id ? { ...r, series_name: v } : r)))
+                    if (isNew) {
+                      handleNewProductChange((p as NewProduct).tempId, "series_name", v)
+                    } else {
+                      setProducts((prev) => prev.map((r) => (r.id === (p as Product).id ? { ...r, series_name: v } : r)))
+                    }
                   }}
                 />
                 <Input
@@ -345,37 +411,59 @@ export default function WebSalesInputView() {
                   value={p.price}
                   onChange={(e) => {
                     const v = parseInt(e.target.value) || 0
-                    setProducts((prev) => prev.map((r) => (r.id === p.id ? { ...r, price: v } : r)))
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={async () => {
-                    if (confirm("削除しますか？")) {
-                      await supabase.from("web_sales_summary").delete().eq("product_id", p.id)
-                      await supabase.from("products").delete().eq("id", p.id)
-                      setProducts((prev) => prev.filter((r) => r.id !== p.id))
-                      setRows((prev) => prev.filter((r) => r.id !== p.id))
+                    if (isNew) {
+                      handleNewProductChange((p as NewProduct).tempId, "price", v)
+                    } else {
+                      setProducts((prev) => prev.map((r) => (r.id === (p as Product).id ? { ...r, price: v } : r)))
                     }
                   }}
-                  className="px-1"
-                >
-                  🗑
-                </Button>
-              </div>
-            ))}
+                />
+                {isNew ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => saveNewProduct(p as NewProduct)}
+                      className="px-1"
+                    >
+                      💾
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => cancelNewProduct((p as NewProduct).tempId)}
+                      className="px-1"
+                    >
+                      🗑
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div></div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        if (confirm("削除しますか？")) {
+                          await supabase.from("web_sales_summary").delete().eq("product_id", (p as Product).id)
+                          await supabase.from("products").delete().eq("id", (p as Product).id)
+                          setProducts((prev) => prev.filter((r) => r.id !== (p as Product).id))
+                          setRows((prev) => prev.filter((r) => r.id !== (p as Product).id))
+                        }
+                      }}
+                      className="px-1"
+                    >
+                      🗑
+                    </Button>
+                  </>
+                )}
+                </div>
+              )
+            })}
             <Button
               variant="outline"
               size="sm"
-              onClick={async () => {
-                const { data } = await supabase
-                  .from("products")
-                  .insert({ product_name: "新商品", series_name: "", price: 0 })
-                  .select()
-                  .single()
-                if (data) setProducts((prev) => [...prev, data])
-              }}
+              onClick={addNewProductRow}
             >
               ＋追加
             </Button>
