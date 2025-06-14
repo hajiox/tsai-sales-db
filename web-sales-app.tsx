@@ -7,6 +7,7 @@ import WebSalesInput from "./components/websales-input"
 import WebSalesEdit from "./components/websales-edit"
 import WebSalesAnalysis from "./components/websales-analysis"
 import CommonDashboard from "./components/common-dashboard"
+import WebSalesSummaryCards from "./components/websales-summary-cards"
 
 export type WebView = "dashboard" | "input" | "edit" | "analysis"
 
@@ -42,6 +43,7 @@ export default function WebSalesApp() {
               className="border rounded text-sm p-1"
             />
           </div>
+          <WebSalesSummaryCards />
           <CommonDashboard />
           {renderContent()}
         </div>
