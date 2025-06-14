@@ -8,14 +8,10 @@ import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 
 type Row = {
-  /**
-   * web_sales_summary.id。月次サマリーが存在しない場合は null
-   */
   id: string | null;
   product_id: string;
   product_name: string;
   series_name: string | null;
-  series_code: number;
   price: number | null;
   amazon_count: number;
   rakuten_count: number;
@@ -30,7 +26,6 @@ export default function WebSalesInputView() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // データ取得
   const load = async (ym: string) => {
     setLoading(true);
     try {
@@ -45,7 +40,6 @@ export default function WebSalesInputView() {
         product_id: r.product_id,
         product_name: r.product_name,
         series_name: r.series_name,
-        series_code: r.series_code,
         price: r.price,
         amazon_count: r.amazon_count ?? 0,
         rakuten_count: r.rakuten_count ?? 0,
@@ -67,12 +61,11 @@ export default function WebSalesInputView() {
     load(month).catch(console.error);
   }, [month]);
 
-  // 値更新ローカル保持
   const update = (
     id: string | null,
     field: keyof Omit<
       Row,
-      "id" | "product_id" | "product_name" | "series_name" | "series_code" | "price"
+      "id" | "product_id" | "product_name" | "series_name" | "price"
     >,
     val: number
   ) =>
@@ -80,11 +73,10 @@ export default function WebSalesInputView() {
       r.map((row) => (row.product_id === id ? { ...row, [field]: val } : row))
     );
 
-  // 保存
   const save = async () => {
     setLoading(true);
     try {
-      const first = `${month}-01`; // 月初固定
+      const first = `${month}-01`;
       const upserts = rows.map((r) => ({
         ...(r.id ? { id: r.id } : {}),
         report_date: first,
@@ -94,7 +86,7 @@ export default function WebSalesInputView() {
         .from("web_sales")
         .upsert(upserts, { onConflict: "product_id,report_date" });
       if (error) throw error;
-      await load(month); // 再読込
+      await load(month);
     } catch (e: any) {
       alert(e.message ?? e);
     } finally {
@@ -104,7 +96,6 @@ export default function WebSalesInputView() {
 
   return (
     <div className="p-6 space-y-4">
-      {/* 月選択 */}
       <div className="flex items-center gap-2">
         <input
           type="month"
@@ -121,7 +112,6 @@ export default function WebSalesInputView() {
         </button>
       </div>
 
-      {/* テーブル */}
       {loading ? (
         <p>loading…</p>
       ) : (
@@ -158,7 +148,6 @@ export default function WebSalesInputView() {
                   <td>{r.series_name ?? "-"}</td>
                   <td className="text-right">{r.price ?? 0}</td>
 
-                  {/* 件数入力欄：rows state で値を制御 */}
                   <td>
                     <input
                       type="number"
