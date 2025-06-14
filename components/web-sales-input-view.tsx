@@ -31,11 +31,48 @@ export default function WebSalesInputView() {
   const load = async (ym: string) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc("web_sales_full_month", {
-        target_month: `${ym}-01`,
-      });
+      const first = `${ym}-01`;
+      const next = new Date(first);
+      next.setMonth(next.getMonth() + 1);
+      const nextStr = next.toISOString().slice(0, 10); // 次月 1 日
+
+      // 月内の raw 行をすべて取得
+      const { data, error } = await supabase
+        .from("web_sales")
+        .select(
+          "product_id, product_name, series_name, price, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count"
+        )
+        .gte("report_date", first)
+        .lt("report_date", nextStr);
       if (error) throw error;
-      setRows(data ?? []);
+
+      // product_id で集計して 1 行化
+      const map = new Map<string, Row>();
+      (data ?? []).forEach((r: any) => {
+        if (!map.has(r.product_id)) {
+          map.set(r.product_id, {
+            id: undefined, // 新規行なので undefined
+            product_id: r.product_id,
+            product_name: r.product_name,
+            series_name: r.series_name,
+            price: r.price,
+            amazon_count: 0,
+            rakuten_count: 0,
+            yahoo_count: 0,
+            mercari_count: 0,
+            base_count: 0,
+            qoo10_count: 0,
+          });
+        }
+        const row = map.get(r.product_id)!;
+        row.amazon_count += r.amazon_count ?? 0;
+        row.rakuten_count += r.rakuten_count ?? 0;
+        row.yahoo_count += r.yahoo_count ?? 0;
+        row.mercari_count += r.mercari_count ?? 0;
+        row.base_count += r.base_count ?? 0;
+        row.qoo10_count += r.qoo10_count ?? 0;
+      });
+      setRows([...map.values()]);
     } catch (e: any) {
       alert(e.message ?? e);
       setRows([]);
@@ -65,24 +102,15 @@ export default function WebSalesInputView() {
   const save = async () => {
     setLoading(true);
     try {
-      const firstDay = `${month}-01`;
-      const payload = rows.map((r) => ({
+      const first = `${month}-01`; // 月初固定
+      const upserts = rows.map((r) => ({
         ...(r.id ? { id: r.id } : {}),
-        product_id: r.product_id,
-        product_name: r.product_name,
-        series_name: r.series_name,
-        price: r.price,
-        report_month: firstDay,
-        amazon_count: r.amazon_count,
-        rakuten_count: r.rakuten_count,
-        yahoo_count: r.yahoo_count,
-        mercari_count: r.mercari_count,
-        base_count: r.base_count,
-        qoo10_count: r.qoo10_count,
+        report_date: first,
+        ...r,
       }));
       const { error } = await supabase
-        .from("web_sales_summary")
-        .upsert(payload, { onConflict: "product_id,report_month" });
+        .from("web_sales")
+        .upsert(upserts, { onConflict: "product_id,report_date" });
       if (error) throw error;
       await load(month); // 再読込
     } catch (e: any) {
