@@ -83,7 +83,7 @@ export default function WebSalesInputView() {
         ...r,
       }));
       const { error } = await supabase
-        .from("web_sales")
+        .from("web_sales_summary") // 修正箇所
         .upsert(upserts, { onConflict: "product_id,report_date" });
       if (error) throw error;
       await load(month);
