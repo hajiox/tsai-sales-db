@@ -7,8 +7,8 @@ import { supabase } from "@/lib/supabase"
 
 export type Product = {
   id: number
-  product_name: string
-  series_name: string
+  name: string
+  series: string
   price: number
 }
 
@@ -49,7 +49,7 @@ export default function WebSalesInputView() {
   const loadData = async (month: string = reportMonth) => {
     const { data: products } = await supabase
       .from("products")
-      .select("id, product_name, series_name, price")
+      .select("id, name, series, price")
       .order("id")
     const { data: summary } = await supabase
       .from("web_sales_summary")
@@ -200,10 +200,10 @@ export default function WebSalesInputView() {
               rows.map((r) => (
                 <tr key={r.id} className="text-center">
                   <td className="border px-2 py-1 text-left whitespace-nowrap">
-                    {r.product_name}
+                    {r.name}
                   </td>
                   <td className="border px-2 py-1 text-left whitespace-nowrap">
-                    {r.series_name}
+                    {r.series}
                   </td>
                   <td className="border px-2 py-1">{f(r.price)}</td>
                   {([
