@@ -30,18 +30,29 @@ export default function WebSalesInputView() {
   const load = async (ym: string) => {
     setLoading(true);
     const firstDay = `${ym}-01`;
-    const { data, error } = await supabase
-      .from("web_sales_summary")
-      .select(
-        `id, product_id, product_name, series_name, price,
-         amazon_count, rakuten_count, yahoo_count,
-         mercari_count, base_count, qoo10_count`
-      )
-      .eq("report_month", firstDay)
-      .order("series_name", { ascending: true })
-      .order("product_name", { ascending: true });
+
+    // ❶ products 全件と、指定月の summary 行を LEFT JOIN
+    const { data, error } = await supabase.rpc("web_sales_full_month", {
+      target_month: firstDay,
+    });
     if (error) throw error;
-    setRows(data ?? []);
+
+    // ❷ rows を state に（件数が null の所は 0 に）
+    setRows(
+      (data ?? []).map((r: any) => ({
+        id: r.id ?? "", // NULL の場合は '' のまま (新規行)
+        product_id: r.product_id,
+        product_name: r.product_name,
+        series_name: r.series_name,
+        price: r.price,
+        amazon_count: r.amazon_count ?? 0,
+        rakuten_count: r.rakuten_count ?? 0,
+        yahoo_count: r.yahoo_count ?? 0,
+        mercari_count: r.mercari_count ?? 0,
+        base_count: r.base_count ?? 0,
+        qoo10_count: r.qoo10_count ?? 0,
+      }))
+    );
     setLoading(false);
   };
 
@@ -70,7 +81,7 @@ export default function WebSalesInputView() {
   const save = async () => {
     setLoading(true);
     const updates = rows.map((r) => ({
-      id: r.id,
+      ...(r.id ? { id: r.id } : {}), // 既存行だけ id を付ける
       product_id: r.product_id,
       product_name: r.product_name,
       series_name: r.series_name,
