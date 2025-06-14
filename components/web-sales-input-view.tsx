@@ -23,27 +23,23 @@ const WebSalesInputView = () => {
   const [ym, setYm] = useState('2025-04');
   const [error, setError] = useState<string | null>(null);
 
+  const formatMonth = (ym: string) => (ym.length === 7 ? `${ym}-01` : ym);
+
   const load = async (ym: string) => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      // 複数の引数形式を試行
-      let data, error;
-      
-      // まず文字列形式（YYYY-MM）で試行
-      try {
+      // まず日付型として呼び出し（YYYY-MM-01 形式に変換）
+      let { data, error } = await supabase.rpc('web_sales_full_month', {
+        target_month: formatMonth(ym),
+      });
+
+      // 日付型でエラーが出た場合は文字列型でも試行
+      if (error || !data) {
+        console.warn('Date format failed, trying string format:', error);
         const result = await supabase.rpc('web_sales_full_month', {
-          target_month: ym, // "2025-04"
-        });
-        data = result.data;
-        error = result.error;
-      } catch (firstError) {
-        console.warn('String format failed, trying date format:', firstError);
-        
-        // 文字列形式で失敗した場合、日付形式（YYYY-MM-01）で試行
-        const result = await supabase.rpc('web_sales_full_month', {
-          target_month: `${ym}-01`, // "2025-04-01"
+          target_month: ym,
         });
         data = result.data;
         error = result.error;
