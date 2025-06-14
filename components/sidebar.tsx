@@ -12,7 +12,6 @@ const sections = [
       { label: "ダッシュボード", href: "/sales/dashboard", icon: BarChart3 },
       { label: "入力", href: "/sales/input", icon: Plus },
       { label: "修正", href: "/sales/edit", icon: Edit },
-      { label: "AI分析", href: "/sales/ai", icon: Brain },
     ],
   },
   {
@@ -21,7 +20,6 @@ const sections = [
       { label: "ダッシュボード", href: "/web-sales/dashboard", icon: BarChart3 },
       { label: "入力", href: "/web-sales/input", icon: Upload },
       { label: "修正", href: "/web-sales/edit", icon: Edit },
-      { label: "AI分析", href: "/web-sales/ai", icon: Brain },
     ],
   },
 ] as const
