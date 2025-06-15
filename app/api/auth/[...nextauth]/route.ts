@@ -38,8 +38,8 @@ export const authOptions: NextAuthOptions = {
         const payload = {
           email: user.email,
           role: "authenticated",
-          // トークンの有効期限 (例: 1時間)
-          exp: Math.floor(Date.now() / 1000) + 60 * 60,
+          // ★トークンの有効期限を30日に設定 (60秒 * 60分 * 24時間 * 30日)
+          exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
         };
         // Supabaseの秘密鍵で署名した新しいトークンを生成
         token.supabaseAccessToken = jwt.sign(payload, SUPABASE_JWT_SECRET);
