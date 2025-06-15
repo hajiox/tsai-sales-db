@@ -1,14 +1,13 @@
-"use client"
-import Sidebar from "@/components/sidebar"
-import SalesInputView from "@/components/sales-input-view"
+// app/sales/input/page.tsx
+
+"use client";
+
+import SalesReportForm from "@/sales-report-form"; // sales-report-form.tsxの場所を正しく指定してください
 
 export default function SalesInputPage() {
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex-1 ml-64 p-8 space-y-8">
-        <SalesInputView />
-      </div>
+    <div>
+      <SalesReportForm />
     </div>
-  )
+  );
 }
