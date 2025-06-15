@@ -270,6 +270,8 @@ export default function DashboardView() {
     fetchLatestAiReport()
   }, [])
 
+  // --- 変更点: 以下のuseEffectブロックをコメントアウト ---
+  /*
   useEffect(() => {
     const fetchCompare = async () => {
       try {
@@ -284,6 +286,7 @@ export default function DashboardView() {
 
     fetchCompare()
   }, [selectedDate])
+  */
 
 
   const formatCurrency = (amount: number) =>
