@@ -1,96 +1,74 @@
-// components/daily-sales-crud-form.tsx
-
 "use client";
 
 import { useState, useEffect } from 'react';
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase';
-import { nf } from '@/lib/utils'; // ★nfをインポート
+import { nf } from '@/lib/utils';
+import { Button } from "@/components/ui/button"; // shadcn/uiのButtonをインポート
+import { Input } from "@/components/ui/input";   // shadcn/uiのInputをインポート
 
 // Propsの型定義
 interface DailySalesCrudFormProps {
     selectedDate: string;
-    dailyData: any; // get_sales_report_dataの返り値を想定
+    dailyData: any;
     onDataUpdate: () => void;
     accessToken: string | null;
 }
 
-// フォームの入力フィールド
-const formFields = [
-    { id: 'floor_sales', label: 'フロア日計', type: 'number' },
-    { id: 'cash_income', label: '入金', type: 'number' },
-    { id: 'register_count', label: 'レジ通過人数', type: 'number' },
-    { id: 'amazon_amount', label: 'Amazon 売上', type: 'number' },
-    { id: 'amazon_count', label: 'Amazon 件数', type: 'number' },
-    { id: 'base_amount', label: 'BASE 売上', type: 'number' },
-    { id: 'base_count', label: 'BASE 件数', type: 'number' },
-    { id: 'yahoo_amount', label: 'Yahoo! 売上', type: 'number' },
-    { id: 'yahoo_count', label: 'Yahoo! 件数', type: 'number' },
-    { id: 'mercari_amount', label: 'メルカリ 売上', type: 'number' },
-    { id: 'mercari_count', label: 'メルカリ 件数', type: 'number' },
-    { id: 'rakuten_amount', label: '楽天 売上', type: 'number' },
-    { id: 'rakuten_count', label: '楽天 件数', type: 'number' },
-    { id: 'qoo10_amount', label: 'Qoo10 売上', type: 'number' },
-    { id: 'qoo10_count', label: 'Qoo10 件数', type: 'number' },
-];
+// ★レイアウトに合わせて入力フィールドコンポーネントを定義
+const FormInput = ({ id, label, value, onChange }: { id: string, label: string, value: any, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
+    <div>
+        <label htmlFor={id} className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
+        <Input
+            type="number"
+            name={id}
+            id={id}
+            value={value}
+            onChange={onChange}
+            className="bg-white"
+        />
+    </div>
+);
 
 export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpdate, accessToken }: DailySalesCrudFormProps) {
     const [formData, setFormData] = useState<any>({});
     const [message, setMessage] = useState('');
 
     useEffect(() => {
-        // dailyDataからフォームの初期値を設定
-        const initialFormData: any = {};
-        formFields.forEach(field => {
-            initialFormData[field.id] = dailyData?.[`d_${field.id}`] ?? '';
-        });
+        const initialFormData: any = {
+            floor_sales: dailyData?.d_floor_sales ?? '', cash_income: dailyData?.d_cash_income ?? '', register_count: dailyData?.d_register_count ?? '',
+            amazon_count: dailyData?.d_amazon_count ?? '', base_count: dailyData?.d_base_count ?? '', yahoo_count: dailyData?.d_yahoo_count ?? '',
+            mercari_count: dailyData?.d_mercari_count ?? '', rakuten_count: dailyData?.d_rakuten_count ?? '', qoo10_count: dailyData?.d_qoo10_count ?? '',
+            amazon_amount: dailyData?.d_amazon_amount ?? '', base_amount: dailyData?.d_base_amount ?? '', yahoo_amount: dailyData?.d_yahoo_amount ?? '',
+            mercari_amount: dailyData?.d_mercari_amount ?? '', rakuten_amount: dailyData?.d_rakuten_amount ?? '', qoo10_amount: dailyData?.d_qoo10_amount ?? '',
+        };
         setFormData(initialFormData);
-    }, [dailyData, selectedDate]);
+    }, [dailyData]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value, type } = e.target;
-        setFormData({ ...formData, [name]: type === 'number' ? (value === '' ? '' : Number(value)) : value });
+        const { name, value } = e.target;
+        setFormData({ ...formData, [name]: value === '' ? '' : Number(value) });
     };
-
+    
+    // ... handleSave, handleDelete, handleGenerateReportの関数は変更なし ...
     const handleSave = async () => {
         if (!accessToken) { setMessage('エラー: 認証トークンがありません'); return; }
         const supabase = createAuthenticatedSupabaseClient(accessToken);
         const dataToSave = { date: selectedDate, ...formData };
-        
-        // 空文字のフィールドをnullに変換
-        for(const key in dataToSave) {
-            if (dataToSave[key] === '') {
-                dataToSave[key] = null;
-            }
-        }
-
+        for(const key in dataToSave) { if (dataToSave[key] === '') { dataToSave[key] = null; } }
         const { error } = await supabase.from('daily_sales_report').upsert(dataToSave, { onConflict: 'date' });
-        if (error) {
-            setMessage(`保存に失敗しました: ${error.message}`);
-        } else {
-            setMessage(`${selectedDate}のデータを保存しました。`);
-            onDataUpdate(); // 親コンポーネントに更新を通知
-        }
+        if (error) { setMessage(`保存に失敗しました: ${error.message}`); } 
+        else { setMessage(`${selectedDate}のデータを保存しました。`); onDataUpdate(); }
     };
-    
     const handleDelete = async () => {
         if (!accessToken) { setMessage('エラー: 認証トークンがありません'); return; }
         if (!confirm(`${selectedDate}のデータを本当に削除しますか？`)) return;
-
         const supabase = createAuthenticatedSupabaseClient(accessToken);
         const { error } = await supabase.from('daily_sales_report').delete().eq('date', selectedDate);
-
-        if (error) {
-            setMessage(`削除に失敗しました: ${error.message}`);
-        } else {
-            setMessage(`${selectedDate}のデータを削除しました。`);
-            onDataUpdate(); // 親コンポーネントに更新を通知
-        }
+        if (error) { setMessage(`削除に失敗しました: ${error.message}`); } 
+        else { setMessage(`${selectedDate}のデータを削除しました。`); onDataUpdate(); }
     };
-
     const handleGenerateReport = () => {
-        // const nf = (num: number) => num ? num.toLocaleString() : '0'; // ★この行を削除
         const d = dailyData;
-        
         const reportText = `【会津ブランド館売上報告】
 ${selectedDate}
 フロア日計 / ${nf(d.d_floor_sales).padStart(8, ' ')}円
@@ -114,38 +92,50 @@ Qoo10累計/  ${nf(d.m_qoo10_total)}円
 WEB売上累計 / ${nf(d.m_web_total)}円
 【月内フロア＋WEB累計売上】
 ${nf(d.m_grand_total)}円`;
-
         navigator.clipboard.writeText(reportText).then(() => {
             setMessage('帳票をクリップボードにコピーしました。');
-        }, () => {
-            setMessage('クリップボードへのコピーに失敗しました。');
-        });
+        }, () => { setMessage('クリップボードへのコピーに失敗しました。'); });
     };
 
+
     return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {formFields.map(field => (
-                    <div key={field.id}>
-                        <label htmlFor={field.id} className="block text-sm font-medium text-gray-700">{field.label}</label>
-                        <input
-                            type={field.type}
-                            name={field.id}
-                            id={field.id}
-                            value={formData[field.id] ?? ''}
-                            onChange={handleChange}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        />
-                    </div>
-                ))}
-            </div>
-            <div className="flex items-center justify-between">
-                <div>
-                    <button onClick={handleSave} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">登録・更新</button>
-                    <button onClick={handleDelete} className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded ml-2">削除</button>
-                    <button onClick={handleGenerateReport} className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded ml-2">帳票をコピー</button>
+        <div className="space-y-6">
+            {/* ★ご要望に合わせて3段のレイアウトに変更 */}
+            <div className="space-y-4">
+                {/* 1段目 */}
+                <div className="grid grid-cols-3 gap-4">
+                    <FormInput id="floor_sales" label="フロア日計" value={formData.floor_sales ?? ''} onChange={handleChange} />
+                    <FormInput id="cash_income" label="入金" value={formData.cash_income ?? ''} onChange={handleChange} />
+                    <FormInput id="register_count" label="レジ通過人数" value={formData.register_count ?? ''} onChange={handleChange} />
                 </div>
-                {message && <p className="text-sm text-gray-600">{message}</p>}
+                {/* 2段目 (件数) */}
+                <div className="grid grid-cols-6 gap-4">
+                    <FormInput id="amazon_count" label="Amazon 件数" value={formData.amazon_count ?? ''} onChange={handleChange} />
+                    <FormInput id="base_count" label="BASE 件数" value={formData.base_count ?? ''} onChange={handleChange} />
+                    <FormInput id="yahoo_count" label="Yahoo! 件数" value={formData.yahoo_count ?? ''} onChange={handleChange} />
+                    <FormInput id="mercari_count" label="メルカリ 件数" value={formData.mercari_count ?? ''} onChange={handleChange} />
+                    <FormInput id="rakuten_count" label="楽天 件数" value={formData.rakuten_count ?? ''} onChange={handleChange} />
+                    <FormInput id="qoo10_count" label="Qoo10 件数" value={formData.qoo10_count ?? ''} onChange={handleChange} />
+                </div>
+                {/* 3段目 (売上) */}
+                <div className="grid grid-cols-6 gap-4">
+                     <FormInput id="amazon_amount" label="Amazon 売上" value={formData.amazon_amount ?? ''} onChange={handleChange} />
+                    <FormInput id="base_amount" label="BASE 売上" value={formData.base_amount ?? ''} onChange={handleChange} />
+                    <FormInput id="yahoo_amount" label="Yahoo! 売上" value={formData.yahoo_amount ?? ''} onChange={handleChange} />
+                    <FormInput id="mercari_amount" label="メルカリ 売上" value={formData.mercari_amount ?? ''} onChange={handleChange} />
+                    <FormInput id="rakuten_amount" label="楽天 売上" value={formData.rakuten_amount ?? ''} onChange={handleChange} />
+                    <FormInput id="qoo10_amount" label="Qoo10 売上" value={formData.qoo10_amount ?? ''} onChange={handleChange} />
+                </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+                 {/* ★ボタンをシックなデザインに変更し、文言を修正 */}
+                <div className="flex items-center gap-2">
+                    <Button onClick={handleSave}>登録・更新</Button>
+                    <Button variant="destructive" onClick={handleDelete}>削除</Button>
+                    <Button variant="secondary" onClick={handleGenerateReport}>帳票を生成</Button>
+                </div>
+                {message && <p className="text-sm text-slate-500">{message}</p>}
             </div>
         </div>
     );
