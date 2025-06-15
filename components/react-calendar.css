@@ -71,7 +71,12 @@
   font-weight: bold;
 }
 .react-calendar__month-view__days__day--weekend {
-  color: #d10000;
+  /* ★ 週末を一括で赤くする指定を、日曜日のみに変更 */
+  /* color: #d10000; */
+}
+.react-calendar__month-view__days__day--sunday {
+    /* ★ 日曜日を赤くする指定を追加 */
+    color: #d10000;
 }
 .react-calendar__month-view__days__day--neighboringMonth {
   color: #94a3b8;
