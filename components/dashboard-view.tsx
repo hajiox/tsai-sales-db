@@ -1,107 +1,95 @@
-// components/ai-analysis-widget.tsx
+// components/dashboard-view.tsx
 "use client";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Brain, Loader2, TrendingUp, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { formatDateJST } from "@/lib/utils";
+import DashboardHeader from "./dashboard-header";
+import DashboardStats from "./dashboard-stats";
+import SalesChartGrid from "./sales-chart-grid";
+import DailySalesCrudForm from "./daily-sales-crud-form";
 
-interface Props {
-  selectedDate: Date;
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-export default function AIAnalysisWidget({ selectedDate }: Props) {
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<string>("");
-  const [error, setError] = useState<string>("");
+export default function DashboardView() {
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [salesData, setSalesData] = useState<any[]>([]);
+  const [summaryData, setSummaryData] = useState<any[]>([]);
+  const [todayData, setTodayData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleAnalyze = async () => {
-    setIsAnalyzing(true);
-    setError("");
-    setAnalysisResult("");
-
+  // データ取得関数
+  const fetchData = async (date: Date) => {
+    setLoading(true);
     try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: selectedDate.toISOString().slice(0, 10)
-        })
+      const formattedDate = formatDateJST(date);
+      
+      // 6ヶ月サマリー取得
+      const { data: summary } = await supabase.rpc("get_6month_sales_summary", {
+        end_date: formattedDate,
       });
+      
+      // 当日データ取得
+      const { data: today } = await supabase
+        .from("daily_sales_report")
+        .select("*")
+        .eq("date", formattedDate)
+        .single();
 
-      const data = await response.json();
-
-      if (data.ok) {
-        setAnalysisResult(data.result);
-        toast.success("AI分析が完了しました");
-      } else {
-        setError(data.error || "分析に失敗しました");
-        toast.error("分析エラー: " + (data.error || "不明なエラー"));
-      }
-    } catch (err) {
-      setError("ネットワークエラーが発生しました");
-      toast.error("通信エラーが発生しました");
+      setSummaryData(summary || []);
+      setTodayData(today);
+      setSalesData(summary || []);
+    } catch (error) {
+      console.error("データ取得エラー:", error);
     } finally {
-      setIsAnalyzing(false);
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchData(selectedDate);
+  }, [selectedDate]);
+
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
+  };
+
+  const handleDataUpdate = () => {
+    fetchData(selectedDate);
+  };
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <Brain className="h-5 w-5 text-blue-600" />
-          AI分析レポート
-        </CardTitle>
-        <Button 
-          onClick={handleAnalyze}
-          disabled={isAnalyzing}
-          variant="outline"
-          size="sm"
-        >
-          {isAnalyzing ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              分析中...
-            </>
-          ) : (
-            <>
-              <TrendingUp className="h-4 w-4 mr-2" />
-              最新データで再解析
-            </>
-          )}
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <div className="flex items-start gap-2 p-4 border border-red-200 bg-red-50 rounded-lg mb-4">
-            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-red-800 font-medium">分析エラー</p>
-              <p className="text-red-700 text-sm mt-1">{error}</p>
-              <p className="text-red-600 text-xs mt-2">
-                売上データが入力されているか確認してください。データが不足している場合、正確な分析ができません。
-              </p>
-            </div>
-          </div>
-        )}
+    <div className="min-h-screen bg-gray-50/50">
+      <div className="container mx-auto px-4 py-6">
+        <DashboardHeader
+          selectedDate={selectedDate}
+          onDateChange={handleDateChange}
+        />
         
-        {analysisResult ? (
-          <div className="prose prose-sm max-w-none">
-            <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
-              {analysisResult}
-            </div>
+        {/* サマリーカード */}
+        <div className="mt-6">
+          <DashboardStats summaryData={summaryData} loading={loading} />
+        </div>
+        
+        {/* メインコンテンツ */}
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* グラフエリア */}
+          <div className="lg:col-span-2">
+            <SalesChartGrid salesData={salesData} loading={loading} />
           </div>
-        ) : !error && (
-          <div className="text-center py-8 text-gray-500">
-            <Brain className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-            <p className="text-sm">「最新データで再解析」ボタンを押してAI分析を実行してください</p>
-            <p className="text-xs mt-1 text-gray-400">
-              選択された日付: {selectedDate.toLocaleDateString('ja-JP')}
-            </p>
+          
+          {/* 売上入力フォーム */}
+          <div className="lg:col-span-1">
+            <DailySalesCrudForm
+              selectedDate={selectedDate}
+              initialData={todayData}
+              onDataUpdate={handleDataUpdate}
+            />
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+    </div>
   );
 }
