@@ -4,8 +4,8 @@ import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import Calendar from 'react-calendar'; // ★ 新しいカレンダーをインポート
-import './react-calendar.css'; // ★ 新しいCSSをインポート
+import Calendar from 'react-calendar';
+import './react-calendar.css';
 
 // react-calendarからの戻り値の型定義
 type ValuePiece = Date | null;
@@ -42,11 +42,12 @@ export default function DashboardHeader({ selectedDate, onDateChange }: Props) {
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="end">
-                    {/* ★ Calendarコンポーネントを差し替え */}
                     <Calendar
                       onChange={handleDateSelect}
                       value={selectedDate}
                       locale="ja-JP"
+                      // ★ formatDayプロパティを追加して日付のフォーマットを数字のみに変更
+                      formatDay={(locale, date) => format(date, 'd')}
                     />
                 </PopoverContent>
             </Popover>
