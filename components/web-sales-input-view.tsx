@@ -9,6 +9,7 @@ type SupabaseRpcResult = {
   product_id: string;
   product_name: string;
   series_name: string;
+  product_number: number;  // 商品番号を追加
   price: number;
   amazon_count: number;
   rakuten_count: number;
@@ -24,6 +25,7 @@ type Row = {
   product_id: string;
   product_name: string;
   series_name: string;
+  product_number: number;  // 商品番号を追加
   price: number;
   amazon_count: number;
   rakuten_count: number;
@@ -193,6 +195,7 @@ const WebSalesInputView = () => {
               <tr className="bg-gray-100">
                 <th className="border px-2 py-2 text-left">商品名</th>
                 <th className="border px-2 py-2 text-center">シリーズ</th>
+                <th className="border px-2 py-2 text-center">商品番号</th>
                 <th className="border px-2 py-2 text-right">単価</th>
                 <th className="border px-2 py-2 text-right">Amazon</th>
                 <th className="border px-2 py-2 text-right">楽天</th>
@@ -207,7 +210,7 @@ const WebSalesInputView = () => {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="border px-4 py-8 text-center text-gray-500">
+                  <td colSpan={12} className="border px-4 py-8 text-center text-gray-500">
                     選択した月のデータがありません
                   </td>
                 </tr>
@@ -226,6 +229,7 @@ const WebSalesInputView = () => {
                     <tr key={r.id || r.product_id || i} className="hover:bg-gray-50">
                       <td className="border px-2 py-1">{r.product_name}</td>
                       <td className="border px-2 py-1 text-center">{r.series_name}</td>
+                      <td className="border px-2 py-1 text-center">{r.product_number}</td>
                       <td className="border px-2 py-1 text-right">¥{r.price.toLocaleString()}</td>
                       <td className="border px-2 py-1 text-right">{r.amazon_count}</td>
                       <td className="border px-2 py-1 text-right">{r.rakuten_count}</td>
