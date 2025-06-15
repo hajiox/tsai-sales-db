@@ -5,166 +5,94 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from "next-auth/react";
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase';
+
+import DashboardHeader from './dashboard-header';
+import DashboardStats from './dashboard-stats';
+import SalesChartGrid from './sales-chart-grid';
 import DailySalesCrudForm from './daily-sales-crud-form';
-import { DayPicker } from 'react-day-picker';
-import 'react-day-picker/dist/style.css';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // shadcn/uiのコンポーネントを想定
-
-// サマリーカードのダミーコンポーネント
-const SummaryCards = ({ data }: { data: any }) => {
-    if (!data) return null;
-    const nf = (num: number) => num ? num.toLocaleString() : '0';
-
-    return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">月内フロア累計</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{nf(data.m_floor_total)}円</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">WEB売上累計</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{nf(data.m_web_total)}円</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">総合計</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{nf(data.m_grand_total)}円</div>
-                </CardContent>
-            </Card>
-        </div>
-    );
-};
-
-// グラフのダミーコンポーネント
-const SalesChart = ({ data }: { data: any }) => {
-    if (!data) return <Card className="mt-4"><CardContent><p className="pt-6">グラフデータを表示するには日付を選択してください。</p></CardContent></Card>;
-    // ここに実際のグラフ描画ライブラリ（Rechartsなど）を使った実装が入ります
-    return (
-        <Card className="mt-4">
-            <CardHeader>
-                <CardTitle>売上グラフ（仮）</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p>ここに棒グラフや折れ線グラフが表示されます。</p>
-                <p>フロア売上: {data.d_floor_sales?.toLocaleString() ?? 0}円</p>
-            </CardContent>
-        </Card>
-    );
-};
-
-// AI分析のダミーコンポーネント
-const AiAnalysisReport = ({ data }: { data: any }) => {
-    if (!data) return null;
-     return (
-        <Card className="mt-6">
-            <CardHeader>
-                <CardTitle>AI分析レポート</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p>ここにAIによる分析結果が表示されます。</p>
-            </CardContent>
-        </Card>
-    );
-}
-
 
 export default function DashboardView() {
     const { data: session } = useSession();
-    // selectedDateの型をDate | undefinedに変更
-    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-    const [reportData, setReportData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    
+    // データステート
+    const [dailyData, setDailyData] = useState<any>(null);
+    const [sixMonthData, setSixMonthData] = useState<any[]>([]);
+    
+    // ローディング・エラーステート
+    const [dailyLoading, setDailyLoading] = useState(true);
+    const [graphLoading, setGraphLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchReportData = useCallback(async (date: Date) => {
-        if (!session?.supabaseAccessToken) return;
-        setLoading(true);
-        // YYYY-MM-DD形式の文字列に変換
+    const getDailyData = useCallback(async (date: Date, supabase: any) => {
+        setDailyLoading(true);
         const dateString = date.toISOString().split('T')[0];
+        const { data, error } = await supabase.rpc('get_sales_report_data', { report_date: dateString });
+        if (error) throw new Error(`日次データ取得エラー: ${error.message}`);
+        setDailyData(data[0] || {});
+        setDailyLoading(false);
+    }, []);
+    
+    const getSixMonthData = useCallback(async (date: Date, supabase: any) => {
+        setGraphLoading(true);
+        const dateString = date.toISOString().split('T')[0];
+        const { data, error } = await supabase.rpc('get_6month_sales_summary', { end_date: dateString });
+        if (error) throw new Error(`グラフデータ取得エラー: ${error.message}`);
+        setSixMonthData(data || []);
+        setGraphLoading(false);
+    }, []);
+
+    const fetchData = useCallback(async (date: Date) => {
+        if (!session?.supabaseAccessToken) return;
+        setError(null);
         try {
             const supabase = createAuthenticatedSupabaseClient(session.supabaseAccessToken);
-            const { data, error } = await supabase.rpc('get_sales_report_data', { report_date: dateString });
-            if (error) throw error;
-            setReportData(data[0] || {});
+            // 2つのデータ取得を並行して実行
+            await Promise.all([
+                getDailyData(date, supabase),
+                getSixMonthData(date, supabase)
+            ]);
         } catch (err: any) {
-            setError('データの取得に失敗しました: ' + err.message);
-            setReportData(null); // エラー時はデータをクリア
+            setError(err.message);
             console.error(err);
-        } finally {
-            setLoading(false);
+            setDailyLoading(false);
+            setGraphLoading(false);
         }
-    }, [session]);
+    }, [session, getDailyData, getSixMonthData]);
 
     useEffect(() => {
-        if (selectedDate) {
-            fetchReportData(selectedDate);
-        }
-    }, [selectedDate, fetchReportData]);
+        fetchData(selectedDate);
+    }, [selectedDate, session]); // sessionの変更でも再取得
 
     const handleDataUpdate = () => {
-        if (selectedDate) {
-            fetchReportData(selectedDate);
-        }
+        fetchData(selectedDate);
     };
 
-    // YYYY-MM-DD形式の文字列を返すヘルパー
-    const selectedDateString = selectedDate ? selectedDate.toISOString().split('T')[0] : '';
-
     return (
-        <div className="space-y-6">
-            <h1 className="text-2xl font-bold">統合売上ダッシュボード</h1>
+        <div className="p-4 md:p-6 lg:p-8 bg-slate-50 min-h-screen font-sans">
+            <DashboardHeader selectedDate={selectedDate} onDateChange={setSelectedDate} />
             
-            <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4">
-                <div className="lg:col-span-1">
-                    <Card>
-                        <CardContent className="p-2">
-                             <DayPicker
-                                mode="single"
-                                selected={selectedDate}
-                                onSelect={setSelectedDate}
-                                className="w-full"
-                                initialFocus
-                             />
-                        </CardContent>
-                    </Card>
-                </div>
-                <div className="md:col-span-2 lg:col-span-3">
-                    <SummaryCards data={reportData} />
-                    <SalesChart data={reportData} />
-                </div>
-            </div>
+            <main className="mt-6 space-y-8">
+                {error && <p className="text-red-500">{error}</p>}
+                
+                <DashboardStats data={dailyData} isLoading={dailyLoading} />
+                
+                <SalesChartGrid data={sixMonthData} isLoading={graphLoading} />
 
-            <hr />
-
-            <div>
-                <h2 className="text-xl font-semibold mb-2">
-                    日次データ操作 ({selectedDateString})
-                </h2>
-                <div className="p-4 border rounded-lg">
-                    {session && selectedDateString ? (
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-slate-200">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                        日次データ操作 ({selectedDate.toLocaleDateString()})
+                    </h3>
+                    {session && (
                         <DailySalesCrudForm
-                            selectedDate={selectedDateString}
-                            dailyData={reportData}
+                            selectedDate={selectedDate.toISOString().split('T')[0]}
+                            dailyData={dailyData}
                             onDataUpdate={handleDataUpdate}
                             accessToken={session.supabaseAccessToken}
                         />
-                    ) : (
-                        <p>カレンダーから日付を選択してください。</p>
                     )}
                 </div>
-            </div>
-
-            <AiAnalysisReport data={reportData} />
+            </main>
         </div>
     );
 }
