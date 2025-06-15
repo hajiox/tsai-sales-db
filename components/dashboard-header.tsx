@@ -1,22 +1,17 @@
 "use client";
 import * as React from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { format, DayOfWeek } from "date-fns";
+import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CustomCalendarHead } from "./custom-calendar-head"; // ★ 自作ヘッダーをインポート
 
 interface Props {
     selectedDate: Date;
     onDateChange: (date: Date) => void;
 }
-
-// ★ 曜日を日本語で正しく表示するためのフォーマット関数を定義
-const formatWeekdayName = (day: Date, options: { locale?: any }) => {
-    return format(day, 'E', { locale: options.locale });
-};
-
 
 export default function DashboardHeader({ selectedDate, onDateChange }: Props) {
     const [isOpen, setIsOpen] = React.useState(false);
@@ -49,7 +44,12 @@ export default function DashboardHeader({ selectedDate, onDateChange }: Props) {
                         selected={selectedDate}
                         onSelect={handleDateSelect}
                         locale={ja}
-                        formatters={{ formatWeekdayName }} // ★ formattersプロパティを追加
+                        // ★ componentsプロパティでヘッダーを自作物に差し替え
+                        components={{
+                          Head: CustomCalendarHead,
+                        }}
+                        // ★ カレンダー全体を小さくするため、文字サイズを調整
+                        className="p-3 text-sm"
                         initialFocus
                     />
                 </PopoverContent>
