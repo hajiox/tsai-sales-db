@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-/** ───────────────────────────────────
- *  型定義（必要最低限）
- * ─────────────────────────────────── */
+/* ─ 型定義 ─ */
 type DailySales = {
   date: string;
   floor_sales: number;
@@ -19,9 +17,7 @@ type DailySales = {
   qoo10_amount: number;
 };
 
-/** ───────────────────────────────────
- *  カード用のヘルパー
- * ─────────────────────────────────── */
+/* ─ ヘルパー ─ */
 const Card = ({
   title,
   value,
@@ -40,35 +36,37 @@ const Card = ({
   </div>
 );
 
-/** ───────────────────────────────────
- *  ダッシュボード本体
- * ─────────────────────────────────── */
+/* ─ 本体 ─ */
 export default function DashboardView({
   selectedDate,
 }: {
-  selectedDate: string;
+  selectedDate?: string; // ← optional に変更
 }) {
+  /* ① 未指定なら今日 (YYYY-MM-DD) を補完 */
+  const dateStr =
+    selectedDate ?? new Date().toISOString().slice(0, 10);
+
   const [sales, setSales] = useState<DailySales | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /* データ取得ロジック —— .maybeSingle() で 406 回避 */
   useEffect(() => {
-    const load = async () => {
+    /* ② dateStr が空なら何もしない */
+    if (!dateStr) return;
+
+    (async () => {
       setLoading(true);
 
       const { data, error } = await supabase
         .from('daily_sales_report')
         .select('*')
-        .eq('date', selectedDate)
-        .maybeSingle(); // ← ★ここだけ変更
+        .eq('date', dateStr)
+        .maybeSingle(); // 406 回避
 
-      if (error) {
-        console.error(error.message);
-      }
+      if (error) console.error(error.message);
 
       setSales(
         data ?? {
-          date: selectedDate,
+          date: dateStr,
           floor_sales: 0,
           cash_amount: 0,
           register_count: 0,
@@ -81,20 +79,26 @@ export default function DashboardView({
         },
       );
       setLoading(false);
-    };
-
-    load();
-  }, [selectedDate]);
+    })();
+  }, [dateStr]);
 
   if (loading || !sales) return <div className="p-4">読み込み中…</div>;
+
+  const ecTotal =
+    sales.amazon_amount +
+    sales.rakuten_amount +
+    sales.yahoo_amount +
+    sales.mercari_amount +
+    sales.base_amount +
+    sales.qoo10_amount;
 
   return (
     <section className="grid grid-cols-2 gap-4 p-4 md:grid-cols-3 lg:grid-cols-4">
       <Card title="フロア売上" value={sales.floor_sales} foot={sales.date} />
       <Card title="レジ通過人数" value={sales.register_count} foot={sales.date} />
-      <Card title="EC売上" value={sales.amazon_amount + sales.rakuten_amount + sales.yahoo_amount + sales.mercari_amount + sales.base_amount + sales.qoo10_amount} foot={sales.date} />
-      <Card title="売上日計" value={sales.floor_sales + sales.amazon_amount + sales.rakuten_amount + sales.yahoo_amount + sales.mercari_amount + sales.base_amount + sales.qoo10_amount} foot={sales.date} />
-      {/* ほかのカードも同様に追加 */}
+      <Card title="EC売上" value={ecTotal} foot={sales.date} />
+      <Card title="売上日計" value={sales.floor_sales + ecTotal} foot={sales.date} />
+      {/* 以下、累計カードなど必要分を追加 */}
     </section>
   );
 }
