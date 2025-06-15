@@ -1,8 +1,8 @@
-// app/layout.tsx (完成形)
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import MainDashboard from "@/main-dashboard";
+import { Toaster } from "@/components/ui/sonner"; // ★ sonnerからToasterをインポート
 
 export const metadata: Metadata = {
   title: "TSA System",
@@ -21,6 +21,7 @@ export default function RootLayout({
           <MainDashboard>
             {children}
           </MainDashboard>
+          <Toaster richColors /> {/* ★ この行を追加 */}
         </Providers>
       </body>
     </html>
