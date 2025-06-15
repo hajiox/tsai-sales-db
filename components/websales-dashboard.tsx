@@ -1,4 +1,3 @@
-// components/web-sales-dashboard.tsx  ※input 画面でも同じ loadData を使っている場合はそちらも同様
 "use client";
 
 import { useEffect, useState } from "react";
@@ -10,6 +9,7 @@ type SummaryRow = {
   product_id: string;
   product_name: string;
   series_name: string | null;
+  product_number: number;
   price: number | null;
   amazon_count: number | null;
   rakuten_count: number | null;
@@ -19,83 +19,247 @@ type SummaryRow = {
   qoo10_count: number | null;
 };
 
+// シリーズ番号に応じた背景色を取得
+const getSeriesColor = (seriesName: string) => {
+  const seriesNum = parseInt(seriesName);
+  const colors = [
+    'bg-blue-50', 'bg-green-50', 'bg-yellow-50', 'bg-purple-50', 'bg-pink-50', 'bg-indigo-50',
+    'bg-gray-50', 'bg-red-50', 'bg-orange-50', 'bg-teal-50', 'bg-cyan-50', 'bg-lime-50',
+    'bg-emerald-50', 'bg-violet-50', 'bg-fuchsia-50', 'bg-rose-50', 'bg-amber-50', 'bg-slate-50'
+  ];
+  return colors[(seriesNum - 1) % colors.length] || 'bg-white';
+};
+
 export default function WebSalesDashboard() {
-  /** UI は “YYYY-MM” だけ持つ */
   const [selectedMonth, setSelectedMonth] = useState<string>(
     format(new Date(), "yyyy-MM")
   );
   const [rows, setRows] = useState<SummaryRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
-  /** 月初 “YYYY-MM-01” でピタッと照合する */
   const loadData = async (ym: string) => {
     setLoading(true);
-    const firstDay = `${ym}-01`;
-    const { data, error } = await supabase.rpc("web_sales_full_month", {
-      target_month: firstDay,
-    });
+    try {
+      const { data, error } = await supabase.rpc("web_sales_full_month", {
+        target_month: ym,
+      });
 
-    if (error) throw error;
-    setRows((data as SummaryRow[]) ?? []);
-    setLoading(false);
+      if (error) throw error;
+      setRows((data as SummaryRow[]) ?? []);
+    } catch (error) {
+      console.error('データ読み込みエラー:', error);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadData(selectedMonth).catch(console.error);
+    loadData(selectedMonth);
   }, [selectedMonth]);
 
+  // 各サイト別の集計
+  const siteStats = {
+    amazon: {
+      count: rows.reduce((sum, r) => sum + (r.amazon_count || 0), 0),
+      revenue: rows.reduce((sum, r) => sum + ((r.amazon_count || 0) * (r.price || 0)), 0)
+    },
+    rakuten: {
+      count: rows.reduce((sum, r) => sum + (r.rakuten_count || 0), 0),
+      revenue: rows.reduce((sum, r) => sum + ((r.rakuten_count || 0) * (r.price || 0)), 0)
+    },
+    yahoo: {
+      count: rows.reduce((sum, r) => sum + (r.yahoo_count || 0), 0),
+      revenue: rows.reduce((sum, r) => sum + ((r.yahoo_count || 0) * (r.price || 0)), 0)
+    },
+    mercari: {
+      count: rows.reduce((sum, r) => sum + (r.mercari_count || 0), 0),
+      revenue: rows.reduce((sum, r) => sum + ((r.mercari_count || 0) * (r.price || 0)), 0)
+    },
+    base: {
+      count: rows.reduce((sum, r) => sum + (r.base_count || 0), 0),
+      revenue: rows.reduce((sum, r) => sum + ((r.base_count || 0) * (r.price || 0)), 0)
+    },
+    qoo10: {
+      count: rows.reduce((sum, r) => sum + (r.qoo10_count || 0), 0),
+      revenue: rows.reduce((sum, r) => sum + ((r.qoo10_count || 0) * (r.price || 0)), 0)
+    }
+  };
+
+  // ベスト20とワースト10の計算
+  const rankedProducts = rows
+    .map(r => {
+      const totalCount = (r.amazon_count || 0) + (r.rakuten_count || 0) + (r.yahoo_count || 0) + 
+                        (r.mercari_count || 0) + (r.base_count || 0) + (r.qoo10_count || 0);
+      const totalRevenue = totalCount * (r.price || 0);
+      return { ...r, totalCount, totalRevenue };
+    })
+    .sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+  const best20 = rankedProducts.slice(0, 20);
+  const worst10 = rankedProducts.filter(p => p.totalRevenue > 0).slice(-10).reverse();
+
   return (
-    <div className="p-6 space-y-4">
-      {/* 月選択ドロップダウン（例） */}
-      <input
-        type="month"
-        value={selectedMonth}
-        onChange={(e) => setSelectedMonth(e.target.value)}
-        className="border rounded px-2 py-1"
-      />
+    <div className="p-4 space-y-6">
+      {/* 月選択 */}
+      <div className="flex items-center gap-2">
+        <label className="font-medium">対象月:</label>
+        <input
+          type="month"
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="border rounded px-3 py-2"
+        />
+      </div>
 
       {loading ? (
-        <p>loading…</p>
-      ) : rows.length === 0 ? (
-        <p>データなし</p>
+        <div className="text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="mt-2 text-gray-600">データを読み込んでいます...</p>
+        </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr>
-              <th className="text-left">商品</th>
-              <th>Amazon</th>
-              <th>楽天</th>
-              <th>Yahoo!</th>
-              <th>メルカリ</th>
-              <th>BASE</th>
-              <th>Qoo10</th>
-              <th>合計</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const total =
-                (r.amazon_count ?? 0) +
-                (r.rakuten_count ?? 0) +
-                (r.yahoo_count ?? 0) +
-                (r.mercari_count ?? 0) +
-                (r.base_count ?? 0) +
-                (r.qoo10_count ?? 0);
-              return (
-                <tr key={r.id} className="border-t">
-                  <td>{r.product_name}</td>
-                  <td className="text-right">{r.amazon_count ?? 0}</td>
-                  <td className="text-right">{r.rakuten_count ?? 0}</td>
-                  <td className="text-right">{r.yahoo_count ?? 0}</td>
-                  <td className="text-right">{r.mercari_count ?? 0}</td>
-                  <td className="text-right">{r.base_count ?? 0}</td>
-                  <td className="text-right">{r.qoo10_count ?? 0}</td>
-                  <td className="text-right font-bold">{total}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <>
+          {/* サイト別統計 */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="bg-blue-100 p-4 rounded-lg">
+              <h3 className="font-semibold text-blue-800">Amazon</h3>
+              <p className="text-2xl font-bold text-blue-900">{siteStats.amazon.count} 件</p>
+              <p className="text-blue-700">¥{siteStats.amazon.revenue.toLocaleString()}</p>
+            </div>
+            <div className="bg-red-100 p-4 rounded-lg">
+              <h3 className="font-semibold text-red-800">楽天</h3>
+              <p className="text-2xl font-bold text-red-900">{siteStats.rakuten.count} 件</p>
+              <p className="text-red-700">¥{siteStats.rakuten.revenue.toLocaleString()}</p>
+            </div>
+            <div className="bg-purple-100 p-4 rounded-lg">
+              <h3 className="font-semibold text-purple-800">Yahoo!</h3>
+              <p className="text-2xl font-bold text-purple-900">{siteStats.yahoo.count} 件</p>
+              <p className="text-purple-700">¥{siteStats.yahoo.revenue.toLocaleString()}</p>
+            </div>
+            <div className="bg-orange-100 p-4 rounded-lg">
+              <h3 className="font-semibold text-orange-800">メルカリ</h3>
+              <p className="text-2xl font-bold text-orange-900">{siteStats.mercari.count} 件</p>
+              <p className="text-orange-700">¥{siteStats.mercari.revenue.toLocaleString()}</p>
+            </div>
+            <div className="bg-green-100 p-4 rounded-lg">
+              <h3 className="font-semibold text-green-800">BASE</h3>
+              <p className="text-2xl font-bold text-green-900">{siteStats.base.count} 件</p>
+              <p className="text-green-700">¥{siteStats.base.revenue.toLocaleString()}</p>
+            </div>
+            <div className="bg-yellow-100 p-4 rounded-lg">
+              <h3 className="font-semibold text-yellow-800">Qoo10</h3>
+              <p className="text-2xl font-bold text-yellow-900">{siteStats.qoo10.count} 件</p>
+              <p className="text-yellow-700">¥{siteStats.qoo10.revenue.toLocaleString()}</p>
+            </div>
+          </div>
+
+          {/* 全商品一覧 */}
+          <div className="bg-white rounded-lg border">
+            <h2 className="text-lg font-semibold p-4 border-b">全商品一覧</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border px-1 py-1 text-left">商品名</th>
+                    <th className="border px-1 py-1 text-center w-12">シリーズ</th>
+                    <th className="border px-1 py-1 text-center w-12">商品番号</th>
+                    <th className="border px-1 py-1 text-right w-16">単価</th>
+                    <th className="border px-1 py-1 text-center w-16">Amazon</th>
+                    <th className="border px-1 py-1 text-center w-16">楽天</th>
+                    <th className="border px-1 py-1 text-center w-16">Yahoo!</th>
+                    <th className="border px-1 py-1 text-center w-16">メルカリ</th>
+                    <th className="border px-1 py-1 text-center w-16">BASE</th>
+                    <th className="border px-1 py-1 text-center w-16">Qoo10</th>
+                    <th className="border px-1 py-1 text-center w-16">合計数</th>
+                    <th className="border px-1 py-1 text-right w-20">売上</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const totalCount = (r.amazon_count || 0) + (r.rakuten_count || 0) + (r.yahoo_count || 0) + 
+                                      (r.mercari_count || 0) + (r.base_count || 0) + (r.qoo10_count || 0);
+                    const totalRevenue = totalCount * (r.price || 0);
+                    const rowColor = getSeriesColor(r.series_name || '1');
+
+                    return (
+                      <tr key={r.id} className={`hover:brightness-95 ${rowColor}`}>
+                        <td className="border px-1 py-0.5">{r.product_name}</td>
+                        <td className="border px-1 py-0.5 text-center">{r.series_name}</td>
+                        <td className="border px-1 py-0.5 text-center">{r.product_number}</td>
+                        <td className="border px-1 py-0.5 text-right">¥{(r.price || 0).toLocaleString()}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.amazon_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.rakuten_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.yahoo_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.mercari_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.base_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.qoo10_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-center font-semibold">{totalCount}</td>
+                        <td className="border px-1 py-0.5 text-right font-semibold">¥{totalRevenue.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ベスト20・ワースト10 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* ベスト20 */}
+            <div className="bg-white rounded-lg border">
+              <h2 className="text-lg font-semibold p-4 border-b">ベスト20</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="border px-2 py-1 text-center w-12">順位</th>
+                      <th className="border px-2 py-1 text-left">商品名</th>
+                      <th className="border px-2 py-1 text-center w-16">件数</th>
+                      <th className="border px-2 py-1 text-right w-20">売上金額</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {best20.map((product, index) => (
+                      <tr key={product.id} className="hover:bg-gray-50">
+                        <td className="border px-2 py-1 text-center">{index + 1}位</td>
+                        <td className="border px-2 py-1">{product.product_name}</td>
+                        <td className="border px-2 py-1 text-center">{product.totalCount}</td>
+                        <td className="border px-2 py-1 text-right">¥{product.totalRevenue.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* ワースト10 */}
+            <div className="bg-white rounded-lg border">
+              <h2 className="text-lg font-semibold p-4 border-b">ワースト10</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="border px-2 py-1 text-center w-12">順位</th>
+                      <th className="border px-2 py-1 text-left">商品名</th>
+                      <th className="border px-2 py-1 text-center w-16">件数</th>
+                      <th className="border px-2 py-1 text-right w-20">売上金額</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {worst10.map((product, index) => (
+                      <tr key={product.id} className="hover:bg-gray-50">
+                        <td className="border px-2 py-1 text-center">{rankedProducts.length - worst10.length + index + 1}位</td>
+                        <td className="border px-2 py-1">{product.product_name}</td>
+                        <td className="border px-2 py-1 text-center">{product.totalCount}</td>
+                        <td className="border px-2 py-1 text-right">¥{product.totalRevenue.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
