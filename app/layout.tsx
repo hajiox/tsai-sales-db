@@ -1,29 +1,14 @@
-// app/layout.tsx (最終確認用)
+// app/layout.tsx (認証解除テスト用)
 
-import type { Metadata } from "next";
-import "./globals.css";
-import { Providers } from "@/components/providers";
-import MainDashboard from "@/main-dashboard";
+import './globals.css'
 
-export const metadata: Metadata = {
-  title: "TSA System",
-  description: "Sales Management System",
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
       <body>
-        <Providers>
-          <MainDashboard>
-            {children}
-          </MainDashboard>
-        </Providers>
+        {/* 全てのラッパーを外し、ページの中身だけを表示する */}
+        {children}
       </body>
     </html>
-  );
+  )
 }
