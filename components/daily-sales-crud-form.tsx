@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase';
+import { nf } from '@/lib/utils'; // ★nfをインポート
 
 // Propsの型定義
 interface DailySalesCrudFormProps {
@@ -87,7 +88,7 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpda
     };
 
     const handleGenerateReport = () => {
-        const nf = (num: number) => num ? num.toLocaleString() : '0';
+        // const nf = (num: number) => num ? num.toLocaleString() : '0'; // ★この行を削除
         const d = dailyData;
         
         const reportText = `【会津ブランド館売上報告】
