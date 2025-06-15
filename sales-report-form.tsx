@@ -112,6 +112,9 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    // Reset existing report state before generating a new one
+    setIsSubmitted(false)
+    setReportData(null)
 
     try {
       const salesData: Omit<DailySalesReport, "id" | "created_at"> = {
