@@ -2,11 +2,14 @@
 import * as React from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
-import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CustomCalendarHead } from "./custom-calendar-head"; // ★ 自作ヘッダーをインポート
+import Calendar from 'react-calendar'; // ★ 新しいカレンダーをインポート
+import './react-calendar.css'; // ★ 新しいCSSをインポート
+
+// react-calendarからの戻り値の型定義
+type ValuePiece = Date | null;
+type Value = ValuePiece | [ValuePiece, ValuePiece];
 
 interface Props {
     selectedDate: Date;
@@ -16,9 +19,9 @@ interface Props {
 export default function DashboardHeader({ selectedDate, onDateChange }: Props) {
     const [isOpen, setIsOpen] = React.useState(false);
 
-    const handleDateSelect = (date: Date | undefined) => {
-        if (date) {
-            onDateChange(date);
+    const handleDateSelect = (value: Value, event: React.MouseEvent<HTMLButtonElement>) => {
+        if (value instanceof Date) {
+            onDateChange(value);
             setIsOpen(false); 
         }
     }
@@ -39,18 +42,11 @@ export default function DashboardHeader({ selectedDate, onDateChange }: Props) {
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="end">
+                    {/* ★ Calendarコンポーネントを差し替え */}
                     <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={handleDateSelect}
-                        locale={ja}
-                        // ★ componentsプロパティでヘッダーを自作物に差し替え
-                        components={{
-                          Head: CustomCalendarHead,
-                        }}
-                        // ★ カレンダー全体を小さくするため、文字サイズを調整
-                        className="p-3 text-sm"
-                        initialFocus
+                      onChange={handleDateSelect}
+                      value={selectedDate}
+                      locale="ja-JP"
                     />
                 </PopoverContent>
             </Popover>
