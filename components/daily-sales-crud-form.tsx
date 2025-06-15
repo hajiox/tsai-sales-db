@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { createAuthenticatedSupabaseClient } from '@/lib/supabase';
 import { nf } from '@/lib/utils';
-import { Button } from "@/components/ui/button"; // shadcn/uiのButtonをインポート
-import { Input } from "@/components/ui/input";   // shadcn/uiのInputをインポート
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner"; // ★ sonnerからtoastをインポート
 
-// Propsの型定義
+// ... (Propsの型定義は変更なし)
 interface DailySalesCrudFormProps {
     selectedDate: string;
     dailyData: any;
@@ -14,7 +15,6 @@ interface DailySalesCrudFormProps {
     accessToken: string | null;
 }
 
-// ★レイアウトに合わせて入力フィールドコンポーネントを定義
 const FormInput = ({ id, label, value, onChange }: { id: string, label: string, value: any, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
     <div>
         <label htmlFor={id} className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
@@ -31,9 +31,10 @@ const FormInput = ({ id, label, value, onChange }: { id: string, label: string, 
 
 export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpdate, accessToken }: DailySalesCrudFormProps) {
     const [formData, setFormData] = useState<any>({});
-    const [message, setMessage] = useState('');
+    // const [message, setMessage] = useState(''); // ★ 不要になったので削除
 
     useEffect(() => {
+        // ... (この関数の中身は変更なし)
         const initialFormData: any = {
             floor_sales: dailyData?.d_floor_sales ?? '', cash_income: dailyData?.d_cash_income ?? '', register_count: dailyData?.d_register_count ?? '',
             amazon_count: dailyData?.d_amazon_count ?? '', base_count: dailyData?.d_base_count ?? '', yahoo_count: dailyData?.d_yahoo_count ?? '',
@@ -43,32 +44,38 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpda
         };
         setFormData(initialFormData);
     }, [dailyData]);
-
+    
+    // ... (handleChange, handleSave, handleDeleteの中身は変更なし)
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value === '' ? '' : Number(value) });
     };
-    
-    // ... handleSave, handleDelete, handleGenerateReportの関数は変更なし ...
     const handleSave = async () => {
-        if (!accessToken) { setMessage('エラー: 認証トークンがありません'); return; }
+        if (!accessToken) { toast.error('エラー: 認証トークンがありません'); return; }
         const supabase = createAuthenticatedSupabaseClient(accessToken);
         const dataToSave = { date: selectedDate, ...formData };
         for(const key in dataToSave) { if (dataToSave[key] === '') { dataToSave[key] = null; } }
         const { error } = await supabase.from('daily_sales_report').upsert(dataToSave, { onConflict: 'date' });
-        if (error) { setMessage(`保存に失敗しました: ${error.message}`); } 
-        else { setMessage(`${selectedDate}のデータを保存しました。`); onDataUpdate(); }
+        if (error) { toast.error(`保存に失敗しました: ${error.message}`); } 
+        else { toast.success(`${selectedDate}のデータを保存しました。`); onDataUpdate(); }
     };
     const handleDelete = async () => {
-        if (!accessToken) { setMessage('エラー: 認証トークンがありません'); return; }
+        if (!accessToken) { toast.error('エラー: 認証トークンがありません'); return; }
         if (!confirm(`${selectedDate}のデータを本当に削除しますか？`)) return;
         const supabase = createAuthenticatedSupabaseClient(accessToken);
         const { error } = await supabase.from('daily_sales_report').delete().eq('date', selectedDate);
-        if (error) { setMessage(`削除に失敗しました: ${error.message}`); } 
-        else { setMessage(`${selectedDate}のデータを削除しました。`); onDataUpdate(); }
+        if (error) { toast.error(`削除に失敗しました: ${error.message}`); } 
+        else { toast.success(`${selectedDate}のデータを削除しました。`); onDataUpdate(); }
     };
+
     const handleGenerateReport = () => {
         const d = dailyData;
+        
+        if (!d) {
+            toast.error("帳票を生成するデータがありません。");
+            return;
+        }
+
         const reportText = `【会津ブランド館売上報告】
 ${selectedDate}
 フロア日計 / ${nf(d.d_floor_sales).padStart(8, ' ')}円
@@ -92,23 +99,24 @@ Qoo10累計/  ${nf(d.m_qoo10_total)}円
 WEB売上累計 / ${nf(d.m_web_total)}円
 【月内フロア＋WEB累計売上】
 ${nf(d.m_grand_total)}円`;
-        navigator.clipboard.writeText(reportText).then(() => {
-            setMessage('帳票をクリップボードにコピーしました。');
-        }, () => { setMessage('クリップボードへのコピーに失敗しました。'); });
-    };
 
+        // ★ setMessageをtoast通知に変更
+        navigator.clipboard.writeText(reportText).then(() => {
+            toast.success("帳票をクリップボードにコピーしました！");
+        }, () => {
+            toast.error("クリップボードへのコピーに失敗しました。");
+        });
+    };
 
     return (
         <div className="space-y-6">
-            {/* ★ご要望に合わせて3段のレイアウトに変更 */}
             <div className="space-y-4">
-                {/* 1段目 */}
+                {/* ... (フォームのレイアウト部分は変更なし) ... */}
                 <div className="grid grid-cols-3 gap-4">
                     <FormInput id="floor_sales" label="フロア日計" value={formData.floor_sales ?? ''} onChange={handleChange} />
                     <FormInput id="cash_income" label="入金" value={formData.cash_income ?? ''} onChange={handleChange} />
                     <FormInput id="register_count" label="レジ通過人数" value={formData.register_count ?? ''} onChange={handleChange} />
                 </div>
-                {/* 2段目 (件数) */}
                 <div className="grid grid-cols-6 gap-4">
                     <FormInput id="amazon_count" label="Amazon 件数" value={formData.amazon_count ?? ''} onChange={handleChange} />
                     <FormInput id="base_count" label="BASE 件数" value={formData.base_count ?? ''} onChange={handleChange} />
@@ -117,7 +125,6 @@ ${nf(d.m_grand_total)}円`;
                     <FormInput id="rakuten_count" label="楽天 件数" value={formData.rakuten_count ?? ''} onChange={handleChange} />
                     <FormInput id="qoo10_count" label="Qoo10 件数" value={formData.qoo10_count ?? ''} onChange={handleChange} />
                 </div>
-                {/* 3段目 (売上) */}
                 <div className="grid grid-cols-6 gap-4">
                      <FormInput id="amazon_amount" label="Amazon 売上" value={formData.amazon_amount ?? ''} onChange={handleChange} />
                     <FormInput id="base_amount" label="BASE 売上" value={formData.base_amount ?? ''} onChange={handleChange} />
@@ -129,13 +136,14 @@ ${nf(d.m_grand_total)}円`;
             </div>
 
             <div className="flex items-center justify-between pt-2">
-                 {/* ★ボタンをシックなデザインに変更し、文言を修正 */}
                 <div className="flex items-center gap-2">
                     <Button onClick={handleSave}>登録・更新</Button>
                     <Button variant="destructive" onClick={handleDelete}>削除</Button>
                     <Button variant="secondary" onClick={handleGenerateReport}>帳票を生成</Button>
                 </div>
+                {/* ★ 不要になったので削除
                 {message && <p className="text-sm text-slate-500">{message}</p>}
+                */}
             </div>
         </div>
     );
