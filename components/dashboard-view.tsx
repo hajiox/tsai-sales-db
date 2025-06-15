@@ -1,19 +1,20 @@
-// components/dashboard-view.tsx (認証解除テスト用)
-
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import { BarChart3, TrendingUp, Users, JapaneseYenIcon as Yen, Loader2 } from "lucide-react"
-import { supabase } from "../lib/supabase" // 基本的なクライアントをインポート
+import { createAuthenticatedSupabaseClient } from "../lib/supabase"
 import { formatDateJST } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
 import GenerateReportButton from './GenerateReportButton'
 
 export default function DashboardView() {
-  // ... (useStateの定義部分は変更ありません)
+  const { data: session } = useSession(); // NextAuthのセッション情報を取得
+
+  // --- useStateの定義 (変更なし) ---
   const [monthlySales, setMonthlySales] = useState<number | null>(null)
   const [monthlyFloorSales, setMonthlyFloorSales] = useState<number | null>(null)
   const [monthlyEcTotal, setMonthlyEcTotal] = useState<number | null>(null)
@@ -31,10 +32,13 @@ export default function DashboardView() {
   const [aiLoading, setAiLoading] = useState<boolean>(true)
 
 
-  // --- これ以降、全てのデータ取得処理を、認証なしのシンプルな形に戻します ---
+  // --- これ以降、全てのデータ取得処理を、認証情報を使って行うように修正 ---
 
   useEffect(() => {
     const fetchMonthlyData = async () => {
+      if (!(session as any)?.supabaseAccessToken) return;
+      const supabase = createAuthenticatedSupabaseClient((session as any).supabaseAccessToken);
+
       const start = new Date(selectedDate);
       start.setDate(1);
       const { data, error } = await supabase
@@ -56,39 +60,51 @@ export default function DashboardView() {
       setFloorSalesData((data || []).map((row) => ({ date: new Date(row.date).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }), floor_sales: row.floor_sales || 0, })));
       setEcSalesData((data || []).map((row) => ({ date: new Date(row.date).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }), ec_sales: (row.amazon_amount || 0) + (row.rakuten_amount || 0) + (row.yahoo_amount || 0) + (row.mercari_amount || 0) + (row.base_amount || 0) + (row.qoo10_amount || 0), })));
     };
-    fetchMonthlyData();
-  }, [selectedDate]); // 依存配列からsessionを削除
+    if(session) fetchMonthlyData();
+  }, [selectedDate, session]);
 
   useEffect(() => {
     const fetchFloorAndRegister = async () => {
+      if (!(session as any)?.supabaseAccessToken) return;
+      const supabase = createAuthenticatedSupabaseClient((session as any).supabaseAccessToken);
+      
       const { data, error } = await supabase.from("daily_sales_report").select("floor_sales, register_count").eq("date", formatDateJST(selectedDate));
       if (error) { console.error("Error fetching floor sales/register count", error); return; }
+
       const totalFloor = (data || []).reduce((sum, row) => sum + (row.floor_sales || 0), 0);
       const totalRegister = (data || []).reduce((sum, row) => sum + (row.register_count || 0), 0);
       setFloorSales(totalFloor);
       setRegisterCount(totalRegister);
     };
-    fetchFloorAndRegister();
-  }, [selectedDate]);
+    if(session) fetchFloorAndRegister();
+  }, [selectedDate, session]);
 
   useEffect(() => {
     const fetchEcTotal = async () => {
+      if (!(session as any)?.supabaseAccessToken) return;
+      const supabase = createAuthenticatedSupabaseClient((session as any).supabaseAccessToken);
+      
       const { data, error } = await supabase.from("daily_sales_report").select("amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount").eq("date", formatDateJST(selectedDate));
       if (error) { console.error("Error fetching ec total amount", error); return; }
+      
       const total = (data || []).reduce((sum, row) => sum + (row.amazon_amount || 0) + (row.rakuten_amount || 0) + (row.yahoo_amount || 0) + (row.mercari_amount || 0) + (row.base_amount || 0) + (row.qoo10_amount || 0), 0);
       setEcTotalAmount(total);
     };
-    fetchEcTotal();
-  }, [selectedDate]);
+    if(session) fetchEcTotal();
+  }, [selectedDate, session]);
 
   useEffect(() => {
     const fetchYearlyData = async () => {
+      if (!(session as any)?.supabaseAccessToken) return;
+      const supabase = createAuthenticatedSupabaseClient((session as any).supabaseAccessToken);
+
       const end = new Date(selectedDate);
       const start = new Date(end);
       start.setDate(1);
       start.setMonth(start.getMonth() - 11);
       const { data, error } = await supabase.from("daily_sales_report").select("date, floor_sales, amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount").gte("date", formatDateJST(start)).lte("date", formatDateJST(end)).order("date", { ascending: true });
       if (error) { console.error("Error fetching yearly data", error); return; }
+
       const floorMap = new Map<string, number>();
       const ecMap = new Map<string, number>();
       for (let i = 0; i < 12; i++) {
@@ -108,12 +124,18 @@ export default function DashboardView() {
       setFloorSalesYearData(Array.from(floorMap.keys()).map((key) => ({ month: key, floor_sales: floorMap.get(key) || 0 })));
       setEcSalesYearData(Array.from(ecMap.keys()).map((key) => ({ month: key, ec_sales: ecMap.get(key) || 0 })));
     };
-    fetchYearlyData();
-  }, [selectedDate]);
+    if(session) fetchYearlyData();
+  }, [selectedDate, session]);
 
   useEffect(() => {
     const fetchLatestAiReport = async () => {
       setAiLoading(true);
+      if (!(session as any)?.supabaseAccessToken) {
+        setAiLoading(false);
+        return;
+      }
+      const supabase = createAuthenticatedSupabaseClient((session as any).supabaseAccessToken);
+      
       try {
         const { data, error } = await supabase.from("ai_reports").select("*").order("created_at", { ascending: false }).limit(1);
         if (error) throw error;
@@ -126,20 +148,140 @@ export default function DashboardView() {
         setAiLoading(false);
       }
     };
-    fetchLatestAiReport();
-  }, []);
+    if(session) fetchLatestAiReport();
+  }, [session]);
 
   const formatCurrency = (amount: number | null) => {
     if (amount === null) return "¥0";
     return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" }).format(amount);
   }
     
-  const handleRunAiAnalysis = async () => { /* ... */ };
+  const handleRunAiAnalysis = async () => {
+    if (!(session as any)?.supabaseAccessToken) {
+        toast({ variant: "destructive", title: "認証エラー", description: "ログイン情報がありません。" });
+        return;
+    }
+    const supabase = createAuthenticatedSupabaseClient((session as any).supabaseAccessToken);
+
+    try {
+      setAiReportLoading(true);
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", },
+        body: JSON.stringify({ date: formatDateJST(selectedDate) }),
+      });
+      if (!response.ok) { throw new Error(`API error: ${response.status}`); }
+      const data = await response.json();
+      if (!data.ok) { throw new Error(data.error || "Unknown error"); }
+      setLatestAiReport(data.result);
+      const { error: insertError } = await supabase.from("ai_reports").insert([{ content: data.result }]);
+      if (insertError) { console.error("Error inserting AI report:", insertError); }
+    } catch (err: any) {
+      console.error("AI analysis error:", err);
+      toast({ variant: "destructive", title: "分析エラー", description: err.message || String(err), });
+    } finally {
+      setAiReportLoading(false);
+    }
+  };
 
   return (
-    // ... (JSX部分は変更ありません) ...
     <div>
-        {/* ... */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">ダッシュボード</h2>
+          <p className="text-sm text-gray-600">売上データの概要と分析</p>
+        </div>
+        <div className="text-right">
+          <input
+            type="date"
+            value={formatDateJST(selectedDate)}
+            onChange={(e) => setSelectedDate(new Date(e.target.value))}
+            className="border rounded text-xs p-1 mb-1 mr-2"
+          />
+          <GenerateReportButton />
+        </div>
+      </div>
+
+      <div className="space-y-4 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-gray-600">フロア売上</CardTitle><Yen className="h-4 w-4 text-gray-400" /></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{formatCurrency(floorSales)}</div><p className="text-xs text-gray-500 mt-1">{formatDateJST(selectedDate)}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-gray-600">レジ通過人数</CardTitle><Users className="h-4 w-4 text-gray-400" /></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{registerCount ?? 0}</div><p className="text-xs text-gray-500 mt-1">{formatDateJST(selectedDate)}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-gray-600">EC売上</CardTitle><BarChart3 className="h-4 w-4 text-gray-400" /></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{formatCurrency(ecTotalAmount)}</div><p className="text-xs text-gray-500 mt-1">{formatDateJST(selectedDate)}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-gray-600">売上日計</CardTitle><TrendingUp className="h-4 w-4 text-gray-400" /></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{formatCurrency((floorSales || 0) + (ecTotalAmount || 0))}</div><p className="text-xs text-gray-500 mt-1">{formatDateJST(selectedDate)}</p></CardContent>
+          </Card>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-gray-600">フロア累計</CardTitle><Yen className="h-4 w-4 text-gray-400" /></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{formatCurrency(monthlyFloorSales)}</div><p className="text-xs text-gray-500 mt-1">1日〜{formatDateJST(selectedDate)}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-gray-600">EC累計</CardTitle><BarChart3 className="h-4 w-4 text-gray-400" /></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{formatCurrency(monthlyEcTotal)}</div><p className="text-xs text-gray-500 mt-1">1日〜{formatDateJST(selectedDate)}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-gray-600">レジ累計</CardTitle><Users className="h-4 w-4 text-gray-400" /></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{monthlyRegisterCount ?? 0}</div><p className="text-xs text-gray-500 mt-1">1日〜{formatDateJST(selectedDate)}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-gray-600">売上総計</CardTitle><TrendingUp className="h-4 w-4 text-gray-400" /></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{formatCurrency(monthlySales)}</div><p className="text-xs text-gray-500 mt-1">1日〜{formatDateJST(selectedDate)}</p></CardContent>
+          </Card>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4 mt-6">
+        <Card>
+          <CardHeader><CardTitle className="text-lg">フロア売上（月間）</CardTitle></CardHeader>
+          <CardContent><div className="h-64"><ResponsiveContainer width="100%" height="100%"><ReBarChart data={floorSalesData} margin={{ left: 10, right: 10 }}><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value: number) => formatCurrency(value)} /><Bar dataKey="floor_sales" fill="#3b82f6" /></ReBarChart></ResponsiveContainer></div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-lg">EC売上（月間）</CardTitle></CardHeader>
+          <CardContent><div className="h-64"><ResponsiveContainer width="100%" height="100%"><ReBarChart data={ecSalesData} margin={{ left: 10, right: 10 }}><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value: number) => formatCurrency(value)} /><Bar dataKey="ec_sales" fill="#10b981" /></ReBarChart></ResponsiveContainer></div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-lg">フロア売上（年間）</CardTitle></CardHeader>
+          <CardContent><div className="h-64"><ResponsiveContainer width="100%" height="100%"><ReBarChart data={floorSalesYearData} margin={{ left: 10, right: 10 }}><XAxis dataKey="month" /><YAxis /><Tooltip formatter={(value: number) => formatCurrency(value)} /><Bar dataKey="floor_sales" fill="#3b82f6" /></ReBarChart></ResponsiveContainer></div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-lg">EC売上（年間）</CardTitle></CardHeader>
+          <CardContent><div className="h-64"><ResponsiveContainer width="100%" height="100%"><ReBarChart data={ecSalesYearData} margin={{ left: 10, right: 10 }}><XAxis dataKey="month" /><YAxis /><Tooltip formatter={(value: number) => formatCurrency(value)} /><Bar dataKey="ec_sales" fill="#10b981" /></ReBarChart></ResponsiveContainer></div></CardContent>
+        </Card>
+      </div>
+      
+      <div className="space-y-4 mt-10">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-900">AI分析レポート</h3>
+          <Button onClick={handleRunAiAnalysis} disabled={aiReportLoading}>
+            {aiReportLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />分析中...</>) : ("AI分析を実行")}
+          </Button>
+        </div>
+        <Card className="bg-gray-50 overflow-visible">
+          <CardContent className="p-4 text-sm text-gray-600 whitespace-pre-wrap overflow-visible">
+            {aiLoading && <p>読み込み中...</p>}
+            {!aiLoading && !latestAiReport && <p>分析結果がありません。「AI分析を実行」ボタンを押して分析を開始してください。</p>}
+            {latestAiReport && (
+              <div>
+                <h4 className="font-semibold text-lg">分析結果</h4>
+                <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed max-w-full overflow-visible">
+                  {latestAiReport}
+                </pre>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
-  );
+  )
 }
