@@ -1,20 +1,28 @@
-// app/layout.tsx (テスト用コード1)
+// app/layout.tsx (完成形)
+import type { Metadata } from "next";
+import "./globals.css";
+import { Providers } from "@/components/providers";
+import MainDashboard from "@/main-dashboard";
 
-import './globals.css'
+export const metadata: Metadata = {
+  title: "TSA System",
+  description: "Sales Management System",
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="ja">
       <body>
-        <h1>こんにちは、世界！</h1>
-        <main>
-          {children}
-        </main>
+        <Providers>
+          <MainDashboard>
+            {children}
+          </MainDashboard>
+        </Providers>
       </body>
     </html>
-  )
+  );
 }
