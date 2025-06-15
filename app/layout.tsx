@@ -1,13 +1,19 @@
-// app/layout.tsx (認証解除テスト用)
+// app/layout.tsx (テスト用コード1)
 
 import './globals.css'
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="ja">
       <body>
-        {/* 全てのラッパーを外し、ページの中身だけを表示する */}
-        {children}
+        <h1>こんにちは、世界！</h1>
+        <main>
+          {children}
+        </main>
       </body>
     </html>
   )
