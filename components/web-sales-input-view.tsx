@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -41,6 +39,12 @@ const WebSalesInputView = () => {
   const [ym, setYm] = useState('2025-04');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  if (error) {
+    return (
+      <div className="p-4 rounded bg-red-100">読み込みエラー: {error}</div>
+    );
+  }
 
   const load = async (month: string) => {
     setLoading(true);
@@ -209,12 +213,7 @@ const WebSalesInputView = () => {
         </div>
       </div>
 
-      {/* エラー表示 */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
-          <strong>エラー:</strong> {error}
-        </div>
-      )}
+
 
       {/* ローディング表示 */}
       {loading && (
