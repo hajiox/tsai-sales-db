@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS daily_sales_report (
 -- Create an index on the date column for better query performance
 CREATE INDEX IF NOT EXISTS idx_daily_sales_report_date ON daily_sales_report(date);
 
+-- Prevent duplicate reports for the same date
+ALTER TABLE daily_sales_report
+  ADD CONSTRAINT unique_date UNIQUE (date);
+
 -- Enable Row Level Security (optional, but recommended)
 ALTER TABLE daily_sales_report ENABLE ROW LEVEL SECURITY;
 
