@@ -1,13 +1,16 @@
-import { clsx, type ClassValue } from "clsx"
+// lib/utils.ts
+
+import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export const formatDateJST = (date: Date) => {
-  const y = date.getFullYear()
-  const m = ("0" + (date.getMonth() + 1)).slice(-2)
-  const d = ("0" + date.getDate()).slice(-2)
-  return `${y}-${m}-${d}`
-}
+// ★この関数を追加
+export const nf = (num: number | null | undefined): string => {
+  if (num === null || num === undefined) {
+    return '0';
+  }
+  return num.toLocaleString();
+};
