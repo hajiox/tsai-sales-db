@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { nf } from "@/lib/utils"; // ★nfをインポート
+import { nf } from "@/lib/utils";
 
 const StatCard = ({ title, value, isLoading }: { title: string, value: string, isLoading: boolean }) => (
     <Card className="shadow-sm border-slate-200">
@@ -8,14 +8,15 @@ const StatCard = ({ title, value, isLoading }: { title: string, value: string, i
         </CardHeader>
         <CardContent>
             {isLoading ? <div className="h-7 bg-slate-200 rounded animate-pulse w-3/4"></div> :
-            <div className="text-xl font-bold text-slate-800">{value}</div>}
+            // ★ text-xl を text-lg に変更して文字サイズを調整
+            <div className="text-lg font-bold text-slate-800">{value}</div>}
         </CardContent>
     </Card>
 );
 
+// ... 以降のコードは変更ありません ...
 export default function DashboardStats({ data, isLoading }: { data: any, isLoading: boolean }) {
     const d = data || {};
-    // const nf = (num: number) => num != null ? num.toLocaleString() : '0'; // ★この行を削除
 
     const dailyTotal = (
         (d.d_floor_sales || 0) + (d.d_amazon_amount || 0) + (d.d_rakuten_amount || 0) +
