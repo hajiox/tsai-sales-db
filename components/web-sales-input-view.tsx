@@ -41,6 +41,14 @@ const WebSalesInputView = () => {
   const [ym, setYm] = useState('2025-04');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<string | null>(null);
+  const [productForm, setProductForm] = useState({
+    name: '',
+    series_code: '',
+    product_number: '',
+    price: ''
+  });
 
   const load = async (month: string) => {
     setLoading(true);
@@ -161,6 +169,79 @@ const WebSalesInputView = () => {
     }
   };
 
+  const openProductForm = (productId?: string) => {
+    if (productId) {
+      const product = rows.find(r => r.product_id === productId);
+      if (product) {
+        setProductForm({
+          name: product.product_name,
+          series_code: product.series_name,
+          product_number: product.product_number.toString(),
+          price: product.price.toString()
+        });
+        setEditingProduct(productId);
+      }
+    } else {
+      setProductForm({
+        name: '',
+        series_code: '',
+        product_number: '',
+        price: ''
+      });
+      setEditingProduct(null);
+    }
+    setShowProductForm(true);
+  };
+
+  const closeProductForm = () => {
+    setShowProductForm(false);
+    setEditingProduct(null);
+    setProductForm({
+      name: '',
+      series_code: '',
+      product_number: '',
+      price: ''
+    });
+  };
+
+  const saveProduct = async () => {
+    try {
+      if (editingProduct) {
+        // 商品情報の更新
+        const { error } = await supabase
+          .from('products')
+          .update({
+            name: productForm.name,
+            series_code: parseInt(productForm.series_code),
+            product_number: parseInt(productForm.product_number),
+            price: parseInt(productForm.price)
+          })
+          .eq('id', editingProduct);
+        
+        if (error) throw error;
+        alert('商品情報を更新しました');
+      } else {
+        // 新商品の追加
+        const { data, error } = await supabase
+          .rpc('add_product_with_global_id', {
+            p_name: productForm.name,
+            p_series_code: parseInt(productForm.series_code),
+            p_product_number: parseInt(productForm.product_number),
+            p_price: parseInt(productForm.price)
+          });
+        
+        if (error) throw error;
+        alert(`新商品を追加しました (管理番号: ${data})`);
+      }
+      
+      closeProductForm();
+      await load(ym);
+      
+    } catch (e: any) {
+      setError(`商品の保存に失敗しました: ${e.message}`);
+    }
+  };
+
   useEffect(() => {
     load(ym);
   }, [ym]);
@@ -204,10 +285,83 @@ const WebSalesInputView = () => {
         >
           {saving ? '保存中...' : '保存'}
         </button>
+        <button
+          onClick={() => openProductForm()}
+          className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition-colors"
+        >
+          商品追加
+        </button>
         <div className="text-xs text-gray-600">
           {rows.length > 0 && `${rows.length}件のデータを表示中`}
         </div>
       </div>
+
+      {/* 商品追加・編集フォーム */}
+      {showProductForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-96">
+            <h3 className="text-lg font-medium mb-4">
+              {editingProduct ? '商品編集' : '商品追加'}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">商品名</label>
+                <input
+                  type="text"
+                  value={productForm.name}
+                  onChange={(e) => setProductForm({...productForm, name: e.target.value})}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">シリーズ番号</label>
+                <input
+                  type="number"
+                  value={productForm.series_code}
+                  onChange={(e) => setProductForm({...productForm, series_code: e.target.value})}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  min="1"
+                  max="18"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">商品番号</label>
+                <input
+                  type="number"
+                  value={productForm.product_number}
+                  onChange={(e) => setProductForm({...productForm, product_number: e.target.value})}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  min="1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">単価</label>
+                <input
+                  type="number"
+                  value={productForm.price}
+                  onChange={(e) => setProductForm({...productForm, price: e.target.value})}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  min="0"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={saveProduct}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
+              >
+                {editingProduct ? '更新' : '追加'}
+              </button>
+              <button
+                onClick={closeProductForm}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* エラー表示 */}
       {error && (
@@ -259,12 +413,13 @@ const WebSalesInputView = () => {
                 <th className="border px-1 py-1 text-center w-16">Qoo10</th>
                 <th className="border px-1 py-1 text-center w-16">合計数</th>
                 <th className="border px-1 py-1 text-right w-20">売上</th>
+                <th className="border px-1 py-1 text-center w-12">操作</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="border px-4 py-6 text-center text-gray-500 text-sm">
+                  <td colSpan={13} className="border px-4 py-6 text-center text-gray-500 text-sm">
                     選択した月のデータがありません
                   </td>
                 </tr>
@@ -344,6 +499,14 @@ const WebSalesInputView = () => {
                       </td>
                       <td className="border px-1 py-0.5 text-right font-semibold">
                         ¥{total_price.toLocaleString()}
+                      </td>
+                      <td className="border px-1 py-0.5 text-center">
+                        <button
+                          onClick={() => openProductForm(r.product_id)}
+                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-1 py-0.5 rounded text-xs"
+                        >
+                          編集
+                        </button>
                       </td>
                     </tr>
                   );
