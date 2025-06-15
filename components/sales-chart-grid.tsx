@@ -1,5 +1,3 @@
-// components/sales-chart-grid.tsx
-
 "use client";
 
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
@@ -50,7 +48,10 @@ export default function SalesChartGrid({ data, isLoading }: { data: any[], isLoa
                         <Line type="monotone" dataKey="amazon_sales" stroke="#ff9900" name="Amazon"/>
                         <Line type="monotone" dataKey="rakuten_sales" stroke="#bf0000" name="楽天"/>
                         <Line type="monotone" dataKey="yahoo_sales" stroke="#ff0033" name="Yahoo!"/>
-                        {/* 他のECサイトも同様に追加 */}
+                        {/* ★ ここからが追加分 */}
+                        <Line type="monotone" dataKey="mercari_sales" stroke="#5a9bff" name="メルカリ"/>
+                        <Line type="monotone" dataKey="base_sales" stroke="#2ecc71" name="BASE"/>
+                        <Line type="monotone" dataKey="qoo10_sales" stroke="#f1c40f" name="Qoo10"/>
                     </LineChart>
                 </ResponsiveContainer>
             </ChartCard>
