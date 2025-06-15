@@ -1,4 +1,4 @@
-// sales-report-form.tsx (入力・修正 統合版)
+// sales-report-form.tsx (統合ダッシュボード対応版)
 
 "use client"
 
@@ -14,12 +14,12 @@ import { CalendarIcon, ClipboardCheck, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { formatDateJST, formatCurrency } from "@/lib/utils"
 
-// Propsの型定義。修正対象の日付を任意で受け取る
+// --- 変更点1: PropsにonSaveSuccessを追加 ---
 type SalesReportFormProps = {
-  initialDate?: string; // YYYY-MM-DD形式
+  initialDate?: string; // yyyy-MM-dd形式
+  onSaveSuccess?: () => void; // 保存成功時に呼び出すコールバック関数
 };
 
-// 販売チャネルの定義
 const salesChannels = [
   { key: "amazon", name: "Amazon" },
   { key: "rakuten", name: "楽天" },
@@ -29,7 +29,6 @@ const salesChannels = [
   { key: "qoo10", name: "Qoo10" },
 ];
 
-// フォームデータの型定義
 type FormData = {
   floor_sales: string;
   cash_income: string;
@@ -38,25 +37,23 @@ type FormData = {
   [key: string]: string;
 };
 
-export default function SalesReportForm({ initialDate }: SalesReportFormProps) {
-  // 日付の初期値を設定。propsで渡されればその日付、なければ今日の日付
+// --- 変更点2: コンポーネントがonSaveSuccessを受け取るように変更 ---
+export default function SalesReportForm({ initialDate, onSaveSuccess }: SalesReportFormProps) {
   const getInitialDate = () => {
     if (initialDate) {
-      // JSTの0時として解釈させるために'T00:00:00'を追加
       return new Date(initialDate + 'T00:00:00');
     }
     return new Date();
   };
 
   const [date, setDate] = useState<Date | undefined>(getInitialDate());
-  const [isSubmitting, setIsSubmitting] = useState(false); // レポート生成ボタンのローディング
-  const [isLoading, setIsLoading] = useState(true); // データ読み込み中のローディング
-  const [isDataFound, setIsDataFound] = useState(false); // 選択日にデータが存在したか
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); 
+  const [isDataFound, setIsDataFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedReport, setGeneratedReport] = useState<string>("");
   const [isCopied, setIsCopied] = useState(false);
 
-  // フォームの初期値（空の状態）
   const emptyFormData: FormData = {
     floor_sales: "", cash_income: "", register_count: "", remarks: "",
     ...salesChannels.reduce((acc, channel) => {
@@ -67,11 +64,10 @@ export default function SalesReportForm({ initialDate }: SalesReportFormProps) {
   };
   const [formData, setFormData] = useState<FormData>(emptyFormData);
 
-  // --- 機能追加：日付に紐づくデータをDBから読み込む ---
   const fetchAndSetData = useCallback(async (targetDate: Date) => {
     setIsLoading(true);
     setError(null);
-    setGeneratedReport(""); // 日付が変わったらレポートはクリア
+    setGeneratedReport("");
 
     const dateString = formatDateJST(targetDate);
     
@@ -82,12 +78,11 @@ export default function SalesReportForm({ initialDate }: SalesReportFormProps) {
         .eq('date', dateString)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116は「行が見つからない」エラーなので無視
+      if (error && error.code !== 'PGRST116') {
         throw error;
       }
 
       if (data) {
-        // データが見つかった場合、フォームに値をセット
         const newFormData: FormData = {
             floor_sales: String(data.floor_sales ?? ''),
             cash_income: String(data.cash_income ?? ''),
@@ -102,7 +97,6 @@ export default function SalesReportForm({ initialDate }: SalesReportFormProps) {
         setFormData(newFormData);
         setIsDataFound(true);
       } else {
-        // データが見つからなかった場合、フォームを空にする
         setFormData(emptyFormData);
         setIsDataFound(false);
       }
@@ -116,13 +110,11 @@ export default function SalesReportForm({ initialDate }: SalesReportFormProps) {
     }
   }, []);
 
-  // コンポーネント表示時、または日付が変更された時にデータを取得する
   useEffect(() => {
     if (date) {
       fetchAndSetData(date);
     }
   }, [date, fetchAndSetData]);
-
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -183,6 +175,12 @@ ${formatCurrency(data.m_grand_total || 0)}`;
       
       const reportText = generateReportText(reportData[0]);
       setGeneratedReport(reportText);
+      setIsDataFound(true); // 登録・更新後はデータが存在する状態になる
+
+      // --- 変更点3: 保存成功を親に通知 ---
+      if (onSaveSuccess) {
+        onSaveSuccess();
+      }
 
     } catch (e: any) {
       console.error("エラーが発生しました:", e);
@@ -198,11 +196,11 @@ ${formatCurrency(data.m_grand_total || 0)}`;
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
-
+  
+  // Cardで囲むのをやめて、より部品として使いやすくする
   return (
-    <div className="flex justify-center p-4">
-      <div className="w-full max-w-4xl space-y-4">
-        <Card>
+    <div className="w-full space-y-4">
+      <Card>
           <CardHeader>
             <CardTitle>{isDataFound ? '売上修正' : '売上入力'}</CardTitle>
             <CardDescription>
@@ -219,7 +217,6 @@ ${formatCurrency(data.m_grand_total || 0)}`;
                 </div>
             ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Date Picker */}
               <div className="space-y-2">
                 <Label className="font-medium">報告日</Label>
                 <Popover>
@@ -235,14 +232,12 @@ ${formatCurrency(data.m_grand_total || 0)}`;
                 </Popover>
               </div>
 
-              {/* Floor Sales */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1"><Label htmlFor="floor_sales" className="text-xs font-medium">フロア日計売上</Label><Input id="floor_sales" type="number" value={formData.floor_sales} onChange={(e) => handleInputChange("floor_sales", e.target.value)} placeholder="0" /></div>
                 <div className="space-y-1"><Label htmlFor="cash_income" className="text-xs font-medium">入金額</Label><Input id="cash_income" type="number" value={formData.cash_income} onChange={(e) => handleInputChange("cash_income", e.target.value)} placeholder="0" /></div>
                 <div className="space-y-1"><Label htmlFor="register_count" className="text-xs font-medium">レジ通過人数</Label><Input id="register_count" type="number" value={formData.register_count} onChange={(e) => handleInputChange("register_count", e.target.value)} placeholder="0" /></div>
               </div>
 
-              {/* Web Sales */}
               <div>
                 <Label className="text-sm font-medium">Web売上</Label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
@@ -256,13 +251,11 @@ ${formatCurrency(data.m_grand_total || 0)}`;
                 </div>
               </div>
 
-              {/* Remarks */}
               <div className="space-y-1"><Label className="text-xs font-medium">備考</Label><Textarea value={formData.remarks} onChange={(e) => handleInputChange("remarks", e.target.value)} className="text-xs min-h-[60px]" placeholder="特記事項があれば入力してください" /></div>
               
-              {/* Submit Button */}
-              <Button type="submit" disabled={isSubmitting} className="w-full">
+              <Button type="submit" disabled={isSubmitting || isLoading} className="w-full">
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSubmitting ? "生成中..." : (isDataFound ? "更新してレポート生成" : "登録してレポート生成")}
+                {isSubmitting ? "処理中..." : (isDataFound ? "更新してレポート生成" : "登録してレポート生成")}
               </Button>
               
               {error && <p className="text-sm text-red-500">{error}</p>}
@@ -272,14 +265,13 @@ ${formatCurrency(data.m_grand_total || 0)}`;
         </Card>
         
         {generatedReport && (
-          <Card><CardHeader><CardTitle>生成された売上報告</CardTitle></CardHeader><CardContent>
+          <Card className="mt-4"><CardHeader><CardTitle>生成された売上報告</CardTitle></CardHeader><CardContent>
               <div className="relative">
                 <Textarea readOnly value={generatedReport} className="text-sm font-mono min-h-[420px] bg-gray-50" />
                 <Button size="sm" variant="ghost" onClick={handleCopyToClipboard} className="absolute top-2 right-2">{isCopied ? <ClipboardCheck className="h-4 w-4 text-green-500" /> : "コピー"}</Button>
               </div>
           </CardContent></Card>
         )}
-      </div>
     </div>
   );
 }
