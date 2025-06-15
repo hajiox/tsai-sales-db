@@ -1,8 +1,12 @@
-// app/sales/dashboard/page.tsx (認証解除テスト用)
+// app/sales/dashboard/page.tsx (修正後)
 
-"use client"
+// このページを動的にレンダリングするようにNext.jsに指示する
+export const dynamic = 'force-dynamic';
 
-import DashboardView from '@/components/dashboard-view' // パスが正しいか確認
+// 'use client' はこのファイルでは不要です。
+// 子コンポーネントのDashboardViewがクライアントコンポーネントであれば問題ありません。
+
+import DashboardView from '@/components/dashboard-view';
 
 export default function SalesDashboardPage() {
     return (
