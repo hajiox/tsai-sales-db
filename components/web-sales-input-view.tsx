@@ -178,56 +178,56 @@ const WebSalesInputView = () => {
   }, 0);
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center gap-4">
+    <div className="p-4 space-y-3">
+      <div className="flex items-center gap-3 text-sm">
         <div className="flex items-center gap-2">
           <label className="font-medium">対象月:</label>
           <input
             type="month"
             value={ym}
             onChange={(e) => setYm(e.target.value)}
-            className="border rounded px-3 py-2"
+            className="border rounded px-2 py-1 text-sm"
             disabled={loading}
           />
         </div>
         <button
           onClick={() => load(ym)}
           disabled={loading}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded transition-colors"
+          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 py-1 rounded text-sm transition-colors"
         >
           {loading ? '読み込み中...' : '再読み込み'}
         </button>
         <button
           onClick={saveData}
           disabled={saving || loading}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded transition-colors"
+          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 py-1 rounded text-sm transition-colors"
         >
           {saving ? '保存中...' : '保存'}
         </button>
-        <div className="text-sm text-gray-600">
+        <div className="text-xs text-gray-600">
           {rows.length > 0 && `${rows.length}件のデータを表示中`}
         </div>
       </div>
 
       {/* エラー表示 */}
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
           <strong>エラー:</strong> {error}
         </div>
       )}
 
       {/* ローディング表示 */}
       {loading && (
-        <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-2 text-gray-600">データを読み込んでいます...</p>
+        <div className="text-center py-6">
+          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <p className="mt-2 text-gray-600 text-sm">データを読み込んでいます...</p>
         </div>
       )}
 
       {/* サマリー表示 */}
       {!loading && rows.length > 0 && (
-        <div className="bg-gray-100 p-4 rounded">
-          <div className="grid grid-cols-3 gap-4 text-sm">
+        <div className="bg-gray-100 p-3 rounded">
+          <div className="grid grid-cols-3 gap-3 text-xs">
             <div>
               <span className="font-medium">商品数:</span> {rows.length}件
             </div>
@@ -244,27 +244,27 @@ const WebSalesInputView = () => {
       {/* メインテーブル */}
       {!loading && (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse border text-sm">
+          <table className="w-full border-collapse border text-xs">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border px-2 py-2 text-left">商品名</th>
-                <th className="border px-2 py-2 text-center">シリーズ</th>
-                <th className="border px-2 py-2 text-center">商品番号</th>
-                <th className="border px-2 py-2 text-right">単価</th>
-                <th className="border px-2 py-2 text-right">Amazon</th>
-                <th className="border px-2 py-2 text-right">楽天</th>
-                <th className="border px-2 py-2 text-right">Yahoo!</th>
-                <th className="border px-2 py-2 text-right">メルカリ</th>
-                <th className="border px-2 py-2 text-right">BASE</th>
-                <th className="border px-2 py-2 text-right">Qoo10</th>
-                <th className="border px-2 py-2 text-right">合計数</th>
-                <th className="border px-2 py-2 text-right">売上</th>
+                <th className="border px-1 py-1 text-left w-80">商品名</th>
+                <th className="border px-1 py-1 text-center w-12">シリーズ</th>
+                <th className="border px-1 py-1 text-center w-12">商品番号</th>
+                <th className="border px-1 py-1 text-right w-16">単価</th>
+                <th className="border px-1 py-1 text-center w-16">Amazon</th>
+                <th className="border px-1 py-1 text-center w-16">楽天</th>
+                <th className="border px-1 py-1 text-center w-16">Yahoo!</th>
+                <th className="border px-1 py-1 text-center w-16">メルカリ</th>
+                <th className="border px-1 py-1 text-center w-16">BASE</th>
+                <th className="border px-1 py-1 text-center w-16">Qoo10</th>
+                <th className="border px-1 py-1 text-center w-16">合計数</th>
+                <th className="border px-1 py-1 text-right w-20">売上</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="border px-4 py-8 text-center text-gray-500">
+                  <td colSpan={12} className="border px-4 py-6 text-center text-gray-500 text-sm">
                     選択した月のデータがありません
                   </td>
                 </tr>
@@ -281,68 +281,68 @@ const WebSalesInputView = () => {
 
                   return (
                     <tr key={r.id || r.product_id || i} className="hover:bg-gray-50">
-                      <td className="border px-2 py-1">{r.product_name}</td>
-                      <td className="border px-2 py-1 text-center">{r.series_name}</td>
-                      <td className="border px-2 py-1 text-center">{r.product_number}</td>
-                      <td className="border px-2 py-1 text-right">¥{r.price.toLocaleString()}</td>
-                      <td className="border px-2 py-1">
+                      <td className="border px-1 py-0.5 text-xs">{r.product_name}</td>
+                      <td className="border px-1 py-0.5 text-center">{r.series_name}</td>
+                      <td className="border px-1 py-0.5 text-center">{r.product_number}</td>
+                      <td className="border px-1 py-0.5 text-right">¥{r.price.toLocaleString()}</td>
+                      <td className="border px-0.5 py-0.5">
                         <input
                           type="number"
                           value={r.amazon_count}
                           onChange={(e) => updateCount(i, 'amazon_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent p-1 focus:bg-white focus:border focus:border-blue-500 rounded"
+                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
                           min="0"
                         />
                       </td>
-                      <td className="border px-2 py-1">
+                      <td className="border px-0.5 py-0.5">
                         <input
                           type="number"
                           value={r.rakuten_count}
                           onChange={(e) => updateCount(i, 'rakuten_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent p-1 focus:bg-white focus:border focus:border-blue-500 rounded"
+                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
                           min="0"
                         />
                       </td>
-                      <td className="border px-2 py-1">
+                      <td className="border px-0.5 py-0.5">
                         <input
                           type="number"
                           value={r.yahoo_count}
                           onChange={(e) => updateCount(i, 'yahoo_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent p-1 focus:bg-white focus:border focus:border-blue-500 rounded"
+                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
                           min="0"
                         />
                       </td>
-                      <td className="border px-2 py-1">
+                      <td className="border px-0.5 py-0.5">
                         <input
                           type="number"
                           value={r.mercari_count}
                           onChange={(e) => updateCount(i, 'mercari_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent p-1 focus:bg-white focus:border focus:border-blue-500 rounded"
+                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
                           min="0"
                         />
                       </td>
-                      <td className="border px-2 py-1">
+                      <td className="border px-0.5 py-0.5">
                         <input
                           type="number"
                           value={r.base_count}
                           onChange={(e) => updateCount(i, 'base_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent p-1 focus:bg-white focus:border focus:border-blue-500 rounded"
+                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
                           min="0"
                         />
                       </td>
-                      <td className="border px-2 py-1">
+                      <td className="border px-0.5 py-0.5">
                         <input
                           type="number"
                           value={r.qoo10_count}
                           onChange={(e) => updateCount(i, 'qoo10_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent p-1 focus:bg-white focus:border focus:border-blue-500 rounded"
+                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
                           min="0"
                         />
                       </td>
-                      <td className="border px-2 py-1 text-right font-semibold">
+                      <td className="border px-1 py-0.5 text-center font-semibold">
                         {total_count}
                       </td>
-                      <td className="border px-2 py-1 text-right font-semibold">
+                      <td className="border px-1 py-0.5 text-right font-semibold">
                         ¥{total_price.toLocaleString()}
                       </td>
                     </tr>
