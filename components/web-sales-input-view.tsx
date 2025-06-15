@@ -35,6 +35,32 @@ type Row = {
   qoo10_count: number;
 };
 
+// シリーズ番号に応じた背景色を取得
+const getSeriesColor = (seriesName: string) => {
+  const seriesNum = parseInt(seriesName);
+  const colors = [
+    'bg-blue-50',      // 1
+    'bg-green-50',     // 2
+    'bg-yellow-50',    // 3
+    'bg-purple-50',    // 4
+    'bg-pink-50',      // 5
+    'bg-indigo-50',    // 6
+    'bg-gray-50',      // 7
+    'bg-red-50',       // 8
+    'bg-orange-50',    // 9
+    'bg-teal-50',      // 10
+    'bg-cyan-50',      // 11
+    'bg-lime-50',      // 12
+    'bg-emerald-50',   // 13
+    'bg-violet-50',    // 14
+    'bg-fuchsia-50',   // 15
+    'bg-rose-50',      // 16
+    'bg-amber-50',     // 17
+    'bg-slate-50'      // 18
+  ];
+  return colors[(seriesNum - 1) % colors.length] || 'bg-white';
+};
+
 const WebSalesInputView = () => {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
@@ -433,9 +459,10 @@ const WebSalesInputView = () => {
                     r.base_count +
                     r.qoo10_count;
                   const total_price = total_count * r.price;
+                  const rowColor = getSeriesColor(r.series_name);
 
                   return (
-                    <tr key={r.id || r.product_id || i} className="hover:bg-gray-50">
+                    <tr key={r.id || r.product_id || i} className={`hover:brightness-95 ${rowColor}`}>
                       <td className="border px-1 py-0.5 text-xs">{r.product_name}</td>
                       <td className="border px-1 py-0.5 text-center">{r.series_name}</td>
                       <td className="border px-1 py-0.5 text-center">{r.product_number}</td>
