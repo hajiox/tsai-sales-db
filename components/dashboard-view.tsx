@@ -10,6 +10,7 @@ import DashboardHeader from './dashboard-header';
 import DashboardStats from './dashboard-stats';
 import SalesChartGrid from './sales-chart-grid';
 import DailySalesCrudForm from './daily-sales-crud-form';
+import AiDashboardSection from './ai-dashboard-section'; // ★ AI分析セクションをインポート
 
 export default function DashboardView() {
     const { data: session } = useSession();
@@ -92,6 +93,9 @@ export default function DashboardView() {
                         />
                     )}
                 </div>
+
+                {/* ★ ダッシュボード下部にAI分析セクションを追加 */}
+                <AiDashboardSection />
             </main>
         </div>
     );
