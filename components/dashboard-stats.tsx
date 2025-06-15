@@ -7,9 +7,9 @@ const StatCard = ({ title, value, isLoading }: { title: string, value: string, i
             <CardTitle className="text-xs font-medium text-slate-500">{title}</CardTitle>
         </CardHeader>
         <CardContent>
-            {isLoading ? <div className="h-7 bg-slate-200 rounded animate-pulse w-3/4"></div> :
-            // ★ text-xl を text-lg に変更して文字サイズを調整
-            <div className="text-lg font-bold text-slate-800">{value}</div>}
+            {isLoading ? <div className="h-6 bg-slate-200 rounded animate-pulse w-3/4"></div> :
+            // ★ text-lg を text-base に変更してさらに文字サイズを調整
+            <div className="text-base font-bold text-slate-800">{value}</div>}
         </CardContent>
     </Card>
 );
@@ -37,7 +37,7 @@ export default function DashboardStats({ data, isLoading }: { data: any, isLoadi
 
     const monthlyStats = [
         { title: 'フロア累計', value: `${nf(d.m_floor_total)} 円` },
-        { title: 'レジ通過累計', value: `${nf(d.m_register_count_total)} 人` }, 
+        { title: 'レジ通過累計', value: `${nf(d.m_register_count_total)} 人` },
         { title: 'Amazon累計', value: `${nf(d.m_amazon_total)} 円` },
         { title: '楽天累計', value: `${nf(d.m_rakuten_total)} 円` },
         { title: 'Yahoo!累計', value: `${nf(d.m_yahoo_total)} 円` },
