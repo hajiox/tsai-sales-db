@@ -5,13 +5,14 @@ import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { BarChart3, Plus, Edit, Brain, Upload } from "lucide-react"
 
+// --- 変更点： 「売上報告システム」の項目をダッシュボードのみにする ---
 const sections = [
   {
     title: "売上報告システム",
     items: [
       { label: "ダッシュボード", href: "/sales/dashboard", icon: BarChart3 },
-      { label: "入力", href: "/sales/input", icon: Plus },
-      { label: "修正", href: "/sales/edit", icon: Edit },
+      // { label: "入力", href: "/sales/input", icon: Plus }, // 削除
+      // { label: "修正", href: "/sales/edit", icon: Edit },   // 削除
     ],
   },
   {
