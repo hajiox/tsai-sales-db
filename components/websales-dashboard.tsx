@@ -1,3 +1,6 @@
+**components/websales-dashboard.tsx**
+
+```typescript
 "use client";
 
 import { useEffect, useState } from "react";
@@ -17,6 +20,17 @@ type SummaryRow = {
   mercari_count: number | null;
   base_count: number | null;
   qoo10_count: number | null;
+};
+
+// シリーズ番号に応じた背景色を取得
+const getSeriesColor = (seriesName: string) => {
+  const seriesNum = parseInt(seriesName);
+  const colors = [
+    'bg-blue-50', 'bg-green-50', 'bg-yellow-50', 'bg-purple-50', 'bg-pink-50', 'bg-indigo-50',
+    'bg-gray-50', 'bg-red-50', 'bg-orange-50', 'bg-teal-50', 'bg-cyan-50', 'bg-lime-50',
+    'bg-emerald-50', 'bg-violet-50', 'bg-fuchsia-50', 'bg-rose-50', 'bg-amber-50', 'bg-slate-50'
+  ];
+  return colors[(seriesNum - 1) % colors.length] || 'bg-white';
 };
 
 export default function WebSalesDashboard() {
@@ -75,12 +89,6 @@ export default function WebSalesDashboard() {
     }
   };
 
-  // 全体の統計
-  const totalStats = {
-    count: Object.values(siteStats).reduce((sum, site) => sum + site.count, 0),
-    revenue: Object.values(siteStats).reduce((sum, site) => sum + site.revenue, 0)
-  };
-
   // ベスト20とワースト10の計算
   const rankedProducts = rows
     .map(r => {
@@ -97,7 +105,7 @@ export default function WebSalesDashboard() {
   return (
     <div className="p-4 space-y-6">
       {/* 月選択 */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
         <label className="font-medium">対象月:</label>
         <input
           type="month"
@@ -114,21 +122,6 @@ export default function WebSalesDashboard() {
         </div>
       ) : (
         <>
-          {/* 全体統計 */}
-          <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-6 rounded-lg">
-            <h2 className="text-2xl font-bold mb-2">月間売上合計</h2>
-            <div className="flex items-center gap-8">
-              <div>
-                <p className="text-3xl font-bold">{totalStats.count.toLocaleString()} 件</p>
-                <p className="text-blue-100">総販売件数</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold">¥{totalStats.revenue.toLocaleString()}</p>
-                <p className="text-blue-100">総売上金額</p>
-              </div>
-            </div>
-          </div>
-
           {/* サイト別統計 */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-blue-100 p-4 rounded-lg">
@@ -163,35 +156,78 @@ export default function WebSalesDashboard() {
             </div>
           </div>
 
+          {/* 全商品一覧 */}
+          <div className="bg-white rounded-lg border">
+            <h2 className="text-lg font-semibold p-4 border-b">全商品一覧</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border px-1 py-1 text-left">商品名</th>
+                    <th className="border px-1 py-1 text-center w-12">シリーズ</th>
+                    <th className="border px-1 py-1 text-center w-12">商品番号</th>
+                    <th className="border px-1 py-1 text-right w-16">単価</th>
+                    <th className="border px-1 py-1 text-center w-16">Amazon</th>
+                    <th className="border px-1 py-1 text-center w-16">楽天</th>
+                    <th className="border px-1 py-1 text-center w-16">Yahoo!</th>
+                    <th className="border px-1 py-1 text-center w-16">メルカリ</th>
+                    <th className="border px-1 py-1 text-center w-16">BASE</th>
+                    <th className="border px-1 py-1 text-center w-16">Qoo10</th>
+                    <th className="border px-1 py-1 text-center w-16">合計数</th>
+                    <th className="border px-1 py-1 text-right w-20">売上</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const totalCount = (r.amazon_count || 0) + (r.rakuten_count || 0) + (r.yahoo_count || 0) + 
+                                      (r.mercari_count || 0) + (r.base_count || 0) + (r.qoo10_count || 0);
+                    const totalRevenue = totalCount * (r.price || 0);
+                    const rowColor = getSeriesColor(r.series_name || '1');
+
+                    return (
+                      <tr key={r.id} className={`hover:brightness-95 ${rowColor}`}>
+                        <td className="border px-1 py-0.5">{r.product_name}</td>
+                        <td className="border px-1 py-0.5 text-center">{r.series_name}</td>
+                        <td className="border px-1 py-0.5 text-center">{r.product_number}</td>
+                        <td className="border px-1 py-0.5 text-right">¥{(r.price || 0).toLocaleString()}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.amazon_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.rakuten_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.yahoo_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.mercari_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.base_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-right">{r.qoo10_count || 0}</td>
+                        <td className="border px-1 py-0.5 text-center font-semibold">{totalCount}</td>
+                        <td className="border px-1 py-0.5 text-right font-semibold">¥{totalRevenue.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* ベスト20・ワースト10 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* ベスト20 */}
-            <div className="bg-white rounded-lg border shadow-sm">
-              <div className="bg-green-50 p-4 border-b">
-                <h2 className="text-lg font-semibold text-green-800">🏆 売上ベスト20</h2>
-              </div>
+            <div className="bg-white rounded-lg border">
+              <h2 className="text-lg font-semibold p-4 border-b">ベスト20</h2>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="border px-3 py-2 text-center w-16">順位</th>
-                      <th className="border px-3 py-2 text-left">商品名</th>
-                      <th className="border px-3 py-2 text-center w-16">件数</th>
-                      <th className="border px-3 py-2 text-right w-24">売上金額</th>
+                      <th className="border px-2 py-1 text-center w-12">順位</th>
+                      <th className="border px-2 py-1 text-left">商品名</th>
+                      <th className="border px-2 py-1 text-center w-16">件数</th>
+                      <th className="border px-2 py-1 text-right w-20">売上金額</th>
                     </tr>
                   </thead>
                   <tbody>
                     {best20.map((product, index) => (
-                      <tr key={product.id} className={`hover:bg-gray-50 ${index < 3 ? 'bg-yellow-50' : ''}`}>
-                        <td className="border px-3 py-2 text-center font-semibold">
-                          {index + 1}
-                          {index === 0 && ' 🥇'}
-                          {index === 1 && ' 🥈'}
-                          {index === 2 && ' 🥉'}
-                        </td>
-                        <td className="border px-3 py-2">{product.product_name}</td>
-                        <td className="border px-3 py-2 text-center">{product.totalCount}</td>
-                        <td className="border px-3 py-2 text-right font-medium">¥{product.totalRevenue.toLocaleString()}</td>
+                      <tr key={product.id} className="hover:bg-gray-50">
+                        <td className="border px-2 py-1 text-center">{index + 1}位</td>
+                        <td className="border px-2 py-1">{product.product_name}</td>
+                        <td className="border px-2 py-1 text-center">{product.totalCount}</td>
+                        <td className="border px-2 py-1 text-right">¥{product.totalRevenue.toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -200,29 +236,25 @@ export default function WebSalesDashboard() {
             </div>
 
             {/* ワースト10 */}
-            <div className="bg-white rounded-lg border shadow-sm">
-              <div className="bg-red-50 p-4 border-b">
-                <h2 className="text-lg font-semibold text-red-800">📉 売上ワースト10</h2>
-              </div>
+            <div className="bg-white rounded-lg border">
+              <h2 className="text-lg font-semibold p-4 border-b">ワースト10</h2>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="border px-3 py-2 text-center w-16">順位</th>
-                      <th className="border px-3 py-2 text-left">商品名</th>
-                      <th className="border px-3 py-2 text-center w-16">件数</th>
-                      <th className="border px-3 py-2 text-right w-24">売上金額</th>
+                      <th className="border px-2 py-1 text-center w-12">順位</th>
+                      <th className="border px-2 py-1 text-left">商品名</th>
+                      <th className="border px-2 py-1 text-center w-16">件数</th>
+                      <th className="border px-2 py-1 text-right w-20">売上金額</th>
                     </tr>
                   </thead>
                   <tbody>
                     {worst10.map((product, index) => (
                       <tr key={product.id} className="hover:bg-gray-50">
-                        <td className="border px-3 py-2 text-center">
-                          {rankedProducts.length - worst10.length + index + 1}
-                        </td>
-                        <td className="border px-3 py-2">{product.product_name}</td>
-                        <td className="border px-3 py-2 text-center">{product.totalCount}</td>
-                        <td className="border px-3 py-2 text-right">¥{product.totalRevenue.toLocaleString()}</td>
+                        <td className="border px-2 py-1 text-center">{rankedProducts.length - worst10.length + index + 1}位</td>
+                        <td className="border px-2 py-1">{product.product_name}</td>
+                        <td className="border px-2 py-1 text-center">{product.totalCount}</td>
+                        <td className="border px-2 py-1 text-right">¥{product.totalRevenue.toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -235,3 +267,4 @@ export default function WebSalesDashboard() {
     </div>
   );
 }
+```
