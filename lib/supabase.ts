@@ -1,21 +1,25 @@
-'use client'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+// lib/supabase.ts (修正後)
 
-/* ───── Supabase 接続情報（固定値） ───── */
-const SUPABASE_URL = 'https://zrerpexdsaxqztqqrwwv.supabase.co'
-const SUPABASE_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpyZXJwZXhkc2F4cXp0cXFyd3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjAzOTgsImV4cCI6MjA2NDkzNjM5OH0.nVWvJfsSAC7dnNCuXLxoN5OvQ4ShQI5FOwipkMlKNec'
+import { createClient } from '@supabase/supabase-js'
 
-export const supabase = createClientComponentClient({
-  supabaseUrl: SUPABASE_URL,
-  supabaseKey: SUPABASE_KEY,
-})
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://zrerpexdsaxqztqqrwwv.supabase.co';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpyZXJwZXhkc2F4cXp0cXFyd3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjAzOTgsImV4cCI6MjA2NDkzNjM5OH0.nVWvJfsSAC7dnNCuXLxoN5OvQ4ShQI5FOwipkMlKNec';
 
-/* ───── ログイン許可メール ───── */
-export const ALLOWED_EMAILS = ['aizubrandhall@gmail.com']
-export const isAllowed = (email?: string) =>
-  ALLOWED_EMAILS.includes((email || '').toLowerCase())
+// 認証情報なしの、基本的なSupabaseクライアント（公開情報へのアクセスなどに使用）
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-/* ---------- 型定義（変更なし） ---------- */
-export type SalesData = { /* 省略 */ }
-export type DailySalesReport = { /* 省略 */ }
+// NextAuthのセッショントークンを使って認証済みのクライアントを生成する新しいヘルパー関数
+export const createAuthenticatedSupabaseClient = (supabaseAccessToken: string) => {
+  if (!supabaseAccessToken) {
+    throw new Error("Supabase access token is missing.");
+  }
+  
+  return createClient(supabaseUrl, supabaseKey, {
+    global: {
+      headers: {
+        // 全てのリクエストに、NextAuthから受け取った身分証明書（トークン）を添付する
+        Authorization: `Bearer ${supabaseAccessToken}`
+      }
+    }
+  });
+};
