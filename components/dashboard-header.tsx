@@ -1,8 +1,8 @@
 "use client";
 import * as React from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
-import { ja } from "date-fns/locale"; // ★ 日本語ロケールをインポート
+import { format, DayOfWeek } from "date-fns";
+import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -12,13 +12,19 @@ interface Props {
     onDateChange: (date: Date) => void;
 }
 
+// ★ 曜日を日本語で正しく表示するためのフォーマット関数を定義
+const formatWeekdayName = (day: Date, options: { locale?: any }) => {
+    return format(day, 'E', { locale: options.locale });
+};
+
+
 export default function DashboardHeader({ selectedDate, onDateChange }: Props) {
     const [isOpen, setIsOpen] = React.useState(false);
 
     const handleDateSelect = (date: Date | undefined) => {
         if (date) {
             onDateChange(date);
-            setIsOpen(false); // 日付を選択したらポップオーバーを閉じる
+            setIsOpen(false); 
         }
     }
 
@@ -42,7 +48,8 @@ export default function DashboardHeader({ selectedDate, onDateChange }: Props) {
                         mode="single"
                         selected={selectedDate}
                         onSelect={handleDateSelect}
-                        locale={ja} // ★ localeプロパティに日本語を指定
+                        locale={ja}
+                        formatters={{ formatWeekdayName }} // ★ formattersプロパティを追加
                         initialFocus
                     />
                 </PopoverContent>
