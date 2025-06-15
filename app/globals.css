@@ -90,13 +90,12 @@ body {
   }
   body {
 
-    /* react-day-pickerの曜日表示崩れを修正 */
-.rdp-head_row {
-  display: grid !important;
-  grid-template-columns: repeat(7, 1fr) !important;
-  justify-items: center !important;
-  width: 100%;
+   /* react-day-pickerの曜日を非表示にし、全体を小さくする */
+.rdp {
+  /* カレンダーの各セルのサイズを小さくします (デフォルトは40px) */
+  --rdp-cell-size: 30px; 
 }
-    @apply bg-background text-foreground;
-  }
+.rdp-head {
+  /* 曜日の行全体を非表示にします */
+  display: none !important;
 }
