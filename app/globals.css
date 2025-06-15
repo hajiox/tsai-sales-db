@@ -89,8 +89,11 @@ body {
     @apply border-border;
   }
   body {
+    @apply bg-background text-foreground;
+  }
+}
 
-   /* react-day-pickerの曜日を非表示にし、全体を小さくする */
+/* react-day-pickerの曜日を非表示にし、全体を小さくする */
 .rdp {
   /* カレンダーの各セルのサイズを小さくします (デフォルトは40px) */
   --rdp-cell-size: 30px; 
