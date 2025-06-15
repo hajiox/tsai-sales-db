@@ -89,6 +89,14 @@ body {
     @apply border-border;
   }
   body {
+
+    /* react-day-pickerの曜日表示崩れを修正 */
+.rdp-head_row {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+  justify-items: center !important;
+  width: 100%;
+}
     @apply bg-background text-foreground;
   }
 }
