@@ -2,6 +2,7 @@
 import * as React from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+import { ja } from "date-fns/locale"; // ★ 日本語ロケールをインポート
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -41,6 +42,7 @@ export default function DashboardHeader({ selectedDate, onDateChange }: Props) {
                         mode="single"
                         selected={selectedDate}
                         onSelect={handleDateSelect}
+                        locale={ja} // ★ localeプロパティに日本語を指定
                         initialFocus
                     />
                 </PopoverContent>
