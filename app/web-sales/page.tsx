@@ -2,10 +2,37 @@
 
 import { useSession } from 'next-auth/react'
 import { redirect } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import MainSidebar from '@/components/main-sidebar'
+import { createClient } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Calendar } from 'react-calendar'
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { CalendarIcon } from 'lucide-react'
+import { formatDateJST } from '@/lib/utils'
 
-export default function WebSalesPage() {
+interface ProductSalesData {
+  id: number
+  series_code: number
+  product_code: number
+  product_name: string
+  series_name: string
+  price: number
+  amazon_count: number
+  rakuten_count: number
+  yahoo_count: number
+  mercari_count: number
+  base_count: number
+  qoo10_count: number
+  floor_count: number
+}
+
+export default function WebSalesDashboard() {
   const { data: session, status } = useSession()
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [salesData, setSalesData] = useState<ProductSalesData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [calendarOpen, setCalendarOpen] = useState(false)
 
   if (status === 'loading') {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -17,145 +44,253 @@ export default function WebSalesPage() {
     redirect('/login')
   }
 
+  // 月初日を取得
+  const getFirstDayOfMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth(), 1)
+  }
+
+  // データ取得
+  const fetchSalesData = async (targetMonth: Date) => {
+    try {
+      setLoading(true)
+      const supabase = createClient()
+      
+      // 月初日をフォーマット
+      const monthStr = `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}-01`
+      
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
+          id,
+          series_code,
+          product_code,
+          product_name,
+          series_name,
+          price,
+          web_sales_summary!inner(
+            amazon_count,
+            rakuten_count,
+            yahoo_count,
+            mercari_count,
+            base_count,
+            qoo10_count,
+            floor_count
+          )
+        `)
+        .eq('web_sales_summary.report_month', monthStr)
+        .order('series_code')
+        .order('product_code')
+
+      if (error) {
+        console.error('データ取得エラー:', error)
+        return
+      }
+
+      // データを整形
+      const formattedData = data.map(item => ({
+        id: item.id,
+        series_code: item.series_code,
+        product_code: item.product_code,
+        product_name: item.product_name,
+        series_name: item.series_name,
+        price: item.price,
+        amazon_count: item.web_sales_summary[0]?.amazon_count || 0,
+        rakuten_count: item.web_sales_summary[0]?.rakuten_count || 0,
+        yahoo_count: item.web_sales_summary[0]?.yahoo_count || 0,
+        mercari_count: item.web_sales_summary[0]?.mercari_count || 0,
+        base_count: item.web_sales_summary[0]?.base_count || 0,
+        qoo10_count: item.web_sales_summary[0]?.qoo10_count || 0,
+        floor_count: item.web_sales_summary[0]?.floor_count || 0,
+      }))
+
+      setSalesData(formattedData)
+    } catch (error) {
+      console.error('データ取得エラー:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchSalesData(selectedDate)
+  }, [selectedDate])
+
+  // 合計計算
+  const getTotalQuantity = (item: ProductSalesData) => {
+    return item.amazon_count + item.rakuten_count + item.yahoo_count + 
+           item.mercari_count + item.base_count + item.qoo10_count + item.floor_count
+  }
+
+  const getTotalSales = (item: ProductSalesData) => {
+    return getTotalQuantity(item) * item.price
+  }
+
+  // 月間サマリー計算
+  const monthSummary = {
+    totalProducts: salesData.length,
+    totalQuantity: salesData.reduce((sum, item) => sum + getTotalQuantity(item), 0),
+    totalSales: salesData.reduce((sum, item) => sum + getTotalSales(item), 0),
+    amazonTotal: salesData.reduce((sum, item) => sum + item.amazon_count, 0),
+    rakutenTotal: salesData.reduce((sum, item) => sum + item.rakuten_count, 0),
+    yahooTotal: salesData.reduce((sum, item) => sum + item.yahoo_count, 0),
+    mercariTotal: salesData.reduce((sum, item) => sum + item.mercari_count, 0),
+    baseTotal: salesData.reduce((sum, item) => sum + item.base_count, 0),
+    qoo10Total: salesData.reduce((sum, item) => sum + item.qoo10_count, 0),
+    floorTotal: salesData.reduce((sum, item) => sum + item.floor_count, 0),
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <MainSidebar />
-      <main className="flex-1 p-8">
+      <MainSidebar>
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-sm h-10 text-gray-300 hover:text-white hover:bg-gray-700"
+        >
+          📊 ダッシュボード
+        </Button>
+      </MainSidebar>
+
+      <main className="flex-1 ml-64 p-8">
         <div className="max-w-7xl mx-auto">
-          <header className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">WEB販売管理システム</h1>
-            <p className="text-gray-600 mt-2">ECサイトの在庫・注文・売上を一元管理</p>
-          </header>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* 商品管理 */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 ml-3">商品管理</h3>
-              </div>
-              <p className="text-gray-600 mb-4">商品登録・編集・在庫管理</p>
-              <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">
-                商品管理画面へ
-              </button>
+          {/* ヘッダー */}
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">WEB販売管理ダッシュボード</h1>
+              <p className="text-gray-600 mt-2">商品別販売実績の管理</p>
             </div>
-
-            {/* 注文管理 */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 ml-3">注文管理</h3>
-              </div>
-              <p className="text-gray-600 mb-4">受注状況・発送管理・顧客対応</p>
-              <button className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors">
-                注文管理画面へ
-              </button>
-            </div>
-
-            {/* 売上分析 */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 ml-3">売上分析</h3>
-              </div>
-              <p className="text-gray-600 mb-4">売上推移・収益分析・レポート</p>
-              <button className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition-colors">
-                売上分析画面へ
-              </button>
-            </div>
-
-            {/* 在庫管理 */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 1v1a1 1 0 001 1h8a1 1 0 001-1V5m-9 1H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V6a1 1 0 00-1-1h-3" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 ml-3">在庫管理</h3>
-              </div>
-              <p className="text-gray-600 mb-4">在庫数管理・補充アラート・棚卸</p>
-              <button className="w-full bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700 transition-colors">
-                在庫管理画面へ
-              </button>
-            </div>
-
-            {/* 顧客管理 */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 ml-3">顧客管理</h3>
-              </div>
-              <p className="text-gray-600 mb-4">顧客情報・購入履歴・対応履歴</p>
-              <button className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors">
-                顧客管理画面へ
-              </button>
-            </div>
-
-            {/* 設定 */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 ml-3">システム設定</h3>
-              </div>
-              <p className="text-gray-600 mb-4">ECサイト連携・通知設定・権限管理</p>
-              <button className="w-full bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 transition-colors">
-                設定画面へ
-              </button>
+            
+            {/* 月選択 */}
+            <div className="flex items-center space-x-4">
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-48 justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {selectedDate ? formatDateJST(selectedDate, 'YYYY年MM月') : '月を選択'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => {
+                      if (date) {
+                        setSelectedDate(getFirstDayOfMonth(date))
+                        setCalendarOpen(false)
+                      }
+                    }}
+                    locale="ja"
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
-          {/* 開発状況 */}
-          <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-blue-900 mb-2">🚧 開発状況</h2>
-            <p className="text-blue-800 mb-4">WEB販売管理システムは現在開発中です。各機能を順次実装していきます。</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-              <div className="flex items-center">
-                <span className="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
-                <span className="text-blue-800">商品管理: 未実装</span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
-                <span className="text-blue-800">注文管理: 未実装</span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
-                <span className="text-blue-800">売上分析: 未実装</span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
-                <span className="text-blue-800">在庫管理: 未実装</span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
-                <span className="text-blue-800">顧客管理: 未実装</span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
-                <span className="text-blue-800">システム設定: 未実装</span>
-              </div>
+          {/* 月間サマリー */}
+          <div className="grid grid-cols-4 gap-6 mb-8">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h3 className="text-sm font-medium text-gray-600 mb-2">総商品数</h3>
+              <p className="text-2xl font-bold text-gray-900">{monthSummary.totalProducts}品目</p>
             </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h3 className="text-sm font-medium text-gray-600 mb-2">総販売数量</h3>
+              <p className="text-2xl font-bold text-gray-900">{monthSummary.totalQuantity.toLocaleString()}個</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h3 className="text-sm font-medium text-gray-600 mb-2">総売上金額</h3>
+              <p className="text-2xl font-bold text-gray-900">¥{monthSummary.totalSales.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h3 className="text-sm font-medium text-gray-600 mb-2">平均単価</h3>
+              <p className="text-2xl font-bold text-gray-900">
+                ¥{monthSummary.totalQuantity > 0 ? Math.round(monthSummary.totalSales / monthSummary.totalQuantity).toLocaleString() : 0}
+              </p>
+            </div>
+          </div>
+
+          {/* ECサイト別サマリー */}
+          <div className="grid grid-cols-7 gap-4 mb-8">
+            {[
+              { name: 'Amazon', count: monthSummary.amazonTotal, color: 'bg-orange-100 text-orange-800' },
+              { name: '楽天', count: monthSummary.rakutenTotal, color: 'bg-red-100 text-red-800' },
+              { name: 'Yahoo!', count: monthSummary.yahooTotal, color: 'bg-purple-100 text-purple-800' },
+              { name: 'メルカリ', count: monthSummary.mercariTotal, color: 'bg-pink-100 text-pink-800' },
+              { name: 'BASE', count: monthSummary.baseTotal, color: 'bg-blue-100 text-blue-800' },
+              { name: 'Qoo10', count: monthSummary.qoo10Total, color: 'bg-green-100 text-green-800' },
+              { name: 'フロア', count: monthSummary.floorTotal, color: 'bg-gray-100 text-gray-800' },
+            ].map((site) => (
+              <div key={site.name} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <h3 className="text-xs font-medium text-gray-600 mb-1">{site.name}</h3>
+                <p className={`text-sm font-bold px-2 py-1 rounded ${site.color}`}>
+                  {site.count.toLocaleString()}個
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* 商品別販売データ */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">商品別販売実績</h2>
+            </div>
+            
+            {loading ? (
+              <div className="p-8 text-center">
+                <div className="text-gray-600">データを読み込み中...</div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">商品</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">価格</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Amazon</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">楽天</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Yahoo!</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">メルカリ</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">BASE</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qoo10</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">フロア</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">合計</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">売上</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {salesData.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {item.series_code}-{item.product_code}
+                            </p>
+                            <p className="text-xs text-gray-500 max-w-xs truncate">
+                              {item.product_name}
+                            </p>
+                            <p className="text-xs text-blue-600">{item.series_name}</p>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">
+                          ¥{item.price.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.amazon_count}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.rakuten_count}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.yahoo_count}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.mercari_count}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.base_count}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.qoo10_count}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.floor_count}</td>
+                        <td className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
+                          {getTotalQuantity(item)}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
+                          ¥{getTotalSales(item).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </main>
