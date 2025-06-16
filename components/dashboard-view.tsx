@@ -27,10 +27,20 @@ export default function DashboardView() {
 
     const getDailyData = useCallback(async (date: Date, supabase: any) => {
         setDailyLoading(true);
-        const dateString = date.toISOString().split('T')[0];
-        const { data, error } = await supabase.rpc('get_sales_report_data', { report_date: dateString });
-        if (error) throw new Error(`日次データ取得エラー: ${error.message}`);
-        setDailyData(data[0] || {});
+        const dateString = date.toISOString().split('T')[0]; // タイムゾーン問題を回避
+        
+        // 日別データを直接取得（RPCではなく）
+        const { data, error } = await supabase
+            .from('daily_sales_report')
+            .select('*')
+            .eq('date', dateString)
+            .single();
+            
+        if (error && error.code !== 'PGRST116') { // PGRST116 = レコードが見つからない
+            throw new Error(`日次データ取得エラー: ${error.message}`);
+        }
+        
+        setDailyData(data || {});
         setDailyLoading(false);
     }, []);
     
