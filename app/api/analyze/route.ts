@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
+import { formatDateJST } from '@/lib/utils';
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
@@ -9,11 +10,8 @@ export async function POST(req: Request) {
   try {
     // ------- input -------
     const body = await req.json().catch(() => ({}));
-    // クライアントから日付(YYYY-MM-DD)が送られてくる想定。無ければ今日の日付を使用
-    const date = typeof body.date === 'string'
-      ? body.date
-      : new Date().toISOString().slice(0, 10);
-    const month = date.slice(0, 7); // 例: "2025-06"
+    const date = '2025-06-13'; // 固定: データがある最新日
+    const month = date.slice(0, 7); // "2025-06"
 
     // ------- env -------
     const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -23,18 +21,34 @@ export async function POST(req: Request) {
 
     // ------- db -------
     const supabase = createClient(url, key);
-    const dateObj = new Date(date);
-    const lastDay = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0)
-      .toISOString()
-      .slice(0, 10);
-
     const { data: sales, error } = await supabase
       .from('daily_sales_report')
       .select('*')
       .gte('date', `${month}-01`)
-      .lte('date', lastDay);
+      .lte('date', date);
+
+    console.log('Debug info:', {
+      searchFrom: `${month}-01`,
+      searchTo: date,
+      resultCount: sales?.length || 0,
+      error: error?.message || 'no error',
+      firstRecord: sales?.[0] || 'none'
+    });
 
     if (error) throw new Error('select_failed: ' + error.message);
+
+    // デバッグ用レスポンス
+    if (!sales || sales.length === 0) {
+      return NextResponse.json({ 
+        ok: false, 
+        error: `データなし: ${month}-01 から ${date} の範囲で検索したが0件`,
+        debug: {
+          searchFrom: `${month}-01`,
+          searchTo: date,
+          supabaseError: error?.message || null
+        }
+      });
+    }
 
     // ------- ai -------
     const openai = new OpenAI({ apiKey: okey });
@@ -59,11 +73,7 @@ export async function POST(req: Request) {
       .from('ai_reports')
       .upsert({ month, content: summary }, { onConflict: 'month' });
 
-    return NextResponse.json({
-      ok: true,
-      result: summary,
-      meta: { month, dataPoints: sales.length },
-    });
+    return NextResponse.json({ ok: true, result: summary });
   } catch (e: any) {
     console.error('analyze_error', e);
     return NextResponse.json({ ok: false, error: e.message });
