@@ -18,6 +18,7 @@ export default function DashboardView() {
     
     // データステート
     const [dailyData, setDailyData] = useState<any>(null);
+    const [monthlyData, setMonthlyData] = useState<any>(null);
     const [sixMonthData, setSixMonthData] = useState<any[]>([]);
     
     // ローディング・エラーステート
@@ -47,6 +48,21 @@ export default function DashboardView() {
         setDailyData(data && data.length > 0 ? data[0] : {});
         setDailyLoading(false);
     }, []);
+
+    const getMonthlyData = useCallback(async (date: Date, supabase: any) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+        
+        // RPC関数で月累計データを取得
+        const { data, error } = await supabase.rpc('get_sales_report_data', { report_date: dateString });
+        if (error) {
+            throw new Error(`月累計データ取得エラー: ${error.message}`);
+        }
+        
+        setMonthlyData(data && data.length > 0 ? data[0] : {});
+    }, []);
     
     const getSixMonthData = useCallback(async (date: Date, supabase: any) => {
         setGraphLoading(true);
@@ -62,9 +78,10 @@ export default function DashboardView() {
         setError(null);
         try {
             const supabase = createAuthenticatedSupabaseClient(session.supabaseAccessToken);
-            // 2つのデータ取得を並行して実行
+            // 3つのデータ取得を並行して実行
             await Promise.all([
                 getDailyData(date, supabase),
+                getMonthlyData(date, supabase),
                 getSixMonthData(date, supabase)
             ]);
         } catch (err: any) {
@@ -73,7 +90,7 @@ export default function DashboardView() {
             setDailyLoading(false);
             setGraphLoading(false);
         }
-    }, [session, getDailyData, getSixMonthData]);
+    }, [session, getDailyData, getMonthlyData, getSixMonthData]);
 
     useEffect(() => {
         fetchData(selectedDate);
@@ -90,7 +107,7 @@ export default function DashboardView() {
             <main className="mt-6 space-y-8">
                 {error && <p className="text-red-500">{error}</p>}
                 
-                <DashboardStats data={dailyData} isLoading={dailyLoading} />
+                <DashboardStats data={dailyData} monthlyData={monthlyData} isLoading={dailyLoading} />
                 
                 <SalesChartGrid data={sixMonthData} isLoading={graphLoading} />
 
