@@ -68,18 +68,19 @@ export default function DashboardView() {
           onDateChange={handleDateChange}
         />
         
+        {/* サマリーカード */}
+        <div className="mt-6">
+          <DashboardStats summaryData={summaryData} loading={loading} />
+        </div>
+        
+        {/* メインコンテンツ - グラフ＋フォーム */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* サマリーカード - 3列全体 */}
-          <div className="lg:col-span-3">
-            <DashboardStats summaryData={summaryData} loading={loading} />
-          </div>
-          
-          {/* グラフエリア - 2列 */}
+          {/* グラフエリア */}
           <div className="lg:col-span-2">
             <SalesChartGrid salesData={salesData} loading={loading} />
           </div>
           
-          {/* 売上入力フォーム - 1列 */}
+          {/* 売上入力フォーム */}
           <div className="lg:col-span-1">
             <DailySalesCrudForm
               selectedDate={selectedDate}
