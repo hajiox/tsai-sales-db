@@ -124,6 +124,7 @@ export default function DashboardView() {
                                 return `${year}-${month}-${day}`;
                             })()}
                             dailyData={dailyData}
+                            monthlyData={monthlyData}
                             onDataUpdate={handleDataUpdate}
                             accessToken={session.supabaseAccessToken}
                         />
