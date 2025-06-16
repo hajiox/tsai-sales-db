@@ -10,6 +10,7 @@ import { toast } from "sonner";
 interface DailySalesCrudFormProps {
     selectedDate: string;
     dailyData: any;
+    monthlyData: any;
     onDataUpdate: () => void;
     accessToken: string | null;
 }
@@ -28,7 +29,7 @@ const FormInput = ({ id, label, value, onChange }: { id: string, label: string, 
     </div>
 );
 
-export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpdate, accessToken }: DailySalesCrudFormProps) {
+export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyData, onDataUpdate, accessToken }: DailySalesCrudFormProps) {
     const [formData, setFormData] = useState<any>({});
 
     useEffect(() => {
@@ -79,8 +80,9 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpda
 
     const handleGenerateReport = () => {
         const d = dailyData;
+        const m = monthlyData;
         
-        if (!d) {
+        if (!d || !m) {
             toast.error("帳票を生成するデータがありません。");
             return;
         }
@@ -88,6 +90,7 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpda
         const reportText = `【会津ブランド館売上報告】
 ${selectedDate}
 フロア日計 / ${nf(d.floor_sales || 0).padStart(8, ' ')}円
+フロア累計 / ${nf(m.m_floor_total || 0)}円
 入 金 / ${nf(d.cash_income || 0).padStart(8, ' ')} 円
 レジ通過人数 / ${nf(d.register_count || 0).padStart(3, ' ')} 人
 【WEB売上】
@@ -96,7 +99,17 @@ BASE 売上 / ${nf(d.base_count || 0)}件  ${nf(d.base_amount || 0)}円
 Yahoo! 売上 / ${nf(d.yahoo_count || 0)}件  ${nf(d.yahoo_amount || 0)}円
 メルカリ 売上 / ${nf(d.mercari_count || 0)}件  ${nf(d.mercari_amount || 0)}円
 楽天 売上 / ${nf(d.rakuten_count || 0)}件  ${nf(d.rakuten_amount || 0)}円
-Qoo10 売上 / ${nf(d.qoo10_count || 0)}件  ${nf(d.qoo10_amount || 0)}円`;
+Qoo10 売上 / ${nf(d.qoo10_count || 0)}件  ${nf(d.qoo10_amount || 0)}円
+Amazon累計/  ${nf(m.m_amazon_total || 0)}円
+BASE累計/  ${nf(m.m_base_total || 0)}円
+Yahoo!累計/  ${nf(m.m_yahoo_total || 0)}円
+メルカリ累計/  ${nf(m.m_mercari_total || 0)}円
+楽天累計/  ${nf(m.m_rakuten_total || 0)}円
+Qoo10累計/  ${nf(m.m_qoo10_total || 0)}円
+---------------------------------------
+WEB売上累計 / ${nf(m.m_web_total || 0)}円
+【月内フロア＋WEB累計売上】
+${nf(m.m_grand_total || 0)}円`;
 
         navigator.clipboard.writeText(reportText).then(() => {
             toast.success("帳票をクリップボードにコピーしました！");
