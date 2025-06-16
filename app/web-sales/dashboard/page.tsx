@@ -6,12 +6,11 @@ import { useState, useEffect } from 'react'
 import MainSidebar from '@/components/main-sidebar'
 import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Calendar } from 'react-calendar'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, Save, Edit3, Trash2, Plus } from 'lucide-react'
+import { CalendarIcon, Save, Edit3 } from 'lucide-react'
 import { formatDateJST } from '@/lib/utils'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
 interface ProductSalesData {
   id: string
@@ -62,7 +61,6 @@ export default function WebSalesDashboard() {
     redirect('/login')
   }
 
-  // データ取得
   const fetchSalesData = async (targetMonth: Date) => {
     try {
       setLoading(true)
@@ -88,6 +86,10 @@ export default function WebSalesDashboard() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchSalesData(selectedDate)
+  }, [selectedDate])
 
   // 編集開始
   const startEdit = (itemId: string, item: ProductSalesData) => {
@@ -370,11 +372,11 @@ export default function WebSalesDashboard() {
                           {['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count', 'floor_count'].map((field) => (
                             <td key={field} className="px-2 py-2 text-center">
                               {isEditing ? (
-                                <Input
+                                <input
                                   type="number"
                                   value={editingData[item.id]?.[field as keyof EditingData[string]] || '0'}
                                   onChange={(e) => updateEditData(item.id, field, e.target.value)}
-                                  className="w-16 h-6 text-xs text-center p-1"
+                                  className="w-16 h-6 text-xs text-center p-1 border rounded"
                                   min="0"
                                 />
                               ) : (
