@@ -13,7 +13,7 @@ interface Props {
 
 const items = [
   { id: "sales" as ModuleId, label: "売上報告システム", path: "/sales/dashboard" },
-  { id: "web" as ModuleId, label: "WEB販売管理システム", path: "/web-sales" },
+  { id: "web" as ModuleId, label: "WEB販売管理システム", path: "/web-sales/dashboard" },
 ]
 
 export default function MainSidebar({ children }: Props) {
