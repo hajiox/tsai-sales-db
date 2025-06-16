@@ -117,7 +117,12 @@ export default function DashboardView() {
                     </h3>
                     {session && (
                         <DailySalesCrudForm
-                            selectedDate={selectedDate.toISOString().split('T')[0]}
+                            selectedDate={(() => {
+                                const year = selectedDate.getFullYear();
+                                const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                                const day = String(selectedDate.getDate()).padStart(2, '0');
+                                return `${year}-${month}-${day}`;
+                            })()}
                             dailyData={dailyData}
                             onDataUpdate={handleDataUpdate}
                             accessToken={session.supabaseAccessToken}
