@@ -177,3 +177,4 @@ EC売上前年比: ${((currentTotal.ec_total / prevYearTotal.ec_total - 1) * 100
     });
   }
 }
+
