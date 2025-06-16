@@ -16,8 +16,39 @@ export async function GET() {
       }, { status: 500 })
     }
     
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
     console.log('Supabaseクライアント作成完了')
+    
+    // report_monthがNULLのデータを確認
+    const { data: nullData, error: nullError } = await supabase
+      .from('web_sales_summary')
+      .select('*')
+      .is('report_month', null)
+      .limit(5)
+      
+    console.log('report_monthがNULLのデータ:', nullData)
+    
+    // report_monthが非NULLのデータを確認
+    const { data: notNullData, error: notNullError } = await supabase
+      .from('web_sales_summary')
+      .select('*')
+      .not('report_month', 'is', null)
+      .limit(5)
+      
+    console.log('report_monthが非NULLのデータ:', notNullData)
+    
+    // 全データを少し取得（report_month条件なし）
+    const { data: allData, error: allError } = await supabase
+      .from('web_sales_summary')
+      .select('*')
+      .limit(5)
+      
+    console.log('全データサンプル:', allData)
     
     // まず、テーブル内の全ての月を確認（詳細表示）
     const { data: allMonths, error: monthsError } = await supabase
@@ -60,16 +91,19 @@ export async function GET() {
     }
     
     return NextResponse.json({ 
-      data: data || [],
-      count: data?.length || 0,
+      data: allData || [], // report_month条件なしのデータを返す
+      count: allData?.length || 0,
       availableMonths: allMonths || [],
       totalCount: count,
-      april2025Data: april2025 || [],
+      nullData: nullData || [],
+      notNullData: notNullData || [],
       debug: {
         searchMonth: '2025-04-01',
         foundData: data?.length || 0,
         totalRecords: count,
-        april2025Count: april2025?.length || 0
+        nullDataCount: nullData?.length || 0,
+        notNullDataCount: notNullData?.length || 0,
+        allDataCount: allData?.length || 0
       }
     })
     
