@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { redirect } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import MainSidebar from '@/components/main-sidebar'
 import { Button } from '@/components/ui/button'
 
@@ -30,27 +30,24 @@ export default function WebSalesDashboard() {
       setLoading(true)
       setError(null)
       
-      // Supabaseクライアントを動的にインポート
-      const { createClient } = await import('@/lib/supabase')
-      const supabase = createClient()
-      console.log('Supabaseクライアント作成完了')
+      // APIルート経由でデータを取得
+      console.log('API経由でデータ取得')
+      const response = await fetch('/api/web-sales-data')
       
-      const { data, error } = await supabase
-        .from('web_sales_summary')
-        .select('*')
-        .eq('report_month', '2025-04-01')
-        .limit(3)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const result = await response.json()
+      console.log('API応答:', result)
 
-      console.log('Supabase応答:', { data, error })
-
-      if (error) {
-        console.error('Supabaseエラー:', error)
-        setError(`データ取得エラー: ${error.message}`)
+      if (result.error) {
+        setError(`APIエラー: ${result.error}`)
         return
       }
 
-      console.log('データ取得成功:', data?.length, '件')
-      setSalesData(data || [])
+      console.log('データ取得成功:', result.data?.length, '件')
+      setSalesData(result.data || [])
       
     } catch (error: any) {
       console.error('予期しないエラー:', error)
