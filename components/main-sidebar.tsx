@@ -2,23 +2,37 @@
 
 import { signOut, useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
+import { useRouter, usePathname } from "next/navigation"
 import React from "react"
 
 export type ModuleId = "sales" | "web"
 
 interface Props {
-  active: ModuleId
-  onChange: (m: ModuleId) => void
-  children: React.ReactNode
+  children?: React.ReactNode
 }
 
 const items = [
-  { id: "sales" as ModuleId, label: "売上報告システム" },
-  { id: "web" as ModuleId, label: "WEB販売管理システム" },
+  { id: "sales" as ModuleId, label: "売上報告システム", path: "/sales/dashboard" },
+  { id: "web" as ModuleId, label: "WEB販売管理システム", path: "/web-sales" },
 ]
 
-export default function MainSidebar({ active, onChange, children }: Props) {
+export default function MainSidebar({ children }: Props) {
   const { data: session } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // 現在のパスから active なシステムを判定
+  const getActiveModule = (): ModuleId | null => {
+    if (pathname.startsWith('/sales')) return 'sales';
+    if (pathname.startsWith('/web-sales')) return 'web';
+    return null;
+  };
+
+  const activeModule = getActiveModule();
+
+  const handleNavigation = (path: string) => {
+    router.push(path);
+  };
 
   return (
     <div className="w-64 bg-gray-800 text-white h-screen fixed left-0 top-0 flex flex-col">
@@ -30,20 +44,22 @@ export default function MainSidebar({ active, onChange, children }: Props) {
         {items.map((item) => (
           <Button
             key={item.id}
-            variant={active === item.id ? "secondary" : "ghost"}
+            variant={activeModule === item.id ? "secondary" : "ghost"}
             className={`w-full justify-start text-sm h-10 ${
-              active === item.id ? "bg-gray-700 text-white" : "text-gray-300 hover:text-white hover:bg-gray-800"
+              activeModule === item.id ? "bg-gray-700 text-white" : "text-gray-300 hover:text-white hover:bg-gray-800"
             }`}
-            onClick={() => onChange(item.id)}
+            onClick={() => handleNavigation(item.path)}
           >
             {item.label}
           </Button>
         ))}
       </div>
       
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {children}
-      </nav>
+      {children && (
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          {children}
+        </nav>
+      )}
 
       {/* ユーザー情報とログアウト */}
       <div className="p-4 border-t border-gray-700">
