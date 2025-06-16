@@ -13,8 +13,6 @@ export async function POST(req: Request) {
     const date = (body.date ?? formatDateJST(new Date())) as string; // 例: "2025-06-13"
     const month = date.slice(0, 7);                // "yyyy-MM"
 
-    console.log('分析開始:', { date, month });
-
     // ------- env -------
     const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -24,27 +22,13 @@ export async function POST(req: Request) {
     // ------- db -------
     const supabase = createClient(url, key);
     
-    // デバッグ: 全6月データを確認
-    const { data: allJuneData, error: allError } = await supabase
-      .from('daily_sales_report')
-      .select('date')
-      .gte('date', '2025-06-01')
-      .lte('date', '2025-06-30');
-    
-    console.log('6月の全データ日付:', allJuneData?.map(d => d.date));
-
+    // 修正: 6月の全データを取得
     const { data: sales, error } = await supabase
       .from('daily_sales_report')
       .select('*')
-      .gte('date', `${month}-01`)
-      .lte('date', date)
+      .gte('date', '2025-06-01')
+      .lte('date', '2025-06-30')
       .order('date', { ascending: true });
-
-    console.log('取得されたデータ:', { 
-      searchRange: `${month}-01 から ${date}`,
-      resultCount: sales?.length || 0,
-      firstResult: sales?.[0]?.date
-    });
 
     if (error) throw new Error('select_failed: ' + error.message);
 
@@ -52,8 +36,8 @@ export async function POST(req: Request) {
     if (!sales || sales.length === 0) {
       return NextResponse.json({ 
         ok: true, 
-        result: `データ検索結果: ${month}-01から${date}の範囲でデータが見つかりませんでした。\n\n6月の利用可能なデータ: ${allJuneData?.map(d => d.date).join(', ') || 'なし'}\n\nデータを入力後、再度分析を実行してください。`,
-        meta: { month, dataPoints: 0, availableDates: allJuneData?.map(d => d.date) || [] }
+        result: '6月のデータが見つかりませんでした。データを入力後、再度分析を実行してください。',
+        meta: { month, dataPoints: 0 }
       });
     }
 
@@ -65,20 +49,34 @@ export async function POST(req: Request) {
         {
           role: 'user',
           content:
-            `以下は${month}月の売上データです。次の3つの観点で簡潔に分析してください：
+            `以下は2025年6月の売上データです。次の3つの観点で詳細に分析してください：
             
-            1. 📊 **今月の概況** - 全体的な売上傾向と特徴
-            2. 📈 **前月・前々月との比較** - 増減の傾向と要因分析  
-            3. ⭐ **特異日ベスト3** - 売上が特に高い/低い日とその理由
+            ## 📊 今月の概況
+            - 全体的な売上傾向と特徴
+            - フロア売上とEC売上のバランス
+            - 1日あたりの平均売上
+            
+            ## 📈 売上推移分析
+            - 日ごとの売上変動パターン
+            - 週末と平日の違い
+            - 売上の増減要因
+            
+            ## ⭐ 特異日ベスト3
+            - 売上が特に高い日TOP3とその要因
+            - 売上が特に低い日とその要因
+            - ECサイト別の好調日
+            
+            ## 💡 改善提案
+            - 売上向上のための具体的な提案
 
-            データ：
+            【データ】
             ${JSON.stringify(sales, null, 2)}
             
-            各項目は見出しをつけて、分かりやすく日本語で記述してください。`,
+            各項目は見出しをつけて、数値を含めて具体的に分析してください。`,
         },
       ],
       temperature: 0.7,
-      max_tokens: 1500
+      max_tokens: 2000
     });
 
     const raw = choices[0]?.message.content ?? '';
