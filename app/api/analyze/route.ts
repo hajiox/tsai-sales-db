@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-import { formatDateJST } from '@/lib/utils';
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
@@ -10,19 +9,18 @@ export async function POST(req: Request) {
   try {
     // ------- input -------
     const body = await req.json().catch(() => ({}));
-    const date = (body.date ?? formatDateJST(new Date())) as string; // 例: "2025-06-13"
-    const month = date.slice(0, 7);                // "yyyy-MM"
+    const month = '2025-06'; // 6月固定
 
     // ------- env -------
     const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const key  = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // anon keyに変更
     const okey = process.env.OPENAI_API_KEY!;
     if (!url || !key || !okey) throw new Error('env_missing');
 
     // ------- db -------
     const supabase = createClient(url, key);
     
-    // 修正: 6月の全データを取得
+    // 6月の全データを取得
     const { data: sales, error } = await supabase
       .from('daily_sales_report')
       .select('*')
@@ -32,11 +30,10 @@ export async function POST(req: Request) {
 
     if (error) throw new Error('select_failed: ' + error.message);
 
-    // データが少なくても分析を実行
     if (!sales || sales.length === 0) {
       return NextResponse.json({ 
         ok: true, 
-        result: '6月のデータが見つかりませんでした。データを入力後、再度分析を実行してください。',
+        result: '6月のデータが見つかりませんでした。',
         meta: { month, dataPoints: 0 }
       });
     }
