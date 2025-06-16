@@ -13,6 +13,8 @@ export async function POST(req: Request) {
     const date = (body.date ?? formatDateJST(new Date())) as string; // 例: "2025-06-13"
     const month = date.slice(0, 7);                // "yyyy-MM"
 
+    console.log('分析開始:', { date, month });
+
     // ------- env -------
     const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -21,6 +23,16 @@ export async function POST(req: Request) {
 
     // ------- db -------
     const supabase = createClient(url, key);
+    
+    // デバッグ: 全6月データを確認
+    const { data: allJuneData, error: allError } = await supabase
+      .from('daily_sales_report')
+      .select('date')
+      .gte('date', '2025-06-01')
+      .lte('date', '2025-06-30');
+    
+    console.log('6月の全データ日付:', allJuneData?.map(d => d.date));
+
     const { data: sales, error } = await supabase
       .from('daily_sales_report')
       .select('*')
@@ -28,14 +40,20 @@ export async function POST(req: Request) {
       .lte('date', date)
       .order('date', { ascending: true });
 
+    console.log('取得されたデータ:', { 
+      searchRange: `${month}-01 から ${date}`,
+      resultCount: sales?.length || 0,
+      firstResult: sales?.[0]?.date
+    });
+
     if (error) throw new Error('select_failed: ' + error.message);
 
     // データが少なくても分析を実行
     if (!sales || sales.length === 0) {
       return NextResponse.json({ 
         ok: true, 
-        result: '今月のデータがまだ入力されていません。データを入力後、再度分析を実行してください。',
-        meta: { month, dataPoints: 0 }
+        result: `データ検索結果: ${month}-01から${date}の範囲でデータが見つかりませんでした。\n\n6月の利用可能なデータ: ${allJuneData?.map(d => d.date).join(', ') || 'なし'}\n\nデータを入力後、再度分析を実行してください。`,
+        meta: { month, dataPoints: 0, availableDates: allJuneData?.map(d => d.date) || [] }
       });
     }
 
