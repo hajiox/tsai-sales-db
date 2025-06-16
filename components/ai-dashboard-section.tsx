@@ -91,7 +91,7 @@ export default function AiDashboardSection() {
   return (
     <div className="bg-white p-6 rounded-lg shadow-md mt-8">
       <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
-        <h2 className="text-xl font-bold text-slate-800">AI分析レポート (簡易版)</h2>
+        <h2 className="text-xl font-bold text-slate-800">AI分析レポート</h2>
         <button
           onClick={handleAnalyze}
           disabled={isAnalyzing || isLoading}
@@ -117,9 +117,6 @@ export default function AiDashboardSection() {
            <p className="text-slate-500 text-center pt-10">表示できる分析レポートがありません。</p>
         )}
       </div>
-       <p className="text-xs text-slate-400 text-right mt-2">
-        ※詳細な4種類のレポートは左のメニュー「AI分析」ページで確認できます。
-      </p>
     </div>
   );
 }
