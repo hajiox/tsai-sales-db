@@ -3,25 +3,20 @@
 import { signOut, useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { useRouter, usePathname } from "next/navigation"
-import React from "react"
+import { HomeIcon, BarChartIcon, SettingsIcon, LogOutIcon } from 'lucide-react'; // アイコンをインポート
 
 export type ModuleId = "sales" | "web"
 
-interface Props {
-  children?: React.ReactNode
-}
-
 const items = [
-  { id: "sales" as ModuleId, label: "売上報告システム", path: "/sales/dashboard" },
-  { id: "web" as ModuleId, label: "WEB販売管理システム", path: "/web-sales/dashboard" },
+  { id: "sales" as ModuleId, label: "売上報告", path: "/sales/dashboard", icon: BarChartIcon },
+  { id: "web" as ModuleId, label: "WEB販売", path: "/web-sales/dashboard", icon: HomeIcon },
 ]
 
-export default function MainSidebar({ children }: Props) {
+export default function MainSidebar() {
   const { data: session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
 
-  // 現在のパスから active なシステムを判定
   const getActiveModule = (): ModuleId | null => {
     if (pathname.startsWith('/sales')) return 'sales';
     if (pathname.startsWith('/web-sales')) return 'web';
@@ -35,60 +30,47 @@ export default function MainSidebar({ children }: Props) {
   };
 
   return (
-    <div className="w-64 bg-gray-800 text-white h-screen fixed left-0 top-0 flex flex-col">
-      <div className="p-4 border-b border-gray-700">
-        <h1 className="text-lg font-semibold">TSAシステム</h1>
+    // w-64 から w-24 に幅を縮小し、サブメニュー用の 영역を削除
+    <div className="w-24 bg-gray-900 text-white h-screen fixed left-0 top-0 flex flex-col shadow-lg">
+      <div className="p-4 border-b border-gray-800">
+        <h1 className="text-xl font-bold text-center">TSA</h1>
       </div>
-      <div className="p-4 space-y-2 border-b border-gray-700">
-        {/* システム切替ボタン */}
+      
+      {/* メインナビゲーション */}
+      <nav className="flex-grow p-2 space-y-2">
         {items.map((item) => (
           <Button
             key={item.id}
-            variant={activeModule === item.id ? "secondary" : "ghost"}
-            className={`w-full justify-start text-sm h-10 ${
-              activeModule === item.id ? "bg-gray-700 text-white" : "text-gray-300 hover:text-white hover:bg-gray-800"
+            variant="ghost"
+            className={`w-full h-auto py-3 flex flex-col items-center justify-center rounded-lg transition-colors duration-200 ${
+              activeModule === item.id
+                ? "bg-gray-700 text-white"
+                : "text-gray-400 hover:text-white hover:bg-gray-800"
             }`}
             onClick={() => handleNavigation(item.path)}
           >
-            {item.label}
+            <item.icon className="w-6 h-6 mb-1" />
+            <span className="text-xs font-medium">{item.label}</span>
           </Button>
         ))}
-      </div>
-      
-      {/* メインナビゲーション - flex-1で残りスペースを占有 */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {children}
       </nav>
 
-      {/* ユーザー情報とログアウト - 最下部に固定 */}
-      <div className="mt-auto p-4 border-t border-gray-700">
-        <div className="flex items-center gap-3 mb-3">
-          {/* Googleアイコン */}
-          <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center">
+      {/* ユーザー情報とログアウト */}
+      <div className="p-2 border-t border-gray-800">
+        <div className="flex flex-col items-center gap-2 mb-2">
             <img 
-              src={session?.user?.image || "https://via.placeholder.com/32"} 
+              src={session?.user?.image || "https://via.placeholder.com/40"} 
               alt="User" 
-              className="w-7 h-7 rounded-full"
+              className="w-10 h-10 rounded-full border-2 border-gray-700"
             />
-          </div>
-          {/* アカウント名 */}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">
-              {session?.user?.name || "Guest"}
-            </p>
-            <p className="text-xs text-gray-400 truncate">
-              {session?.user?.email || ""}
-            </p>
-          </div>
         </div>
-        {/* 小さなログアウトボタン */}
         <Button 
           onClick={() => signOut({ callbackUrl: '/' })} 
-          variant="outline"
-          size="sm"
-          className="w-full text-xs h-8 bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+          variant="ghost"
+          className="w-full h-auto py-3 flex flex-col items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800"
         >
-          ログアウト
+            <LogOutIcon className="w-6 h-6 mb-1" />
+            <span className="text-xs font-medium">ログアウト</span>
         </Button>
       </div>
     </div>
