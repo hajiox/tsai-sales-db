@@ -19,13 +19,22 @@ export async function GET() {
     const supabase = createClient(supabaseUrl, supabaseKey)
     console.log('Supabaseクライアント作成完了')
     
+    // まず、テーブル内の全ての月を確認
+    const { data: allMonths, error: monthsError } = await supabase
+      .from('web_sales_summary')
+      .select('report_month')
+      .limit(10)
+      
+    console.log('利用可能な月:', allMonths)
+    
+    // 次に、2025-04-01のデータを取得
     const { data, error } = await supabase
       .from('web_sales_summary')
       .select('*')
       .eq('report_month', '2025-04-01')
       .limit(5)
       
-    console.log('Supabase応答:', { dataCount: data?.length, error })
+    console.log('2025-04-01のデータ:', { dataCount: data?.length, error })
     
     if (error) {
       console.error('Supabaseエラー:', error)
@@ -36,7 +45,12 @@ export async function GET() {
     
     return NextResponse.json({ 
       data: data || [],
-      count: data?.length || 0
+      count: data?.length || 0,
+      availableMonths: allMonths || [],
+      debug: {
+        searchMonth: '2025-04-01',
+        foundData: data?.length || 0
+      }
     })
     
   } catch (error: any) {
