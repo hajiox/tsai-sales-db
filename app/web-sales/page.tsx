@@ -12,9 +12,7 @@ import { CalendarIcon } from 'lucide-react'
 import { formatDateJST } from '@/lib/utils'
 
 interface ProductSalesData {
-  id: number
-  series_code: number
-  product_code: number
+  id: string
   product_name: string
   series_name: string
   price: number
@@ -25,11 +23,14 @@ interface ProductSalesData {
   base_count: number
   qoo10_count: number
   floor_count: number
+  total_count: number
+  total_sales: number
+  report_month: string
 }
 
 export default function WebSalesDashboard() {
   const { data: session, status } = useSession()
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState(new Date(2025, 3, 1)) // 2025年4月
   const [salesData, setSalesData] = useState<ProductSalesData[]>([])
   const [loading, setLoading] = useState(true)
   const [calendarOpen, setCalendarOpen] = useState(false)
@@ -44,66 +45,39 @@ export default function WebSalesDashboard() {
     redirect('/login')
   }
 
-  // 月初日を取得
-  const getFirstDayOfMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth(), 1)
-  }
-
   // データ取得
   const fetchSalesData = async (targetMonth: Date) => {
     try {
       setLoading(true)
       const supabase = createClient()
       
-      // 月初日をフォーマット
+      // 月をフォーマット（2025-04-01形式）
       const monthStr = `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}-01`
+      console.log('検索対象月:', monthStr)
       
+      // まず利用可能なデータを確認
+      const { data: availableMonths } = await supabase
+        .from('web_sales_summary')
+        .select('report_month')
+        .limit(10)
+      
+      console.log('利用可能な月:', availableMonths)
+      
+      // web_sales_summaryテーブルから直接データを取得
       const { data, error } = await supabase
-        .from('products')
-        .select(`
-          id,
-          series_code,
-          product_code,
-          product_name,
-          series_name,
-          price,
-          web_sales_summary!inner(
-            amazon_count,
-            rakuten_count,
-            yahoo_count,
-            mercari_count,
-            base_count,
-            qoo10_count,
-            floor_count
-          )
-        `)
-        .eq('web_sales_summary.report_month', monthStr)
-        .order('series_code')
-        .order('product_code')
+        .from('web_sales_summary')
+        .select('*')
+        .eq('report_month', monthStr)
+        .order('id')
 
       if (error) {
         console.error('データ取得エラー:', error)
         return
       }
 
-      // データを整形
-      const formattedData = data.map(item => ({
-        id: item.id,
-        series_code: item.series_code,
-        product_code: item.product_code,
-        product_name: item.product_name,
-        series_name: item.series_name,
-        price: item.price,
-        amazon_count: item.web_sales_summary[0]?.amazon_count || 0,
-        rakuten_count: item.web_sales_summary[0]?.rakuten_count || 0,
-        yahoo_count: item.web_sales_summary[0]?.yahoo_count || 0,
-        mercari_count: item.web_sales_summary[0]?.mercari_count || 0,
-        base_count: item.web_sales_summary[0]?.base_count || 0,
-        qoo10_count: item.web_sales_summary[0]?.qoo10_count || 0,
-        floor_count: item.web_sales_summary[0]?.floor_count || 0,
-      }))
+      console.log('取得データ:', data)
 
-      setSalesData(formattedData)
+      setSalesData(data || [])
     } catch (error) {
       console.error('データ取得エラー:', error)
     } finally {
@@ -115,28 +89,18 @@ export default function WebSalesDashboard() {
     fetchSalesData(selectedDate)
   }, [selectedDate])
 
-  // 合計計算
-  const getTotalQuantity = (item: ProductSalesData) => {
-    return item.amazon_count + item.rakuten_count + item.yahoo_count + 
-           item.mercari_count + item.base_count + item.qoo10_count + item.floor_count
-  }
-
-  const getTotalSales = (item: ProductSalesData) => {
-    return getTotalQuantity(item) * item.price
-  }
-
   // 月間サマリー計算
   const monthSummary = {
     totalProducts: salesData.length,
-    totalQuantity: salesData.reduce((sum, item) => sum + getTotalQuantity(item), 0),
-    totalSales: salesData.reduce((sum, item) => sum + getTotalSales(item), 0),
-    amazonTotal: salesData.reduce((sum, item) => sum + item.amazon_count, 0),
-    rakutenTotal: salesData.reduce((sum, item) => sum + item.rakuten_count, 0),
-    yahooTotal: salesData.reduce((sum, item) => sum + item.yahoo_count, 0),
-    mercariTotal: salesData.reduce((sum, item) => sum + item.mercari_count, 0),
-    baseTotal: salesData.reduce((sum, item) => sum + item.base_count, 0),
-    qoo10Total: salesData.reduce((sum, item) => sum + item.qoo10_count, 0),
-    floorTotal: salesData.reduce((sum, item) => sum + item.floor_count, 0),
+    totalQuantity: salesData.reduce((sum, item) => sum + (item.total_count || 0), 0),
+    totalSales: salesData.reduce((sum, item) => sum + (item.total_sales || 0), 0),
+    amazonTotal: salesData.reduce((sum, item) => sum + (item.amazon_count || 0), 0),
+    rakutenTotal: salesData.reduce((sum, item) => sum + (item.rakuten_count || 0), 0),
+    yahooTotal: salesData.reduce((sum, item) => sum + (item.yahoo_count || 0), 0),
+    mercariTotal: salesData.reduce((sum, item) => sum + (item.mercari_count || 0), 0),
+    baseTotal: salesData.reduce((sum, item) => sum + (item.base_count || 0), 0),
+    qoo10Total: salesData.reduce((sum, item) => sum + (item.qoo10_count || 0), 0),
+    floorTotal: salesData.reduce((sum, item) => sum + (item.floor_count || 0), 0),
   }
 
   return (
@@ -174,7 +138,8 @@ export default function WebSalesDashboard() {
                     selected={selectedDate}
                     onSelect={(date) => {
                       if (date) {
-                        setSelectedDate(getFirstDayOfMonth(date))
+                        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1)
+                        setSelectedDate(firstDay)
                         setCalendarOpen(false)
                       }
                     }}
@@ -237,6 +202,11 @@ export default function WebSalesDashboard() {
               <div className="p-8 text-center">
                 <div className="text-gray-600">データを読み込み中...</div>
               </div>
+            ) : salesData.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="text-gray-600">選択した月のデータがありません</div>
+                <div className="text-xs text-gray-500 mt-2">2025年4月のデータがある場合は、その月を選択してください</div>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -261,29 +231,26 @@ export default function WebSalesDashboard() {
                         <td className="px-4 py-3">
                           <div>
                             <p className="text-sm font-medium text-gray-900">
-                              {item.series_code}-{item.product_code}
-                            </p>
-                            <p className="text-xs text-gray-500 max-w-xs truncate">
                               {item.product_name}
                             </p>
                             <p className="text-xs text-blue-600">{item.series_name}</p>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center text-sm text-gray-900">
-                          ¥{item.price.toLocaleString()}
+                          ¥{item.price?.toLocaleString() || 0}
                         </td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.amazon_count}</td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.rakuten_count}</td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.yahoo_count}</td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.mercari_count}</td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.base_count}</td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.qoo10_count}</td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.floor_count}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.amazon_count || 0}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.rakuten_count || 0}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.yahoo_count || 0}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.mercari_count || 0}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.base_count || 0}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.qoo10_count || 0}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-900">{item.floor_count || 0}</td>
                         <td className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
-                          {getTotalQuantity(item)}
+                          {item.total_count || 0}
                         </td>
                         <td className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
-                          ¥{getTotalSales(item).toLocaleString()}
+                          ¥{item.total_sales?.toLocaleString() || 0}
                         </td>
                       </tr>
                     ))}
