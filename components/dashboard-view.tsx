@@ -27,7 +27,11 @@ export default function DashboardView() {
 
     const getDailyData = useCallback(async (date: Date, supabase: any) => {
         setDailyLoading(true);
-        const dateString = date.toISOString().split('T')[0]; // タイムゾーン問題を回避
+        // タイムゾーン問題を完全に回避するローカル日付文字列生成
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
         
         // 日別データを直接取得（singleを削除）
         const { data, error } = await supabase
