@@ -21,34 +21,37 @@ export async function POST(req: Request) {
 
     // ------- db -------
     const supabase = createClient(url, key);
-    const { data: sales, error } = await supabase
-      .from('daily_sales_report')
-      .select('*')
-      .gte('date', `${month}-01`)
-      .lte('date', date);
-
-    console.log('Debug info:', {
-      searchFrom: `${month}-01`,
-      searchTo: date,
-      resultCount: sales?.length || 0,
-      error: error?.message || 'no error',
-      firstRecord: sales?.[0] || 'none'
+    
+    // 他の機能と同じRPCを使用
+    const { data: salesData, error } = await supabase.rpc('get_6month_sales_summary', {
+      end_date: date
     });
 
-    if (error) throw new Error('select_failed: ' + error.message);
+    console.log('Debug info:', {
+      rpcCall: 'get_6month_sales_summary',
+      endDate: date,
+      resultCount: salesData?.length || 0,
+      error: error?.message || 'no error'
+    });
 
-    // デバッグ用レスポンス
-    if (!sales || sales.length === 0) {
+    if (error) throw new Error('rpc_failed: ' + error.message);
+
+    // RPCデータから6月分を抽出
+    const juneSales = salesData?.filter(item => item.month_label === '2025-06') || [];
+    
+    if (juneSales.length === 0) {
       return NextResponse.json({ 
         ok: false, 
-        error: `データなし: ${month}-01 から ${date} の範囲で検索したが0件`,
+        error: `6月データなし: RPCから${salesData?.length || 0}件取得、6月分は0件`,
         debug: {
-          searchFrom: `${month}-01`,
-          searchTo: date,
-          supabaseError: error?.message || null
+          rpcResult: salesData?.map(d => d.month_label) || [],
+          searchDate: date
         }
       });
     }
+
+    // AI用に6月データを整形
+    const sales = juneSales;
 
     // ------- ai -------
     const openai = new OpenAI({ apiKey: okey });
