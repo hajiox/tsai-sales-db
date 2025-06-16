@@ -4,7 +4,6 @@ import { useSession } from 'next-auth/react'
 import { redirect } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import MainSidebar from '@/components/main-sidebar'
-import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 
 export default function WebSalesDashboard() {
@@ -31,6 +30,8 @@ export default function WebSalesDashboard() {
       setLoading(true)
       setError(null)
       
+      // Supabaseクライアントを動的にインポート
+      const { createClient } = await import('@/lib/supabase')
       const supabase = createClient()
       console.log('Supabaseクライアント作成完了')
       
@@ -38,7 +39,7 @@ export default function WebSalesDashboard() {
         .from('web_sales_summary')
         .select('*')
         .eq('report_month', '2025-04-01')
-        .limit(3) // 最初は3件だけ
+        .limit(3)
 
       console.log('Supabase応答:', { data, error })
 
