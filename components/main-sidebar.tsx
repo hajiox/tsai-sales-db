@@ -55,14 +55,13 @@ export default function MainSidebar({ children }: Props) {
         ))}
       </div>
       
-      {children && (
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          {children}
-        </nav>
-      )}
+      {/* メインナビゲーション - flex-1で残りスペースを占有 */}
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        {children}
+      </nav>
 
-      {/* ユーザー情報とログアウト */}
-      <div className="p-4 border-t border-gray-700">
+      {/* ユーザー情報とログアウト - 最下部に固定 */}
+      <div className="mt-auto p-4 border-t border-gray-700">
         <div className="flex items-center gap-3 mb-3">
           {/* Googleアイコン */}
           <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center">
