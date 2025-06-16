@@ -4,33 +4,14 @@ import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { toast } from "sonner";
 
-// 分析レポートのサマリー部分の型定義
-interface AnalysisSummary {
-  summary: string;
-}
-
 export default function AiDashboardSection() {
-  const [analysisResult, setAnalysisResult] = useState<AnalysisSummary | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [latestMonth, setLatestMonth] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClientComponentClient();
 
-  // DBから取得したcontent(JSON文字列)を安全にパースする関数
-  const parseContent = (content: string): AnalysisSummary | null => {
-    try {
-      const parsed = JSON.parse(content);
-      // ダッシュボードではサマリーのみ表示するため、summaryの存在をチェック
-      if (parsed.summary) {
-        return parsed;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  };
-  
   // "YYYY-MM" 形式を "YYYY年M月" 形式に変換
   const formatMonth = (month: string | null): string => {
     if (!month) return "";
@@ -54,13 +35,9 @@ export default function AiDashboardSection() {
       if (fetchError || !data) {
         setError("過去の分析レポートを取得できませんでした。");
       } else if (data.content) {
-        const parsed = parseContent(data.content);
-        if (parsed) {
-          setAnalysisResult(parsed);
-          setLatestMonth(data.month);
-        } else {
-          setError("レポートデータの形式が正しくありません。");
-        }
+        // 修正: contentは既に文字列形式
+        setAnalysisResult(data.content);
+        setLatestMonth(data.month);
       } else {
         setError("分析レポートが見つかりませんでした。");
       }
@@ -77,9 +54,15 @@ export default function AiDashboardSection() {
     toast.info("AI分析を開始しました。完了まで1〜2分お待ちください。");
 
     try {
-      // APIエンドポイントを呼び出す
+      // 現在の日付を送信
+      const today = new Date().toISOString().slice(0, 10);
+      
       const response = await fetch("/api/analyze", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ date: today })
       });
 
       if (!response.ok) {
@@ -89,15 +72,13 @@ export default function AiDashboardSection() {
 
       const result = await response.json();
       
-      if (result.content) {
-        const parsed = parseContent(result.content);
-        if (parsed) {
-          setAnalysisResult(parsed);
-          setLatestMonth(result.month);
-          toast.success(`${formatMonth(result.month)}の分析が完了しました。`);
-        } else {
-           throw new Error("APIから返されたデータの形式が正しくありません。");
-        }
+      if (result.ok && result.result) {
+        // 修正: APIの新しいレスポンス形式に対応
+        setAnalysisResult(result.result);
+        setLatestMonth(result.meta?.month || today.slice(0, 7));
+        toast.success("AI分析が完了しました。");
+      } else {
+        throw new Error(result.error || "分析結果を取得できませんでした。");
       }
     } catch (err: any) {
       setError(err.message || "分析中に不明なエラーが発生しました。");
@@ -127,10 +108,10 @@ export default function AiDashboardSection() {
           <p className="text-red-500 text-center pt-10">{error}</p>
         ) : analysisResult ? (
           <div>
-            <h3 className="font-semibold text-slate-700 mb-2">{formatMonth(latestMonth)} の簡易分析</h3>
-            <p className="text-slate-600 whitespace-pre-wrap">
-              {analysisResult.summary}
-            </p>
+            <h3 className="font-semibold text-slate-700 mb-2">{formatMonth(latestMonth)} の分析レポート</h3>
+            <div className="text-slate-600 whitespace-pre-wrap">
+              {analysisResult}
+            </div>
           </div>
         ) : (
            <p className="text-slate-500 text-center pt-10">表示できる分析レポートがありません。</p>
