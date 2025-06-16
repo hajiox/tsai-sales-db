@@ -5,10 +5,11 @@ import { nf } from "@/lib/utils";
 
 interface Props {
   data: any;
+  monthlyData: any;
   isLoading: boolean;
 }
 
-export default function DashboardStats({ data, isLoading }: Props) {
+export default function DashboardStats({ data, monthlyData, isLoading }: Props) {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-4">
@@ -49,6 +50,19 @@ export default function DashboardStats({ data, isLoading }: Props) {
     }
   ];
 
+  // 月累計データの表示
+  const monthlyStats = [
+    { title: "フロア累計", value: monthlyData?.m_floor_total || 0, unit: "円" },
+    { title: "レジ通過累計", value: monthlyData?.m_register_count_total || 0, unit: "人" },
+    { title: "Amazon累計", value: monthlyData?.m_amazon_total || 0, unit: "円" },
+    { title: "楽天累計", value: monthlyData?.m_rakuten_total || 0, unit: "円" },
+    { title: "Yahoo!累計", value: monthlyData?.m_yahoo_total || 0, unit: "円" },
+    { title: "メルカリ累計", value: monthlyData?.m_mercari_total || 0, unit: "円" },
+    { title: "BASE累計", value: monthlyData?.m_base_total || 0, unit: "円" },
+    { title: "Qoo10累計", value: monthlyData?.m_qoo10_total || 0, unit: "円" },
+    { title: "総合計", value: monthlyData?.m_grand_total || 0, unit: "円" }
+  ];
+
   return (
     <div>
       {/* 日計サマリー */}
@@ -70,21 +84,18 @@ export default function DashboardStats({ data, isLoading }: Props) {
         </div>
       </div>
 
-      {/* 月累計サマリー（空のカード表示） */}
+      {/* 月累計サマリー */}
       <div>
         <h3 className="text-lg font-semibold text-slate-800 mb-4">月累計サマリー</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-4">
-          {[
-            "フロア累計", "レジ通過累計", "Amazon累計", "楽天累計", 
-            "Yahoo!累計", "メルカリ累計", "BASE累計", "Qoo10累計", "総合計"
-          ].map((title, index) => (
+          {monthlyStats.map((stat, index) => (
             <Card key={index}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-slate-600">{title}</CardTitle>
+                <CardTitle className="text-sm text-slate-600">{stat.title}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-xl font-bold text-slate-800">
-                  0 円
+                  {nf(stat.value)} {stat.unit}
                 </div>
               </CardContent>
             </Card>
