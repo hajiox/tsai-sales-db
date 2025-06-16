@@ -1,3 +1,10 @@
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
 // 数値をカンマ区切りにする関数
 export const nf = (num: number | null | undefined): string => {
   if (num === null || num === undefined) {
