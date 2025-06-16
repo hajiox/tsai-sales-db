@@ -11,6 +11,7 @@ export default function WebSalesDashboard() {
   
   const { data: session, status } = useSession()
   const [salesData, setSalesData] = useState<any[]>([])
+  const [availableMonths, setAvailableMonths] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,6 +49,7 @@ export default function WebSalesDashboard() {
 
       console.log('データ取得成功:', result.data?.length, '件')
       setSalesData(result.data || [])
+      setAvailableMonths(result.availableMonths || [])
       
     } catch (error: any) {
       console.error('予期しないエラー:', error)
@@ -121,6 +123,26 @@ export default function WebSalesDashboard() {
                   </div>
                 </div>
               )}
+
+              {/* 利用可能な月を表示 */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mt-4">
+                <p className="text-yellow-800 text-sm font-semibold mb-2">
+                  📅 データベース内の利用可能な月:
+                </p>
+                <div className="text-xs">
+                  {availableMonths.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {availableMonths.map((month, index) => (
+                        <span key={index} className="bg-white px-2 py-1 rounded border">
+                          {month.report_month}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>「データ取得テスト」ボタンを押して確認してください</p>
+                  )}
+                </div>
+              </div>
             </div>
             
             <div className="bg-white rounded-lg shadow-sm border p-4">
