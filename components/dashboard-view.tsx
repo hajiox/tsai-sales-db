@@ -29,18 +29,18 @@ export default function DashboardView() {
         setDailyLoading(true);
         const dateString = date.toISOString().split('T')[0]; // タイムゾーン問題を回避
         
-        // 日別データを直接取得（RPCではなく）
+        // 日別データを直接取得（singleを削除）
         const { data, error } = await supabase
             .from('daily_sales_report')
             .select('*')
-            .eq('date', dateString)
-            .single();
+            .eq('date', dateString);
             
-        if (error && error.code !== 'PGRST116') { // PGRST116 = レコードが見つからない
+        if (error) {
             throw new Error(`日次データ取得エラー: ${error.message}`);
         }
         
-        setDailyData(data || {});
+        // データが存在する場合は最初の要素、存在しない場合は空オブジェクト
+        setDailyData(data && data.length > 0 ? data[0] : {});
         setDailyLoading(false);
     }, []);
     
