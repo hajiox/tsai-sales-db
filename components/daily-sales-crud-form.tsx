@@ -5,9 +5,8 @@ import { createAuthenticatedSupabaseClient } from '@/lib/supabase';
 import { nf } from '@/lib/utils';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner"; // ★ sonnerからtoastをインポート
+import { toast } from "sonner";
 
-// ... (Propsの型定義は変更なし)
 interface DailySalesCrudFormProps {
     selectedDate: string;
     dailyData: any;
@@ -31,25 +30,34 @@ const FormInput = ({ id, label, value, onChange }: { id: string, label: string, 
 
 export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpdate, accessToken }: DailySalesCrudFormProps) {
     const [formData, setFormData] = useState<any>({});
-    // const [message, setMessage] = useState(''); // ★ 不要になったので削除
 
     useEffect(() => {
-        // ... (この関数の中身は変更なし)
+        // 修正: 直接テーブルから取得したデータ構造に対応
         const initialFormData: any = {
-            floor_sales: dailyData?.d_floor_sales ?? '', cash_income: dailyData?.d_cash_income ?? '', register_count: dailyData?.d_register_count ?? '',
-            amazon_count: dailyData?.d_amazon_count ?? '', base_count: dailyData?.d_base_count ?? '', yahoo_count: dailyData?.d_yahoo_count ?? '',
-            mercari_count: dailyData?.d_mercari_count ?? '', rakuten_count: dailyData?.d_rakuten_count ?? '', qoo10_count: dailyData?.d_qoo10_count ?? '',
-            amazon_amount: dailyData?.d_amazon_amount ?? '', base_amount: dailyData?.d_base_amount ?? '', yahoo_amount: dailyData?.d_yahoo_amount ?? '',
-            mercari_amount: dailyData?.d_mercari_amount ?? '', rakuten_amount: dailyData?.d_rakuten_amount ?? '', qoo10_amount: dailyData?.d_qoo10_amount ?? '',
+            floor_sales: dailyData?.floor_sales ?? '',
+            cash_income: dailyData?.cash_income ?? '',
+            register_count: dailyData?.register_count ?? '',
+            amazon_count: dailyData?.amazon_count ?? '',
+            base_count: dailyData?.base_count ?? '',
+            yahoo_count: dailyData?.yahoo_count ?? '',
+            mercari_count: dailyData?.mercari_count ?? '',
+            rakuten_count: dailyData?.rakuten_count ?? '',
+            qoo10_count: dailyData?.qoo10_count ?? '',
+            amazon_amount: dailyData?.amazon_amount ?? '',
+            base_amount: dailyData?.base_amount ?? '',
+            yahoo_amount: dailyData?.yahoo_amount ?? '',
+            mercari_amount: dailyData?.mercari_amount ?? '',
+            rakuten_amount: dailyData?.rakuten_amount ?? '',
+            qoo10_amount: dailyData?.qoo10_amount ?? '',
         };
         setFormData(initialFormData);
     }, [dailyData]);
     
-    // ... (handleChange, handleSave, handleDeleteの中身は変更なし)
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value === '' ? '' : Number(value) });
     };
+
     const handleSave = async () => {
         if (!accessToken) { toast.error('エラー: 認証トークンがありません'); return; }
         const supabase = createAuthenticatedSupabaseClient(accessToken);
@@ -59,6 +67,7 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpda
         if (error) { toast.error(`保存に失敗しました: ${error.message}`); } 
         else { toast.success(`${selectedDate}のデータを保存しました。`); onDataUpdate(); }
     };
+
     const handleDelete = async () => {
         if (!accessToken) { toast.error('エラー: 認証トークンがありません'); return; }
         if (!confirm(`${selectedDate}のデータを本当に削除しますか？`)) return;
@@ -78,29 +87,17 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, onDataUpda
 
         const reportText = `【会津ブランド館売上報告】
 ${selectedDate}
-フロア日計 / ${nf(d.d_floor_sales).padStart(8, ' ')}円
-フロア累計 / ${nf(d.m_floor_total).padStart(8, ' ')}円
-入 金 / ${nf(d.d_cash_income).padStart(8, ' ')} 円
-レジ通過人数 / ${nf(d.d_register_count).padStart(3, ' ')} 人
+フロア日計 / ${nf(d.floor_sales || 0).padStart(8, ' ')}円
+入 金 / ${nf(d.cash_income || 0).padStart(8, ' ')} 円
+レジ通過人数 / ${nf(d.register_count || 0).padStart(3, ' ')} 人
 【WEB売上】
-Amazon 売上 / ${nf(d.d_amazon_count)}件  ${nf(d.d_amazon_amount)}円
-BASE 売上 / ${nf(d.d_base_count)}件  ${nf(d.d_base_amount)}円
-Yahoo! 売上 / ${nf(d.d_yahoo_count)}件  ${nf(d.d_yahoo_amount)}円
-メルカリ 売上 / ${nf(d.d_mercari_count)}件  ${nf(d.d_mercari_amount)}円
-楽天 売上 / ${nf(d.d_rakuten_count)}件  ${nf(d.d_rakuten_amount)}円
-Qoo10 売上 / ${nf(d.d_qoo10_count)}件  ${nf(d.d_qoo10_amount)}円
-Amazon累計/  ${nf(d.m_amazon_total)}円
-BASE累計/  ${nf(d.m_base_total)}円
-Yahoo!累計/  ${nf(d.m_yahoo_total)}円
-メルカリ累計/  ${nf(d.m_mercari_total)}円
-楽天累計/  ${nf(d.m_rakuten_total)}円
-Qoo10累計/  ${nf(d.m_qoo10_total)}円
----------------------------------------
-WEB売上累計 / ${nf(d.m_web_total)}円
-【月内フロア＋WEB累計売上】
-${nf(d.m_grand_total)}円`;
+Amazon 売上 / ${nf(d.amazon_count || 0)}件  ${nf(d.amazon_amount || 0)}円
+BASE 売上 / ${nf(d.base_count || 0)}件  ${nf(d.base_amount || 0)}円
+Yahoo! 売上 / ${nf(d.yahoo_count || 0)}件  ${nf(d.yahoo_amount || 0)}円
+メルカリ 売上 / ${nf(d.mercari_count || 0)}件  ${nf(d.mercari_amount || 0)}円
+楽天 売上 / ${nf(d.rakuten_count || 0)}件  ${nf(d.rakuten_amount || 0)}円
+Qoo10 売上 / ${nf(d.qoo10_count || 0)}件  ${nf(d.qoo10_amount || 0)}円`;
 
-        // ★ setMessageをtoast通知に変更
         navigator.clipboard.writeText(reportText).then(() => {
             toast.success("帳票をクリップボードにコピーしました！");
         }, () => {
@@ -111,7 +108,6 @@ ${nf(d.m_grand_total)}円`;
     return (
         <div className="space-y-6">
             <div className="space-y-4">
-                {/* ... (フォームのレイアウト部分は変更なし) ... */}
                 <div className="grid grid-cols-3 gap-4">
                     <FormInput id="floor_sales" label="フロア日計" value={formData.floor_sales ?? ''} onChange={handleChange} />
                     <FormInput id="cash_income" label="入金" value={formData.cash_income ?? ''} onChange={handleChange} />
@@ -141,9 +137,6 @@ ${nf(d.m_grand_total)}円`;
                     <Button variant="destructive" onClick={handleDelete}>削除</Button>
                     <Button variant="secondary" onClick={handleGenerateReport}>帳票を生成</Button>
                 </div>
-                {/* ★ 不要になったので削除
-                {message && <p className="text-sm text-slate-500">{message}</p>}
-                */}
             </div>
         </div>
     );
