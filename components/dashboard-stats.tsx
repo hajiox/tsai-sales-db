@@ -75,7 +75,7 @@ export default function DashboardStats({ data, monthlyData, isLoading }: Props) 
                 <CardTitle className="text-sm text-slate-600">{stat.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-xl font-bold text-slate-800">
+                <div className="text-sm font-bold text-slate-800">
                   {nf(stat.value)} {stat.unit}
                 </div>
               </CardContent>
@@ -94,7 +94,7 @@ export default function DashboardStats({ data, monthlyData, isLoading }: Props) 
                 <CardTitle className="text-sm text-slate-600">{stat.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-xl font-bold text-slate-800">
+                <div className="text-sm font-bold text-slate-800">
                   {nf(stat.value)} {stat.unit}
                 </div>
               </CardContent>
