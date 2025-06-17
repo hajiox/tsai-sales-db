@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
-import { supabase } from "@/lib/supabase";
 
+// 型定義
 type SummaryRow = {
   id: string;
   product_id: string;
@@ -19,15 +18,14 @@ type SummaryRow = {
   qoo10_count: number | null;
 };
 
-// シリーズ名に応じた背景色を取得
+// シリーズ名に応じた背景色を取得するヘルパー関数
 const getSeriesColor = (seriesName: string | null) => {
   if (!seriesName) return 'bg-white';
   let hash = 0;
-  if (seriesName.length === 0) return 'bg-white';
   for (let i = 0; i < seriesName.length; i++) {
     const char = seriesName.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
+    hash = hash & hash;
   }
   const colors = [
     'bg-blue-50', 'bg-green-50', 'bg-yellow-50', 'bg-purple-50', 'bg-pink-50', 'bg-indigo-50',
@@ -38,17 +36,22 @@ const getSeriesColor = (seriesName: string | null) => {
   return colors[index];
 };
 
+// ダッシュボード本体のコンポーネント
 const WebSalesDashboard = () => {
   const [summary, setSummary] = useState<SummaryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // 月選択の機能をこのコンポーネントに移動
+  const [month, setMonth] = useState<string>('2025-04');
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch('/api/web-sales-data');
+        // APIに選択した月を渡せるように、将来的に拡張します (現在はまだ)
+        const response = await fetch('/api/web-sales-data'); 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -58,33 +61,40 @@ const WebSalesDashboard = () => {
           const sortedData = data.data.sort((a: SummaryRow, b: SummaryRow) => a.product_number - b.product_number);
           setSummary(sortedData);
         } else {
-          console.error("Fetched data is not in the expected format:", data);
           setSummary([]);
         }
       } catch (e: any) {
         setError(e.message);
-        console.error("Fetching data failed:", e);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [month]); // 月が変更されたらデータを再取得
 
   if (loading) return <div className="flex justify-center items-center h-64">Loading...</div>;
   if (error) return <div className="p-4 text-red-600 bg-red-100 rounded-md">Error: {error}</div>;
   
   return (
     <div className="w-full space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight">WEB販売管理</h1>
-        <p className="text-gray-500">月次の販売実績を確認・管理します。</p>
+      <header className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">WEB販売管理</h1>
+          <p className="text-gray-500">月次の販売実績を確認・管理します。</p>
+        </div>
+        {/* 月選択のUIをここに配置 */}
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="border rounded-md text-base p-2 bg-white"
+        />
       </header>
 
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="p-6 border-b">
-          <h3 className="text-xl font-semibold">2025年4月 販売実績</h3>
+          <h3 className="text-xl font-semibold">{month}月 販売実績</h3>
         </div>
         <div className="p-6">
           <div className="overflow-x-auto">
@@ -108,12 +118,8 @@ const WebSalesDashboard = () => {
               <tbody>
                 {summary.map((r) => {
                   const totalCount = 
-                    (r.amazon_count || 0) + 
-                    (r.rakuten_count || 0) + 
-                    (r.yahoo_count || 0) + 
-                    (r.mercari_count || 0) + 
-                    (r.base_count || 0) + 
-                    (r.qoo10_count || 0);
+                    (r.amazon_count || 0) + (r.rakuten_count || 0) + (r.yahoo_count || 0) + 
+                    (r.mercari_count || 0) + (r.base_count || 0) + (r.qoo10_count || 0);
                   const totalRevenue = totalCount * (r.price || 0);
                   const rowColor = getSeriesColor(r.series_name);
 
