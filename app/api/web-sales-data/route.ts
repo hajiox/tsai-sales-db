@@ -24,64 +24,29 @@ export async function GET() {
     })
     console.log('Supabaseクライアント作成完了')
     
-    // report_monthがNULLのデータを確認
-    const { data: nullData, error: nullError } = await supabase
-      .from('web_sales_summary')
-      .select('*')
-      .is('report_month', null)
-      .limit(5)
-      
-    console.log('report_monthがNULLのデータ:', nullData)
-    
-    // report_monthが非NULLのデータを確認
-    const { data: notNullData, error: notNullError } = await supabase
-      .from('web_sales_summary')
-      .select('*')
-      .not('report_month', 'is', null)
-      .limit(5)
-      
-    console.log('report_monthが非NULLのデータ:', notNullData)
-    
-    // 全データを少し取得（report_month条件なし）
-    const { data: allData, error: allError } = await supabase
-      .from('web_sales_summary')
-      .select('*')
-      .limit(5)
-      
-    console.log('全データサンプル:', allData)
-    
-    // まず、テーブル内の全ての月を確認（詳細表示）
-    const { data: allMonths, error: monthsError } = await supabase
-      .from('web_sales_summary')
-      .select('report_month, id, product_name')
-      .limit(10)
-      
-    console.log('利用可能な月（詳細）:', allMonths)
-    
-    // テーブル全体の件数を確認
-    const { count, error: countError } = await supabase
-      .from('web_sales_summary')
-      .select('*', { count: 'exact', head: true })
-      
-    console.log('テーブル全体の件数:', count)
-    
-    // 2025年4月に近い日付で検索してみる
-    const { data: april2025, error: aprilError } = await supabase
-      .from('web_sales_summary')
-      .select('*')
-      .like('report_month', '2025-04%')
-      .limit(3)
-      
-    console.log('2025年4月関連データ:', april2025)
-    
-    // 次に、2025-04-01のデータを取得
+    // 全データを取得（商品名・シリーズ名を含む）
     const { data, error } = await supabase
       .from('web_sales_summary')
-      .select('*')
-      .eq('report_month', '2025-04-01')
-      .limit(5)
+      .select(`
+        id,
+        product_id,
+        product_name,
+        series_name,
+        product_code,
+        product_number,
+        amazon_count,
+        rakuten_count,
+        yahoo_count,
+        mercari_count,
+        base_count,
+        qoo10_count,
+        report_month
+      `)
+      .order('product_code', { ascending: true })
+      .order('product_number', { ascending: true })
       
-    console.log('2025-04-01のデータ:', { dataCount: data?.length, error })
+    console.log('取得データ件数:', data?.length)
+    console.log('最初の3件のサンプル:', data?.slice(0, 3))
     
     if (error) {
       console.error('Supabaseエラー:', error)
@@ -90,20 +55,21 @@ export async function GET() {
       }, { status: 500 })
     }
     
+    // データの品質確認
+    const hasProductName = data?.some(item => item.product_name && item.product_name !== null && item.product_name !== '')
+    const hasSeriesName = data?.some(item => item.series_name && item.series_name !== null && item.series_name !== '')
+    
+    console.log('商品名あり:', hasProductName)
+    console.log('シリーズ名あり:', hasSeriesName)
+    
     return NextResponse.json({ 
-      data: allData || [], // report_month条件なしのデータを返す
-      count: allData?.length || 0,
-      availableMonths: allMonths || [],
-      totalCount: count,
-      nullData: nullData || [],
-      notNullData: notNullData || [],
+      data: data || [],
+      count: data?.length || 0,
       debug: {
-        searchMonth: '2025-04-01',
-        foundData: data?.length || 0,
-        totalRecords: count,
-        nullDataCount: nullData?.length || 0,
-        notNullDataCount: notNullData?.length || 0,
-        allDataCount: allData?.length || 0
+        hasProductName,
+        hasSeriesName,
+        totalRecords: data?.length || 0,
+        sampleData: data?.slice(0, 2) || []
       }
     })
     
