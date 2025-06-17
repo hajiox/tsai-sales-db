@@ -192,8 +192,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
           <table className="w-full text-xs border-collapse">
             <thead className="bg-gray-100 sticky top-0">
               <tr>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 w-12">No.</th>
-                <th className="px-2 py-1 text-left font-medium text-gray-700 border min-w-48">商品名</th>
+                <th className="px-2 py-1 text-left font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 min-w-56">商品名</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">シリーズ</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">商品番号</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">単価</th>
@@ -216,8 +215,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
                 
                 return (
                   <tr key={row.id} className={`border-b hover:brightness-95 ${rowBgColor}`}>
-                    <td className={`px-2 py-1 text-center border sticky left-0 ${rowBgColor} z-10 text-xs`}>{index + 1}</td>
-                    <td className="px-2 py-1 text-left border text-xs">{row.product_name}</td>
+                    <td className={`px-2 py-1 text-left border sticky left-0 ${rowBgColor} z-10 text-xs`}>{row.product_name}</td>
                     <td className="px-2 py-1 text-center border text-xs">{row.series_name || '-'}</td>
                     <td className="px-2 py-1 text-center border text-xs">{row.product_number}</td>
                     <td className="px-2 py-1 text-right border text-xs">¥{(row.price || 0).toLocaleString()}</td>
@@ -248,7 +246,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
               
               {/* 合計行 */}
               <tr className="bg-green-100 font-bold border-t-2">
-                <td className="px-2 py-2 text-center border sticky left-0 bg-green-100 z-10 text-xs" colSpan={5}>合計</td>
+                <td className="px-2 py-2 text-center border sticky left-0 bg-green-100 z-10 text-xs" colSpan={4}>合計</td>
                 <td className="px-2 py-2 text-center border text-xs">{totals.amazon.toLocaleString()}</td>
                 <td className="px-2 py-2 text-center border text-xs">{totals.rakuten.toLocaleString()}</td>
                 <td className="px-2 py-2 text-center border text-xs">{totals.yahoo.toLocaleString()}</td>
