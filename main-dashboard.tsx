@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { usePathname } from 'next/navigation'
 import MainSidebar from "@/components/main-sidebar"
-import SalesSidebarMenu from "@/components/sidebar"
+// import SalesSidebarMenu from "@/components/sidebar" // ← 不要なため削除
 
 export default function MainDashboard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -18,14 +18,13 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
   }, [pathname])
   
   return (
-    // 全体をflexboxで管理し、マージン計算を不要にします
     <div className="flex h-screen bg-gray-100">
+      {/* 広いサイドバー */}
       <MainSidebar />
       
-      {/* 売上報告システムの時だけサブメニューを表示 */}
-      {activeModule === 'sales' && <SalesSidebarMenu />}
+      {/* サブメニューの呼び出しを完全に削除しました */}
       
-      {/* メインコンテンツは残りのスペースを全て使います */}
+      {/* メインコンテンツ */}
       <main className="flex-grow p-6 overflow-auto">
         {children}
       </main>
