@@ -3,7 +3,7 @@
 import { signOut, useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { useRouter, usePathname } from "next/navigation"
-import { HomeIcon, BarChartIcon, SettingsIcon, LogOutIcon } from 'lucide-react'; // アイコンをインポート
+import { HomeIcon, BarChartIcon, LogOutIcon } from 'lucide-react';
 
 export type ModuleId = "sales" | "web"
 
@@ -30,13 +30,12 @@ export default function MainSidebar() {
   };
 
   return (
-    // w-64 から w-24 に幅を縮小し、サブメニュー用の 영역を削除
-    <div className="w-24 bg-gray-900 text-white h-screen fixed left-0 top-0 flex flex-col shadow-lg">
+    // position:fixed を削除し、flexの子要素として振る舞うように変更
+    <div className="w-24 bg-gray-900 text-white flex flex-col shadow-lg flex-shrink-0">
       <div className="p-4 border-b border-gray-800">
         <h1 className="text-xl font-bold text-center">TSA</h1>
       </div>
       
-      {/* メインナビゲーション */}
       <nav className="flex-grow p-2 space-y-2">
         {items.map((item) => (
           <Button
@@ -55,7 +54,6 @@ export default function MainSidebar() {
         ))}
       </nav>
 
-      {/* ユーザー情報とログアウト */}
       <div className="p-2 border-t border-gray-800">
         <div className="flex flex-col items-center gap-2 mb-2">
             <img 
