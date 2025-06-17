@@ -3,6 +3,7 @@
 import { useState } from "react"
 import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
+import WebSalesEditableTable from "@/components/web-sales-editable-table"
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,8 @@ export default function WebSalesDashboardPage() {
       </header>
 
       <WebSalesSummaryCards month={month} />
+      
+      <WebSalesEditableTable month={month} />
       
       <WebSalesRankingTable month={month} />
     </div>
