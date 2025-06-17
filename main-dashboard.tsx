@@ -10,36 +10,23 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
   const [activeModule, setActiveModule] = useState<'sales' | 'web'>('sales')
 
   useEffect(() => {
-    // 現在のURLを見て、どちらのシステムを表示しているか判断します
     if (pathname.startsWith('/web-sales')) {
       setActiveModule('web')
     } else {
       setActiveModule('sales')
     }
   }, [pathname])
-
-  // 「売上報告システム」の時だけサブメニューを表示します
-  const showSubMenu = activeModule === 'sales';
-
-  // サブメニューの有無に応じて、メインコンテンツの開始位置を調整します
-  // スリムバーのみ: w-24 (96px)
-  // スリムバー + サブメニュー: w-64 (256px)
-  const mainContentMargin = showSubMenu ? 'ml-64' : 'ml-24';
-
+  
   return (
-    <div className="bg-gray-100">
-      {/* スリムになったメインのサイドバーです */}
-      <MainSidebar /> 
+    // 全体をflexboxで管理し、マージン計算を不要にします
+    <div className="flex h-screen bg-gray-100">
+      <MainSidebar />
       
-      {/* サブメニューが必要な時だけ、メインサイドバーの右隣に表示します */}
-      {showSubMenu && (
-        <div className="fixed top-0 left-24 h-full z-10">
-           <SalesSidebarMenu />
-        </div>
-      )}
+      {/* 売上報告システムの時だけサブメニューを表示 */}
+      {activeModule === 'sales' && <SalesSidebarMenu />}
       
-      {/* メインコンテンツです。適切なマージンが設定されます */}
-      <main className={`min-h-screen p-6 transition-all duration-200 ${mainContentMargin}`}>
+      {/* メインコンテンツは残りのスペースを全て使います */}
+      <main className="flex-grow p-6 overflow-auto">
         {children}
       </main>
     </div>
