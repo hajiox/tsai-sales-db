@@ -5,9 +5,8 @@ import { usePathname } from 'next/navigation'
 import MainSidebar from "@/components/main-sidebar"
 
 export default function MainDashboard({ children }: { children: React.ReactNode }) {
-  // このファイル内での activeModule の役割はサイドバーへのprops渡しでしたが、
-  // サイドバーが自律的にアクティブ状態を判断するようになったため、
-  // この state は現在使われていません。しかし、将来的な利用のため残しておきます。
+  // この state は現在レイアウトには直接影響しませんが、
+  // サイドバー内のボタンのハイライト表示などに使われるため残します。
   const pathname = usePathname()
   const [activeModule, setActiveModule] = useState<'sales' | 'web'>('sales')
 
@@ -21,7 +20,7 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
   
   return (
     // これが最終的なレイアウト構成です。
-    // サイドバーとメインコンテンツのみをシンプルに配置します。
+    // サイドバーとメインコンテンツのみをシンプルに横に並べます。
     <div className="flex h-screen bg-gray-100">
       
       <MainSidebar />
