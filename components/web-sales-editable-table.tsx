@@ -131,12 +131,14 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     if (isEditing) {
       return (
         <input
-          type="number"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleCellSave}
           onKeyDown={handleKeyDown}
-          className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300"
+          className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-center"
           autoFocus
         />
       );
@@ -144,7 +146,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
 
     return (
       <div
-        className="w-full px-1 py-0.5 cursor-pointer hover:bg-blue-100 rounded text-xs"
+        className="w-full px-1 py-0.5 cursor-pointer hover:bg-blue-100 rounded text-xs text-center"
         onClick={() => handleCellClick(row.id, field, value)}
       >
         {value || '-'}
@@ -191,16 +193,16 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
             <thead className="bg-gray-100 sticky top-0">
               <tr>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 w-12">No.</th>
-                <th className="px-2 py-1 text-left font-medium text-gray-700 border min-w-60">商品名</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">シリーズ</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">商品番号</th>
+                <th className="px-2 py-1 text-left font-medium text-gray-700 border min-w-48">商品名</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">シリーズ</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">商品番号</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">単価</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">Amazon</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Amazon</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">楽天</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">Yahoo!</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">メルカリ</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Yahoo!</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">メルカリ</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">Qoo10</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
                 <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
               </tr>
             </thead>
