@@ -114,6 +114,27 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     base: 0, qoo10: 0, totalCount: 0
   });
 
+  // シリーズ別売上サマリー
+  const seriesSummary = rows.reduce((acc, row) => {
+    const seriesName = row.series_name || '未分類';
+    const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
+                      (row.yahoo_count || 0) + (row.mercari_count || 0) + 
+                      (row.base_count || 0) + (row.qoo10_count || 0);
+    const totalSales = totalCount * (row.price || 0);
+
+    if (!acc[seriesName]) {
+      acc[seriesName] = { count: 0, sales: 0 };
+    }
+    acc[seriesName].count += totalCount;
+    acc[seriesName].sales += totalSales;
+    
+    return acc;
+  }, {} as Record<string, { count: number; sales: number }>);
+
+  // 売上順にソート
+  const sortedSeries = Object.entries(seriesSummary)
+    .sort(([, a], [, b]) => b.sales - a.sales);
+
   // シリーズ別の背景色を取得
   const getSeriesRowColor = (seriesName: string | null) => {
     if (!seriesName) return 'bg-white';
