@@ -1,21 +1,20 @@
 "use client"
 
 import { useState } from "react"
-import WebSalesDashboard from "@/components/websales-dashboard"
+import WebSalesProductList from "@/components/web-sales-product-list"
 import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
-import CommonDashboard from "@/components/common-dashboard"
 
 // 静的生成を無効化して動的レンダリングを強制
 export const dynamic = 'force-dynamic'
 
 /**
  * WEB販売管理システムのページ
- * 各コンポーネントを統合し、完全なダッシュボードを構成します。
+ * Excelファイルと同じ形式の商品一覧を表示します。
  * レイアウト（サイドバー等）は main-dashboard.tsx が担当します。
  */
 export default function WebSalesDashboardPage() {
-  const [month, setMonth] = useState<string>(new Date().toISOString().slice(0, 7))
+  const [month, setMonth] = useState<string>('2025-04')
 
   return (
     <div className="w-full space-y-6">
@@ -33,17 +32,14 @@ export default function WebSalesDashboardPage() {
         />
       </header>
 
-      {/* サマリーカード */}
+      {/* サマリーカード（修正予定） */}
       <WebSalesSummaryCards month={month} />
 
-      {/* ランキングテーブル */}
+      {/* メイン商品一覧 - Excelファイルと同じ形式 */}
+      <WebSalesProductList month={month} />
+
+      {/* ランキングテーブル（修正予定） */}
       <WebSalesRankingTable month={month} />
-
-      {/* 共通ダッシュボード */}
-      <CommonDashboard />
-
-      {/* メインダッシュボード */}
-      <WebSalesDashboard />
     </div>
   )
 }
