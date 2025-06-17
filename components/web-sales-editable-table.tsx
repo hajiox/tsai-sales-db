@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 type ProductRow = {
   id: string;
   product_id: string;
+  product_name: string;
+  series_name: string;
   amazon_count: number;
   rakuten_count: number;
   yahoo_count: number;
@@ -26,6 +28,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
   const [error, setError] = useState<string | null>(null);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -68,12 +71,13 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     setEditValue(currentValue.toString());
   };
 
-  // 編集完了
-  const handleCellSave = () => {
+  // 編集完了・保存
+  const handleCellSave = async () => {
     if (!editingCell) return;
 
     const newValue = parseInt(editValue) || 0;
     
+    // UIを先に更新
     setProducts(prevProducts => 
       prevProducts.map(product => 
         product.id === editingCell.rowId
@@ -85,8 +89,35 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     setEditingCell(null);
     setEditValue("");
 
-    // TODO: ここでAPIに保存リクエストを送信
-    console.log('保存:', { rowId: editingCell.rowId, field: editingCell.field, value: newValue });
+    // データベースに保存
+    try {
+      setSaving(true);
+      const response = await fetch('/api/web-sales-update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: editingCell.rowId,
+          field: editingCell.field,
+          value: newValue
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`保存エラー: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('保存成功:', result);
+      
+    } catch (error: any) {
+      console.error('保存エラー:', error);
+      // 保存失敗時は元の値に戻す
+      window.location.reload();
+    } finally {
+      setSaving(false);
+    }
   };
 
   // 編集キャンセル
@@ -175,6 +206,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
         <h3 className="text-lg font-semibold mb-2">📝 {month}月 商品別販売実績（編集可能）</h3>
         <p className="text-sm text-gray-600">
           💡 数量セルをクリックして直接編集できます。Enterで保存、Escapeでキャンセルします。
+          {saving && <span className="text-blue-600 font-bold ml-2">保存中...</span>}
         </p>
         <div className="grid grid-cols-4 gap-4 text-sm mt-3">
           <div>Amazon: <span className="font-bold">{totals.amazon.toLocaleString()}</span>個</div>
@@ -197,8 +229,8 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
             <thead className="bg-gray-100 sticky top-0">
               <tr>
                 <th className="px-3 py-2 text-center font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10">No.</th>
-                <th className="px-3 py-2 text-center font-medium text-gray-700 border sticky left-8 bg-gray-100 z-10">シリーズ</th>
-                <th className="px-3 py-2 text-center font-medium text-gray-700 border sticky left-16 bg-gray-100 z-10">商品</th>
+                <th className="px-3 py-2 text-center font-medium text-gray-700 border">シリーズ名</th>
+                <th className="px-3 py-2 text-center font-medium text-gray-700 border">商品名</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-700 border">Amazon</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-700 border">楽天</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-700 border">Yahoo!</th>
@@ -217,8 +249,8 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
                 return (
                   <tr key={product.id} className="border-b hover:bg-gray-50">
                     <td className="px-3 py-2 text-center border sticky left-0 bg-white">{index + 1}</td>
-                    <td className="px-3 py-2 text-center border sticky left-8 bg-white">{product.product_code}</td>
-                    <td className="px-3 py-2 text-center border sticky left-16 bg-white">{product.product_number}</td>
+                    <td className="px-3 py-2 text-left border max-w-xs truncate">{product.series_name || '-'}</td>
+                    <td className="px-3 py-2 text-left border max-w-xs truncate">{product.product_name || '-'}</td>
                     <td className="px-3 py-2 text-center border">
                       {renderEditableCell(product, 'amazon_count', product.amazon_count)}
                     </td>
