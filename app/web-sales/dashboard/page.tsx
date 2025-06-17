@@ -8,7 +8,6 @@ import CommonDashboard from "@/components/common-dashboard"
 
 // 静的生成を無効化して動的レンダリングを強制
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
 
 /**
  * WEB販売管理システムのページ
