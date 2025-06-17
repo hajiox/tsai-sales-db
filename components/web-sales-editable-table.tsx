@@ -1,20 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
-type ProductRow = {
+type SummaryRow = {
   id: string;
   product_id: string;
   product_name: string;
-  series_name: string;
-  amazon_count: number;
-  rakuten_count: number;
-  yahoo_count: number;
-  mercari_count: number;
-  base_count: number;
-  qoo10_count: number;
-  product_code: number;
+  series_name: string | null;
   product_number: number;
+  price: number | null;
+  amazon_count: number | null;
+  rakuten_count: number | null;
+  yahoo_count: number | null;
+  mercari_count: number | null;
+  base_count: number | null;
+  qoo10_count: number | null;
 };
 
 type EditingCell = {
@@ -22,53 +23,38 @@ type EditingCell = {
   field: string;
 } | null;
 
-export default function WebSalesEditableTable({ month }: { month: string }) {
-  const [products, setProducts] = useState<ProductRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function WebSalesEdit({ month }: { month: string }) {
+  const [rows, setRows] = useState<SummaryRow[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [editValue, setEditValue] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const loadData = async (ym: string) => {
+      setLoading(true);
       try {
-        setLoading(true);
-        setError(null);
-        
-        const response = await fetch('/api/web-sales-data');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data && Array.isArray(data.data)) {
-          const sortedData = data.data.sort((a: ProductRow, b: ProductRow) => {
-            if (a.product_code !== b.product_code) {
-              return a.product_code - b.product_code;
-            }
-            return a.product_number - b.product_number;
-          });
-          setProducts(sortedData);
-        } else {
-          setProducts([]);
-        }
-      } catch (e: any) {
-        console.error('データ取得エラー:', e);
-        setError(e.message);
+        const { data, error } = await supabase.rpc("web_sales_full_month", {
+          target_month: ym,
+        });
+
+        if (error) throw error;
+        setRows((data as SummaryRow[]) ?? []);
+      } catch (error) {
+        console.error('データ読み込みエラー:', error);
+        setRows([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    loadData(month);
   }, [month]);
 
   // セルをクリックして編集開始
-  const handleCellClick = (rowId: string, field: string, currentValue: number) => {
+  const handleCellClick = (rowId: string, field: string, currentValue: number | null) => {
     setEditingCell({ rowId, field });
-    setEditValue(currentValue.toString());
+    setEditValue((currentValue || 0).toString());
   };
 
   // 編集完了・保存
@@ -78,46 +64,19 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     const newValue = parseInt(editValue) || 0;
     
     // UIを先に更新
-    setProducts(prevProducts => 
-      prevProducts.map(product => 
-        product.id === editingCell.rowId
-          ? { ...product, [editingCell.field]: newValue }
-          : product
+    setRows(prevRows => 
+      prevRows.map(row => 
+        row.id === editingCell.rowId
+          ? { ...row, [editingCell.field]: newValue }
+          : row
       )
     );
 
     setEditingCell(null);
     setEditValue("");
 
-    // データベースに保存
-    try {
-      setSaving(true);
-      const response = await fetch('/api/web-sales-update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: editingCell.rowId,
-          field: editingCell.field,
-          value: newValue
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`保存エラー: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('保存成功:', result);
-      
-    } catch (error: any) {
-      console.error('保存エラー:', error);
-      // 保存失敗時は元の値に戻す
-      window.location.reload();
-    } finally {
-      setSaving(false);
-    }
+    // 保存処理（今後実装）
+    console.log('保存:', { rowId: editingCell.rowId, field: editingCell.field, value: newValue });
   };
 
   // 編集キャンセル
@@ -136,17 +95,17 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
   };
 
   // 合計計算
-  const totals = products.reduce((acc, product) => {
-    acc.amazon += product.amazon_count || 0;
-    acc.rakuten += product.rakuten_count || 0;
-    acc.yahoo += product.yahoo_count || 0;
-    acc.mercari += product.mercari_count || 0;
-    acc.base += product.base_count || 0;
-    acc.qoo10 += product.qoo10_count || 0;
+  const totals = rows.reduce((acc, row) => {
+    acc.amazon += row.amazon_count || 0;
+    acc.rakuten += row.rakuten_count || 0;
+    acc.yahoo += row.yahoo_count || 0;
+    acc.mercari += row.mercari_count || 0;
+    acc.base += row.base_count || 0;
+    acc.qoo10 += row.qoo10_count || 0;
     
-    const totalCount = (product.amazon_count || 0) + (product.rakuten_count || 0) + 
-                      (product.yahoo_count || 0) + (product.mercari_count || 0) + 
-                      (product.base_count || 0) + (product.qoo10_count || 0);
+    const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
+                      (row.yahoo_count || 0) + (row.mercari_count || 0) + 
+                      (row.base_count || 0) + (row.qoo10_count || 0);
     acc.totalCount += totalCount;
     
     return acc;
@@ -156,8 +115,8 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
   });
 
   // 編集可能セルのレンダリング
-  const renderEditableCell = (product: ProductRow, field: keyof ProductRow, value: number) => {
-    const isEditing = editingCell?.rowId === product.id && editingCell?.field === field;
+  const renderEditableCell = (row: SummaryRow, field: keyof SummaryRow, value: number | null) => {
+    const isEditing = editingCell?.rowId === row.id && editingCell?.field === field;
     
     if (isEditing) {
       return (
@@ -176,7 +135,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     return (
       <div
         className="w-full px-2 py-1 cursor-pointer hover:bg-blue-50 rounded"
-        onClick={() => handleCellClick(product.id, field, value)}
+        onClick={() => handleCellClick(row.id, field, value)}
       >
         {value || '-'}
       </div>
@@ -186,15 +145,8 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div>Loading...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-4 text-red-600 bg-red-100 rounded-md">
-        Error: {error}
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p className="mt-2 text-gray-600">データを読み込んでいます...</p>
       </div>
     );
   }
@@ -222,15 +174,17 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       {/* 編集可能テーブル */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="p-4 border-b bg-gray-50">
-          <h3 className="text-xl font-semibold">全商品一覧 ({products.length}商品)</h3>
+          <h3 className="text-xl font-semibold">全商品一覧 ({rows.length}商品)</h3>
         </div>
         <div className="overflow-x-auto max-h-96 overflow-y-auto">
           <table className="w-full text-sm border-collapse">
             <thead className="bg-gray-100 sticky top-0">
               <tr>
                 <th className="px-3 py-2 text-center font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10">No.</th>
-                <th className="px-3 py-2 text-center font-medium text-gray-700 border">シリーズ名</th>
-                <th className="px-3 py-2 text-center font-medium text-gray-700 border">商品名</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-700 border">商品名</th>
+                <th className="px-3 py-2 text-center font-medium text-gray-700 border">シリーズ</th>
+                <th className="px-3 py-2 text-center font-medium text-gray-700 border">商品番号</th>
+                <th className="px-3 py-2 text-center font-medium text-gray-700 border">単価</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-700 border">Amazon</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-700 border">楽天</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-700 border">Yahoo!</th>
@@ -241,33 +195,35 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
               </tr>
             </thead>
             <tbody>
-              {products.map((product, index) => {
-                const totalCount = (product.amazon_count || 0) + (product.rakuten_count || 0) + 
-                                 (product.yahoo_count || 0) + (product.mercari_count || 0) + 
-                                 (product.base_count || 0) + (product.qoo10_count || 0);
+              {rows.map((row, index) => {
+                const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
+                                 (row.yahoo_count || 0) + (row.mercari_count || 0) + 
+                                 (row.base_count || 0) + (row.qoo10_count || 0);
                 
                 return (
-                  <tr key={product.id} className="border-b hover:bg-gray-50">
+                  <tr key={row.id} className="border-b hover:bg-gray-50">
                     <td className="px-3 py-2 text-center border sticky left-0 bg-white">{index + 1}</td>
-                    <td className="px-3 py-2 text-left border max-w-xs truncate">{product.series_name || '-'}</td>
-                    <td className="px-3 py-2 text-left border max-w-xs truncate">{product.product_name || '-'}</td>
+                    <td className="px-3 py-2 text-left border max-w-xs truncate">{row.product_name}</td>
+                    <td className="px-3 py-2 text-center border">{row.series_name || '-'}</td>
+                    <td className="px-3 py-2 text-center border">{row.product_number}</td>
+                    <td className="px-3 py-2 text-right border">¥{(row.price || 0).toLocaleString()}</td>
                     <td className="px-3 py-2 text-center border">
-                      {renderEditableCell(product, 'amazon_count', product.amazon_count)}
+                      {renderEditableCell(row, 'amazon_count', row.amazon_count)}
                     </td>
                     <td className="px-3 py-2 text-center border">
-                      {renderEditableCell(product, 'rakuten_count', product.rakuten_count)}
+                      {renderEditableCell(row, 'rakuten_count', row.rakuten_count)}
                     </td>
                     <td className="px-3 py-2 text-center border">
-                      {renderEditableCell(product, 'yahoo_count', product.yahoo_count)}
+                      {renderEditableCell(row, 'yahoo_count', row.yahoo_count)}
                     </td>
                     <td className="px-3 py-2 text-center border">
-                      {renderEditableCell(product, 'mercari_count', product.mercari_count)}
+                      {renderEditableCell(row, 'mercari_count', row.mercari_count)}
                     </td>
                     <td className="px-3 py-2 text-center border">
-                      {renderEditableCell(product, 'base_count', product.base_count)}
+                      {renderEditableCell(row, 'base_count', row.base_count)}
                     </td>
                     <td className="px-3 py-2 text-center border">
-                      {renderEditableCell(product, 'qoo10_count', product.qoo10_count)}
+                      {renderEditableCell(row, 'qoo10_count', row.qoo10_count)}
                     </td>
                     <td className="px-3 py-2 text-center font-bold border bg-blue-50">
                       {totalCount.toLocaleString()}
@@ -278,7 +234,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
               
               {/* 合計行 */}
               <tr className="bg-green-100 font-bold border-t-2">
-                <td className="px-3 py-3 text-center border sticky left-0 bg-green-100" colSpan={3}>合計</td>
+                <td className="px-3 py-3 text-center border sticky left-0 bg-green-100" colSpan={5}>合計</td>
                 <td className="px-3 py-3 text-center border">{totals.amazon.toLocaleString()}</td>
                 <td className="px-3 py-3 text-center border">{totals.rakuten.toLocaleString()}</td>
                 <td className="px-3 py-3 text-center border">{totals.yahoo.toLocaleString()}</td>
