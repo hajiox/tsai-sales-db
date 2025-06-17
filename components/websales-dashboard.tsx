@@ -126,4 +126,21 @@ const WebSalesDashboard = () => {
                       <td className="px-4 py-3 text-center">{r.amazon_count || '-'}</td>
                       <td className="px-4 py-3 text-center">{r.rakuten_count || '-'}</td>
                       <td className="px-4 py-3 text-center">{r.yahoo_count || '-'}</td>
-                      <td className="px
+                      <td className="px-4 py-3 text-center">{r.mercari_count || '-'}</td>
+                      <td className="px-4 py-3 text-center">{r.base_count || '-'}</td>
+                      <td className="px-4 py-3 text-center">{r.qoo10_count || '-'}</td>
+                      <td className="px-4 py-3 text-center font-bold">{totalCount}</td>
+                      <td className="px-4 py-3 text-right font-bold">{totalRevenue.toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default WebSalesDashboard;
