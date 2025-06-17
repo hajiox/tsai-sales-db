@@ -2,25 +2,20 @@
 
 import { useEffect, useState } from "react";
 
-// 正しい型定義（実際のデータベース構造に合わせる）
+// 型定義
 type SummaryRow = {
   id: number;
-  product_id: number | null;
   product_name: string;
   series_name: string | null;
   price: number | null;
-  report_month: string | null;
   amazon_count: number | null;
   rakuten_count: number | null;
   yahoo_count: number | null;
   mercari_count: number | null;
   base_count: number | null;
   qoo10_count: number | null;
-  floor_count: number | null;
   total_count: number | null;
   total_sales: number | null;
-  created_at: string;
-  updated_at: string;
 };
 
 // シリーズ名に応じた背景色を取得するヘルパー関数
@@ -33,9 +28,7 @@ const getSeriesColor = (seriesName: string | null) => {
     hash = hash & hash;
   }
   const colors = [
-    'bg-blue-50', 'bg-green-50', 'bg-yellow-50', 'bg-purple-50', 'bg-pink-50', 'bg-indigo-50',
-    'bg-gray-50', 'bg-red-50', 'bg-orange-50', 'bg-teal-50', 'bg-cyan-50', 'bg-lime-50',
-    'bg-emerald-50', 'bg-violet-50', 'bg-fuchsia-50', 'bg-rose-50'
+    'bg-blue-50', 'bg-green-50', 'bg-yellow-50', 'bg-purple-50', 'bg-pink-50', 'bg-indigo-50'
   ];
   const index = Math.abs(hash % colors.length);
   return colors[index];
@@ -46,40 +39,61 @@ const WebSalesDashboard = () => {
   const [summary, setSummary] = useState<SummaryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // 月選択の機能
   const [month, setMonth] = useState<string>('2025-04');
 
   useEffect(() => {
+    // ビルド時（サーバーサイド）では実行しない
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
+
     const fetchData = async () => {
-      setLoading(true);
-      setError(null);
       try {
-        const response = await fetch('/api/web-sales-data'); 
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch('/api/web-sales-data');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
         const data = await response.json();
         
         if (data && Array.isArray(data.data)) {
-          // product_numberではなくidでソート
-          const sortedData = data.data.sort((a: SummaryRow, b: SummaryRow) => a.id - b.id);
-          setSummary(sortedData);
+          setSummary(data.data.slice(0, 5)); // 最初の5件のみ表示
         } else {
           setSummary([]);
         }
       } catch (e: any) {
+        console.error('データ取得エラー:', e);
         setError(e.message);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-  }, [month]);
+    // タイマーを使って無限ループを防ぐ
+    const timer = setTimeout(fetchData, 100);
+    
+    return () => clearTimeout(timer);
+  }, []); // monthの依存を一時的に削除
 
-  if (loading) return <div className="flex justify-center items-center h-64">Loading...</div>;
-  if (error) return <div className="p-4 text-red-600 bg-red-100 rounded-md">Error: {error}</div>;
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div>Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-red-600 bg-red-100 rounded-md">
+        Error: {error}
+      </div>
+    );
+  }
   
   return (
     <div className="w-full space-y-6">
@@ -101,55 +115,48 @@ const WebSalesDashboard = () => {
           <h3 className="text-xl font-semibold">{month}月 販売実績</h3>
         </div>
         <div className="p-6">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">商品名</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600 whitespace-nowrap">シリーズ</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600 whitespace-nowrap">単価</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">Amazon</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">楽天</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">Yahoo!</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">メルカリ</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">BASE</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">Qoo10</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">フロア</th>
-                  <th className="px-4 py-3 text-center font-bold text-gray-700 whitespace-nowrap">合計数量</th>
-                  <th className="px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">合計金額</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.map((r) => {
-                  // データベースに既に計算済みの値がある場合はそれを使用、なければ計算
-                  const totalCount = r.total_count || (
-                    (r.amazon_count || 0) + (r.rakuten_count || 0) + (r.yahoo_count || 0) + 
-                    (r.mercari_count || 0) + (r.base_count || 0) + (r.qoo10_count || 0) + (r.floor_count || 0)
-                  );
-                  
-                  const totalRevenue = r.total_sales || (totalCount * (r.price || 0));
-                  const rowColor = getSeriesColor(r.series_name);
+          {summary.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              データがありません
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">商品名</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">シリーズ</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">単価</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">Amazon</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">楽天</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">Yahoo!</th>
+                    <th className="px-4 py-3 text-center font-bold text-gray-700">合計数量</th>
+                    <th className="px-4 py-3 text-right font-bold text-gray-700">合計金額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.map((r) => {
+                    const totalCount = r.total_count || 0;
+                    const totalRevenue = r.total_sales || 0;
+                    const rowColor = getSeriesColor(r.series_name);
 
-                  return (
-                    <tr key={r.id} className={`border-t ${rowColor} hover:bg-gray-100`}>
-                      <td className="px-4 py-3 font-medium whitespace-nowrap">{r.product_name}</td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">{r.series_name || '-'}</td>
-                      <td className="px-4 py-3 text-right">{r.price ? `¥${r.price.toLocaleString()}` : '-'}</td>
-                      <td className="px-4 py-3 text-center">{r.amazon_count || '-'}</td>
-                      <td className="px-4 py-3 text-center">{r.rakuten_count || '-'}</td>
-                      <td className="px-4 py-3 text-center">{r.yahoo_count || '-'}</td>
-                      <td className="px-4 py-3 text-center">{r.mercari_count || '-'}</td>
-                      <td className="px-4 py-3 text-center">{r.base_count || '-'}</td>
-                      <td className="px-4 py-3 text-center">{r.qoo10_count || '-'}</td>
-                      <td className="px-4 py-3 text-center">{r.floor_count || '-'}</td>
-                      <td className="px-4 py-3 text-center font-bold">{totalCount}</td>
-                      <td className="px-4 py-3 text-right font-bold">¥{totalRevenue.toLocaleString()}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    return (
+                      <tr key={r.id} className={`border-t ${rowColor} hover:bg-gray-100`}>
+                        <td className="px-4 py-3 font-medium">{r.product_name}</td>
+                        <td className="px-4 py-3 text-center">{r.series_name || '-'}</td>
+                        <td className="px-4 py-3 text-right">{r.price ? `¥${r.price.toLocaleString()}` : '-'}</td>
+                        <td className="px-4 py-3 text-center">{r.amazon_count || '-'}</td>
+                        <td className="px-4 py-3 text-center">{r.rakuten_count || '-'}</td>
+                        <td className="px-4 py-3 text-center">{r.yahoo_count || '-'}</td>
+                        <td className="px-4 py-3 text-center font-bold">{totalCount}</td>
+                        <td className="px-4 py-3 text-right font-bold">¥{totalRevenue.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
