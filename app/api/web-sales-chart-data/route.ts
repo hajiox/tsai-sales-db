@@ -12,7 +12,7 @@ export async function GET() {
   try {
     // 過去6ヶ月の開始日を計算
     const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5); // 今月含めて6ヶ月
     const startDate = sixMonthsAgo.toISOString().split('T')[0];
 
     // 過去6ヶ月のデータを取得
@@ -35,40 +35,48 @@ export async function GET() {
       return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
-    // 月別に集計
+    // 過去6ヶ月分の枠を作成
     const monthlyData: { [key: string]: any } = {};
+    const currentDate = new Date();
     
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(currentDate);
+      date.setMonth(date.getMonth() - i);
+      const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+      
+      monthlyData[monthKey] = {
+        month: monthKey,
+        amazon: 0,
+        rakuten: 0,
+        yahoo: 0,
+        mercari: 0,
+        base: 0,
+        qoo10: 0,
+        total: 0
+      };
+    }
+    
+    // 実際のデータを集計
     data?.forEach(row => {
       const date = new Date(row.report_month + 'T00:00:00');
       const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`;
       
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = {
-          month: monthKey,
-          amazon: 0,
-          rakuten: 0,
-          yahoo: 0,
-          mercari: 0,
-          base: 0,
-          qoo10: 0,
-          total: 0
-        };
+      if (monthlyData[monthKey]) {
+        monthlyData[monthKey].amazon += row.amazon_count || 0;
+        monthlyData[monthKey].rakuten += row.rakuten_count || 0;
+        monthlyData[monthKey].yahoo += row.yahoo_count || 0;
+        monthlyData[monthKey].mercari += row.mercari_count || 0;
+        monthlyData[monthKey].base += row.base_count || 0;
+        monthlyData[monthKey].qoo10 += row.qoo10_count || 0;
+        
+        monthlyData[monthKey].total = 
+          monthlyData[monthKey].amazon + 
+          monthlyData[monthKey].rakuten + 
+          monthlyData[monthKey].yahoo + 
+          monthlyData[monthKey].mercari + 
+          monthlyData[monthKey].base + 
+          monthlyData[monthKey].qoo10;
       }
-      
-      monthlyData[monthKey].amazon += row.amazon_count || 0;
-      monthlyData[monthKey].rakuten += row.rakuten_count || 0;
-      monthlyData[monthKey].yahoo += row.yahoo_count || 0;
-      monthlyData[monthKey].mercari += row.mercari_count || 0;
-      monthlyData[monthKey].base += row.base_count || 0;
-      monthlyData[monthKey].qoo10 += row.qoo10_count || 0;
-      
-      monthlyData[monthKey].total = 
-        monthlyData[monthKey].amazon + 
-        monthlyData[monthKey].rakuten + 
-        monthlyData[monthKey].yahoo + 
-        monthlyData[monthKey].mercari + 
-        monthlyData[monthKey].base + 
-        monthlyData[monthKey].qoo10;
     });
 
     // 配列に変換
