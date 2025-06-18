@@ -52,56 +52,47 @@ export async function PUT(request: NextRequest) {
     })
 
     const body = await request.json();
-    console.log('受信データ:', body);
-
     const { product_id, report_month, field, value } = body;
 
     if (!product_id || !report_month || !field || value === undefined) {
-      console.error('パラメータ不足:', { product_id, report_month, field, value });
       return NextResponse.json(
         { error: '必須パラメータが不足しています' },
         { status: 400 }
       );
     }
 
+    // 月形式を日付形式に変換 (2025-04 → 2025-04-01)
+    const formattedMonth = report_month.length === 7 ? `${report_month}-01` : report_month;
+
     // 既存レコードを検索
     const { data: existingData, error: selectError } = await supabase
       .from('web_sales_summary')
       .select('*')
       .eq('product_id', product_id)
-      .eq('report_month', report_month);
+      .eq('report_month', formattedMonth);
 
     if (selectError) {
       console.error('検索エラー:', selectError);
       throw selectError;
     }
 
-    console.log('既存データ:', existingData);
-
     let result;
     if (existingData && existingData.length > 0) {
       // 既存レコードを更新
-      console.log('既存レコード更新:', { product_id, report_month, field, value });
-      
       const { data, error } = await supabase
         .from('web_sales_summary')
         .update({ [field]: value })
         .eq('product_id', product_id)
-        .eq('report_month', report_month)
+        .eq('report_month', formattedMonth)
         .select();
 
-      if (error) {
-        console.error('更新エラー:', error);
-        throw error;
-      }
+      if (error) throw error;
       result = data;
     } else {
       // 新規レコードを作成
-      console.log('新規レコード作成:', { product_id, report_month, field, value });
-      
       const insertData = {
         product_id,
-        report_month,
+        report_month: formattedMonth,
         amazon_count: field === 'amazon_count' ? value : 0,
         rakuten_count: field === 'rakuten_count' ? value : 0,
         yahoo_count: field === 'yahoo_count' ? value : 0,
@@ -115,14 +106,9 @@ export async function PUT(request: NextRequest) {
         .insert(insertData)
         .select();
 
-      if (error) {
-        console.error('挿入エラー:', error);
-        throw error;
-      }
+      if (error) throw error;
       result = data;
     }
-
-    console.log('保存成功:', result);
 
     return NextResponse.json({ 
       success: true, 
@@ -135,8 +121,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(
       { 
         error: '販売数の保存に失敗しました', 
-        details: error.message,
-        stack: error.stack 
+        details: error.message
       },
       { status: 500 }
     );
