@@ -4,80 +4,102 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { supabase } from "../lib/supabase"
 
-const SITES = [
-  { key: "amazon", name: "Amazon" },
-  { key: "rakuten", name: "楽天" },
-  { key: "yahoo", name: "Yahoo" },
-  { key: "mercari", name: "メルカリ" },
-  { key: "base", name: "BASE" },
-  { key: "qoo10", name: "Qoo10" },
-]
-
-type Totals = Record<string, { count: number; amount: number }>
+type SeriesSummary = {
+  seriesName: string;
+  count: number;
+  sales: number;
+}
 
 export default function WebSalesSummaryCards({ month }: { month: string }) {
-  const [totals, setTotals] = useState<Totals | null>(null)
+  const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([])
+  const [totalCount, setTotalCount] = useState(0)
 
   useEffect(() => {
     const fetchData = async () => {
-      const start = `${month}-01`
-      const next = new Date(start)
-      next.setMonth(next.getMonth() + 1)
-      const end = next.toISOString().slice(0, 10)
+      try {
+        const { data, error } = await supabase.rpc("web_sales_full_month", {
+          target_month: month,
+        });
 
-      const { data, error } = await supabase
-        .from("web_sales")
-        .select(
-          "created_at, price, amazon, rakuten, yahoo, mercari, base, qoo10"
-        )
-        .gte("created_at", start)
-        .lt("created_at", end)
+        if (error) throw error;
+        
+        const rows = (data as any[]) ?? [];
+        
+        // シリーズ別集計
+        const seriesMap = new Map<string, { count: number; sales: number }>();
+        let grandTotal = 0;
 
-      if (error) {
-        console.error("fetch_error", error)
-        return
+        rows.forEach((row: any) => {
+          const seriesName = row.series_name || '未分類';
+          const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
+                            (row.yahoo_count || 0) + (row.mercari_count || 0) + 
+                            (row.base_count || 0) + (row.qoo10_count || 0);
+          const totalSales = totalCount * (row.price || 0);
+          
+          grandTotal += totalCount;
+
+          if (!seriesMap.has(seriesName)) {
+            seriesMap.set(seriesName, { count: 0, sales: 0 });
+          }
+          const existing = seriesMap.get(seriesName)!;
+          existing.count += totalCount;
+          existing.sales += totalSales;
+        });
+
+        // 売上順にソート
+        const sortedSeries = Array.from(seriesMap.entries())
+          .map(([seriesName, data]) => ({
+            seriesName,
+            count: data.count,
+            sales: data.sales
+          }))
+          .sort((a, b) => b.sales - a.sales);
+
+        setSeriesSummary(sortedSeries);
+        setTotalCount(grandTotal);
+        
+      } catch (error) {
+        console.error('データ読み込みエラー:', error);
+        setSeriesSummary([]);
+        setTotalCount(0);
       }
+    };
 
-      const init: Totals = {}
-      SITES.forEach((s) => {
-        init[s.key] = { count: 0, amount: 0 }
-      })
-
-      ;(data || []).forEach((row: any) => {
-        SITES.forEach((s) => {
-          const qty = row[s.key] ?? 0
-          const price = row.price ?? 0
-          init[s.key].count += qty
-          init[s.key].amount += qty * price
-        })
-      })
-
-      setTotals(init)
-    }
-
-    fetchData()
+    fetchData();
   }, [month])
 
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-4">
-      {SITES.map((s) => (
-        <Card key={s.key}>
-          <CardHeader>
-            <CardTitle className="text-sm">{s.name}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="text-xl font-bold">
-              {totals ? f(totals[s.key].count) : "-"} 件
-            </div>
-            <div className="text-sm text-gray-500">
-              ¥{totals ? f(totals[s.key].amount) : "-"}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-4">
+      {/* 総販売数 */}
+      <div className="bg-green-50 p-4 rounded-lg text-center">
+        <h2 className="text-lg font-semibold mb-2">📊 {month}月 販売実績サマリー</h2>
+        <div className="text-2xl font-bold text-green-600">
+          総販売数: {f(totalCount)}個
+        </div>
+      </div>
+
+      {/* シリーズ別売上サマリー */}
+      <div className="grid grid-cols-8 gap-3">
+        {seriesSummary.map((series) => (
+          <Card key={series.seriesName} className="text-center">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">
+                {series.seriesName}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-1">
+              <div className="text-base font-bold text-blue-600">
+                {f(series.count)}個
+              </div>
+              <div className="text-xs text-green-600 font-semibold">
+                ¥{f(series.sales)}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   )
 }
-
