@@ -18,13 +18,16 @@ export default function WebSalesDashboardPage() {
   }
 
   const handlePeriodSelect = (period: '6months' | '1year') => {
-    const currentDate = new Date()
+    // 現在表示中の月から期間を計算
+    const currentMonth = new Date(month + '-01')
     let targetDate: Date
 
     if (period === '6months') {
-      targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 5, 1)
+      // 現在の月から5ヶ月前（6ヶ月間の開始月）
+      targetDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 5, 1)
     } else {
-      targetDate = new Date(currentDate.getFullYear() - 1, currentDate.getMonth(), 1)
+      // 現在の月から11ヶ月前（12ヶ月間の開始月）
+      targetDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 11, 1)
     }
 
     const targetMonth = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`
@@ -72,3 +75,4 @@ export default function WebSalesDashboardPage() {
     </div>
   )
 }
+
