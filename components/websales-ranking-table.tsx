@@ -66,7 +66,7 @@ export default function WebSalesRankingTable({ month }: Props) {
 
       const desc = [...arr].sort((a, b) => b.total_count - a.total_count)
       const asc = [...arr].sort((a, b) => a.total_count - b.total_count)
-      setBestRows(desc.slice(0, 20))
+      setBestRows(desc.slice(0, 10))
       setWorstRows(asc.slice(0, 10))
     }
 
@@ -76,48 +76,51 @@ export default function WebSalesRankingTable({ month }: Props) {
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
 
   return (
-    <div className="space-y-6">
+    <div className="grid grid-cols-2 gap-6">
+      {/* ベスト10 */}
       <div>
-        <h3 className="font-semibold mb-2">ベスト20</h3>
-        <table className="min-w-full text-sm border">
-          <thead className="bg-gray-100">
+        <h3 className="font-semibold mb-3 text-green-700">🏆 ベスト10</h3>
+        <table className="min-w-full text-xs border">
+          <thead className="bg-green-50">
             <tr>
-              <th className="border px-2 py-1">順位</th>
+              <th className="border px-1 py-1 w-12">順位</th>
               <th className="border px-2 py-1">商品名</th>
-              <th className="border px-2 py-1">件数</th>
-              <th className="border px-2 py-1">売上金額</th>
+              <th className="border px-1 py-1 w-16">件数</th>
+              <th className="border px-1 py-1 w-20">売上金額</th>
             </tr>
           </thead>
           <tbody>
             {bestRows.map((r, i) => (
-              <tr key={r.product_name} className="text-center">
-                <td className="border px-2 py-1">{i + 1}位</td>
-                <td className="border px-2 py-1 text-left">{r.product_name}</td>
-                <td className="border px-2 py-1">{f(r.total_count)}</td>
-                <td className="border px-2 py-1">¥{f(r.total_amount)}</td>
+              <tr key={r.product_name} className="text-center hover:bg-green-50">
+                <td className="border px-1 py-1 font-medium">{i + 1}</td>
+                <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
+                <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
+                <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* ワースト10 */}
       <div>
-        <h3 className="font-semibold mb-2">ワースト10</h3>
-        <table className="min-w-full text-sm border">
-          <thead className="bg-gray-100">
+        <h3 className="font-semibold mb-3 text-red-700">📉 ワースト10</h3>
+        <table className="min-w-full text-xs border">
+          <thead className="bg-red-50">
             <tr>
-              <th className="border px-2 py-1">順位</th>
+              <th className="border px-1 py-1 w-12">順位</th>
               <th className="border px-2 py-1">商品名</th>
-              <th className="border px-2 py-1">件数</th>
-              <th className="border px-2 py-1">売上金額</th>
+              <th className="border px-1 py-1 w-16">件数</th>
+              <th className="border px-1 py-1 w-20">売上金額</th>
             </tr>
           </thead>
           <tbody>
             {worstRows.map((r, i) => (
-              <tr key={r.product_name} className="text-center">
-                <td className="border px-2 py-1">{i + 1}位</td>
-                <td className="border px-2 py-1 text-left">{r.product_name}</td>
-                <td className="border px-2 py-1">{f(r.total_count)}</td>
-                <td className="border px-2 py-1">¥{f(r.total_amount)}</td>
+              <tr key={r.product_name} className="text-center hover:bg-red-50">
+                <td className="border px-1 py-1 font-medium">{i + 1}</td>
+                <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
+                <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
+                <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
               </tr>
             ))}
           </tbody>
@@ -126,4 +129,3 @@ export default function WebSalesRankingTable({ month }: Props) {
     </div>
   )
 }
-
