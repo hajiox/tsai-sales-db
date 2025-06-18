@@ -30,10 +30,14 @@ type EditingCell = {
 
 export default function WebSalesEditableTable({ month }: { month: string }) {
   const [rows, setRows] = useState<SummaryRow[]>([]);
+  const [originalRows, setOriginalRows] = useState<SummaryRow[]>([]);
   const [seriesList, setSeriesList] = useState<SeriesMaster[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [saveMessage, setSaveMessage] = useState<string>("");
+  const [savingRows, setSavingRows] = useState<Set<string>>(new Set());
+  const [savingAll, setSavingAll] = useState<boolean>(false);
   
   // シリーズ管理用の状態
   const [showSeriesForm, setShowSeriesForm] = useState(false);
@@ -63,10 +67,13 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       });
 
       if (error) throw error;
-      setRows((data as SummaryRow[]) ?? []);
+      const salesData = (data as SummaryRow[]) ?? [];
+      setRows(salesData);
+      setOriginalRows(JSON.parse(JSON.stringify(salesData))); // ディープコピー
     } catch (error) {
       console.error('データ読み込みエラー:', error);
       setRows([]);
+      setOriginalRows([]);
     } finally {
       setLoading(false);
     }
@@ -81,6 +88,118 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       }
     } catch (error) {
       console.error('シリーズ読み込みエラー:', error);
+    }
+  };
+
+  // メッセージ表示
+  const showSaveMessage = (message: string) => {
+    setSaveMessage(message);
+    setTimeout(() => setSaveMessage(""), 3000);
+  };
+
+  // 行が変更されているかチェック
+  const isRowChanged = (rowId: string) => {
+    const currentRow = rows.find(r => r.id === rowId);
+    const originalRow = originalRows.find(r => r.id === rowId);
+    if (!currentRow || !originalRow) return false;
+
+    const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
+    return salesFields.some(field => currentRow[field as keyof SummaryRow] !== originalRow[field as keyof SummaryRow]);
+  };
+
+  // 変更された行を取得
+  const getChangedRows = () => {
+    return rows.filter(row => isRowChanged(row.id));
+  };
+
+  // 単一行保存
+  const saveRow = async (rowId: string) => {
+    const row = rows.find(r => r.id === rowId);
+    if (!row) return;
+
+    setSavingRows(prev => new Set(prev.add(rowId)));
+
+    try {
+      const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
+      
+      for (const field of salesFields) {
+        const value = row[field as keyof SummaryRow] || 0;
+        
+        const response = await fetch('/api/web-sales-data', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_id: row.product_id,
+            report_month: month,
+            field,
+            value
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`${field}の保存に失敗しました`);
+        }
+      }
+
+      // 保存成功時に元データを更新
+      setOriginalRows(prev => prev.map(r => r.id === rowId ? { ...row } : r));
+      showSaveMessage(`「${row.product_name}」の販売数を保存しました`);
+      
+    } catch (error) {
+      console.error('保存エラー:', error);
+      showSaveMessage('保存に失敗しました');
+    } finally {
+      setSavingRows(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(rowId);
+        return newSet;
+      });
+    }
+  };
+
+  // 一括保存
+  const saveAllChanges = async () => {
+    const changedRows = getChangedRows();
+    if (changedRows.length === 0) {
+      showSaveMessage('変更がありません');
+      return;
+    }
+
+    setSavingAll(true);
+
+    try {
+      for (const row of changedRows) {
+        const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
+        
+        for (const field of salesFields) {
+          const value = row[field as keyof SummaryRow] || 0;
+          
+          const response = await fetch('/api/web-sales-data', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              product_id: row.product_id,
+              report_month: month,
+              field,
+              value
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`${row.product_name}の${field}保存に失敗しました`);
+          }
+        }
+      }
+
+      // 保存成功時に元データを更新
+      setOriginalRows(JSON.parse(JSON.stringify(rows)));
+      showSaveMessage(`${changedRows.length}商品の販売数を一括保存しました`);
+      
+    } catch (error) {
+      console.error('一括保存エラー:', error);
+      showSaveMessage('一括保存に失敗しました');
+    } finally {
+      setSavingAll(false);
     }
   };
 
@@ -101,7 +220,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       if (response.ok) {
         setNewSeriesName("");
         setShowSeriesForm(false);
-        loadSeries(); // リロード
+        loadSeries();
         alert('シリーズが追加されました');
       } else {
         alert('エラー: ' + result.error);
@@ -139,7 +258,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       if (response.ok) {
         setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" });
         setShowProductForm(false);
-        loadData(); // データをリロード
+        loadData();
         alert('商品が追加されました');
       } else {
         alert('エラー: ' + result.error);
@@ -166,7 +285,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       const result = await response.json();
       
       if (response.ok) {
-        loadData(); // データをリロード
+        loadData();
         alert('商品が削除されました');
       } else {
         alert('エラー: ' + result.error);
@@ -191,7 +310,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       const result = await response.json();
       
       if (response.ok) {
-        loadSeries(); // リロード
+        loadSeries();
         alert('シリーズが削除されました');
       } else {
         alert('エラー: ' + result.error);
@@ -225,9 +344,6 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
 
     setEditingCell(null);
     setEditValue("");
-
-    // 保存処理（今後実装）
-    console.log('保存:', { rowId: editingCell.rowId, field: editingCell.field, value: newValue });
   };
 
   // 編集キャンセル
@@ -251,7 +367,6 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     const seriesNum = parseInt(seriesName);
     if (isNaN(seriesNum)) return 'bg-white';
     
-    // 偶数・奇数で色分け
     return seriesNum % 2 === 0 ? 'bg-gray-50' : 'bg-white';
   };
 
@@ -294,8 +409,31 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     );
   }
 
+  const changedRowsCount = getChangedRows().length;
+
   return (
     <div className="space-y-4">
+      {/* 保存メッセージ */}
+      {saveMessage && (
+        <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+          {saveMessage}
+        </div>
+      )}
+
+      {/* 上部一括保存ボタン */}
+      <div className="flex justify-between items-center">
+        <div className="text-sm text-gray-600">
+          変更された商品: {changedRowsCount}件
+        </div>
+        <button
+          onClick={saveAllChanges}
+          disabled={savingAll || changedRowsCount === 0}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+        >
+          {savingAll ? '保存中...' : `一括保存 (${changedRowsCount}件)`}
+        </button>
+      </div>
+
       {/* 編集可能テーブル */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
@@ -375,7 +513,8 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
                 <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">操作</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-20">保存</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">削除</th>
               </tr>
             </thead>
             <tbody>
@@ -385,10 +524,12 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
                                  (row.base_count || 0) + (row.qoo10_count || 0);
                 
                 const rowBgColor = getSeriesRowColor(row.series_name);
+                const isChanged = isRowChanged(row.id);
+                const isSaving = savingRows.has(row.id);
                 
                 return (
-                  <tr key={row.id} className={`border-b hover:brightness-95 ${rowBgColor}`}>
-                    <td className={`px-2 py-1 text-left border sticky left-0 ${rowBgColor} z-10 text-xs`}>{row.product_name}</td>
+                  <tr key={row.id} className={`border-b hover:brightness-95 ${rowBgColor} ${isChanged ? 'bg-yellow-50' : ''}`}>
+                    <td className={`px-2 py-1 text-left border sticky left-0 ${isChanged ? 'bg-yellow-50' : rowBgColor} z-10 text-xs`}>{row.product_name}</td>
                     <td className="px-2 py-1 text-center border text-xs">{row.series_name || '-'}</td>
                     <td className="px-2 py-1 text-center border text-xs">{row.product_number}</td>
                     <td className="px-2 py-1 text-right border text-xs">¥{(row.price || 0).toLocaleString()}</td>
@@ -415,6 +556,15 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
                     </td>
                     <td className="px-2 py-1 text-center border">
                       <button
+                        onClick={() => saveRow(row.id)}
+                        disabled={isSaving || !isChanged}
+                        className="px-2 py-0.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      >
+                        {isSaving ? '保存中' : '保存'}
+                      </button>
+                    </td>
+                    <td className="px-2 py-1 text-center border">
+                      <button
                         onClick={() => handleDeleteProduct(row.id, row.product_name)}
                         className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600"
                         disabled={totalCount > 0}
@@ -429,6 +579,17 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* 下部一括保存ボタン */}
+      <div className="flex justify-end">
+        <button
+          onClick={saveAllChanges}
+          disabled={savingAll || changedRowsCount === 0}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+        >
+          {savingAll ? '保存中...' : `一括保存 (${changedRowsCount}件)`}
+        </button>
       </div>
 
       {/* シリーズ管理セクション */}
