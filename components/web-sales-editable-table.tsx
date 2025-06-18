@@ -392,6 +392,7 @@ export default function WebSalesEditableTable({
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleCellSave}
           onKeyDown={handleKeyDown}
+          onFocus={(e) => e.target.select()} // 追加：フォーカス時に全選択
           className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-center"
           autoFocus
         />
