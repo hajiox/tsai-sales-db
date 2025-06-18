@@ -12,26 +12,23 @@ export const dynamic = 'force-dynamic'
 export default function WebSalesDashboardPage() {
   const [month, setMonth] = useState<string>('2025-04')
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0)
+  const [viewMode, setViewMode] = useState<'single' | 'period'>('single')
+  const [periodMonths, setPeriodMonths] = useState<number>(6)
 
   const handleDataSaved = () => {
     setRefreshTrigger(prev => prev + 1)
   }
 
   const handlePeriodSelect = (period: '6months' | '1year') => {
-    // 現在表示中の月から期間を計算
-    const currentMonth = new Date(month + '-01')
-    let targetDate: Date
+    setViewMode('period')
+    setPeriodMonths(period === '6months' ? 6 : 12)
+    setRefreshTrigger(prev => prev + 1)
+  }
 
-    if (period === '6months') {
-      // 現在の月から5ヶ月前（6ヶ月間の開始月）
-      targetDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 5, 1)
-    } else {
-      // 現在の月から11ヶ月前（12ヶ月間の開始月）
-      targetDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 11, 1)
-    }
-
-    const targetMonth = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`
-    setMonth(targetMonth)
+  const handleMonthSelect = (newMonth: string) => {
+    setMonth(newMonth)
+    setViewMode('single')
+    setRefreshTrigger(prev => prev + 1)
   }
 
   return (
@@ -39,31 +36,49 @@ export default function WebSalesDashboardPage() {
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">WEB販売管理システム</h1>
-          <p className="text-gray-500">月次の販売実績を確認・管理します。</p>
+          <p className="text-gray-500">
+            {viewMode === 'single' 
+              ? '月次の販売実績を確認・管理します。' 
+              : `${month}を基準とした過去${periodMonths}ヶ月の集計データを表示中`
+            }
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => handlePeriodSelect('6months')}
-            className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200"
+            className={`px-3 py-1 rounded text-sm ${
+              viewMode === 'period' && periodMonths === 6 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+            }`}
           >
             過去6ヶ月
           </button>
           <button
             onClick={() => handlePeriodSelect('1year')}
-            className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200"
+            className={`px-3 py-1 rounded text-sm ${
+              viewMode === 'period' && periodMonths === 12 
+                ? 'bg-green-600 text-white' 
+                : 'bg-green-100 text-green-700 hover:bg-green-200'
+            }`}
           >
             過去1年
           </button>
           <input
             type="month"
             value={month}
-            onChange={(e) => setMonth(e.target.value)}
+            onChange={(e) => handleMonthSelect(e.target.value)}
             className="border rounded-md text-base p-2 bg-white"
           />
         </div>
       </header>
 
-      <WebSalesSummaryCards month={month} refreshTrigger={refreshTrigger} />
+      <WebSalesSummaryCards 
+        month={month} 
+        refreshTrigger={refreshTrigger}
+        viewMode={viewMode}
+        periodMonths={periodMonths}
+      />
       
       <WebSalesCharts month={month} refreshTrigger={refreshTrigger} />
       
@@ -75,4 +90,3 @@ export default function WebSalesDashboardPage() {
     </div>
   )
 }
-
