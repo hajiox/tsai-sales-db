@@ -1,65 +1,88 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic';
 
-// 既存のGET処理
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const month = searchParams.get('month');
-
-  if (!month) {
-    return NextResponse.json(
-      { error: 'month パラメータが必要です' },
-      { status: 400 }
-    );
-  }
-
+export async function GET() {
   try {
-    const { data, error } = await supabase.rpc('web_sales_full_month', {
-      target_month: month
-    });
-
-    if (error) throw error;
-
-    return NextResponse.json({ data: data || [] });
-  } catch (error) {
-    console.error('データ取得エラー:', error);
-    return NextResponse.json(
-      { error: 'データの取得に失敗しました' },
-      { status: 500 }
-    );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+    
+    const { data, error } = await supabase
+      .from('web_sales_summary')
+      .select('*')
+      
+    if (error) {
+      console.error('Supabaseエラー:', error)
+      return NextResponse.json({ 
+        error: error.message 
+      }, { status: 500 })
+    }
+    
+    return NextResponse.json({ 
+      data: data || [],
+      count: data?.length || 0
+    })
+    
+  } catch (error: any) {
+    console.error('APIエラー:', error)
+    return NextResponse.json({ 
+      error: error.message 
+    }, { status: 500 })
   }
 }
 
-// 新規追加：販売数保存処理
 export async function PUT(request: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+
     const body = await request.json();
+    console.log('受信データ:', body);
+
     const { product_id, report_month, field, value } = body;
 
     if (!product_id || !report_month || !field || value === undefined) {
+      console.error('パラメータ不足:', { product_id, report_month, field, value });
       return NextResponse.json(
         { error: '必須パラメータが不足しています' },
         { status: 400 }
       );
     }
 
-    // 対象月のレコードを確認・作成
+    // 既存レコードを検索
     const { data: existingData, error: selectError } = await supabase
       .from('web_sales_summary')
-      .select('id')
+      .select('*')
       .eq('product_id', product_id)
-      .eq('report_month', report_month)
-      .single();
+      .eq('report_month', report_month);
 
-    if (selectError && selectError.code !== 'PGRST116') {
+    if (selectError) {
+      console.error('検索エラー:', selectError);
       throw selectError;
     }
 
+    console.log('既存データ:', existingData);
+
     let result;
-    if (existingData) {
+    if (existingData && existingData.length > 0) {
       // 既存レコードを更新
+      console.log('既存レコード更新:', { product_id, report_month, field, value });
+      
       const { data, error } = await supabase
         .from('web_sales_summary')
         .update({ [field]: value })
@@ -67,20 +90,24 @@ export async function PUT(request: NextRequest) {
         .eq('report_month', report_month)
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('更新エラー:', error);
+        throw error;
+      }
       result = data;
     } else {
       // 新規レコードを作成
+      console.log('新規レコード作成:', { product_id, report_month, field, value });
+      
       const insertData = {
         product_id,
         report_month,
-        amazon_count: 0,
-        rakuten_count: 0,
-        yahoo_count: 0,
-        mercari_count: 0,
-        base_count: 0,
-        qoo10_count: 0,
-        [field]: value
+        amazon_count: field === 'amazon_count' ? value : 0,
+        rakuten_count: field === 'rakuten_count' ? value : 0,
+        yahoo_count: field === 'yahoo_count' ? value : 0,
+        mercari_count: field === 'mercari_count' ? value : 0,
+        base_count: field === 'base_count' ? value : 0,
+        qoo10_count: field === 'qoo10_count' ? value : 0
       };
 
       const { data, error } = await supabase
@@ -88,9 +115,14 @@ export async function PUT(request: NextRequest) {
         .insert(insertData)
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('挿入エラー:', error);
+        throw error;
+      }
       result = data;
     }
+
+    console.log('保存成功:', result);
 
     return NextResponse.json({ 
       success: true, 
@@ -98,10 +130,14 @@ export async function PUT(request: NextRequest) {
       data: result 
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('販売数保存エラー:', error);
     return NextResponse.json(
-      { error: '販売数の保存に失敗しました' },
+      { 
+        error: '販売数の保存に失敗しました', 
+        details: error.message,
+        stack: error.stack 
+      },
       { status: 500 }
     );
   }
