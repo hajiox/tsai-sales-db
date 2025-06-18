@@ -152,6 +152,31 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     }
   };
 
+  // 商品削除
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!confirm(`「${productName}」を削除しますか？`)) return;
+    
+    try {
+      const response = await fetch('/api/products-master', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: productId })
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        loadData(); // データをリロード
+        alert('商品が削除されました');
+      } else {
+        alert('エラー: ' + result.error);
+      }
+    } catch (error) {
+      console.error('商品削除エラー:', error);
+      alert('商品削除に失敗しました');
+    }
+  };
+
   // シリーズ削除
   const handleDeleteSeries = async (seriesId: number, seriesName: string) => {
     if (!confirm(`「${seriesName}」を削除しますか？`)) return;
