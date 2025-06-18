@@ -5,12 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { supabase } from "../lib/supabase"
 
 const SITES = [
-  { key: "amazon", name: "Amazon" },
-  { key: "rakuten", name: "楽天" },
-  { key: "yahoo", name: "Yahoo" },
-  { key: "mercari", name: "メルカリ" },
-  { key: "base", name: "BASE" },
-  { key: "qoo10", name: "Qoo10" },
+  { key: "amazon_count", name: "Amazon" },
+  { key: "rakuten_count", name: "楽天" },
+  { key: "yahoo_count", name: "Yahoo" },
+  { key: "mercari_count", name: "メルカリ" },
+  { key: "base_count", name: "BASE" },
+  { key: "qoo10_count", name: "Qoo10" },
 ]
 
 type Totals = Record<string, { count: number; amount: number }>
@@ -21,56 +21,46 @@ type SeriesSummary = {
   sales: number;
 }
 
-export default function WebSalesSummaryCards({ month }: { month: string }) {
+export default function WebSalesSummaryCards({ 
+  month, 
+  refreshTrigger 
+}: { 
+  month: string;
+  refreshTrigger?: number;
+}) {
   const [totals, setTotals] = useState<Totals | null>(null)
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
-      const start = `${month}-01`
-      const next = new Date(start)
-      next.setMonth(next.getMonth() + 1)
-      const end = next.toISOString().slice(0, 10)
-
-      // ECサイト別データ取得（元のロジック）
-      const { data, error } = await supabase
-        .from("web_sales")
-        .select(
-          "created_at, price, amazon, rakuten, yahoo, mercari, base, qoo10"
-        )
-        .gte("created_at", start)
-        .lt("created_at", end)
-
-      if (error) {
-        console.error("fetch_error", error)
-        return
-      }
-
-      const init: Totals = {}
-      SITES.forEach((s) => {
-        init[s.key] = { count: 0, amount: 0 }
-      })
-
-      ;(data || []).forEach((row: any) => {
-        SITES.forEach((s) => {
-          const qty = row[s.key] ?? 0
-          const price = row.price ?? 0
-          init[s.key].count += qty
-          init[s.key].amount += qty * price
-        })
-      })
-
-      setTotals(init)
-
-      // シリーズ別データ取得（series_master結合）
       try {
-        const { data: seriesData, error: seriesError } = await supabase.rpc("web_sales_full_month", {
+        // web_sales_summaryテーブルから全データを取得
+        const { data: salesData, error: salesError } = await supabase.rpc("web_sales_full_month", {
           target_month: month,
         });
 
-        if (seriesError) throw seriesError;
+        if (salesError) throw salesError;
 
-        // series_masterテーブルからシリーズ名を取得
+        const rows = (salesData as any[]) ?? [];
+
+        // ECサイト別集計（新ロジック）
+        const init: Totals = {}
+        SITES.forEach((s) => {
+          init[s.key] = { count: 0, amount: 0 }
+        })
+
+        rows.forEach((row: any) => {
+          SITES.forEach((s) => {
+            const qty = row[s.key] ?? 0
+            const price = row.price ?? 0
+            init[s.key].count += qty
+            init[s.key].amount += qty * price
+          })
+        })
+
+        setTotals(init)
+
+        // シリーズマスタを取得
         const { data: seriesMaster, error: masterError } = await supabase
           .from('series_master')
           .select('series_id, series_name');
@@ -81,8 +71,6 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
         const seriesNameMap = new Map(
           seriesMaster.map(item => [item.series_id, item.series_name])
         );
-        
-        const rows = (seriesData as any[]) ?? [];
         
         // シリーズ別集計
         const seriesMap = new Map<string, { count: number; sales: number }>();
@@ -115,13 +103,14 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
         setSeriesSummary(sortedSeries);
         
       } catch (error) {
-        console.error('シリーズデータ読み込みエラー:', error);
+        console.error('データ読み込みエラー:', error);
+        setTotals(null);
         setSeriesSummary([]);
       }
     }
 
     fetchData()
-  }, [month])
+  }, [month, refreshTrigger])
 
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
 
