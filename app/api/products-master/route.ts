@@ -59,9 +59,7 @@ export async function POST(request: Request) {
           yahoo_count: 0,
           mercari_count: 0,
           base_count: 0,
-          qoo10_count: 0,
-          total_count: 0,
-          total_sales: 0
+          qoo10_count: 0
         }
       ])
       .select()
