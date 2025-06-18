@@ -9,6 +9,12 @@ export const dynamic = 'force-dynamic'
 
 export default function WebSalesDashboardPage() {
   const [month, setMonth] = useState<string>('2025-04')
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0)
+
+  // 保存完了時にサマリーを更新
+  const handleDataSaved = () => {
+    setRefreshTrigger(prev => prev + 1)
+  }
 
   return (
     <div className="w-full space-y-6">
@@ -25,9 +31,9 @@ export default function WebSalesDashboardPage() {
         />
       </header>
 
-      <WebSalesSummaryCards month={month} />
+      <WebSalesSummaryCards month={month} refreshTrigger={refreshTrigger} />
       
-      <WebSalesEditableTable month={month} />
+      <WebSalesEditableTable month={month} onDataSaved={handleDataSaved} />
       
       <WebSalesRankingTable month={month} />
     </div>
