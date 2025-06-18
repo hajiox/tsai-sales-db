@@ -10,6 +10,11 @@ const supabase = createClient(
 
 export async function GET() {
   try {
+    // 過去6ヶ月の開始日を計算
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const startDate = sixMonthsAgo.toISOString().split('T')[0];
+
     // 過去6ヶ月のデータを取得
     const { data, error } = await supabase
       .from('web_sales_summary')
@@ -22,6 +27,7 @@ export async function GET() {
         base_count,
         qoo10_count
       `)
+      .gte('report_month', startDate)
       .order('report_month', { ascending: true });
 
     if (error) {
@@ -33,10 +39,8 @@ export async function GET() {
     const monthlyData: { [key: string]: any } = {};
     
     data?.forEach(row => {
-      const monthKey = new Date(row.report_month).toLocaleDateString('ja-JP', { 
-        year: 'numeric', 
-        month: 'short' 
-      });
+      const date = new Date(row.report_month + 'T00:00:00');
+      const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`;
       
       if (!monthlyData[monthKey]) {
         monthlyData[monthKey] = {
@@ -67,8 +71,8 @@ export async function GET() {
         monthlyData[monthKey].qoo10;
     });
 
-    // 配列に変換して過去6ヶ月分のみ返す
-    const chartData = Object.values(monthlyData).slice(-6);
+    // 配列に変換
+    const chartData = Object.values(monthlyData);
 
     return NextResponse.json(chartData);
     
