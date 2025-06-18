@@ -127,8 +127,24 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
 
   return (
     <div className="space-y-6">
-      {/* ECサイト別サマリー（元のまま） */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* ECサイト別サマリー + 総合計 */}
+      <div className="grid grid-cols-7 gap-4">
+        {/* 総合計を左上に表示 */}
+        <Card className="text-center bg-green-50 border-green-200">
+          <CardHeader>
+            <CardTitle className="text-sm">総合計</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-xl font-bold">
+              {seriesSummary.reduce((sum, s) => sum + s.count, 0).toLocaleString()} 件
+            </div>
+            <div className="text-sm text-gray-500">
+              ¥{seriesSummary.reduce((sum, s) => sum + s.sales, 0).toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ECサイト別サマリー（6個） */}
         {SITES.map((s) => (
           <Card key={s.key}>
             <CardHeader>
@@ -148,25 +164,8 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
 
       {/* シリーズ別売上サマリー */}
       <div className="grid grid-cols-7 gap-3">
-        {/* 総合計を左上に表示 */}
-        <Card className="text-center bg-green-50 border-green-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold leading-tight">
-              総合計
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 space-y-1">
-            <div className="text-sm font-bold text-black">
-              {f(seriesSummary.reduce((sum, s) => sum + s.count, 0))}個
-            </div>
-            <div className="text-xs text-gray-500 font-semibold">
-              ¥{f(seriesSummary.reduce((sum, s) => sum + s.sales, 0))}
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* シリーズ別サマリー（6個まで表示） */}
-        {seriesSummary.slice(0, 6).map((series) => (
+        {/* シリーズ別サマリー（7個表示） */}
+        {seriesSummary.slice(0, 7).map((series) => (
           <Card key={series.seriesName} className="text-center">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-semibold leading-tight">
