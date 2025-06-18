@@ -1,57 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+// 既存のGET処理
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const month = searchParams.get('month');
+
+  if (!month) {
+    return NextResponse.json(
+      { error: 'month パラメータが必要です' },
+      { status: 400 }
+    );
+  }
+
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
-    
-    const { data, error } = await supabase
-      .from('web_sales_summary')
-      .select('*')
-      
-    if (error) {
-      console.error('Supabaseエラー:', error)
-      return NextResponse.json({ 
-        error: error.message 
-      }, { status: 500 })
-    }
-    
-    return NextResponse.json({ 
-      data: data || [],
-      count: data?.length || 0
-    })
-    
-  } catch (error: any) {
-    console.error('APIエラー:', error)
-    return NextResponse.json({ 
-      error: error.message 
-    }, { status: 500 })
+    const { data, error } = await supabase.rpc('web_sales_full_month', {
+      target_month: month
+    });
+
+    if (error) throw error;
+
+    return NextResponse.json({ data: data || [] });
+  } catch (error) {
+    console.error('データ取得エラー:', error);
+    return NextResponse.json(
+      { error: 'データの取得に失敗しました' },
+      { status: 500 }
+    );
   }
 }
 
-// 販売数保存処理
+// 新規追加：販売数保存処理
 export async function PUT(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
-
     const body = await request.json();
     const { product_id, report_month, field, value } = body;
 
@@ -115,7 +98,7 @@ export async function PUT(request: NextRequest) {
       data: result 
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('販売数保存エラー:', error);
     return NextResponse.json(
       { error: '販売数の保存に失敗しました' },
