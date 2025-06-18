@@ -40,6 +40,16 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
   const [newSeriesName, setNewSeriesName] = useState("");
   const [seriesLoading, setSeriesLoading] = useState(false);
 
+  // 商品管理用の状態
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    product_name: "",
+    series_id: "",
+    product_number: "",
+    price: ""
+  });
+  const [productLoading, setProductLoading] = useState(false);
+
   useEffect(() => {
     loadData();
     loadSeries();
@@ -101,6 +111,44 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       alert('シリーズ追加に失敗しました');
     } finally {
       setSeriesLoading(false);
+    }
+  };
+
+  // 商品追加
+  const handleAddProduct = async () => {
+    if (!newProduct.product_name.trim() || !newProduct.series_id || !newProduct.product_number || !newProduct.price) {
+      alert('全ての項目を入力してください');
+      return;
+    }
+    
+    setProductLoading(true);
+    try {
+      const response = await fetch('/api/products-master', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_name: newProduct.product_name.trim(),
+          series_id: parseInt(newProduct.series_id),
+          product_number: parseInt(newProduct.product_number),
+          price: parseInt(newProduct.price)
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" });
+        setShowProductForm(false);
+        loadData(); // データをリロード
+        alert('商品が追加されました');
+      } else {
+        alert('エラー: ' + result.error);
+      }
+    } catch (error) {
+      console.error('商品追加エラー:', error);
+      alert('商品追加に失敗しました');
+    } finally {
+      setProductLoading(false);
     }
   };
 
@@ -225,9 +273,68 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
     <div className="space-y-4">
       {/* 編集可能テーブル */}
       <div className="rounded-lg border bg-white shadow-sm">
-        <div className="p-3 border-b bg-gray-50">
+        <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
           <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
+          <button
+            onClick={() => setShowProductForm(!showProductForm)}
+            className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+          >
+            {showProductForm ? 'キャンセル' : '商品追加'}
+          </button>
         </div>
+
+        {/* 商品追加フォーム */}
+        {showProductForm && (
+          <div className="p-3 bg-yellow-50 border-b">
+            <div className="grid grid-cols-5 gap-2">
+              <input
+                type="text"
+                value={newProduct.product_name}
+                onChange={(e) => setNewProduct({...newProduct, product_name: e.target.value})}
+                placeholder="商品名"
+                className="px-2 py-1 border rounded text-sm"
+                disabled={productLoading}
+              />
+              <select
+                value={newProduct.series_id}
+                onChange={(e) => setNewProduct({...newProduct, series_id: e.target.value})}
+                className="px-2 py-1 border rounded text-sm"
+                disabled={productLoading}
+              >
+                <option value="">シリーズ選択</option>
+                {seriesList.map((series) => (
+                  <option key={series.series_id} value={series.series_id}>
+                    {series.series_id}: {series.series_name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={newProduct.product_number}
+                onChange={(e) => setNewProduct({...newProduct, product_number: e.target.value})}
+                placeholder="商品番号"
+                className="px-2 py-1 border rounded text-sm"
+                disabled={productLoading}
+              />
+              <input
+                type="number"
+                value={newProduct.price}
+                onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                placeholder="価格"
+                className="px-2 py-1 border rounded text-sm"
+                disabled={productLoading}
+              />
+              <button
+                onClick={handleAddProduct}
+                disabled={productLoading}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                {productLoading ? '追加中...' : '追加'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead className="bg-gray-100 sticky top-0">
@@ -243,6 +350,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
                 <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -279,6 +387,16 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
                     </td>
                     <td className="px-2 py-1 text-center font-bold border bg-blue-50 text-xs">
                       {totalCount.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-1 text-center border">
+                      <button
+                        onClick={() => handleDeleteProduct(row.id, row.product_name)}
+                        className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+                        disabled={totalCount > 0}
+                        title={totalCount > 0 ? "販売実績があるため削除できません" : "商品を削除"}
+                      >
+                        削除
+                      </button>
                     </td>
                   </tr>
                 );
