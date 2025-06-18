@@ -114,7 +114,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { product_id } = await request.json()
+    const { product_id, force_delete = false } = await request.json()
     
     if (!product_id) {
       return NextResponse.json({ 
@@ -150,14 +150,16 @@ export async function DELETE(request: Request) {
                         (salesData.yahoo_count || 0) + (salesData.mercari_count || 0) + 
                         (salesData.base_count || 0) + (salesData.qoo10_count || 0)
       
-      if (totalSales > 0) {
+      if (totalSales > 0 && !force_delete) {
         return NextResponse.json({ 
-          error: 'この商品には販売実績があるため削除できません' 
-        }, { status: 400 })
+          error: 'sales_exist',
+          sales_count: totalSales,
+          message: 'この商品には販売実績があります。販売データと一緒に削除しますか？' 
+        }, { status: 409 })
       }
     }
     
-    // web_sales_summaryから削除
+    // web_sales_summaryから削除（販売実績も含めて削除）
     await supabase
       .from('web_sales_summary')
       .delete()
@@ -177,7 +179,7 @@ export async function DELETE(request: Request) {
     }
     
     return NextResponse.json({ 
-      message: '商品が削除されました'
+      message: force_delete ? '商品と販売実績を削除しました' : '商品が削除されました'
     })
     
   } catch (error: any) {
