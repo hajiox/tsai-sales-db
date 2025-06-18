@@ -5,6 +5,7 @@ import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
 import WebSalesEditableTable from "@/components/web-sales-editable-table"
 import WebSalesCharts from "@/components/websales-charts"
+import WebSalesAiSection from "@/components/web-sales-ai-section"
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +39,8 @@ export default function WebSalesDashboardPage() {
       <WebSalesEditableTable month={month} onDataSaved={handleDataSaved} />
       
       <WebSalesRankingTable month={month} />
+      
+      <WebSalesAiSection month={month} />
     </div>
   )
 }
