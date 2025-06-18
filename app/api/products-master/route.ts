@@ -22,9 +22,11 @@ export async function POST(request: Request) {
     })
     
     // 同じシリーズの同じ商品番号が既に存在するかチェック
-    const { data: existingData, error: checkError } = await supabase.rpc("web_sales_full_month", {
-      target_month: new Date().toISOString().slice(0, 7)
-    });
+    const { data: existingData, error: checkError } = await supabase
+      .from('products')
+      .select('series_code, product_code')
+      .eq('series_code', series_id)
+      .eq('product_code', product_number)
     
     if (checkError) {
       return NextResponse.json({ 
@@ -32,27 +34,53 @@ export async function POST(request: Request) {
       }, { status: 500 })
     }
     
-    const isDuplicate = existingData?.some((product: any) => 
-      parseInt(product.series_name) === series_id && product.product_number === product_number
-    )
-    
-    if (isDuplicate) {
+    if (existingData && existingData.length > 0) {
       return NextResponse.json({ 
         error: 'このシリーズの商品番号は既に存在します' 
       }, { status: 400 })
     }
+
+    // シリーズ一覧を取得（シリーズ名取得用）
+    const { data: seriesList, error: seriesError } = await supabase
+      .from('series_master')
+      .select('series_id, series_name')
     
-    // 新しい商品をweb_sales_summaryテーブルに追加
+    if (seriesError) {
+      return NextResponse.json({ 
+        error: 'シリーズデータ取得エラー: ' + seriesError.message 
+      }, { status: 500 })
+    }
+    
+    // 新しい商品をproductsテーブルに追加
+    const { data: productData, error: productError } = await supabase
+      .from('products')
+      .insert([
+        {
+          name: product_name,
+          series: seriesList.find(s => s.series_id === series_id)?.series_name || '',
+          series_code: series_id,
+          price: price,
+          product_code: product_number,
+          product_number: product_number
+        }
+      ])
+      .select()
+      
+    if (productError) {
+      console.error('商品追加エラー:', productError)
+      return NextResponse.json({ 
+        error: productError.message 
+      }, { status: 500 })
+    }
+
+    // web_sales_summaryテーブルにも対応レコードを追加
     const currentMonth = new Date().toISOString().slice(0, 7) + '-01'
     
     const { data, error } = await supabase
       .from('web_sales_summary')
       .insert([
         {
-          product_name: product_name,
-          series_name: series_id.toString(),
-          product_number: product_number,
-          price: price,
+          product_id: productData[0].id,
           report_month: currentMonth,
           amazon_count: 0,
           rakuten_count: 0,
@@ -72,7 +100,7 @@ export async function POST(request: Request) {
     }
     
     return NextResponse.json({ 
-      data: data[0],
+      data: productData[0],
       message: '商品が追加されました'
     })
     
@@ -105,22 +133,22 @@ export async function DELETE(request: Request) {
     })
     
     // 販売実績があるかチェック
-    const { data: productData, error: checkError } = await supabase
+    const { data: salesData, error: checkError } = await supabase
       .from('web_sales_summary')
       .select('amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count')
-      .eq('id', product_id)
+      .eq('product_id', product_id)
       .single()
     
-    if (checkError) {
+    if (checkError && checkError.code !== 'PGRST116') {
       return NextResponse.json({ 
-        error: '商品データ確認エラー: ' + checkError.message 
+        error: '販売データ確認エラー: ' + checkError.message 
       }, { status: 500 })
     }
     
-    if (productData) {
-      const totalSales = (productData.amazon_count || 0) + (productData.rakuten_count || 0) + 
-                        (productData.yahoo_count || 0) + (productData.mercari_count || 0) + 
-                        (productData.base_count || 0) + (productData.qoo10_count || 0)
+    if (salesData) {
+      const totalSales = (salesData.amazon_count || 0) + (salesData.rakuten_count || 0) + 
+                        (salesData.yahoo_count || 0) + (salesData.mercari_count || 0) + 
+                        (salesData.base_count || 0) + (salesData.qoo10_count || 0)
       
       if (totalSales > 0) {
         return NextResponse.json({ 
@@ -129,8 +157,15 @@ export async function DELETE(request: Request) {
       }
     }
     
-    const { error } = await supabase
+    // web_sales_summaryから削除
+    await supabase
       .from('web_sales_summary')
+      .delete()
+      .eq('product_id', product_id)
+    
+    // productsテーブルから削除
+    const { error } = await supabase
+      .from('products')
       .delete()
       .eq('id', product_id)
       
