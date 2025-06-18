@@ -23,96 +23,134 @@ type SeriesSummary = {
 
 export default function WebSalesSummaryCards({ 
   month, 
-  refreshTrigger 
+  refreshTrigger,
+  viewMode = 'single',
+  periodMonths = 6
 }: { 
   month: string;
   refreshTrigger?: number;
+  viewMode?: 'single' | 'period';
+  periodMonths?: number;
 }) {
   const [totals, setTotals] = useState<Totals | null>(null)
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // web_sales_summaryテーブルから全データを取得
-        const { data: salesData, error: salesError } = await supabase.rpc("web_sales_full_month", {
-          target_month: month,
-        });
-
-        if (salesError) throw salesError;
-
-        const rows = (salesData as any[]) ?? [];
-
-        // ECサイト別集計（新ロジック）
-        const init: Totals = {}
-        SITES.forEach((s) => {
-          init[s.key] = { count: 0, amount: 0 }
-        })
-
-        rows.forEach((row: any) => {
-          SITES.forEach((s) => {
-            const qty = row[s.key] ?? 0
-            const price = row.price ?? 0
-            init[s.key].count += qty
-            init[s.key].amount += qty * price
-          })
-        })
-
-        setTotals(init)
-
-        // シリーズマスタを取得
-        const { data: seriesMaster, error: masterError } = await supabase
-          .from('series_master')
-          .select('series_id, series_name');
-
-        if (masterError) throw masterError;
-
-        // シリーズマスタをMapに変換
-        const seriesNameMap = new Map(
-          seriesMaster.map(item => [item.series_id, item.series_name])
-        );
+        setLoading(true)
         
-        // シリーズ別集計
-        const seriesMap = new Map<string, { count: number; sales: number }>();
-
-        rows.forEach((row: any) => {
-          const seriesId = row.series_name;
-          const seriesName = seriesNameMap.get(parseInt(seriesId)) || '未分類';
-          const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
-                            (row.yahoo_count || 0) + (row.mercari_count || 0) + 
-                            (row.base_count || 0) + (row.qoo10_count || 0);
-          const totalSales = totalCount * (row.price || 0);
-
-          if (!seriesMap.has(seriesName)) {
-            seriesMap.set(seriesName, { count: 0, sales: 0 });
+        if (viewMode === 'period') {
+          // 期間集計データを取得
+          const response = await fetch('/api/web-sales-period', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              base_month: month, 
+              period_months: periodMonths 
+            })
+          })
+          
+          if (!response.ok) {
+            throw new Error('期間データ取得エラー')
           }
-          const existing = seriesMap.get(seriesName)!;
-          existing.count += totalCount;
-          existing.sales += totalSales;
-        });
+          
+          const result = await response.json()
+          setTotals(result.totals)
+          setSeriesSummary(result.seriesSummary)
+          
+        } else {
+          // 単月データを取得（既存ロジック）
+          const { data: salesData, error: salesError } = await supabase.rpc("web_sales_full_month", {
+            target_month: month,
+          });
 
-        // 売上順にソート
-        const sortedSeries = Array.from(seriesMap.entries())
-          .map(([seriesName, data]) => ({
-            seriesName,
-            count: data.count,
-            sales: data.sales
-          }))
-          .sort((a, b) => b.sales - a.sales);
+          if (salesError) throw salesError;
 
-        setSeriesSummary(sortedSeries);
+          const rows = (salesData as any[]) ?? [];
+
+          // ECサイト別集計（新ロジック）
+          const init: Totals = {}
+          SITES.forEach((s) => {
+            init[s.key] = { count: 0, amount: 0 }
+          })
+
+          rows.forEach((row: any) => {
+            SITES.forEach((s) => {
+              const qty = row[s.key] ?? 0
+              const price = row.price ?? 0
+              init[s.key].count += qty
+              init[s.key].amount += qty * price
+            })
+          })
+
+          setTotals(init)
+
+          // シリーズマスタを取得
+          const { data: seriesMaster, error: masterError } = await supabase
+            .from('series_master')
+            .select('series_id, series_name');
+
+          if (masterError) throw masterError;
+
+          // シリーズマスタをMapに変換
+          const seriesNameMap = new Map(
+            seriesMaster.map(item => [item.series_id, item.series_name])
+          );
+          
+          // シリーズ別集計
+          const seriesMap = new Map<string, { count: number; sales: number }>();
+
+          rows.forEach((row: any) => {
+            const seriesId = row.series_name;
+            const seriesName = seriesNameMap.get(parseInt(seriesId)) || '未分類';
+            const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
+                              (row.yahoo_count || 0) + (row.mercari_count || 0) + 
+                              (row.base_count || 0) + (row.qoo10_count || 0);
+            const totalSales = totalCount * (row.price || 0);
+
+            if (!seriesMap.has(seriesName)) {
+              seriesMap.set(seriesName, { count: 0, sales: 0 });
+            }
+            const existing = seriesMap.get(seriesName)!;
+            existing.count += totalCount;
+            existing.sales += totalSales;
+          });
+
+          // 売上順にソート
+          const sortedSeries = Array.from(seriesMap.entries())
+            .map(([seriesName, data]) => ({
+              seriesName,
+              count: data.count,
+              sales: data.sales
+            }))
+            .sort((a, b) => b.sales - a.sales);
+
+          setSeriesSummary(sortedSeries);
+        }
         
       } catch (error) {
         console.error('データ読み込みエラー:', error);
         setTotals(null);
         setSeriesSummary([]);
+      } finally {
+        setLoading(false)
       }
     }
 
     fetchData()
-  }, [month, refreshTrigger])
+  }, [month, refreshTrigger, viewMode, periodMonths])
 
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-32">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -121,7 +159,14 @@ export default function WebSalesSummaryCards({
         {/* 総合計を左上に表示 */}
         <Card className="text-center bg-green-50 border-green-200">
           <CardHeader>
-            <CardTitle className="text-sm">総合計</CardTitle>
+            <CardTitle className="text-sm">
+              総合計
+              {viewMode === 'period' && (
+                <div className="text-xs text-gray-500 mt-1">
+                  ({periodMonths}ヶ月間)
+                </div>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-xl font-bold">
