@@ -62,13 +62,25 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
 
       setTotals(init)
 
-      // シリーズ別データ取得
+      // シリーズ別データ取得（series_master結合）
       try {
         const { data: seriesData, error: seriesError } = await supabase.rpc("web_sales_full_month", {
           target_month: month,
         });
 
         if (seriesError) throw seriesError;
+
+        // series_masterテーブルからシリーズ名を取得
+        const { data: seriesMaster, error: masterError } = await supabase
+          .from('series_master')
+          .select('series_id, series_name');
+
+        if (masterError) throw masterError;
+
+        // シリーズマスタをMapに変換
+        const seriesNameMap = new Map(
+          seriesMaster.map(item => [item.series_id, item.series_name])
+        );
         
         const rows = (seriesData as any[]) ?? [];
         
@@ -76,7 +88,8 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
         const seriesMap = new Map<string, { count: number; sales: number }>();
 
         rows.forEach((row: any) => {
-          const seriesName = row.series_name ? `シリーズ${row.series_name}` : '未分類';
+          const seriesId = row.series_name;
+          const seriesName = seriesNameMap.get(parseInt(seriesId)) || '未分類';
           const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
                             (row.yahoo_count || 0) + (row.mercari_count || 0) + 
                             (row.base_count || 0) + (row.qoo10_count || 0);
@@ -138,12 +151,12 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
         {seriesSummary.map((series) => (
           <Card key={series.seriesName} className="text-center">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">
+              <CardTitle className="text-xs font-semibold leading-tight">
                 {series.seriesName}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 space-y-1">
-              <div className="text-base font-bold text-blue-600">
+              <div className="text-sm font-bold text-blue-600">
                 {f(series.count)}個
               </div>
               <div className="text-xs text-green-600 font-semibold">
