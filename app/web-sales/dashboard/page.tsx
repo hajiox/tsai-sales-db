@@ -4,7 +4,7 @@ import { useState } from "react"
 import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
 import WebSalesEditableTable from "@/components/web-sales-editable-table"
-import WebSalesCharts from "@/components/websales-charts"
+// import WebSalesCharts from "@/components/websales-charts"
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +12,6 @@ export default function WebSalesDashboardPage() {
   const [month, setMonth] = useState<string>('2025-04')
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0)
 
-  // 保存完了時にサマリーを更新
   const handleDataSaved = () => {
     setRefreshTrigger(prev => prev + 1)
   }
@@ -34,7 +33,7 @@ export default function WebSalesDashboardPage() {
 
       <WebSalesSummaryCards month={month} refreshTrigger={refreshTrigger} />
       
-      <WebSalesCharts month={month} refreshTrigger={refreshTrigger} />
+      {/* <WebSalesCharts month={month} refreshTrigger={refreshTrigger} /> */}
       
       <WebSalesEditableTable month={month} onDataSaved={handleDataSaved} />
       
