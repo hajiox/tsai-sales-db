@@ -4,6 +4,7 @@ import { useState } from "react"
 import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
 import WebSalesEditableTable from "@/components/web-sales-editable-table"
+import WebSalesCharts from "@/components/websales-charts"
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,7 @@ export default function WebSalesDashboardPage() {
     <div className="w-full space-y-6">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">WEB販売管理</h1>
+          <h1 className="text-3xl font-bold tracking-tight">WEB販売管理システム</h1>
           <p className="text-gray-500">月次の販売実績を確認・管理します。</p>
         </div>
         <input
@@ -32,6 +33,8 @@ export default function WebSalesDashboardPage() {
       </header>
 
       <WebSalesSummaryCards month={month} refreshTrigger={refreshTrigger} />
+      
+      <WebSalesCharts month={month} refreshTrigger={refreshTrigger} />
       
       <WebSalesEditableTable month={month} onDataSaved={handleDataSaved} />
       
