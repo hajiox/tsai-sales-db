@@ -292,7 +292,30 @@ export default function WebSalesEditableTable({
       
       const result = await response.json();
       
-      if (response.ok) {
+      if (response.status === 409 && result.error === 'sales_exist') {
+        // 販売実績がある場合の確認ダイアログ
+        const confirmForceDelete = confirm(
+          `「${productName}」には販売実績（${result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`
+        );
+        
+        if (confirmForceDelete) {
+          // 強制削除を実行
+          const forceResponse = await fetch('/api/products-master', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id: productId, force_delete: true })
+          });
+          
+          const forceResult = await forceResponse.json();
+          
+          if (forceResponse.ok) {
+            loadData();
+            alert('商品と販売実績を削除しました');
+          } else {
+            alert('エラー: ' + forceResult.error);
+          }
+        }
+      } else if (response.ok) {
         loadData();
         alert('商品が削除されました');
       } else {
@@ -576,8 +599,7 @@ export default function WebSalesEditableTable({
                       <button
                         onClick={() => handleDeleteProduct(row.id, row.product_name)}
                         className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-                        disabled={totalCount > 0}
-                        title={totalCount > 0 ? "販売実績があるため削除できません" : "商品を削除"}
+                        title="商品を削除"
                       >
                         削除
                       </button>
