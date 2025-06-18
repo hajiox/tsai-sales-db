@@ -28,7 +28,13 @@ type EditingCell = {
   field: string;
 } | null;
 
-export default function WebSalesEditableTable({ month }: { month: string }) {
+export default function WebSalesEditableTable({ 
+  month, 
+  onDataSaved 
+}: { 
+  month: string;
+  onDataSaved?: () => void;
+}) {
   const [rows, setRows] = useState<SummaryRow[]>([]);
   const [originalRows, setOriginalRows] = useState<SummaryRow[]>([]);
   const [seriesList, setSeriesList] = useState<SeriesMaster[]>([]);
@@ -144,6 +150,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       // 保存成功時に元データを更新
       setOriginalRows(prev => prev.map(r => r.id === rowId ? { ...row } : r));
       showSaveMessage(`「${row.product_name}」の販売数を保存しました`);
+      onDataSaved?.(); // 親コンポーネントに通知
       
     } catch (error) {
       console.error('保存エラー:', error);
@@ -194,6 +201,7 @@ export default function WebSalesEditableTable({ month }: { month: string }) {
       // 保存成功時に元データを更新
       setOriginalRows(JSON.parse(JSON.stringify(rows)));
       showSaveMessage(`${changedRows.length}商品の販売数を一括保存しました`);
+      onDataSaved?.(); // 親コンポーネントに通知
       
     } catch (error) {
       console.error('一括保存エラー:', error);
