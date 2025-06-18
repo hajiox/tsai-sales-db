@@ -163,9 +163,9 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
       </div>
 
       {/* シリーズ別売上サマリー */}
-      <div className="grid grid-cols-7 gap-3">
-        {/* シリーズ別サマリー（7個表示） */}
-        {seriesSummary.slice(0, 7).map((series) => (
+      <div className="grid grid-cols-8 gap-3">
+        {/* シリーズ別サマリー（全て表示） */}
+        {seriesSummary.map((series) => (
           <Card key={series.seriesName} className="text-center">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-semibold leading-tight">
