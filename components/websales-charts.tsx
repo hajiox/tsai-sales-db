@@ -1,6 +1,19 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
+import { useEffect, useState } from 'react';
+
+interface MonthlyData {
+  month: string;
+  total: number;
+  amazon: number;
+  rakuten: number;
+  yahoo: number;
+  mercari: number;
+  base: number;
+  qoo10: number;
+}
 
 export default function WebSalesCharts({ 
   month, 
@@ -9,23 +22,54 @@ export default function WebSalesCharts({
   month: string;
   refreshTrigger?: number;
 }) {
-  const dummyData = [
-    { month: "11月", total: 2500 },
-    { month: "12月", total: 3200 },
-    { month: "1月", total: 2800 },
-    { month: "2月", total: 3500 },
-    { month: "3月", total: 4100 },
-    { month: "4月", total: 5400 }
-  ];
+  const [chartData, setChartData] = useState<MonthlyData[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const sites = [
-    { name: "Amazon", value: 2465, color: "#ff9500" },
-    { name: "楽天", value: 1200, color: "#bf0000" },
-    { name: "Yahoo!", value: 800, color: "#ff0033" },
-    { name: "メルカリ", value: 600, color: "#3498db" },
-    { name: "BASE", value: 200, color: "#00b894" },
-    { name: "Qoo10", value: 139, color: "#fdcb6e" }
-  ];
+  useEffect(() => {
+    fetchChartData();
+  }, [month, refreshTrigger]);
+
+  const fetchChartData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/web-sales-chart-data');
+      if (response.ok) {
+        const data = await response.json();
+        setChartData(data);
+      }
+    } catch (error) {
+      console.error('Chart data fetch error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">📊 総売上推移（過去6ヶ月）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64 flex items-center justify-center">
+              <div className="text-gray-500">データ読み込み中...</div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">📈 ECサイト別売上（過去6ヶ月）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64 flex items-center justify-center">
+              <div className="text-gray-500">データ読み込み中...</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 gap-6">
@@ -34,20 +78,15 @@ export default function WebSalesCharts({
           <CardTitle className="text-base">📊 総売上推移（過去6ヶ月）</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {dummyData.map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">{item.month}</span>
-                <div className="flex items-center space-x-2">
-                  <div 
-                    className="bg-blue-500 h-4 rounded" 
-                    style={{ width: `${(item.total / 6000) * 100}px` }}
-                  ></div>
-                  <span className="text-sm font-medium">{item.total.toLocaleString()}件</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="total" fill="#3b82f6" />
+            </BarChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
 
@@ -56,20 +95,21 @@ export default function WebSalesCharts({
           <CardTitle className="text-base">📈 ECサイト別売上（過去6ヶ月）</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {sites.map((site, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: site.color }}
-                  ></div>
-                  <span className="text-sm text-gray-600">{site.name}</span>
-                </div>
-                <span className="text-sm font-medium">{site.value.toLocaleString()}件</span>
-              </div>
-            ))}
-          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="amazon" stroke="#ff9500" name="Amazon" />
+              <Line type="monotone" dataKey="rakuten" stroke="#bf0000" name="楽天" />
+              <Line type="monotone" dataKey="yahoo" stroke="#ff0033" name="Yahoo!" />
+              <Line type="monotone" dataKey="mercari" stroke="#3498db" name="メルカリ" />
+              <Line type="monotone" dataKey="base" stroke="#00b894" name="BASE" />
+              <Line type="monotone" dataKey="qoo10" stroke="#fdcb6e" name="Qoo10" />
+            </LineChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
     </div>
