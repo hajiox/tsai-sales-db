@@ -156,10 +156,10 @@ export default function WebSalesSummaryCards({ month }: { month: string }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 space-y-1">
-              <div className="text-sm font-bold text-blue-600">
+              <div className="text-sm font-bold text-black">
                 {f(series.count)}個
               </div>
-              <div className="text-xs text-green-600 font-semibold">
+              <div className="text-xs text-gray-500 font-semibold">
                 ¥{f(series.sales)}
               </div>
             </CardContent>
