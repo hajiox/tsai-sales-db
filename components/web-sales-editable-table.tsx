@@ -1,171 +1,210 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase } from "../lib/supabase"
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
-const SITES = [
-  { key: "amazon", name: "Amazon" },
-  { key: "rakuten", name: "楽天" },
-  { key: "yahoo", name: "Yahoo" },
-  { key: "mercari", name: "メルカリ" },
-  { key: "base", name: "BASE" },
-  { key: "qoo10", name: "Qoo10" },
-]
+type SummaryRow = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  series_name: string | null;
+  product_number: number;
+  price: number | null;
+  amazon_count: number | null;
+  rakuten_count: number | null;
+  yahoo_count: number | null;
+  mercari_count: number | null;
+  base_count: number | null;
+  qoo10_count: number | null;
+};
 
-type Totals = Record<string, { count: number; amount: number }>
+type EditingCell = {
+  rowId: string;
+  field: string;
+} | null;
 
-type SeriesSummary = {
-  seriesName: string;
-  count: number;
-  sales: number;
-}
-
-export default function WebSalesSummaryCards({ month }: { month: string }) {
-  const [totals, setTotals] = useState<Totals | null>(null)
-  const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([])
+export default function WebSalesEditableTable({ month }: { month: string }) {
+  const [rows, setRows] = useState<SummaryRow[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [editingCell, setEditingCell] = useState<EditingCell>(null);
+  const [editValue, setEditValue] = useState<string>("");
 
   useEffect(() => {
-    const fetchData = async () => {
-      const start = `${month}-01`
-      const next = new Date(start)
-      next.setMonth(next.getMonth() + 1)
-      const end = next.toISOString().slice(0, 10)
-
-      // ECサイト別データ取得（元のロジック）
-      const { data, error } = await supabase
-        .from("web_sales")
-        .select(
-          "created_at, price, amazon, rakuten, yahoo, mercari, base, qoo10"
-        )
-        .gte("created_at", start)
-        .lt("created_at", end)
-
-      if (error) {
-        console.error("fetch_error", error)
-        return
-      }
-
-      const init: Totals = {}
-      SITES.forEach((s) => {
-        init[s.key] = { count: 0, amount: 0 }
-      })
-
-      ;(data || []).forEach((row: any) => {
-        SITES.forEach((s) => {
-          const qty = row[s.key] ?? 0
-          const price = row.price ?? 0
-          init[s.key].count += qty
-          init[s.key].amount += qty * price
-        })
-      })
-
-      setTotals(init)
-
-      // シリーズ別データ取得（series_master結合）
+    const loadData = async (ym: string) => {
+      setLoading(true);
       try {
-        const { data: seriesData, error: seriesError } = await supabase.rpc("web_sales_full_month", {
-          target_month: month,
+        const { data, error } = await supabase.rpc("web_sales_full_month", {
+          target_month: ym,
         });
 
-        if (seriesError) throw seriesError;
-
-        // series_masterテーブルからシリーズ名を取得
-        const { data: seriesMaster, error: masterError } = await supabase
-          .from('series_master')
-          .select('series_id, series_name');
-
-        if (masterError) throw masterError;
-
-        // シリーズマスタをMapに変換
-        const seriesNameMap = new Map(
-          seriesMaster.map(item => [item.series_id, item.series_name])
-        );
-        
-        const rows = (seriesData as any[]) ?? [];
-        
-        // シリーズ別集計
-        const seriesMap = new Map<string, { count: number; sales: number }>();
-
-        rows.forEach((row: any) => {
-          const seriesId = row.series_name;
-          const seriesName = seriesNameMap.get(parseInt(seriesId)) || '未分類';
-          const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
-                            (row.yahoo_count || 0) + (row.mercari_count || 0) + 
-                            (row.base_count || 0) + (row.qoo10_count || 0);
-          const totalSales = totalCount * (row.price || 0);
-
-          if (!seriesMap.has(seriesName)) {
-            seriesMap.set(seriesName, { count: 0, sales: 0 });
-          }
-          const existing = seriesMap.get(seriesName)!;
-          existing.count += totalCount;
-          existing.sales += totalSales;
-        });
-
-        // 売上順にソート
-        const sortedSeries = Array.from(seriesMap.entries())
-          .map(([seriesName, data]) => ({
-            seriesName,
-            count: data.count,
-            sales: data.sales
-          }))
-          .sort((a, b) => b.sales - a.sales);
-
-        setSeriesSummary(sortedSeries);
-        
+        if (error) throw error;
+        setRows((data as SummaryRow[]) ?? []);
       } catch (error) {
-        console.error('シリーズデータ読み込みエラー:', error);
-        setSeriesSummary([]);
+        console.error('データ読み込みエラー:', error);
+        setRows([]);
+      } finally {
+        setLoading(false);
       }
+    };
+
+    loadData(month);
+  }, [month]);
+
+  // セルをクリックして編集開始
+  const handleCellClick = (rowId: string, field: string, currentValue: number | null) => {
+    setEditingCell({ rowId, field });
+    setEditValue((currentValue || 0).toString());
+  };
+
+  // 編集完了・保存
+  const handleCellSave = async () => {
+    if (!editingCell) return;
+
+    const newValue = parseInt(editValue) || 0;
+    
+    // UIを先に更新
+    setRows(prevRows => 
+      prevRows.map(row => 
+        row.id === editingCell.rowId
+          ? { ...row, [editingCell.field]: newValue }
+          : row
+      )
+    );
+
+    setEditingCell(null);
+    setEditValue("");
+
+    // 保存処理（今後実装）
+    console.log('保存:', { rowId: editingCell.rowId, field: editingCell.field, value: newValue });
+  };
+
+  // 編集キャンセル
+  const handleCellCancel = () => {
+    setEditingCell(null);
+    setEditValue("");
+  };
+
+  // キーボードイベント
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleCellSave();
+    } else if (e.key === 'Escape') {
+      handleCellCancel();
+    }
+  };
+
+  // シリーズ別の背景色を取得
+  const getSeriesRowColor = (seriesName: string | null) => {
+    if (!seriesName) return 'bg-white';
+    const seriesNum = parseInt(seriesName);
+    if (isNaN(seriesNum)) return 'bg-white';
+    
+    // 偶数・奇数で色分け
+    return seriesNum % 2 === 0 ? 'bg-gray-50' : 'bg-white';
+  };
+
+  // 編集可能セルのレンダリング
+  const renderEditableCell = (row: SummaryRow, field: keyof SummaryRow, value: number | null) => {
+    const isEditing = editingCell?.rowId === row.id && editingCell?.field === field;
+    
+    if (isEditing) {
+      return (
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleCellSave}
+          onKeyDown={handleKeyDown}
+          className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-center"
+          autoFocus
+        />
+      );
     }
 
-    fetchData()
-  }, [month])
+    return (
+      <div
+        className="w-full px-1 py-0.5 cursor-pointer hover:bg-blue-100 rounded text-xs text-center"
+        onClick={() => handleCellClick(row.id, field, value)}
+      >
+        {value || '-'}
+      </div>
+    );
+  };
 
-  const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p className="mt-2 text-gray-600">データを読み込んでいます...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* ECサイト別サマリー（元のまま） */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {SITES.map((s) => (
-          <Card key={s.key}>
-            <CardHeader>
-              <CardTitle className="text-sm">{s.name}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              <div className="text-xl font-bold">
-                {totals ? f(totals[s.key].count) : "-"} 件
-              </div>
-              <div className="text-sm text-gray-500">
-                ¥{totals ? f(totals[s.key].amount) : "-"}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+    <div className="rounded-lg border bg-white shadow-sm">
+      <div className="p-3 border-b bg-gray-50">
+        <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
       </div>
-
-      {/* シリーズ別売上サマリー */}
-      <div className="grid grid-cols-8 gap-3">
-        {seriesSummary.map((series) => (
-          <Card key={series.seriesName} className="text-center">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-semibold leading-tight">
-                {series.seriesName}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-1">
-              <div className="text-sm font-bold text-black">
-                {f(series.count)}個
-              </div>
-              <div className="text-xs text-gray-500 font-semibold">
-                ¥{f(series.sales)}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead className="bg-gray-100 sticky top-0">
+            <tr>
+              <th className="px-2 py-1 text-left font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 min-w-56">商品名</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">シリーズ</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">商品番号</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">単価</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Amazon</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">楽天</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Yahoo!</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">メルカリ</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
+              <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
+              <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => {
+              const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
+                               (row.yahoo_count || 0) + (row.mercari_count || 0) + 
+                               (row.base_count || 0) + (row.qoo10_count || 0);
+              
+              const rowBgColor = getSeriesRowColor(row.series_name);
+              
+              return (
+                <tr key={row.id} className={`border-b hover:brightness-95 ${rowBgColor}`}>
+                  <td className={`px-2 py-1 text-left border sticky left-0 ${rowBgColor} z-10 text-xs`}>{row.product_name}</td>
+                  <td className="px-2 py-1 text-center border text-xs">{row.series_name || '-'}</td>
+                  <td className="px-2 py-1 text-center border text-xs">{row.product_number}</td>
+                  <td className="px-2 py-1 text-right border text-xs">¥{(row.price || 0).toLocaleString()}</td>
+                  <td className="px-2 py-1 text-center border">
+                    {renderEditableCell(row, 'amazon_count', row.amazon_count)}
+                  </td>
+                  <td className="px-2 py-1 text-center border">
+                    {renderEditableCell(row, 'rakuten_count', row.rakuten_count)}
+                  </td>
+                  <td className="px-2 py-1 text-center border">
+                    {renderEditableCell(row, 'yahoo_count', row.yahoo_count)}
+                  </td>
+                  <td className="px-2 py-1 text-center border">
+                    {renderEditableCell(row, 'mercari_count', row.mercari_count)}
+                  </td>
+                  <td className="px-2 py-1 text-center border">
+                    {renderEditableCell(row, 'base_count', row.base_count)}
+                  </td>
+                  <td className="px-2 py-1 text-center border">
+                    {renderEditableCell(row, 'qoo10_count', row.qoo10_count)}
+                  </td>
+                  <td className="px-2 py-1 text-center font-bold border bg-blue-50 text-xs">
+                    {totalCount.toLocaleString()}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
-  )
+  );
 }
