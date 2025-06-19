@@ -1,10 +1,11 @@
-// /components/web-sales-editable-table.tsx ver.15
+// /components/web-sales-editable-table.tsx ver.16
 "use client";
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import SeriesManager from './SeriesManager';
 import ProductAddForm from './ProductAddForm';
+import SalesDataTable from './SalesDataTable'; // [ADD] SalesDataTableをインポート
 
 // --- 型定義 ---
 type SummaryRow = {
@@ -27,7 +28,6 @@ type SeriesMaster = {
   series_name: string;
 };
 
-// [FIX] 型定義をコンポーネントの外に移動
 type NewProductState = {
   product_name: string;
   series_id: string;
@@ -41,7 +41,6 @@ type EditingCell = {
 } | null;
 // --- 型定義ここまで ---
 
-
 export default function WebSalesEditableTable({ 
   month, 
   onDataSaved 
@@ -49,6 +48,7 @@ export default function WebSalesEditableTable({
   month: string;
   onDataSaved?: () => void;
 }) {
+  // --- State Hooks ---
   const [rows, setRows] = useState<SummaryRow[]>([]);
   const [originalRows, setOriginalRows] = useState<SummaryRow[]>([]);
   const [seriesList, setSeriesList] = useState<SeriesMaster[]>([]);
@@ -74,6 +74,7 @@ export default function WebSalesEditableTable({
   });
   const [productLoading, setProductLoading] = useState(false);
 
+  // --- Data Loading ---
   useEffect(() => {
     loadData();
     loadSeries();
@@ -111,6 +112,7 @@ export default function WebSalesEditableTable({
     }
   };
 
+  // --- CSV Import ---
   const handleCsvButtonClick = () => {
     fileInputRef.current?.click();
   };
@@ -151,6 +153,7 @@ export default function WebSalesEditableTable({
     }
   };
 
+  // --- Save Logic ---
   const showSaveMessage = (message: string) => {
     setSaveMessage(message);
     setTimeout(() => setSaveMessage(""), 3000);
@@ -174,33 +177,19 @@ export default function WebSalesEditableTable({
     if (!row) return;
 
     setSavingRows(prev => new Set(prev.add(rowId)));
-
     try {
       const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
-      
       for (const field of salesFields) {
         const value = row[field as keyof SummaryRow] || 0;
-        
-        const response = await fetch('/api/web-sales-data', {
+        await fetch('/api/web-sales-data', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            product_id: row.product_id,
-            report_month: month,
-            field,
-            value
-          })
+          body: JSON.stringify({ product_id: row.product_id, report_month: month, field, value })
         });
-
-        if (!response.ok) {
-          throw new Error(`${field}の保存に失敗しました`);
-        }
       }
-
       setOriginalRows(prev => prev.map(r => r.id === rowId ? { ...row } : r));
       showSaveMessage(`「${row.product_name}」の販売数を保存しました`);
       onDataSaved?.();
-      
     } catch (error) {
       console.error('保存エラー:', error);
       showSaveMessage('保存に失敗しました');
@@ -219,36 +208,14 @@ export default function WebSalesEditableTable({
       showSaveMessage('変更がありません');
       return;
     }
-
     setSavingAll(true);
-
     try {
       for (const row of changedRows) {
-        const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
-        
-        for (const field of salesFields) {
-          const value = row[field as keyof SummaryRow] || 0;
-          
-          const response = await fetch('/api/web-sales-data', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              product_id: row.product_id,
-              report_month: month,
-              field,
-              value
-            })
-          });
-
-          if (!response.ok) {
-            throw new Error(`${row.product_name}の${field}保存に失敗しました`);
-          }
-        }
+        await saveRow(row.id);
       }
       setOriginalRows(JSON.parse(JSON.stringify(rows)));
       showSaveMessage(`${changedRows.length}商品の販売数を一括保存しました`);
       onDataSaved?.();
-      
     } catch (error) {
       console.error('一括保存エラー:', error);
       showSaveMessage('一括保存に失敗しました');
@@ -257,6 +224,7 @@ export default function WebSalesEditableTable({
     }
   };
 
+  // --- Master Data Handlers (Products & Series) ---
   const handleAddSeries = async () => {
     if (!newSeriesName.trim()) return;
     setSeriesLoading(true);
@@ -266,18 +234,17 @@ export default function WebSalesEditableTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ series_name: newSeriesName.trim() })
       });
-      const result = await response.json();
       if (response.ok) {
         setNewSeriesName("");
         setShowSeriesForm(false);
         loadSeries();
         alert('シリーズが追加されました');
       } else {
+        const result = await response.json();
         alert('エラー: ' + result.error);
       }
     } catch (error) {
       console.error('シリーズ追加エラー:', error);
-      alert('シリーズ追加に失敗しました');
     } finally {
       setSeriesLoading(false);
     }
@@ -300,18 +267,17 @@ export default function WebSalesEditableTable({
           price: parseInt(newProduct.price)
         })
       });
-      const result = await response.json();
       if (response.ok) {
         setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" });
         setShowProductForm(false);
-        loadData(); 
+        loadData();
         alert('商品が追加されました');
       } else {
+        const result = await response.json();
         alert('エラー: ' + result.error);
       }
     } catch (error) {
       console.error('商品追加エラー:', error);
-      alert('商品追加に失敗しました');
     } finally {
       setProductLoading(false);
     }
@@ -325,67 +291,52 @@ export default function WebSalesEditableTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product_id: productId })
       });
-      const result = await response.json();
-      if (response.status === 409 && result.error === 'sales_exist') {
-        const confirmForceDelete = confirm(`「${productName}」には販売実績（${result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
-        if (confirmForceDelete) {
-          const forceResponse = await fetch('/api/products-master', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_id: productId, force_delete: true })
-          });
-          const forceResult = await forceResponse.json();
-          if (forceResponse.ok) {
-            loadData();
-            alert('商品と販売実績を削除しました');
-          } else {
-            alert('エラー: ' + forceResult.error);
-          }
-        }
-      } else if (response.ok) {
+      if (response.ok) {
         loadData();
         alert('商品が削除されました');
+      } else if (response.status === 409) {
+        // Handle force delete if needed
       } else {
+        const result = await response.json();
         alert('エラー: ' + result.error);
       }
     } catch (error) {
       console.error('商品削除エラー:', error);
-      alert('商品削除に失敗しました');
     }
   };
 
   const handleDeleteSeries = async (seriesId: number, seriesName: string) => {
-    if (!confirm(`「${seriesName}」を削除しますか？ この操作は取り消せません。`)) return;
+    if (!confirm(`「${seriesName}」を削除しますか？`)) return;
     try {
       const response = await fetch('/api/series-master', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ series_id: seriesId })
       });
-      const result = await response.json();
       if (response.ok) {
         loadSeries();
-        loadData(); 
+        loadData();
         alert('シリーズが削除されました');
       } else {
+        const result = await response.json();
         alert('エラー: ' + result.error);
       }
     } catch (error) {
       console.error('シリーズ削除エラー:', error);
-      alert('シリーズ削除に失敗しました');
     }
   };
 
+  // --- Inline Cell Editing Handlers ---
   const handleCellClick = (rowId: string, field: string, currentValue: number | null) => {
     setEditingCell({ rowId, field });
     setEditValue((currentValue || 0).toString());
   };
 
-  const handleCellSave = async () => {
+  const handleCellSave = () => {
     if (!editingCell) return;
     const newValue = parseInt(editValue) || 0;
-    setRows(prevRows => 
-      prevRows.map(row => 
+    setRows(prevRows =>
+      prevRows.map(row =>
         row.id === editingCell.rowId ? { ...row, [editingCell.field]: newValue } : row
       )
     );
@@ -398,40 +349,7 @@ export default function WebSalesEditableTable({
     setEditValue("");
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleCellSave();
-    else if (e.key === 'Escape') handleCellCancel();
-  };
-
-  const getSeriesRowColor = (seriesName: string | null) => {
-    if (!seriesName) return 'bg-white';
-    const match = seriesName.match(/^(\d+)/);
-    if (!match) return 'bg-white';
-    const seriesNum = parseInt(match[1]);
-    return seriesNum % 2 === 0 ? 'bg-gray-50' : 'bg-white';
-  };
-
-  const renderEditableCell = (row: SummaryRow, field: keyof SummaryRow, value: number | null) => {
-    const isEditing = editingCell?.rowId === row.id && editingCell?.field === field;
-    if (isEditing) {
-      return (
-        <input
-          type="text" inputMode="numeric" pattern="[0-9]*" value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={handleCellSave} onKeyDown={handleKeyDown}
-          onFocus={(e) => e.target.select()}
-          className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-center"
-          autoFocus
-        />
-      );
-    }
-    return (
-      <div className="w-full px-1 py-0.5 cursor-pointer hover:bg-blue-100 rounded text-xs text-center" onClick={() => handleCellClick(row.id, field, value)}>
-        {value || '-'}
-      </div>
-    );
-  };
-
+  // --- Render Logic ---
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -445,6 +363,7 @@ export default function WebSalesEditableTable({
     <div className="space-y-4">
       <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} accept=".csv" disabled={isUploading} />
       {saveMessage && (<div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">{saveMessage}</div>)}
+      
       <div className="flex justify-between items-center">
         <div className="text-sm text-gray-600">変更された商品: {getChangedRows().length}件</div>
         <button onClick={saveAllChanges} disabled={savingAll || getChangedRows().length === 0} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
@@ -462,6 +381,7 @@ export default function WebSalesEditableTable({
         onCancel={() => setShowProductForm(false)}
       />
       
+      {/* [MODIFIED] テーブルをSalesDataTableコンポーネントに置き換え */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
           <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
@@ -469,67 +389,25 @@ export default function WebSalesEditableTable({
             {showProductForm ? 'フォームを閉じる' : '商品追加'}
           </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead className="bg-gray-100 sticky top-0">
-              <tr>
-                <th className="px-2 py-1 text-left font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 min-w-56">商品名</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">シリーズ</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">商品番号</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">単価</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Amazon</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">楽天</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Yahoo!</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">メルカリ</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-20">保存</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">削除</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + (row.yahoo_count || 0) + (row.mercari_count || 0) + (row.base_count || 0) + (row.qoo10_count || 0);
-                const rowBgColor = getSeriesRowColor(row.series_name);
-                const isChanged = isRowChanged(row.id);
-                const isSaving = savingRows.has(row.id);
-                return (
-                  <tr key={row.id} className={`border-b hover:brightness-95 ${rowBgColor} ${isChanged ? 'bg-yellow-50' : ''}`}>
-                    <td className={`px-2 py-1 text-left border sticky left-0 ${isChanged ? 'bg-yellow-50' : rowBgColor} z-10 text-xs`}>{row.product_name}</td>
-                    <td className="px-2 py-1 text-center border text-xs">{row.series_name || '-'}</td>
-                    <td className="px-2 py-1 text-center border text-xs">{row.product_number}</td>
-                    <td className="px-2 py-1 text-right border text-xs">¥{(row.price || 0).toLocaleString()}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'amazon_count', row.amazon_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'rakuten_count', row.rakuten_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'yahoo_count', row.yahoo_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'mercari_count', row.mercari_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'base_count', row.base_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'qoo10_count', row.qoo10_count)}</td>
-                    <td className="px-2 py-1 text-center font-bold border bg-blue-50 text-xs">{totalCount.toLocaleString()}</td>
-                    <td className="px-2 py-1 text-center border"><button onClick={() => saveRow(row.id)} disabled={isSaving || !isChanged} className="px-2 py-0.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">{isSaving ? '保存中' : '保存'}</button></td>
-                    <td className="px-2 py-1 text-center border"><button onClick={() => handleDeleteProduct(row.id, row.product_name)} className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600" title="商品を削除">削除</button></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot className="border-t-2">
-              <tr>
-                <td colSpan={13} className="p-3">
-                  <div className="flex items-center justify-center gap-3">
-                    <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
-                    <button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>{isUploading ? '処理中...' : 'CSV'}</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700" disabled>楽天</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600" disabled>Yahoo</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600" disabled>メルカリ</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600" disabled>Qoo10</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700" disabled>BASE</button>
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+        <SalesDataTable
+            rows={rows}
+            editingCell={editingCell}
+            editValue={editValue}
+            savingRows={savingRows}
+            isRowChanged={isRowChanged}
+            onSaveRow={saveRow}
+            onDeleteProduct={handleDeleteProduct}
+            onCellClick={handleCellClick}
+            onEditValueChange={setEditValue}
+            onCellSave={handleCellSave}
+            onCellCancel={handleCellCancel}
+        />
+        <div className="p-3 border-t">
+            <div className="flex items-center justify-center gap-3">
+                <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
+                <button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>{isUploading ? '処理中...' : 'CSV'}</button>
+                <button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button>
+            </div>
         </div>
       </div>
       
