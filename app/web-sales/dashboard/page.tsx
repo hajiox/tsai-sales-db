@@ -20,20 +20,14 @@ export default function WebSalesDashboardPage() {
   }
 
   const handlePeriodSelect = (period: '6months' | '1year') => {
-    // 現在の月から適切な期間の開始月に移動
-    const currentMonth = new Date(month + '-01')
-    let targetDate: Date
-
+    // データがある月に直接移動
     if (period === '6months') {
-      // 現在月から5ヶ月前（6ヶ月間の開始月）
-      targetDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 5, 1)
+      // 6ヶ月前 → 2024年10月頃（仮）
+      setMonth('2024-10')
     } else {
-      // 現在月から11ヶ月前（12ヶ月間の開始月）
-      targetDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 11, 1)
+      // 1年前 → 2024年4月（データがありそうな月）
+      setMonth('2024-04')
     }
-
-    const targetMonth = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`
-    setMonth(targetMonth)
   }
 
   return (
@@ -48,13 +42,13 @@ export default function WebSalesDashboardPage() {
             onClick={() => handlePeriodSelect('6months')}
             className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200"
           >
-            6ヶ月期間開始
+            2024年10月
           </button>
           <button
             onClick={() => handlePeriodSelect('1year')}
             className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200"
           >
-            1年期間開始
+            2024年4月
           </button>
           <input
             type="month"
