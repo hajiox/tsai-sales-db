@@ -1,166 +1,223 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+"use client"
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { supabase } from "../lib/supabase"
 
-export async function POST(req: Request) {
-  try {
-    const { base_month, period_months } = await req.json();
-    
-    console.log('Period API called:', { base_month, period_months });
-    
-    if (!base_month || !period_months) {
-      return NextResponse.json({ error: 'base_month and period_months required' }, { status: 400 });
-    }
+const SITES = [
+  { key: "amazon_count", name: "Amazon" },
+  { key: "rakuten_count", name: "楽天" },
+  { key: "yahoo_count", name: "Yahoo" },
+  { key: "mercari_count", name: "メルカリ" },
+  { key: "base_count", name: "BASE" },
+  { key: "qoo10_count", name: "Qoo10" },
+]
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
+type Totals = Record<string, { count: number; amount: number }>
+
+type SeriesSummary = {
+  seriesName: string;
+  count: number;
+  sales: number;
+}
+
+export default function WebSalesSummaryCards({ 
+  month, 
+  refreshTrigger,
+  viewMode = 'single',
+  periodMonths = 6
+}: { 
+  month: string;
+  refreshTrigger?: number;
+  viewMode?: 'single' | 'period';
+  periodMonths?: number;
+}) {
+  const [totals, setTotals] = useState<Totals | null>(null)
+  const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        
+        // 期間表示は一旦無効化して、常に単月表示
+        // if (viewMode === 'period') {
+        //   // 期間集計データを取得
+        //   const response = await fetch('/api/web-sales-period', {
+        //     method: 'POST',
+        //     headers: { 'Content-Type': 'application/json' },
+        //     body: JSON.stringify({ 
+        //       base_month: month, 
+        //       period_months: periodMonths 
+        //     })
+        //   })
+          
+        //   if (!response.ok) {
+        //     throw new Error('期間データ取得エラー')
+        //   }
+          
+        //   const result = await response.json()
+        //   setTotals(result.totals)
+        //   setSeriesSummary(result.seriesSummary)
+          
+        // } else {
+          // 単月データを取得（既存ロジック）
+          const { data: salesData, error: salesError } = await supabase.rpc("web_sales_full_month", {
+            target_month: month,
+          });
+
+          if (salesError) throw salesError;
+
+          const rows = (salesData as any[]) ?? [];
+
+          // ECサイト別集計（新ロジック）
+          const init: Totals = {}
+          SITES.forEach((s) => {
+            init[s.key] = { count: 0, amount: 0 }
+          })
+
+          rows.forEach((row: any) => {
+            SITES.forEach((s) => {
+              const qty = row[s.key] ?? 0
+              const price = row.price ?? 0
+              init[s.key].count += qty
+              init[s.key].amount += qty * price
+            })
+          })
+
+          setTotals(init)
+
+          // シリーズマスタを取得
+          const { data: seriesMaster, error: masterError } = await supabase
+            .from('series_master')
+            .select('series_id, series_name');
+
+          if (masterError) throw masterError;
+
+          // シリーズマスタをMapに変換
+          const seriesNameMap = new Map(
+            seriesMaster.map(item => [item.series_id, item.series_name])
+          );
+          
+          // シリーズ別集計
+          const seriesMap = new Map<string, { count: number; sales: number }>();
+
+          rows.forEach((row: any) => {
+            const seriesId = row.series_name;
+            const seriesName = seriesNameMap.get(parseInt(seriesId)) || '未分類';
+            const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + 
+                              (row.yahoo_count || 0) + (row.mercari_count || 0) + 
+                              (row.base_count || 0) + (row.qoo10_count || 0);
+            const totalSales = totalCount * (row.price || 0);
+
+            if (!seriesMap.has(seriesName)) {
+              seriesMap.set(seriesName, { count: 0, sales: 0 });
+            }
+            const existing = seriesMap.get(seriesName)!;
+            existing.count += totalCount;
+            existing.sales += totalSales;
+          });
+
+          // 売上順にソート
+          const sortedSeries = Array.from(seriesMap.entries())
+            .map(([seriesName, data]) => ({
+              seriesName,
+              count: data.count,
+              sales: data.sales
+            }))
+            .sort((a, b) => b.sales - a.sales);
+
+          setSeriesSummary(sortedSeries);
+        // }
+        
+      } catch (error) {
+        console.error('データ読み込みエラー:', error);
+        setTotals(null);
+        setSeriesSummary([]);
+      } finally {
+        setLoading(false)
       }
-    });
-
-    // 基準月から期間分遡った開始月を計算
-    const baseDate = new Date(base_month + '-01');
-    const startDate = new Date(baseDate.getFullYear(), baseDate.getMonth() - (period_months - 1), 1);
-    const startMonth = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-01`;
-    const endMonth = base_month + '-31';
-
-    console.log('Date range:', { startMonth, endMonth });
-
-    // 期間内のデータを取得
-    const { data, error } = await supabase
-      .from('web_sales_summary')
-      .select(`
-        product_id,
-        report_month,
-        amazon_count,
-        rakuten_count,
-        yahoo_count,
-        mercari_count,
-        base_count,
-        qoo10_count
-      `)
-      .gte('report_month', startMonth)
-      .lte('report_month', endMonth);
-
-    if (error) {
-      console.error('Database error:', error);
-      return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
-    console.log('Sales data count:', data?.length || 0);
+    fetchData()
+  }, [month, refreshTrigger])
 
-    // 商品マスタを別途取得
-    const { data: products, error: productsError } = await supabase
-      .from('products')
-      .select('id, name, price, series_code');
+  const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
 
-    if (productsError) {
-      console.error('Products error:', productsError);
-      return NextResponse.json({ error: 'Products error' }, { status: 500 });
-    }
-
-    console.log('Products count:', products?.length || 0);
-
-    // 商品マスタをMapに変換
-    const productsMap = new Map(products?.map(p => [p.id, p]) || []);
-
-    // シリーズマスタを取得
-    const { data: seriesMaster, error: seriesError } = await supabase
-      .from('series_master')
-      .select('series_id, series_name');
-
-    if (seriesError) {
-      console.error('Series master error:', seriesError);
-      return NextResponse.json({ error: 'Series master error' }, { status: 500 });
-    }
-
-    const seriesMap = new Map(seriesMaster?.map(s => [s.series_id, s.series_name]) || []);
-
-    // ECサイト別集計
-    const siteData = {
-      amazon_count: 0,
-      rakuten_count: 0,
-      yahoo_count: 0,
-      mercari_count: 0,
-      base_count: 0,
-      qoo10_count: 0
-    };
-
-    const siteAmount = {
-      amazon_count: 0,
-      rakuten_count: 0,
-      yahoo_count: 0,
-      mercari_count: 0,
-      base_count: 0,
-      qoo10_count: 0
-    };
-
-    // シリーズ別集計
-    const seriesData = new Map();
-
-    data?.forEach((row: any) => {
-      const product = productsMap.get(row.product_id);
-      if (!product) return;
-      
-      const price = product.price || 0;
-      const seriesId = product.series_code;
-      const seriesName = seriesMap.get(seriesId) || '未分類';
-
-      // ECサイト別集計
-      const siteKeys = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
-      let rowTotalCount = 0;
-      
-      siteKeys.forEach(site => {
-        const count = row[site] || 0;
-        siteData[site as keyof typeof siteData] += count;
-        siteAmount[site as keyof typeof siteAmount] += count * price;
-        rowTotalCount += count;
-      });
-
-      // シリーズ別集計
-      const totalAmount = rowTotalCount * price;
-
-      if (!seriesData.has(seriesName)) {
-        seriesData.set(seriesName, { count: 0, sales: 0 });
-      }
-      const existing = seriesData.get(seriesName);
-      existing.count += rowTotalCount;
-      existing.sales += totalAmount;
-    });
-
-    // レスポンス形式を統一
-    const totals: any = {};
-    Object.keys(siteData).forEach(site => {
-      totals[site] = {
-        count: siteData[site as keyof typeof siteData],
-        amount: siteAmount[site as keyof typeof siteAmount]
-      };
-    });
-
-    const seriesSummary = Array.from(seriesData.entries())
-      .map(([seriesName, data]: [string, any]) => ({
-        seriesName,
-        count: data.count,
-        sales: data.sales
-      }))
-      .sort((a, b) => b.sales - a.sales);
-
-    console.log('Final result:', { totals, seriesSummaryCount: seriesSummary.length });
-
-    return NextResponse.json({
-      totals,
-      seriesSummary,
-      period: `${period_months}ヶ月間`,
-      base_month
-    });
-
-  } catch (error: any) {
-    console.error('Period API error:', error);
-    return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-32">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
   }
+
+  return (
+    <div className="space-y-6">
+      {/* ECサイト別サマリー + 総合計 */}
+      <div className="grid grid-cols-7 gap-4">
+        {/* 総合計を左上に表示 */}
+        <Card className="text-center bg-green-50 border-green-200">
+          <CardHeader>
+            <CardTitle className="text-sm">
+              総合計
+              {viewMode === 'period' && (
+                <div className="text-xs text-gray-500 mt-1">
+                  ({periodMonths}ヶ月間)
+                </div>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-xl font-bold">
+              {seriesSummary.reduce((sum, s) => sum + s.count, 0).toLocaleString()} 件
+            </div>
+            <div className="text-sm text-gray-500">
+              ¥{seriesSummary.reduce((sum, s) => sum + s.sales, 0).toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ECサイト別サマリー（6個） */}
+        {SITES.map((s) => (
+          <Card key={s.key}>
+            <CardHeader>
+              <CardTitle className="text-sm">{s.name}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              <div className="text-xl font-bold">
+                {totals ? f(totals[s.key].count) : "-"} 件
+              </div>
+              <div className="text-sm text-gray-500">
+                ¥{totals ? f(totals[s.key].amount) : "-"}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* シリーズ別売上サマリー */}
+      <div className="grid grid-cols-8 gap-3">
+        {/* シリーズ別サマリー（全て表示） */}
+        {seriesSummary.map((series) => (
+          <Card key={series.seriesName} className="text-center">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-semibold leading-tight">
+                {series.seriesName}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-1">
+              <div className="text-sm font-bold text-black">
+                {f(series.count)}個
+              </div>
+              <div className="text-xs text-gray-500 font-semibold">
+                ¥{f(series.sales)}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
 }
