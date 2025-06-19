@@ -1,8 +1,9 @@
-// /components/web-sales-editable-table.tsx ver.12 (構文エラー修正版)
+// /components/web-sales-editable-table.tsx ver.13
 "use client";
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import SeriesManager from './SeriesManager'; // [ADD] SeriesManagerをインポート
 
 type SummaryRow = {
   id: string;
@@ -291,7 +292,7 @@ export default function WebSalesEditableTable({
       if (response.ok) {
         setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" });
         setShowProductForm(false);
-        loadData();
+        loadData(); // 商品追加後にテーブルを再読み込み
         alert('商品が追加されました');
       } else {
         alert('エラー: ' + result.error);
@@ -342,7 +343,7 @@ export default function WebSalesEditableTable({
   };
 
   const handleDeleteSeries = async (seriesId: number, seriesName: string) => {
-    if (!confirm(`「${seriesName}」を削除しますか？`)) return;
+    if (!confirm(`「${seriesName}」を削除しますか？ この操作は取り消せません。`)) return;
     try {
       const response = await fetch('/api/series-master', {
         method: 'DELETE',
@@ -352,6 +353,7 @@ export default function WebSalesEditableTable({
       const result = await response.json();
       if (response.ok) {
         loadSeries();
+        loadData(); // 商品に紐づくシリーズ名が変更されるためデータも再読み込み
         alert('シリーズが削除されました');
       } else {
         alert('エラー: ' + result.error);
@@ -422,7 +424,7 @@ export default function WebSalesEditableTable({
     return (
       <div className="flex justify-center items-center h-64">
         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <p className="mt-2 text-gray-600">データを読み込んでいます...</p>
+        <p className="ml-2 text-gray-600">データを読み込んでいます...</p>
       </div>
     );
   }
@@ -582,51 +584,17 @@ export default function WebSalesEditableTable({
         </div>
       </div>
       
-      <div className="bg-blue-50 p-4 rounded-lg">
-        <div className="flex justify-between items-center mb-3">
-          <h4 className="text-base font-semibold">📚 シリーズ管理</h4>
-          <button
-            onClick={() => setShowSeriesForm(!showSeriesForm)}
-            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-          >
-            {showSeriesForm ? 'キャンセル' : 'シリーズ追加'}
-          </button>
-        </div>
-        {showSeriesForm && (
-          <div className="mb-3 p-3 bg-white rounded border">
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
-                value={newSeriesName}
-                onChange={(e) => setNewSeriesName(e.target.value)}
-                placeholder="新しいシリーズ名を入力"
-                className="flex-1 px-2 py-1 border rounded text-sm"
-                disabled={seriesLoading}
-              />
-              <button
-                onClick={handleAddSeries}
-                disabled={seriesLoading || !newSeriesName.trim()}
-                className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-              >
-                {seriesLoading ? '追加中...' : '追加'}
-              </button>
-            </div>
-          </div>
-        )}
-        <div className="grid grid-cols-4 gap-2 text-xs">
-          {seriesList.map((series) => (
-            <div key={series.series_id} className="flex justify-between items-center bg-white p-2 rounded border">
-              <span>{series.series_id}: {series.series_name}</span>
-              <button
-                onClick={() => handleDeleteSeries(series.series_id, series.series_name)}
-                className="ml-2 px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-              >
-                削除
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* [MODIFIED] シリーズ管理セクションをコンポーネントに置き換え */}
+      <SeriesManager
+        seriesList={seriesList}
+        showSeriesForm={showSeriesForm}
+        newSeriesName={newSeriesName}
+        seriesLoading={seriesLoading}
+        onShowFormToggle={() => setShowSeriesForm(!showSeriesForm)}
+        onNewSeriesNameChange={setNewSeriesName}
+        onAddSeries={handleAddSeries}
+        onDeleteSeries={handleDeleteSeries}
+      />
     </div>
   );
 }
