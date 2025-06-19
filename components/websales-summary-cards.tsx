@@ -53,6 +53,7 @@ export default function WebSalesSummaryCards({
           })
           
           if (!response.ok) {
+            console.error('期間データ取得エラー:', response.status)
             throw new Error('期間データ取得エラー')
           }
           
