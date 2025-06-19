@@ -1,4 +1,4 @@
-// /app/api/import/csv/route.ts ver.5 (文字コードShift-JISに対応)
+// /app/api/import/csv/route.ts ver.6 (商品名ヘッダーの柔軟な検索に対応)
 
 import { NextResponse } from 'next/server';
 import Papa from 'papaparse';
@@ -20,13 +20,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'ファイルがありません。' }, { status: 400 });
     }
 
-    // --- ▼ ここから修正 ▼ ---
-    // ファイルをバイナリデータとして読み込む
     const fileBuffer = await file.arrayBuffer();
-    // Shift-JIS形式でテキストに変換（デコード）する
     const decoder = new TextDecoder('shift-jis');
     const csvString = decoder.decode(fileBuffer);
-    // --- ▲ ここまで修正 ▲ ---
 
     const parsedData = Papa.parse(csvString, {
       header: true,
@@ -34,7 +30,6 @@ export async function POST(request: Request) {
     });
 
     if (parsedData.errors.length > 0) {
-      console.error('CSV解析エラー:', parsedData.errors);
       return NextResponse.json({ error: 'CSVの解析に失敗しました。' }, { status: 400 });
     }
 
@@ -43,18 +38,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'CSVにデータがありません。' }, { status: 400 });
     }
     
-    const productNameKey = '商品名';
-    if (!(productNameKey in dataRows[0])) {
-      const detectedHeaders = Object.keys(dataRows[0]);
+    // --- ▼ ここから修正 ▼ ---
+    const detectedHeaders = Object.keys(dataRows[0]);
+
+    // 「商品名」で始まるヘッダーを柔軟に検索 (前後の空白は無視)
+    const productNameHeader = detectedHeaders.find(h => h.trim().startsWith('商品名'));
+
+    if (!productNameHeader) {
       return NextResponse.json({
-        error: `CSVに「${productNameKey}」の列が見つかりません。検出された列名: [${detectedHeaders.join(', ')}]`
+        error: `CSVに「商品名」で始まる列が見つかりません。検出された列名: [${detectedHeaders.join(', ')}]`
       }, { status: 400 });
     }
     
-    const firstRowProductName = dataRows[0][productNameKey];
+    // 見つかったヘッダー名を使って商品名を取得
+    const firstRowProductName = dataRows[0][productNameHeader];
     if (!firstRowProductName) {
        return NextResponse.json({ error: 'CSVの1行目に商品名がありません。' }, { status: 400 });
     }
+    // --- ▲ ここまで修正 ▲ ---
 
     const { data: productsMaster, error: dbError } = await supabase
       .from('products')
