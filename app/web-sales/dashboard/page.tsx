@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.2 (CSVインポートUI追加)
+// /app/web-sales/dashboard/page.tsx ver.4 (旧CSVインポートUIを完全削除)
 "use client"
 
 import { useState } from "react"
@@ -7,13 +7,6 @@ import WebSalesRankingTable from "@/components/websales-ranking-table"
 import WebSalesEditableTable from "@/components/web-sales-editable-table"
 import WebSalesCharts from "@/components/websales-charts"
 import WebSalesAiSection from "@/components/web-sales-ai-section"
-
-// UIコンポーネントをインポート
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-
 
 export const dynamic = 'force-dynamic'
 
@@ -66,7 +59,6 @@ export default function WebSalesDashboardPage() {
       </header>
       
       <div className="space-y-6">
-        {/* サマリーカードは常に表示。モードに応じて内部で表示を切り替える */}
         <WebSalesSummaryCards
           month={month}
           refreshTrigger={refreshTrigger}
@@ -74,79 +66,12 @@ export default function WebSalesDashboardPage() {
           periodMonths={periodMonths}
         />
 
-        {/* 月別表示の時だけ以下のコンポーネントを表示 */}
         {viewMode === 'month' && (
           <>
             <WebSalesCharts month={month} refreshTrigger={refreshTrigger} />
             <WebSalesEditableTable month={month} onDataSaved={handleDataSaved} />
             <WebSalesRankingTable month={month} />
             <WebSalesAiSection month={month} />
-
-            {/* --- ▼ ここから追加 ▼ --- */}
-            <Card>
-              <CardHeader>
-                <CardTitle>CSV一括インポート</CardTitle>
-                <CardDescription>
-                  各ECサイトからダウンロードした売上実績CSVファイルをアップロードして、一括でデータを取り込みます。
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Amazon */}
-                  <div className="space-y-2">
-                    <Label htmlFor="amazon-csv">Amazon</Label>
-                    <div className="flex gap-2">
-                      <Input id="amazon-csv" type="file" className="flex-grow" />
-                      <Button>読込</Button>
-                    </div>
-                  </div>
-                  {/* Rakuten */}
-                  <div className="space-y-2">
-                    <Label htmlFor="rakuten-csv">Rakuten</Label>
-                    <div className="flex gap-2">
-                      <Input id="rakuten-csv" type="file" className="flex-grow" />
-                      <Button>読込</Button>
-                    </div>
-                  </div>
-                  {/* Yahoo */}
-                  <div className="space-y-2">
-                    <Label htmlFor="yahoo-csv">Yahoo!ショッピング</Label>
-                    <div className="flex gap-2">
-                      <Input id="yahoo-csv" type="file" className="flex-grow" />
-                      <Button>読込</Button>
-                    </div>
-                  </div>
-                  {/* Mercari */}
-                  <div className="space-y-2">
-                    <Label htmlFor="mercari-csv">メルカリShops</Label>
-                    <div className="flex gap-2">
-                      <Input id="mercari-csv" type="file" className="flex-grow" />
-                      <Button>読込</Button>
-                    </div>
-                  </div>
-                   {/* Qoo10 */}
-                  <div className="space-y-2">
-                    <Label htmlFor="qoo10-csv">Qoo10</Label>
-                    <div className="flex gap-2">
-                      <Input id="qoo10-csv" type="file" className="flex-grow" />
-                      <Button>読込</Button>
-                    </div>
-                  </div>
-                  {/* Base */}
-                  <div className="space-y-2">
-                    <Label htmlFor="base-csv">BASE</Label>
-                    <div className="flex gap-2">
-                      <Input id="base-csv" type="file" className="flex-grow" />
-                      <Button>読込</Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-end">
-                 <Button size="lg" disabled>（未実装）選択したファイルを一括読込</Button>
-              </CardFooter>
-            </Card>
-            {/* --- ▲ ここまで追加 ▲ --- */}
           </>
         )}
       </div>
