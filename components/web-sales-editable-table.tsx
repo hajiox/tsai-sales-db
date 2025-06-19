@@ -1,11 +1,12 @@
-// /components/web-sales-editable-table.tsx ver.14
+// /components/web-sales-editable-table.tsx ver.15
 "use client";
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import SeriesManager from './SeriesManager';
-import ProductAddForm from './ProductAddForm'; // [ADD] ProductAddFormをインポート
+import ProductAddForm from './ProductAddForm';
 
+// --- 型定義 ---
 type SummaryRow = {
   id: string;
   product_id: string;
@@ -26,6 +27,7 @@ type SeriesMaster = {
   series_name: string;
 };
 
+// [FIX] 型定義をコンポーネントの外に移動
 type NewProductState = {
   product_name: string;
   series_id: string;
@@ -37,6 +39,8 @@ type EditingCell = {
   rowId: string;
   field: string;
 } | null;
+// --- 型定義ここまで ---
+
 
 export default function WebSalesEditableTable({ 
   month, 
@@ -237,7 +241,7 @@ export default function WebSalesEditableTable({
           });
 
           if (!response.ok) {
-            throw new Error(`<span class="math-inline">\{row\.product\_name\}の</span>{field}保存に失敗しました`);
+            throw new Error(`${row.product_name}の${field}保存に失敗しました`);
           }
         }
       }
@@ -300,7 +304,7 @@ export default function WebSalesEditableTable({
       if (response.ok) {
         setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" });
         setShowProductForm(false);
-        loadData(); // 商品追加後にテーブルを再読み込み
+        loadData(); 
         alert('商品が追加されました');
       } else {
         alert('エラー: ' + result.error);
@@ -323,7 +327,7 @@ export default function WebSalesEditableTable({
       });
       const result = await response.json();
       if (response.status === 409 && result.error === 'sales_exist') {
-        const confirmForceDelete = confirm(`「<span class="math-inline">\{productName\}」には販売実績（</span>{result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
+        const confirmForceDelete = confirm(`「${productName}」には販売実績（${result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
         if (confirmForceDelete) {
           const forceResponse = await fetch('/api/products-master', {
             method: 'DELETE',
@@ -361,7 +365,7 @@ export default function WebSalesEditableTable({
       const result = await response.json();
       if (response.ok) {
         loadSeries();
-        loadData(); // 商品に紐づくシリーズ名が変更されるためデータも再読み込み
+        loadData(); 
         alert('シリーズが削除されました');
       } else {
         alert('エラー: ' + result.error);
@@ -448,7 +452,6 @@ export default function WebSalesEditableTable({
         </button>
       </div>
       
-      {/* [MODIFIED] 商品追加フォームをコンポーネントに置き換え */}
       <ProductAddForm
         show={showProductForm}
         newProduct={newProduct}
@@ -473,4 +476,73 @@ export default function WebSalesEditableTable({
                 <th className="px-2 py-1 text-left font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 min-w-56">商品名</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">シリーズ</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">商品番号</th>
-                <th className="px-2 py-1 text-center font
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">単価</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Amazon</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">楽天</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Yahoo!</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">メルカリ</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-20">保存</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">削除</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + (row.yahoo_count || 0) + (row.mercari_count || 0) + (row.base_count || 0) + (row.qoo10_count || 0);
+                const rowBgColor = getSeriesRowColor(row.series_name);
+                const isChanged = isRowChanged(row.id);
+                const isSaving = savingRows.has(row.id);
+                return (
+                  <tr key={row.id} className={`border-b hover:brightness-95 ${rowBgColor} ${isChanged ? 'bg-yellow-50' : ''}`}>
+                    <td className={`px-2 py-1 text-left border sticky left-0 ${isChanged ? 'bg-yellow-50' : rowBgColor} z-10 text-xs`}>{row.product_name}</td>
+                    <td className="px-2 py-1 text-center border text-xs">{row.series_name || '-'}</td>
+                    <td className="px-2 py-1 text-center border text-xs">{row.product_number}</td>
+                    <td className="px-2 py-1 text-right border text-xs">¥{(row.price || 0).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'amazon_count', row.amazon_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'rakuten_count', row.rakuten_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'yahoo_count', row.yahoo_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'mercari_count', row.mercari_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'base_count', row.base_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'qoo10_count', row.qoo10_count)}</td>
+                    <td className="px-2 py-1 text-center font-bold border bg-blue-50 text-xs">{totalCount.toLocaleString()}</td>
+                    <td className="px-2 py-1 text-center border"><button onClick={() => saveRow(row.id)} disabled={isSaving || !isChanged} className="px-2 py-0.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">{isSaving ? '保存中' : '保存'}</button></td>
+                    <td className="px-2 py-1 text-center border"><button onClick={() => handleDeleteProduct(row.id, row.product_name)} className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600" title="商品を削除">削除</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="border-t-2">
+              <tr>
+                <td colSpan={13} className="p-3">
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
+                    <button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>{isUploading ? '処理中...' : 'CSV'}</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700" disabled>楽天</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600" disabled>Yahoo</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600" disabled>メルカリ</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600" disabled>Qoo10</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700" disabled>BASE</button>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+      
+      <SeriesManager
+        seriesList={seriesList}
+        showSeriesForm={showSeriesForm}
+        newSeriesName={newSeriesName}
+        seriesLoading={seriesLoading}
+        onShowFormToggle={() => setShowSeriesForm(!showSeriesForm)}
+        onNewSeriesNameChange={setNewSeriesName}
+        onAddSeries={handleAddSeries}
+        onDeleteSeries={handleDeleteSeries}
+      />
+    </div>
+  );
+}
