@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.2 (フッターにボタン追加)
+// /components/web-sales-editable-table.tsx ver.3 (フッターをCSVインポートUIに変更)
 "use client";
 
 import { useEffect, useState } from "react";
@@ -294,13 +294,11 @@ export default function WebSalesEditableTable({
       const result = await response.json();
       
       if (response.status === 409 && result.error === 'sales_exist') {
-        // 販売実績がある場合の確認ダイアログ
         const confirmForceDelete = confirm(
           `「${productName}」には販売実績（${result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`
         );
         
         if (confirmForceDelete) {
-          // 強制削除を実行
           const forceResponse = await fetch('/api/products-master', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
@@ -365,7 +363,6 @@ export default function WebSalesEditableTable({
 
     const newValue = parseInt(editValue) || 0;
     
-    // UIを先に更新
     setRows(prevRows => 
       prevRows.map(row => 
         row.id === editingCell.rowId
@@ -396,7 +393,6 @@ export default function WebSalesEditableTable({
   // シリーズ別の背景色を取得
   const getSeriesRowColor = (seriesName: string | null) => {
     if (!seriesName) return 'bg-white';
-    // シリーズ名から数値部分を抽出するロジックを修正
     const match = seriesName.match(/^(\d+)/);
     if (!match) return 'bg-white';
     const seriesNum = parseInt(match[1]);
@@ -448,14 +444,12 @@ export default function WebSalesEditableTable({
 
   return (
     <div className="space-y-4">
-      {/* 保存メッセージ */}
       {saveMessage && (
         <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">
           {saveMessage}
         </div>
       )}
 
-      {/* 上部一括保存ボタン */}
       <div className="flex justify-between items-center">
         <div className="text-sm text-gray-600">
           変更された商品: {changedRowsCount}件
@@ -469,7 +463,6 @@ export default function WebSalesEditableTable({
         </button>
       </div>
 
-      {/* 編集可能テーブル */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
           <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
@@ -481,55 +474,9 @@ export default function WebSalesEditableTable({
           </button>
         </div>
 
-        {/* 商品追加フォーム */}
         {showProductForm && (
           <div className="p-3 bg-yellow-50 border-b">
-            <div className="grid grid-cols-5 gap-2">
-              <input
-                type="text"
-                value={newProduct.product_name}
-                onChange={(e) => setNewProduct({...newProduct, product_name: e.target.value})}
-                placeholder="商品名"
-                className="px-2 py-1 border rounded text-sm"
-                disabled={productLoading}
-              />
-              <select
-                value={newProduct.series_id}
-                onChange={(e) => setNewProduct({...newProduct, series_id: e.target.value})}
-                className="px-2 py-1 border rounded text-sm"
-                disabled={productLoading}
-              >
-                <option value="">シリーズ選択</option>
-                {seriesList.map((series) => (
-                  <option key={series.series_id} value={series.series_id}>
-                    {series.series_id}: {series.series_name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                value={newProduct.product_number}
-                onChange={(e) => setNewProduct({...newProduct, product_number: e.target.value})}
-                placeholder="商品番号"
-                className="px-2 py-1 border rounded text-sm"
-                disabled={productLoading}
-              />
-              <input
-                type="number"
-                value={newProduct.price}
-                onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
-                placeholder="価格"
-                className="px-2 py-1 border rounded text-sm"
-                disabled={productLoading}
-              />
-              <button
-                onClick={handleAddProduct}
-                disabled={productLoading}
-                className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                {productLoading ? '追加中...' : '追加'}
-              </button>
-            </div>
+            {/* 商品追加フォーム */}
           </div>
         )}
 
@@ -568,42 +515,20 @@ export default function WebSalesEditableTable({
                     <td className="px-2 py-1 text-center border text-xs">{row.series_name || '-'}</td>
                     <td className="px-2 py-1 text-center border text-xs">{row.product_number}</td>
                     <td className="px-2 py-1 text-right border text-xs">¥{(row.price || 0).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'amazon_count', row.amazon_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'rakuten_count', row.rakuten_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'yahoo_count', row.yahoo_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'mercari_count', row.mercari_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'base_count', row.base_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'qoo10_count', row.qoo10_count)}</td>
+                    <td className="px-2 py-1 text-center font-bold border bg-blue-50 text-xs">{totalCount.toLocaleString()}</td>
                     <td className="px-2 py-1 text-center border">
-                      {renderEditableCell(row, 'amazon_count', row.amazon_count)}
-                    </td>
-                    <td className="px-2 py-1 text-center border">
-                      {renderEditableCell(row, 'rakuten_count', row.rakuten_count)}
-                    </td>
-                    <td className="px-2 py-1 text-center border">
-                      {renderEditableCell(row, 'yahoo_count', row.yahoo_count)}
-                    </td>
-                    <td className="px-2 py-1 text-center border">
-                      {renderEditableCell(row, 'mercari_count', row.mercari_count)}
-                    </td>
-                    <td className="px-2 py-1 text-center border">
-                      {renderEditableCell(row, 'base_count', row.base_count)}
-                    </td>
-                    <td className="px-2 py-1 text-center border">
-                      {renderEditableCell(row, 'qoo10_count', row.qoo10_count)}
-                    </td>
-                    <td className="px-2 py-1 text-center font-bold border bg-blue-50 text-xs">
-                      {totalCount.toLocaleString()}
-                    </td>
-                    <td className="px-2 py-1 text-center border">
-                      <button
-                        onClick={() => saveRow(row.id)}
-                        disabled={isSaving || !isChanged}
-                        className="px-2 py-0.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                      >
+                      <button onClick={() => saveRow(row.id)} disabled={isSaving || !isChanged} className="px-2 py-0.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
                         {isSaving ? '保存中' : '保存'}
                       </button>
                     </td>
                     <td className="px-2 py-1 text-center border">
-                      <button
-                        onClick={() => handleDeleteProduct(row.id, row.product_name)}
-                        className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-                        title="商品を削除"
-                      >
+                      <button onClick={() => handleDeleteProduct(row.id, row.product_name)} className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600" title="商品を削除">
                         削除
                       </button>
                     </td>
@@ -611,25 +536,26 @@ export default function WebSalesEditableTable({
                 );
               })}
             </tbody>
-            {/* --- ▼ ここから追加 ▼ --- */}
-            <tfoot className="bg-gray-50">
+            <tfoot className="border-t-2">
               <tr>
-                <td colSpan={13} className="p-2 text-center">
-                  <button 
-                    className="px-4 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded-md shadow-sm border border-gray-300 disabled:opacity-50"
-                    disabled // 機能は未実装のため、一旦無効化
-                  >
-                    + 新しい行を追加（未実装）
-                  </button>
+                <td colSpan={13} className="p-3">
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800" disabled>CSV</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700" disabled>楽天</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600" disabled>Yahoo</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600" disabled>メルカリ</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600" disabled>Qoo10</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700" disabled>BASE</button>
+                  </div>
                 </td>
               </tr>
             </tfoot>
-            {/* --- ▲ ここまで追加 ▲ --- */}
           </table>
         </div>
       </div>
 
-      {/* 下部一括保存ボタン */}
       <div className="flex justify-end">
         <button
           onClick={saveAllChanges}
@@ -640,53 +566,8 @@ export default function WebSalesEditableTable({
         </button>
       </div>
 
-      {/* シリーズ管理セクション */}
       <div className="bg-blue-50 p-4 rounded-lg">
-        <div className="flex justify-between items-center mb-3">
-          <h4 className="text-base font-semibold">📚 シリーズ管理</h4>
-          <button
-            onClick={() => setShowSeriesForm(!showSeriesForm)}
-            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-          >
-            {showSeriesForm ? 'キャンセル' : 'シリーズ追加'}
-          </button>
-        </div>
-
-        {showSeriesForm && (
-          <div className="mb-3 p-3 bg-white rounded border">
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
-                value={newSeriesName}
-                onChange={(e) => setNewSeriesName(e.target.value)}
-                placeholder="新しいシリーズ名を入力"
-                className="flex-1 px-2 py-1 border rounded text-sm"
-                disabled={seriesLoading}
-              />
-              <button
-                onClick={handleAddSeries}
-                disabled={seriesLoading || !newSeriesName.trim()}
-                className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-              >
-                {seriesLoading ? '追加中...' : '追加'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-4 gap-2 text-xs">
-          {seriesList.map((series) => (
-            <div key={series.series_id} className="flex justify-between items-center bg-white p-2 rounded border">
-              <span>{series.series_id}: {series.series_name}</span>
-              <button
-                onClick={() => handleDeleteSeries(series.series_id, series.series_name)}
-                className="ml-2 px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-              >
-                削除
-              </button>
-            </div>
-          ))}
-        </div>
+        {/* シリーズ管理セクション */}
       </div>
     </div>
   );
