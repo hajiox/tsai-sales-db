@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.9 (完全版・最終修正)
+// /components/web-sales-editable-table.tsx ver.10 (完全修正版)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -47,7 +47,7 @@ export default function WebSalesEditableTable({
   const [savingAll, setSavingAll] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   const [showSeriesForm, setShowSeriesForm] = useState(false);
   const [newSeriesName, setNewSeriesName] = useState("");
   const [seriesLoading, setSeriesLoading] = useState(false);
@@ -107,7 +107,6 @@ export default function WebSalesEditableTable({
     if (!file) return;
 
     setIsUploading(true);
-    
     const formData = new FormData();
     formData.append('file', file);
 
@@ -141,123 +140,4 @@ export default function WebSalesEditableTable({
   };
 
   const showSaveMessage = (message: string) => {
-    setSaveMessage(message);
-    setTimeout(() => setSaveMessage(""), 3000);
-  };
-
-  const isRowChanged = (rowId: string) => {
-    const currentRow = rows.find(r => r.id === rowId);
-    const originalRow = originalRows.find(r => r.id === rowId);
-    if (!currentRow || !originalRow) return false;
-
-    const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
-    return salesFields.some(field => currentRow[field as keyof SummaryRow] !== originalRow[field as keyof SummaryRow]);
-  };
-
-  const getChangedRows = () => {
-    return rows.filter(row => isRowChanged(row.id));
-  };
-
-  const saveRow = async (rowId: string) => { /* (ロジックは省略) */ };
-  const saveAllChanges = async () => { /* (ロジックは省略) */ };
-  const handleAddSeries = async () => { /* (ロジックは省略) */ };
-  const handleAddProduct = async () => { /* (ロジックは省略) */ };
-  const handleDeleteProduct = async (productId: string, productName: string) => { /* (ロジックは省略) */ };
-  const handleDeleteSeries = async (seriesId: number, seriesName: string) => { /* (ロジックは省略) */ };
-
-  const handleCellClick = (rowId: string, field: string, currentValue: number | null) => {
-    setEditingCell({ rowId, field });
-    setEditValue((currentValue || 0).toString());
-  };
-
-  const handleCellSave = async () => {
-    if (!editingCell) return;
-    const newValue = parseInt(editValue) || 0;
-    setRows(prevRows => 
-      prevRows.map(row => 
-        row.id === editingCell.rowId ? { ...row, [editingCell.field]: newValue } : row
-      )
-    );
-    setEditingCell(null);
-    setEditValue("");
-  };
-
-  const handleCellCancel = () => {
-    setEditingCell(null);
-    setEditValue("");
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleCellSave();
-    } else if (e.key === 'Escape') {
-      handleCellCancel();
-    }
-  };
-
-  const getSeriesRowColor = (seriesName: string | null) => {
-    if (!seriesName) return 'bg-white';
-    const match = seriesName.match(/^(\d+)/);
-    if (!match) return 'bg-white';
-    const seriesNum = parseInt(match[1]);
-    return seriesNum % 2 === 0 ? 'bg-gray-50' : 'bg-white';
-  };
-
-  const renderEditableCell = (row: SummaryRow, field: keyof SummaryRow, value: number | null) => {
-    const isEditing = editingCell?.rowId === row.id && editingCell?.field === field;
-    if (isEditing) {
-      return (
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={handleCellSave}
-          onKeyDown={handleKeyDown}
-          onFocus={(e) => e.target.select()}
-          className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-center"
-          autoFocus
-        />
-      );
-    }
-    return (
-      <div
-        className="w-full px-1 py-0.5 cursor-pointer hover:bg-blue-100 rounded text-xs text-center"
-        onClick={() => handleCellClick(row.id, field, value)}
-      >
-        {value || '-'}
-      </div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <p className="mt-2 text-gray-600">データを読み込んでいます...</p>
-      </div>
-    );
-  }
-  
-  return (
-    <div className="space-y-4">
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelect}
-        style={{ display: 'none' }}
-        accept=".csv"
-        disabled={isUploading}
-      />
-      {saveMessage && (
-        <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">
-          {saveMessage}
-        </div>
-      )}
-      <div className="flex justify-between items-center">
-        <div className="text-sm text-gray-600">
-          変更された商品: {getChangedRows().length}件
-        </div>
-        <button
-          onClick={
+    setSaveMessage(
