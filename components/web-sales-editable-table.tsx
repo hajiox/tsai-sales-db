@@ -1,9 +1,10 @@
-// /components/web-sales-editable-table.tsx ver.13
+// /components/web-sales-editable-table.tsx ver.14
 "use client";
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import SeriesManager from './SeriesManager'; // [ADD] SeriesManagerをインポート
+import SeriesManager from './SeriesManager';
+import ProductAddForm from './ProductAddForm'; // [ADD] ProductAddFormをインポート
 
 type SummaryRow = {
   id: string;
@@ -23,6 +24,13 @@ type SummaryRow = {
 type SeriesMaster = {
   series_id: number;
   series_name: string;
+};
+
+type NewProductState = {
+  product_name: string;
+  series_id: string;
+  product_number: string;
+  price: string;
 };
 
 type EditingCell = {
@@ -54,7 +62,7 @@ export default function WebSalesEditableTable({
   const [seriesLoading, setSeriesLoading] = useState(false);
 
   const [showProductForm, setShowProductForm] = useState(false);
-  const [newProduct, setNewProduct] = useState({
+  const [newProduct, setNewProduct] = useState<NewProductState>({
     product_name: "",
     series_id: "",
     product_number: "",
@@ -229,7 +237,7 @@ export default function WebSalesEditableTable({
           });
 
           if (!response.ok) {
-            throw new Error(`${row.product_name}の${field}保存に失敗しました`);
+            throw new Error(`<span class="math-inline">\{row\.product\_name\}の</span>{field}保存に失敗しました`);
           }
         }
       }
@@ -315,7 +323,7 @@ export default function WebSalesEditableTable({
       });
       const result = await response.json();
       if (response.status === 409 && result.error === 'sales_exist') {
-        const confirmForceDelete = confirm(`「${productName}」には販売実績（${result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
+        const confirmForceDelete = confirm(`「<span class="math-inline">\{productName\}」には販売実績（</span>{result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
         if (confirmForceDelete) {
           const forceResponse = await fetch('/api/products-master', {
             method: 'DELETE',
@@ -440,84 +448,22 @@ export default function WebSalesEditableTable({
         </button>
       </div>
       
-      {/* 商品追加フォーム */}
-      {showProductForm && (
-        <div className="bg-green-50 p-4 rounded-lg border">
-          <h4 className="text-base font-semibold mb-3">🛍️ 新商品追加</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">商品名</label>
-              <input
-                type="text"
-                value={newProduct.product_name}
-                onChange={(e) => setNewProduct({...newProduct, product_name: e.target.value})}
-                className="w-full px-2 py-1 border rounded text-sm"
-                placeholder="商品名を入力"
-                disabled={productLoading}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">シリーズ</label>
-              <select
-                value={newProduct.series_id}
-                onChange={(e) => setNewProduct({...newProduct, series_id: e.target.value})}
-                className="w-full px-2 py-1 border rounded text-sm"
-                disabled={productLoading}
-              >
-                <option value="">シリーズを選択</option>
-                {seriesList.map((series) => (
-                  <option key={series.series_id} value={series.series_id}>
-                    {series.series_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">商品番号</label>
-              <input
-                type="number"
-                value={newProduct.product_number}
-                onChange={(e) => setNewProduct({...newProduct, product_number: e.target.value})}
-                className="w-full px-2 py-1 border rounded text-sm"
-                placeholder="商品番号"
-                disabled={productLoading}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">単価</label>
-              <input
-                type="number"
-                value={newProduct.price}
-                onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
-                className="w-full px-2 py-1 border rounded text-sm"
-                placeholder="単価"
-                disabled={productLoading}
-              />
-            </div>
-          </div>
-          <div className="flex gap-2 mt-3">
-            <button
-              onClick={handleAddProduct}
-              disabled={productLoading}
-              className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-            >
-              {productLoading ? '追加中...' : '商品追加'}
-            </button>
-            <button
-              onClick={() => setShowProductForm(false)}
-              className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
-            >
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
+      {/* [MODIFIED] 商品追加フォームをコンポーネントに置き換え */}
+      <ProductAddForm
+        show={showProductForm}
+        newProduct={newProduct}
+        seriesList={seriesList}
+        productLoading={productLoading}
+        onNewProductChange={(update) => setNewProduct(prev => ({...prev, ...update}))}
+        onAddProduct={handleAddProduct}
+        onCancel={() => setShowProductForm(false)}
+      />
       
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
           <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
           <button onClick={() => setShowProductForm(!showProductForm)} className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">
-            {showProductForm ? 'キャンセル' : '商品追加'}
+            {showProductForm ? 'フォームを閉じる' : '商品追加'}
           </button>
         </div>
         <div className="overflow-x-auto">
@@ -527,74 +473,4 @@ export default function WebSalesEditableTable({
                 <th className="px-2 py-1 text-left font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 min-w-56">商品名</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">シリーズ</th>
                 <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">商品番号</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">単価</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Amazon</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">楽天</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Yahoo!</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">メルカリ</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-20">保存</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">削除</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + (row.yahoo_count || 0) + (row.mercari_count || 0) + (row.base_count || 0) + (row.qoo10_count || 0);
-                const rowBgColor = getSeriesRowColor(row.series_name);
-                const isChanged = isRowChanged(row.id);
-                const isSaving = savingRows.has(row.id);
-                return (
-                  <tr key={row.id} className={`border-b hover:brightness-95 ${rowBgColor} ${isChanged ? 'bg-yellow-50' : ''}`}>
-                    <td className={`px-2 py-1 text-left border sticky left-0 ${isChanged ? 'bg-yellow-50' : rowBgColor} z-10 text-xs`}>{row.product_name}</td>
-                    <td className="px-2 py-1 text-center border text-xs">{row.series_name || '-'}</td>
-                    <td className="px-2 py-1 text-center border text-xs">{row.product_number}</td>
-                    <td className="px-2 py-1 text-right border text-xs">¥{(row.price || 0).toLocaleString()}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'amazon_count', row.amazon_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'rakuten_count', row.rakuten_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'yahoo_count', row.yahoo_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'mercari_count', row.mercari_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'base_count', row.base_count)}</td>
-                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'qoo10_count', row.qoo10_count)}</td>
-                    <td className="px-2 py-1 text-center font-bold border bg-blue-50 text-xs">{totalCount.toLocaleString()}</td>
-                    <td className="px-2 py-1 text-center border"><button onClick={() => saveRow(row.id)} disabled={isSaving || !isChanged} className="px-2 py-0.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">{isSaving ? '保存中' : '保存'}</button></td>
-                    <td className="px-2 py-1 text-center border"><button onClick={() => handleDeleteProduct(row.id, row.product_name)} className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600" title="商品を削除">削除</button></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot className="border-t-2">
-              <tr>
-                <td colSpan={13} className="p-3">
-                  <div className="flex items-center justify-center gap-3">
-                    <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
-                    <button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>{isUploading ? '処理中...' : 'CSV'}</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700" disabled>楽天</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600" disabled>Yahoo</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600" disabled>メルカリ</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600" disabled>Qoo10</button>
-                    <button className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700" disabled>BASE</button>
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-      
-      {/* [MODIFIED] シリーズ管理セクションをコンポーネントに置き換え */}
-      <SeriesManager
-        seriesList={seriesList}
-        showSeriesForm={showSeriesForm}
-        newSeriesName={newSeriesName}
-        seriesLoading={seriesLoading}
-        onShowFormToggle={() => setShowSeriesForm(!showSeriesForm)}
-        onNewSeriesNameChange={setNewSeriesName}
-        onAddSeries={handleAddSeries}
-        onDeleteSeries={handleDeleteSeries}
-      />
-    </div>
-  );
-}
+                <th className="px-2 py-1 text-center font
