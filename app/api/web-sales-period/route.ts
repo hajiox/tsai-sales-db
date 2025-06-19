@@ -104,21 +104,24 @@ export async function POST(req: Request) {
       const seriesName = seriesMap.get(seriesId) || '未分類';
 
       // ECサイト別集計
-      Object.keys(siteData).forEach(site => {
+      const siteKeys = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
+      let rowTotalCount = 0;
+      
+      siteKeys.forEach(site => {
         const count = row[site] || 0;
         siteData[site as keyof typeof siteData] += count;
         siteAmount[site as keyof typeof siteAmount] += count * price;
+        rowTotalCount += count;
       });
 
       // シリーズ別集計
-      const totalCount = Object.keys(siteData).reduce((sum, site) => sum + (row[site] || 0), 0);
-      const totalAmount = totalCount * price;
+      const totalAmount = rowTotalCount * price;
 
       if (!seriesData.has(seriesName)) {
         seriesData.set(seriesName, { count: 0, sales: 0 });
       }
       const existing = seriesData.get(seriesName);
-      existing.count += totalCount;
+      existing.count += rowTotalCount;
       existing.sales += totalAmount;
     });
 
