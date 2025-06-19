@@ -149,73 +149,45 @@ export default function WebSalesEditableTable({
     if (!currentRow || !originalRow) return false;
 
     const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
-    return salesFields.some(field => 
-      currentRow[field as keyof SummaryRow] !== originalRow[field as keyof SummaryRow]
-    );
+    return salesFields.some(field => currentRow[field as keyof SummaryRow] !== originalRow[field as keyof SummaryRow]);
   };
 
-  const handleEdit = (rowId: string, field: string) => {
-    const row = rows.find(r => r.id === rowId);
-    if (row) {
-      setEditingCell({ rowId, field });
-      setEditValue(String(row[field as keyof SummaryRow] || ""));
-    }
-  };
-
-  const handleSave = () => {
-    if (!editingCell) return;
-
-    const newRows = rows.map(row => {
-      if (row.id === editingCell.rowId) {
-        return {
-          ...row,
-          [editingCell.field]: editValue === "" ? null : Number(editValue)
-        };
-      }
-      return row;
-    });
-
-    setRows(newRows);
-    setEditingCell(null);
-  };
-
-  const handleCancel = () => {
-    setEditingCell(null);
-    setEditValue("");
+  const getChangedRows = () => {
+    return rows.filter(row => isRowChanged(row.id));
   };
 
   const saveRow = async (rowId: string) => {
     const row = rows.find(r => r.id === rowId);
-    if (!row || !isRowChanged(rowId)) return;
+    if (!row) return;
 
-    setSavingRows(prev => new Set(prev).add(rowId));
+    setSavingRows(prev => new Set(prev.add(rowId)));
+
     try {
-      const salesData = {
-        product_id: row.product_id,
-        month: month,
-        amazon_count: row.amazon_count,
-        rakuten_count: row.rakuten_count,
-        yahoo_count: row.yahoo_count,
-        mercari_count: row.mercari_count,
-        base_count: row.base_count,
-        qoo10_count: row.qoo10_count
-      };
+      const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
+      
+      for (const field of salesFields) {
+        const value = row[field as keyof SummaryRow] || 0;
+        
+        const response = await fetch('/api/web-sales-data', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_id: row.product_id,
+            report_month: month,
+            field,
+            value
+          })
+        });
 
-      const response = await fetch('/api/sales-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(salesData),
-      });
+        if (!response.ok) {
+          throw new Error(`${field}の保存に失敗しました`);
+        }
+      }
 
-      if (!response.ok) throw new Error('保存に失敗しました');
-
-      const updatedOriginalRows = originalRows.map(origRow => 
-        origRow.id === rowId ? { ...row } : origRow
-      );
-      setOriginalRows(updatedOriginalRows);
-
-      showSaveMessage(`${row.product_name} を保存しました`);
+      setOriginalRows(prev => prev.map(r => r.id === rowId ? { ...row } : r));
+      showSaveMessage(`「${row.product_name}」の販売数を保存しました`);
       onDataSaved?.();
+      
     } catch (error) {
       console.error('保存エラー:', error);
       showSaveMessage('保存に失敗しました');
@@ -228,21 +200,45 @@ export default function WebSalesEditableTable({
     }
   };
 
-  const saveAll = async () => {
-    const changedRows = rows.filter(row => isRowChanged(row.id));
+  const saveAllChanges = async () => {
+    const changedRows = getChangedRows();
     if (changedRows.length === 0) {
-      showSaveMessage('変更はありません');
+      showSaveMessage('変更がありません');
       return;
     }
 
     setSavingAll(true);
+
     try {
-      const promises = changedRows.map(row => saveRow(row.id));
-      await Promise.all(promises);
-      showSaveMessage(`${changedRows.length}件の変更を保存しました`);
+      for (const row of changedRows) {
+        const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
+        
+        for (const field of salesFields) {
+          const value = row[field as keyof SummaryRow] || 0;
+          
+          const response = await fetch('/api/web-sales-data', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              product_id: row.product_id,
+              report_month: month,
+              field,
+              value
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`<span class="math-inline">\{row\.product\_name\}の</span>{field}保存に失敗しました`);
+          }
+        }
+      }
+      setOriginalRows(JSON.parse(JSON.stringify(rows)));
+      showSaveMessage(`${changedRows.length}商品の販売数を一括保存しました`);
+      onDataSaved?.();
+      
     } catch (error) {
       console.error('一括保存エラー:', error);
-      showSaveMessage('一部の保存に失敗しました');
+      showSaveMessage('一括保存に失敗しました');
     } finally {
       setSavingAll(false);
     }
@@ -250,317 +246,273 @@ export default function WebSalesEditableTable({
 
   const handleAddSeries = async () => {
     if (!newSeriesName.trim()) return;
-
     setSeriesLoading(true);
     try {
       const response = await fetch('/api/series-master', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ series_name: newSeriesName.trim() }),
+        body: JSON.stringify({ series_name: newSeriesName.trim() })
       });
-
-      if (!response.ok) throw new Error('シリーズの追加に失敗しました');
-
-      await loadSeries();
-      setNewSeriesName("");
-      setShowSeriesForm(false);
-      showSaveMessage('シリーズを追加しました');
+      const result = await response.json();
+      if (response.ok) {
+        setNewSeriesName("");
+        setShowSeriesForm(false);
+        loadSeries();
+        alert('シリーズが追加されました');
+      } else {
+        alert('エラー: ' + result.error);
+      }
     } catch (error) {
       console.error('シリーズ追加エラー:', error);
-      alert('シリーズの追加に失敗しました');
+      alert('シリーズ追加に失敗しました');
     } finally {
       setSeriesLoading(false);
     }
   };
 
   const handleAddProduct = async () => {
-    if (!newProduct.product_name || !newProduct.series_id || !newProduct.product_number) {
-      alert('必須項目を入力してください');
+    if (!newProduct.product_name.trim() || !newProduct.series_id || !newProduct.product_number || !newProduct.price) {
+      alert('全ての項目を入力してください');
       return;
     }
-
     setProductLoading(true);
     try {
-      const response = await fetch('/api/products', {
+      const response = await fetch('/api/products-master', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_name: newProduct.product_name.trim(),
-          series_id: Number(newProduct.series_id),
-          product_number: Number(newProduct.product_number),
-          price: newProduct.price ? Number(newProduct.price) : null
-        }),
+          series_id: parseInt(newProduct.series_id),
+          product_number: parseInt(newProduct.product_number),
+          price: parseInt(newProduct.price)
+        })
       });
-
-      if (!response.ok) throw new Error('商品の追加に失敗しました');
-
-      await loadData();
-      setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" });
-      setShowProductForm(false);
-      showSaveMessage('商品を追加しました');
+      const result = await response.json();
+      if (response.ok) {
+        setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" });
+        setShowProductForm(false);
+        loadData();
+        alert('商品が追加されました');
+      } else {
+        alert('エラー: ' + result.error);
+      }
     } catch (error) {
       console.error('商品追加エラー:', error);
-      alert('商品の追加に失敗しました');
+      alert('商品追加に失敗しました');
     } finally {
       setProductLoading(false);
     }
   };
 
-  const formatNumber = (num: number | null) => {
-    if (num === null || num === 0) return "-";
-    return num.toLocaleString();
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!confirm(`「${productName}」を削除しますか？`)) return;
+    try {
+      const response = await fetch('/api/products-master', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: productId })
+      });
+      const result = await response.json();
+      if (response.status === 409 && result.error === 'sales_exist') {
+        const confirmForceDelete = confirm(`「<span class="math-inline">\{productName\}」には販売実績（</span>{result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
+        if (confirmForceDelete) {
+          const forceResponse = await fetch('/api/products-master', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id: productId, force_delete: true })
+          });
+          const forceResult = await forceResponse.json();
+          if (forceResponse.ok) {
+            loadData();
+            alert('商品と販売実績を削除しました');
+          } else {
+            alert('エラー: ' + forceResult.error);
+          }
+        }
+      } else if (response.ok) {
+        loadData();
+        alert('商品が削除されました');
+      } else {
+        alert('エラー: ' + result.error);
+      }
+    } catch (error) {
+      console.error('商品削除エラー:', error);
+      alert('商品削除に失敗しました');
+    }
   };
 
-  const calculateRowTotal = (row: SummaryRow) => {
-    return (row.amazon_count || 0) + (row.rakuten_count || 0) + 
-           (row.yahoo_count || 0) + (row.mercari_count || 0) + 
-           (row.base_count || 0) + (row.qoo10_count || 0);
+  const handleDeleteSeries = async (seriesId: number, seriesName: string) => {
+    if (!confirm(`「${seriesName}」を削除しますか？`)) return;
+    try {
+      const response = await fetch('/api/series-master', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ series_id: seriesId })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        loadSeries();
+        alert('シリーズが削除されました');
+      } else {
+        alert('エラー: ' + result.error);
+      }
+    } catch (error) {
+      console.error('シリーズ削除エラー:', error);
+      alert('シリーズ削除に失敗しました');
+    }
   };
 
-  const calculateColumnTotal = (field: keyof SummaryRow) => {
-    return rows.reduce((sum, row) => sum + (Number(row[field]) || 0), 0);
+  const handleCellClick = (rowId: string, field: string, currentValue: number | null) => {
+    setEditingCell({ rowId, field });
+    setEditValue((currentValue || 0).toString());
   };
 
-  const calculateGrandTotal = () => {
-    return rows.reduce((sum, row) => sum + calculateRowTotal(row), 0);
+  const handleCellSave = async () => {
+    if (!editingCell) return;
+    const newValue = parseInt(editValue) || 0;
+    setRows(prevRows => 
+      prevRows.map(row => 
+        row.id === editingCell.rowId ? { ...row, [editingCell.field]: newValue } : row
+      )
+    );
+    setEditingCell(null);
+    setEditValue("");
+  };
+
+  const handleCellCancel = () => {
+    setEditingCell(null);
+    setEditValue("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleCellSave();
+    else if (e.key === 'Escape') handleCellCancel();
+  };
+
+  const getSeriesRowColor = (seriesName: string | null) => {
+    if (!seriesName) return 'bg-white';
+    const match = seriesName.match(/^(\d+)/);
+    if (!match) return 'bg-white';
+    const seriesNum = parseInt(match[1]);
+    return seriesNum % 2 === 0 ? 'bg-gray-50' : 'bg-white';
+  };
+
+  const renderEditableCell = (row: SummaryRow, field: keyof SummaryRow, value: number | null) => {
+    const isEditing = editingCell?.rowId === row.id && editingCell?.field === field;
+    if (isEditing) {
+      return (
+        <input
+          type="text" inputMode="numeric" pattern="[0-9]*" value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleCellSave} onKeyDown={handleKeyDown}
+          onFocus={(e) => e.target.select()}
+          className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-center"
+          autoFocus
+        />
+      );
+    }
+    return (
+      <div className="w-full px-1 py-0.5 cursor-pointer hover:bg-blue-100 rounded text-xs text-center" onClick={() => handleCellClick(row.id, field, value)}>
+        {value || '-'}
+      </div>
+    );
   };
 
   if (loading) {
-    return <div className="flex justify-center items-center h-64">読み込み中...</div>;
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p className="mt-2 text-gray-600">データを読み込んでいます...</p>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full">
-      <div className="mb-4 flex justify-between items-center">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowSeriesForm(!showSeriesForm)}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-          >
-            シリーズ追加
-          </button>
-          <button
-            onClick={() => setShowProductForm(!showProductForm)}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            商品追加
-          </button>
-          <button
-            onClick={handleCsvButtonClick}
-            disabled={isUploading}
-            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400"
-          >
-            {isUploading ? 'アップロード中...' : 'CSV取込'}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-        </div>
-        <button
-          onClick={saveAll}
-          disabled={savingAll || rows.filter(row => isRowChanged(row.id)).length === 0}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
-        >
-          {savingAll ? '保存中...' : 'すべて保存'}
+    <div className="space-y-4">
+      <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} accept=".csv" disabled={isUploading} />
+      {saveMessage && (<div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">{saveMessage}</div>)}
+      <div className="flex justify-between items-center">
+        <div className="text-sm text-gray-600">変更された商品: {getChangedRows().length}件</div>
+        <button onClick={saveAllChanges} disabled={savingAll || getChangedRows().length === 0} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+          {savingAll ? '保存中...' : `一括保存 (${getChangedRows().length}件)`}
         </button>
       </div>
-
-      {showSeriesForm && (
-        <div className="mb-4 p-4 border rounded bg-gray-50">
-          <h3 className="font-bold mb-2">新しいシリーズを追加</h3>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newSeriesName}
-              onChange={(e) => setNewSeriesName(e.target.value)}
-              placeholder="シリーズ名"
-              className="flex-1 px-3 py-2 border rounded"
-            />
-            <button
-              onClick={handleAddSeries}
-              disabled={seriesLoading}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
-            >
-              {seriesLoading ? '追加中...' : '追加'}
-            </button>
-            <button
-              onClick={() => {
-                setShowSeriesForm(false);
-                setNewSeriesName("");
-              }}
-              className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-            >
-              キャンセル
-            </button>
-          </div>
+      <div className="rounded-lg border bg-white shadow-sm">
+        <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
+          <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
+          <button onClick={() => setShowProductForm(!showProductForm)} className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">
+            {showProductForm ? 'キャンセル' : '商品追加'}
+          </button>
         </div>
-      )}
-
-      {showProductForm && (
-        <div className="mb-4 p-4 border rounded bg-gray-50">
-          <h3 className="font-bold mb-2">新しい商品を追加</h3>
-          <div className="grid grid-cols-2 gap-2 mb-2">
-            <input
-              type="text"
-              value={newProduct.product_name}
-              onChange={(e) => setNewProduct({...newProduct, product_name: e.target.value})}
-              placeholder="商品名 *"
-              className="px-3 py-2 border rounded"
-            />
-            <select
-              value={newProduct.series_id}
-              onChange={(e) => setNewProduct({...newProduct, series_id: e.target.value})}
-              className="px-3 py-2 border rounded"
-            >
-              <option value="">シリーズを選択 *</option>
-              {seriesList.map(series => (
-                <option key={series.series_id} value={series.series_id}>
-                  {series.series_name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              value={newProduct.product_number}
-              onChange={(e) => setNewProduct({...newProduct, product_number: e.target.value})}
-              placeholder="商品番号 *"
-              className="px-3 py-2 border rounded"
-            />
-            <input
-              type="number"
-              value={newProduct.price}
-              onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
-              placeholder="価格"
-              className="px-3 py-2 border rounded"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleAddProduct}
-              disabled={productLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
-            >
-              {productLoading ? '追加中...' : '追加'}
-            </button>
-            <button
-              onClick={() => {
-                setShowProductForm(false);
-                setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" });
-              }}
-              className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-            >
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
-
-      {saveMessage && (
-        <div className="mb-4 p-3 bg-green-100 text-green-700 rounded">
-          {saveMessage}
-        </div>
-      )}
-
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-4 py-2 text-left">シリーズ</th>
-              <th className="border px-4 py-2 text-left">商品名</th>
-              <th className="border px-4 py-2 text-center">番号</th>
-              <th className="border px-4 py-2 text-right">価格</th>
-              <th className="border px-4 py-2 text-center">Amazon</th>
-              <th className="border px-4 py-2 text-center">楽天</th>
-              <th className="border px-4 py-2 text-center">Yahoo</th>
-              <th className="border px-4 py-2 text-center">メルカリ</th>
-              <th className="border px-4 py-2 text-center">BASE</th>
-              <th className="border px-4 py-2 text-center">Qoo10</th>
-              <th className="border px-4 py-2 text-center">合計</th>
-              <th className="border px-4 py-2 text-center">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className={isRowChanged(row.id) ? "bg-yellow-50" : ""}>
-                <td className="border px-4 py-2">{row.series_name || "-"}</td>
-                <td className="border px-4 py-2">{row.product_name}</td>
-                <td className="border px-4 py-2 text-center">{row.product_number}</td>
-                <td className="border px-4 py-2 text-right">
-                  {row.price ? `¥${row.price.toLocaleString()}` : "-"}
-                </td>
-                {['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'].map(field => (
-                  <td key={field} className="border px-4 py-2 text-center">
-                    {editingCell?.rowId === row.id && editingCell?.field === field ? (
-                      <input
-                        type="number"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={handleSave}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSave();
-                          if (e.key === 'Escape') handleCancel();
-                        }}
-                        className="w-20 px-2 py-1 border rounded text-center"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        onClick={() => handleEdit(row.id, field)}
-                        className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded inline-block min-w-[3rem]"
-                      >
-                        {formatNumber(row[field as keyof SummaryRow] as number | null)}
-                      </span>
-                    )}
-                  </td>
-                ))}
-                <td className="border px-4 py-2 text-center font-semibold">
-                  {formatNumber(calculateRowTotal(row))}
-                </td>
-                <td className="border px-4 py-2 text-center">
-                  <button
-                    onClick={() => saveRow(row.id)}
-                    disabled={!isRowChanged(row.id) || savingRows.has(row.id)}
-                    className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-                  >
-                    {savingRows.has(row.id) ? '保存中...' : '保存'}
-                  </button>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead className="bg-gray-100 sticky top-0">
+              <tr>
+                <th className="px-2 py-1 text-left font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 min-w-56">商品名</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">シリーズ</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">商品番号</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">単価</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Amazon</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">楽天</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Yahoo!</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">メルカリ</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
+                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-20">保存</th>
+                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">削除</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + (row.yahoo_count || 0) + (row.mercari_count || 0) + (row.base_count || 0) + (row.qoo10_count || 0);
+                const rowBgColor = getSeriesRowColor(row.series_name);
+                const isChanged = isRowChanged(row.id);
+                const isSaving = savingRows.has(row.id);
+                return (
+                  <tr key={row.id} className={`border-b hover:brightness-95 ${rowBgColor} ${isChanged ? 'bg-yellow-50' : ''}`}>
+                    <td className={`px-2 py-1 text-left border sticky left-0 ${isChanged ? 'bg-yellow-50' : rowBgColor} z-10 text-xs`}>{row.product_name}</td>
+                    <td className="px-2 py-1 text-center border text-xs">{row.series_name || '-'}</td>
+                    <td className="px-2 py-1 text-center border text-xs">{row.product_number}</td>
+                    <td className="px-2 py-1 text-right border text-xs">¥{(row.price || 0).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'amazon_count', row.amazon_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'rakuten_count', row.rakuten_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'yahoo_count', row.yahoo_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'mercari_count', row.mercari_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'base_count', row.base_count)}</td>
+                    <td className="px-2 py-1 text-center border">{renderEditableCell(row, 'qoo10_count', row.qoo10_count)}</td>
+                    <td className="px-2 py-1 text-center font-bold border bg-blue-50 text-xs">{totalCount.toLocaleString()}</td>
+                    <td className="px-2 py-1 text-center border"><button onClick={() => saveRow(row.id)} disabled={isSaving || !isChanged} className="px-2 py-0.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">{isSaving ? '保存中' : '保存'}</button></td>
+                    <td className="px-2 py-1 text-center border"><button onClick={() => handleDeleteProduct(row.id, row.product_name)} className="px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600" title="商品を削除">削除</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="border-t-2">
+              <tr>
+                <td colSpan={13} className="p-3">
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
+                    <button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>{isUploading ? '処理中...' : 'CSV'}</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700" disabled>楽天</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600" disabled>Yahoo</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600" disabled>メルカリ</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600" disabled>Qoo10</button>
+                    <button className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700" disabled>BASE</button>
+                  </div>
                 </td>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-200 font-bold">
-              <td colSpan={4} className="border px-4 py-2 text-right">合計</td>
-              <td className="border px-4 py-2 text-center">
-                {formatNumber(calculateColumnTotal('amazon_count'))}
-              </td>
-              <td className="border px-4 py-2 text-center">
-                {formatNumber(calculateColumnTotal('rakuten_count'))}
-              </td>
-              <td className="border px-4 py-2 text-center">
-                {formatNumber(calculateColumnTotal('yahoo_count'))}
-              </td>
-              <td className="border px-4 py-2 text-center">
-                {formatNumber(calculateColumnTotal('mercari_count'))}
-              </td>
-              <td className="border px-4 py-2 text-center">
-                {formatNumber(calculateColumnTotal('base_count'))}
-              </td>
-              <td className="border px-4 py-2 text-center">
-                {formatNumber(calculateColumnTotal('qoo10_count'))}
-              </td>
-              <td className="border px-4 py-2 text-center">
-                {formatNumber(calculateGrandTotal())}
-              </td>
-              <td className="border px-4 py-2"></td>
-            </tr>
-          </tfoot>
-        </table>
+            </tfoot>
+          </table>
+        </div>
       </div>
-    </div>
-  );
-}
+      <div className="bg-blue-50 p-4 rounded-lg">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-base font-semibold">📚 シリーズ管理</h4>
+            <button onClick={() => setShowSeriesForm(!showSeriesForm)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">{showSeriesForm ? 'キャンセル' : 'シリーズ追加'}</button>
+          </div>
+          {showSeriesForm && (
+            <div className="mb-3 p-3 bg-white rounded border">
+              <div className="flex gap-2 items-center">
+                <input type="text" value={newSeriesName} onChange={(e) => setNewSeriesName(e
