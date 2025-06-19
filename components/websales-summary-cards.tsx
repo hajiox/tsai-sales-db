@@ -50,17 +50,20 @@ export default function WebSalesSummaryCards({
           setTotals(data.totals);
           setSeriesSummary(data.seriesSummary);
         } else {
-          // --- 月別表示モード (こちらを修正しました) ---
+          // --- 月別表示モード (こちらで原因を調査します) ---
           const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month });
           if (error) throw error;
           const rows = (data as any[]) ?? [];
 
-          // [修正点①] シリーズマスタを取得して、番号と名前の対応表を作成します
+          // ▼▼▼【原因調査用コード】▼▼▼
+          // データベースから返ってきたデータの1行目をコンソールに表示します。
+          console.log("【確認用】RPC関数の戻り値:", rows[0]);
+          // ▲▲▲【原因調査用コード】▲▲▲
+
           const { data: seriesMasterData, error: masterError } = await supabase.from('series_master').select('series_id, series_name');
           if (masterError) throw masterError;
           const seriesNameMap = new Map(seriesMasterData.map(item => [item.series_id, item.series_name]));
 
-          // ECサイト別集計 (ここは変更なし)
           const siteTotals: Totals = {};
           SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0 }; });
           rows.forEach((row: any) => {
@@ -73,12 +76,9 @@ export default function WebSalesSummaryCards({
           });
           setTotals(siteTotals);
 
-          // シリーズ別集計 (こちらも修正)
           const seriesMap = new Map<string, { count: number, sales: number }>();
           rows.forEach((row: any) => {
-            // [修正点②] rowからシリーズコード(series_code)を取り出し、対応表から正式なシリーズ名を取得します
             const seriesName = seriesNameMap.get(row.series_code) || '未分類';
-            
             const totalCount = SITES.reduce((sum, s) => sum + (row[s.key] || 0), 0);
             const totalSales = totalCount * (row.price || 0);
             
@@ -105,7 +105,6 @@ export default function WebSalesSummaryCards({
     fetchData();
   }, [month, refreshTrigger, viewMode, periodMonths]);
 
-  // JSX部分は変更ありません
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
   if (loading) {
