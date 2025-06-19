@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.12 (最終確定版)
+// /components/web-sales-editable-table.tsx ver.12 (構文エラー修正版)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -228,7 +228,7 @@ export default function WebSalesEditableTable({
           });
 
           if (!response.ok) {
-            throw new Error(`<span class="math-inline">\{row\.product\_name\}の</span>{field}保存に失敗しました`);
+            throw new Error(`${row.product_name}の${field}保存に失敗しました`);
           }
         }
       }
@@ -314,7 +314,7 @@ export default function WebSalesEditableTable({
       });
       const result = await response.json();
       if (response.status === 409 && result.error === 'sales_exist') {
-        const confirmForceDelete = confirm(`「<span class="math-inline">\{productName\}」には販売実績（</span>{result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
+        const confirmForceDelete = confirm(`「${productName}」には販売実績（${result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
         if (confirmForceDelete) {
           const forceResponse = await fetch('/api/products-master', {
             method: 'DELETE',
@@ -437,6 +437,80 @@ export default function WebSalesEditableTable({
           {savingAll ? '保存中...' : `一括保存 (${getChangedRows().length}件)`}
         </button>
       </div>
+      
+      {/* 商品追加フォーム */}
+      {showProductForm && (
+        <div className="bg-green-50 p-4 rounded-lg border">
+          <h4 className="text-base font-semibold mb-3">🛍️ 新商品追加</h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">商品名</label>
+              <input
+                type="text"
+                value={newProduct.product_name}
+                onChange={(e) => setNewProduct({...newProduct, product_name: e.target.value})}
+                className="w-full px-2 py-1 border rounded text-sm"
+                placeholder="商品名を入力"
+                disabled={productLoading}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">シリーズ</label>
+              <select
+                value={newProduct.series_id}
+                onChange={(e) => setNewProduct({...newProduct, series_id: e.target.value})}
+                className="w-full px-2 py-1 border rounded text-sm"
+                disabled={productLoading}
+              >
+                <option value="">シリーズを選択</option>
+                {seriesList.map((series) => (
+                  <option key={series.series_id} value={series.series_id}>
+                    {series.series_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">商品番号</label>
+              <input
+                type="number"
+                value={newProduct.product_number}
+                onChange={(e) => setNewProduct({...newProduct, product_number: e.target.value})}
+                className="w-full px-2 py-1 border rounded text-sm"
+                placeholder="商品番号"
+                disabled={productLoading}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">単価</label>
+              <input
+                type="number"
+                value={newProduct.price}
+                onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                className="w-full px-2 py-1 border rounded text-sm"
+                placeholder="単価"
+                disabled={productLoading}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={handleAddProduct}
+              disabled={productLoading}
+              className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+            >
+              {productLoading ? '追加中...' : '商品追加'}
+            </button>
+            <button
+              onClick={() => setShowProductForm(false)}
+              className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
+      
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
           <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
@@ -507,57 +581,52 @@ export default function WebSalesEditableTable({
           </table>
         </div>
       </div>
+      
       <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="flex justify-between items-center mb-3">
-            <h4 className="text-base font-semibold">📚 シリーズ管理</h4>
-            <button onClick={() => setShowSeriesForm(!showSeriesForm)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">{showSeriesForm ? 'キャンセル' : 'シリーズ追加'}</button>
-          </div>
-          {showSeriesForm && (
-            <div className="mb-3 p-3 bg-white rounded border">
-              <div className="flex gap-2 items-center">
-                <input type="text" value={newSeriesName} onChange={(e) => setNewSeriesName(e
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="flex justify-between items-center mb-3">
-            <h4 className="text-base font-semibold">📚 シリーズ管理</h4>
-            <button
-              onClick={() => setShowSeriesForm(!showSeriesForm)}
-              className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-            >
-              {showSeriesForm ? 'キャンセル' : 'シリーズ追加'}
-            </button>
-          </div>
-          {showSeriesForm && (
-            <div className="mb-3 p-3 bg-white rounded border">
-              <div className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={newSeriesName}
-                  onChange={(e) => setNewSeriesName(e.target.value)}
-                  placeholder="新しいシリーズ名を入力"
-                  className="flex-1 px-2 py-1 border rounded text-sm"
-                  disabled={seriesLoading}
-                />
-                <button
-                  onClick={handleAddSeries}
-                  disabled={seriesLoading || !newSeriesName.trim()}
-                  className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-                >
-                  {seriesLoading ? '追加中...' : '追加'}
-                </button>
-              </div>
-            </div>
-          )}
-          <div className="grid grid-cols-4 gap-2 text-xs">
-            {seriesList.map((series) => (
-              <div key={series.series_id} className="flex justify-between items-center bg-white p-2 rounded border">
-                <span>{series.series_id}: {series.series_name}</span>
-                <button
-                  onClick={() => handleDeleteSeries(series.series_id, series.series_name)}
-                  className="ml-2 px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-                >
-                  削除
-                </button>
-              </div>
-            ))}
-          </div>
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="text-base font-semibold">📚 シリーズ管理</h4>
+          <button
+            onClick={() => setShowSeriesForm(!showSeriesForm)}
+            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+          >
+            {showSeriesForm ? 'キャンセル' : 'シリーズ追加'}
+          </button>
         </div>
+        {showSeriesForm && (
+          <div className="mb-3 p-3 bg-white rounded border">
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                value={newSeriesName}
+                onChange={(e) => setNewSeriesName(e.target.value)}
+                placeholder="新しいシリーズ名を入力"
+                className="flex-1 px-2 py-1 border rounded text-sm"
+                disabled={seriesLoading}
+              />
+              <button
+                onClick={handleAddSeries}
+                disabled={seriesLoading || !newSeriesName.trim()}
+                className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+              >
+                {seriesLoading ? '追加中...' : '追加'}
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-4 gap-2 text-xs">
+          {seriesList.map((series) => (
+            <div key={series.series_id} className="flex justify-between items-center bg-white p-2 rounded border">
+              <span>{series.series_id}: {series.series_name}</span>
+              <button
+                onClick={() => handleDeleteSeries(series.series_id, series.series_name)}
+                className="ml-2 px-1 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+              >
+                削除
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
