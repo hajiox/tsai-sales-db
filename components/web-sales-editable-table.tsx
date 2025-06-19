@@ -1,3 +1,4 @@
+// /components/web-sales-editable-table.tsx ver.2 (フッターにボタン追加)
 "use client";
 
 import { useEffect, useState } from "react";
@@ -395,9 +396,11 @@ export default function WebSalesEditableTable({
   // シリーズ別の背景色を取得
   const getSeriesRowColor = (seriesName: string | null) => {
     if (!seriesName) return 'bg-white';
-    const seriesNum = parseInt(seriesName);
-    if (isNaN(seriesNum)) return 'bg-white';
-    
+    // シリーズ名から数値部分を抽出するロジックを修正
+    const match = seriesName.match(/^(\d+)/);
+    if (!match) return 'bg-white';
+    const seriesNum = parseInt(match[1]);
+
     return seriesNum % 2 === 0 ? 'bg-gray-50' : 'bg-white';
   };
 
@@ -415,7 +418,7 @@ export default function WebSalesEditableTable({
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleCellSave}
           onKeyDown={handleKeyDown}
-          onFocus={(e) => e.target.select()} // 追加：フォーカス時に全選択
+          onFocus={(e) => e.target.select()}
           className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-center"
           autoFocus
         />
@@ -608,6 +611,20 @@ export default function WebSalesEditableTable({
                 );
               })}
             </tbody>
+            {/* --- ▼ ここから追加 ▼ --- */}
+            <tfoot className="bg-gray-50">
+              <tr>
+                <td colSpan={13} className="p-2 text-center">
+                  <button 
+                    className="px-4 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded-md shadow-sm border border-gray-300 disabled:opacity-50"
+                    disabled // 機能は未実装のため、一旦無効化
+                  >
+                    + 新しい行を追加（未実装）
+                  </button>
+                </td>
+              </tr>
+            </tfoot>
+            {/* --- ▲ ここまで追加 ▲ --- */}
           </table>
         </div>
       </div>
