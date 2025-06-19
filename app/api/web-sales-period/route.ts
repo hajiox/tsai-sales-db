@@ -38,8 +38,7 @@ export async function POST(req: Request) {
         yahoo_count,
         mercari_count,
         base_count,
-        qoo10_count,
-        products!inner(name, price, series_code)
+        qoo10_count
       `)
       .gte('report_month', startMonth)
       .lte('report_month', endMonth);
@@ -48,6 +47,19 @@ export async function POST(req: Request) {
       console.error('Database error:', error);
       return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
+
+    // 商品マスタを別途取得
+    const { data: products, error: productsError } = await supabase
+      .from('products')
+      .select('id, name, price, series_code');
+
+    if (productsError) {
+      console.error('Products error:', productsError);
+      return NextResponse.json({ error: 'Products error' }, { status: 500 });
+    }
+
+    // 商品マスタをMapに変換
+    const productsMap = new Map(products.map(p => [p.id, p]));
 
     // シリーズマスタを取得
     const { data: seriesMaster, error: seriesError } = await supabase
@@ -84,8 +96,11 @@ export async function POST(req: Request) {
     const seriesData = new Map();
 
     data?.forEach((row: any) => {
-      const price = row.products?.price || 0;
-      const seriesId = row.products?.series_code;
+      const product = productsMap.get(row.product_id);
+      if (!product) return;
+      
+      const price = product.price || 0;
+      const seriesId = product.series_code;
       const seriesName = seriesMap.get(seriesId) || '未分類';
 
       // ECサイト別集計
