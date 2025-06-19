@@ -39,7 +39,7 @@ export default function WebSalesSummaryCards({
       setLoading(true);
       try {
         if (viewMode === 'period') {
-          // --- 期間集計モード (この部分は正常に動作しています) ---
+          // --- 期間集計モード (正常に動作しています) ---
           const res = await fetch('/api/web-sales-period', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -50,20 +50,12 @@ export default function WebSalesSummaryCards({
           setTotals(data.totals);
           setSeriesSummary(data.seriesSummary);
         } else {
-          // --- 月別表示モード (こちらで原因を調査します) ---
+          // --- 月別表示モード (原因が判明したため、最終修正しました) ---
           const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month });
           if (error) throw error;
           const rows = (data as any[]) ?? [];
 
-          // ▼▼▼【原因調査用コード】▼▼▼
-          // データベースから返ってきたデータの1行目をコンソールに表示します。
-          console.log("【確認用】RPC関数の戻り値:", rows[0]);
-          // ▲▲▲【原因調査用コード】▲▲▲
-
-          const { data: seriesMasterData, error: masterError } = await supabase.from('series_master').select('series_id, series_name');
-          if (masterError) throw masterError;
-          const seriesNameMap = new Map(seriesMasterData.map(item => [item.series_id, item.series_name]));
-
+          // ECサイト別集計
           const siteTotals: Totals = {};
           SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0 }; });
           rows.forEach((row: any) => {
@@ -76,9 +68,14 @@ export default function WebSalesSummaryCards({
           });
           setTotals(siteTotals);
 
+          // シリーズ別集計 (大幅にシンプルで正しいロジックになりました)
           const seriesMap = new Map<string, { count: number, sales: number }>();
           rows.forEach((row: any) => {
-            const seriesName = seriesNameMap.get(row.series_code) || '未分類';
+            // ★★★★★★★★★★★★★★★★★★★★★★★
+            // ★ これが正解でした: row.series_name ★
+            // ★★★★★★★★★★★★★★★★★★★★★★★
+            const seriesName = row.series_name || '未分類';
+            
             const totalCount = SITES.reduce((sum, s) => sum + (row[s.key] || 0), 0);
             const totalSales = totalCount * (row.price || 0);
             
@@ -105,6 +102,7 @@ export default function WebSalesSummaryCards({
     fetchData();
   }, [month, refreshTrigger, viewMode, periodMonths]);
 
+  // JSX部分は変更ありません
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
   if (loading) {
