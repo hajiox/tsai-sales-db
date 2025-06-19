@@ -1,4 +1,4 @@
-// /app/api/import/csv/route.ts ver.4 (エラーメッセージ改善)
+// /app/api/import/csv/route.ts ver.5 (文字コードShift-JISに対応)
 
 import { NextResponse } from 'next/server';
 import Papa from 'papaparse';
@@ -20,13 +20,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'ファイルがありません。' }, { status: 400 });
     }
 
-    const csvString = await file.text();
+    // --- ▼ ここから修正 ▼ ---
+    // ファイルをバイナリデータとして読み込む
+    const fileBuffer = await file.arrayBuffer();
+    // Shift-JIS形式でテキストに変換（デコード）する
+    const decoder = new TextDecoder('shift-jis');
+    const csvString = decoder.decode(fileBuffer);
+    // --- ▲ ここまで修正 ▲ ---
+
     const parsedData = Papa.parse(csvString, {
       header: true,
       skipEmptyLines: true,
     });
 
     if (parsedData.errors.length > 0) {
+      console.error('CSV解析エラー:', parsedData.errors);
       return NextResponse.json({ error: 'CSVの解析に失敗しました。' }, { status: 400 });
     }
 
@@ -35,16 +43,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'CSVにデータがありません。' }, { status: 400 });
     }
     
-    // --- ▼ ここから修正 ▼ ---
-
-    // CSVから検出されたヘッダー名（列名）の一覧を取得
-    const detectedHeaders = Object.keys(dataRows[0]);
-    console.log('CSVから検出されたヘッダー一覧:', detectedHeaders);
-
-    // 「商品名」というキーが存在するかチェック
     const productNameKey = '商品名';
     if (!(productNameKey in dataRows[0])) {
-      // 存在しない場合、検出されたヘッダー一覧をエラーメッセージに含めて返す
+      const detectedHeaders = Object.keys(dataRows[0]);
       return NextResponse.json({
         error: `CSVに「${productNameKey}」の列が見つかりません。検出された列名: [${detectedHeaders.join(', ')}]`
       }, { status: 400 });
@@ -54,8 +55,6 @@ export async function POST(request: Request) {
     if (!firstRowProductName) {
        return NextResponse.json({ error: 'CSVの1行目に商品名がありません。' }, { status: 400 });
     }
-
-    // --- ▲ ここまで修正 ▲ ---
 
     const { data: productsMaster, error: dbError } = await supabase
       .from('products')
