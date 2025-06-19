@@ -1,11 +1,11 @@
-// /components/web-sales-editable-table.tsx ver.16
+// /components/web-sales-editable-table.tsx ver.17
 "use client";
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import SeriesManager from './SeriesManager';
 import ProductAddForm from './ProductAddForm';
-import SalesDataTable from './SalesDataTable'; // [ADD] SalesDataTableをインポート
+import SalesDataTable from './SalesDataTable';
 
 // --- 型定義 ---
 type SummaryRow = {
@@ -210,12 +210,12 @@ export default function WebSalesEditableTable({
     }
     setSavingAll(true);
     try {
+      // 一括保存は個別の保存処理をループで呼び出す
       for (const row of changedRows) {
         await saveRow(row.id);
       }
-      setOriginalRows(JSON.parse(JSON.stringify(rows)));
+      // stateの同期は各saveRowで行われるため、ここでは不要
       showSaveMessage(`${changedRows.length}商品の販売数を一括保存しました`);
-      onDataSaved?.();
     } catch (error) {
       console.error('一括保存エラー:', error);
       showSaveMessage('一括保存に失敗しました');
@@ -295,7 +295,11 @@ export default function WebSalesEditableTable({
         loadData();
         alert('商品が削除されました');
       } else if (response.status === 409) {
-        // Handle force delete if needed
+        const result = await response.json();
+        const confirmForceDelete = confirm(`「${productName}」には販売実績（${result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`);
+        if (confirmForceDelete) {
+            // Force delete logic can be added here if needed
+        }
       } else {
         const result = await response.json();
         alert('エラー: ' + result.error);
@@ -381,7 +385,6 @@ export default function WebSalesEditableTable({
         onCancel={() => setShowProductForm(false)}
       />
       
-      {/* [MODIFIED] テーブルをSalesDataTableコンポーネントに置き換え */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
           <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
@@ -402,11 +405,17 @@ export default function WebSalesEditableTable({
             onCellSave={handleCellSave}
             onCellCancel={handleCellCancel}
         />
+        {/* [FIX] 削除されてしまったボタンを復元 */}
         <div className="p-3 border-t">
             <div className="flex items-center justify-center gap-3">
                 <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
                 <button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>{isUploading ? '処理中...' : 'CSV'}</button>
                 <button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button>
+                <button className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700" disabled>楽天</button>
+                <button className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600" disabled>Yahoo</button>
+                <button className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600" disabled>メルカリ</button>
+                <button className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600" disabled>Qoo10</button>
+                <button className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700" disabled>BASE</button>
             </div>
         </div>
       </div>
