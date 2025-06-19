@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.7 (ビルドエラー修正版)
+// /components/web-sales-editable-table.tsx ver.8 (テーブル描画ロジック修正)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -131,21 +131,74 @@ export default function WebSalesEditableTable({
     }
   };
   
-  const showSaveMessage = (message: string) => { /* (省略) */ };
-  const isRowChanged = (rowId: string) => { /* (省略) */ return false; };
-  const getChangedRows = () => { /* (省略) */ return []; };
+  const showSaveMessage = (message: string) => {
+    setSaveMessage(message);
+    setTimeout(() => setSaveMessage(""), 3000);
+  };
+  const isRowChanged = (rowId: string) => {
+    const currentRow = rows.find(r => r.id === rowId);
+    const originalRow = originalRows.find(r => r.id === rowId);
+    if (!currentRow || !originalRow) return false;
+    const salesFields = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
+    return salesFields.some(field => currentRow[field as keyof SummaryRow] !== originalRow[field as keyof SummaryRow]);
+  };
+  const getChangedRows = () => rows.filter(row => isRowChanged(row.id));
   const saveRow = async (rowId: string) => { /* (省略) */ };
   const saveAllChanges = async () => { /* (省略) */ };
   const handleAddSeries = async () => { /* (省略) */ };
   const handleAddProduct = async () => { /* (省略) */ };
   const handleDeleteProduct = async (productId: string, productName: string) => { /* (省略) */ };
   const handleDeleteSeries = async (seriesId: number, seriesName: string) => { /* (省略) */ };
-  const handleCellClick = (rowId: string, field: string, currentValue: number | null) => { /* (省略) */ };
-  const handleCellSave = async () => { /* (省略) */ };
-  const handleCellCancel = () => { /* (省略) */ };
-  const handleKeyDown = (e: React.KeyboardEvent) => { /* (省略) */ };
-  const getSeriesRowColor = (seriesName: string | null) => { /* (省略) */ return ''; };
-  const renderEditableCell = (row: SummaryRow, field: keyof SummaryRow, value: number | null) => { /* (省略) */ };
+  const handleCellClick = (rowId: string, field: string, currentValue: number | null) => {
+    setEditingCell({ rowId, field });
+    setEditValue((currentValue || 0).toString());
+  };
+  const handleCellSave = async () => {
+    if (!editingCell) return;
+    const newValue = parseInt(editValue) || 0;
+    setRows(prevRows => 
+      prevRows.map(row => 
+        row.id === editingCell.rowId ? { ...row, [editingCell.field]: newValue } : row
+      )
+    );
+    setEditingCell(null);
+    setEditValue("");
+  };
+  const handleCellCancel = () => {
+    setEditingCell(null);
+    setEditValue("");
+  };
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleCellSave();
+    else if (e.key === 'Escape') handleCellCancel();
+  };
+  const getSeriesRowColor = (seriesName: string | null) => {
+    if (!seriesName) return 'bg-white';
+    const match = seriesName.match(/^(\d+)/);
+    if (!match) return 'bg-white';
+    const seriesNum = parseInt(match[1]);
+    return seriesNum % 2 === 0 ? 'bg-gray-50' : 'bg-white';
+  };
+  const renderEditableCell = (row: SummaryRow, field: keyof SummaryRow, value: number | null) => {
+    const isEditing = editingCell?.rowId === row.id && editingCell?.field === field;
+    if (isEditing) {
+      return (
+        <input
+          type="text" inputMode="numeric" pattern="[0-9]*" value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleCellSave} onKeyDown={handleKeyDown}
+          onFocus={(e) => e.target.select()}
+          className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-center"
+          autoFocus
+        />
+      );
+    }
+    return (
+      <div className="w-full px-1 py-0.5 cursor-pointer hover:bg-blue-100 rounded text-xs text-center" onClick={() => handleCellClick(row.id, field, value)}>
+        {value || '-'}
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -155,84 +208,10 @@ export default function WebSalesEditableTable({
     );
   }
 
-  const changedRowsCount = getChangedRows().length;
-
   return (
     <div className="space-y-4">
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelect}
-        style={{ display: 'none' }}
-        accept=".csv"
-        disabled={isUploading}
-      />
-      {saveMessage && (
-        <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">
-          {saveMessage}
-        </div>
-      )}
+      <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} accept=".csv" disabled={isUploading}/>
+      {saveMessage && (<div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">{saveMessage}</div>)}
       <div className="flex justify-between items-center">
-        <div className="text-sm text-gray-600">変更された商品: {changedRowsCount}件</div>
-        <button
-          onClick={saveAllChanges}
-          disabled={savingAll || changedRowsCount === 0}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-        >
-          {savingAll ? '保存中...' : `一括保存 (${changedRowsCount}件)`}
-        </button>
-      </div>
-      <div className="rounded-lg border bg-white shadow-sm">
-        <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
-          <h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3>
-          <button onClick={() => setShowProductForm(!showProductForm)} className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">
-            {showProductForm ? 'キャンセル' : '商品追加'}
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead className="bg-gray-100 sticky top-0">
-              <tr>
-                <th className="px-2 py-1 text-left font-medium text-gray-700 border sticky left-0 bg-gray-100 z-10 min-w-56">商品名</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">シリーズ</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">商品番号</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">単価</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Amazon</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">楽天</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">Yahoo!</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-20">メルカリ</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-16">BASE</th>
-                <th className="px-2 py-1 text-center font-medium text-gray-700 border w-18">Qoo10</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">合計</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-20">保存</th>
-                <th className="px-2 py-1 text-center font-bold text-gray-700 border w-16">削除</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* ... (tbodyの内容は省略) ... */}
-            </tbody>
-            <tfoot className="border-t-2">
-              <tr>
-                <td colSpan={13} className="p-3">
-                  <div className="flex items-center justify-center gap-3">
-                    <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
-                    <button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>
-                      {isUploading ? '処理中...' : 'CSV'}
-                    </button>
-                    {/* ... (他のボタンは省略) ... */}
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-      <div className="flex justify-end">
-        {/* ... (一括保存ボタンは省略) ... */}
-      </div>
-      <div className="bg-blue-50 p-4 rounded-lg">
-        {/* ... (シリーズ管理は省略) ... */}
-      </div>
-    </div>
-  );
-}
+        <div className="text-sm text-gray-600">変更された商品: {getChangedRows().length}件</div>
+        <button onClick={saveAllChanges} disabled={savingAll || getChangedRows().length === 0} className="px-4 py-2 bg-blue-600 text
