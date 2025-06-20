@@ -1,8 +1,7 @@
 // /app/api/import/csv/route.ts
-// ver3 (一括インポート対応版)
+// ver5 (ECサイト名マッピング修正版)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { matchProducts } from '@/lib/db/productMatcher';
 import { Readable } from 'stream';
 import { Buffer } from 'buffer';
 
@@ -28,14 +27,50 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-// ECサイト名とDBカラム名のマッピング
+// 一時的な商品マッチング関数（部分一致）
+async function matchProductsByName(productNames: string[]) {
+  const { data: products, error } = await supabase
+    .from('products')
+    .select('id, name, series_id, price');
+
+  if (error) {
+    throw new Error(`商品マスタの取得に失敗しました: ${error.message}`);
+  }
+
+  return productNames.map(csvName => {
+    // 完全一致を最優先
+    let match = products?.find(p => p.name === csvName);
+    
+    if (!match) {
+      // 部分一致（CSVの商品名がマスタ商品名を含む）
+      match = products?.find(p => csvName.includes(p.name));
+    }
+    
+    if (!match) {
+      // 部分一致（マスタ商品名がCSVの商品名を含む）
+      match = products?.find(p => p.name.includes(csvName));
+    }
+    
+    return match ? {
+      id: match.id,
+      name: match.name,
+      series_id: match.series_id,
+      price: match.price,
+      similarity: match.name === csvName ? 1.0 : 0.8 // 完全一致は1.0、部分一致は0.8
+    } : null;
+  });
+}
+
+// ECサイト名とDBカラム名のマッピング（CSVに合わせて修正）
 const ecSiteColumnMap: { [key: string]: string } = {
   'Amazon': 'amazon',
-  '楽天': 'rakuten',
+  '楽天市場': 'rakuten',  // 「楽天」→「楽天市場」に修正
+  '楽天': 'rakuten',      // 従来の「楽天」も対応
   'Yahoo!': 'yahoo',
-  'Yahoo': 'yahoo', // Yahooの別表記にも対応
+  'Yahoo': 'yahoo',
   'メルカリ': 'mercari',
   'BASE': 'base',
+  'フロア': 'floor',       // 新規追加
   'Qoo10': 'qoo10'
 };
 
@@ -52,20 +87,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'レポート月が指定されていません。' }, { status: 400 });
     }
 
-    // ファイルをテキストとして読み込む
+    // ファイルをバッファとして読み込む
     const fileBuffer = await streamToBuffer(file.stream() as any);
     
     // 文字コード判定（Shift_JISを優先的に試す）
     let fileContent = '';
     try {
-        // UTF-8でまず試す
-        fileContent = new TextDecoder('utf-8', { fatal: true }).decode(fileBuffer);
+        // Shift_JISでまず試す
+        fileContent = new TextDecoder('shift_jis', { fatal: true }).decode(fileBuffer);
     } catch (e) {
         try {
-            // UTF-8で失敗したらShift_JISで試す
-            fileContent = new TextDecoder('shift-jis', { fatal: true }).decode(fileBuffer);
-        } catch (sjisError) {
-            return NextResponse.json({ error: 'ファイルの文字コードがUTF-8またはShift_JISではありません。' }, { status: 400 });
+            // Shift_JISで失敗したらUTF-8で試す
+            fileContent = new TextDecoder('utf-8', { fatal: true }).decode(fileBuffer);
+        } catch (utf8Error) {
+            return NextResponse.json({ error: 'ファイルの文字コードがShift_JISまたはUTF-8ではありません。' }, { status: 400 });
         }
     }
 
@@ -74,7 +109,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'CSVにヘッダー行またはデータ行がありません。' }, { status: 400 });
     }
 
-    // ヘッダー行を解析
+    // ヘッダー行を解析（先頭の空白を除去）
     const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
     
     // 必要な列のインデックスを取得
@@ -94,6 +129,8 @@ export async function POST(req: NextRequest) {
         ecSiteIndices[dbName] = index;
       }
     }
+
+    console.log('検出されたECサイト:', ecSiteIndices);
 
     // CSVデータを解析
     const csvData = lines.slice(1).map(line => {
@@ -116,9 +153,9 @@ export async function POST(req: NextRequest) {
       };
     }).filter(item => item.productName && item.productName.length > 0);
 
-    // 商品名を一括でベクトル検索にかける
+    // 商品名を一括で部分一致検索にかける
     const productNames = csvData.map(d => d.productName);
-    const matchedProducts = await matchProducts(productNames);
+    const matchedProducts = await matchProductsByName(productNames);
     
     // マッチング結果を整形（ECサイトごとに分割）
     const responseData: any[] = [];
