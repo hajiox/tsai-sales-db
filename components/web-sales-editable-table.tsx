@@ -1,71 +1,43 @@
-// /components/web-sales-editable-table.tsx の handleFileSelect 関数内の変換処理部分のみ修正
-// データをCSV商品名ごとにグループ化
-const productGroups = new Map<string, any[]>();
-importData.forEach((item: any, index: number) => {
-  console.log(`データ${index}:`, item);
-  if (!item.csvProductName) {
-    console.warn(`データ${index}にcsvProductNameがありません:`, item);
-    return;
-  }
-  const key = item.csvProductName;
-  if (!productGroups.has(key)) {
-    productGroups.set(key, []);
-  }
-  productGroups.get(key)!.push(item);
-});
+// /components/web-sales-editable-table.tsx
+// ver.26 (ビルドエラー修正版)
+"use client";
 
-console.log('グループ化されたデータ:', productGroups);
+import { useEffect, useState, useRef } from "react";
+import { supabase } from "@/lib/supabase";
+import SeriesManager from './SeriesManager';
+import ProductAddForm from './ProductAddForm';
+import SalesDataTable from './SalesDataTable';
+import CsvImportConfirmModal from "./CsvImportConfirmModal";
 
-// グループ化されたデータをImportResult形式に変換
-const convertedResults: ImportResult[] = [];
-let id = 1;
+// --- 型定義 ---
+type SummaryRow = { id: string; product_id: string; product_name: string; series_name: string | null; product_number: number; price: number | null; amazon_count: number | null; rakuten_count: number | null; yahoo_count: number | null; mercari_count: number | null; base_count: number | null; qoo10_count: number | null; };
+type SeriesMaster = { series_id: number; series_name: string; };
+type NewProductState = { product_name: string; series_id: string; product_number: string; price: string; };
+type EditingCell = { rowId: string; field: string; } | null;
+type ImportResult = { id: number; original: string; matched: string | null; salesData: { [key: string]: number; }; };
+type ProductMaster = { id: string; name: string; };
 
-productGroups.forEach((items, csvProductName) => {
-  console.log(`商品「${csvProductName}」の処理開始:`, items);
+// --- Component ---
+export default function WebSalesEditableTable({ 
+  month, 
+  onDataSaved 
+}: { 
+  month: string;
+  onDataSaved?: () => void;
+}) {
+  // --- State Hooks ---
+  const [rows, setRows] = useState<SummaryRow[]>([]);
+  const [originalRows, setOriginalRows] = useState<SummaryRow[]>([]);
+  const [seriesList, setSeriesList] = useState<SeriesMaster[]>([]);
+  const [productMaster, setProductMaster] = useState<ProductMaster[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [editingCell, setEditingCell] = useState<EditingCell>(null);
+  const [editValue, setEditValue] = useState<string>("");
+  const [saveMessage, setSaveMessage] = useState<string>("");
+  const [savingRows, setSavingRows] = useState<Set<string>>(new Set());
+  const [savingAll, setSavingAll] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
   
-  // 販売データをECサイト別に集計
-  const salesData: { [key: string]: number } = {};
-  let matchedProductName = null;
-  
-  items.forEach((item, itemIndex) => {
-    console.log(`  アイテム${itemIndex}:`, item);
-    console.log(`  数量: ${item.quantity}, ECサイト: ${item.ecSite}`);
-    
-    if (item.quantity && item.quantity > 0) {
-      // ECサイト名を日本語に変換
-      const ecSiteMap: { [key: string]: string } = {
-        'amazon': 'Amazon',
-        'rakuten': '楽天',
-        'yahoo': 'Yahoo',
-        'mercari': 'メルカリ',
-        'base': 'BASE', 
-        'qoo10': 'Qoo10'
-      };
-      const displayEcSite = ecSiteMap[item.ecSite] || item.ecSite;
-      
-      // ★ここが重要：既存の値に加算する
-      if (salesData[displayEcSite]) {
-        salesData[displayEcSite] += item.quantity;
-      } else {
-        salesData[displayEcSite] = item.quantity;
-      }
-      
-      console.log(`  販売データ更新: ${displayEcSite} = ${salesData[displayEcSite]}`);
-    }
-    
-    // マッチした商品名を取得（最初の1件から）
-    if (item.masterProductName && !matchedProductName) {
-      matchedProductName = item.masterProductName;
-    }
-  });
-  
-  const result = {
-    id: id++,
-    original: csvProductName,
-    matched: matchedProductName,
-    salesData: salesData
-  };
-  
-  console.log(`商品「${csvProductName}」の最終結果:`, result);
-  convertedResults.push(result);
-});
+  const [showSeriesForm, setShowSeriesForm] = useState(false);
+  const [newSeriesName, setNewSeriesName]
