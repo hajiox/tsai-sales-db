@@ -1,4 +1,4 @@
-// /app/api/admin/generate-embeddings/route.ts ver.1
+// /app/api/admin/generate-embeddings/route.ts ver.2
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import OpenAI from 'openai';
@@ -10,15 +10,16 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const BATCH_SIZE = 500; // 一度に処理する件数
+const BATCH_SIZE = 500;
 
 export async function GET() {
   try {
-    // 1. まだベクトル化されていない商品を取得
+    // 1. [MODIFIED] ベクトル化されておらず、かつ商品名が空でない商品を取得
     const { data: products, error: fetchError } = await supabase
       .from('products')
       .select('id, name')
-      .is('embedding', null); // embeddingが設定されていないもののみ対象
+      .is('embedding', null)     // embeddingが設定されていない
+      .not('name', 'is', null);  // ★★★ nameがNULLではないことを保証する
 
     if (fetchError) {
       throw new Error(`商品データの取得に失敗: ${fetchError.message}`);
@@ -33,21 +34,23 @@ export async function GET() {
     // 2. バッチ処理でベクトル化とDB保存を実行
     for (let i = 0; i < products.length; i += BATCH_SIZE) {
       const batch = products.slice(i, i + BATCH_SIZE);
-      const productNames = batch.map(p => p.name);
+      // filter(p => p.name) を追加して、万が一空文字列が来ても除外する
+      const productNames = batch.map(p => p.name).filter(p => p.name);
 
-      // OpenAIのAPIで商品名をベクトルに変換
+      if (productNames.length === 0) {
+          continue; // このバッチに有効な名前がなければスキップ
+      }
+
       const embeddingResponse = await openai.embeddings.create({
         model: 'text-embedding-3-small',
         input: productNames,
       });
 
-      // DBに保存する形式に整形
       const updates = batch.map((product, index) => ({
         id: product.id,
         embedding: embeddingResponse.data[index].embedding,
       }));
 
-      // Supabaseにupsertで保存
       const { error: upsertError } = await supabase
         .from('products')
         .upsert(updates);
