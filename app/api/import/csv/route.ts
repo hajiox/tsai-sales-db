@@ -1,6 +1,4 @@
-// /app/api/import/csv/route.ts ver.8 (販売数データの読み込みに対応)
-"use client";
-
+// /app/api/import/csv/route.ts ver.9
 import { NextResponse } from 'next/server';
 import Papa from 'papaparse';
 import { supabase } from '@/lib/supabase';
@@ -12,7 +10,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// [ADD] CSVの列名とDBの列名を対応させるためのマップ
+// CSVの列名とDBの列名を対応させるためのマップ
 const columnMap: { [key: string]: string } = {
   'Amazon': 'amazon_count',
   '楽天': 'rakuten_count',
@@ -50,7 +48,7 @@ export async function POST(request: Request) {
     }
     const uniqueCsvProductNames = [...new Set(dataRows.map(row => row[productNameHeader]).filter(Boolean))];
     if (uniqueCsvProductNames.length === 0) {
-      return NextResponse.json({ error: 'CSV内に有効な商品名が見つかりません。' }, { status: 400 });
+        return NextResponse.json({ error: 'CSV内に有効な商品名が見つかりません。' }, { status: 400 });
     }
 
     // 3. 商品マスタの取得とAIによるマッチング
@@ -70,7 +68,7 @@ export async function POST(request: Request) {
     if (!resultJsonString) throw new Error("AIからの応答が空です。");
     const matchedProductsMap = JSON.parse(resultJsonString);
 
-    // 4. [MODIFIED] 販売数データを含めた最終結果を生成
+    // 4. 販売数データを含めた最終結果を生成
     const results = dataRows.map((row, index) => {
       const originalName = row[productNameHeader];
       const salesData: { [key: string]: number } = {};
