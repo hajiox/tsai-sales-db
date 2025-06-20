@@ -1,5 +1,5 @@
 // /app/api/import/csv/route.ts
-// ver2 (商品名ヘッダーの検索を柔軟化)
+// ver3 (一括インポート対応版)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { matchProducts } from '@/lib/db/productMatcher';
@@ -9,7 +9,7 @@ import { Buffer } from 'buffer';
 // Node.jsランタイムを明示的に指定
 export const runtime = 'nodejs';
 
-// Vercel KVから設定を読み込む
+// Supabaseクライアントを初期化
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -28,21 +28,28 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+// ECサイト名とDBカラム名のマッピング
+const ecSiteColumnMap: { [key: string]: string } = {
+  'Amazon': 'amazon',
+  '楽天': 'rakuten',
+  'Yahoo!': 'yahoo',
+  'Yahoo': 'yahoo', // Yahooの別表記にも対応
+  'メルカリ': 'mercari',
+  'BASE': 'base',
+  'Qoo10': 'qoo10'
+};
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const reportMonth = formData.get('reportMonth') as string | null;
-    const ecSite = formData.get('ecSite') as string | null;
 
     if (!file) {
       return NextResponse.json({ error: 'ファイルがアップロードされていません。' }, { status: 400 });
     }
     if (!reportMonth) {
       return NextResponse.json({ error: 'レポート月が指定されていません。' }, { status: 400 });
-    }
-    if (!ecSite) {
-        return NextResponse.json({ error: 'ECサイトが指定されていません。' }, { status: 400 });
     }
 
     // ファイルをテキストとして読み込む
@@ -67,63 +74,82 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'CSVにヘッダー行またはデータ行がありません。' }, { status: 400 });
     }
 
-    // ヘッダー行を検証し、必要な列のインデックスを取得
+    // ヘッダー行を解析
     const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-
-    // ★★★★★★★★★★★★★★★★★★★★ 修正点 ★★★★★★★★★★★★★★★★★★★★
-    // 'startsWith' から 'includes' に変更し、より柔軟なヘッダー名に対応
+    
+    // 必要な列のインデックスを取得
     const productNameIndex = header.findIndex(h => h.includes('商品名'));
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-
-    const quantityIndex = header.findIndex(h => h.includes('個数') || h.includes('数量'));
-    const amountIndex = header.findIndex(h => h.includes('売上') || h.includes('金額'));
-
+    const seriesIndex = header.findIndex(h => h.includes('シリーズ'));
+    const priceIndex = header.findIndex(h => h.includes('価格'));
+    
     if (productNameIndex === -1) {
-      // エラーメッセージも修正に合わせて変更
       return NextResponse.json({ error: 'CSVに「商品名」を含む列が見つかりません。' }, { status: 400 });
     }
-    if (quantityIndex === -1) {
-        return NextResponse.json({ error: 'CSVに「個数」または「数量」を含む列が見つかりません。' }, { status: 400 });
-    }
-    if (amountIndex === -1) {
-        return NextResponse.json({ error: 'CSVに「売上」または「金額」を含む列が見つかりません。' }, { status: 400 });
+
+    // 各ECサイトの列インデックスを取得
+    const ecSiteIndices: { [key: string]: number } = {};
+    for (const [csvName, dbName] of Object.entries(ecSiteColumnMap)) {
+      const index = header.findIndex(h => h === csvName);
+      if (index !== -1) {
+        ecSiteIndices[dbName] = index;
+      }
     }
 
     // CSVデータを解析
     const csvData = lines.slice(1).map(line => {
       const columns = line.split(',').map(c => c.replace(/"/g, '').trim());
+      
+      // 各ECサイトの販売数を取得
+      const salesByEcSite: { [key: string]: number } = {};
+      for (const [ecSite, index] of Object.entries(ecSiteIndices)) {
+        const value = parseInt(columns[index], 10) || 0;
+        if (value > 0) {
+          salesByEcSite[ecSite] = value;
+        }
+      }
+      
       return {
         productName: columns[productNameIndex],
-        quantity: parseInt(columns[quantityIndex], 10) || 0,
-        amount: parseInt(columns[amountIndex], 10) || 0,
+        seriesName: seriesIndex !== -1 ? columns[seriesIndex] : null,
+        price: priceIndex !== -1 ? parseInt(columns[priceIndex], 10) || 0 : 0,
+        salesByEcSite: salesByEcSite
       };
-    }).filter(item => item.productName && item.productName.length > 0); // 商品名が空の行は除外
-
+    }).filter(item => item.productName && item.productName.length > 0);
 
     // 商品名を一括でベクトル検索にかける
     const productNames = csvData.map(d => d.productName);
     const matchedProducts = await matchProducts(productNames);
     
-    // マッチング結果を元のデータに結合
-    const responseData = csvData.map((item, index) => {
+    // マッチング結果を整形（ECサイトごとに分割）
+    const responseData: any[] = [];
+    
+    csvData.forEach((item, index) => {
       const match = matchedProducts[index];
-      return {
-        csvProductName: item.productName,
-        productId: match.id,
-        masterProductName: match.name,
-        seriesId: match.series_id,
-        price: match.price,
-        similarity: match.similarity,
-        quantity: item.quantity,
-        amount: item.amount,
-      };
+      
+      // 各ECサイトのデータを個別のレコードとして作成
+      for (const [ecSite, quantity] of Object.entries(item.salesByEcSite)) {
+        responseData.push({
+          csvProductName: item.productName,
+          productId: match?.id || null,
+          masterProductName: match?.name || null,
+          seriesId: match?.series_id || null,
+          seriesName: item.seriesName,
+          price: match?.price || item.price,
+          similarity: match?.similarity || 0,
+          quantity: quantity,
+          ecSite: ecSite,
+          reportMonth: reportMonth
+        });
+      }
     });
 
-    return NextResponse.json(responseData, { status: 200 });
+    return NextResponse.json({
+      message: `CSV全${csvData.length}商品、${responseData.length}件のデータを読み込みました。`,
+      data: responseData
+    }, { status: 200 });
 
   } catch (error: any) {
     console.error('APIエラー:', error);
-    // エラーオブジェクトがErrorインスタンスであるかを確認
     const errorMessage = error instanceof Error ? error.message : '不明なエラーが発生しました。';
     return NextResponse.json({ error: `APIエラー: ${errorMessage}` }, { status: 500 });
   }
