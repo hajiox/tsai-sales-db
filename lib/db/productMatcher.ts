@@ -1,5 +1,5 @@
 // /lib/db/productMatcher.ts
-// ver1 (ベクトル検索を実行する関数)
+// ver1 (ベクトル検索を実行する関数) - updated
 import { createClient } from '@supabase/supabase-js';
 
 // Supabaseクライアントを初期化
