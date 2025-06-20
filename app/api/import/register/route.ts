@@ -1,4 +1,4 @@
-// /app/api/import/register/route.ts ver.1
+// /app/api/import/register/route.ts ver.2 (詳細なエラーログ出力付き)
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
@@ -20,7 +20,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '必要なデータが不足しています。' }, { status: 400 });
     }
 
-    // 1. 商品マスタから「商品名→ID」の対応マップを作成
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('id, name');
@@ -31,10 +30,8 @@ export async function POST(request: Request) {
     
     const productNameToIdMap = new Map(products.map(p => [p.name, p.id]));
 
-    // 2. 登録用のデータ配列を作成
     const dataToUpsert = results
       .map((result: ImportResult) => {
-        // マッチした商品名があり、かつマスタに存在する場合のみ処理
         if (result.matched && productNameToIdMap.has(result.matched)) {
           const productId = productNameToIdMap.get(result.matched);
           return {
@@ -45,21 +42,22 @@ export async function POST(request: Request) {
         }
         return null;
       })
-      .filter((item: any): item is object => item !== null); // nullの項目を除外
+      .filter((item: any): item is object => item !== null);
 
     if (dataToUpsert.length === 0) {
       return NextResponse.json({ message: '登録対象のデータがありませんでした。' }, { status: 200 });
     }
-
-    // 3. Supabaseのupsert機能で一括登録・更新
-    // onConflictで指定したキーが重複した場合にUPDATEが実行される
+    
+    // [MODIFIED] エラーハンドリングを強化
     const { error: upsertError } = await supabase
       .from('web_sales_summary')
       .upsert(dataToUpsert, { onConflict: 'product_id,report_month' });
 
     if (upsertError) {
-      console.error('Upsert error:', upsertError);
-      throw new Error(`データベースへの登録に失敗しました: ${upsertError.message}`);
+      // Supabaseからの詳細なエラーをサーバーログに出力
+      console.error('Supabase Upsert Error:', JSON.stringify(upsertError, null, 2));
+      // フロントエンドには分かりやすいメッセージを返す
+      throw new Error(`データベースへの登録に失敗しました。詳細はサーバーログを確認してください。`);
     }
 
     return NextResponse.json({
@@ -67,7 +65,7 @@ export async function POST(request: Request) {
     }, { status: 200 });
 
   } catch (error) {
-    console.error('APIエラー:', error);
+    console.error('APIルート全体のエラー:', error);
     const errorMessage = error instanceof Error ? error.message : 'サーバー内部でエラーが発生しました。';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
