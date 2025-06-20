@@ -1,10 +1,11 @@
-// /app/api/import/csv/route.ts ver.9
+// /app/api/import/csv/route.ts ver.10
 import { NextResponse } from 'next/server';
 import Papa from 'papaparse';
 import { supabase } from '@/lib/supabase';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs'; // [ADD] Node.jsランタイムを明示的に指定
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
