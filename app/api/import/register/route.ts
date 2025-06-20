@@ -1,4 +1,4 @@
-// /app/api/import/register/route.ts ver.2 (詳細なエラーログ出力付き)
+// /app/api/import/register/route.ts ver.3 (日付形式の修正)
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
@@ -36,7 +36,8 @@ export async function POST(request: Request) {
           const productId = productNameToIdMap.get(result.matched);
           return {
             product_id: productId,
-            report_month: report_month,
+            // [FIX] "YYYY-MM" を "YYYY-MM-01" の日付形式に変換
+            report_month: `${report_month}-01`,
             ...result.salesData
           };
         }
@@ -47,16 +48,13 @@ export async function POST(request: Request) {
     if (dataToUpsert.length === 0) {
       return NextResponse.json({ message: '登録対象のデータがありませんでした。' }, { status: 200 });
     }
-    
-    // [MODIFIED] エラーハンドリングを強化
+
     const { error: upsertError } = await supabase
       .from('web_sales_summary')
       .upsert(dataToUpsert, { onConflict: 'product_id,report_month' });
 
     if (upsertError) {
-      // Supabaseからの詳細なエラーをサーバーログに出力
       console.error('Supabase Upsert Error:', JSON.stringify(upsertError, null, 2));
-      // フロントエンドには分かりやすいメッセージを返す
       throw new Error(`データベースへの登録に失敗しました。詳細はサーバーログを確認してください。`);
     }
 
