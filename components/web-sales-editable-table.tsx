@@ -1,5 +1,5 @@
 // /components/web-sales-editable-table.tsx
-// ver.24 (CSVインポート数値データ修正版)
+// ver.25 (データ変換エラー修正版)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -72,10 +72,20 @@ export default function WebSalesEditableTable({
       if (response.ok) { 
         console.log('CSV読み込み結果:', result);
         const importData = result.data || [];
+        console.log('APIから取得したデータ件数:', importData.length);
         
-        // データをCSV商品名ごとにグループ化してImportResult形式に変換
+        if (!Array.isArray(importData)) {
+          throw new Error('APIレスポンスが配列ではありません');
+        }
+        
+        // データをCSV商品名ごとにグループ化
         const productGroups = new Map<string, any[]>();
-        importData.forEach((item: any) => {
+        importData.forEach((item: any, index: number) => {
+          console.log(`データ${index}:`, item);
+          if (!item.csvProductName) {
+            console.warn(`データ${index}にcsvProductNameがありません:`, item);
+            return;
+          }
           const key = item.csvProductName;
           if (!productGroups.has(key)) {
             productGroups.set(key, []);
@@ -83,17 +93,24 @@ export default function WebSalesEditableTable({
           productGroups.get(key)!.push(item);
         });
         
+        console.log('グループ化されたデータ:', productGroups);
+        
         // グループ化されたデータをImportResult形式に変換
         const convertedResults: ImportResult[] = [];
         let id = 1;
         
         productGroups.forEach((items, csvProductName) => {
+          console.log(`商品「${csvProductName}」の処理開始:`, items);
+          
           // 販売データをECサイト別に集計
           const salesData: { [key: string]: number } = {};
           let matchedProductName = null;
           
-          items.forEach(item => {
-            if (item.quantity > 0) {
+          items.forEach((item, itemIndex) => {
+            console.log(`  アイテム${itemIndex}:`, item);
+            console.log(`  数量: ${item.quantity}, ECサイト: ${item.ecSite}`);
+            
+            if (item.quantity && item.quantity > 0) {
               // ECサイト名を日本語に変換
               const ecSiteMap: { [key: string]: string } = {
                 'amazon': 'Amazon',
@@ -104,7 +121,8 @@ export default function WebSalesEditableTable({
                 'qoo10': 'Qoo10'
               };
               const displayEcSite = ecSiteMap[item.ecSite] || item.ecSite;
-              salesData[displayEcSite] = item.quantity;
+              salesData[displayEcSite] = (salesData[displayEcSite] || 0) + item.quantity;
+              console.log(`  販売データ更新: ${displayEcSite} = ${salesData[displayEcSite]}`);
             }
             
             // マッチした商品名を取得（最初の1件から）
@@ -113,20 +131,24 @@ export default function WebSalesEditableTable({
             }
           });
           
-          convertedResults.push({
+          const result = {
             id: id++,
             original: csvProductName,
             matched: matchedProductName,
             salesData: salesData
-          });
+          };
+          
+          console.log(`商品「${csvProductName}」の最終結果:`, result);
+          convertedResults.push(result);
         });
         
-        console.log('変換後のデータ:', convertedResults);
+        console.log('最終的な変換後データ:', convertedResults);
         setImportResults(convertedResults);
         setShowConfirmModal(true);
       } 
       else { throw new Error(result.error || '不明なエラーが発生しました'); }
     } catch (error) {
+      console.error('CSVインポートエラー:', error);
       alert(`エラー: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsUploading(false);
