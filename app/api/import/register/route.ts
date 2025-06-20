@@ -1,5 +1,5 @@
 // /app/api/import/register/route.ts
-// ver.4 (salesDataキー名対応版)
+// ver.5 (テーブル列名修正版)
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
@@ -31,14 +31,14 @@ export async function POST(request: Request) {
     
     const productNameToIdMap = new Map(products.map(p => [p.name, p.id]));
 
-    // ECサイト名のマッピング（フロントエンド → DB）
+    // ECサイト名のマッピング（フロントエンド → DB列名）
     const ecSiteMapping: { [key: string]: string } = {
-      'Amazon': 'amazon',
-      '楽天': 'rakuten',
-      'Yahoo': 'yahoo',
-      'メルカリ': 'mercari',
-      'BASE': 'base',
-      'Qoo10': 'qoo10'
+      'Amazon': 'amazon_count',
+      '楽天': 'rakuten_count',
+      'Yahoo': 'yahoo_count',
+      'メルカリ': 'mercari_count',
+      'BASE': 'base_count',
+      'Qoo10': 'qoo10_count'
     };
 
     const dataToUpsert = results
@@ -49,9 +49,9 @@ export async function POST(request: Request) {
           // salesDataのキー名を変換
           const convertedSalesData: { [key: string]: number } = {};
           for (const [frontendKey, quantity] of Object.entries(result.salesData)) {
-            const dbKey = ecSiteMapping[frontendKey];
-            if (dbKey && quantity > 0) {
-              convertedSalesData[dbKey] = quantity;
+            const dbColumnName = ecSiteMapping[frontendKey];
+            if (dbColumnName && quantity > 0) {
+              convertedSalesData[dbColumnName] = quantity;
             }
           }
           
