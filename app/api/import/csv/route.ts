@@ -1,5 +1,5 @@
 // /app/api/import/csv/route.ts
-// ver5 (ECサイト名マッピング修正版)
+// ver6 (productsテーブル構造に合わせて修正)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Readable } from 'stream';
@@ -31,7 +31,7 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
 async function matchProductsByName(productNames: string[]) {
   const { data: products, error } = await supabase
     .from('products')
-    .select('id, name, series_id, price');
+    .select('id, name, series, price');
 
   if (error) {
     throw new Error(`商品マスタの取得に失敗しました: ${error.message}`);
@@ -54,23 +54,22 @@ async function matchProductsByName(productNames: string[]) {
     return match ? {
       id: match.id,
       name: match.name,
-      series_id: match.series_id,
+      series: match.series,
       price: match.price,
       similarity: match.name === csvName ? 1.0 : 0.8 // 完全一致は1.0、部分一致は0.8
     } : null;
   });
 }
 
-// ECサイト名とDBカラム名のマッピング（CSVに合わせて修正）
+// ECサイト名とDBカラム名のマッピング（フロアを除外）
 const ecSiteColumnMap: { [key: string]: string } = {
   'Amazon': 'amazon',
-  '楽天市場': 'rakuten',  // 「楽天」→「楽天市場」に修正
-  '楽天': 'rakuten',      // 従来の「楽天」も対応
+  '楽天市場': 'rakuten',
+  '楽天': 'rakuten',
   'Yahoo!': 'yahoo',
   'Yahoo': 'yahoo',
   'メルカリ': 'mercari',
   'BASE': 'base',
-  'フロア': 'floor',       // 新規追加
   'Qoo10': 'qoo10'
 };
 
@@ -169,8 +168,7 @@ export async function POST(req: NextRequest) {
           csvProductName: item.productName,
           productId: match?.id || null,
           masterProductName: match?.name || null,
-          seriesId: match?.series_id || null,
-          seriesName: item.seriesName,
+          seriesName: match?.series || item.seriesName,
           price: match?.price || item.price,
           similarity: match?.similarity || 0,
           quantity: quantity,
