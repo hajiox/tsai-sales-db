@@ -1,4 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.22
+// /components/web-sales-editable-table.tsx
+// ver.23 (CSVインポートレスポンス処理を修正)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -48,7 +49,7 @@ export default function WebSalesEditableTable({
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [importResults, setImportResults] = useState<ImportResult[]>([]);
-  const [isSubmittingImport, setIsSubmittingImport] = useState(false); // [ADD] インポート登録中のState
+  const [isSubmittingImport, setIsSubmittingImport] = useState(false);
 
   // --- Data Loading ---
   useEffect(() => { loadData(); loadSeries(); loadProductMaster(); }, [month]);
@@ -64,11 +65,28 @@ export default function WebSalesEditableTable({
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('reportMonth', month); // ★修正箇所：reportMonthを追加
+    formData.append('reportMonth', month);
     try {
       const response = await fetch('/api/import/csv', { method: 'POST', body: formData });
       const result = await response.json();
-      if (response.ok) { setImportResults(result.results); setShowConfirmModal(true); } 
+      if (response.ok) { 
+        // ★修正箇所：result.data を使用
+        console.log('CSV読み込み結果:', result);
+        const importData = result.data || [];
+        
+        // データを ImportResult 形式に変換
+        const convertedResults = importData.map((item: any, index: number) => ({
+          id: index + 1,
+          original: item.csvProductName,
+          matched: item.masterProductName,
+          salesData: {
+            [item.ecSite]: item.quantity
+          }
+        }));
+        
+        setImportResults(convertedResults);
+        setShowConfirmModal(true);
+      } 
       else { throw new Error(result.error || '不明なエラーが発生しました'); }
     } catch (error) {
       alert(`エラー: ${error instanceof Error ? error.message : String(error)}`);
@@ -77,9 +95,9 @@ export default function WebSalesEditableTable({
       if(fileInputRef.current) { fileInputRef.current.value = ""; }
     }
   };
+  
   const handleImportResultChange = (id: number, newMatchedValue: string) => { setImportResults(currentResults => currentResults.map(result => result.id === id ? { ...result, matched: newMatchedValue || null } : result)); };
   
-  // [ADD] DBへの本登録を実行する関数
   const handleConfirmImport = async (updatedResults: ImportResult[]) => {
     setIsSubmittingImport(true);
     try {
@@ -92,8 +110,8 @@ export default function WebSalesEditableTable({
       if (response.ok) {
         alert(result.message);
         setShowConfirmModal(false);
-        loadData(); // テーブルのデータを再読み込み
-        onDataSaved?.(); // 親コンポーネントにも通知
+        loadData();
+        onDataSaved?.();
       } else {
         throw new Error(result.error || '登録処理中にエラーが発生しました。');
       }
