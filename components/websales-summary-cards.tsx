@@ -1,4 +1,5 @@
 // /components/websales-summary-cards.tsx
+// ver3 (列名を正しいものに修正)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -39,7 +40,7 @@ export default function WebSalesSummaryCards({
       setLoading(true);
       try {
         if (viewMode === 'period') {
-          // --- 期間集計モード (正常に動作しています) ---
+          // 期間集計モード
           const res = await fetch('/api/web-sales-period', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -50,7 +51,7 @@ export default function WebSalesSummaryCards({
           setTotals(data.totals);
           setSeriesSummary(data.seriesSummary);
         } else {
-          // --- 月別表示モード (原因が判明したため、最終修正しました) ---
+          // 月別表示モード
           const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month });
           if (error) throw error;
           const rows = (data as any[]) ?? [];
@@ -68,12 +69,9 @@ export default function WebSalesSummaryCards({
           });
           setTotals(siteTotals);
 
-          // シリーズ別集計 (大幅にシンプルで正しいロジックになりました)
+          // シリーズ別集計
           const seriesMap = new Map<string, { count: number, sales: number }>();
           rows.forEach((row: any) => {
-            // ★★★★★★★★★★★★★★★★★★★★★★★
-            // ★ これが正解でした: row.series_name ★
-            // ★★★★★★★★★★★★★★★★★★★★★★★
             const seriesName = row.series_name || '未分類';
             
             const totalCount = SITES.reduce((sum, s) => sum + (row[s.key] || 0), 0);
@@ -102,7 +100,6 @@ export default function WebSalesSummaryCards({
     fetchData();
   }, [month, refreshTrigger, viewMode, periodMonths]);
 
-  // JSX部分は変更ありません
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
   if (loading) {
