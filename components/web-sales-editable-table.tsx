@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.21
+// /components/web-sales-editable-table.tsx ver.22
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -64,6 +64,7 @@ export default function WebSalesEditableTable({
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('reportMonth', month); // ★修正箇所：reportMonthを追加
     try {
       const response = await fetch('/api/import/csv', { method: 'POST', body: formData });
       const result = await response.json();
