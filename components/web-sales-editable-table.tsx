@@ -1,5 +1,5 @@
 // /components/web-sales-editable-table.tsx
-// ver.23 (CSVインポートレスポンス処理を修正)
+// ver.24 (CSVインポート数値データ修正版)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -70,20 +70,58 @@ export default function WebSalesEditableTable({
       const response = await fetch('/api/import/csv', { method: 'POST', body: formData });
       const result = await response.json();
       if (response.ok) { 
-        // ★修正箇所：result.data を使用
         console.log('CSV読み込み結果:', result);
         const importData = result.data || [];
         
-        // データを ImportResult 形式に変換
-        const convertedResults = importData.map((item: any, index: number) => ({
-          id: index + 1,
-          original: item.csvProductName,
-          matched: item.masterProductName,
-          salesData: {
-            [item.ecSite]: item.quantity
+        // データをCSV商品名ごとにグループ化してImportResult形式に変換
+        const productGroups = new Map<string, any[]>();
+        importData.forEach((item: any) => {
+          const key = item.csvProductName;
+          if (!productGroups.has(key)) {
+            productGroups.set(key, []);
           }
-        }));
+          productGroups.get(key)!.push(item);
+        });
         
+        // グループ化されたデータをImportResult形式に変換
+        const convertedResults: ImportResult[] = [];
+        let id = 1;
+        
+        productGroups.forEach((items, csvProductName) => {
+          // 販売データをECサイト別に集計
+          const salesData: { [key: string]: number } = {};
+          let matchedProductName = null;
+          
+          items.forEach(item => {
+            if (item.quantity > 0) {
+              // ECサイト名を日本語に変換
+              const ecSiteMap: { [key: string]: string } = {
+                'amazon': 'Amazon',
+                'rakuten': '楽天',
+                'yahoo': 'Yahoo',
+                'mercari': 'メルカリ',
+                'base': 'BASE', 
+                'qoo10': 'Qoo10'
+              };
+              const displayEcSite = ecSiteMap[item.ecSite] || item.ecSite;
+              salesData[displayEcSite] = item.quantity;
+            }
+            
+            // マッチした商品名を取得（最初の1件から）
+            if (item.masterProductName && !matchedProductName) {
+              matchedProductName = item.masterProductName;
+            }
+          });
+          
+          convertedResults.push({
+            id: id++,
+            original: csvProductName,
+            matched: matchedProductName,
+            salesData: salesData
+          });
+        });
+        
+        console.log('変換後のデータ:', convertedResults);
         setImportResults(convertedResults);
         setShowConfirmModal(true);
       } 
