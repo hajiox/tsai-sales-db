@@ -1,5 +1,5 @@
 // /components/web-sales-editable-table.tsx
-// ver.26 (ビルドエラー修正版)
+// ver.26　 (ビルドエラー修正版)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
