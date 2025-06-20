@@ -1,4 +1,5 @@
-// /components/CsvImportConfirmModal.tsx ver.4
+// /components/CsvImportConfirmModal.tsx
+// ver.5 (販売数表示修正版)
 "use client";
 
 type ImportResult = {
@@ -17,14 +18,14 @@ interface CsvImportConfirmModalProps {
   isOpen: boolean;
   results: ImportResult[];
   productMaster: ProductMaster[];
-  isSubmitting: boolean; // [ADD] 登録処理中フラグ
+  isSubmitting: boolean;
   onClose: () => void;
   onConfirm: (updatedResults: ImportResult[]) => void;
   onResultChange: (id: number, newMatchedValue: string) => void;
 }
 
-const dbToDisplayName: { [key: string]: string } = { 'amazon_count': 'Amazon', 'rakuten_count': '楽天', 'yahoo_count': 'Yahoo', 'mercari_count': 'メルカリ', 'base_count': 'BASE', 'qoo10_count': 'Qoo10' };
-const displayOrder = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count'];
+// ★修正：フロントエンドのsalesDataのキー名に合わせる
+const displayOrder = ['Amazon', '楽天', 'Yahoo', 'メルカリ', 'BASE', 'Qoo10'];
 
 export default function CsvImportConfirmModal({
   isOpen,
@@ -60,7 +61,9 @@ export default function CsvImportConfirmModal({
               <tr>
                 <th className="p-2 w-2/5">CSVの商品名</th>
                 <th className="p-2 w-2/5">マッチした商品（修正可能）</th>
-                {displayOrder.map(key => (<th key={key} className="p-2 text-center">{dbToDisplayName[key]}</th>))}
+                {displayOrder.map(ecSite => (
+                  <th key={ecSite} className="p-2 text-center">{ecSite}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -79,7 +82,11 @@ export default function CsvImportConfirmModal({
                       ))}
                     </select>
                   </td>
-                  {displayOrder.map(key => (<td key={key} className="p-2 text-center">{result.salesData[key] || 0}</td>))}
+                  {displayOrder.map(ecSite => (
+                    <td key={ecSite} className="p-2 text-center">
+                      {result.salesData[ecSite] || 0}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -93,7 +100,7 @@ export default function CsvImportConfirmModal({
           <button
             onClick={handleConfirmClick}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
-            disabled={isSubmitting} // [MODIFIED] disabledの条件を変更
+            disabled={isSubmitting}
           >
             {isSubmitting ? '登録中...' : 'この内容でDBに登録'}
           </button>
