@@ -1,4 +1,5 @@
-// /app/api/import/register/route.ts ver.3 (日付形式の修正)
+// /app/api/import/register/route.ts
+// ver.4 (salesDataキー名対応版)
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
@@ -30,15 +31,34 @@ export async function POST(request: Request) {
     
     const productNameToIdMap = new Map(products.map(p => [p.name, p.id]));
 
+    // ECサイト名のマッピング（フロントエンド → DB）
+    const ecSiteMapping: { [key: string]: string } = {
+      'Amazon': 'amazon',
+      '楽天': 'rakuten',
+      'Yahoo': 'yahoo',
+      'メルカリ': 'mercari',
+      'BASE': 'base',
+      'Qoo10': 'qoo10'
+    };
+
     const dataToUpsert = results
       .map((result: ImportResult) => {
         if (result.matched && productNameToIdMap.has(result.matched)) {
           const productId = productNameToIdMap.get(result.matched);
+          
+          // salesDataのキー名を変換
+          const convertedSalesData: { [key: string]: number } = {};
+          for (const [frontendKey, quantity] of Object.entries(result.salesData)) {
+            const dbKey = ecSiteMapping[frontendKey];
+            if (dbKey && quantity > 0) {
+              convertedSalesData[dbKey] = quantity;
+            }
+          }
+          
           return {
             product_id: productId,
-            // [FIX] "YYYY-MM" を "YYYY-MM-01" の日付形式に変換
             report_month: `${report_month}-01`,
-            ...result.salesData
+            ...convertedSalesData
           };
         }
         return null;
@@ -48,6 +68,8 @@ export async function POST(request: Request) {
     if (dataToUpsert.length === 0) {
       return NextResponse.json({ message: '登録対象のデータがありませんでした。' }, { status: 200 });
     }
+
+    console.log('登録予定データ:', JSON.stringify(dataToUpsert, null, 2));
 
     const { error: upsertError } = await supabase
       .from('web_sales_summary')
