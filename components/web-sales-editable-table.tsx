@@ -40,4 +40,4 @@ export default function WebSalesEditableTable({
   const [isUploading, setIsUploading] = useState(false);
   
   const [showSeriesForm, setShowSeriesForm] = useState(false);
-  const [newSeriesName, setNewSeriesName]
+  const [newSeriesName, setNewSeriesName] = useState("");
