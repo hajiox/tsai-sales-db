@@ -1,7 +1,7 @@
 // /components/web-sales-editable-table.tsx ver.32
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo } from "react"
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react"
 import {
   Table,
   TableHeader,
@@ -22,7 +22,6 @@ import { useDisclosure } from "@nextui-org/modal"
 import { supabase } from "@/lib/supabase"
 import { WebSalesData, Product } from "@/types/db"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Suspense } from "react" // Suspenseのインポートはそのまま
 
 import CsvImportConfirmModal from "./CsvImportConfirmModal"
 import AmazonCsvImportModal from "./AmazonCsvImportModal" // HTMLベースのモーダルをインポート
@@ -131,7 +130,7 @@ export default function WebSalesEditableTable({
 
   const items = useMemo(() => {
     const start = (page - 1) * ROWS_PER_PAGE
-    const end = start + ROWS + "_PER_PAGE"
+    const end = start + ROWS_PER_PAGE
     return filteredItems.slice(start, end)
   }, [page, filteredItems])
 
@@ -270,8 +269,8 @@ export default function WebSalesEditableTable({
   }
 
   return (
-    <> {/* <--- ここをフラグメントに変更 */}
-      <Suspense fallback={<div>Loading table...</div>}> {/* <--- Suspenseを移動 */}
+    <>
+      <Suspense fallback={<div>Loading table...</div>}>
         <div className="p-4">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">
@@ -484,9 +483,9 @@ export default function WebSalesEditableTable({
             <p>合計売上金額: ¥{new Intl.NumberFormat("ja-JP").format(getTotalAmountAllECSites())}</p>
           </div>
         </div>
-      </Suspense> {/* <--- Suspenseを移動 */}
+      </Suspense>
       <CsvImportConfirmModal isOpen={isCsvModalOpen} onClose={onCloseCsvModal} />
       <AmazonCsvImportModal isOpen={isAmazonCsvModalOpen} onClose={onCloseAmazonCsvModal} />
-    </> // <--- ここをフラグメントに変更
+    </>
   )
 }
