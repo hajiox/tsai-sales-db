@@ -1,4 +1,4 @@
-// /components/websales-ranking-table.tsx ver.1
+// /components/websales-ranking-table.tsx ver.2
 "use client"
 
 import { useEffect, useState } from "react"
@@ -59,14 +59,14 @@ export default function WebSalesRankingTable({ month }: Props) {
             (row.base_count || 0) +
             (row.qoo10_count || 0)
 
-          if (count > 0) {
+          // if (count > 0) { // ← この条件を削除
             if (!map.has(name)) {
               map.set(name, { count: 0, amount: 0 })
             }
             const entry = map.get(name)!
             entry.count += count
             entry.amount += count * price
-          }
+          // } // ← この行も削除
         })
 
         console.log('📈 集計結果:', { productCount: map.size })
@@ -81,7 +81,6 @@ export default function WebSalesRankingTable({ month }: Props) {
         // ソート（件数順）
         const desc = [...arr].sort((a, b) => b.total_count - a.total_count)
         const asc = [...arr]
-          // .filter(item => item.total_count > 0) // ← 件数0の商品も表示するため、この行を削除
           .sort((a, b) => a.total_count - b.total_count)
 
         console.log('🏆 ベスト10:', desc.slice(0, 10))
