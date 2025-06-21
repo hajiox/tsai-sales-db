@@ -1,5 +1,5 @@
 // /components/websales-summary-cards.tsx
-// ver3 (列名を正しいものに修正)
+// ver4 (デバッグログ追加版)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -52,21 +52,37 @@ export default function WebSalesSummaryCards({
           setSeriesSummary(data.seriesSummary);
         } else {
           // 月別表示モード
+          console.log('=== デバッグ開始 ===');
+          console.log('月:', month);
+          
           const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month });
+          console.log('Supabaseレスポンス:', { data, error });
+          
           if (error) throw error;
           const rows = (data as any[]) ?? [];
+          console.log('取得した行数:', rows.length);
+          console.log('最初の3行:', rows.slice(0, 3));
 
           // ECサイト別集計
           const siteTotals: Totals = {};
           SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0 }; });
-          rows.forEach((row: any) => {
+          
+          rows.forEach((row: any, index: number) => {
+            if (index < 3) {
+              console.log(`行${index}の詳細:`, row);
+            }
             SITES.forEach(s => {
               const qty = row[s.key] ?? 0;
               const price = row.price ?? 0;
+              if (qty > 0 && index < 3) {
+                console.log(`  ${s.name}: 数量=${qty}, 価格=${price}`);
+              }
               siteTotals[s.key].count += qty;
               siteTotals[s.key].amount += qty * price;
             });
           });
+          
+          console.log('集計結果:', siteTotals);
           setTotals(siteTotals);
 
           // シリーズ別集計
@@ -87,6 +103,8 @@ export default function WebSalesSummaryCards({
             .map(([seriesName, data]) => ({ seriesName, ...data }))
             .sort((a, b) => b.sales - a.sales);
           setSeriesSummary(sortedSeries);
+          
+          console.log('=== デバッグ終了 ===');
         }
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
