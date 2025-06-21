@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.30
+// /components/web-sales-editable-table.tsx ver.31
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
@@ -9,23 +9,22 @@ import {
   TableBody,
   TableRow,
   TableCell,
-  Input,
-  Button,
+  Input, // NextUIのInputは残す
+  Button, // NextUIのButtonは残す
   Dropdown,
   DropdownTrigger,
   DropdownMenu,
   DropdownItem,
   Pagination,
-  // Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, // ←これらの個別のインポートを削除
-  Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, // ここをまとめてインポートするように
-} from "@nextui-org/react" // ← @nextui-org/react からまとめてインポート
+} from "@nextui-org/react" // NextUIのModal関連インポートは削除
+import { useDisclosure } from "@nextui-org/modal" // useDisclosureのみNextUIからインポート
 
 import { supabase } from "@/lib/supabase"
 import { WebSalesData, Product } from "@/types/db"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 import CsvImportConfirmModal from "./CsvImportConfirmModal"
-import AmazonCsvImportModal from "./AmazonCsvImportModal"
+import AmazonCsvImportModal from "./AmazonCsvImportModal" // HTMLベースのモーダルをインポート
 
 interface WebSalesEditableTableProps {
   initialWebSalesData: WebSalesData[]
@@ -461,7 +460,8 @@ export default function WebSalesEditableTable({
                         (sum, site) => sum + (row[`${site}_amount`] || 0),
                         0,
                       ),
-                    )}
+                    ),
+                  )}
                   </div>
                 </TableCell>
                 <TableCell className="text-center font-bold">
