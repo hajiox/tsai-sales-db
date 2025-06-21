@@ -16,64 +16,105 @@ interface Row {
 export default function WebSalesRankingTable({ month }: Props) {
   const [bestRows, setBestRows] = useState<Row[]>([])
   const [worstRows, setWorstRows] = useState<Row[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchData = async () => {
-      const start = `${month}-01`
-      const next = new Date(start)
-      next.setMonth(next.getMonth() + 1)
-      const end = next.toISOString().slice(0, 10)
+      console.log('🏆 ランキング取得開始:', { month })
+      setLoading(true)
+      
+      try {
+        // web_sales_full_month DB関数を使用
+        const { data, error } = await supabase.rpc("web_sales_full_month", { 
+          target_month: month 
+        })
 
-      const { data, error } = await supabase
-        .from("web_sales")
-        .select(
-          "product_name, price, amazon, rakuten, yahoo, mercari, base, qoo10"
-        )
-        .gte("created_at", start)
-        .lt("created_at", end)
-
-      if (error) {
-        console.error("fetch_error", error)
-        return
-      }
-
-      const map = new Map<string, { count: number; amount: number }>()
-
-      ;(data || []).forEach((row: any) => {
-        const name = row.product_name || ""
-        const price = row.price ?? 0
-        const count =
-          (row.amazon ?? 0) +
-          (row.rakuten ?? 0) +
-          (row.yahoo ?? 0) +
-          (row.mercari ?? 0) +
-          (row.base ?? 0) +
-          (row.qoo10 ?? 0)
-
-        if (!map.has(name)) {
-          map.set(name, { count: 0, amount: 0 })
+        if (error) {
+          console.error("🚨 ランキングデータ取得エラー:", error)
+          return
         }
-        const entry = map.get(name)!
-        entry.count += count
-        entry.amount += count * price
-      })
 
-      const arr: Row[] = Array.from(map.entries()).map(([product_name, v]) => ({
-        product_name,
-        total_count: v.count,
-        total_amount: v.amount,
-      }))
+        console.log('📊 取得データ:', { dataLength: data?.length })
 
-      const desc = [...arr].sort((a, b) => b.total_count - a.total_count)
-      const asc = [...arr].sort((a, b) => a.total_count - b.total_count)
-      setBestRows(desc.slice(0, 10))
-      setWorstRows(asc.slice(0, 10))
+        if (!data || data.length === 0) {
+          setBestRows([])
+          setWorstRows([])
+          return
+        }
+
+        // 商品ごとに集計
+        const map = new Map<string, { count: number; amount: number }>()
+
+        data.forEach((row: any) => {
+          const name = row.product_name || row.name || ""
+          const price = row.price || 0
+          
+          // 各ECサイトの販売数を合計
+          const count = 
+            (row.amazon_count || 0) +
+            (row.rakuten_count || 0) +
+            (row.yahoo_count || 0) +
+            (row.mercari_count || 0) +
+            (row.base_count || 0) +
+            (row.qoo10_count || 0)
+
+          if (count > 0) {
+            if (!map.has(name)) {
+              map.set(name, { count: 0, amount: 0 })
+            }
+            const entry = map.get(name)!
+            entry.count += count
+            entry.amount += count * price
+          }
+        })
+
+        console.log('📈 集計結果:', { productCount: map.size })
+
+        // 配列に変換
+        const arr: Row[] = Array.from(map.entries()).map(([product_name, v]) => ({
+          product_name,
+          total_count: v.count,
+          total_amount: v.amount,
+        }))
+
+        // ソート（件数順）
+        const desc = [...arr].sort((a, b) => b.total_count - a.total_count)
+        const asc = [...arr]
+          .filter(item => item.total_count > 0) // 0件は除外
+          .sort((a, b) => a.total_count - b.total_count)
+
+        console.log('🏆 ベスト10:', desc.slice(0, 10))
+        console.log('📉 ワースト10:', asc.slice(0, 10))
+
+        setBestRows(desc.slice(0, 10))
+        setWorstRows(asc.slice(0, 10))
+        
+      } catch (error) {
+        console.error("🚨 ランキング処理エラー:", error)
+      } finally {
+        setLoading(false)
+      }
     }
 
     fetchData()
   }, [month])
 
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 gap-6">
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-200 rounded mb-3 w-24"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
+        </div>
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-200 rounded mb-3 w-24"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="grid grid-cols-2 gap-6">
@@ -90,14 +131,22 @@ export default function WebSalesRankingTable({ month }: Props) {
             </tr>
           </thead>
           <tbody>
-            {bestRows.map((r, i) => (
-              <tr key={r.product_name} className="text-center hover:bg-green-50">
-                <td className="border px-1 py-1 font-medium">{i + 1}</td>
-                <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
-                <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
-                <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
+            {bestRows.length > 0 ? (
+              bestRows.map((r, i) => (
+                <tr key={r.product_name} className="text-center hover:bg-green-50">
+                  <td className="border px-1 py-1 font-medium">{i + 1}</td>
+                  <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
+                  <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
+                  <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} className="border px-2 py-4 text-center text-gray-500">
+                  データがありません
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
@@ -115,14 +164,22 @@ export default function WebSalesRankingTable({ month }: Props) {
             </tr>
           </thead>
           <tbody>
-            {worstRows.map((r, i) => (
-              <tr key={r.product_name} className="text-center hover:bg-red-50">
-                <td className="border px-1 py-1 font-medium">{i + 1}</td>
-                <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
-                <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
-                <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
+            {worstRows.length > 0 ? (
+              worstRows.map((r, i) => (
+                <tr key={r.product_name} className="text-center hover:bg-red-50">
+                  <td className="border px-1 py-1 font-medium">{i + 1}</td>
+                  <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
+                  <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
+                  <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} className="border px-2 py-4 text-center text-gray-500">
+                  データがありません
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
