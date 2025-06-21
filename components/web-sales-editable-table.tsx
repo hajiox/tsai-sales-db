@@ -1,7 +1,7 @@
-// /components/web-sales-editable-table.tsx ver.32
+// /components/web-sales-editable-table.tsx ver.33
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react"
+import React, { useState, useEffect, useCallback, useMemo } from "react"
 import {
   Table,
   TableHeader,
@@ -22,6 +22,7 @@ import { useDisclosure } from "@nextui-org/modal"
 import { supabase } from "@/lib/supabase"
 import { WebSalesData, Product } from "@/types/db"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+// import { Suspense } from "react" // ← Suspenseのインポートを削除
 
 import CsvImportConfirmModal from "./CsvImportConfirmModal"
 import AmazonCsvImportModal from "./AmazonCsvImportModal" // HTMLベースのモーダルをインポート
@@ -269,8 +270,8 @@ export default function WebSalesEditableTable({
   }
 
   return (
-    <>
-      <Suspense fallback={<div>Loading table...</div>}>
+    <> {/* フラグメントは残す */}
+      {/* <Suspense fallback={<div>Loading table...</div>}> // ← Suspenseを削除 */}
         <div className="p-4">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">
@@ -483,7 +484,7 @@ export default function WebSalesEditableTable({
             <p>合計売上金額: ¥{new Intl.NumberFormat("ja-JP").format(getTotalAmountAllECSites())}</p>
           </div>
         </div>
-      </Suspense>
+      {/* </Suspense> // ← Suspenseを削除 */}
       <CsvImportConfirmModal isOpen={isCsvModalOpen} onClose={onCloseCsvModal} />
       <AmazonCsvImportModal isOpen={isAmazonCsvModalOpen} onClose={onCloseAmazonCsvModal} />
     </>
