@@ -1,3 +1,4 @@
+// /components/websales-ranking-table.tsx ver.1
 "use client"
 
 import { useEffect, useState } from "react"
@@ -80,7 +81,7 @@ export default function WebSalesRankingTable({ month }: Props) {
         // ソート（件数順）
         const desc = [...arr].sort((a, b) => b.total_count - a.total_count)
         const asc = [...arr]
-          .filter(item => item.total_count > 0) // 0件は除外
+          // .filter(item => item.total_count > 0) // ← 件数0の商品も表示するため、この行を削除
           .sort((a, b) => a.total_count - b.total_count)
 
         console.log('🏆 ベスト10:', desc.slice(0, 10))
