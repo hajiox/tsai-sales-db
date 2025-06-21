@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.29
+// /components/web-sales-editable-table.tsx ver.30
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
@@ -16,14 +16,16 @@ import {
   DropdownMenu,
   DropdownItem,
   Pagination,
-} from "@nextui-org/react"
-import { useDisclosure } from "@nextui-org/modal" // Modal関連をuseDisclosureのみに
+  // Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, // ←これらの個別のインポートを削除
+  Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, // ここをまとめてインポートするように
+} from "@nextui-org/react" // ← @nextui-org/react からまとめてインポート
+
 import { supabase } from "@/lib/supabase"
 import { WebSalesData, Product } from "@/types/db"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 import CsvImportConfirmModal from "./CsvImportConfirmModal"
-import AmazonCsvImportModal from "./AmazonCsvImportModal" // 新しいコンポーネントをインポート
+import AmazonCsvImportModal from "./AmazonCsvImportModal"
 
 interface WebSalesEditableTableProps {
   initialWebSalesData: WebSalesData[]
