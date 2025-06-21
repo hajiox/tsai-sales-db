@@ -1,265 +1,594 @@
-// /components/web-sales-editable-table.tsx
-// ver.27 (月別データ削除機能追加版)
-"use client";
+// /components/web-sales-editable-table.tsx ver.28
+"use client"
 
-import { useEffect, useState, useRef } from "react";
-import { supabase } from "@/lib/supabase";
-import SeriesManager from './SeriesManager';
-import ProductAddForm from './ProductAddForm';
-import SalesDataTable from './SalesDataTable';
-import CsvImportConfirmModal from "./CsvImportConfirmModal";
+import React, { useState, useEffect, useCallback, useMemo } from "react"
+import {
+  Table,
+  TableHeader,
+  TableColumn,
+  TableBody,
+  TableRow,
+  TableCell,
+  Input,
+  Button,
+  Dropdown,
+  DropdownTrigger,
+  DropdownMenu,
+  DropdownItem,
+  Pagination,
+} from "@nextui-org/react"
+import {
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
+} from "@nextui-org/modal"
+import { supabase } from "@/lib/supabase"
+import { WebSalesData, Product } from "@/types/db" // Adjust path as necessary
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { Suspense } from "react"
+import CsvImportConfirmModal from "./CsvImportConfirmModal" // CSVインポート確認モーダルをインポート
 
-// --- 型定義 ---
-type SummaryRow = { id: string; product_id: string; product_name: string; series_name: string | null; product_number: number; price: number | null; amazon_count: number | null; rakuten_count: number | null; yahoo_count: number | null; mercari_count: number | null; base_count: number | null; qoo10_count: number | null; };
-type SeriesMaster = { series_id: number; series_name: string; };
-type NewProductState = { product_name: string; series_id: string; product_number: string; price: string; };
-type EditingCell = { rowId: string; field: string; } | null;
-type ImportResult = { id: number; original: string; matched: string | null; salesData: { [key: string]: number; }; };
-type ProductMaster = { id: string; name: string; };
+interface WebSalesEditableTableProps {
+  initialWebSalesData: WebSalesData[]
+  month: string
+}
 
-// --- Component ---
-export default function WebSalesEditableTable({ 
-  month, 
-  onDataSaved 
-}: { 
-  month: string;
-  onDataSaved?: () => void;
-}) {
-  // --- State Hooks ---
-  const [rows, setRows] = useState<SummaryRow[]>([]);
-  const [originalRows, setOriginalRows] = useState<SummaryRow[]>([]);
-  const [seriesList, setSeriesList] = useState<SeriesMaster[]>([]);
-  const [productMaster, setProductMaster] = useState<ProductMaster[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [editingCell, setEditingCell] = useState<EditingCell>(null);
-  const [editValue, setEditValue] = useState<string>("");
-  const [saveMessage, setSaveMessage] = useState<string>("");
-  const [savingRows, setSavingRows] = useState<Set<string>>(new Set());
-  const [savingAll, setSavingAll] = useState<boolean>(false);
-  const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  
-  const [showSeriesForm, setShowSeriesForm] = useState(false);
-  const [newSeriesName, setNewSeriesName] = useState("");
-  const [seriesLoading, setSeriesLoading] = useState(false);
+const ROWS_PER_PAGE = 10
 
-  const [showProductForm, setShowProductForm] = useState(false);
-  const [newProduct, setNewProduct] = useState<NewProductState>({ product_name: "", series_id: "", product_number: "", price: "" });
-  const [productLoading, setProductLoading] = useState(false);
+export default function WebSalesEditableTable({
+  initialWebSalesData,
+  month,
+}: WebSalesEditableTableProps) {
+  const [data, setData] = useState<WebSalesData[]>(initialWebSalesData)
+  const [editMode, setEditMode] = useState<string | null>(null) // 'product_id-ec_site_name'
+  const [editedValue, setEditedValue] = useState<string>("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [currentMonth, setCurrentMonth] = useState(month)
+  const [productMap, setProductMap] = useState<Map<string, Product>>(new Map())
+  const [filterValue, setFilterValue] = useState("")
+  const [page, setPage] = useState(1)
 
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [importResults, setImportResults] = useState<ImportResult[]>([]);
-  const [isSubmittingImport, setIsSubmittingImport] = useState(false);
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
 
-  // --- Data Loading ---
-  useEffect(() => { loadData(); loadSeries(); loadProductMaster(); }, [month]);
-  const loadData = async () => { setLoading(true); try { const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month }); if (error) throw error; const salesData = (data as SummaryRow[]) ?? []; setRows(salesData); setOriginalRows(JSON.parse(JSON.stringify(salesData))); } catch (error) { console.error('データ読み込みエラー:', error); } finally { setLoading(false); } };
-  const loadSeries = async () => { try { const response = await fetch('/api/series-master'); const result = await response.json(); if (response.ok) { setSeriesList(result.data || []); } } catch (error) { console.error('シリーズ読み込みエラー:', error); } };
-  const loadProductMaster = async () => { try { const { data, error } = await supabase.from('products').select('id, name'); if (error) throw error; setProductMaster(data || []); } catch (error) { console.error('商品マスタの読み込みエラー:', error); } };
+  // CSVインポートモーダルの制御
+  const {
+    isOpen: isCsvModalOpen,
+    onOpen: onOpenCsvModal,
+    onClose: onCloseCsvModal,
+  } = useDisclosure()
 
-  // --- 月別データ削除機能 ---
+  // Amazon CSVインポートモーダルの制御
+  const {
+    isOpen: isAmazonCsvModalOpen,
+    onOpen: onOpenAmazonCsvModal,
+    onClose: onCloseAmazonCsvModal,
+  } = useDisclosure()
+
+  const [amazonFile, setAmazonFile] = useState<File | null>(null);
+  const [amazonImportMessage, setAmazonImportMessage] = useState<string>("");
+  const [amazonImportLoading, setAmazonImportLoading] = useState(false);
+
+
+  useEffect(() => {
+    setCurrentMonth(month)
+  }, [month])
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      const { data: products, error } = await supabase
+        .from("products")
+        .select("*")
+      if (error) {
+        console.error("Error fetching products:", error)
+        return
+      }
+      const map = new Map<string, Product>()
+      products.forEach((p) => map.set(p.id, p))
+      setProductMap(map)
+    }
+    fetchProducts()
+  }, [])
+
+  useEffect(() => {
+    setData(initialWebSalesData)
+  }, [initialWebSalesData])
+
+  const getProductName = (productId: string) => {
+    return productMap.get(productId)?.name || "不明な商品"
+  }
+
+  const getProductSeriesCode = (productId: string) => {
+    return productMap.get(productId)?.series_code || 9999
+  }
+
+  const getProductNumber = (productId: string) => {
+    return productMap.get(productId)?.product_number || 9999
+  }
+
+  const getProductPrice = (productId: string) => {
+    return productMap.get(productId)?.price || 0
+  }
+
+  const filteredItems = useMemo(() => {
+    const sortedData = [...data].sort((a, b) => {
+      const seriesCodeA = getProductSeriesCode(a.product_id)
+      const seriesCodeB = getProductSeriesCode(b.product_id)
+      if (seriesCodeA !== seriesCodeB) {
+        return seriesCodeA - seriesCodeB
+      }
+      const productNumberA = getProductNumber(a.product_id)
+      const productNumberB = getProductNumber(b.product_id)
+      return productNumberA - productNumberB
+    })
+
+    if (!filterValue) {
+      return sortedData
+    }
+    return sortedData.filter((item) =>
+      getProductName(item.product_id)
+        .toLowerCase()
+        .includes(filterValue.toLowerCase()),
+    )
+  }, [data, filterValue, productMap])
+
+  const pages = Math.ceil(filteredItems.length / ROWS_PER_PAGE)
+
+  const items = useMemo(() => {
+    const start = (page - 1) * ROWS_PER_PAGE
+    const end = start + ROWS_PER_PAGE
+    return filteredItems.slice(start, end)
+  }, [page, filteredItems])
+
+  const handleEdit = (
+    productId: string,
+    ecSite: string,
+    currentValue: number | null,
+  ) => {
+    setEditMode(`${productId}-${ecSite}`)
+    setEditedValue(currentValue?.toString() || "")
+  }
+
+  const handleSave = async (productId: string, ecSite: string) => {
+    setIsLoading(true)
+    const newValue = parseInt(editedValue)
+
+    if (isNaN(newValue)) {
+      alert("有効な数値を入力してください。")
+      setIsLoading(false)
+      return
+    }
+
+    const updatedData = data.map((item) =>
+      item.product_id === productId
+        ? { ...item, [`${ecSite}_count`]: newValue }
+        : item,
+    )
+    setData(updatedData)
+
+    try {
+      const updatePayload: any = { product_id: productId, report_month: month }
+      updatePayload[`${ecSite}_count`] = newValue
+
+      // 金額も同時に更新する場合
+      const price = getProductPrice(productId)
+      if (price !== undefined) {
+        updatePayload[`${ecSite}_amount`] = newValue * price
+      }
+
+      const { error } = await supabase
+        .from("web_sales_summary")
+        .upsert([updatePayload], { onConflict: "product_id, report_month" })
+
+      if (error) {
+        console.error("Error updating data:", error)
+        alert("データの保存に失敗しました。")
+      } else {
+        console.log("Data saved successfully.")
+      }
+    } catch (error) {
+      console.error("Error during save operation:", error)
+      alert("データの保存中にエラーが発生しました。")
+    } finally {
+      setEditMode(null)
+      setEditedValue("")
+      setIsLoading(false)
+    }
+  }
+
+  const handleMonthChange = useCallback(
+    (selectedMonth: string) => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("month", selectedMonth)
+      router.push(`${pathname}?${params.toString()}`)
+    },
+    [searchParams, router, pathname],
+  )
+
+  const getTotal = (ecSite: string) => {
+    return filteredItems.reduce((sum, item) => {
+      const count = item[`${ecSite}_count`] || 0
+      return sum + count
+    }, 0)
+  }
+
+  const getTotalAmount = (ecSite: string) => {
+    return filteredItems.reduce((sum, item) => {
+      const amount = item[`${ecSite}_amount`] || 0
+      return sum + amount
+    }, 0)
+  }
+
+  const getTotalAllECSites = () => {
+    const ecSites = [
+      "amazon",
+      "rakuten",
+      "yahoo",
+      "mercari",
+      "base",
+      "qoo10",
+    ]
+    return ecSites.reduce((totalSum, site) => totalSum + getTotal(site), 0)
+  }
+
+  const getTotalAmountAllECSites = () => {
+    const ecSites = [
+      "amazon",
+      "rakuten",
+      "yahoo",
+      "mercari",
+      "base",
+      "qoo10",
+    ]
+    return ecSites.reduce((totalSum, site) => totalSum + getTotalAmount(site), 0)
+  }
+
   const handleDeleteMonthData = async () => {
-    const salesDataCount = rows.filter(row => 
-      (row.amazon_count || 0) + (row.rakuten_count || 0) + (row.yahoo_count || 0) + 
-      (row.mercari_count || 0) + (row.base_count || 0) + (row.qoo10_count || 0) > 0
-    ).length;
-
-    if (salesDataCount === 0) {
-      alert('削除対象の販売データがありません。');
-      return;
+    if (
+      !window.confirm(
+        `${currentMonth}のすべての売上データを削除します。本当によろしいですか？`,
+      )
+    ) {
+      return
     }
 
-    if (!confirm(`${month}の販売データ（${salesDataCount}商品分）を削除しますか？\n\n※この操作は取り消せません。`)) {
-      return;
-    }
-
-    setIsDeleting(true);
+    setIsLoading(true)
     try {
-      const response = await fetch(`/api/web-sales-data?month=${month}`, {
-        method: 'DELETE'
-      });
-      
-      const result = await response.json();
-      
-      if (response.ok) {
-        alert(result.message);
-        loadData(); // データ再読み込み
-        onDataSaved?.();
+      const { error } = await supabase
+        .from("web_sales_summary")
+        .delete()
+        .eq("report_month", currentMonth + "-01") // DBのカラムに合わせてyyyy-mm-dd形式に
+      if (error) {
+        console.error("Error deleting month data:", error)
+        alert("月別データの削除に失敗しました。")
       } else {
-        throw new Error(result.error || '削除に失敗しました');
+        alert(`${currentMonth}の売上データが正常に削除されました。`)
+        setData([]) // UIからデータをクリア
+        router.refresh() // ページをリフレッシュして最新の状態を反映
       }
     } catch (error) {
-      console.error('削除エラー:', error);
-      alert(`削除エラー: ${error instanceof Error ? error.message : '不明なエラー'}`);
+      console.error("Error during delete operation:", error)
+      alert("月別データの削除中にエラーが発生しました。")
     } finally {
-      setIsDeleting(false);
+      setIsLoading(false)
+    }
+  }
+
+  const handleAmazonFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setAmazonFile(e.target.files[0]);
+      setAmazonImportMessage(''); // メッセージをクリア
+    } else {
+      setAmazonFile(null);
     }
   };
 
-  // --- CSV Import ---
-  const handleCsvButtonClick = () => { fileInputRef.current?.click(); };
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploading(true);
+  const handleAmazonUpload = async () => {
+    if (!amazonFile) {
+      setAmazonImportMessage('ファイルを選択してください。'); // メッセージ修正
+      return;
+    }
+
+    setAmazonImportLoading(true);
+    setAmazonImportMessage('アップロード中...');
+
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('reportMonth', month);
+    formData.append('file', amazonFile);
+
     try {
-      const response = await fetch('/api/import/csv', { method: 'POST', body: formData });
-      const result = await response.json();
-      if (response.ok) { 
-        console.log('CSV読み込み結果:', result);
-        const apiData = result.data || [];
-        console.log('APIから取得したデータ件数:', apiData.length);
-        
-        if (!Array.isArray(apiData)) {
-          throw new Error('APIレスポンスが配列ではありません');
-        }
-        
-        // データをCSV商品名ごとにグループ化
-        const productGroups = new Map<string, any[]>();
-        apiData.forEach((item: any, index: number) => {
-          console.log(`データ${index}:`, item);
-          if (!item.csvProductName) {
-            console.warn(`データ${index}にcsvProductNameがありません:`, item);
-            return;
-          }
-          const key = item.csvProductName;
-          if (!productGroups.has(key)) {
-            productGroups.set(key, []);
-          }
-          productGroups.get(key)!.push(item);
-        });
-        
-        console.log('グループ化されたデータ:', productGroups);
-        
-        // グループ化されたデータをImportResult形式に変換
-        const convertedResults: ImportResult[] = [];
-        let id = 1;
-        
-        productGroups.forEach((items, csvProductName) => {
-          console.log(`商品「${csvProductName}」の処理開始:`, items);
-          
-          // 販売データをECサイト別に集計
-          const salesData: { [key: string]: number } = {};
-          let matchedProductName = null;
-          
-          items.forEach((item, itemIndex) => {
-            console.log(`  アイテム${itemIndex}:`, item);
-            console.log(`  数量: ${item.quantity}, ECサイト: ${item.ecSite}`);
-            
-            if (item.quantity && item.quantity > 0) {
-              // ECサイト名を日本語に変換
-              const ecSiteMap: { [key: string]: string } = {
-                'amazon': 'Amazon',
-                'rakuten': '楽天',
-                'yahoo': 'Yahoo',
-                'mercari': 'メルカリ',
-                'base': 'BASE', 
-                'qoo10': 'Qoo10'
-              };
-              const displayEcSite = ecSiteMap[item.ecSite] || item.ecSite;
-              salesData[displayEcSite] = item.quantity;
-              console.log(`  販売データ設定: ${displayEcSite} = ${salesData[displayEcSite]}`);
-            }
-            
-            // マッチした商品名を取得（最初の1件から）
-            if (item.masterProductName && !matchedProductName) {
-              matchedProductName = item.masterProductName;
-            }
-          });
-          
-          const result = {
-            id: id++,
-            original: csvProductName,
-            matched: matchedProductName,
-            salesData: salesData
-          };
-          
-          console.log(`商品「${csvProductName}」の最終結果:`, result);
-          convertedResults.push(result);
-        });
-        
-        console.log('最終的な変換後データ:', convertedResults);
-        setImportResults(convertedResults);
-        setShowConfirmModal(true);
-      } 
-      else { throw new Error(result.error || '不明なエラーが発生しました'); }
-    } catch (error) {
-      console.error('CSVインポートエラー:', error);
-      alert(`エラー: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setIsUploading(false);
-      if(fileInputRef.current) { fileInputRef.current.value = ""; }
-    }
-  };
-  
-  const handleImportResultChange = (id: number, newMatchedValue: string) => { setImportResults(currentResults => currentResults.map(result => result.id === id ? { ...result, matched: newMatchedValue || null } : result)); };
-  
-  const handleConfirmImport = async (updatedResults: ImportResult[]) => {
-    setIsSubmittingImport(true);
-    try {
-      const response = await fetch('/api/import/register', {
+      const response = await fetch('/api/import/amazon', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ results: updatedResults, report_month: month }),
+        body: formData,
       });
+
       const result = await response.json();
+
       if (response.ok) {
-        alert(result.message);
-        setShowConfirmModal(false);
-        loadData();
-        onDataSaved?.();
+        setAmazonImportMessage(result.message || 'Amazonデータが正常にインポートされました。');
+        onCloseAmazonCsvModal();
+        router.refresh(); // データをリフレッシュ
       } else {
-        throw new Error(result.error || '登録処理中にエラーが発生しました。');
+        setAmazonImportMessage(result.error || 'Amazonデータのインポートに失敗しました。');
       }
     } catch (error) {
-      alert(`エラー: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Amazonアップロードエラー:', error);
+      setAmazonImportMessage('ファイルのアップロード中にエラーが発生しました。');
     } finally {
-      setIsSubmittingImport(false);
+      setAmazonImportLoading(false);
+      setAmazonFile(null); // ファイル選択をリセット
     }
   };
 
-  // --- Save Logic (Inline Edit) ---
-  const showSaveMessage = (message: string) => { setSaveMessage(message); setTimeout(() => setSaveMessage(""), 3000); };
-  const isRowChanged = (rowId: string) => { const currentRow = rows.find(r => r.id === rowId); const originalRow = originalRows.find(r => r.id === rowId); if (!currentRow || !originalRow) return false; const salesFields: (keyof SummaryRow)[] = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count']; return salesFields.some(field => currentRow[field] !== originalRow[field]); };
-  const getChangedRows = () => { return rows.filter(row => isRowChanged(row.id)); };
-  const saveRow = async (rowId: string) => { const row = rows.find(r => r.id === rowId); if (!row) return; setSavingRows(prev => new Set(prev.add(rowId))); try { const salesFields: (keyof SummaryRow)[] = ['amazon_count', 'rakuten_count', 'yahoo_count', 'mercari_count', 'base_count', 'qoo10_count']; for (const field of salesFields) { const value = row[field] || 0; await fetch('/api/web-sales-data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: row.product_id, report_month: month, field: String(field), value }) }); } setOriginalRows(prev => prev.map(r => r.id === rowId ? { ...row } : r)); showSaveMessage(`「${row.product_name}」の販売数を保存しました`); onDataSaved?.(); } catch (error) { console.error('保存エラー:', error); showSaveMessage('保存に失敗しました'); } finally { setSavingRows(prev => { const newSet = new Set(prev); newSet.delete(rowId); return newSet; }); } };
-  const saveAllChanges = async () => { const changedRows = getChangedRows(); if (changedRows.length === 0) { showSaveMessage('変更がありません'); return; } setSavingAll(true); try { for (const row of changedRows) { await saveRow(row.id); } showSaveMessage(`${changedRows.length}商品の販売数を一括保存しました`); } catch (error) { console.error('一括保存エラー:', error); showSaveMessage('一括保存に失敗しました'); } finally { setSavingAll(false); } };
-
-  // --- Master Data Handlers ---
-  const handleAddSeries = async () => { if (!newSeriesName.trim()) return; setSeriesLoading(true); try { const response = await fetch('/api/series-master', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ series_name: newSeriesName.trim() }) }); if (response.ok) { setNewSeriesName(""); setShowSeriesForm(false); loadSeries(); alert('シリーズが追加されました'); } else { const result = await response.json(); alert('エラー: ' + result.error); } } catch (error) { console.error('シリーズ追加エラー:', error); } finally { setSeriesLoading(false); } };
-  const handleAddProduct = async () => { if (!newProduct.product_name.trim() || !newProduct.series_id || !newProduct.product_number || !newProduct.price) { alert('全ての項目を入力してください'); return; } setProductLoading(true); try { const response = await fetch('/api/products-master', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_name: newProduct.product_name.trim(), series_id: parseInt(newProduct.series_id), product_number: parseInt(newProduct.product_number), price: parseInt(newProduct.price) }) }); if (response.ok) { setNewProduct({ product_name: "", series_id: "", product_number: "", price: "" }); setShowProductForm(false); loadData(); alert('商品が追加されました'); } else { const result = await response.json(); alert('エラー: ' + result.error); } } catch (error) { console.error('商品追加エラー:', error); } finally { setProductLoading(false); } };
-  const handleDeleteProduct = async (productId: string, productName: string) => { if (!confirm(`「${productName}」を削除しますか？`)) return; try { const response = await fetch('/api/products-master', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: productId }) }); if (response.ok) { loadData(); alert('商品が削除されました'); } else if (response.status === 409) { const result = await response.json(); if (confirm(`「${productName}」には販売実績（${result.sales_count}件）があります。\n\n販売データと一緒に削除しますか？`)) { /* Force delete logic here */ } } else { const result = await response.json(); alert('エラー: ' + result.error); } } catch (error) { console.error('商品削除エラー:', error); } };
-  const handleDeleteSeries = async (seriesId: number, seriesName: string) => { if (!confirm(`「${seriesName}」を削除しますか？`)) return; try { const response = await fetch('/api/series-master', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ series_id: seriesId }) }); if (response.ok) { loadSeries(); loadData(); alert('シリーズが削除されました'); } else { const result = await response.json(); alert('エラー: ' + result.error); } } catch (error) { console.error('シリーズ削除エラー:', error); } };
-
-  // --- Inline Cell Editing Handlers ---
-  const handleCellClick = (rowId: string, field: string, currentValue: number | null) => { setEditingCell({ rowId, field }); setEditValue((currentValue || 0).toString()); };
-  const handleCellSave = () => { if (!editingCell) return; const newValue = parseInt(editValue) || 0; setRows(prevRows => prevRows.map(row => row.id === editingCell.rowId ? { ...row, [editingCell.field]: newValue } : row )); setEditingCell(null); setEditValue(""); };
-  const handleCellCancel = () => { setEditingCell(null); setEditValue(""); };
-
-  // --- Render Logic ---
-  if (loading) { return <div className="flex justify-center items-center h-64"><div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><p className="ml-2 text-gray-600">データを読み込んでいます...</p></div>; }
 
   return (
-    <div className="space-y-4">
-      <CsvImportConfirmModal isOpen={showConfirmModal} results={importResults} productMaster={productMaster} isSubmitting={isSubmittingImport} onResultChange={handleImportResultChange} onClose={() => setShowConfirmModal(false)} onConfirm={handleConfirmImport} />
-      <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} accept=".csv" disabled={isUploading} />
-      {saveMessage && (<div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">{saveMessage}</div>)}
-      <div className="flex justify-between items-center">
-        <div className="text-sm text-gray-600">変更された商品: {getChangedRows().length}件</div>
-        <div className="flex gap-2">
-          <button onClick={handleDeleteMonthData} disabled={isDeleting} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
-            {isDeleting ? '削除中...' : `${month}データ削除`}
-          </button>
-          <button onClick={saveAllChanges} disabled={savingAll || getChangedRows().length === 0} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">{savingAll ? '保存中...' : `一括保存 (${getChangedRows().length}件)`}</button>
+    <Suspense fallback={<div>Loading table...</div>}>
+      <div className="p-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">
+            WEB販売実績 ({currentMonth}月)
+          </h2>
+          <div className="flex gap-2">
+            <Dropdown>
+              <DropdownTrigger>
+                <Button variant="bordered" className="w-32">
+                  {currentMonth}
+                </Button>
+              </DropdownTrigger>
+              <DropdownMenu
+                aria-label="Month selection"
+                selectedKeys={[currentMonth]}
+                onAction={(key) => handleMonthChange(key.toString())}
+                className="max-h-64 overflow-y-auto"
+              >
+                {/* 2023年からの月を生成 */}
+                {Array.from({ length: 36 }, (_, i) => {
+                  const date = new Date(2023, i, 1)
+                  const year = date.getFullYear()
+                  const month = (date.getMonth() + 1).toString().padStart(2, "0")
+                  const value = `${year}-${month}`
+                  return (
+                    <DropdownItem key={value} value={value}>
+                      {year}年{month}月
+                    </DropdownItem>
+                  )
+                })}
+              </DropdownMenu>
+            </Dropdown>
+            <Input
+              placeholder="商品名で検索"
+              value={filterValue}
+              onValueChange={setFilterValue}
+              className="w-48"
+            />
+            {/* 既存のCSVインポートボタン */}
+            <Button color="primary" onClick={onOpenCsvModal}>
+              CSVインポート
+            </Button>
+            {/* Amazon CSVインポートボタン（既存のボタンに紐付け） */}
+            <Button color="secondary" onClick={onOpenAmazonCsvModal}>
+              Amazon CSVインポート
+            </Button>
+            <Button color="danger" onClick={handleDeleteMonthData}>
+              {currentMonth}月 データ削除
+            </Button>
+          </div>
+        </div>
+
+        {/* --- Amazon CSVインポートモーダル --- */}
+        <Modal
+          isOpen={isAmazonCsvModalOpen}
+          onClose={onCloseAmazonCsvModal}
+          placement="center"
+        >
+          <ModalContent>
+            {(onClose) => (
+              <>
+                <ModalHeader className="flex flex-col gap-1">
+                  Amazon CSVインポート
+                </ModalHeader>
+                <ModalBody>
+                  <p className="text-sm text-gray-600">
+                    Amazonの売上CSVファイルを選択してアップロードしてください。
+                    商品名と販売個数を読み込み、既存データに加算します。
+                  </p>
+                  <Input
+                    type="file"
+                    onChange={handleAmazonFileChange}
+                    accept=".csv"
+                    label="Amazon CSVファイル"
+                    placeholder="ファイルを選択"
+                    labelPlacement="outside-left"
+                    isClearable={false}
+                  />
+                  {amazonImportMessage && (
+                    <p className={`text-sm ${amazonImportLoading ? 'text-blue-500' : (amazonImportMessage.includes('成功') ? 'text-green-500' : 'text-red-500')}`}>
+                      {amazonImportMessage}
+                    </p>
+                  )}
+                </ModalBody>
+                <ModalFooter>
+                  <Button color="danger" variant="light" onPress={onClose}>
+                    キャンセル
+                  </Button>
+                  <Button
+                    color="primary"
+                    onPress={handleAmazonUpload}
+                    isDisabled={!amazonFile || amazonImportLoading}
+                    isLoading={amazonImportLoading}
+                  >
+                    {amazonImportLoading ? "アップロード中..." : "インポート開始"}
+                  </Button>
+                </ModalFooter>
+              </>
+            )}
+          </ModalContent>
+        </Modal>
+
+        <Table
+          aria-label="WEB販売実績テーブル"
+          bottomContent={
+            <div className="flex w-full justify-center">
+              <Pagination
+                isCompact
+                showControls
+                showShadow
+                color="primary"
+                page={page}
+                total={pages}
+                onChange={(page) => setPage(page)}
+              />
+            </div>
+          }
+          classNames={{
+            wrapper: "min-h-[222px]",
+          }}
+        >
+          <TableHeader>
+            <TableColumn key="product_name" className="w-52">
+              商品名
+            </TableColumn>
+            <TableColumn key="amazon" className="w-24 text-center">
+              Amazon
+            </TableColumn>
+            <TableColumn key="rakuten" className="w-24 text-center">
+              楽天
+            </TableColumn>
+            <TableColumn key="yahoo" className="w-24 text-center">
+              Yahoo!
+            </TableColumn>
+            <TableColumn key="mercari" className="w-24 text-center">
+              メルカリ
+            </TableColumn>
+            <TableColumn key="base" className="w-24 text-center">
+              BASE
+            </TableColumn>
+            <TableColumn key="qoo10" className="w-24 text-center">
+              Qoo10
+            </TableColumn>
+            <TableColumn key="total_count" className="w-24 text-center">
+              合計数
+            </TableColumn>
+            <TableColumn key="total_amount" className="w-28 text-center">
+              合計金額
+            </TableColumn>
+          </TableHeader>
+          <TableBody emptyContent={"データがありません"}>
+            {items.map((row) => (
+              <TableRow key={row.product_id}>
+                <TableCell className="text-left text-xs">
+                  {getProductName(row.product_id)}
+                </TableCell>
+                {(
+                  [
+                    "amazon",
+                    "rakuten",
+                    "yahoo",
+                    "mercari",
+                    "base",
+                    "qoo10",
+                  ] as const
+                ).map((site) => {
+                  const cellKey = `${row.product_id}-${site}`
+                  const count = row[`${site}_count`] || 0
+                  const amount = row[`${site}_amount`] || 0
+                  const displayValue = `${count}` // 金額は表示しない
+                  return (
+                    <TableCell key={cellKey}>
+                      <div
+                        onClick={() => handleEdit(row.product_id, site, count)}
+                        className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-center ${
+                          editMode === cellKey ? "bg-blue-50" : ""
+                        }`}
+                      >
+                        {editMode === cellKey ? (
+                          <Input
+                            autoFocus
+                            value={editedValue}
+                            onChange={(e) => setEditedValue(e.target.value)}
+                            onBlur={() => handleSave(row.product_id, site)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleSave(row.product_id, site)
+                              } else if (e.key === "Escape") {
+                                setEditMode(null)
+                                setEditedValue("")
+                              }
+                            }}
+                            type="number"
+                            className="text-center"
+                            size="sm"
+                          />
+                        ) : (
+                          displayValue
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 text-center">
+                        ¥{new Intl.NumberFormat("ja-JP").format(amount)}
+                      </div>
+                    </TableCell>
+                  )
+                })}
+                <TableCell className="text-center font-bold">
+                  {new Intl.NumberFormat("ja-JP").format(
+                    [
+                      "amazon",
+                      "rakuten",
+                      "yahoo",
+                      "mercari",
+                      "base",
+                      "qoo10",
+                    ].reduce(
+                      (sum, site) => sum + (row[`${site}_count`] || 0),
+                      0,
+                    ),
+                  )}
+                  <div className="text-xs text-gray-500">
+                    ¥
+                    {new Intl.NumberFormat("ja-JP").format(
+                      [
+                        "amazon",
+                        "rakuten",
+                        "yahoo",
+                        "mercari",
+                        "base",
+                        "qoo10",
+                      ].reduce(
+                        (sum, site) => sum + (row[`${site}_amount`] || 0),
+                        0,
+                      ),
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-center font-bold">
+                  ¥
+                  {new Intl.NumberFormat("ja-JP").format(
+                    [
+                      "amazon",
+                      "rakuten",
+                      "yahoo",
+                      "mercari",
+                      "base",
+                      "qoo10",
+                    ].reduce(
+                      (sum, site) => sum + (row[`${site}_amount`] || 0),
+                      0,
+                    ),
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <div className="flex justify-end gap-4 text-sm mt-4 mr-4">
+          <p>合計販売数: {new Intl.NumberFormat("ja-JP").format(getTotalAllECSites())}</p>
+          <p>合計売上金額: ¥{new Intl.NumberFormat("ja-JP").format(getTotalAmountAllECSites())}</p>
         </div>
       </div>
-      <ProductAddForm show={showProductForm} newProduct={newProduct} seriesList={seriesList} productLoading={productLoading} onNewProductChange={(update) => setNewProduct(prev => ({...prev, ...update}))} onAddProduct={handleAddProduct} onCancel={() => setShowProductForm(false)} />
-      <div className="rounded-lg border bg-white shadow-sm"><div className="p-3 border-b bg-gray-50 flex justify-between items-center"><h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3><button onClick={() => setShowProductForm(!showProductForm)} className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">{showProductForm ? 'フォームを閉じる' : '商品追加'}</button></div><SalesDataTable rows={rows} editingCell={editingCell} editValue={editValue} savingRows={savingRows} isRowChanged={isRowChanged} onSaveRow={saveRow} onDeleteProduct={handleDeleteProduct} onCellClick={handleCellClick} onEditValueChange={setEditValue} onCellSave={handleCellSave} onCellCancel={handleCellCancel} /><div className="p-3 border-t"><div className="flex items-center justify-center gap-3"><span className="text-sm font-semibold text-gray-600">データ取り込み:</span><button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>{isUploading ? '処理中...' : 'CSV'}</button><button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button><button className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700" disabled>楽天</button><button className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600" disabled>Yahoo</button><button className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600" disabled>メルカリ</button><button className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600" disabled>Qoo10</button><button className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700" disabled>BASE</button></div></div></div>
-      <SeriesManager seriesList={seriesList} showSeriesForm={showSeriesForm} newSeriesName={newSeriesName} seriesLoading={seriesLoading} onShowFormToggle={() => setShowSeriesForm(!showSeriesForm)} onNewSeriesNameChange={setNewSeriesName} onAddSeries={handleAddSeries} onDeleteSeries={handleDeleteSeries} />
-    </div>
-  );
+      <CsvImportConfirmModal isOpen={isCsvModalOpen} onClose={onCloseCsvModal} />
+    </Suspense>
+  )
 }
