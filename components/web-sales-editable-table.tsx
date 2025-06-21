@@ -1,5 +1,5 @@
 // /components/web-sales-editable-table.tsx
-// ver.26 (ビルドエラー修正版)
+// ver.27 (月別データ削除機能追加版)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -36,6 +36,7 @@ export default function WebSalesEditableTable({
   const [saveMessage, setSaveMessage] = useState<string>("");
   const [savingRows, setSavingRows] = useState<Set<string>>(new Set());
   const [savingAll, setSavingAll] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   
@@ -56,6 +57,45 @@ export default function WebSalesEditableTable({
   const loadData = async () => { setLoading(true); try { const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month }); if (error) throw error; const salesData = (data as SummaryRow[]) ?? []; setRows(salesData); setOriginalRows(JSON.parse(JSON.stringify(salesData))); } catch (error) { console.error('データ読み込みエラー:', error); } finally { setLoading(false); } };
   const loadSeries = async () => { try { const response = await fetch('/api/series-master'); const result = await response.json(); if (response.ok) { setSeriesList(result.data || []); } } catch (error) { console.error('シリーズ読み込みエラー:', error); } };
   const loadProductMaster = async () => { try { const { data, error } = await supabase.from('products').select('id, name'); if (error) throw error; setProductMaster(data || []); } catch (error) { console.error('商品マスタの読み込みエラー:', error); } };
+
+  // --- 月別データ削除機能 ---
+  const handleDeleteMonthData = async () => {
+    const salesDataCount = rows.filter(row => 
+      (row.amazon_count || 0) + (row.rakuten_count || 0) + (row.yahoo_count || 0) + 
+      (row.mercari_count || 0) + (row.base_count || 0) + (row.qoo10_count || 0) > 0
+    ).length;
+
+    if (salesDataCount === 0) {
+      alert('削除対象の販売データがありません。');
+      return;
+    }
+
+    if (!confirm(`${month}の販売データ（${salesDataCount}商品分）を削除しますか？\n\n※この操作は取り消せません。`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/web-sales-data?month=${month}`, {
+        method: 'DELETE'
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        alert(result.message);
+        loadData(); // データ再読み込み
+        onDataSaved?.();
+      } else {
+        throw new Error(result.error || '削除に失敗しました');
+      }
+    } catch (error) {
+      console.error('削除エラー:', error);
+      alert(`削除エラー: ${error instanceof Error ? error.message : '不明なエラー'}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // --- CSV Import ---
   const handleCsvButtonClick = () => { fileInputRef.current?.click(); };
@@ -208,7 +248,15 @@ export default function WebSalesEditableTable({
       <CsvImportConfirmModal isOpen={showConfirmModal} results={importResults} productMaster={productMaster} isSubmitting={isSubmittingImport} onResultChange={handleImportResultChange} onClose={() => setShowConfirmModal(false)} onConfirm={handleConfirmImport} />
       <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} accept=".csv" disabled={isUploading} />
       {saveMessage && (<div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">{saveMessage}</div>)}
-      <div className="flex justify-between items-center"><div className="text-sm text-gray-600">変更された商品: {getChangedRows().length}件</div><button onClick={saveAllChanges} disabled={savingAll || getChangedRows().length === 0} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">{savingAll ? '保存中...' : `一括保存 (${getChangedRows().length}件)`}</button></div>
+      <div className="flex justify-between items-center">
+        <div className="text-sm text-gray-600">変更された商品: {getChangedRows().length}件</div>
+        <div className="flex gap-2">
+          <button onClick={handleDeleteMonthData} disabled={isDeleting} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+            {isDeleting ? '削除中...' : `${month}データ削除`}
+          </button>
+          <button onClick={saveAllChanges} disabled={savingAll || getChangedRows().length === 0} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">{savingAll ? '保存中...' : `一括保存 (${getChangedRows().length}件)`}</button>
+        </div>
+      </div>
       <ProductAddForm show={showProductForm} newProduct={newProduct} seriesList={seriesList} productLoading={productLoading} onNewProductChange={(update) => setNewProduct(prev => ({...prev, ...update}))} onAddProduct={handleAddProduct} onCancel={() => setShowProductForm(false)} />
       <div className="rounded-lg border bg-white shadow-sm"><div className="p-3 border-b bg-gray-50 flex justify-between items-center"><h3 className="text-lg font-semibold">全商品一覧 ({rows.length}商品)</h3><button onClick={() => setShowProductForm(!showProductForm)} className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">{showProductForm ? 'フォームを閉じる' : '商品追加'}</button></div><SalesDataTable rows={rows} editingCell={editingCell} editValue={editValue} savingRows={savingRows} isRowChanged={isRowChanged} onSaveRow={saveRow} onDeleteProduct={handleDeleteProduct} onCellClick={handleCellClick} onEditValueChange={setEditValue} onCellSave={handleCellSave} onCellCancel={handleCellCancel} /><div className="p-3 border-t"><div className="flex items-center justify-center gap-3"><span className="text-sm font-semibold text-gray-600">データ取り込み:</span><button onClick={handleCsvButtonClick} className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400" disabled={isUploading}>{isUploading ? '処理中...' : 'CSV'}</button><button className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600" disabled>Amazon</button><button className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700" disabled>楽天</button><button className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600" disabled>Yahoo</button><button className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600" disabled>メルカリ</button><button className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600" disabled>Qoo10</button><button className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700" disabled>BASE</button></div></div></div>
       <SeriesManager seriesList={seriesList} showSeriesForm={showSeriesForm} newSeriesName={newSeriesName} seriesLoading={seriesLoading} onShowFormToggle={() => setShowSeriesForm(!showSeriesForm)} onNewSeriesNameChange={setNewSeriesName} onAddSeries={handleAddSeries} onDeleteSeries={handleDeleteSeries} />
