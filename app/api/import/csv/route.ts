@@ -1,9 +1,13 @@
 // /app/api/import/csv/route.ts
-// ver.8 (デバッグ強化版) - 修正版動作確認用Deploy用
+// ver.9 (Vercelキャッシュ修正版) - 静的レンダリング防止
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Readable } from 'stream';
 import { Buffer } from 'buffer';
+
+// Vercelでの静的キャッシュを無効化（重要！）
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // Node.jsランタイムを明示的に指定
 export const runtime = 'nodejs';
