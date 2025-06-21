@@ -1,129 +1,84 @@
+// /app/api/web-sales-data/route.ts
+// ver.2 (DELETE機能追加版)
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
 
-export const dynamic = 'force-dynamic';
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
-    
-    const { data, error } = await supabase
-      .from('web_sales_summary')
-      .select('*')
-      
-    if (error) {
-      console.error('Supabaseエラー:', error)
-      return NextResponse.json({ 
-        error: error.message 
-      }, { status: 500 })
+    const { searchParams } = new URL(request.url)
+    const month = searchParams.get('month')
+
+    if (!month) {
+      return NextResponse.json({ error: 'monthパラメータが必要です' }, { status: 400 })
     }
+
+    const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month })
     
-    return NextResponse.json({ 
-      data: data || [],
-      count: data?.length || 0
-    })
-    
-  } catch (error: any) {
-    console.error('APIエラー:', error)
-    return NextResponse.json({ 
-      error: error.message 
-    }, { status: 500 })
+    if (error) throw error
+
+    return NextResponse.json({ data: data || [] })
+  } catch (error) {
+    console.error('データ取得エラー:', error)
+    return NextResponse.json({ error: 'データの取得に失敗しました' }, { status: 500 })
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
+    const body = await request.json()
+    const { month, updates } = body
 
-    const body = await request.json();
-    const { product_id, report_month, field, value } = body;
-
-    if (!product_id || !report_month || !field || value === undefined) {
-      return NextResponse.json(
-        { error: '必須パラメータが不足しています' },
-        { status: 400 }
-      );
+    if (!month || !updates || !Array.isArray(updates)) {
+      return NextResponse.json({ error: '無効なリクエストデータです' }, { status: 400 })
     }
 
-    // 月形式を日付形式に変換 (2025-04 → 2025-04-01)
-    const formattedMonth = report_month.length === 7 ? `${report_month}-01` : report_month;
+    for (const update of updates) {
+      const { product_id, ...updateData } = update
+      
+      const { error } = await supabase
+        .from('web_sales_summary')
+        .upsert({
+          product_id,
+          report_month: month,
+          ...updateData
+        }, {
+          onConflict: 'product_id,report_month'
+        })
 
-    // 既存レコードを検索
-    const { data: existingData, error: selectError } = await supabase
+      if (error) throw error
+    }
+
+    return NextResponse.json({ message: 'データが正常に保存されました' })
+  } catch (error) {
+    console.error('データ保存エラー:', error)
+    return NextResponse.json({ error: 'データの保存に失敗しました' }, { status: 500 })
+  }
+}
+
+// 新規追加: DELETE機能
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const month = searchParams.get('month')
+
+    if (!month) {
+      return NextResponse.json({ error: 'monthパラメータが必要です' }, { status: 400 })
+    }
+
+    // 指定した月のデータを一括削除
+    const { error, count } = await supabase
       .from('web_sales_summary')
-      .select('*')
-      .eq('product_id', product_id)
-      .eq('report_month', formattedMonth);
+      .delete()
+      .eq('report_month', month)
 
-    if (selectError) {
-      console.error('検索エラー:', selectError);
-      throw selectError;
-    }
-
-    let result;
-    if (existingData && existingData.length > 0) {
-      // 既存レコードを更新
-      const { data, error } = await supabase
-        .from('web_sales_summary')
-        .update({ [field]: value })
-        .eq('product_id', product_id)
-        .eq('report_month', formattedMonth)
-        .select();
-
-      if (error) throw error;
-      result = data;
-    } else {
-      // 新規レコードを作成
-      const insertData = {
-        product_id,
-        report_month: formattedMonth,
-        amazon_count: field === 'amazon_count' ? value : 0,
-        rakuten_count: field === 'rakuten_count' ? value : 0,
-        yahoo_count: field === 'yahoo_count' ? value : 0,
-        mercari_count: field === 'mercari_count' ? value : 0,
-        base_count: field === 'base_count' ? value : 0,
-        qoo10_count: field === 'qoo10_count' ? value : 0
-      };
-
-      const { data, error } = await supabase
-        .from('web_sales_summary')
-        .insert(insertData)
-        .select();
-
-      if (error) throw error;
-      result = data;
-    }
+    if (error) throw error
 
     return NextResponse.json({ 
-      success: true, 
-      message: '販売数が保存されました',
-      data: result 
-    });
-
-  } catch (error: any) {
-    console.error('販売数保存エラー:', error);
-    return NextResponse.json(
-      { 
-        error: '販売数の保存に失敗しました', 
-        details: error.message
-      },
-      { status: 500 }
-    );
+      message: `${month}の販売データを削除しました`,
+      deletedCount: count 
+    })
+  } catch (error) {
+    console.error('データ削除エラー:', error)
+    return NextResponse.json({ error: 'データの削除に失敗しました' }, { status: 500 })
   }
 }
