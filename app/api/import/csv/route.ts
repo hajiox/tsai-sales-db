@@ -1,5 +1,5 @@
 // /app/api/import/csv/route.ts
-// ver.8 (デバッグ強化版) - 修正版動作確認用
+// ver.8 (デバッグ強化版) - 修正版動作確認用Deploy用
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Readable } from 'stream';
