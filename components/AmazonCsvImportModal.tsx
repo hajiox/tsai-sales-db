@@ -1,4 +1,4 @@
-// /components/AmazonCsvImportModal.tsx ver.1
+// /components/AmazonCsvImportModal.tsx ver.2
 "use client"
 
 import React, { useState } from "react"
@@ -10,7 +10,7 @@ import {
   ModalFooter,
   Button,
   Input,
-} from "@nextui-org/react"
+} from "@nextui-org/react" // ← @nextui-org/react からまとめてインポート
 import { useRouter } from "next/navigation"
 
 interface AmazonCsvImportModalProps {
@@ -55,7 +55,6 @@ export default function AmazonCsvImportModal({ isOpen, onClose }: AmazonCsvImpor
 
       if (response.ok) {
         setAmazonImportMessage(result.message || "Amazonデータが正常にインポートされました。")
-        // onClose(); // 成功時にモーダルを閉じる
         router.refresh() // データをリフレッシュ
         // 少し遅れてモーダルを閉じることでメッセージ表示の確認時間を設ける
         setTimeout(() => {
@@ -78,7 +77,7 @@ export default function AmazonCsvImportModal({ isOpen, onClose }: AmazonCsvImpor
   return (
     <Modal isOpen={isOpen} onClose={onClose} placement="center">
       <ModalContent>
-        {(onCloseModal) => ( // onCloseModalを引数で受け取る
+        {(onCloseModal) => (
           <>
             <ModalHeader className="flex flex-col gap-1">
               Amazon CSVインポート
