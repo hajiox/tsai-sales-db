@@ -1,5 +1,5 @@
 // /app/api/import/csv/route.ts
-// ver.9 (Vercelキャッシュ修正版) - 静的レンダリング防止
+// ver.10 (CSVパース修正版) - 商品名内カンマ対応
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Readable } from 'stream';
@@ -31,9 +31,32 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
  return Buffer.concat(chunks);
 }
 
+// 正しいCSVパース関数（カンマとクォート対応）
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current.trim());
+  return result;
+}
+
 // 改善された商品マッチング関数
 async function matchProductsByName(productNames: string[]) {
- console.log('🚀 VER.8 デバッグ版が実行されています！');
+ console.log('🚀 VER.10 CSVパース修正版が実行されています！');
  
  const { data: products, error } = await supabase
    .from('products')
@@ -115,7 +138,7 @@ const ecSiteColumnMap: { [key: string]: string } = {
 
 export async function POST(req: NextRequest) {
  try {
-   console.log('🚀🚀🚀 CSV IMPORT API VER.8 START 🚀🚀🚀');
+   console.log('🚀🚀🚀 CSV IMPORT API VER.10 START 🚀🚀🚀');
    
    const formData = await req.formData();
    const file = formData.get('file') as File | null;
@@ -154,8 +177,9 @@ export async function POST(req: NextRequest) {
 
    console.log('📄 CSVデータ行数:', lines.length - 1);
 
-   // ヘッダー行を解析（先頭の空白を除去）
-   const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+   // ヘッダー行を正しくパース
+   const header = parseCSVLine(lines[0]);
+   console.log('📋 ヘッダー:', header);
    
    // 必要な列のインデックスを取得
    const productNameIndex = header.findIndex(h => h.includes('商品名'));
@@ -165,6 +189,8 @@ export async function POST(req: NextRequest) {
    if (productNameIndex === -1) {
      return NextResponse.json({ error: 'CSVに「商品名」を含む列が見つかりません。' }, { status: 400 });
    }
+
+   console.log('📍 列インデックス - 商品名:', productNameIndex, 'シリーズ:', seriesIndex, '価格:', priceIndex);
 
    // 各ECサイトの列インデックスを取得
    const ecSiteIndices: { [key: string]: number } = {};
@@ -177,9 +203,11 @@ export async function POST(req: NextRequest) {
 
    console.log('🛒 検出されたECサイト:', ecSiteIndices);
 
-   // CSVデータを解析
-   const csvData = lines.slice(1).map(line => {
-     const columns = line.split(',').map(c => c.replace(/"/g, '').trim());
+   // CSVデータを正しくパース
+   const csvData = lines.slice(1).map((line, lineNumber) => {
+     const columns = parseCSVLine(line);
+     
+     console.log(`📝 行${lineNumber + 1}: 商品名="${columns[productNameIndex]}" (列数: ${columns.length})`);
      
      // 各ECサイトの販売数を取得
      const salesByEcSite: { [key: string]: number } = {};
@@ -187,6 +215,7 @@ export async function POST(req: NextRequest) {
        const value = parseInt(columns[index], 10) || 0;
        if (value > 0) {
          salesByEcSite[ecSite] = value;
+         console.log(`  ${ecSite}: ${value}件`);
        }
      }
      
@@ -200,9 +229,9 @@ export async function POST(req: NextRequest) {
 
    // 商品名を一括で部分一致検索にかける
    const productNames = csvData.map(d => d.productName);
-   console.log('\n🔥🔥🔥 マッチング処理開始 (VER.8) 🔥🔥🔥');
+   console.log('\n🔥🔥🔥 マッチング処理開始 (VER.10) 🔥🔥🔥');
    const matchedProducts = await matchProductsByName(productNames);
-   console.log('🔥🔥🔥 マッチング処理終了 (VER.8) 🔥🔥🔥\n');
+   console.log('🔥🔥🔥 マッチング処理終了 (VER.10) 🔥🔥🔥\n');
    
    // マッチング結果を整形（ECサイトごとに分割）
    const responseData: any[] = [];
@@ -230,7 +259,7 @@ export async function POST(req: NextRequest) {
    console.log('✅ 最終データ件数:', responseData.length);
 
    return NextResponse.json({
-     message: `CSV全${csvData.length}商品、${responseData.length}件のデータを読み込みました。(VER.8デバッグ版)`,
+     message: `CSV全${csvData.length}商品、${responseData.length}件のデータを読み込みました。(VER.10 CSVパース修正版)`,
      data: responseData
    }, { status: 200 });
 
