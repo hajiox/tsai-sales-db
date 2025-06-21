@@ -1,7 +1,7 @@
 // /app/api/import/csv/route.ts
-// ver.10 (CSVパース修正版) - 商品名内カンマ対応
+// ver.11 (Supabase統一版) - クライアント重複警告解決
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { Readable } from 'stream';
 import { Buffer } from 'buffer';
 
@@ -11,16 +11,6 @@ export const revalidate = 0;
 
 // Node.jsランタイムを明示的に指定
 export const runtime = 'nodejs';
-
-// Supabaseクライアントを初期化
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
- throw new Error('Supabase URL or Anon Key is not defined');
-}
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // ストリームをバッファに変換するヘルパー関数
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
@@ -56,7 +46,7 @@ function parseCSVLine(line: string): string[] {
 
 // 改善された商品マッチング関数
 async function matchProductsByName(productNames: string[]) {
- console.log('🚀 VER.10 CSVパース修正版が実行されています！');
+ console.log('🚀 VER.11 Supabase統一版が実行されています！');
  
  const { data: products, error } = await supabase
    .from('products')
@@ -138,7 +128,7 @@ const ecSiteColumnMap: { [key: string]: string } = {
 
 export async function POST(req: NextRequest) {
  try {
-   console.log('🚀🚀🚀 CSV IMPORT API VER.10 START 🚀🚀🚀');
+   console.log('🚀🚀🚀 CSV IMPORT API VER.11 START 🚀🚀🚀');
    
    const formData = await req.formData();
    const file = formData.get('file') as File | null;
@@ -229,9 +219,9 @@ export async function POST(req: NextRequest) {
 
    // 商品名を一括で部分一致検索にかける
    const productNames = csvData.map(d => d.productName);
-   console.log('\n🔥🔥🔥 マッチング処理開始 (VER.10) 🔥🔥🔥');
+   console.log('\n🔥🔥🔥 マッチング処理開始 (VER.11) 🔥🔥🔥');
    const matchedProducts = await matchProductsByName(productNames);
-   console.log('🔥🔥🔥 マッチング処理終了 (VER.10) 🔥🔥🔥\n');
+   console.log('🔥🔥🔥 マッチング処理終了 (VER.11) 🔥🔥🔥\n');
    
    // マッチング結果を整形（ECサイトごとに分割）
    const responseData: any[] = [];
@@ -259,7 +249,7 @@ export async function POST(req: NextRequest) {
    console.log('✅ 最終データ件数:', responseData.length);
 
    return NextResponse.json({
-     message: `CSV全${csvData.length}商品、${responseData.length}件のデータを読み込みました。(VER.10 CSVパース修正版)`,
+     message: `CSV全${csvData.length}商品、${responseData.length}件のデータを読み込みました。(VER.11 Supabase統一版)`,
      data: responseData
    }, { status: 200 });
 
