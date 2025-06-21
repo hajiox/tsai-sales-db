@@ -1,5 +1,5 @@
 // /components/websales-summary-cards.tsx
-// ver4 (デバッグログ追加版)
+// ver5 (引数型修正版)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -55,7 +55,10 @@ export default function WebSalesSummaryCards({
           console.log('=== デバッグ開始 ===');
           console.log('月:', month);
           
-          const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month });
+          // target_monthをtext型として渡す（引数名も正しく指定）
+          const { data, error } = await supabase.rpc("web_sales_full_month", { 
+            target_month: month 
+          });
           console.log('Supabaseレスポンス:', { data, error });
           
           if (error) throw error;
