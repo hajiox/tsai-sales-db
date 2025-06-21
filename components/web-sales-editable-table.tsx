@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.28
+// /components/web-sales-editable-table.tsx ver.29
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
@@ -17,19 +17,13 @@ import {
   DropdownItem,
   Pagination,
 } from "@nextui-org/react"
-import {
-  Modal,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  useDisclosure,
-} from "@nextui-org/modal"
+import { useDisclosure } from "@nextui-org/modal" // Modal関連をuseDisclosureのみに
 import { supabase } from "@/lib/supabase"
-import { WebSalesData, Product } from "@/types/db" // Adjust path as necessary
+import { WebSalesData, Product } from "@/types/db"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
-import CsvImportConfirmModal from "./CsvImportConfirmModal" // CSVインポート確認モーダルをインポート
+import CsvImportConfirmModal from "./CsvImportConfirmModal"
+import AmazonCsvImportModal from "./AmazonCsvImportModal" // 新しいコンポーネントをインポート
 
 interface WebSalesEditableTableProps {
   initialWebSalesData: WebSalesData[]
@@ -68,11 +62,6 @@ export default function WebSalesEditableTable({
     onOpen: onOpenAmazonCsvModal,
     onClose: onCloseAmazonCsvModal,
   } = useDisclosure()
-
-  const [amazonFile, setAmazonFile] = useState<File | null>(null);
-  const [amazonImportMessage, setAmazonImportMessage] = useState<string>("");
-  const [amazonImportLoading, setAmazonImportLoading] = useState(false);
-
 
   useEffect(() => {
     setCurrentMonth(month)
@@ -278,52 +267,6 @@ export default function WebSalesEditableTable({
     }
   }
 
-  const handleAmazonFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setAmazonFile(e.target.files[0]);
-      setAmazonImportMessage(''); // メッセージをクリア
-    } else {
-      setAmazonFile(null);
-    }
-  };
-
-  const handleAmazonUpload = async () => {
-    if (!amazonFile) {
-      setAmazonImportMessage('ファイルを選択してください。'); // メッセージ修正
-      return;
-    }
-
-    setAmazonImportLoading(true);
-    setAmazonImportMessage('アップロード中...');
-
-    const formData = new FormData();
-    formData.append('file', amazonFile);
-
-    try {
-      const response = await fetch('/api/import/amazon', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setAmazonImportMessage(result.message || 'Amazonデータが正常にインポートされました。');
-        onCloseAmazonCsvModal();
-        router.refresh(); // データをリフレッシュ
-      } else {
-        setAmazonImportMessage(result.error || 'Amazonデータのインポートに失敗しました。');
-      }
-    } catch (error) {
-      console.error('Amazonアップロードエラー:', error);
-      setAmazonImportMessage('ファイルのアップロード中にエラーが発生しました。');
-    } finally {
-      setAmazonImportLoading(false);
-      setAmazonFile(null); // ファイル選択をリセット
-    }
-  };
-
-
   return (
     <Suspense fallback={<div>Loading table...</div>}>
       <div className="p-4">
@@ -379,54 +322,10 @@ export default function WebSalesEditableTable({
         </div>
 
         {/* --- Amazon CSVインポートモーダル --- */}
-        <Modal
+        <AmazonCsvImportModal
           isOpen={isAmazonCsvModalOpen}
           onClose={onCloseAmazonCsvModal}
-          placement="center"
-        >
-          <ModalContent>
-            {(onClose) => (
-              <>
-                <ModalHeader className="flex flex-col gap-1">
-                  Amazon CSVインポート
-                </ModalHeader>
-                <ModalBody>
-                  <p className="text-sm text-gray-600">
-                    Amazonの売上CSVファイルを選択してアップロードしてください。
-                    商品名と販売個数を読み込み、既存データに加算します。
-                  </p>
-                  <Input
-                    type="file"
-                    onChange={handleAmazonFileChange}
-                    accept=".csv"
-                    label="Amazon CSVファイル"
-                    placeholder="ファイルを選択"
-                    labelPlacement="outside-left"
-                    isClearable={false}
-                  />
-                  {amazonImportMessage && (
-                    <p className={`text-sm ${amazonImportLoading ? 'text-blue-500' : (amazonImportMessage.includes('成功') ? 'text-green-500' : 'text-red-500')}`}>
-                      {amazonImportMessage}
-                    </p>
-                  )}
-                </ModalBody>
-                <ModalFooter>
-                  <Button color="danger" variant="light" onPress={onClose}>
-                    キャンセル
-                  </Button>
-                  <Button
-                    color="primary"
-                    onPress={handleAmazonUpload}
-                    isDisabled={!amazonFile || amazonImportLoading}
-                    isLoading={amazonImportLoading}
-                  >
-                    {amazonImportLoading ? "アップロード中..." : "インポート開始"}
-                  </Button>
-                </ModalFooter>
-              </>
-            )}
-          </ModalContent>
-        </Modal>
+        />
 
         <Table
           aria-label="WEB販売実績テーブル"
