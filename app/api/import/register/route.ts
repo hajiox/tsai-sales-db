@@ -1,92 +1,84 @@
 // /app/api/import/register/route.ts
-// ver.5 (テーブル列名修正版)
+// ver.7 (完全デバッグ版)
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-type ImportResult = {
-  id: number;
-  original: string;
-  matched: string | null;
-  salesData: { [key: string]: number };
-};
-
 export async function POST(request: Request) {
   try {
-    const { results, report_month } = await request.json();
+    const body = await request.json();
+    console.log('=== デバッグ開始 ===');
+    console.log('1. 受信データ:', JSON.stringify(body, null, 2));
 
-    if (!results || !report_month) {
-      return NextResponse.json({ error: '必要なデータが不足しています。' }, { status: 400 });
+    const { results, report_month } = body;
+
+    console.log('2. results配列:', results);
+    console.log('3. results配列の長さ:', results?.length);
+    console.log('4. 最初のresult:', results?.[0]);
+
+    if (!results || !Array.isArray(results)) {
+      console.log('5. resultsが配列ではない');
+      return NextResponse.json({ error: 'resultsが配列ではありません。' }, { status: 400 });
     }
 
+    console.log('6. 各resultの確認:');
+    results.forEach((result, index) => {
+      console.log(`   result[${index}]:`, {
+        matched: result?.matched,
+        hasMatched: !!result?.matched,
+        salesData: result?.salesData
+      });
+    });
+
+    // マッチした商品を取得
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('id, name');
 
     if (productsError) {
-      throw new Error(`商品マスタの取得に失敗: ${productsError.message}`);
+      console.log('7. 商品取得エラー:', productsError);
+      return NextResponse.json({ error: `商品マスタの取得に失敗: ${productsError.message}` }, { status: 500 });
     }
-    
+
+    console.log('8. 商品マスタ件数:', products?.length);
+    console.log('9. 商品マスタサンプル:', products?.slice(0, 3));
+
     const productNameToIdMap = new Map(products.map(p => [p.name, p.id]));
+    console.log('10. 商品名マップサンプル:', Array.from(productNameToIdMap.entries()).slice(0, 3));
 
-    // ECサイト名のマッピング（フロントエンド → DB列名）
-    const ecSiteMapping: { [key: string]: string } = {
-      'Amazon': 'amazon_count',
-      '楽天': 'rakuten_count',
-      'Yahoo': 'yahoo_count',
-      'メルカリ': 'mercari_count',
-      'BASE': 'base_count',
-      'Qoo10': 'qoo10_count'
-    };
+    const validResults = results.filter(result => {
+      const isValid = result?.matched && productNameToIdMap.has(result.matched);
+      console.log(`    商品「${result?.matched}」: ${isValid ? '有効' : '無効'}`);
+      return isValid;
+    });
 
-    const dataToUpsert = results
-      .map((result: ImportResult) => {
-        if (result.matched && productNameToIdMap.has(result.matched)) {
-          const productId = productNameToIdMap.get(result.matched);
-          
-          // salesDataのキー名を変換
-          const convertedSalesData: { [key: string]: number } = {};
-          for (const [frontendKey, quantity] of Object.entries(result.salesData)) {
-            const dbColumnName = ecSiteMapping[frontendKey];
-            if (dbColumnName && quantity > 0) {
-              convertedSalesData[dbColumnName] = quantity;
-            }
-          }
-          
-          return {
-            product_id: productId,
-            report_month: `${report_month}-01`,
-            ...convertedSalesData
-          };
+    console.log('11. 有効なresults数:', validResults.length);
+
+    if (validResults.length === 0) {
+      console.log('12. 有効なデータなし');
+      return NextResponse.json({ 
+        error: '登録対象のデータがありませんでした。',
+        debug: {
+          totalResults: results.length,
+          validResults: validResults.length,
+          firstResultMatched: results[0]?.matched,
+          hasProductInMap: results[0]?.matched ? productNameToIdMap.has(results[0].matched) : false
         }
-        return null;
-      })
-      .filter((item: any): item is object => item !== null);
-
-    if (dataToUpsert.length === 0) {
-      return NextResponse.json({ message: '登録対象のデータがありませんでした。' }, { status: 200 });
-    }
-
-    console.log('登録予定データ:', JSON.stringify(dataToUpsert, null, 2));
-
-    const { error: upsertError } = await supabase
-      .from('web_sales_summary')
-      .upsert(dataToUpsert, { onConflict: 'product_id,report_month' });
-
-    if (upsertError) {
-      console.error('Supabase Upsert Error:', JSON.stringify(upsertError, null, 2));
-      throw new Error(`データベースへの登録に失敗しました。詳細はサーバーログを確認してください。`);
+      }, { status: 400 });
     }
 
     return NextResponse.json({
-      message: `${dataToUpsert.length}件のデータが正常に登録・更新されました。`
+      message: 'デバッグ成功',
+      validResults: validResults.length
     }, { status: 200 });
 
   } catch (error) {
-    console.error('APIルート全体のエラー:', error);
-    const errorMessage = error instanceof Error ? error.message : 'サーバー内部でエラーが発生しました。';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error('=== APIエラー ===', error);
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : 'サーバーエラー',
+      stack: error instanceof Error ? error.stack : undefined
+    }, { status: 500 });
   }
 }
