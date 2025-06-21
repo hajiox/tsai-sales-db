@@ -1,5 +1,5 @@
 // /app/api/import/register/route.ts
-// ver.8 (実際の登録処理版)
+// ver.9 (データ集約版)
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
@@ -38,30 +38,42 @@ export async function POST(request: Request) {
       'Qoo10': 'qoo10_count'
     };
 
-    const dataToUpsert = [];
+    // 商品ごとにデータを集約
+    const aggregatedData = new Map<string, any>();
 
     for (const result of results) {
       if (result.matched && productNameToIdMap.has(result.matched)) {
         const productId = productNameToIdMap.get(result.matched);
+        const key = `${productId}_${report_month}`;
         
-        // salesDataを変換
-        const convertedData: any = {
-          product_id: productId,
-          report_month: `${report_month}-01`
-        };
+        if (!aggregatedData.has(key)) {
+          aggregatedData.set(key, {
+            product_id: productId,
+            report_month: `${report_month}-01`,
+            amazon_count: 0,
+            rakuten_count: 0,
+            yahoo_count: 0,
+            mercari_count: 0,
+            base_count: 0,
+            qoo10_count: 0
+          });
+        }
 
+        const data = aggregatedData.get(key);
+        
+        // 販売数を集約
         for (const [ecSite, quantity] of Object.entries(result.salesData)) {
           const dbColumn = ecSiteMapping[ecSite];
           if (dbColumn && quantity > 0) {
-            convertedData[dbColumn] = quantity;
+            data[dbColumn] += quantity;
           }
         }
-
-        dataToUpsert.push(convertedData);
       }
     }
 
-    console.log('登録予定データ:', JSON.stringify(dataToUpsert, null, 2));
+    const dataToUpsert = Array.from(aggregatedData.values());
+
+    console.log('集約後の登録予定データ:', JSON.stringify(dataToUpsert, null, 2));
 
     if (dataToUpsert.length === 0) {
       return NextResponse.json({ message: '登録対象のデータがありませんでした。' }, { status: 200 });
