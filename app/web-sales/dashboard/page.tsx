@@ -1,7 +1,7 @@
-// /app/web-sales/dashboard/page.tsx ver.5 (URLパラメータ対応版)
+// /app/web-sales/dashboard/page.tsx ver.6 (Suspense対応版)
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
@@ -13,7 +13,8 @@ export const dynamic = 'force-dynamic'
 
 type ViewMode = 'month' | 'period';
 
-export default function WebSalesDashboardPage() {
+// SearchParamsを使用するコンポーネントを分離
+function WebSalesDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -39,7 +40,7 @@ export default function WebSalesDashboardPage() {
     if (urlMonth && urlMonth !== month) {
       setMonth(urlMonth);
     }
-  }, [searchParams]);
+  }, [searchParams, month]);
 
   // 月が変更された時にURLを更新
   const handleMonthChange = (newMonth: string) => {
@@ -106,5 +107,32 @@ export default function WebSalesDashboardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ローディングコンポーネント
+function DashboardLoading() {
+  return (
+    <div className="w-full space-y-6">
+      <div className="animate-pulse">
+        <div className="h-8 bg-gray-200 rounded w-1/3 mb-2"></div>
+        <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
+        <div className="h-12 bg-gray-200 rounded mb-6"></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="h-32 bg-gray-200 rounded"></div>
+          <div className="h-32 bg-gray-200 rounded"></div>
+          <div className="h-32 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// メインコンポーネント
+export default function WebSalesDashboardPage() {
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <WebSalesDashboardContent />
+    </Suspense>
   );
 }
