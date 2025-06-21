@@ -1,7 +1,8 @@
-// /app/web-sales/dashboard/page.tsx ver.4 (元のバージョンに復元)
+// /app/web-sales/dashboard/page.tsx ver.5 (URLパラメータ対応版)
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
 import WebSalesEditableTable from "@/components/web-sales-editable-table"
@@ -13,11 +14,40 @@ export const dynamic = 'force-dynamic'
 type ViewMode = 'month' | 'period';
 
 export default function WebSalesDashboardPage() {
-  const [month, setMonth] = useState<string>('2025-06');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // URLパラメータから月を取得、なければ現在月をデフォルトに
+  const getCurrentMonth = () => {
+    const urlMonth = searchParams.get('month');
+    if (urlMonth) return urlMonth;
+    
+    // デフォルトは現在月
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const [month, setMonth] = useState<string>(getCurrentMonth());
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [periodMonths, setPeriodMonths] = useState<6 | 12>(6);
+
+  // URLパラメータが変更された時にstateを更新
+  useEffect(() => {
+    const urlMonth = searchParams.get('month');
+    if (urlMonth && urlMonth !== month) {
+      setMonth(urlMonth);
+    }
+  }, [searchParams]);
+
+  // 月が変更された時にURLを更新
+  const handleMonthChange = (newMonth: string) => {
+    setMonth(newMonth);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('month', newMonth);
+    router.push(`?${params.toString()}`);
+  };
 
   const handleDataSaved = () => {
     setRefreshTrigger(prev => prev + 1);
@@ -50,7 +80,7 @@ export default function WebSalesDashboardPage() {
               <input
                 type="month"
                 value={month}
-                onChange={(e) => setMonth(e.target.value)}
+                onChange={(e) => handleMonthChange(e.target.value)}
                 className="border rounded-md text-base p-2 bg-white"
               />
             </div>
