@@ -45,11 +45,18 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
 
   const fetchProductMaster = async () => {
     try {
-      const response = await fetch('/api/products-master')
-      if (response.ok) {
-        const products = await response.json()
-        setProductMaster(products.map((p: any) => ({ id: p.id, name: p.name })))
+      const { data: products, error } = await supabase
+        .from('products')
+        .select('id, name')
+        .order('series_code, product_number')
+      
+      if (error) {
+        console.error('Product master fetch error:', error)
+        return
       }
+      
+      console.log('商品マスター取得:', products?.length || 0, '件')
+      setProductMaster(products?.map((p: any) => ({ id: p.id, name: p.name })) || [])
     } catch (error) {
       console.error('Product master fetch error:', error)
     }
