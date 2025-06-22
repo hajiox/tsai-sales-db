@@ -95,6 +95,8 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
 
       if (response.ok) {
         setImportResults(result.matchedResults || [])
+        setUnmatchedProducts(result.unmatchedProducts || [])
+        setCsvSummary(result.summary || null)
         setAmazonImportMessage("")
         // メインモーダルを閉じて確認モーダルを表示
         onClose()
@@ -130,14 +132,18 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
       if (response.ok) {
         setAmazonImportMessage(result.message || "Amazonデータが正常にインポートされました。")
         setShowConfirmModal(false)
-        router.refresh() // データをリフレッシュ
-        // 2秒後に全体を閉じる
+        
+        // 複数の方法でデータを更新
+        router.refresh() // Next.jsのルーター更新
+        window.location.reload() // 強制リロード
+        
+        // 1秒後に全体を閉じる
         setTimeout(() => {
           onClose()
           setAmazonFile(null)
           setImportResults([])
           setAmazonImportMessage("")
-        }, 2000)
+        }, 1000)
       } else {
         setAmazonImportMessage(result.error || "Amazonデータのインポートに失敗しました。")
         setShowConfirmModal(false)
@@ -212,6 +218,8 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
       <AmazonCsvConfirmModal
         isOpen={showConfirmModal}
         results={importResults}
+        unmatchedProducts={unmatchedProducts}
+        csvSummary={csvSummary}
         productMaster={productMaster}
         month={month}
         isSubmitting={isSubmittingImport}
