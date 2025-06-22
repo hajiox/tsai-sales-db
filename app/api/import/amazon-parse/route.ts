@@ -34,8 +34,8 @@ function parseCSVLine(line: string): string[] {
   return result
 }
 
-// 商品名マッチング関数
-function findBestMatch(amazonTitle: string, products: any[]): any | null {
+// 商品名マッチング関数（修正版 - より精密なマッチング）
+function findBestMatch(amazonTitle: string, products: any[], learningData: any[] = []): any | null {
   if (!amazonTitle || !products.length) return null
 
   const cleanAmazonTitle = amazonTitle
@@ -44,44 +44,161 @@ function findBestMatch(amazonTitle: string, products: any[]): any | null {
     .replace(/\s+/g, ' ')
     .trim()
 
-  let bestMatch = null
-  let bestScore = 0
-
-  for (const product of products) {
-    const productName = product.name.toLowerCase()
-    
-    // 完全一致チェック
-    if (productName === cleanAmazonTitle) {
-      return product
-    }
-
-    // 部分一致スコア計算
-    let score = 0
-    const amazonWords = cleanAmazonTitle.split(' ')
-    const productWords = productName.split(' ')
-
-    for (const amazonWord of amazonWords) {
-      if (amazonWord.length < 2) continue
-
-      for (const productWord of productWords) {
-        if (productWord.includes(amazonWord) || amazonWord.includes(productWord)) {
-          score += amazonWord.length
-        }
-      }
-    }
-
-    // 長い商品名ほど優先
-    if (cleanAmazonTitle.includes(productName) || productName.includes(cleanAmazonTitle)) {
-      score += product.name.length * 2
-    }
-
-    if (score > bestScore && score > cleanAmazonTitle.length * 0.3) {
-      bestScore = score
-      bestMatch = product
+  // 1. 学習データから完全一致をチェック
+  const learnedMatch = learningData.find(entry => 
+    entry.amazon_title.toLowerCase() === cleanAmazonTitle
+  )
+  if (learnedMatch) {
+    const product = products.find(p => p.id === learnedMatch.product_id)
+    if (product) {
+      console.log('学習データからマッチング:', amazonTitle, '→', product.name)
+      return { ...product, matchType: 'learned' }
     }
   }
 
+  let bestMatch = null
+  let bestScore = 0
+  const amazonWords = cleanAmazonTitle.split(' ').filter(w => w.length >= 2)
+
+  console.log('マッチング対象:', cleanAmazonTitle, 'キーワード:', amazonWords)
+
+  for (const product of products) {
+    const productName = product.name.toLowerCase()
+    const productWords = productName.split(' ').filter(w => w.length >= 2)
+    
+    // 2. 完全一致チェック
+    if (productName === cleanAmazonTitle) {
+      console.log('完全一致:', product.name)
+      return { ...product, matchType: 'exact' }
+    }
+
+    let score = 0
+    let matchedWords = 0
+    let totalWords = amazonWords.length
+
+    // 3. 重要キーワードの特定
+    const importantKeywords = ['チャーシュー', 'ラーメン', 'レトルト', 'ドレッシング', 'サラダ', '極厚', '薄切り', 'カット', 'スライス']
+    
+    // 4. 単語レベルマッチング（より厳密）
+    for (const amazonWord of amazonWords) {
+      let wordMatched = false
+      
+      for (const productWord of productWords) {
+        // 完全一致の単語
+        if (amazonWord === productWord) {
+          score += amazonWord.length * 5 // 完全一致は高得点
+          wordMatched = true
+          break
+        }
+        // 包含関係
+        else if (productWord.includes(amazonWord) && amazonWord.length >= 3) {
+          score += amazonWord.length * 2
+          wordMatched = true
+        }
+        else if (amazonWord.includes(productWord) && productWord.length >= 3) {
+          score += productWord.length * 1.5
+          wordMatched = true
+        }
+      }
+      
+      // 重要キーワードボーナス
+      if (wordMatched && importantKeywords.includes(amazonWord)) {
+        score += 10
+      }
+      
+      if (wordMatched) {
+        matchedWords++
+      }
+    }
+
+    // 5. マッチ率の計算
+    const matchRatio = totalWords > 0 ? matchedWords / totalWords : 0
+    
+    // 6. 商品固有の特徴をチェック
+    let specificityBonus = 0
+    
+    // チャーシューの種類判定
+    if (cleanAmazonTitle.includes('極厚') && productName.includes('極厚')) {
+      specificityBonus += 15
+    } else if (cleanAmazonTitle.includes('薄切り') && productName.includes('薄切り')) {
+      specificityBonus += 15
+    } else if (cleanAmazonTitle.includes('カット') && productName.includes('カット')) {
+      specificityBonus += 10
+    }
+    
+    // 容量・枚数の一致
+    const amazonNumbers = cleanAmazonTitle.match(/\d+/g) || []
+    const productNumbers = productName.match(/\d+/g) || []
+    
+    for (const amazonNum of amazonNumbers) {
+      if (productNumbers.includes(amazonNum)) {
+        specificityBonus += 5
+      }
+    }
+
+    // 最終スコア計算
+    const finalScore = score + specificityBonus
+
+    // マッチング条件を厳格化
+    const minMatchRatio = 0.4 // 40%以上の単語がマッチ
+    const minScore = Math.max(cleanAmazonTitle.length * 0.3, 10)
+    
+    console.log(`商品: ${product.name}, スコア: ${finalScore}, マッチ率: ${matchRatio.toFixed(2)}, マッチ単語: ${matchedWords}/${totalWords}`)
+    
+    if (finalScore > bestScore && matchRatio >= minMatchRatio && finalScore >= minScore) {
+      bestScore = finalScore
+      const confidence = matchRatio >= 0.7 ? 'high' : matchRatio >= 0.5 ? 'medium' : 'low'
+      bestMatch = { ...product, matchType: confidence }
+    }
+  }
+
+  if (bestMatch) {
+    console.log('最終マッチング:', amazonTitle, '→', bestMatch.name, 'スコア:', bestScore)
+  } else {
+    console.log('マッチング失敗:', amazonTitle)
+  }
+
   return bestMatch
+}
+
+// 文字列類似度計算関数（新規追加）
+function getSimilarity(str1: string, str2: string): number {
+  const longer = str1.length > str2.length ? str1 : str2
+  const shorter = str1.length > str2.length ? str2 : str1
+  
+  if (longer.length === 0) return 1.0
+  
+  const editDistance = getEditDistance(longer, shorter)
+  return (longer.length - editDistance) / longer.length
+}
+
+// 編集距離計算
+function getEditDistance(str1: string, str2: string): number {
+  const matrix = []
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i]
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1]
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        )
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length]
 }
 
 export async function POST(request: NextRequest) {
@@ -147,6 +264,17 @@ export async function POST(request: NextRequest) {
 
     console.log('商品マスター件数:', products?.length || 0)
 
+    // 学習データを取得（過去のマッチング履歴）
+    const { data: learningData, error: learningError } = await supabase
+      .from('amazon_product_mapping')
+      .select('amazon_title, product_id')
+
+    if (learningError) {
+      console.log('学習データ取得エラー（スキップ）:', learningError.message)
+    }
+
+    console.log('学習データ件数:', learningData?.length || 0)
+
     // データ行を処理
     const matchedResults = []
     const unmatchedProducts = []
@@ -163,8 +291,8 @@ export async function POST(request: NextRequest) {
       const quantity = parseInt(quantityStr) || 0
       if (quantity <= 0) continue
 
-      // 商品マッチング実行
-      const matchedProduct = findBestMatch(amazonTitle, products || [])
+      // 商品マッチング実行（学習データ付き）
+      const matchedProduct = findBestMatch(amazonTitle, products || [], learningData || [])
 
       if (matchedProduct) {
         matchedResults.push({
@@ -172,7 +300,8 @@ export async function POST(request: NextRequest) {
           productName: matchedProduct.name,
           amazonTitle,
           quantity,
-          matched: true
+          matched: true,
+          matchType: matchedProduct.matchType || 'medium'
         })
       } else {
         unmatchedProducts.push({
