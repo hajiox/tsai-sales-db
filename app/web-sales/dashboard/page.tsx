@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.6 (Suspense対応版)
+// /app/web-sales/dashboard/page.tsx ver.7 (プロパティ修正版)
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
@@ -8,6 +8,8 @@ import WebSalesRankingTable from "@/components/websales-ranking-table"
 import WebSalesEditableTable from "@/components/web-sales-editable-table"
 import WebSalesCharts from "@/components/websales-charts"
 import WebSalesAiSection from "@/components/web-sales-ai-section"
+import { supabase } from "@/lib/supabase"
+import { WebSalesData } from "@/types/db"
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +32,8 @@ function WebSalesDashboardContent() {
 
   const [month, setMonth] = useState<string>(getCurrentMonth());
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+  const [webSalesData, setWebSalesData] = useState<WebSalesData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [periodMonths, setPeriodMonths] = useState<6 | 12>(6);
@@ -49,6 +53,33 @@ function WebSalesDashboardContent() {
     params.set('month', newMonth);
     router.push(`?${params.toString()}`);
   };
+
+  // データ取得
+  useEffect(() => {
+    const fetchWebSalesData = async () => {
+      if (!month) return;
+      
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .rpc('web_sales_full_month', { target_month: month })
+        
+        if (error) {
+          console.error('Error fetching web sales data:', error);
+          setWebSalesData([]);
+        } else {
+          setWebSalesData(data || []);
+        }
+      } catch (error) {
+        console.error('Error during fetch operation:', error);
+        setWebSalesData([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWebSalesData();
+  }, [month, refreshTrigger]);
 
   const handleDataSaved = () => {
     setRefreshTrigger(prev => prev + 1);
@@ -100,7 +131,19 @@ function WebSalesDashboardContent() {
         {viewMode === 'month' && (
           <>
             <WebSalesCharts month={month} refreshTrigger={refreshTrigger} />
-            <WebSalesEditableTable month={month} onDataSaved={handleDataSaved} />
+            {isLoading ? (
+              <div className="p-4">
+                <div className="animate-pulse">
+                  <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+                  <div className="h-64 bg-gray-200 rounded"></div>
+                </div>
+              </div>
+            ) : (
+              <WebSalesEditableTable 
+                initialWebSalesData={webSalesData}
+                month={month}
+              />
+            )}
             <WebSalesRankingTable month={month} />
             <WebSalesAiSection month={month} />
           </>
