@@ -160,8 +160,8 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
   const handleCloseConfirmModal = () => {
     setShowConfirmModal(false)
     setImportResults([])
-    // メインモーダルを再度開く
-    // onOpen() // ← これは削除（自動で開かない）
+    setUnmatchedProducts([])
+    setCsvSummary(null)
   }
 
   return (
