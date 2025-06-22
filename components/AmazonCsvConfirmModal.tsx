@@ -1,4 +1,4 @@
-// /components/AmazonCsvConfirmModal.tsx ver.2
+// /components/AmazonCsvConfirmModal.tsx ver.3
 "use client"
 
 import React, { useState } from "react"
@@ -31,11 +31,18 @@ interface UnmatchedProduct {
   matched: false
 }
 
+interface NewProduct {
+  amazonTitle: string
+  productName: string
+  price: number
+  quantity: number
+}
+
 export default function AmazonCsvConfirmModal({
   isOpen,
   results,
-  unmatchedProducts = [], // デフォルト値を設定
-  csvSummary = null, // デフォルト値を設定
+  unmatchedProducts = [],
+  csvSummary = null,
   productMaster,
   month,
   isSubmitting,
@@ -43,6 +50,10 @@ export default function AmazonCsvConfirmModal({
   onConfirm,
 }: AmazonCsvConfirmModalProps) {
   const [editableResults, setEditableResults] = useState<AmazonImportResult[]>(results)
+  const [showUnmatched, setShowUnmatched] = useState(false)
+  const [newProducts, setNewProducts] = useState<NewProduct[]>([])
+  const [isAddingProduct, setIsAddingProduct] = useState(false)
+  const [selectedUnmatchedIndex, setSelectedUnmatchedIndex] = useState<number | null>(null)
   const router = useRouter()
 
   // 結果が更新されたら編集可能な結果も更新
@@ -76,6 +87,62 @@ export default function AmazonCsvConfirmModal({
   const removeResult = (index: number) => {
     const updated = editableResults.filter((_, i) => i !== index)
     setEditableResults(updated)
+  }
+
+  // 商品追加モーダルを開く
+  const openAddProductModal = (unmatchedIndex: number) => {
+    setSelectedUnmatchedIndex(unmatchedIndex)
+    setIsAddingProduct(true)
+  }
+
+  // 商品追加処理
+  const handleAddProduct = async (productData: NewProduct) => {
+    try {
+      // API呼び出し（商品マスターに追加）
+      const response = await fetch('/api/products/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: productData.productName,
+          price: productData.price,
+          amazonTitle: productData.amazonTitle
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('商品追加に失敗しました')
+      }
+
+      const newProduct = await response.json()
+
+      // 新しい商品を結果に追加
+      const newResult: AmazonImportResult = {
+        productId: newProduct.id,
+        productName: newProduct.name,
+        amazonTitle: productData.amazonTitle,
+        quantity: productData.quantity,
+        matched: true,
+        matchType: 'exact'
+      }
+
+      setEditableResults(prev => [...prev, newResult])
+      setIsAddingProduct(false)
+      setSelectedUnmatchedIndex(null)
+
+      // 成功メッセージ
+      alert('商品を追加しました')
+    } catch (error) {
+      console.error('商品追加エラー:', error)
+      alert('商品追加に失敗しました')
+    }
+  }
+
+  // 未マッチング商品をスキップ
+  const skipUnmatchedProduct = (index: number) => {
+    // 特に処理は不要（単に無視）
+    console.log(`未マッチング商品をスキップ: ${unmatchedProducts[index]?.amazonTitle}`)
   }
 
   // 統計計算用の関数
@@ -139,11 +206,23 @@ export default function AmazonCsvConfirmModal({
               <div className="text-xs text-gray-500">({stats.highConfidenceQuantity.toLocaleString()}個)</div>
             </div>
             <div className="bg-white rounded-lg p-3 border">
-              <div className="text-xs text-gray-500">要確認マッチング</div>
-              <div className="text-lg font-bold text-yellow-600">{stats.lowConfidence.length}品種</div>
-              <div className="text-xs text-gray-500">({stats.lowConfidenceQuantity.toLocaleString()}個)</div>
+              <div className="text-xs text-gray-500">未マッチング商品</div>
+              <div className="text-lg font-bold text-red-600">{unmatchedProducts.length}品種</div>
+              <div className="text-xs text-gray-500">({unmatchedProducts.reduce((sum, p) => sum + p.quantity, 0).toLocaleString()}個)</div>
             </div>
           </div>
+
+          {/* 未マッチング商品表示切り替えボタン */}
+          {unmatchedProducts.length > 0 && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowUnmatched(!showUnmatched)}
+                className="bg-red-100 text-red-800 px-4 py-2 rounded-lg hover:bg-red-200 transition-colors"
+              >
+                {showUnmatched ? '未マッチング商品を非表示' : `未マッチング商品を表示 (${unmatchedProducts.length}件)`}
+              </button>
+            </div>
+          )}
 
           {/* マッチングタイプ別の詳細 */}
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -178,15 +257,47 @@ export default function AmazonCsvConfirmModal({
               </span>
             )}
           </div>
-
-          {/* 合計確認 */}
-          <div className="mt-2 text-xs text-gray-500">
-            詳細: 高精度({stats.highConfidence.length}) + 中精度({stats.medium.length}) + 低精度({stats.low.length}) = 合計({stats.total}) 
-            | 数量: {stats.highConfidenceQuantity} + {stats.medium.reduce((s,r)=>s+r.quantity,0)} + {stats.low.reduce((s,r)=>s+r.quantity,0)} = {stats.totalQuantity}
-          </div>
         </div>
 
         <div className="flex-1 p-4 overflow-y-auto">
+          {/* 未マッチング商品セクション */}
+          {showUnmatched && unmatchedProducts.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold mb-4 text-red-600">未マッチング商品一覧</h4>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+                {unmatchedProducts.map((product, index) => (
+                  <div key={index} className="border-2 border-red-200 rounded-lg p-4 bg-red-50">
+                    <div className="mb-3">
+                      <label className="text-xs text-red-600 font-medium">Amazon商品名</label>
+                      <p className="text-sm font-medium text-gray-800 leading-relaxed">
+                        {product.amazonTitle}
+                      </p>
+                    </div>
+                    <div className="mb-3">
+                      <label className="text-xs text-red-600 font-medium">販売数量</label>
+                      <p className="text-lg font-bold text-red-600">{product.quantity.toLocaleString()}個</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openAddProductModal(index)}
+                        className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
+                      >
+                        商品追加
+                      </button>
+                      <button
+                        onClick={() => skipUnmatchedProduct(index)}
+                        className="flex-1 bg-gray-300 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-400 transition-colors"
+                      >
+                        スキップ
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* マッチング済み商品セクション */}
           {editableResults.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-500 mb-4">マッチする商品が見つかりませんでした。</p>
@@ -194,18 +305,7 @@ export default function AmazonCsvConfirmModal({
             </div>
           ) : (
             <>
-              <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <h4 className="font-medium text-yellow-800 mb-2">⚠️ データ確認が必要</h4>
-                <div className="text-sm text-yellow-700 space-y-1">
-                  <p>• CSV総商品数: <strong>{csvSummary?.totalRows || '不明'}商品</strong> → マッチング: <strong>{editableResults.length}商品</strong></p>
-                  <p>• CSV総販売数: <strong>{csvSummary?.csvTotalQuantity?.toLocaleString() || '不明'}個</strong> → マッチング: <strong>{stats.totalQuantity.toLocaleString()}個</strong></p>
-                  <p>• <span className="text-red-600 font-medium">未マッチング: {(unmatchedProducts || []).length}商品 ({csvSummary?.unmatchedQuantity?.toLocaleString() || 0}個)</span></p>
-                  {(unmatchedProducts || []).length > 0 && (
-                    <p className="text-red-600 font-medium">→ 商品マスター追加が必要です</p>
-                  )}
-                </div>
-              </div>
-              
+              <h4 className="text-lg font-semibold mb-4 text-blue-600">マッチング済み商品一覧</h4>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {editableResults.map((result, index) => (
                 <div key={index} className="border rounded-lg p-4 bg-gray-50">
@@ -281,7 +381,7 @@ export default function AmazonCsvConfirmModal({
             <div className="text-sm text-gray-600">
               <div>Amazon列のみを更新します（他のECサイトデータは保持）</div>
               <div className="text-xs text-red-600 mt-1">
-                ⚠️ 未マッチング商品は商品マスター追加後に再インポートしてください
+                ⚠️ 未マッチング商品は商品追加後に再度インポートしてください
               </div>
             </div>
             <div className="flex gap-3">
@@ -313,6 +413,127 @@ export default function AmazonCsvConfirmModal({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 商品追加モーダル */}
+      {isAddingProduct && selectedUnmatchedIndex !== null && (
+        <ProductAddModal
+          isOpen={isAddingProduct}
+          unmatchedProduct={unmatchedProducts[selectedUnmatchedIndex]}
+          onClose={() => {
+            setIsAddingProduct(false)
+            setSelectedUnmatchedIndex(null)
+          }}
+          onAdd={handleAddProduct}
+        />
+      )}
+    </div>
+  )
+}
+
+// 商品追加モーダルコンポーネント
+interface ProductAddModalProps {
+  isOpen: boolean
+  unmatchedProduct: UnmatchedProduct
+  onClose: () => void
+  onAdd: (productData: NewProduct) => void
+}
+
+function ProductAddModal({ isOpen, unmatchedProduct, onClose, onAdd }: ProductAddModalProps) {
+  const [productName, setProductName] = useState(unmatchedProduct?.amazonTitle || '')
+  const [price, setPrice] = useState<number>(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!productName || !price) {
+      alert('商品名と価格を入力してください')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await onAdd({
+        amazonTitle: unmatchedProduct.amazonTitle,
+        productName,
+        price,
+        quantity: unmatchedProduct.quantity
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[99999] p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+        <div className="p-6 border-b">
+          <h3 className="text-lg font-semibold">新商品追加</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            未マッチング商品を商品マスターに追加します
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Amazon商品名</label>
+            <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded border">
+              {unmatchedProduct?.amazonTitle}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">販売数量</label>
+            <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded border">
+              {unmatchedProduct?.quantity.toLocaleString()}個
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">商品名 *</label>
+            <input
+              type="text"
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+              placeholder="商品マスターに登録する商品名"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">価格 *</label>
+            <input
+              type="number"
+              value={price}
+              onChange={(e) => setPrice(parseInt(e.target.value) || 0)}
+              className="w-full border rounded px-3 py-2"
+              placeholder="商品価格（円）"
+              min="0"
+              required
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+            >
+              キャンセル
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSubmitting ? '追加中...' : '商品を追加'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
