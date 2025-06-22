@@ -1,7 +1,7 @@
-// /app/web-sales/dashboard/page.tsx ver.8
+// /app/web-sales/dashboard/page.tsx ver.10
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
@@ -19,18 +19,18 @@ type ViewMode = 'month' | 'period';
 function WebSalesDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isInitializedRef = useRef(false);
   
   // URLパラメータから月を取得、なければ現在月をデフォルトに
   const getCurrentMonth = () => {
     const urlMonth = searchParams.get('month');
     if (urlMonth) return urlMonth;
     
-    // デフォルトは現在月
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  const [month, setMonth] = useState<string>(getCurrentMonth());
+  const [month, setMonth] = useState<string>(() => getCurrentMonth());
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [webSalesData, setWebSalesData] = useState<WebSalesData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,61 +38,79 @@ function WebSalesDashboardContent() {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [periodMonths, setPeriodMonths] = useState<6 | 12>(6);
 
-  // URLパラメータが変更された時にstateを更新
-  useEffect(() => {
-    const urlMonth = searchParams.get('month');
-    if (urlMonth && urlMonth !== month) {
-      setMonth(urlMonth);
-    }
-  }, [searchParams, month]);
-
-  // 月が変更された時にURLを更新
-  const handleMonthChange = (newMonth: string) => {
+  // 月が変更された時にURLを更新（useCallbackで安定化）
+  const handleMonthChange = useCallback((newMonth: string) => {
+    if (newMonth === month) return; // 同じ月の場合は何もしない
+    
     setMonth(newMonth);
     const params = new URLSearchParams(searchParams.toString());
     params.set('month', newMonth);
-    router.push(`?${params.toString()}`);
-  };
+    router.push(`?${params.toString()}`, { scroll: false });
+  }, [month, searchParams, router]);
 
-  // データ取得
+  // 初期化時のみURLパラメータを反映
   useEffect(() => {
+    if (!isInitializedRef.current) {
+      const urlMonth = getCurrentMonth();
+      if (urlMonth !== month) {
+        setMonth(urlMonth);
+      }
+      isInitializedRef.current = true;
+    }
+  }, []);
+
+  // データ取得（monthとrefreshTriggerのみに依存）
+  useEffect(() => {
+    let isCancelled = false;
+    
     const fetchWebSalesData = async () => {
-      if (!month) return;
+      if (!month) {
+        setWebSalesData([]);
+        setIsLoading(false);
+        return;
+      }
       
       setIsLoading(true);
       try {
-        console.log('Debug - Calling web_sales_full_month with month:', month); // デバッグログ追加
+        console.log('Debug - Calling web_sales_full_month with month:', month);
         const { data, error } = await supabase
-          .rpc('web_sales_full_month', { target_month: month })
+          .rpc('web_sales_full_month', { target_month: month });
+        
+        if (isCancelled) return; // コンポーネントがアンマウントされた場合は処理しない
         
         if (error) {
           console.error('Error fetching web sales data:', error);
-          console.log('Debug - Error object:', error); // デバッグログ追加
           setWebSalesData([]);
         } else {
-          console.log('Debug - Data received:', data); // デバッグログ追加
+          console.log('Debug - Data received:', data);
           setWebSalesData(data || []);
         }
       } catch (error) {
+        if (isCancelled) return;
         console.error('Error during fetch operation:', error);
-        console.log('Debug - Catch block error:', error); // デバッグログ追加
         setWebSalesData([]);
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchWebSalesData();
+    
+    return () => {
+      isCancelled = true;
+    };
   }, [month, refreshTrigger]);
 
-  const handleDataSaved = () => {
+  const handleDataSaved = useCallback(() => {
     setRefreshTrigger(prev => prev + 1);
-  };
+  }, []);
 
-  const selectPeriod = (months: 6 | 12) => {
+  const selectPeriod = useCallback((months: 6 | 12) => {
     setPeriodMonths(months);
     setViewMode('period');
-  };
+  }, []);
 
   return (
     <div className="w-full space-y-6">
@@ -107,9 +125,24 @@ function WebSalesDashboardContent() {
         </div>
         <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
           <div className="flex items-center gap-2">
-            <button onClick={() => setViewMode('month')} className={`px-3 py-2 text-sm rounded-md ${viewMode === 'month' ? 'bg-black text-white' : 'bg-white border'}`}>月別表示</button>
-            <button onClick={() => selectPeriod(6)} className={`px-3 py-2 text-sm rounded-md ${viewMode === 'period' && periodMonths === 6 ? 'bg-black text-white' : 'bg-white border'}`}>過去6ヶ月</button>
-            <button onClick={() => selectPeriod(12)} className={`px-3 py-2 text-sm rounded-md ${viewMode === 'period' && periodMonths === 12 ? 'bg-black text-white' : 'bg-white border'}`}>過去12ヶ月</button>
+            <button 
+              onClick={() => setViewMode('month')} 
+              className={`px-3 py-2 text-sm rounded-md ${viewMode === 'month' ? 'bg-black text-white' : 'bg-white border'}`}
+            >
+              月別表示
+            </button>
+            <button 
+              onClick={() => selectPeriod(6)} 
+              className={`px-3 py-2 text-sm rounded-md ${viewMode === 'period' && periodMonths === 6 ? 'bg-black text-white' : 'bg-white border'}`}
+            >
+              過去6ヶ月
+            </button>
+            <button 
+              onClick={() => selectPeriod(12)} 
+              className={`px-3 py-2 text-sm rounded-md ${viewMode === 'period' && periodMonths === 12 ? 'bg-black text-white' : 'bg-white border'}`}
+            >
+              過去12ヶ月
+            </button>
           </div>
           {viewMode === 'month' && (
             <div className="flex items-center gap-3">
