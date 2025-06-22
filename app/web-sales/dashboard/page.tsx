@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.7 (プロパティ修正版)
+// /app/web-sales/dashboard/page.tsx ver.8
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
@@ -61,17 +61,21 @@ function WebSalesDashboardContent() {
       
       setIsLoading(true);
       try {
+        console.log('Debug - Calling web_sales_full_month with month:', month); // デバッグログ追加
         const { data, error } = await supabase
           .rpc('web_sales_full_month', { target_month: month })
         
         if (error) {
           console.error('Error fetching web sales data:', error);
+          console.log('Debug - Error object:', error); // デバッグログ追加
           setWebSalesData([]);
         } else {
+          console.log('Debug - Data received:', data); // デバッグログ追加
           setWebSalesData(data || []);
         }
       } catch (error) {
         console.error('Error during fetch operation:', error);
+        console.log('Debug - Catch block error:', error); // デバッグログ追加
         setWebSalesData([]);
       } finally {
         setIsLoading(false);
