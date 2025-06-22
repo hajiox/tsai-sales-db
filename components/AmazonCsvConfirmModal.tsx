@@ -34,8 +34,8 @@ interface UnmatchedProduct {
 export default function AmazonCsvConfirmModal({
   isOpen,
   results,
-  unmatchedProducts,
-  csvSummary,
+  unmatchedProducts = [], // デフォルト値を設定
+  csvSummary = null, // デフォルト値を設定
   productMaster,
   month,
   isSubmitting,
@@ -199,8 +199,8 @@ export default function AmazonCsvConfirmModal({
                 <div className="text-sm text-yellow-700 space-y-1">
                   <p>• CSV総商品数: <strong>{csvSummary?.totalRows || '不明'}商品</strong> → マッチング: <strong>{editableResults.length}商品</strong></p>
                   <p>• CSV総販売数: <strong>{csvSummary?.csvTotalQuantity?.toLocaleString() || '不明'}個</strong> → マッチング: <strong>{stats.totalQuantity.toLocaleString()}個</strong></p>
-                  <p>• <span className="text-red-600 font-medium">未マッチング: {unmatchedProducts?.length || 0}商品 ({csvSummary?.unmatchedQuantity?.toLocaleString() || 0}個)</span></p>
-                  {unmatchedProducts && unmatchedProducts.length > 0 && (
+                  <p>• <span className="text-red-600 font-medium">未マッチング: {(unmatchedProducts || []).length}商品 ({csvSummary?.unmatchedQuantity?.toLocaleString() || 0}個)</span></p>
+                  {(unmatchedProducts || []).length > 0 && (
                     <p className="text-red-600 font-medium">→ 商品マスター追加が必要です</p>
                   )}
                 </div>
