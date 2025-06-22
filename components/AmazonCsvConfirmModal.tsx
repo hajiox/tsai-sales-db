@@ -10,6 +10,7 @@ interface AmazonImportResult {
   amazonTitle: string
   quantity: number
   matched: boolean
+  matchType?: 'exact' | 'learned' | 'high' | 'medium' | 'low'
 }
 
 interface AmazonCsvConfirmModalProps {
@@ -150,17 +151,14 @@ export default function AmazonCsvConfirmModal({
                   {/* マッチング品質インジケーター */}
                   <div className="mt-2">
                     <div className={`text-xs px-2 py-1 rounded inline-block ${
-                      result.productName && (
-                        result.amazonTitle.toLowerCase().includes(result.productName.toLowerCase()) ||
-                        result.productName.toLowerCase().includes(result.amazonTitle.toLowerCase())
-                      ) ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
+                      result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-100 text-green-800' :
+                      result.matchType === 'high' ? 'bg-blue-100 text-blue-800' :
+                      'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {result.productName && (
-                        result.amazonTitle.toLowerCase().includes(result.productName.toLowerCase()) ||
-                        result.productName.toLowerCase().includes(result.amazonTitle.toLowerCase())
-                      ) ? '高精度マッチング'
-                        : '要確認マッチング（商品名を手動で選択してください）'}
+                      {result.matchType === 'exact' ? '完全一致' :
+                       result.matchType === 'learned' ? '学習済み（高精度）' :
+                       result.matchType === 'high' ? '高精度マッチング' :
+                       '要確認マッチング（手動選択推奨）'}
                     </div>
                   </div>
                 </div>
