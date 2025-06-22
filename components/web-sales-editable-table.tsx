@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.36
+// /components/web-sales-editable-table.tsx ver.38
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
@@ -15,14 +15,8 @@ import {
   DropdownTrigger,
   DropdownMenu,
   DropdownItem,
-  Modal,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  useDisclosure,
 } from "@nextui-org/react"
-
+import { useDisclosure } from "@nextui-org/modal"
 import { supabase } from "@/lib/supabase"
 import { WebSalesData, Product } from "@/types/db"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -188,20 +182,6 @@ export default function WebSalesEditableTable({
     [searchParams, router, pathname],
   )
 
-  const getTotal = (ecSite: string) => {
-    return filteredItems.reduce((sum, item) => {
-      const count = item[`${ecSite}_count`] || 0
-      return sum + count
-    }, 0)
-  }
-
-  const getTotalAmount = (ecSite: string) => {
-    return filteredItems.reduce((sum, item) => {
-      const amount = item[`${ecSite}_amount`] || 0
-      return sum + amount
-    }, 0)
-  }
-
   const getTotalAllECSites = () => {
     const ecSites = [
       "amazon",
@@ -211,7 +191,12 @@ export default function WebSalesEditableTable({
       "base",
       "qoo10",
     ]
-    return ecSites.reduce((totalSum, site) => totalSum + getTotal(site), 0)
+    return ecSites.reduce((totalSum, site) => {
+      return totalSum + filteredItems.reduce((sum, item) => {
+        const count = item[`${site}_count`] || 0
+        return sum + count
+      }, 0)
+    }, 0)
   }
 
   const getTotalAmountAllECSites = () => {
@@ -223,7 +208,12 @@ export default function WebSalesEditableTable({
       "base",
       "qoo10",
     ]
-    return ecSites.reduce((totalSum, site) => totalSum + getTotalAmount(site), 0)
+    return ecSites.reduce((totalSum, site) => {
+      return totalSum + filteredItems.reduce((sum, item) => {
+        const amount = item[`${site}_amount`] || 0
+        return sum + amount
+      }, 0)
+    }, 0)
   }
 
   const handleDeleteMonthData = async () => {
@@ -258,8 +248,8 @@ export default function WebSalesEditableTable({
   }
 
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">
           WEB販売実績 ({currentMonth}月)
         </h2>
@@ -301,94 +291,48 @@ export default function WebSalesEditableTable({
         </div>
       </div>
 
-      <Table aria-label="WEB販売実績テーブル">
-        <TableHeader>
-          <TableColumn key="product_name" className="w-52">
-            商品名
-          </TableColumn>
-          <TableColumn key="amazon" className="w-24 text-center">
-            Amazon
-          </TableColumn>
-          <TableColumn key="rakuten" className="w-24 text-center">
-            楽天
-          </TableColumn>
-          <TableColumn key="yahoo" className="w-24 text-center">
-            Yahoo!
-          </TableColumn>
-          <TableColumn key="mercari" className="w-24 text-center">
-            メルカリ
-          </TableColumn>
-          <TableColumn key="base" className="w-24 text-center">
-            BASE
-          </TableColumn>
-          <TableColumn key="qoo10" className="w-24 text-center">
-            Qoo10
-          </TableColumn>
-          <TableColumn key="total_count" className="w-24 text-center">
-            合計数
-          </TableColumn>
-          <TableColumn key="total_amount" className="w-28 text-center">
-            合計金額
-          </TableColumn>
-        </TableHeader>
-        <TableBody emptyContent={"データがありません"}>
-          {filteredItems.map((row) => (
-            <TableRow key={row.product_id}>
-              <TableCell className="text-left text-xs">
-                {getProductName(row.product_id)}
-              </TableCell>
-              {(
-                [
-                  "amazon",
-                  "rakuten",
-                  "yahoo",
-                  "mercari",
-                  "base",
-                  "qoo10",
-                ] as const
-              ).map((site) => {
-                const cellKey = `${row.product_id}-${site}`
-                const count = row[`${site}_count`] || 0
-                const amount = row[`${site}_amount`] || 0
-                const displayValue = `${count}`
-                return (
-                  <TableCell key={cellKey}>
-                    <div
-                      onClick={() => handleEdit(row.product_id, site, count)}
-                      className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-center ${
-                        editMode === cellKey ? "bg-blue-50" : ""
-                      }`}
-                    >
-                      {editMode === cellKey ? (
-                        <Input
-                          autoFocus
-                          value={editedValue}
-                          onChange={(e) => setEditedValue(e.target.value)}
-                          onBlur={() => handleSave(row.product_id, site)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleSave(row.product_id, site)
-                            } else if (e.key === "Escape") {
-                              setEditMode(null)
-                              setEditedValue("")
-                            }
-                          }}
-                          type="number"
-                          className="text-center"
-                          size="sm"
-                        />
-                      ) : (
-                        displayValue
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500 text-center">
-                      ¥{new Intl.NumberFormat("ja-JP").format(amount)}
-                    </div>
-                  </TableCell>
-                )
-              })}
-              <TableCell className="text-center font-bold">
-                {new Intl.NumberFormat("ja-JP").format(
+      <div className="rounded-lg border bg-white shadow-sm">
+        <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
+          <h3 className="text-lg font-semibold">全商品一覧 ({filteredItems.length}商品)</h3>
+        </div>
+
+        <Table aria-label="WEB販売実績テーブル">
+          <TableHeader>
+            <TableColumn key="product_name" className="w-52">
+              商品名
+            </TableColumn>
+            <TableColumn key="amazon" className="w-24 text-center">
+              Amazon
+            </TableColumn>
+            <TableColumn key="rakuten" className="w-24 text-center">
+              楽天
+            </TableColumn>
+            <TableColumn key="yahoo" className="w-24 text-center">
+              Yahoo!
+            </TableColumn>
+            <TableColumn key="mercari" className="w-24 text-center">
+              メルカリ
+            </TableColumn>
+            <TableColumn key="base" className="w-24 text-center">
+              BASE
+            </TableColumn>
+            <TableColumn key="qoo10" className="w-24 text-center">
+              Qoo10
+            </TableColumn>
+            <TableColumn key="total_count" className="w-24 text-center">
+              合計数
+            </TableColumn>
+            <TableColumn key="total_amount" className="w-28 text-center">
+              合計金額
+            </TableColumn>
+          </TableHeader>
+          <TableBody emptyContent={"データがありません"}>
+            {filteredItems.map((row) => (
+              <TableRow key={row.product_id}>
+                <TableCell className="text-left text-xs">
+                  {getProductName(row.product_id)}
+                </TableCell>
+                {(
                   [
                     "amazon",
                     "rakuten",
@@ -396,12 +340,80 @@ export default function WebSalesEditableTable({
                     "mercari",
                     "base",
                     "qoo10",
-                  ].reduce(
-                    (sum, site) => sum + (row[`${site}_count`] || 0),
-                    0,
-                  ),
-                )}
-                <div className="text-xs text-gray-500">
+                  ] as const
+                ).map((site) => {
+                  const cellKey = `${row.product_id}-${site}`
+                  const count = row[`${site}_count`] || 0
+                  const amount = row[`${site}_amount`] || 0
+                  const displayValue = `${count}`
+                  return (
+                    <TableCell key={cellKey}>
+                      <div
+                        onClick={() => handleEdit(row.product_id, site, count)}
+                        className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-center ${
+                          editMode === cellKey ? "bg-blue-50" : ""
+                        }`}
+                      >
+                        {editMode === cellKey ? (
+                          <Input
+                            autoFocus
+                            value={editedValue}
+                            onChange={(e) => setEditedValue(e.target.value)}
+                            onBlur={() => handleSave(row.product_id, site)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleSave(row.product_id, site)
+                              } else if (e.key === "Escape") {
+                                setEditMode(null)
+                                setEditedValue("")
+                              }
+                            }}
+                            type="number"
+                            className="text-center"
+                            size="sm"
+                          />
+                        ) : (
+                          displayValue
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 text-center">
+                        ¥{new Intl.NumberFormat("ja-JP").format(amount)}
+                      </div>
+                    </TableCell>
+                  )
+                })}
+                <TableCell className="text-center font-bold">
+                  {new Intl.NumberFormat("ja-JP").format(
+                    [
+                      "amazon",
+                      "rakuten",
+                      "yahoo",
+                      "mercari",
+                      "base",
+                      "qoo10",
+                    ].reduce(
+                      (sum, site) => sum + (row[`${site}_count`] || 0),
+                      0,
+                    ),
+                  )}
+                  <div className="text-xs text-gray-500">
+                    ¥
+                    {new Intl.NumberFormat("ja-JP").format(
+                      [
+                        "amazon",
+                        "rakuten",
+                        "yahoo",
+                        "mercari",
+                        "base",
+                        "qoo10",
+                      ].reduce(
+                        (sum, site) => sum + (row[`${site}_amount`] || 0),
+                        0,
+                      ),
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-center font-bold">
                   ¥
                   {new Intl.NumberFormat("ja-JP").format(
                     [
@@ -416,41 +428,65 @@ export default function WebSalesEditableTable({
                       0,
                     ),
                   )}
-                </div>
-              </TableCell>
-              <TableCell className="text-center font-bold">
-                ¥
-                {new Intl.NumberFormat("ja-JP").format(
-                  [
-                    "amazon",
-                    "rakuten",
-                    "yahoo",
-                    "mercari",
-                    "base",
-                    "qoo10",
-                  ].reduce(
-                    (sum, site) => sum + (row[`${site}_amount`] || 0),
-                    0,
-                  ),
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        <div className="p-3 border-t">
+          <div className="flex items-center justify-center gap-3">
+            <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
+            <button
+              onClick={onOpenCsvModal}
+              className="px-3 py-1 text-xs font-semibold text-white bg-gray-700 rounded hover:bg-gray-800 disabled:bg-gray-400"
+              disabled={isLoading}
+            >
+              CSV
+            </button>
+            <button
+              onClick={onOpenAmazonCsvModal}
+              className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600"
+            >
+              Amazon
+            </button>
+            <button
+              className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700"
+              disabled
+            >
+              楽天
+            </button>
+            <button
+              className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600"
+              disabled
+            >
+              Yahoo
+            </button>
+            <button
+              className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600"
+              disabled
+            >
+              メルカリ
+            </button>
+            <button
+              className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600"
+              disabled
+            >
+              Qoo10
+            </button>
+            <button
+              className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700"
+              disabled
+            >
+              BASE
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div className="flex justify-end gap-4 text-sm mt-4 mr-4">
         <p>合計販売数: {new Intl.NumberFormat("ja-JP").format(getTotalAllECSites())}</p>
         <p>合計売上金額: ¥{new Intl.NumberFormat("ja-JP").format(getTotalAmountAllECSites())}</p>
-      </div>
-
-      <div className="flex gap-2 mt-4">
-        <Button color="primary" onClick={onOpenCsvModal}>
-          CSVインポート
-        </Button>
-        <Button color="secondary" onClick={onOpenAmazonCsvModal}>
-          Amazon CSVインポート
-        </Button>
       </div>
 
       <CsvImportConfirmModal isOpen={isCsvModalOpen} onClose={onCloseCsvModal} />
