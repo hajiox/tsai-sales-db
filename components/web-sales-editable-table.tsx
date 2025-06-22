@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.35
+// /components/web-sales-editable-table.tsx ver.36
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
@@ -15,9 +15,13 @@ import {
   DropdownTrigger,
   DropdownMenu,
   DropdownItem,
-  Pagination,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
 } from "@nextui-org/react"
-import { useDisclosure } from "@nextui-org/modal"
 
 import { supabase } from "@/lib/supabase"
 import { WebSalesData, Product } from "@/types/db"
@@ -30,8 +34,6 @@ interface WebSalesEditableTableProps {
   month: string
 }
 
-const ROWS_PER_PAGE = 10
-
 export default function WebSalesEditableTable({
   initialWebSalesData,
   month,
@@ -43,7 +45,6 @@ export default function WebSalesEditableTable({
   const [currentMonth, setCurrentMonth] = useState(month)
   const [productMap, setProductMap] = useState<Map<string, Product>>(new Map())
   const [filterValue, setFilterValue] = useState("")
-  const [page, setPage] = useState(1)
 
   const router = useRouter()
   const pathname = usePathname()
@@ -122,14 +123,6 @@ export default function WebSalesEditableTable({
         .includes(filterValue.toLowerCase()),
     )
   }, [data, filterValue, productMap])
-
-  const pages = Math.ceil(filteredItems.length / ROWS_PER_PAGE)
-
-  const items = useMemo(() => {
-    const start = (page - 1) * ROWS_PER_PAGE
-    const end = start + ROWS_PER_PAGE
-    return filteredItems.slice(start, end)
-  }, [page, filteredItems])
 
   const handleEdit = (
     productId: string,
@@ -302,37 +295,13 @@ export default function WebSalesEditableTable({
             onValueChange={setFilterValue}
             className="w-48"
           />
-          <Button color="primary" onClick={onOpenCsvModal}>
-            CSVインポート
-          </Button>
-          <Button color="secondary" onClick={onOpenAmazonCsvModal}>
-            Amazon CSVインポート
-          </Button>
           <Button color="danger" onClick={handleDeleteMonthData}>
             {currentMonth}月 データ削除
           </Button>
         </div>
       </div>
 
-      <Table
-        aria-label="WEB販売実績テーブル"
-        bottomContent={
-          <div className="flex w-full justify-center">
-            <Pagination
-              isCompact
-              showControls
-              showShadow
-              color="primary"
-              page={page}
-              total={pages}
-              onChange={(page) => setPage(page)}
-            />
-          </div>
-        }
-        classNames={{
-          wrapper: "min-h-[222px]",
-        }}
-      >
+      <Table aria-label="WEB販売実績テーブル">
         <TableHeader>
           <TableColumn key="product_name" className="w-52">
             商品名
@@ -363,7 +332,7 @@ export default function WebSalesEditableTable({
           </TableColumn>
         </TableHeader>
         <TableBody emptyContent={"データがありません"}>
-          {items.map((row) => (
+          {filteredItems.map((row) => (
             <TableRow key={row.product_id}>
               <TableCell className="text-left text-xs">
                 {getProductName(row.product_id)}
@@ -469,9 +438,19 @@ export default function WebSalesEditableTable({
           ))}
         </TableBody>
       </Table>
+
       <div className="flex justify-end gap-4 text-sm mt-4 mr-4">
         <p>合計販売数: {new Intl.NumberFormat("ja-JP").format(getTotalAllECSites())}</p>
         <p>合計売上金額: ¥{new Intl.NumberFormat("ja-JP").format(getTotalAmountAllECSites())}</p>
+      </div>
+
+      <div className="flex gap-2 mt-4">
+        <Button color="primary" onClick={onOpenCsvModal}>
+          CSVインポート
+        </Button>
+        <Button color="secondary" onClick={onOpenAmazonCsvModal}>
+          Amazon CSVインポート
+        </Button>
       </div>
 
       <CsvImportConfirmModal isOpen={isCsvModalOpen} onClose={onCloseCsvModal} />
