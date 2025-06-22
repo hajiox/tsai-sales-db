@@ -1,7 +1,7 @@
-// /app/web-sales/dashboard/page.tsx ver.10
+// /app/web-sales/dashboard/page.tsx ver.11
 "use client"
 
-import { useState, useEffect, Suspense, useCallback, useRef } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import WebSalesSummaryCards from "@/components/websales-summary-cards"
 import WebSalesRankingTable from "@/components/websales-ranking-table"
@@ -19,10 +19,9 @@ type ViewMode = 'month' | 'period';
 function WebSalesDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isInitializedRef = useRef(false);
   
   // URLパラメータから月を取得、なければ現在月をデフォルトに
-  const getCurrentMonth = () => {
+  const getInitialMonth = () => {
     const urlMonth = searchParams.get('month');
     if (urlMonth) return urlMonth;
     
@@ -30,87 +29,50 @@ function WebSalesDashboardContent() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  const [month, setMonth] = useState<string>(() => getCurrentMonth());
-  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+  const [month, setMonth] = useState<string>(getInitialMonth());
   const [webSalesData, setWebSalesData] = useState<WebSalesData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [periodMonths, setPeriodMonths] = useState<6 | 12>(6);
 
-  // 月が変更された時にURLを更新（useCallbackで安定化）
-  const handleMonthChange = useCallback((newMonth: string) => {
-    if (newMonth === month) return; // 同じ月の場合は何もしない
-    
+  // 月が変更された時にURLを更新
+  const handleMonthChange = (newMonth: string) => {
     setMonth(newMonth);
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams();
     params.set('month', newMonth);
-    router.push(`?${params.toString()}`, { scroll: false });
-  }, [month, searchParams, router]);
+    router.push(`?${params.toString()}`);
+  };
 
-  // 初期化時のみURLパラメータを反映
+  // データ取得 - monthのみに依存
   useEffect(() => {
-    if (!isInitializedRef.current) {
-      const urlMonth = getCurrentMonth();
-      if (urlMonth !== month) {
-        setMonth(urlMonth);
-      }
-      isInitializedRef.current = true;
-    }
-  }, []);
-
-  // データ取得（monthとrefreshTriggerのみに依存）
-  useEffect(() => {
-    let isCancelled = false;
-    
     const fetchWebSalesData = async () => {
-      if (!month) {
-        setWebSalesData([]);
-        setIsLoading(false);
-        return;
-      }
-      
       setIsLoading(true);
       try {
-        console.log('Debug - Calling web_sales_full_month with month:', month);
         const { data, error } = await supabase
           .rpc('web_sales_full_month', { target_month: month });
-        
-        if (isCancelled) return; // コンポーネントがアンマウントされた場合は処理しない
         
         if (error) {
           console.error('Error fetching web sales data:', error);
           setWebSalesData([]);
         } else {
-          console.log('Debug - Data received:', data);
           setWebSalesData(data || []);
         }
       } catch (error) {
-        if (isCancelled) return;
         console.error('Error during fetch operation:', error);
         setWebSalesData([]);
       } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     };
 
     fetchWebSalesData();
-    
-    return () => {
-      isCancelled = true;
-    };
-  }, [month, refreshTrigger]);
+  }, [month]);
 
-  const handleDataSaved = useCallback(() => {
-    setRefreshTrigger(prev => prev + 1);
-  }, []);
-
-  const selectPeriod = useCallback((months: 6 | 12) => {
+  const selectPeriod = (months: 6 | 12) => {
     setPeriodMonths(months);
     setViewMode('period');
-  }, []);
+  };
 
   return (
     <div className="w-full space-y-6">
@@ -160,14 +122,14 @@ function WebSalesDashboardContent() {
       <div className="space-y-6">
         <WebSalesSummaryCards
           month={month}
-          refreshTrigger={refreshTrigger}
+          refreshTrigger={0}
           viewMode={viewMode}
           periodMonths={periodMonths}
         />
 
         {viewMode === 'month' && (
           <>
-            <WebSalesCharts month={month} refreshTrigger={refreshTrigger} />
+            <WebSalesCharts month={month} refreshTrigger={0} />
             {isLoading ? (
               <div className="p-4">
                 <div className="animate-pulse">
