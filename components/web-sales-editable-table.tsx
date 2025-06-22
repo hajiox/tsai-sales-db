@@ -1,219 +1,154 @@
-// /components/web-sales-editable-table.tsx ver.41
+// /components/WebSalesDataTable.tsx ver.2
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useDisclosure } from "@nextui-org/modal"
-
-// Custom Hooks
-import { useWebSalesData } from "@/hooks/useWebSalesData"
-import { useCSVImport } from "@/hooks/useCSVImport"
-import { useTableEdit } from "@/hooks/useTableEdit"
-
-// Components
-import WebSalesTableHeader from "./WebSalesTableHeader"
-import WebSalesDataTable from "./WebSalesDataTable"
-import WebSalesImportButtons from "./WebSalesImportButtons"
-import WebSalesSummary from "./WebSalesSummary"
-import CsvImportConfirmModal from "./CsvImportConfirmModal"
-import AmazonCsvImportModal from "./AmazonCsvImportModal"
-
-// Utils
-import { 
-  calculateTotalAllECSites,
-  calculateTotalAmountAllECSites, // この関数はECサイトごとの合計ではなく、商品全体の合計金額を計算するように変更します
-  sortWebSalesData,
-  filterWebSalesData
-} from "@/utils/webSalesUtils"
-
-// Types
+import React from "react"
+import {
+  Table,
+  TableHeader,
+  TableColumn,
+  TableBody,
+  TableRow,
+  TableCell,
+  Input,
+} from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
 
-interface WebSalesEditableTableProps {
-  initialWebSalesData: WebSalesData[]
-  month: string
+interface WebSalesDataTableProps {
+  filteredItems: WebSalesData[]
+  editMode: string | null
+  editedValue: string
+  getProductName: (productId: string) => string
+  getProductPrice: (productId: string) => number
+  onEdit: (productId: string, ecSite: string, currentValue: number | null) => void
+  onSave: (productId: string, ecSite: string) => void
+  onEditValueChange: (value: string) => void
+  onCancel: () => void
 }
 
-export default function WebSalesEditableTable({
-  initialWebSalesData,
-  month,
-}: WebSalesEditableTableProps) {
-  const [currentMonth, setCurrentMonth] = useState(month)
-  const [filterValue, setFilterValue] = useState("")
-
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-
-  // Custom Hooks
-  const {
-    data,
-    setData,
-    productMap,
-    isLoading: dataLoading,
-    getProductName,
-    getProductSeriesCode,
-    getProductNumber,
-    getProductPrice,
-    handleDeleteMonthData,
-  } = useWebSalesData(initialWebSalesData, month)
-
-  const {
-    importResults,
-    productMaster,
-    setProductMaster,
-    isSubmittingImport,
-    isUploading,
-    fileInputRef,
-    isCsvModalOpen,
-    onOpenCsvModal,
-    onCloseCsvModal,
-    handleCsvButtonClick,
-    handleFileSelect,
-    handleImportResultChange,
-    handleConfirmImport,
-  } = useCSVImport()
-
-  const {
-    editMode,
-    editedValue,
-    isLoading: editLoading,
-    setEditedValue,
-    handleEdit,
-    handleSave,
-    handleCancel,
-  } = useTableEdit()
-
-  // Amazon CSV Modal
-  const {
-    isOpen: isAmazonCsvModalOpen,
-    onOpen: onOpenAmazonCsvModal,
-    onClose: onCloseAmazonCsvModal,
-  } = useDisclosure()
-
-  useEffect(() => {
-    setCurrentMonth(month)
-  }, [month])
-
-  // Set product master for CSV import
-  useEffect(() => {
-    const products = Array.from(productMap.values())
-    const masterData = products.map(p => ({ id: p.id, name: p.name }))
-    setProductMaster(masterData)
-  }, [productMap, setProductMaster])
-
-  const handleMonthChange = useCallback(
-    (selectedMonth: string) => {
-      const params = new URLSearchParams(searchParams.toString())
-      params.set("month", selectedMonth)
-      router.push(`${pathname}?${params.toString()}`)
-    },
-    [searchParams, router, pathname],
-  )
-
-  const filteredItems = useMemo(() => {
-    const sortedData = sortWebSalesData(data, getProductSeriesCode, getProductNumber)
-    return filterWebSalesData(sortedData, filterValue, getProductName)
-  }, [data, filterValue, getProductSeriesCode, getProductNumber, getProductName])
-
-  // 各ECサイトの合計数量を計算
-  const totalCount = calculateTotalAllECSites(filteredItems);
-  
-  // 各ECサイトの販売金額合計と、全ECサイトの合計金額を計算
-  // このロジックはWebSalesDataTableに渡すことになります
-  // ここでは全体の合計金額を計算します
-  const totalAmount = useMemo(() => {
-    let sum = 0;
-    filteredItems.forEach(item => {
-      const productPrice = getProductPrice(item.product_id) || 0;
-      const totalItemQuantity = calculateTotalAllECSites([item]); // 単一アイテムの合計数量
-      sum += totalItemQuantity * productPrice;
-    });
-    return sum;
-  }, [filteredItems, getProductPrice]);
-
-  const handleSaveWithDeps = useCallback(
-    (productId: string, ecSite: string) => {
-      handleSave(productId, ecSite, month, data, setData, getProductPrice)
-    },
-    [handleSave, month, data, setData, getProductPrice]
-  )
-
-  const handleFileSelectWithMonth = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      handleFileSelect(e, month)
-    },
-    [handleFileSelect, month]
-  )
-
-  const handleConfirmImportWithMonth = useCallback(
-    (updatedResults: any[]) => {
-      handleConfirmImport(updatedResults, month)
-    },
-    [handleConfirmImport, month]
-  )
-
-  const handleDeleteWithRouter = useCallback(() => {
-    handleDeleteMonthData(currentMonth, router)
-  }, [handleDeleteMonthData, currentMonth, router])
-
+export default function WebSalesDataTable({
+  filteredItems,
+  editMode,
+  editedValue,
+  getProductName,
+  getProductPrice,
+  onEdit,
+  onSave,
+  onEditValueChange,
+  onCancel,
+}: WebSalesDataTableProps) {
   return (
-    <div className="space-y-4">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileSelectWithMonth} 
-        style={{ display: 'none' }} 
-        accept=".csv" 
-        disabled={isUploading} 
-      />
+    <div className="rounded-lg border bg-white shadow-sm">
+      <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
+        <h3 className="text-lg font-semibold">全商品一覧 ({filteredItems.length}商品)</h3>
+      </div>
 
-      <WebSalesTableHeader
-        currentMonth={currentMonth}
-        filterValue={filterValue}
-        isLoading={dataLoading || editLoading}
-        onMonthChange={handleMonthChange}
-        onFilterChange={setFilterValue}
-        onDeleteMonthData={handleDeleteWithRouter}
-      />
+      <Table aria-label="WEB販売実績テーブル">
+        <TableHeader>
+          <TableColumn key="product_name" className="w-52">
+            商品名
+          </TableColumn>
+          <TableColumn key="amazon" className="w-24 text-center">
+            Amazon
+          </TableColumn>
+          <TableColumn key="rakuten" className="w-24 text-center">
+            楽天
+          </TableColumn>
+          <TableColumn key="yahoo" className="w-24 text-center">
+            Yahoo!
+          </TableColumn>
+          <TableColumn key="mercari" className="w-24 text-center">
+            メルカリ
+          </TableColumn>
+          <TableColumn key="base" className="w-24 text-center">
+            BASE
+          </TableColumn>
+          <TableColumn key="qoo10" className="w-24 text-center">
+            Qoo10
+          </TableColumn>
+          <TableColumn key="total_count" className="w-24 text-center">
+            合計数
+          </TableColumn>
+          <TableColumn key="total_amount" className="w-28 text-center">
+            合計金額
+          </TableColumn>
+        </TableHeader>
+        <TableBody emptyContent={"データがありません"}>
+          {filteredItems.map((row) => {
+            const productPrice = getProductPrice(row.product_id)
+            const totalCount = [
+              "amazon",
+              "rakuten",
+              "yahoo",
+              "mercari",
+              "base",
+              "qoo10",
+            ].reduce((sum, site) => sum + (row[`${site}_count`] || 0), 0)
+            const totalAmount = totalCount * productPrice
 
-      <WebSalesDataTable
-        filteredItems={filteredItems}
-        editMode={editMode}
-        editedValue={editedValue}
-        getProductName={getProductName}
-        getProductPrice={getProductPrice} {/* <-- 追加 */}
-        onEdit={handleEdit}
-        onSave={handleSaveWithDeps}
-        onEditValueChange={setEditedValue}
-        onCancel={handleCancel}
-      />
-
-      <WebSalesImportButtons
-        isUploading={isUploading}
-        onCsvClick={handleCsvButtonClick}
-        onAmazonClick={onOpenAmazonCsvModal}
-      />
-
-      <WebSalesSummary
-        totalCount={totalCount}
-        totalAmount={totalAmount}
-      />
-
-      <CsvImportConfirmModal 
-        isOpen={isCsvModalOpen} 
-        results={importResults}
-        productMaster={productMaster}
-        isSubmitting={isSubmittingImport}
-        onClose={onCloseCsvModal}
-        onConfirm={handleConfirmImportWithMonth}
-        onResultChange={handleImportResultChange}
-      />
-      
-      <AmazonCsvImportModal 
-        isOpen={isAmazonCsvModalOpen} 
-        onClose={onCloseAmazonCsvModal} 
-      />
+            return (
+              <TableRow key={row.product_id}>
+                <TableCell className="text-left text-xs">
+                  {getProductName(row.product_id)}
+                  <div className="text-xs text-gray-500 mt-1">
+                    単価: ¥{new Intl.NumberFormat("ja-JP").format(productPrice)}
+                  </div>
+                </TableCell>
+                {(
+                  [
+                    "amazon",
+                    "rakuten",
+                    "yahoo",
+                    "mercari",
+                    "base",
+                    "qoo10",
+                  ] as const
+                ).map((site) => {
+                  const cellKey = `${row.product_id}-${site}`
+                  const count = row[`${site}_count`] || 0
+                  const displayValue = `${count}`
+                  return (
+                    <TableCell key={cellKey}>
+                      <div
+                        onClick={() => onEdit(row.product_id, site, count)}
+                        className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-center ${
+                          editMode === cellKey ? "bg-blue-50" : ""
+                        }`}
+                      >
+                        {editMode === cellKey ? (
+                          <Input
+                            autoFocus
+                            value={editedValue}
+                            onChange={(e) => onEditValueChange(e.target.value)}
+                            onBlur={() => onSave(row.product_id, site)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                onSave(row.product_id, site)
+                              } else if (e.key === "Escape") {
+                                onCancel()
+                              }
+                            }}
+                            type="number"
+                            className="text-center"
+                            size="sm"
+                          />
+                        ) : (
+                          displayValue
+                        )}
+                      </div>
+                    </TableCell>
+                  )
+                })}
+                <TableCell className="text-center font-bold">
+                  {new Intl.NumberFormat("ja-JP").format(totalCount)}
+                </TableCell>
+                <TableCell className="text-center font-bold">
+                  ¥{new Intl.NumberFormat("ja-JP").format(totalAmount)}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
     </div>
   )
 }
