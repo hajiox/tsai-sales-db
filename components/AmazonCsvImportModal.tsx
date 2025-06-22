@@ -1,4 +1,4 @@
-// /components/AmazonCsvImportModal.tsx ver.4
+// /components/AmazonCsvImportModal.tsx ver.13
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
@@ -12,6 +12,13 @@ interface AmazonImportResult {
   amazonTitle: string
   quantity: number
   matched: boolean
+  matchType?: 'exact' | 'learned' | 'high' | 'medium' | 'low'
+}
+
+interface UnmatchedProduct {
+  amazonTitle: string
+  quantity: number
+  matched: false
 }
 
 interface AmazonCsvImportModalProps {
@@ -25,6 +32,8 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
   const [amazonImportMessage, setAmazonImportMessage] = useState<string>("")
   const [amazonImportLoading, setAmazonImportLoading] = useState(false)
   const [importResults, setImportResults] = useState<AmazonImportResult[]>([])
+  const [unmatchedProducts, setUnmatchedProducts] = useState<UnmatchedProduct[]>([])
+  const [csvSummary, setCsvSummary] = useState<any>(null)
   const [productMaster, setProductMaster] = useState<{ id: string; name: string }[]>([])
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [isSubmittingImport, setIsSubmittingImport] = useState(false)
@@ -36,7 +45,6 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
     if (dialogRef.current) {
       if (isOpen) {
         dialogRef.current.showModal()
-        // 商品マスターデータを取得
         fetchProductMaster()
       } else {
         dialogRef.current.close()
@@ -66,7 +74,7 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
   const handleAmazonFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setAmazonFile(e.target.files[0])
-      setAmazonImportMessage("") // メッセージをクリア
+      setAmazonImportMessage("")
     } else {
       setAmazonFile(null)
     }
@@ -98,7 +106,6 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
         setUnmatchedProducts(result.unmatchedProducts || [])
         setCsvSummary(result.summary || null)
         setAmazonImportMessage("")
-        // メインモーダルを閉じて確認モーダルを表示
         onClose()
         setShowConfirmModal(true)
       } else {
@@ -133,11 +140,9 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
         setAmazonImportMessage(result.message || "Amazonデータが正常にインポートされました。")
         setShowConfirmModal(false)
         
-        // 複数の方法でデータを更新
-        router.refresh() // Next.jsのルーター更新
-        window.location.reload() // 強制リロード
+        router.refresh()
+        window.location.reload()
         
-        // 1秒後に全体を閉じる
         setTimeout(() => {
           onClose()
           setAmazonFile(null)
@@ -214,7 +219,6 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
         </div>
       </dialog>
 
-      {/* 確認モーダル */}
       <AmazonCsvConfirmModal
         isOpen={showConfirmModal}
         results={importResults}
