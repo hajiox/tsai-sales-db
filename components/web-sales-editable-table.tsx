@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.34
+// /components/web-sales-editable-table.tsx ver.33
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
@@ -22,7 +22,7 @@ import { useDisclosure } from "@nextui-org/modal"
 import { supabase } from "@/lib/supabase"
 import { WebSalesData, Product } from "@/types/db"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-// Suspenseは削除済み
+// import { Suspense } from "react" // ← Suspenseのインポートを削除
 
 import CsvImportConfirmModal from "./CsvImportConfirmModal"
 import AmazonCsvImportModal from "./AmazonCsvImportModal" // HTMLベースのモーダルをインポート
@@ -106,11 +106,6 @@ export default function WebSalesEditableTable({
   }
 
   const filteredItems = useMemo(() => {
-    // dataがnullまたはundefinedの場合に備える
-    if (!data) {
-      return [];
-    }
-
     const sortedData = [...data].sort((a, b) => {
       const seriesCodeA = getProductSeriesCode(a.product_id)
       const seriesCodeB = getProductSeriesCode(b.product_id)
@@ -135,10 +130,6 @@ export default function WebSalesEditableTable({
   const pages = Math.ceil(filteredItems.length / ROWS_PER_PAGE)
 
   const items = useMemo(() => {
-    // filteredItemsがnullまたはundefinedの場合に備える
-    if (!filteredItems) {
-      return [];
-    }
     const start = (page - 1) * ROWS_PER_PAGE
     const end = start + ROWS_PER_PAGE
     return filteredItems.slice(start, end)
@@ -279,165 +270,115 @@ export default function WebSalesEditableTable({
   }
 
   return (
-    <>
-      <div className="p-4">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">
-            WEB販売実績 ({currentMonth}月)
-          </h2>
-          <div className="flex gap-2">
-            <Dropdown>
-              <DropdownTrigger>
-                <Button variant="bordered" className="w-32">
-                  {currentMonth}
-                </Button>
-              </DropdownTrigger>
-              <DropdownMenu
-                aria-label="Month selection"
-                selectedKeys={[currentMonth]}
-                onAction={(key) => handleMonthChange(key.toString())}
-                className="max-h-64 overflow-y-auto"
-              >
-                {/* 2023年からの月を生成 */}
-                {Array.from({ length: 36 }, (_, i) => {
-                  const date = new Date(2023, i, 1)
-                  const year = date.getFullYear()
-                  const month = (date.getMonth() + 1).toString().padStart(2, "0")
-                  const value = `${year}-${month}`
-                  return (
-                    <DropdownItem key={value} value={value}>
-                      {year}年{month}月
-                    </DropdownItem>
-                  )
-                })}
-              </DropdownMenu>
-            </Dropdown>
-            <Input
-              placeholder="商品名で検索"
-              value={filterValue}
-              onValueChange={setFilterValue}
-              className="w-48"
-            />
-            {/* 既存のCSVインポートボタン */}
-            <Button color="primary" onClick={onOpenCsvModal}>
-              CSVインポート
-            </Button>
-            {/* Amazon CSVインポートボタン（既存のボタンに紐付け） */}
-            <Button color="secondary" onClick={onOpenAmazonCsvModal}>
-              Amazon CSVインポート
-            </Button>
-            <Button color="danger" onClick={handleDeleteMonthData}>
-              {currentMonth}月 データ削除
-            </Button>
-          </div>
-        </div>
-
-        <Table
-          aria-label="WEB販売実績テーブル"
-          bottomContent={
-            <div className="flex w-full justify-center">
-              <Pagination
-                isCompact
-                showControls
-                showShadow
-                color="primary"
-                page={page}
-                total={pages}
-                onChange={(page) => setPage(page)}
+    <> {/* フラグメントは残す */}
+      {/* <Suspense fallback={<div>Loading table...</div>}> // ← Suspenseを削除 */}
+        <div className="p-4">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">
+              WEB販売実績 ({currentMonth}月)
+            </h2>
+            <div className="flex gap-2">
+              <Dropdown>
+                <DropdownTrigger>
+                  <Button variant="bordered" className="w-32">
+                    {currentMonth}
+                  </Button>
+                </DropdownTrigger>
+                <DropdownMenu
+                  aria-label="Month selection"
+                  selectedKeys={[currentMonth]}
+                  onAction={(key) => handleMonthChange(key.toString())}
+                  className="max-h-64 overflow-y-auto"
+                >
+                  {/* 2023年からの月を生成 */}
+                  {Array.from({ length: 36 }, (_, i) => {
+                    const date = new Date(2023, i, 1)
+                    const year = date.getFullYear()
+                    const month = (date.getMonth() + 1).toString().padStart(2, "0")
+                    const value = `${year}-${month}`
+                    return (
+                      <DropdownItem key={value} value={value}>
+                        {year}年{month}月
+                      </DropdownItem>
+                    )
+                  })}
+                </DropdownMenu>
+              </Dropdown>
+              <Input
+                placeholder="商品名で検索"
+                value={filterValue}
+                onValueChange={setFilterValue}
+                className="w-48"
               />
+              {/* 既存のCSVインポートボタン */}
+              <Button color="primary" onClick={onOpenCsvModal}>
+                CSVインポート
+              </Button>
+              {/* Amazon CSVインポートボタン（既存のボタンに紐付け） */}
+              <Button color="secondary" onClick={onOpenAmazonCsvModal}>
+                Amazon CSVインポート
+              </Button>
+              <Button color="danger" onClick={handleDeleteMonthData}>
+                {currentMonth}月 データ削除
+              </Button>
             </div>
-          }
-          classNames={{
-            wrapper: "min-h-[222px]",
-          }}
-        >
-          <TableHeader>
-            <TableColumn key="product_name" className="w-52">
-              商品名
-            </TableColumn>
-            <TableColumn key="amazon" className="w-24 text-center">
-              Amazon
-            </TableColumn>
-            <TableColumn key="rakuten" className="w-24 text-center">
-              楽天
-            </TableColumn>
-            <TableColumn key="yahoo" className="w-24 text-center">
-              Yahoo!
-            </TableColumn>
-            <TableColumn key="mercari" className="w-24 text-center">
-              メルカリ
-            </TableColumn>
-            <TableColumn key="base" className="w-24 text-center">
-              BASE
-            </TableColumn>
-            <TableColumn key="qoo10" className="w-24 text-center">
-              Qoo10
-            </TableColumn>
-            <TableColumn key="total_count" className="w-24 text-center">
-              合計数
-            </TableColumn>
-            <TableColumn key="total_amount" className="w-28 text-center">
-              合計金額
-            </TableColumn>
-          </TableHeader>
-          <TableBody emptyContent={"データがありません"} items={items || []}> {/* itemsにundefinedチェックを追加 */}
-            {(item) => ( // render props形式でitemsを渡す
-              <TableRow key={item.product_id}>
-                <TableCell className="text-left text-xs">
-                  {getProductName(item.product_id)}
-                </TableCell>
-                {(
-                  [
-                    "amazon",
-                    "rakuten",
-                    "yahoo",
-                    "mercari",
-                    "base",
-                    "qoo10",
-                  ] as const
-                ).map((site) => {
-                  const cellKey = `${item.product_id}-${site}`
-                  const count = item[`${site}_count`] || 0
-                  const amount = item[`${site}_amount`] || 0
-                  const displayValue = `${count}` // 金額は表示しない
-                  return (
-                    <TableCell key={cellKey}>
-                      <div
-                        onClick={() => handleEdit(item.product_id, site, count)}
-                        className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-center ${
-                          editMode === cellKey ? "bg-blue-50" : ""
-                        }`}
-                      >
-                        {editMode === cellKey ? (
-                          <Input
-                            autoFocus
-                            value={editedValue}
-                            onChange={(e) => setEditedValue(e.target.value)}
-                            onBlur={() => handleSave(item.product_id, site)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                handleSave(item.product_id, site)
-                              } else if (e.key === "Escape") {
-                                setEditMode(null)
-                                setEditedValue("")
-                              }
-                            }}
-                            type="number"
-                            className="text-center"
-                            size="sm"
-                          />
-                        ) : (
-                          displayValue
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500 text-center">
-                        ¥{new Intl.NumberFormat("ja-JP").format(amount)}
-                      </div>
-                    </TableCell>
-                  )
-                })}
-                <TableCell className="text-center font-bold">
-                  {new Intl.NumberFormat("ja-JP").format(
+          </div>
+
+          <Table
+            aria-label="WEB販売実績テーブル"
+            bottomContent={
+              <div className="flex w-full justify-center">
+                <Pagination
+                  isCompact
+                  showControls
+                  showShadow
+                  color="primary"
+                  page={page}
+                  total={pages}
+                  onChange={(page) => setPage(page)}
+                />
+              </div>
+            }
+            classNames={{
+              wrapper: "min-h-[222px]",
+            }}
+          >
+            <TableHeader>
+              <TableColumn key="product_name" className="w-52">
+                商品名
+              </TableColumn>
+              <TableColumn key="amazon" className="w-24 text-center">
+                Amazon
+              </TableColumn>
+              <TableColumn key="rakuten" className="w-24 text-center">
+                楽天
+              </TableColumn>
+              <TableColumn key="yahoo" className="w-24 text-center">
+                Yahoo!
+              </TableColumn>
+              <TableColumn key="mercari" className="w-24 text-center">
+                メルカリ
+              </TableColumn>
+              <TableColumn key="base" className="w-24 text-center">
+                BASE
+              </TableColumn>
+              <TableColumn key="qoo10" className="w-24 text-center">
+                Qoo10
+              </TableColumn>
+              <TableColumn key="total_count" className="w-24 text-center">
+                合計数
+              </TableColumn>
+              <TableColumn key="total_amount" className="w-28 text-center">
+                合計金額
+              </TableColumn>
+            </TableHeader>
+            <TableBody emptyContent={"データがありません"}>
+              {items.map((row) => (
+                <TableRow key={row.product_id}>
+                  <TableCell className="text-left text-xs">
+                    {getProductName(row.product_id)}
+                  </TableCell>
+                  {(
                     [
                       "amazon",
                       "rakuten",
@@ -445,12 +386,80 @@ export default function WebSalesEditableTable({
                       "mercari",
                       "base",
                       "qoo10",
-                    ].reduce(
-                      (sum, site) => sum + (item[`${site}_count`] || 0),
-                      0,
-                    ),
-                  )}
-                  <div className="text-xs text-gray-500">
+                    ] as const
+                  ).map((site) => {
+                    const cellKey = `${row.product_id}-${site}`
+                    const count = row[`${site}_count`] || 0
+                    const amount = row[`${site}_amount`] || 0
+                    const displayValue = `${count}` // 金額は表示しない
+                    return (
+                      <TableCell key={cellKey}>
+                        <div
+                          onClick={() => handleEdit(row.product_id, site, count)}
+                          className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-center ${
+                            editMode === cellKey ? "bg-blue-50" : ""
+                          }`}
+                        >
+                          {editMode === cellKey ? (
+                            <Input
+                              autoFocus
+                              value={editedValue}
+                              onChange={(e) => setEditedValue(e.target.value)}
+                              onBlur={() => handleSave(row.product_id, site)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  handleSave(row.product_id, site)
+                                } else if (e.key === "Escape") {
+                                  setEditMode(null)
+                                  setEditedValue("")
+                                }
+                              }}
+                              type="number"
+                              className="text-center"
+                              size="sm"
+                            />
+                          ) : (
+                            displayValue
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500 text-center">
+                          ¥{new Intl.NumberFormat("ja-JP").format(amount)}
+                        </div>
+                      </TableCell>
+                    )
+                  })}
+                  <TableCell className="text-center font-bold">
+                    {new Intl.NumberFormat("ja-JP").format(
+                      [
+                        "amazon",
+                        "rakuten",
+                        "yahoo",
+                        "mercari",
+                        "base",
+                        "qoo10",
+                      ].reduce(
+                        (sum, site) => sum + (row[`${site}_count`] || 0),
+                        0,
+                      ),
+                    )}
+                    <div className="text-xs text-gray-500">
+                      ¥
+                      {new Intl.NumberFormat("ja-JP").format(
+                        [
+                          "amazon",
+                          "rakuten",
+                          "yahoo",
+                          "mercari",
+                          "base",
+                          "qoo10",
+                        ].reduce(
+                          (sum, site) => sum + (row[`${site}_amount`] || 0),
+                          0,
+                        ),
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center font-bold">
                     ¥
                     {new Intl.NumberFormat("ja-JP").format(
                       [
@@ -461,37 +470,21 @@ export default function WebSalesEditableTable({
                         "base",
                         "qoo10",
                       ].reduce(
-                        (sum, site) => sum + (item[`${site}_amount`] || 0),
+                        (sum, site) => sum + (row[`${site}_amount`] || 0),
                         0,
                       ),
                     )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-center font-bold">
-                  ¥
-                  {new Intl.NumberFormat("ja-JP").format(
-                    [
-                      "amazon",
-                      "rakuten",
-                      "yahoo",
-                      "mercari",
-                      "base",
-                      "qoo10",
-                    ].reduce(
-                      (sum, site) => sum + (item[`${site}_amount`] || 0),
-                      0,
-                    ),
-                  )}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        <div className="flex justify-end gap-4 text-sm mt-4 mr-4">
-          <p>合計販売数: {new Intl.NumberFormat("ja-JP").format(getTotalAllECSites())}</p>
-          <p>合計売上金額: ¥{new Intl.NumberFormat("ja-JP").format(getTotalAmountAllECSites())}</p>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="flex justify-end gap-4 text-sm mt-4 mr-4">
+            <p>合計販売数: {new Intl.NumberFormat("ja-JP").format(getTotalAllECSites())}</p>
+            <p>合計売上金額: ¥{new Intl.NumberFormat("ja-JP").format(getTotalAmountAllECSites())}</p>
+          </div>
         </div>
-      </div>
+      {/* </Suspense> // ← Suspenseを削除 */}
       <CsvImportConfirmModal isOpen={isCsvModalOpen} onClose={onCloseCsvModal} />
       <AmazonCsvImportModal isOpen={isAmazonCsvModalOpen} onClose={onCloseAmazonCsvModal} />
     </>
