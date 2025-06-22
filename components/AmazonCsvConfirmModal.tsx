@@ -150,15 +150,17 @@ export default function AmazonCsvConfirmModal({
                   {/* マッチング品質インジケーター */}
                   <div className="mt-2">
                     <div className={`text-xs px-2 py-1 rounded inline-block ${
-                      result.amazonTitle.toLowerCase().includes(result.productName.toLowerCase()) ||
-                      result.productName.toLowerCase().includes(result.amazonTitle.toLowerCase())
-                        ? 'bg-green-100 text-green-800'
+                      result.productName && (
+                        result.amazonTitle.toLowerCase().includes(result.productName.toLowerCase()) ||
+                        result.productName.toLowerCase().includes(result.amazonTitle.toLowerCase())
+                      ) ? 'bg-green-100 text-green-800'
                         : 'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {result.amazonTitle.toLowerCase().includes(result.productName.toLowerCase()) ||
-                       result.productName.toLowerCase().includes(result.amazonTitle.toLowerCase())
-                        ? '高精度マッチング'
-                        : '要確認マッチング'}
+                      {result.productName && (
+                        result.amazonTitle.toLowerCase().includes(result.productName.toLowerCase()) ||
+                        result.productName.toLowerCase().includes(result.amazonTitle.toLowerCase())
+                      ) ? '高精度マッチング'
+                        : '要確認マッチング（商品名を手動で選択してください）'}
                     </div>
                   </div>
                 </div>
