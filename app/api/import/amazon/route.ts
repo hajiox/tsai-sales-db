@@ -1,156 +1,227 @@
-// /app/api/import/amazon/route.ts ver.2
-import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { matchProduct, normalizeProductName } from '@/lib/db/productMatcher'; // matchProductとnormalizeProductNameをインポート
-import Papa from 'papaparse'; // CSVパースにPapaParseを使用
+// /app/api/import/amazon/route.ts ver.1
+import { NextRequest, NextResponse } from "next/server"
+import { supabase } from "@/lib/supabase"
 
-// Amazon CSVの列インデックス定数 (0-indexed)
-const AMAZON_PRODUCT_NAME_COL = 2; // C列はインデックス2
-const AMAZON_QUANTITY_COL = 13;    // N列はインデックス13
+export const dynamic = 'force-dynamic'
 
-export async function POST(req: NextRequest) {
+// CSVを安全にパースする関数
+function parseCSVLine(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+  let i = 0
+
+  while (i < line.length) {
+    const char = line[i]
+    const nextChar = line[i + 1]
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"'
+        i += 2
+        continue
+      }
+      inQuotes = !inQuotes
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+    i++
+  }
+  result.push(current.trim())
+  return result
+}
+
+// 商品名マッチング関数（AI風の部分一致ロジック）
+function findBestMatch(amazonTitle: string, products: any[]): any | null {
+  if (!amazonTitle || !products.length) return null
+
+  // Amazon商品名のクリーニング
+  const cleanAmazonTitle = amazonTitle
+    .toLowerCase()
+    .replace(/[【】\[\]()（）]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  let bestMatch = null
+  let bestScore = 0
+
+  for (const product of products) {
+    const productName = product.name.toLowerCase()
+    
+    // 完全一致チェック
+    if (productName === cleanAmazonTitle) {
+      return product
+    }
+
+    // 部分一致スコア計算
+    let score = 0
+    const amazonWords = cleanAmazonTitle.split(' ')
+    const productWords = productName.split(' ')
+
+    // 各単語の一致度をチェック
+    for (const amazonWord of amazonWords) {
+      if (amazonWord.length < 2) continue // 短すぎる単語は無視
+
+      for (const productWord of productWords) {
+        if (productWord.includes(amazonWord) || amazonWord.includes(productWord)) {
+          score += amazonWord.length
+        }
+      }
+    }
+
+    // 長い商品名ほど優先（既存ロジック）
+    if (cleanAmazonTitle.includes(productName) || productName.includes(cleanAmazonTitle)) {
+      score += product.name.length * 2
+    }
+
+    if (score > bestScore && score > cleanAmazonTitle.length * 0.3) {
+      bestScore = score
+      bestMatch = product
+    }
+  }
+
+  return bestMatch
+}
+
+export async function POST(request: NextRequest) {
   try {
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
+    const formData = await request.formData()
+    const file = formData.get('file') as File
 
     if (!file) {
-      return NextResponse.json({ error: 'ファイルがアップロードされていません' }, { status: 400 });
+      return NextResponse.json({ error: 'ファイルが選択されていません' }, { status: 400 })
     }
 
-    // ファイルの内容をテキストとして読み込む
-    const arrayBuffer = await file.arrayBuffer();
-    // Amazon CSVのエンコーディングは通常UTF-8ですが、念のためShift_JISも試せるようにPapaParseに任せます
-    const csvContent = new TextDecoder('utf-8').decode(arrayBuffer); // 一旦UTF-8でデコードを試みる
+    // ファイル内容を読み込み
+    const text = await file.text()
+    let csvData: string[][]
 
-    // PapaParseを使ってCSVをパース
-    const parseResult = Papa.parse(csvContent, {
-      header: false, // ヘッダーは手動でスキップするためfalse
-      skipEmptyLines: true,
-      // PapaParseはエンコーディング自動判別が弱いため、明示的にUTF-8を指定。
-      // もし文字化けする場合は、ここでエンコーディングオプションを調整する必要があるかもしれません。
-      encoding: 'utf-8', 
-      error: (error) => {
-        console.error('PapaParseエラー:', error);
-      }
-    });
-
-    const parsedRows = parseResult.data as string[][];
-
-    // ヘッダー行と、データが不正な行をスキップ
-    // AmazonのCSVは、注文データ以外の情報も含まれる場合があるため、
-    // 実際にデータが始まる行から処理を開始し、各行のカラム数をチェックすることが重要です。
-    // 今回はN列（インデックス13）までデータがあると想定し、少なくとも14カラム以上ある行を有効とします。
-    const dataRows = parsedRows.filter((row, index) => {
-      // 最初の数行はヘッダーや要約の場合があるため、データ開始行を特定するロジックが必要
-      // Amazonの典型的な売上レポートは、最初の数行がサマリーで、その後に詳細データが続くことが多いです。
-      // 仮にデータ行は最低でも指定した列数を持つと仮定します。
-      return row.length > Math.max(AMAZON_PRODUCT_NAME_COL, AMAZON_QUANTITY_COL);
-    });
-
-    if (dataRows.length === 0) {
-      return NextResponse.json({ message: 'パースされた有効なデータがありません' }, { status: 200 });
+    try {
+      // CSV解析 - 改良版パーサーを使用
+      const lines = text.split('\n').filter(line => line.trim())
+      csvData = lines.map(line => parseCSVLine(line))
+    } catch (parseError) {
+      console.error('CSV parse error:', parseError)
+      return NextResponse.json({ error: 'CSVファイルの形式が正しくありません' }, { status: 400 })
     }
 
-    // Supabaseから全ての商品マスタデータを取得
-    const { data: allProducts, error: productsError } = await supabase
+    if (csvData.length < 2) {
+      return NextResponse.json({ error: 'CSVデータが不足しています' }, { status: 400 })
+    }
+
+    // ヘッダー行を取得
+    const headers = csvData[0]
+    console.log('CSV Headers:', headers)
+
+    // 必要な列のインデックスを特定
+    const titleIndex = headers.findIndex(h => h.includes('タイトル'))
+    const quantityIndex = headers.findIndex(h => h.includes('注文された商品点数'))
+
+    if (titleIndex === -1 || quantityIndex === -1) {
+      return NextResponse.json({ 
+        error: `必要な列が見つかりません。タイトル列: ${titleIndex}, 販売数量列: ${quantityIndex}` 
+      }, { status: 400 })
+    }
+
+    // 商品マスターデータを取得
+    const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, name, series, series_code, product_number, global_product_id');
+      .select('*')
 
     if (productsError) {
-      console.error('商品マスタ取得エラー:', productsError);
-      return NextResponse.json({ error: '商品マスタの取得に失敗しました' }, { status: 500 });
-    }
-    if (!allProducts || allProducts.length === 0) {
-      return NextResponse.json({ error: '商品マスタがありません。先に商品マスタを登録してください。' }, { status: 400 });
+      console.error('Products fetch error:', productsError)
+      return NextResponse.json({ error: '商品データの取得に失敗しました' }, { status: 500 })
     }
 
-    const upsertData: any[] = [];
-    const processedProductCounts = new Map<string, { total_quantity: number; total_amount: number }>();
+    // データ行を処理
+    const results = []
+    const unmatchedProducts = []
+    let totalQuantity = 0
 
-    dataRows.forEach((row, rowIndex) => {
-      const productName = row[AMAZON_PRODUCT_NAME_COL]?.trim();
-      const quantityStr = row[AMAZON_QUANTITY_COL]?.trim();
-      
-      if (!productName || !quantityStr) {
-        console.warn(`スキップされた行 ${rowIndex + 1}: 商品名または数量が不正です。`, row);
-        return;
+    for (let i = 1; i < csvData.length; i++) {
+      const row = csvData[i]
+      if (row.length <= Math.max(titleIndex, quantityIndex)) continue
+
+      const amazonTitle = row[titleIndex]?.trim()
+      const quantityStr = row[quantityIndex]?.trim()
+
+      if (!amazonTitle || !quantityStr) continue
+
+      const quantity = parseInt(quantityStr) || 0
+      if (quantity <= 0) continue
+
+      // 商品マッチング実行
+      const matchedProduct = findBestMatch(amazonTitle, products)
+
+      if (matchedProduct) {
+        results.push({
+          productId: matchedProduct.id,
+          productName: matchedProduct.name,
+          amazonTitle,
+          quantity,
+          matched: true
+        })
+        totalQuantity += quantity
+      } else {
+        unmatchedProducts.push({
+          amazonTitle,
+          quantity,
+          matched: false
+        })
       }
-
-      const quantity = parseInt(quantityStr, 10);
-
-      if (isNaN(quantity) || quantity <= 0) { // 数量が有効な数値で、かつ0より大きいことを確認
-        console.warn(`スキップされた行 ${rowIndex + 1}: 数量が不正です (${quantityStr})。`, row);
-        return;
-      }
-      
-      // 商品マスタとのマッチング
-      const matchedProduct = matchProduct(productName, allProducts);
-
-      if (!matchedProduct) {
-        console.warn(`マッチング失敗: Amazon商品名 "${productName}" に対応する商品が見つかりませんでした。行 ${rowIndex + 1}`);
-        return;
-      }
-
-      // 月ごとの集計のために、report_monthを特定する必要があります。
-      // Amazon CSVには「注文日」のような日付カラムがあるはずですが、今回は「商品名」と「数量」のみに限定されているため、
-      // どの月のデータとして扱うかを決定する必要があります。
-      // 現状は、CSVファイル名から月を特定するか、手動で指定する想定で進めます。
-      // 今回は `2025.03Amazon売上.csv` のファイル名から「2025-03」と仮定します。
-      // 本番運用では日付カラムから動的に取得するロジックが必要です。
-      const reportMonth = '2025-03-01'; // ここを動的に取得するロジックを追加する必要あり
-
-      const key = `${reportMonth}-${matchedProduct.id}`;
-      if (!processedProductCounts.has(key)) {
-        processedProductCounts.set(key, { total_quantity: 0, total_amount: 0 });
-      }
-      const entry = processedProductCounts.get(key)!;
-      entry.total_quantity += quantity;
-      // AmazonのCSVには商品ごとの単価がないため、金額は0としています。
-      // 必要であればproductsテーブルのpriceを利用するか、別途金額データを取得するロジックが必要です。
-      entry.total_amount += (quantity * (matchedProduct.price || 0)); // productMatcherから価格が取得できれば計算
-
-    });
-
-    // 集計したデータをupsertDataに追加
-    processedProductCounts.forEach((value, key) => {
-      const [reportMonth, productId] = key.split('-');
-      upsertData.push({
-        product_id: productId,
-        report_month: reportMonth,
-        amazon_count: value.total_quantity,
-        amazon_amount: value.total_amount,
-        // 他のECサイトのカウント/金額は0または既存の値を維持するため、
-        // onConflictで既存レコードを更新する際は注意が必要です。
-        // 今回はamazon_countとamazon_amountのみを更新するようにします。
-        // NOTE: web_sales_summaryテーブルにupsertする場合、他のECサイトの数値が上書きされる可能性があります。
-        // その場合は、既存データを読み込んでから更新値を設定するロジックが必要になります。
-        // 現状はAmazonデータで直接更新することを想定します。
-      });
-    });
-
-    if (upsertData.length === 0) {
-      return NextResponse.json({ message: '登録対象のデータがありませんでした。' }, { status: 200 });
     }
 
-    // Supabaseへのデータ登録処理
-    // onConflictでreport_monthとproduct_idが競合した場合に更新
-    const { data, error } = await supabase
-      .from('web_sales_summary')
-      .upsert(upsertData, { 
-        onConflict: 'report_month, product_id', 
-        ignoreDuplicates: false // 重複時は更新する
-      });
+    // 現在月を取得
+    const now = new Date()
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-    if (error) {
-      console.error('Supabaseへのデータ登録エラー:', error);
-      return NextResponse.json({ error: 'データの保存に失敗しました', details: error.message }, { status: 500 });
+    // データベース更新処理
+    let updateCount = 0
+    for (const result of results) {
+      try {
+        const { error: upsertError } = await supabase
+          .from('web_sales_summary')
+          .upsert({
+            product_id: result.productId,
+            report_month: currentMonth,
+            amazon_count: result.quantity
+          }, {
+            onConflict: 'product_id,report_month',
+            ignoreDuplicates: false
+          })
+
+        if (upsertError) {
+          console.error('Upsert error for product:', result.productId, upsertError)
+        } else {
+          updateCount++
+        }
+      } catch (updateError) {
+        console.error('Update error:', updateError)
+      }
     }
 
-    console.log('Amazon売上データ upsert 成功:', { upsertedRows: data?.length });
-    return NextResponse.json({ message: 'Amazon売上データが正常にインポートされました', data }, { status: 200 });
+    // 結果レポート
+    const report = {
+      message: `Amazon CSVインポート完了: ${updateCount}件の商品を更新しました`,
+      summary: {
+        totalRows: csvData.length - 1,
+        matchedProducts: results.length,
+        unmatchedProducts: unmatchedProducts.length,
+        totalQuantity,
+        updatedRecords: updateCount
+      },
+      unmatchedProducts: unmatchedProducts.slice(0, 10) // 最初の10件のみ表示
+    }
 
-  } catch (error: any) {
-    console.error('AmazonインポートAPIエラー:', error);
-    return NextResponse.json({ error: '内部サーバーエラー', details: error.message }, { status: 500 });
+    console.log('Amazon CSV Import Result:', report)
+
+    return NextResponse.json(report)
+
+  } catch (error) {
+    console.error('Amazon CSV import error:', error)
+    return NextResponse.json({ error: 'インポート処理中にエラーが発生しました' }, { status: 500 })
   }
 }
