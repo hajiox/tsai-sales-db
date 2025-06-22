@@ -84,9 +84,61 @@ export default function AmazonCsvConfirmModal({
           <p className="text-sm text-gray-600 mt-1">
             {month}月のAmazonデータを確認し、必要に応じて修正してください。
           </p>
-          <div className="flex gap-4 mt-2 text-sm">
-            <span className="text-blue-600">マッチング済み: {editableResults.length}件</span>
-            <span className="text-green-600">合計販売数: {totalQuantity}個</span>
+          
+          {/* 詳細統計情報 */}
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg p-3 border">
+              <div className="text-xs text-gray-500">マッチング済み商品</div>
+              <div className="text-lg font-bold text-blue-600">{editableResults.length}品種</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 border">
+              <div className="text-xs text-gray-500">合計販売数量</div>
+              <div className="text-lg font-bold text-green-600">{totalQuantity.toLocaleString()}個</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 border">
+              <div className="text-xs text-gray-500">高精度マッチング</div>
+              <div className="text-lg font-bold text-emerald-600">
+                {editableResults.filter(r => r.matchType === 'exact' || r.matchType === 'learned' || r.matchType === 'high').length}品種
+              </div>
+              <div className="text-xs text-gray-500">
+                ({editableResults.filter(r => r.matchType === 'exact' || r.matchType === 'learned' || r.matchType === 'high')
+                  .reduce((sum, r) => sum + r.quantity, 0).toLocaleString()}個)
+              </div>
+            </div>
+            <div className="bg-white rounded-lg p-3 border">
+              <div className="text-xs text-gray-500">要確認マッチング</div>
+              <div className="text-lg font-bold text-yellow-600">
+                {editableResults.filter(r => r.matchType === 'medium' || r.matchType === 'low' || !r.matchType).length}品種
+              </div>
+              <div className="text-xs text-gray-500">
+                ({editableResults.filter(r => r.matchType === 'medium' || r.matchType === 'low' || !r.matchType)
+                  .reduce((sum, r) => sum + r.quantity, 0).toLocaleString()}個)
+              </div>
+            </div>
+          </div>
+
+          {/* マッチングタイプ別の詳細 */}
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            {editableResults.filter(r => r.matchType === 'exact').length > 0 && (
+              <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
+                完全一致: {editableResults.filter(r => r.matchType === 'exact').length}品種
+              </span>
+            )}
+            {editableResults.filter(r => r.matchType === 'learned').length > 0 && (
+              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                学習済み: {editableResults.filter(r => r.matchType === 'learned').length}品種
+              </span>
+            )}
+            {editableResults.filter(r => r.matchType === 'high').length > 0 && (
+              <span className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded">
+                高精度: {editableResults.filter(r => r.matchType === 'high').length}品種
+              </span>
+            )}
+            {editableResults.filter(r => r.matchType === 'medium' || r.matchType === 'low' || !r.matchType).length > 0 && (
+              <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                要確認: {editableResults.filter(r => r.matchType === 'medium' || r.matchType === 'low' || !r.matchType).length}品種
+              </span>
+            )}
           </div>
         </div>
 
