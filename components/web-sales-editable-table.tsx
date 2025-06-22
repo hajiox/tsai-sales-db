@@ -204,7 +204,8 @@ export default function WebSalesEditableTable({
       
       <AmazonCsvImportModal 
         isOpen={isAmazonCsvModalOpen} 
-        onClose={onCloseAmazonCsvModal} 
+        onClose={onCloseAmazonCsvModal}
+        month={month}
       />
     </div>
   )
