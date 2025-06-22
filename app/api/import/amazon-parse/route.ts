@@ -319,11 +319,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       matchedResults,
-      unmatchedProducts: unmatchedProducts.slice(0, 10),
+      unmatchedProducts: unmatchedProducts.slice(0, 50), // 最大50件表示
       summary: {
         totalRows: csvData.length - 1,
         matchedCount: matchedResults.length,
-        unmatchedCount: unmatchedProducts.length
+        unmatchedCount: unmatchedProducts.length,
+        csvTotalQuantity: matchedResults.reduce((sum, r) => sum + r.quantity, 0) + unmatchedProducts.reduce((sum, r) => sum + r.quantity, 0),
+        matchedQuantity: matchedResults.reduce((sum, r) => sum + r.quantity, 0),
+        unmatchedQuantity: unmatchedProducts.reduce((sum, r) => sum + r.quantity, 0)
       }
     })
 
