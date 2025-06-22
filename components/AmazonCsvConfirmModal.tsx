@@ -16,6 +16,8 @@ interface AmazonImportResult {
 interface AmazonCsvConfirmModalProps {
   isOpen: boolean
   results: AmazonImportResult[]
+  unmatchedProducts: UnmatchedProduct[]
+  csvSummary: any
   productMaster: { id: string; name: string }[]
   month: string
   isSubmitting: boolean
@@ -23,9 +25,17 @@ interface AmazonCsvConfirmModalProps {
   onConfirm: (updatedResults: AmazonImportResult[]) => void
 }
 
+interface UnmatchedProduct {
+  amazonTitle: string
+  quantity: number
+  matched: false
+}
+
 export default function AmazonCsvConfirmModal({
   isOpen,
   results,
+  unmatchedProducts,
+  csvSummary,
   productMaster,
   month,
   isSubmitting,
@@ -187,10 +197,12 @@ export default function AmazonCsvConfirmModal({
               <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <h4 className="font-medium text-yellow-800 mb-2">⚠️ データ確認が必要</h4>
                 <div className="text-sm text-yellow-700 space-y-1">
-                  <p>• CSV総商品数: <strong>110商品</strong> → マッチング: <strong>{editableResults.length}商品</strong></p>
-                  <p>• CSV総販売数: <strong>1,956個</strong> → マッチング: <strong>{stats.totalQuantity}個</strong></p>
-                  <p>• 未マッチング: <strong>{110 - editableResults.length}商品</strong> (<strong>{1956 - stats.totalQuantity}個</strong>)</p>
-                  <p className="text-red-600 font-medium">→ 新商品の可能性があります。商品マスター追加を検討してください。</p>
+                  <p>• CSV総商品数: <strong>{csvSummary?.totalRows || '不明'}商品</strong> → マッチング: <strong>{editableResults.length}商品</strong></p>
+                  <p>• CSV総販売数: <strong>{csvSummary?.csvTotalQuantity?.toLocaleString() || '不明'}個</strong> → マッチング: <strong>{stats.totalQuantity.toLocaleString()}個</strong></p>
+                  <p>• <span className="text-red-600 font-medium">未マッチング: {unmatchedProducts?.length || 0}商品 ({csvSummary?.unmatchedQuantity?.toLocaleString() || 0}個)</span></p>
+                  {unmatchedProducts && unmatchedProducts.length > 0 && (
+                    <p className="text-red-600 font-medium">→ 商品マスター追加が必要です</p>
+                  )}
                 </div>
               </div>
               
