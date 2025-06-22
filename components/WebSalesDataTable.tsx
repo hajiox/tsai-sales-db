@@ -1,4 +1,4 @@
-// /components/WebSalesDataTable.tsx
+// /components/WebSalesDataTable.tsx ver.3
 "use client"
 
 import React from "react"
@@ -18,6 +18,7 @@ interface WebSalesDataTableProps {
   editMode: string | null
   editedValue: string
   getProductName: (productId: string) => string
+  getProductPrice: (productId: string) => number
   onEdit: (productId: string, ecSite: string, currentValue: number | null) => void
   onSave: (productId: string, ecSite: string) => void
   onEditValueChange: (value: string) => void
@@ -29,6 +30,7 @@ export default function WebSalesDataTable({
   editMode,
   editedValue,
   getProductName,
+  getProductPrice,
   onEdit,
   onSave,
   onEditValueChange,
@@ -71,62 +73,30 @@ export default function WebSalesDataTable({
           </TableColumn>
         </TableHeader>
         <TableBody emptyContent={"データがありません"}>
-          {filteredItems.map((row) => (
-            <TableRow key={row.product_id}>
-              <TableCell className="text-left text-xs">
-                {getProductName(row.product_id)}
-              </TableCell>
-              {(
-                [
-                  "amazon",
-                  "rakuten",
-                  "yahoo",
-                  "mercari",
-                  "base",
-                  "qoo10",
-                ] as const
-              ).map((site) => {
-                const cellKey = `${row.product_id}-${site}`
-                const count = row[`${site}_count`] || 0
-                const amount = row[`${site}_amount`] || 0
-                const displayValue = `${count}`
-                return (
-                  <TableCell key={cellKey}>
-                    <div
-                      onClick={() => onEdit(row.product_id, site, count)}
-                      className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-center ${
-                        editMode === cellKey ? "bg-blue-50" : ""
-                      }`}
-                    >
-                      {editMode === cellKey ? (
-                        <Input
-                          autoFocus
-                          value={editedValue}
-                          onChange={(e) => onEditValueChange(e.target.value)}
-                          onBlur={() => onSave(row.product_id, site)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              onSave(row.product_id, site)
-                            } else if (e.key === "Escape") {
-                              onCancel()
-                            }
-                          }}
-                          type="number"
-                          className="text-center"
-                          size="sm"
-                        />
-                      ) : (
-                        displayValue
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500 text-center">
-                      ¥{new Intl.NumberFormat("ja-JP").format(amount)}
-                    </div>
-                  </TableCell>
-                )
-              })}
-              <TableCell className="text-center font-bold">
-                {new Intl.NumberFormat("ja-JP").format(
+          {filteredItems.map((row) => {
+            const productPrice = getProductPrice(row.product_id)
+            const totalCount = [
+              "amazon",
+              "rakuten",
+              "yahoo",
+              "mercari",
+              "base",
+              "qoo10",
+            ].reduce((sum, site) => sum + (row[`${site}_count`] || 0), 0)
+            const totalAmount = totalCount * productPrice
+            
+            // デバッグログ追加
+            console.log(`Debug - Product ${row.product_id}: name=${getProductName(row.product_id)}, price=${productPrice}, count=${totalCount}, total=${totalAmount}`)
+
+            return (
+              <TableRow key={row.product_id}>
+                <TableCell className="text-left text-xs">
+                  <div>{getProductName(row.product_id)}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    単価: ¥{new Intl.NumberFormat("ja-JP").format(productPrice)}
+                  </div>
+                </TableCell>
+                {(
                   [
                     "amazon",
                     "rakuten",
@@ -134,46 +104,52 @@ export default function WebSalesDataTable({
                     "mercari",
                     "base",
                     "qoo10",
-                  ].reduce(
-                    (sum, site) => sum + (row[`${site}_count`] || 0),
-                    0,
-                  ),
-                )}
-                <div className="text-xs text-gray-500">
-                  ¥
-                  {new Intl.NumberFormat("ja-JP").format(
-                    [
-                      "amazon",
-                      "rakuten",
-                      "yahoo",
-                      "mercari",
-                      "base",
-                      "qoo10",
-                    ].reduce(
-                      (sum, site) => sum + (row[`${site}_amount`] || 0),
-                      0,
-                    ),
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-center font-bold">
-                ¥
-                {new Intl.NumberFormat("ja-JP").format(
-                  [
-                    "amazon",
-                    "rakuten",
-                    "yahoo",
-                    "mercari",
-                    "base",
-                    "qoo10",
-                  ].reduce(
-                    (sum, site) => sum + (row[`${site}_amount`] || 0),
-                    0,
-                  ),
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
+                  ] as const
+                ).map((site) => {
+                  const cellKey = `${row.product_id}-${site}`
+                  const count = row[`${site}_count`] || 0
+                  const displayValue = `${count}`
+                  return (
+                    <TableCell key={cellKey} className="text-center">
+                      <div
+                        onClick={() => onEdit(row.product_id, site, count)}
+                        className={`cursor-pointer hover:bg-gray-100 p-1 rounded ${
+                          editMode === cellKey ? "bg-blue-50" : ""
+                        }`}
+                      >
+                        {editMode === cellKey ? (
+                          <Input
+                            autoFocus
+                            value={editedValue}
+                            onChange={(e) => onEditValueChange(e.target.value)}
+                            onBlur={() => onSave(row.product_id, site)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                onSave(row.product_id, site)
+                              } else if (e.key === "Escape") {
+                                onCancel()
+                              }
+                            }}
+                            type="number"
+                            className="text-center"
+                            size="sm"
+                          />
+                        ) : (
+                          displayValue
+                        )}
+                      </div>
+                    </TableCell>
+                  )
+                })}
+                <TableCell className="text-center font-bold">
+                  {new Intl.NumberFormat("ja-JP").format(totalCount)}
+                </TableCell>
+                <TableCell className="text-center font-bold">
+                  ¥{new Intl.NumberFormat("ja-JP").format(totalAmount)}
+                </TableCell>
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
     </div>
