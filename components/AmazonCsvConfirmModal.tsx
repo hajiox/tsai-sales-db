@@ -68,7 +68,35 @@ export default function AmazonCsvConfirmModal({
     setEditableResults(updated)
   }
 
-  const totalQuantity = editableResults.reduce((sum, result) => sum + result.quantity, 0)
+  // 統計計算用の関数
+  const getMatchingStats = () => {
+    const exact = editableResults.filter(r => r.matchType === 'exact')
+    const learned = editableResults.filter(r => r.matchType === 'learned')
+    const high = editableResults.filter(r => r.matchType === 'high')
+    const medium = editableResults.filter(r => r.matchType === 'medium')
+    const low = editableResults.filter(r => r.matchType === 'low')
+    const unknown = editableResults.filter(r => !r.matchType)
+
+    const highConfidence = [...exact, ...learned, ...high]
+    const lowConfidence = [...medium, ...low, ...unknown]
+
+    return {
+      exact,
+      learned,
+      high,
+      medium,
+      low,
+      unknown,
+      highConfidence,
+      lowConfidence,
+      total: editableResults.length,
+      totalQuantity: editableResults.reduce((sum, r) => sum + r.quantity, 0),
+      highConfidenceQuantity: highConfidence.reduce((sum, r) => sum + r.quantity, 0),
+      lowConfidenceQuantity: lowConfidence.reduce((sum, r) => sum + r.quantity, 0)
+    }
+  }
+
+  const stats = getMatchingStats()
 
   const handleConfirm = () => {
     onConfirm(editableResults)
@@ -89,56 +117,62 @@ export default function AmazonCsvConfirmModal({
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg p-3 border">
               <div className="text-xs text-gray-500">マッチング済み商品</div>
-              <div className="text-lg font-bold text-blue-600">{editableResults.length}品種</div>
+              <div className="text-lg font-bold text-blue-600">{stats.total}品種</div>
             </div>
             <div className="bg-white rounded-lg p-3 border">
               <div className="text-xs text-gray-500">合計販売数量</div>
-              <div className="text-lg font-bold text-green-600">{totalQuantity.toLocaleString()}個</div>
+              <div className="text-lg font-bold text-green-600">{stats.totalQuantity.toLocaleString()}個</div>
             </div>
             <div className="bg-white rounded-lg p-3 border">
               <div className="text-xs text-gray-500">高精度マッチング</div>
-              <div className="text-lg font-bold text-emerald-600">
-                {editableResults.filter(r => r.matchType === 'exact' || r.matchType === 'learned' || r.matchType === 'high').length}品種
-              </div>
-              <div className="text-xs text-gray-500">
-                ({editableResults.filter(r => r.matchType === 'exact' || r.matchType === 'learned' || r.matchType === 'high')
-                  .reduce((sum, r) => sum + r.quantity, 0).toLocaleString()}個)
-              </div>
+              <div className="text-lg font-bold text-emerald-600">{stats.highConfidence.length}品種</div>
+              <div className="text-xs text-gray-500">({stats.highConfidenceQuantity.toLocaleString()}個)</div>
             </div>
             <div className="bg-white rounded-lg p-3 border">
               <div className="text-xs text-gray-500">要確認マッチング</div>
-              <div className="text-lg font-bold text-yellow-600">
-                {editableResults.filter(r => r.matchType === 'medium' || r.matchType === 'low' || !r.matchType).length}品種
-              </div>
-              <div className="text-xs text-gray-500">
-                ({editableResults.filter(r => r.matchType === 'medium' || r.matchType === 'low' || !r.matchType)
-                  .reduce((sum, r) => sum + r.quantity, 0).toLocaleString()}個)
-              </div>
+              <div className="text-lg font-bold text-yellow-600">{stats.lowConfidence.length}品種</div>
+              <div className="text-xs text-gray-500">({stats.lowConfidenceQuantity.toLocaleString()}個)</div>
             </div>
           </div>
 
           {/* マッチングタイプ別の詳細 */}
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            {editableResults.filter(r => r.matchType === 'exact').length > 0 && (
+            {stats.exact.length > 0 && (
               <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
-                完全一致: {editableResults.filter(r => r.matchType === 'exact').length}品種
+                完全一致: {stats.exact.length}品種 ({stats.exact.reduce((sum, r) => sum + r.quantity, 0)}個)
               </span>
             )}
-            {editableResults.filter(r => r.matchType === 'learned').length > 0 && (
+            {stats.learned.length > 0 && (
               <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                学習済み: {editableResults.filter(r => r.matchType === 'learned').length}品種
+                学習済み: {stats.learned.length}品種 ({stats.learned.reduce((sum, r) => sum + r.quantity, 0)}個)
               </span>
             )}
-            {editableResults.filter(r => r.matchType === 'high').length > 0 && (
+            {stats.high.length > 0 && (
               <span className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded">
-                高精度: {editableResults.filter(r => r.matchType === 'high').length}品種
+                高精度: {stats.high.length}品種 ({stats.high.reduce((sum, r) => sum + r.quantity, 0)}個)
               </span>
             )}
-            {editableResults.filter(r => r.matchType === 'medium' || r.matchType === 'low' || !r.matchType).length > 0 && (
+            {stats.medium.length > 0 && (
               <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                要確認: {editableResults.filter(r => r.matchType === 'medium' || r.matchType === 'low' || !r.matchType).length}品種
+                中精度: {stats.medium.length}品種 ({stats.medium.reduce((sum, r) => sum + r.quantity, 0)}個)
               </span>
             )}
+            {stats.low.length > 0 && (
+              <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                低精度: {stats.low.length}品種 ({stats.low.reduce((sum, r) => sum + r.quantity, 0)}個)
+              </span>
+            )}
+            {stats.unknown.length > 0 && (
+              <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded">
+                不明: {stats.unknown.length}品種 ({stats.unknown.reduce((sum, r) => sum + r.quantity, 0)}個)
+              </span>
+            )}
+          </div>
+
+          {/* 合計確認 */}
+          <div className="mt-2 text-xs text-gray-500">
+            確認: 高精度({stats.highConfidence.length}) + 要確認({stats.lowConfidence.length}) = 合計({stats.total}) 
+            | 数量: {stats.highConfidenceQuantity} + {stats.lowConfidenceQuantity} = {stats.totalQuantity}
           </div>
         </div>
 
