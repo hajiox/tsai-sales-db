@@ -1,4 +1,4 @@
-// /components/AmazonCsvConfirmModal.tsx ver.1
+// /components/AmazonCsvConfirmModal.tsx ver.2
 "use client"
 
 import React, { useState } from "react"
@@ -78,7 +78,7 @@ export default function AmazonCsvConfirmModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden">
+      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-hidden mx-4">
         <div className="p-6 border-b bg-gray-50">
           <h3 className="text-lg font-semibold">Amazon CSVインポート確認</h3>
           <p className="text-sm text-gray-600 mt-1">
@@ -90,58 +90,56 @@ export default function AmazonCsvConfirmModal({
           </div>
         </div>
 
-        <div className="p-4 overflow-y-auto max-h-96">
+        <div className="p-4 overflow-y-auto max-h-[70vh]">
           {editableResults.length === 0 ? (
             <p className="text-center text-gray-500 py-8">
               マッチする商品が見つかりませんでした。
             </p>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {editableResults.map((result, index) => (
                 <div key={index} className="border rounded-lg p-4 bg-gray-50">
-                  <div className="grid grid-cols-12 gap-4 items-center">
-                    {/* Amazon商品名 */}
-                    <div className="col-span-4">
-                      <label className="text-xs text-gray-500">Amazon商品名</label>
-                      <p className="text-sm font-medium truncate" title={result.amazonTitle}>
-                        {result.amazonTitle}
-                      </p>
-                    </div>
+                  {/* Amazon商品名 - 全文表示 */}
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 font-medium">Amazon商品名</label>
+                    <p className="text-sm font-medium text-gray-800 leading-relaxed">
+                      {result.amazonTitle}
+                    </p>
+                  </div>
 
-                    {/* マッチした商品選択 */}
-                    <div className="col-span-4">
-                      <label className="text-xs text-gray-500">マッチ商品</label>
-                      <select
-                        value={result.productId}
-                        onChange={(e) => handleProductChange(index, e.target.value)}
-                        className="w-full text-sm border rounded px-2 py-1"
-                      >
-                        <option value="">商品を選択...</option>
-                        {productMaster.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  {/* マッチした商品選択 */}
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 font-medium block mb-1">マッチ商品</label>
+                    <select
+                      value={result.productId}
+                      onChange={(e) => handleProductChange(index, e.target.value)}
+                      className="w-full text-sm border rounded px-3 py-2"
+                    >
+                      <option value="">商品を選択...</option>
+                      {productMaster.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                    {/* 販売数量 */}
-                    <div className="col-span-2">
-                      <label className="text-xs text-gray-500">販売数</label>
+                  {/* 販売数量と削除ボタン */}
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 font-medium block mb-1">販売数</label>
                       <input
                         type="number"
                         value={result.quantity}
                         onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 0)}
-                        className="w-full text-sm border rounded px-2 py-1"
+                        className="w-full text-sm border rounded px-3 py-2"
                         min="0"
                       />
                     </div>
-
-                    {/* 削除ボタン */}
-                    <div className="col-span-2">
+                    <div className="pt-6">
                       <button
                         onClick={() => removeResult(index)}
-                        className="text-red-500 hover:text-red-700 text-sm px-2 py-1 border border-red-200 rounded hover:bg-red-50"
+                        className="text-red-500 hover:text-red-700 text-sm px-3 py-2 border border-red-200 rounded hover:bg-red-50"
                       >
                         削除
                       </button>
@@ -149,8 +147,8 @@ export default function AmazonCsvConfirmModal({
                   </div>
 
                   {/* マッチング品質インジケーター */}
-                  <div className="mt-2">
-                    <div className={`text-xs px-2 py-1 rounded inline-block ${
+                  <div>
+                    <div className={`text-xs px-3 py-1 rounded inline-block ${
                       result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-100 text-green-800' :
                       result.matchType === 'high' ? 'bg-blue-100 text-blue-800' :
                       'bg-yellow-100 text-yellow-800'
@@ -175,14 +173,14 @@ export default function AmazonCsvConfirmModal({
             <button
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-6 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
             >
               キャンセル
             </button>
             <button
               onClick={handleConfirm}
               disabled={isSubmitting || editableResults.length === 0}
-              className={`px-4 py-2 text-sm text-white rounded disabled:opacity-50 ${
+              className={`px-6 py-2 text-sm text-white rounded disabled:opacity-50 ${
                 isSubmitting 
                   ? 'bg-blue-400 cursor-not-allowed' 
                   : 'bg-blue-600 hover:bg-blue-700'
