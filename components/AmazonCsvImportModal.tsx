@@ -88,6 +88,8 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
       if (response.ok) {
         setImportResults(result.matchedResults || [])
         setAmazonImportMessage("")
+        // メインモーダルを閉じて確認モーダルを表示
+        onClose()
         setShowConfirmModal(true)
       } else {
         setAmazonImportMessage(result.error || "Amazon CSVの解析に失敗しました。")
@@ -144,6 +146,8 @@ export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonC
   const handleCloseConfirmModal = () => {
     setShowConfirmModal(false)
     setImportResults([])
+    // メインモーダルを再度開く
+    // onOpen() // ← これは削除（自動で開かない）
   }
 
   return (
