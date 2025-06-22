@@ -105,9 +105,9 @@ export default function AmazonCsvConfirmModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-hidden mx-4">
-        <div className="p-6 border-b bg-gray-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+        <div className="p-6 border-b bg-gray-50 flex-shrink-0">
           <h3 className="text-lg font-semibold">Amazon CSVインポート確認</h3>
           <p className="text-sm text-gray-600 mt-1">
             {month}月のAmazonデータを確認し、必要に応じて修正してください。
@@ -171,18 +171,30 @@ export default function AmazonCsvConfirmModal({
 
           {/* 合計確認 */}
           <div className="mt-2 text-xs text-gray-500">
-            確認: 高精度({stats.highConfidence.length}) + 要確認({stats.lowConfidence.length}) = 合計({stats.total}) 
-            | 数量: {stats.highConfidenceQuantity} + {stats.lowConfidenceQuantity} = {stats.totalQuantity}
+            詳細: 高精度({stats.highConfidence.length}) + 中精度({stats.medium.length}) + 低精度({stats.low.length}) = 合計({stats.total}) 
+            | 数量: {stats.highConfidenceQuantity} + {stats.medium.reduce((s,r)=>s+r.quantity,0)} + {stats.low.reduce((s,r)=>s+r.quantity,0)} = {stats.totalQuantity}
           </div>
         </div>
 
-        <div className="p-4 overflow-y-auto max-h-[70vh]">
+        <div className="flex-1 p-4 overflow-y-auto">
           {editableResults.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">
-              マッチする商品が見つかりませんでした。
-            </p>
+            <div className="text-center py-8">
+              <p className="text-gray-500 mb-4">マッチする商品が見つかりませんでした。</p>
+              <p className="text-sm text-red-600">CSV商品数とマッチング数に大きな差があります。商品マスターの確認が必要です。</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <>
+              <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <h4 className="font-medium text-yellow-800 mb-2">⚠️ データ確認が必要</h4>
+                <div className="text-sm text-yellow-700 space-y-1">
+                  <p>• CSV総商品数: <strong>110商品</strong> → マッチング: <strong>{editableResults.length}商品</strong></p>
+                  <p>• CSV総販売数: <strong>1,956個</strong> → マッチング: <strong>{stats.totalQuantity}個</strong></p>
+                  <p>• 未マッチング: <strong>{110 - editableResults.length}商品</strong> (<strong>{1956 - stats.totalQuantity}個</strong>)</p>
+                  <p className="text-red-600 font-medium">→ 新商品の可能性があります。商品マスター追加を検討してください。</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {editableResults.map((result, index) => (
                 <div key={index} className="border rounded-lg p-4 bg-gray-50">
                   {/* Amazon商品名 - 全文表示 */}
@@ -247,33 +259,46 @@ export default function AmazonCsvConfirmModal({
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
 
-        <div className="p-6 border-t bg-gray-50 flex justify-between items-center">
-          <div className="text-sm text-gray-600">
-            インポート後、データは即座に反映されます
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-6 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-            >
-              キャンセル
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={isSubmitting || editableResults.length === 0}
-              className={`px-6 py-2 text-sm text-white rounded disabled:opacity-50 ${
-                isSubmitting 
-                  ? 'bg-blue-400 cursor-not-allowed' 
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {isSubmitting ? '処理中...' : `${editableResults.length}件をインポート`}
-            </button>
+        <div className="border-t bg-gray-50 p-6 flex-shrink-0">
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-600">
+              <div>Amazon列のみを更新します（他のECサイトデータは保持）</div>
+              <div className="text-xs text-red-600 mt-1">
+                ⚠️ 未マッチング商品は商品マスター追加後に再インポートしてください
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                disabled={isSubmitting}
+                className="px-6 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={isSubmitting || editableResults.length === 0}
+                className={`px-6 py-2 text-sm text-white rounded disabled:opacity-50 transition-colors ${
+                  isSubmitting 
+                    ? 'bg-blue-400 cursor-not-allowed' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                    処理中...
+                  </span>
+                ) : (
+                  `${editableResults.length}品種をDBに反映`
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
