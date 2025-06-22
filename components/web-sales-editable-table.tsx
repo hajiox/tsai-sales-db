@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.40
+// /components/web-sales-editable-table.tsx ver.41
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
@@ -21,7 +21,7 @@ import AmazonCsvImportModal from "./AmazonCsvImportModal"
 // Utils
 import { 
   calculateTotalAllECSites,
-  calculateTotalAmountAllECSites,
+  calculateTotalAmountAllECSites, // この関数はECサイトごとの合計ではなく、商品全体の合計金額を計算するように変更します
   sortWebSalesData,
   filterWebSalesData
 } from "@/utils/webSalesUtils"
@@ -116,8 +116,21 @@ export default function WebSalesEditableTable({
     return filterWebSalesData(sortedData, filterValue, getProductName)
   }, [data, filterValue, getProductSeriesCode, getProductNumber, getProductName])
 
-  const totalCount = calculateTotalAllECSites(filteredItems)
-  const totalAmount = calculateTotalAmountAllECSites(filteredItems)
+  // 各ECサイトの合計数量を計算
+  const totalCount = calculateTotalAllECSites(filteredItems);
+  
+  // 各ECサイトの販売金額合計と、全ECサイトの合計金額を計算
+  // このロジックはWebSalesDataTableに渡すことになります
+  // ここでは全体の合計金額を計算します
+  const totalAmount = useMemo(() => {
+    let sum = 0;
+    filteredItems.forEach(item => {
+      const productPrice = getProductPrice(item.product_id) || 0;
+      const totalItemQuantity = calculateTotalAllECSites([item]); // 単一アイテムの合計数量
+      sum += totalItemQuantity * productPrice;
+    });
+    return sum;
+  }, [filteredItems, getProductPrice]);
 
   const handleSaveWithDeps = useCallback(
     (productId: string, ecSite: string) => {
@@ -169,6 +182,7 @@ export default function WebSalesEditableTable({
         editMode={editMode}
         editedValue={editedValue}
         getProductName={getProductName}
+        getProductPrice={getProductPrice} {/* <-- 追加 */}
         onEdit={handleEdit}
         onSave={handleSaveWithDeps}
         onEditValueChange={setEditedValue}
