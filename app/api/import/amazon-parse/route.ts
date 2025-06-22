@@ -187,15 +187,41 @@ function findBestMatchSimplified(amazonTitle: string, products: any[], learningD
     }
     totalScore += specScore
 
-    // 5. 数量マッチング（別途計算 - ボーナス扱い）
-    let quantityBonus = 0
-    for (const amazonQty of amazonKeywords.quantities) {
-      if (productKeywords.quantities.includes(amazonQty)) {
-        quantityBonus += 25
-        console.log(`数量一致: ${amazonQty} (+25点ボーナス)`)
+    // 5. 数量マッチング（重要 - 同商品の区別のため）
+    let quantityScore = 0
+    let hasQuantityMatch = false
+    let hasQuantityConflict = false
+    
+    // Amazon側に数量情報がある場合
+    if (amazonKeywords.quantities.length > 0) {
+      if (productKeywords.quantities.length > 0) {
+        // 両方に数量情報がある場合は厳密チェック
+        for (const amazonQty of amazonKeywords.quantities) {
+          if (productKeywords.quantities.includes(amazonQty)) {
+            quantityScore += 40
+            hasQuantityMatch = true
+            console.log(`数量一致: ${amazonQty} (+40点)`)
+          }
+        }
+        
+        // 数量情報があるのに一致しない場合は減点（同商品の違うセット）
+        if (!hasQuantityMatch) {
+          quantityScore = -30
+          hasQuantityConflict = true
+          console.log(`数量不一致 (-30点) Amazon:${amazonKeywords.quantities.join(',')} vs 商品:${productKeywords.quantities.join(',')}`)
+        }
+      } else {
+        // 商品側に数量情報がない場合は軽微減点
+        quantityScore = -5
+        console.log('商品側に数量情報なし (-5点)')
       }
+    } else if (productKeywords.quantities.length > 0) {
+      // Amazon側に数量情報がない場合は軽微減点
+      quantityScore = -5
+      console.log('Amazon側に数量情報なし (-5点)')
     }
-    totalScore += quantityBonus
+    
+    totalScore += quantityScore
 
     // 6. 完全一致ボーナス
     if (amazonFront === productFront) {
@@ -205,21 +231,26 @@ function findBestMatchSimplified(amazonTitle: string, products: any[], learningD
 
     console.log(`最終スコア: ${totalScore}`)
 
-    // マッチング条件（緩和）
+    // マッチング条件（数量考慮）
     const minScore = hasProductTypeMatch ? 80 : 120 // 商品種別一致なら条件緩和
     const minFrontSimilarity = 0.2 // 20%以上の文字列類似度
+    
+    // 数量不一致がある場合は高いスコアが必要
+    const adjustedMinScore = hasQuantityConflict ? minScore + 50 : minScore
 
-    if (totalScore >= minScore && frontSimilarity >= minFrontSimilarity && totalScore > bestScore) {
+    if (totalScore >= adjustedMinScore && frontSimilarity >= minFrontSimilarity && totalScore > bestScore) {
       bestScore = totalScore
       
-      // 信頼度判定
+      // 信頼度判定（数量マッチング考慮）
       let confidence = 'low'
-      if (totalScore >= 200) {
+      if (totalScore >= 200 && hasQuantityMatch) {
         confidence = 'exact'
-      } else if (totalScore >= 150 && hasProductTypeMatch) {
+      } else if (totalScore >= 150 && hasProductTypeMatch && !hasQuantityConflict) {
         confidence = 'high'
-      } else if (totalScore >= 100) {
+      } else if (totalScore >= 100 && !hasQuantityConflict) {
         confidence = 'medium'
+      } else if (hasQuantityConflict) {
+        confidence = 'low' // 数量不一致は信頼度を下げる
       }
       
       bestMatch = { ...product, matchType: confidence }
