@@ -1,4 +1,4 @@
-// /app/api/import/amazon-confirm/route.ts ver.6 (date型対応版)
+// /app/api/import/amazon-confirm/route.ts ver.7 (正しいテーブル使用版)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
@@ -8,17 +8,14 @@ export async function POST(request: NextRequest) {
   try {
     const { month, results } = await request.json()
 
-    console.log('Amazon確定処理 - 受信データ:', { month, resultsLength: results?.length })
+    console.log('Amazon確定処理開始:', { month, resultsLength: results?.length })
 
     if (!month || !results || !Array.isArray(results)) {
-      console.error('Amazon確定処理 - データ不足:', { month, results })
       return NextResponse.json(
         { error: '必要なデータが不足しています' },
         { status: 400 }
       )
     }
-
-    console.log(`Amazon確定処理開始: ${month}月, ${results.length}件`)
 
     let successCount = 0
     let errorCount = 0
@@ -27,20 +24,15 @@ export async function POST(request: NextRequest) {
       try {
         console.log(`処理中: product_id=${result.productId}, quantity=${result.quantity}`)
         
-        // 日付を適切な形式に変換（YYYY-MM-DD）
-        const reportDate = `${month}-01`
-        
-        console.log('使用する日付:', reportDate)
-
-        // upsert処理（既存データがあれば更新、なければ挿入）
+        // 正しいテーブル（web_sales_summary）を使用
         const { data, error } = await supabase
-          .from('web_sales')
+          .from('web_sales_summary')
           .upsert({
             product_id: result.productId,
             amazon_count: result.quantity,
-            report_month: reportDate,
-            report_date: reportDate,
-            created_at: new Date().toISOString()
+            report_month: `${month}-01`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           }, {
             onConflict: 'product_id,report_month'
           })
@@ -50,7 +42,7 @@ export async function POST(request: NextRequest) {
           console.error(`upsertエラー (${result.productId}):`, error)
           errorCount++
         } else {
-          console.log(`upsert成功 (${result.productId}):`, result.quantity, 'データ:', data)
+          console.log(`upsert成功 (${result.productId}):`, result.quantity)
           successCount++
         }
       } catch (itemError) {
@@ -62,7 +54,7 @@ export async function POST(request: NextRequest) {
     console.log(`Amazon確定処理完了: 成功${successCount}件, エラー${errorCount}件`)
 
     return NextResponse.json({
-      message: `Amazon データの更新が完了しました (成功: ${successCount}件, エラー: ${errorCount}件)`,
+      message: `Amazon データの更新が完了しました (成功: ${successCount}件)`,
       success: successCount > 0,
       successCount,
       errorCount,
@@ -72,7 +64,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Amazon確定API エラー:', error)
     return NextResponse.json(
-      { error: 'サーバーエラーが発生しました: ' + error.message },
+      { error: 'サーバーエラーが発生しました' },
       { status: 500 }
     )
   }
