@@ -1,4 +1,4 @@
-// /components/AmazonCsvConfirmModal.tsx ver.6 (分割版・重複チェック機能付き)
+// /components/AmazonCsvConfirmModal.tsx ver.6 (単一ファイル・重複チェック機能付き)
 "use client"
 
 import React, { useState } from "react"
@@ -39,6 +39,25 @@ interface NewProduct {
   quantity: number
 }
 
+interface AllProductResult {
+  productId: string
+  productName: string
+  amazonTitle: string
+  quantity: number
+  matched: boolean
+  matchType?: 'exact' | 'learned' | 'high' | 'medium' | 'low' | 'none'
+  hasData: boolean
+  isDuplicate?: boolean
+  duplicateInfo?: DuplicateInfo
+}
+
+interface DuplicateInfo {
+  count: number
+  amazonTitles: string[]
+  totalQuantity: number
+  originalQuantities: number[]
+}
+
 export default function AmazonCsvConfirmModal({
   isOpen,
   results,
@@ -51,25 +70,105 @@ export default function AmazonCsvConfirmModal({
   onConfirm,
 }: AmazonCsvConfirmModalProps) {
   
-  const { cleanResults, duplicates, stats, updateResults } = useDuplicateChecker(results, productMaster)
+  // 🔥 重複チェック機能
+  const detectDuplicates = (results: AmazonImportResult[]): { cleanResults: AllProductResult[], duplicates: AllProductResult[] } => {
+    const productMap = new Map<string, AmazonImportResult[]>()
+    
+    // 商品ID別にグループ化
+    results.forEach(result => {
+      if (!productMap.has(result.productId)) {
+        productMap.set(result.productId, [])
+      }
+      productMap.get(result.productId)!.push(result)
+    })
+    
+    const cleanResults: AllProductResult[] = []
+    const duplicates: AllProductResult[] = []
+    
+    // 全商品マスターをベースに処理
+    productMaster.forEach(product => {
+      const matchedResults = productMap.get(product.id) || []
+      
+      if (matchedResults.length === 0) {
+        // データなし商品
+        cleanResults.push({
+          productId: product.id,
+          productName: product.name,
+          amazonTitle: '',
+          quantity: 0,
+          matched: true,
+          matchType: 'none',
+          hasData: false,
+          isDuplicate: false
+        })
+      } else if (matchedResults.length === 1) {
+        // 正常商品（重複なし）
+        const result = matchedResults[0]
+        cleanResults.push({
+          ...result,
+          hasData: true,
+          isDuplicate: false
+        })
+      } else {
+        // 🚨 重複商品検出
+        const totalQuantity = matchedResults.reduce((sum, r) => sum + r.quantity, 0)
+        const amazonTitles = matchedResults.map(r => r.amazonTitle)
+        const originalQuantities = matchedResults.map(r => r.quantity)
+        
+        const duplicateResult: AllProductResult = {
+          productId: product.id,
+          productName: product.name,
+          amazonTitle: amazonTitles.join(' / '),
+          quantity: totalQuantity,
+          matched: true,
+          matchType: matchedResults[0].matchType,
+          hasData: true,
+          isDuplicate: true,
+          duplicateInfo: {
+            count: matchedResults.length,
+            amazonTitles,
+            totalQuantity,
+            originalQuantities
+          }
+        }
+        
+        duplicates.push(duplicateResult)
+        cleanResults.push(duplicateResult)
+      }
+    })
+    
+    return { cleanResults, duplicates }
+  }
+
+  const { cleanResults, duplicates } = detectDuplicates(results)
+  const [allProductsResults, setAllProductsResults] = useState<AllProductResult[]>(cleanResults)
+  const [originalResults, setOriginalResults] = useState<AmazonImportResult[]>(results)
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [showZeroQuantity, setShowZeroQuantity] = useState(false)
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false)
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [selectedUnmatchedIndex, setSelectedUnmatchedIndex] = useState<number | null>(null)
   const [manualSelections, setManualSelections] = useState<{amazonTitle: string, productId: string}[]>([])
+  const router = useRouter()
+
+  // 結果が更新されたら重複チェックも更新
+  React.useEffect(() => {
+    const { cleanResults } = detectDuplicates(results)
+    setAllProductsResults(cleanResults)
+    setOriginalResults(results)
+  }, [results, productMaster])
 
   const handleProductChange = (index: number, newProductId: string) => {
     const selectedProduct = productMaster.find(p => p.id === newProductId)
     if (selectedProduct) {
-      const updated = [...cleanResults]
+      const updated = [...allProductsResults]
       updated[index] = {
         ...updated[index],
         productId: newProductId,
         productName: selectedProduct.name,
         matched: true
       }
-      updateResults(updated)
+      setAllProductsResults(updated)
 
       // 学習データ対象チェック
       if (updated[index].hasData) {
@@ -82,13 +181,13 @@ export default function AmazonCsvConfirmModal({
   }
 
   const handleQuantityChange = (index: number, newQuantity: number) => {
-    const updated = [...cleanResults]
+    const updated = [...allProductsResults]
     updated[index] = { ...updated[index], quantity: newQuantity }
-    updateResults(updated)
+    setAllProductsResults(updated)
   }
 
   const removeResult = (index: number) => {
-    const updated = [...cleanResults]
+    const updated = [...allProductsResults]
     updated[index] = {
       ...updated[index],
       quantity: 0,
@@ -97,7 +196,7 @@ export default function AmazonCsvConfirmModal({
       matchType: 'none',
       isDuplicate: false
     }
-    updateResults(updated)
+    setAllProductsResults(updated)
   }
 
   const openAddProductModal = (unmatchedIndex: number) => {
@@ -120,18 +219,19 @@ export default function AmazonCsvConfirmModal({
       if (!response.ok) throw new Error('商品追加に失敗しました')
 
       const newProduct = await response.json()
-      const newResult = {
+      
+      const newResult: AllProductResult = {
         productId: newProduct.product.id,
         productName: newProduct.product.name,
         amazonTitle: productData.amazonTitle,
         quantity: productData.quantity,
         matched: true,
-        matchType: 'exact' as const,
+        matchType: 'exact',
         hasData: true,
         isDuplicate: false
       }
 
-      updateResults(prev => [...prev, newResult])
+      setAllProductsResults(prev => [...prev, newResult])
       setIsAddingProduct(false)
       setSelectedUnmatchedIndex(null)
       alert('商品を追加しました')
@@ -140,6 +240,50 @@ export default function AmazonCsvConfirmModal({
       alert('商品追加に失敗しました')
     }
   }
+
+  const handleUnmatchedProductSelect = (unmatchedIndex: number, productId: string) => {
+    if (!productId) return
+    
+    const selectedProduct = productMaster.find(p => p.id === productId)
+    if (!selectedProduct) return
+
+    const unmatchedProduct = unmatchedProducts[unmatchedIndex]
+    
+    const updated = [...allProductsResults]
+    const existingIndex = updated.findIndex(p => p.productId === productId)
+    
+    if (existingIndex !== -1) {
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        amazonTitle: unmatchedProduct.amazonTitle,
+        quantity: unmatchedProduct.quantity,
+        hasData: true,
+        matchType: 'medium'
+      }
+      setAllProductsResults(updated)
+    }
+
+    setManualSelections(prev => [...prev, {
+      amazonTitle: unmatchedProduct.amazonTitle,
+      productId: selectedProduct.id
+    }])
+  }
+
+  const getMatchingStats = () => {
+    const withData = allProductsResults.filter(r => r.hasData && r.quantity > 0)
+    const withoutData = allProductsResults.filter(r => !r.hasData || r.quantity === 0)
+
+    return {
+      total: allProductsResults.length,
+      withData: withData.length,
+      withoutData: withoutData.length,
+      duplicateCount: duplicates.length,
+      totalQuantity: withData.reduce((sum, r) => sum + r.quantity, 0),
+      csvOriginalCount: results.length
+    }
+  }
+
+  const stats = getMatchingStats()
 
   const handleConfirm = async () => {
     // 重複がある場合は警告
@@ -167,7 +311,7 @@ export default function AmazonCsvConfirmModal({
     }
     
     // データありの商品のみをconfirmに渡す
-    const resultsToConfirm = cleanResults
+    const resultsToConfirm = allProductsResults
       .filter(r => r.hasData && r.quantity > 0)
       .map(r => ({
         productId: r.productId,
@@ -184,11 +328,11 @@ export default function AmazonCsvConfirmModal({
   if (!isOpen) return null
 
   // 表示用データのフィルタリング
-  let displayResults = cleanResults
+  let displayResults = allProductsResults
   if (showDuplicatesOnly) {
-    displayResults = cleanResults.filter(r => r.isDuplicate)
+    displayResults = allProductsResults.filter(r => r.isDuplicate)
   } else if (!showZeroQuantity) {
-    displayResults = cleanResults.filter(r => r.hasData && r.quantity > 0)
+    displayResults = allProductsResults.filter(r => r.hasData && r.quantity > 0)
   }
 
   return (
@@ -200,7 +344,18 @@ export default function AmazonCsvConfirmModal({
             {month}月のAmazonデータを確認し、必要に応じて修正してください。
           </p>
           
-          <DuplicateAlert duplicates={duplicates} />
+          {/* 🚨 重複警告 */}
+          {duplicates.length > 0 && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <h4 className="text-red-800 font-semibold mb-2">⚠️ 重複検出！</h4>
+              <p className="text-sm text-red-700 mb-2">
+                <strong>{duplicates.length}商品</strong>で重複が検出されました。同じ商品マスターに複数のCSV商品が紐付いています。
+              </p>
+              <div className="text-xs text-red-600">
+                数量は自動で合計されますが、確認してください。
+              </div>
+            </div>
+          )}
           
           {/* 統計情報 */}
           <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -233,7 +388,9 @@ export default function AmazonCsvConfirmModal({
             <button
               onClick={() => setShowZeroQuantity(!showZeroQuantity)}
               className={`px-4 py-2 rounded-lg text-sm ${
-                showZeroQuantity ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                showZeroQuantity 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               {showZeroQuantity ? `データなし商品を非表示` : `すべて表示 (${stats.total}品種)`}
@@ -243,7 +400,9 @@ export default function AmazonCsvConfirmModal({
               <button
                 onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
                 className={`px-4 py-2 rounded-lg text-sm ${
-                  showDuplicatesOnly ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800 hover:bg-red-200'
+                  showDuplicatesOnly 
+                    ? 'bg-red-600 text-white' 
+                    : 'bg-red-100 text-red-800 hover:bg-red-200'
                 }`}
               >
                 {showDuplicatesOnly ? '全商品表示' : `重複商品のみ表示 (${stats.duplicateCount}品種)`}
@@ -266,15 +425,108 @@ export default function AmazonCsvConfirmModal({
           
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {displayResults.map((result, index) => (
-              <ProductItem
-                key={`${result.productId}-${index}`}
-                result={result}
-                index={index}
-                productMaster={productMaster}
-                onProductChange={handleProductChange}
-                onQuantityChange={handleQuantityChange}
-                onRemove={removeResult}
-              />
+              <div key={`${result.productId}-${index}`} className={`border rounded-lg p-4 ${
+                result.isDuplicate ? 'bg-red-50 border-red-300' :
+                !result.hasData ? 'bg-gray-50 border-gray-200' :
+                result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-50 border-green-200' :
+                result.matchType === 'high' ? 'bg-blue-50 border-blue-200' :
+                result.matchType === 'medium' ? 'bg-yellow-50 border-yellow-200' :
+                'bg-orange-50 border-orange-200'
+              }`}>
+                
+                {/* 重複警告 */}
+                {result.isDuplicate && result.duplicateInfo && (
+                  <div className="mb-4 p-2 bg-red-100 border border-red-200 rounded">
+                    <div className="text-xs text-red-700 font-semibold">🚨 重複検出</div>
+                    <div className="text-xs text-red-600 mt-1">
+                      {result.duplicateInfo.count}件のCSV商品が同じマスターに紐付き:
+                    </div>
+                    <div className="text-xs text-red-600 mt-1">
+                      数量: {result.duplicateInfo.originalQuantities.join(' + ')} = {result.duplicateInfo.totalQuantity}個
+                    </div>
+                  </div>
+                )}
+
+                {/* 商品名 */}
+                <div className="mb-4">
+                  <label className="text-xs text-gray-500 font-medium">商品名</label>
+                  <p className="text-sm font-bold text-gray-800">{result.productName}</p>
+                </div>
+
+                {/* Amazon商品名 */}
+                {result.hasData && (
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 font-medium">Amazon商品名</label>
+                    <p className="text-sm font-medium text-gray-700">{result.amazonTitle}</p>
+                  </div>
+                )}
+
+                {/* 商品選択 */}
+                <div className="mb-4">
+                  <label className="text-xs text-gray-500 font-medium block mb-1">
+                    商品選択（修正可能）
+                    {result.hasData && <span className="ml-2 text-xs text-blue-600">※要確認</span>}
+                  </label>
+                  <select
+                    value={result.productId}
+                    onChange={(e) => handleProductChange(index, e.target.value)}
+                    className="w-full text-sm border rounded px-3 py-2"
+                    disabled={!result.hasData}
+                  >
+                    <option value="">商品を選択...</option>
+                    {productMaster.map((product) => (
+                      <option key={product.id} value={product.id}>{product.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 販売数・削除ボタン */}
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500 font-medium block mb-1">
+                      販売数{result.isDuplicate ? '（統合済み）' : ''}
+                    </label>
+                    <input
+                      type="number"
+                      value={result.quantity}
+                      onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 0)}
+                      className="w-full text-sm border rounded px-3 py-2"
+                      min="0"
+                      disabled={!result.hasData}
+                    />
+                  </div>
+                  {result.hasData && (
+                    <div className="pt-6">
+                      <button
+                        onClick={() => removeResult(index)}
+                        className="text-red-500 hover:text-red-700 text-sm px-3 py-2 border border-red-200 rounded"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* マッチタイプラベル */}
+                <div>
+                  <div className={`text-xs px-3 py-1 rounded inline-block ${
+                    result.isDuplicate ? 'bg-red-100 text-red-800' :
+                    !result.hasData ? 'bg-gray-100 text-gray-600' :
+                    result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-100 text-green-800' :
+                    result.matchType === 'high' ? 'bg-blue-100 text-blue-800' :
+                    result.matchType === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-orange-100 text-orange-800'
+                  }`}>
+                    {result.isDuplicate ? `重複統合 (${result.duplicateInfo?.count}件)` :
+                     !result.hasData ? 'データなし' :
+                     result.matchType === 'exact' ? '完全一致（要確認）' :
+                     result.matchType === 'learned' ? '学習済み（要確認）' :
+                     result.matchType === 'high' ? '高精度（要確認）' :
+                     result.matchType === 'medium' ? '中精度（要確認）' :
+                     '低精度（要確認）'}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
