@@ -80,10 +80,32 @@ function extractImportantKeywords(text: string): {
   if (cleanText.includes('特濃')) specifications.push('特濃')
   if (cleanText.includes('濃厚')) specifications.push('濃厚')
   
-  // 数量・セット情報
+  // 数量・セット情報（優先順位付き抽出）
   const quantities: string[] = []
-  const quantityMatches = cleanText.match(/(\d+)[食個枚本袋パック人前セット杯]/g) || []
-  quantities.push(...quantityMatches)
+  
+  // 1. セット情報を優先（最も重要）
+  const setMatches = cleanText.match(/(\d+)[個]?セット/g) || []
+  quantities.push(...setMatches)
+  
+  // 2. パック情報
+  const packMatches = cleanText.match(/(\d+)パック/g) || []
+  quantities.push(...packMatches)
+  
+  // 3. 食事関連
+  const foodMatches = cleanText.match(/(\d+)[食人前杯]/g) || []
+  quantities.push(...foodMatches)
+  
+  // 4. 個別単位（セット情報がない場合のみ）
+  if (setMatches.length === 0) {
+    const unitMatches = cleanText.match(/(\d+)[枚本袋]/g) || []
+    quantities.push(...unitMatches)
+  }
+  
+  // 5. 個数（他の情報がない場合のみ）
+  if (quantities.length === 0) {
+    const pieceMatches = cleanText.match(/(\d+)個/g) || []
+    quantities.push(...pieceMatches)
+  }
   
   // ブランド・シリーズ
   const brands: string[] = []
@@ -218,23 +240,38 @@ function findBestMatchSimplified(amazonTitle: string, products: any[], learningD
     let hasQuantityMatch = false
     let hasQuantityConflict = false
     
+    console.log(`Amazon数量: [${amazonKeywords.quantities.join(', ')}]`)
+    console.log(`商品数量: [${productKeywords.quantities.join(', ')}]`)
+    
     // Amazon側に数量情報がある場合
     if (amazonKeywords.quantities.length > 0) {
       if (productKeywords.quantities.length > 0) {
-        // 両方に数量情報がある場合は厳密チェック
+        // 完全一致をチェック
         for (const amazonQty of amazonKeywords.quantities) {
-          if (productKeywords.quantities.includes(amazonQty)) {
-            quantityScore += 40
-            hasQuantityMatch = true
-            console.log(`数量一致: ${amazonQty} (+40点)`)
+          for (const productQty of productKeywords.quantities) {
+            if (amazonQty === productQty) {
+              quantityScore += 40
+              hasQuantityMatch = true
+              console.log(`数量完全一致: ${amazonQty} (+40点)`)
+            }
           }
         }
         
-        // 数量情報があるのに一致しない場合は減点（同商品の違うセット）
+        // 数量情報があるのに一致しない場合は厳格チェック
         if (!hasQuantityMatch) {
-          quantityScore = -30
-          hasQuantityConflict = true
-          console.log(`数量不一致 (-30点) Amazon:${amazonKeywords.quantities.join(',')} vs 商品:${productKeywords.quantities.join(',')}`)
+          // セット数の不一致は特に厳格に
+          const amazonHasSet = amazonKeywords.quantities.some(q => q.includes('セット'))
+          const productHasSet = productKeywords.quantities.some(q => q.includes('セット'))
+          
+          if (amazonHasSet || productHasSet) {
+            quantityScore = -50 // セット数不一致は大幅減点
+            hasQuantityConflict = true
+            console.log(`セット数不一致 (-50点)`)
+          } else {
+            quantityScore = -30
+            hasQuantityConflict = true
+            console.log(`数量不一致 (-30点)`)
+          }
         }
       } else {
         // 商品側に数量情報がない場合は軽微減点
