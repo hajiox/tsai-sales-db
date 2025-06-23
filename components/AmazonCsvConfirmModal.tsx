@@ -54,6 +54,7 @@ export default function AmazonCsvConfirmModal({
   const [newProducts, setNewProducts] = useState<NewProduct[]>([])
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [selectedUnmatchedIndex, setSelectedUnmatchedIndex] = useState<number | null>(null)
+  const [manualSelections, setManualSelections] = useState<{amazonTitle: string, productId: string}[]>([])
   const router = useRouter()
 
   // 結果が更新されたら編集可能な結果も更新
@@ -145,8 +146,8 @@ export default function AmazonCsvConfirmModal({
     console.log(`未マッチング商品をスキップ: ${unmatchedProducts[index]?.amazonTitle}`)
   }
 
-  // 未マッチング商品の手動選択
-  const handleUnmatchedProductSelect = async (unmatchedIndex: number, productId: string) => {
+  // 未マッチング商品の手動選択（学習データ登録は確定時）
+  const handleUnmatchedProductSelect = (unmatchedIndex: number, productId: string) => {
     if (!productId) return
     
     const selectedProduct = productMaster.find(p => p.id === productId)
@@ -154,7 +155,7 @@ export default function AmazonCsvConfirmModal({
 
     const unmatchedProduct = unmatchedProducts[unmatchedIndex]
     
-    // 新しい商品結果として追加
+    // 新しい商品結果として追加（学習データ登録はまだしない）
     const newResult: AmazonImportResult = {
       productId: selectedProduct.id,
       productName: selectedProduct.name,
@@ -166,25 +167,13 @@ export default function AmazonCsvConfirmModal({
 
     setEditableResults(prev => [...prev, newResult])
 
-    // 学習データに追加（APIコール）
-    try {
-      await fetch('/api/products/add-learning', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amazonTitle: unmatchedProduct.amazonTitle,
-          productId: selectedProduct.id
-        }),
-      })
-      console.log('学習データに追加しました')
-    } catch (error) {
-      console.error('学習データ追加エラー:', error)
-    }
+    // 学習データ登録のフラグを設定（確定時に一括登録）
+    setManualSelections(prev => [...prev, {
+      amazonTitle: unmatchedProduct.amazonTitle,
+      productId: selectedProduct.id
+    }])
 
-    // 成功メッセージ
-    alert(`「${selectedProduct.name}」を選択しました`)
+    console.log(`商品選択: ${selectedProduct.name}（学習データ登録は確定時）`)
   }
 
   // 統計計算用の関数
@@ -217,7 +206,27 @@ export default function AmazonCsvConfirmModal({
 
   const stats = getMatchingStats()
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    // 手動選択の学習データを一括登録
+    for (const selection of manualSelections) {
+      try {
+        await fetch('/api/products/add-learning', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amazonTitle: selection.amazonTitle,
+            productId: selection.productId
+          }),
+        })
+        console.log(`学習データ登録: ${selection.amazonTitle}`)
+      } catch (error) {
+        console.error('学習データ追加エラー:', error)
+      }
+    }
+    
+    // 通常の確定処理
     onConfirm(editableResults)
   }
 
