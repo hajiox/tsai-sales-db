@@ -1,9 +1,8 @@
-// /components/web-sales-editable-table.tsx ver.44 (onSuccess修正版)
+// /components/web-sales-editable-table.tsx ver.45 (リセット機能統合版)
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-// useDisclosureを削除
 
 // Custom Hooks
 import { useWebSalesData } from "@/hooks/useWebSalesData"
@@ -237,6 +236,12 @@ export default function WebSalesEditableTable({
     }
   }
 
+  // 🔥 新機能: Amazon学習データリセット後の処理
+  const handleLearningReset = () => {
+    console.log('Amazon学習データリセット完了')
+    // 必要に応じてデータ再読み込みなど
+  }
+
   return (
     <div className="space-y-4">
       <input 
@@ -273,6 +278,7 @@ export default function WebSalesEditableTable({
         isUploading={isUploading}
         onCsvClick={handleCsvButtonClick}
         onAmazonClick={onOpenAmazonCsvModal}
+        onLearningReset={handleLearningReset}
       />
 
       <WebSalesSummary
