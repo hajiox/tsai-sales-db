@@ -8,7 +8,7 @@ interface AmazonCsvImportModalProps {
   isOpen: boolean
   month: string
   onClose: () => void
-  onSuccess: (results: {
+  onSuccess?: (results: {
     matchedResults: any[]
     unmatchedProducts: any[]
     summary: any
@@ -63,7 +63,13 @@ export default function AmazonCsvImportModal({
       const result = await response.json()
       console.log('アップロード成功:', result)
       
-      onSuccess(result)
+      // onSuccessが関数として存在する場合のみ実行
+      if (onSuccess && typeof onSuccess === 'function') {
+        onSuccess(result)
+      } else {
+        console.error('onSuccess is not a function:', onSuccess)
+        alert('結果を受け取れませんでした')
+      }
     } catch (error) {
       console.error('Upload error:', error)
       setError(error instanceof Error ? error.message : 'アップロードに失敗しました')
