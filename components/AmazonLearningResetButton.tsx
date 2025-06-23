@@ -1,87 +1,78 @@
-// /components/AmazonLearningResetButton.tsx ver.1
+// /components/WebSalesImportButtons.tsx ver.2 (リセットボタン追加版)
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
+import AmazonLearningResetButton from "./AmazonLearningResetButton"
 
-interface AmazonLearningResetButtonProps {
-  onReset?: () => void
+interface WebSalesImportButtonsProps {
+  isUploading: boolean
+  onCsvClick: () => void
+  onAmazonClick: () => void
+  onLearningReset?: () => void
 }
 
-export default function AmazonLearningResetButton({ onReset }: AmazonLearningResetButtonProps) {
-  const [isResetting, setIsResetting] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
-
-  const handleReset = async () => {
-    if (!showConfirm) {
-      setShowConfirm(true)
-      return
-    }
-
-    setIsResetting(true)
-    try {
-      const response = await fetch('/api/learning/amazon-reset', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('リセットに失敗しました')
-      }
-
-      const result = await response.json()
-      
-      if (result.success) {
-        alert(`Amazon学習データをリセットしました（削除件数: ${result.deletedCount}件）`)
-        onReset?.()
-        setShowConfirm(false)
-      } else {
-        throw new Error(result.error || 'リセットに失敗しました')
-      }
-    } catch (error) {
-      console.error('学習データリセットエラー:', error)
-      alert(`リセットに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`)
-    } finally {
-      setIsResetting(false)
-    }
-  }
-
-  const handleCancel = () => {
-    setShowConfirm(false)
-  }
-
-  if (showConfirm) {
-    return (
-      <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-        <div className="text-sm text-red-700 flex-1">
-          <strong>⚠️ 確認:</strong> Amazon学習データを全削除します。この操作は取り消せません。
-        </div>
-        <button
-          onClick={handleReset}
-          disabled={isResetting}
+export default function WebSalesImportButtons({ 
+  isUploading, 
+  onCsvClick, 
+  onAmazonClick,
+  onLearningReset 
+}: WebSalesImportButtonsProps) {
+  return (
+    <div className="space-y-3">
+      {/* メインインポートボタン群 */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-gray-700">データ取り込み:</span>
+        <button 
+          onClick={onCsvClick}
+          disabled={isUploading}
+          className="px-3 py-1 text-xs font-semibold text-white bg-gray-600 rounded hover:bg-gray-700 disabled:opacity-50"
+        >
+          CSV
+        </button>
+        <button 
+          onClick={onAmazonClick}
+          disabled={isUploading}
+          className="px-3 py-1 text-xs font-semibold text-white bg-orange-600 rounded hover:bg-orange-700 disabled:opacity-50"
+        >
+          Amazon
+        </button>
+        <button 
+          disabled={isUploading}
           className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50"
         >
-          {isResetting ? '削除中...' : '実行'}
+          楽天
         </button>
-        <button
-          onClick={handleCancel}
-          disabled={isResetting}
-          className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+        <button 
+          disabled={isUploading}
+          className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
         >
-          キャンセル
+          Yahoo
+        </button>
+        <button 
+          disabled={isUploading}
+          className="px-3 py-1 text-xs font-semibold text-white bg-cyan-600 rounded hover:bg-cyan-700 disabled:opacity-50"
+        >
+          メルカリ
+        </button>
+        <button 
+          disabled={isUploading}
+          className="px-3 py-1 text-xs font-semibold text-white bg-pink-600 rounded hover:bg-pink-700 disabled:opacity-50"
+        >
+          Qoo10
+        </button>
+        <button 
+          disabled={isUploading}
+          className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50"
+        >
+          BASE
         </button>
       </div>
-    )
-  }
 
-  return (
-    <button
-      onClick={handleReset}
-      disabled={isResetting}
-      className="px-3 py-2 text-sm font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200 disabled:opacity-50"
-    >
-      {isResetting ? 'リセット中...' : '🔄 Amazon学習データリセット'}
-    </button>
+      {/* 学習データリセットボタン */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
+        <AmazonLearningResetButton onReset={onLearningReset} />
+      </div>
+    </div>
   )
 }
