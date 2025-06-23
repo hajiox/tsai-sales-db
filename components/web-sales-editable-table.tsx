@@ -281,6 +281,35 @@ export default function WebSalesEditableTable({
         onLearningReset={handleLearningReset}
       />
 
+      {/* 🔥 一時的なAmazon学習データリセットボタン */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
+        <button
+          onClick={async () => {
+            if (confirm('Amazon学習データを全削除します。この操作は取り消せません。実行しますか？')) {
+              try {
+                const response = await fetch('/api/learning/amazon-reset', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                })
+                const result = await response.json()
+                if (result.success) {
+                  alert(`Amazon学習データをリセットしました（削除件数: ${result.deletedCount}件）`)
+                } else {
+                  alert('リセットに失敗しました')
+                }
+              } catch (error) {
+                console.error('リセットエラー:', error)
+                alert('リセットに失敗しました')
+              }
+            }
+          }}
+          className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200"
+        >
+          🔄 Amazon学習データリセット
+        </button>
+      </div>
+
       <WebSalesSummary
         totalCount={totalCount}
         totalAmount={totalAmount}
