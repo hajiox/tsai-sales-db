@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.43
+// /components/web-sales-editable-table.tsx ver.44 (onSuccess修正版)
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
@@ -17,6 +17,7 @@ import WebSalesImportButtons from "./WebSalesImportButtons"
 import WebSalesSummary from "./WebSalesSummary"
 import CsvImportConfirmModal from "./CsvImportConfirmModal"
 import AmazonCsvImportModal from "./AmazonCsvImportModal"
+import AmazonCsvConfirmModal from "./AmazonCsvConfirmModal"
 
 // Utils
 import { 
@@ -38,6 +39,11 @@ export default function WebSalesEditableTable({
   month,
 }: WebSalesEditableTableProps) {
   const [filterValue, setFilterValue] = useState("")
+
+  // Amazon CSV関連のstate
+  const [amazonResults, setAmazonResults] = useState<any>(null)
+  const [showAmazonConfirm, setShowAmazonConfirm] = useState(false)
+  const [isAmazonSubmitting, setIsAmazonSubmitting] = useState(false)
 
   const router = useRouter()
   const pathname = usePathname()
@@ -149,6 +155,54 @@ export default function WebSalesEditableTable({
     handleDeleteMonthData(month, router)
   }
 
+  // Amazon CSV成功時の処理
+  const handleAmazonCsvSuccess = (results: any) => {
+    console.log('Amazon CSV結果:', results)
+    setAmazonResults(results)
+    setShowAmazonConfirm(true)
+    onCloseAmazonCsvModal()
+  }
+
+  // Amazon CSV確認モーダルを閉じる
+  const handleAmazonConfirmClose = () => {
+    setShowAmazonConfirm(false)
+    setAmazonResults(null)
+  }
+
+  // Amazon CSV確定処理
+  const handleAmazonConfirm = async (updatedResults: any[]) => {
+    setIsAmazonSubmitting(true)
+    try {
+      const response = await fetch('/api/import/amazon-confirm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          month: month,
+          results: updatedResults,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Amazon データの更新に失敗しました')
+      }
+
+      const result = await response.json()
+      console.log('Amazon データ更新成功:', result)
+      
+      // データを再読み込み
+      window.location.reload()
+      
+    } catch (error) {
+      console.error('Amazon データ更新エラー:', error)
+      alert('データの更新に失敗しました')
+    } finally {
+      setIsAmazonSubmitting(false)
+      handleAmazonConfirmClose()
+    }
+  }
+
   return (
     <div className="space-y-4">
       <input 
@@ -206,7 +260,23 @@ export default function WebSalesEditableTable({
         isOpen={isAmazonCsvModalOpen} 
         onClose={onCloseAmazonCsvModal}
         month={month}
+        onSuccess={handleAmazonCsvSuccess}
       />
+
+      {/* Amazon CSV確認モーダル */}
+      {showAmazonConfirm && amazonResults && (
+        <AmazonCsvConfirmModal
+          isOpen={showAmazonConfirm}
+          results={amazonResults.matchedResults || []}
+          unmatchedProducts={amazonResults.unmatchedProducts || []}
+          csvSummary={amazonResults.summary}
+          productMaster={productMaster}
+          month={month}
+          isSubmitting={isAmazonSubmitting}
+          onClose={handleAmazonConfirmClose}
+          onConfirm={handleAmazonConfirm}
+        />
+      )}
     </div>
   )
 }
