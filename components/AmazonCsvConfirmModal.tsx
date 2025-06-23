@@ -50,6 +50,7 @@ export default function AmazonCsvConfirmModal({
   onConfirm,
 }: AmazonCsvConfirmModalProps) {
   const [editableResults, setEditableResults] = useState<AmazonImportResult[]>(results)
+  const [originalResults, setOriginalResults] = useState<AmazonImportResult[]>(results) // 元の結果を保持
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [newProducts, setNewProducts] = useState<NewProduct[]>([])
   const [isAddingProduct, setIsAddingProduct] = useState(false)
@@ -60,12 +61,15 @@ export default function AmazonCsvConfirmModal({
   // 結果が更新されたら編集可能な結果も更新
   React.useEffect(() => {
     setEditableResults(results)
+    setOriginalResults(results) // 元の結果も保存
   }, [results])
 
   const handleProductChange = (index: number, newProductId: string) => {
     const selectedProduct = productMaster.find(p => p.id === newProductId)
     if (selectedProduct) {
       const updated = [...editableResults]
+      const originalProduct = originalResults[index]
+      
       updated[index] = {
         ...updated[index],
         productId: newProductId,
@@ -73,6 +77,26 @@ export default function AmazonCsvConfirmModal({
         matched: true
       }
       setEditableResults(updated)
+
+      // 元の結果と異なる場合は学習データ対象に追加
+      if (originalProduct && originalProduct.productId !== newProductId) {
+        const existingSelection = manualSelections.find(s => s.amazonTitle === updated[index].amazonTitle)
+        if (existingSelection) {
+          // 既存の選択を更新
+          setManualSelections(prev => prev.map(s => 
+            s.amazonTitle === updated[index].amazonTitle 
+              ? { ...s, productId: newProductId }
+              : s
+          ))
+        } else {
+          // 新しい選択を追加
+          setManualSelections(prev => [...prev, {
+            amazonTitle: updated[index].amazonTitle,
+            productId: newProductId
+          }])
+        }
+        console.log(`学習対象追加: ${updated[index].amazonTitle} → ${selectedProduct.name}`)
+      }
     }
   }
 
@@ -371,10 +395,21 @@ export default function AmazonCsvConfirmModal({
             </div>
           ) : (
             <>
-              <h4 className="text-lg font-semibold mb-4 text-blue-600">マッチング済み商品一覧</h4>
+              <h4 className="text-lg font-semibold mb-4 text-blue-600">マッチング済み商品一覧（全て修正可能）</h4>
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                <p className="text-sm text-blue-700">
+                  <strong>💡 重要:</strong> 高精度・中精度マッチングでも間違いがある場合があります。
+                  全ての商品を確認し、必要に応じて修正してください。修正内容は学習データに反映され、次回の精度が向上します。
+                </p>
+              </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {editableResults.map((result, index) => (
-                <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                <div key={index} className={`border rounded-lg p-4 ${
+                  result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-50 border-green-200' :
+                  result.matchType === 'high' ? 'bg-blue-50 border-blue-200' :
+                  result.matchType === 'medium' ? 'bg-yellow-50 border-yellow-200' :
+                  'bg-orange-50 border-orange-200'
+                }`}>
                   {/* Amazon商品名 - 全文表示 */}
                   <div className="mb-4">
                     <label className="text-xs text-gray-500 font-medium">Amazon商品名</label>
@@ -383,9 +418,15 @@ export default function AmazonCsvConfirmModal({
                     </p>
                   </div>
 
-                  {/* マッチした商品選択 */}
+                  {/* マッチした商品選択（全商品で修正可能） */}
                   <div className="mb-4">
-                    <label className="text-xs text-gray-500 font-medium block mb-1">マッチ商品</label>
+                    <label className="text-xs text-gray-500 font-medium block mb-1">
+                      マッチ商品（修正可能）
+                      {result.matchType === 'exact' || result.matchType === 'learned' || result.matchType === 'high' ? 
+                        <span className="ml-2 text-xs text-blue-600">※高精度でも要確認</span> : 
+                        <span className="ml-2 text-xs text-yellow-600">※要確認推奨</span>
+                      }
+                    </label>
                     <select
                       value={result.productId}
                       onChange={(e) => handleProductChange(index, e.target.value)}
@@ -427,12 +468,14 @@ export default function AmazonCsvConfirmModal({
                     <div className={`text-xs px-3 py-1 rounded inline-block ${
                       result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-100 text-green-800' :
                       result.matchType === 'high' ? 'bg-blue-100 text-blue-800' :
-                      'bg-yellow-100 text-yellow-800'
+                      result.matchType === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-orange-100 text-orange-800'
                     }`}>
-                      {result.matchType === 'exact' ? '完全一致' :
-                       result.matchType === 'learned' ? '学習済み（高精度）' :
-                       result.matchType === 'high' ? '高精度マッチング' :
-                       '要確認マッチング（手動選択推奨）'}
+                      {result.matchType === 'exact' ? '完全一致（要確認）' :
+                       result.matchType === 'learned' ? '学習済み（要確認）' :
+                       result.matchType === 'high' ? '高精度マッチング（要確認）' :
+                       result.matchType === 'medium' ? '中精度マッチング（要確認）' :
+                       '低精度マッチング（要確認）'}
                     </div>
                   </div>
                 </div>
@@ -446,8 +489,8 @@ export default function AmazonCsvConfirmModal({
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
               <div>Amazon列のみを更新します（他のECサイトデータは保持）</div>
-              <div className="text-xs text-red-600 mt-1">
-                ⚠️ 未マッチング商品は商品追加後に再度インポートしてください
+              <div className="text-xs text-blue-600 mt-1">
+                ✅ 全ての修正内容が学習データに反映され、次回のマッチング精度が向上します
               </div>
             </div>
             <div className="flex gap-3">
