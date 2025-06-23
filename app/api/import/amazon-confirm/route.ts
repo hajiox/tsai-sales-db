@@ -1,4 +1,4 @@
-// /app/api/import/amazon-confirm/route.ts ver.7 (正しいテーブル使用版)
+// /app/api/import/amazon-confirm/route.ts ver.8 (id生成対応版)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
@@ -24,29 +24,25 @@ export async function POST(request: NextRequest) {
       try {
         console.log(`処理中: product_id=${result.productId}, quantity=${result.quantity}`)
         
-        // 正しいテーブル（web_sales_summary）を使用
+        // シンプルなinsert処理（id自動生成）
         const { data, error } = await supabase
           .from('web_sales_summary')
-          .upsert({
+          .insert({
             product_id: result.productId,
             amazon_count: result.quantity,
-            report_month: `${month}-01`,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'product_id,report_month'
+            report_month: `${month}-01`
           })
           .select()
 
         if (error) {
-          console.error(`upsertエラー (${result.productId}):`, error)
+          console.error(`挿入エラー (${result.productId}):`, error.message)
           errorCount++
         } else {
-          console.log(`upsert成功 (${result.productId}):`, result.quantity)
+          console.log(`挿入成功 (${result.productId}):`, result.quantity)
           successCount++
         }
       } catch (itemError) {
-        console.error(`処理エラー (${result.productId}):`, itemError)
+        console.error(`処理エラー (${result.productId}):`, itemError.message)
         errorCount++
       }
     }
