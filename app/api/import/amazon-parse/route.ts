@@ -1,4 +1,4 @@
-// /app/api/import/amazon-parse/route.ts ver.4 (API専用)
+// /app/api/import/amazon-parse/route.ts ver.5 (最終版)
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 
@@ -395,7 +395,7 @@ function getEditDistance(str1: string, str2: string): number {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Amazon CSV解析開始 (シンプル前半重視)')
+    console.log('Amazon CSV解析開始 (最終版)')
 
     const formData = await request.formData()
     const file = formData.get('file') as File
