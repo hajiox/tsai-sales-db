@@ -1,4 +1,4 @@
-// /app/api/import/amazon-confirm/route.ts ver.1
+// /app/api/import/amazon-confirm/route.ts ver.2 (テーブル名修正版)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     for (const result of results) {
       try {
         const { data: existingData } = await supabase
-          .from('web_sales_data')
+          .from('web_sales')
           .select('*')
           .eq('product_id', result.productId)
           .eq('month', month)
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
         if (existingData) {
           // 既存データを更新（Amazon列のみ）
           const { error: updateError } = await supabase
-            .from('web_sales_data')
+            .from('web_sales')
             .update({
               amazon_count: result.quantity,
               updated_at: new Date().toISOString()
@@ -44,12 +44,13 @@ export async function POST(request: NextRequest) {
             console.error(`更新エラー (${result.productId}):`, updateError)
             errorCount++
           } else {
+            console.log(`更新成功 (${result.productId}): ${result.quantity}`)
             successCount++
           }
         } else {
           // 新規データを挿入
           const { error: insertError } = await supabase
-            .from('web_sales_data')
+            .from('web_sales')
             .insert({
               product_id: result.productId,
               month: month,
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
             console.error(`挿入エラー (${result.productId}):`, insertError)
             errorCount++
           } else {
+            console.log(`挿入成功 (${result.productId}): ${result.quantity}`)
             successCount++
           }
         }
