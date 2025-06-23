@@ -8,7 +8,11 @@ interface AmazonCsvImportModalProps {
   isOpen: boolean
   month: string
   onClose: () => void
-  onSuccess: (results: any) => void
+  onSuccess: (results: {
+    matchedResults: any[]
+    unmatchedProducts: any[]
+    summary: any
+  }) => void
 }
 
 export default function AmazonCsvImportModal({
@@ -76,7 +80,7 @@ export default function AmazonCsvImportModal({
         <div className="p-6 border-b">
           <h3 className="text-lg font-semibold">Amazon CSVインポート</h3>
           <p className="text-sm text-gray-600 mt-1">
-            AmazonのCファイルを選択してアップロードしてください。商品名のマッチング確認画面を経由してAmazon列のみを更新します。
+            AmazonのCSVファイルを選択してアップロードしてください。商品名のマッチング確認画面を経由してAmazon列のみを更新します。
           </p>
         </div>
 
