@@ -157,6 +157,7 @@ export default function WebSalesEditableTable({
   // Amazon CSV成功時の処理
   const handleAmazonCsvSuccess = (results: any) => {
     console.log('Amazon CSV結果:', results)
+    console.log('現在の月:', month) // デバッグ用
     setAmazonResults(results)
     setShowAmazonConfirm(true)
     onCloseAmazonCsvModal()
@@ -172,7 +173,13 @@ export default function WebSalesEditableTable({
   const handleAmazonConfirm = async (updatedResults: any[]) => {
     setIsAmazonSubmitting(true)
     try {
-      console.log('Amazon確定処理開始:', { month, resultsCount: updatedResults.length })
+      // 月の形式を確認・修正
+      const formattedMonth = month.length === 7 ? month : `${month.slice(0,4)}-${month.slice(4,6)}`
+      console.log('Amazon確定処理開始:', { 
+        originalMonth: month, 
+        formattedMonth, 
+        resultsCount: updatedResults.length 
+      })
       
       const response = await fetch('/api/import/amazon-confirm', {
         method: 'POST',
@@ -180,7 +187,7 @@ export default function WebSalesEditableTable({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          month: month,
+          month: formattedMonth, // 修正された月を使用
           results: updatedResults,
         }),
       })
