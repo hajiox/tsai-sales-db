@@ -145,6 +145,48 @@ export default function AmazonCsvConfirmModal({
     console.log(`未マッチング商品をスキップ: ${unmatchedProducts[index]?.amazonTitle}`)
   }
 
+  // 未マッチング商品の手動選択
+  const handleUnmatchedProductSelect = async (unmatchedIndex: number, productId: string) => {
+    if (!productId) return
+    
+    const selectedProduct = productMaster.find(p => p.id === productId)
+    if (!selectedProduct) return
+
+    const unmatchedProduct = unmatchedProducts[unmatchedIndex]
+    
+    // 新しい商品結果として追加
+    const newResult: AmazonImportResult = {
+      productId: selectedProduct.id,
+      productName: selectedProduct.name,
+      amazonTitle: unmatchedProduct.amazonTitle,
+      quantity: unmatchedProduct.quantity,
+      matched: true,
+      matchType: 'medium' // 手動選択は中精度扱い
+    }
+
+    setEditableResults(prev => [...prev, newResult])
+
+    // 学習データに追加（APIコール）
+    try {
+      await fetch('/api/products/add-learning', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amazonTitle: unmatchedProduct.amazonTitle,
+          productId: selectedProduct.id
+        }),
+      })
+      console.log('学習データに追加しました')
+    } catch (error) {
+      console.error('学習データ追加エラー:', error)
+    }
+
+    // 成功メッセージ
+    alert(`「${selectedProduct.name}」を選択しました`)
+  }
+
   // 統計計算用の関数
   const getMatchingStats = () => {
     const exact = editableResults.filter(r => r.matchType === 'exact')
@@ -277,12 +319,27 @@ export default function AmazonCsvConfirmModal({
                       <label className="text-xs text-red-600 font-medium">販売数量</label>
                       <p className="text-lg font-bold text-red-600">{product.quantity.toLocaleString()}個</p>
                     </div>
+                      {/* 手動商品選択 */}
+                    <div className="mb-3">
+                      <label className="text-xs text-red-600 font-medium block mb-1">既存商品から選択</label>
+                      <select
+                        onChange={(e) => handleUnmatchedProductSelect(index, e.target.value)}
+                        className="w-full text-sm border border-red-300 rounded px-3 py-2"
+                      >
+                        <option value="">既存商品から選択...</option>
+                        {productMaster.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => openAddProductModal(index)}
                         className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
                       >
-                        商品追加
+                        新商品追加
                       </button>
                       <button
                         onClick={() => skipUnmatchedProduct(index)}
