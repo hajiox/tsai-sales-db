@@ -4,9 +4,6 @@
 import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import ProductAddModal from "./ProductAddModal"
-import DuplicateAlert from "./DuplicateAlert"
-import ProductItem from "./ProductItem"
-import { useDuplicateChecker } from "@/hooks/useDuplicateChecker"
 
 interface AmazonImportResult {
   productId: string
