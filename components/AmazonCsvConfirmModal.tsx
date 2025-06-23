@@ -1,4 +1,4 @@
-// /components/AmazonCsvConfirmModal.tsx ver.4 (短縮版)
+// /components/AmazonCsvConfirmModal.tsx ver.5 (全商品表示版)
 "use client"
 
 import React, { useState } from "react"
@@ -39,6 +39,17 @@ interface NewProduct {
   quantity: number
 }
 
+// 全商品表示用の統合型
+interface AllProductResult {
+  productId: string
+  productName: string
+  amazonTitle: string
+  quantity: number
+  matched: boolean
+  matchType?: 'exact' | 'learned' | 'high' | 'medium' | 'low' | 'none'
+  hasData: boolean  // CSVにデータがあるかどうか
+}
+
 export default function AmazonCsvConfirmModal({
   isOpen,
   results,
@@ -50,25 +61,62 @@ export default function AmazonCsvConfirmModal({
   onClose,
   onConfirm,
 }: AmazonCsvConfirmModalProps) {
-  const [editableResults, setEditableResults] = useState<AmazonImportResult[]>(results)
+  // 🔥 新機能: 全商品を統合したリストを作成
+  const createAllProductsList = (): AllProductResult[] => {
+    const allProducts: AllProductResult[] = []
+    
+    // 1. 全商品マスターをベースに0件商品を作成
+    productMaster.forEach(product => {
+      allProducts.push({
+        productId: product.id,
+        productName: product.name,
+        amazonTitle: '',
+        quantity: 0,
+        matched: true,
+        matchType: 'none',
+        hasData: false
+      })
+    })
+    
+    // 2. CSVマッチング結果で上書き
+    results.forEach(result => {
+      const index = allProducts.findIndex(p => p.productId === result.productId)
+      if (index !== -1) {
+        allProducts[index] = {
+          ...result,
+          hasData: true
+        }
+      }
+    })
+    
+    return allProducts.sort((a, b) => {
+      // データありを先に、その後は商品名順
+      if (a.hasData && !b.hasData) return -1
+      if (!a.hasData && b.hasData) return 1
+      return a.productName.localeCompare(b.productName)
+    })
+  }
+
+  const [allProductsResults, setAllProductsResults] = useState<AllProductResult[]>(createAllProductsList())
   const [originalResults, setOriginalResults] = useState<AmazonImportResult[]>(results)
   const [showUnmatched, setShowUnmatched] = useState(false)
+  const [showZeroQuantity, setShowZeroQuantity] = useState(false)
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [selectedUnmatchedIndex, setSelectedUnmatchedIndex] = useState<number | null>(null)
   const [manualSelections, setManualSelections] = useState<{amazonTitle: string, productId: string}[]>([])
   const router = useRouter()
 
-  // 結果が更新されたら編集可能な結果も更新
+  // 結果が更新されたら全商品リストも更新
   React.useEffect(() => {
-    setEditableResults(results)
+    setAllProductsResults(createAllProductsList())
     setOriginalResults(results)
-  }, [results])
+  }, [results, productMaster])
 
   const handleProductChange = (index: number, newProductId: string) => {
     const selectedProduct = productMaster.find(p => p.id === newProductId)
     if (selectedProduct) {
-      const updated = [...editableResults]
-      const originalProduct = originalResults[index]
+      const updated = [...allProductsResults]
+      const originalProduct = originalResults.find(r => r.productId === updated[index].productId)
       
       updated[index] = {
         ...updated[index],
@@ -76,10 +124,10 @@ export default function AmazonCsvConfirmModal({
         productName: selectedProduct.name,
         matched: true
       }
-      setEditableResults(updated)
+      setAllProductsResults(updated)
 
-      // 元の結果と異なる場合は学習データ対象に追加
-      if (originalProduct && originalProduct.productId !== newProductId) {
+      // 学習データ対象チェック
+      if (originalProduct && originalProduct.productId !== newProductId && updated[index].hasData) {
         const existingSelection = manualSelections.find(s => s.amazonTitle === updated[index].amazonTitle)
         if (existingSelection) {
           setManualSelections(prev => prev.map(s => 
@@ -99,14 +147,21 @@ export default function AmazonCsvConfirmModal({
   }
 
   const handleQuantityChange = (index: number, newQuantity: number) => {
-    const updated = [...editableResults]
+    const updated = [...allProductsResults]
     updated[index] = { ...updated[index], quantity: newQuantity }
-    setEditableResults(updated)
+    setAllProductsResults(updated)
   }
 
   const removeResult = (index: number) => {
-    const updated = editableResults.filter((_, i) => i !== index)
-    setEditableResults(updated)
+    const updated = [...allProductsResults]
+    updated[index] = {
+      ...updated[index],
+      quantity: 0,
+      amazonTitle: '',
+      hasData: false,
+      matchType: 'none'
+    }
+    setAllProductsResults(updated)
   }
 
   const openAddProductModal = (unmatchedIndex: number) => {
@@ -129,16 +184,19 @@ export default function AmazonCsvConfirmModal({
       if (!response.ok) throw new Error('商品追加に失敗しました')
 
       const newProduct = await response.json()
-      const newResult: AmazonImportResult = {
+      
+      // 新商品を全商品リストに追加
+      const newResult: AllProductResult = {
         productId: newProduct.product.id,
         productName: newProduct.product.name,
         amazonTitle: productData.amazonTitle,
         quantity: productData.quantity,
         matched: true,
-        matchType: 'exact'
+        matchType: 'exact',
+        hasData: true
       }
 
-      setEditableResults(prev => [...prev, newResult])
+      setAllProductsResults(prev => [...prev, newResult])
       setIsAddingProduct(false)
       setSelectedUnmatchedIndex(null)
       alert('商品を追加しました')
@@ -155,16 +213,22 @@ export default function AmazonCsvConfirmModal({
     if (!selectedProduct) return
 
     const unmatchedProduct = unmatchedProducts[unmatchedIndex]
-    const newResult: AmazonImportResult = {
-      productId: selectedProduct.id,
-      productName: selectedProduct.name,
-      amazonTitle: unmatchedProduct.amazonTitle,
-      quantity: unmatchedProduct.quantity,
-      matched: true,
-      matchType: 'medium'
+    
+    // 既存の商品を更新
+    const updated = [...allProductsResults]
+    const existingIndex = updated.findIndex(p => p.productId === productId)
+    
+    if (existingIndex !== -1) {
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        amazonTitle: unmatchedProduct.amazonTitle,
+        quantity: unmatchedProduct.quantity,
+        hasData: true,
+        matchType: 'medium'
+      }
+      setAllProductsResults(updated)
     }
 
-    setEditableResults(prev => [...prev, newResult])
     setManualSelections(prev => [...prev, {
       amazonTitle: unmatchedProduct.amazonTitle,
       productId: selectedProduct.id
@@ -174,22 +238,25 @@ export default function AmazonCsvConfirmModal({
   }
 
   const getMatchingStats = () => {
-    const exact = editableResults.filter(r => r.matchType === 'exact')
-    const learned = editableResults.filter(r => r.matchType === 'learned')
-    const high = editableResults.filter(r => r.matchType === 'high')
-    const medium = editableResults.filter(r => r.matchType === 'medium')
-    const low = editableResults.filter(r => r.matchType === 'low')
+    const withData = allProductsResults.filter(r => r.hasData && r.quantity > 0)
+    const withoutData = allProductsResults.filter(r => !r.hasData || r.quantity === 0)
+    
+    const exact = withData.filter(r => r.matchType === 'exact')
+    const learned = withData.filter(r => r.matchType === 'learned')
+    const high = withData.filter(r => r.matchType === 'high')
+    const medium = withData.filter(r => r.matchType === 'medium')
+    const low = withData.filter(r => r.matchType === 'low')
 
     const highConfidence = [...exact, ...learned, ...high]
     const lowConfidence = [...medium, ...low]
 
     return {
-      exact, learned, high, medium, low,
+      total: allProductsResults.length,
+      withData: withData.length,
+      withoutData: withoutData.length,
+      totalQuantity: withData.reduce((sum, r) => sum + r.quantity, 0),
       highConfidence, lowConfidence,
-      total: editableResults.length,
-      totalQuantity: editableResults.reduce((sum, r) => sum + r.quantity, 0),
-      highConfidenceQuantity: highConfidence.reduce((sum, r) => sum + r.quantity, 0),
-      lowConfidenceQuantity: lowConfidence.reduce((sum, r) => sum + r.quantity, 0)
+      exact, learned, high, medium, low
     }
   }
 
@@ -213,10 +280,27 @@ export default function AmazonCsvConfirmModal({
       }
     }
     
-    onConfirm(editableResults)
+    // データありの商品のみをconfirmに渡す
+    const resultsToConfirm = allProductsResults
+      .filter(r => r.hasData && r.quantity > 0)
+      .map(r => ({
+        productId: r.productId,
+        productName: r.productName,
+        amazonTitle: r.amazonTitle,
+        quantity: r.quantity,
+        matched: r.matched,
+        matchType: r.matchType as any
+      }))
+    
+    onConfirm(resultsToConfirm)
   }
 
   if (!isOpen) return null
+
+  // 表示用データのフィルタリング
+  const displayResults = showZeroQuantity 
+    ? allProductsResults 
+    : allProductsResults.filter(r => r.hasData && r.quantity > 0)
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
@@ -227,19 +311,19 @@ export default function AmazonCsvConfirmModal({
             {month}月のAmazonデータを確認し、必要に応じて修正してください。
           </p>
           
-          {/* 統計情報 */}
+          {/* 統計情報 - 全商品版 */}
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg p-3 border">
-              <div className="text-xs text-gray-500">マッチング済み商品</div>
+              <div className="text-xs text-gray-500">全商品数</div>
               <div className="text-lg font-bold text-blue-600">{stats.total}品種</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 border">
+              <div className="text-xs text-gray-500">データあり商品</div>
+              <div className="text-lg font-bold text-green-600">{stats.withData}品種</div>
             </div>
             <div className="bg-white rounded-lg p-3 border">
               <div className="text-xs text-gray-500">合計販売数量</div>
               <div className="text-lg font-bold text-green-600">{stats.totalQuantity.toLocaleString()}個</div>
-            </div>
-            <div className="bg-white rounded-lg p-3 border">
-              <div className="text-xs text-gray-500">高精度マッチング</div>
-              <div className="text-lg font-bold text-emerald-600">{stats.highConfidence.length}品種</div>
             </div>
             <div className="bg-white rounded-lg p-3 border">
               <div className="text-xs text-gray-500">未マッチング商品</div>
@@ -247,17 +331,28 @@ export default function AmazonCsvConfirmModal({
             </div>
           </div>
 
-          {/* 未マッチング表示切り替え */}
-          {unmatchedProducts.length > 0 && (
-            <div className="mt-4">
+          {/* 表示切り替えボタン */}
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() => setShowZeroQuantity(!showZeroQuantity)}
+              className={`px-4 py-2 rounded-lg text-sm ${
+                showZeroQuantity 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {showZeroQuantity ? `データなし商品を非表示 (${stats.withoutData}品種)` : `すべて表示 (${stats.total}品種)`}
+            </button>
+            
+            {unmatchedProducts.length > 0 && (
               <button
                 onClick={() => setShowUnmatched(!showUnmatched)}
-                className="bg-red-100 text-red-800 px-4 py-2 rounded-lg hover:bg-red-200"
+                className="bg-red-100 text-red-800 px-4 py-2 rounded-lg hover:bg-red-200 text-sm"
               >
                 {showUnmatched ? '未マッチング商品を非表示' : `未マッチング商品を表示 (${unmatchedProducts.length}件)`}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="flex-1 p-4 overflow-y-auto">
@@ -305,90 +400,102 @@ export default function AmazonCsvConfirmModal({
             </div>
           )}
 
-          {/* マッチング済み商品セクション */}
-          {editableResults.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500 mb-4">マッチする商品が見つかりませんでした。</p>
-            </div>
-          ) : (
-            <>
-              <h4 className="text-lg font-semibold mb-4 text-blue-600">マッチング済み商品一覧（全て修正可能）</h4>
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-                <p className="text-sm text-blue-700">
-                  <strong>💡 重要:</strong> 高精度・中精度マッチングでも間違いがある場合があります。
-                  全ての商品を確認し、必要に応じて修正してください。
-                </p>
-              </div>
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {editableResults.map((result, index) => (
-                  <div key={index} className={`border rounded-lg p-4 ${
-                    result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-50 border-green-200' :
-                    result.matchType === 'high' ? 'bg-blue-50 border-blue-200' :
-                    result.matchType === 'medium' ? 'bg-yellow-50 border-yellow-200' :
-                    'bg-orange-50 border-orange-200'
-                  }`}>
-                    <div className="mb-4">
-                      <label className="text-xs text-gray-500 font-medium">Amazon商品名</label>
-                      <p className="text-sm font-medium text-gray-800">{result.amazonTitle}</p>
-                    </div>
+          {/* 全商品一覧セクション */}
+          <h4 className="text-lg font-semibold mb-4 text-blue-600">
+            全商品一覧 ({displayResults.length}品種表示中)
+          </h4>
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+            <p className="text-sm text-blue-700">
+              <strong>💡 重要:</strong> 全{stats.total}商品が表示されています。
+              データなし商品は0件として表示され、CSVにある商品のみがデータベースに保存されます。
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {displayResults.map((result, index) => (
+              <div key={`${result.productId}-${index}`} className={`border rounded-lg p-4 ${
+                !result.hasData ? 'bg-gray-50 border-gray-200' :
+                result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-50 border-green-200' :
+                result.matchType === 'high' ? 'bg-blue-50 border-blue-200' :
+                result.matchType === 'medium' ? 'bg-yellow-50 border-yellow-200' :
+                'bg-orange-50 border-orange-200'
+              }`}>
+                
+                {/* 商品名（常に表示） */}
+                <div className="mb-4">
+                  <label className="text-xs text-gray-500 font-medium">商品名</label>
+                  <p className="text-sm font-bold text-gray-800">{result.productName}</p>
+                </div>
 
-                    <div className="mb-4">
-                      <label className="text-xs text-gray-500 font-medium block mb-1">
-                        マッチ商品（修正可能）
-                        <span className="ml-2 text-xs text-blue-600">※要確認</span>
-                      </label>
-                      <select
-                        value={result.productId}
-                        onChange={(e) => handleProductChange(index, e.target.value)}
-                        className="w-full text-sm border rounded px-3 py-2"
-                      >
-                        <option value="">商品を選択...</option>
-                        {productMaster.map((product) => (
-                          <option key={product.id} value={product.id}>{product.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="flex-1">
-                        <label className="text-xs text-gray-500 font-medium block mb-1">販売数</label>
-                        <input
-                          type="number"
-                          value={result.quantity}
-                          onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 0)}
-                          className="w-full text-sm border rounded px-3 py-2"
-                          min="0"
-                        />
-                      </div>
-                      <div className="pt-6">
-                        <button
-                          onClick={() => removeResult(index)}
-                          className="text-red-500 hover:text-red-700 text-sm px-3 py-2 border border-red-200 rounded"
-                        >
-                          削除
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className={`text-xs px-3 py-1 rounded inline-block ${
-                        result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-100 text-green-800' :
-                        result.matchType === 'high' ? 'bg-blue-100 text-blue-800' :
-                        result.matchType === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-orange-100 text-orange-800'
-                      }`}>
-                        {result.matchType === 'exact' ? '完全一致（要確認）' :
-                         result.matchType === 'learned' ? '学習済み（要確認）' :
-                         result.matchType === 'high' ? '高精度（要確認）' :
-                         result.matchType === 'medium' ? '中精度（要確認）' :
-                         '低精度（要確認）'}
-                      </div>
-                    </div>
+                {/* Amazon商品名（データありの場合のみ） */}
+                {result.hasData && (
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 font-medium">Amazon商品名</label>
+                    <p className="text-sm font-medium text-gray-700">{result.amazonTitle}</p>
                   </div>
-                ))}
+                )}
+
+                <div className="mb-4">
+                  <label className="text-xs text-gray-500 font-medium block mb-1">
+                    商品選択（修正可能）
+                    {result.hasData && <span className="ml-2 text-xs text-blue-600">※要確認</span>}
+                  </label>
+                  <select
+                    value={result.productId}
+                    onChange={(e) => handleProductChange(index, e.target.value)}
+                    className="w-full text-sm border rounded px-3 py-2"
+                    disabled={!result.hasData}
+                  >
+                    <option value="">商品を選択...</option>
+                    {productMaster.map((product) => (
+                      <option key={product.id} value={product.id}>{product.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500 font-medium block mb-1">販売数</label>
+                    <input
+                      type="number"
+                      value={result.quantity}
+                      onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 0)}
+                      className="w-full text-sm border rounded px-3 py-2"
+                      min="0"
+                      disabled={!result.hasData}
+                    />
+                  </div>
+                  {result.hasData && (
+                    <div className="pt-6">
+                      <button
+                        onClick={() => removeResult(index)}
+                        className="text-red-500 hover:text-red-700 text-sm px-3 py-2 border border-red-200 rounded"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div className={`text-xs px-3 py-1 rounded inline-block ${
+                    !result.hasData ? 'bg-gray-100 text-gray-600' :
+                    result.matchType === 'exact' || result.matchType === 'learned' ? 'bg-green-100 text-green-800' :
+                    result.matchType === 'high' ? 'bg-blue-100 text-blue-800' :
+                    result.matchType === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-orange-100 text-orange-800'
+                  }`}>
+                    {!result.hasData ? 'データなし' :
+                     result.matchType === 'exact' ? '完全一致（要確認）' :
+                     result.matchType === 'learned' ? '学習済み（要確認）' :
+                     result.matchType === 'high' ? '高精度（要確認）' :
+                     result.matchType === 'medium' ? '中精度（要確認）' :
+                     '低精度（要確認）'}
+                  </div>
+                </div>
               </div>
-            </>
-          )}
+            ))}
+          </div>
         </div>
 
         <div className="border-t bg-gray-50 p-6 flex-shrink-0">
@@ -396,7 +503,7 @@ export default function AmazonCsvConfirmModal({
             <div className="text-sm text-gray-600">
               <div>Amazon列のみを更新します（他のECサイトデータは保持）</div>
               <div className="text-xs text-blue-600 mt-1">
-                ✅ 全ての修正内容が学習データに反映され、次回の精度が向上します
+                ✅ データあり{stats.withData}品種・{stats.totalQuantity.toLocaleString()}個をDBに保存
               </div>
             </div>
             <div className="flex gap-3">
@@ -409,12 +516,12 @@ export default function AmazonCsvConfirmModal({
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={isSubmitting || editableResults.length === 0}
+                disabled={isSubmitting || stats.withData === 0}
                 className={`px-6 py-2 text-sm text-white rounded disabled:opacity-50 ${
                   isSubmitting ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                {isSubmitting ? '処理中...' : `${editableResults.length}品種をDBに反映`}
+                {isSubmitting ? '処理中...' : `${stats.withData}品種をDBに反映`}
               </button>
             </div>
           </div>
