@@ -1,4 +1,4 @@
-// /app/api/import/amazon-confirm/route.ts ver.2 (テーブル名修正版)
+// /app/api/import/amazon-confirm/route.ts ver.3 (実テーブル構造対応版)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
@@ -22,23 +22,28 @@ export async function POST(request: NextRequest) {
 
     for (const result of results) {
       try {
+        // 月の形式を統一（YYYY-MM形式）
+        const reportMonth = `${month}-01`
+        
+        // 既存データを確認
         const { data: existingData } = await supabase
           .from('web_sales')
           .select('*')
           .eq('product_id', result.productId)
-          .eq('month', month)
+          .eq('report_month', reportMonth)
           .single()
 
         if (existingData) {
-          // 既存データを更新（Amazon列のみ）
+          // 既存データを更新（amazon_count列を使用）
           const { error: updateError } = await supabase
             .from('web_sales')
             .update({
               amazon_count: result.quantity,
+              report_month: reportMonth,
               updated_at: new Date().toISOString()
             })
             .eq('product_id', result.productId)
-            .eq('month', month)
+            .eq('report_month', reportMonth)
 
           if (updateError) {
             console.error(`更新エラー (${result.productId}):`, updateError)
@@ -53,13 +58,14 @@ export async function POST(request: NextRequest) {
             .from('web_sales')
             .insert({
               product_id: result.productId,
-              month: month,
               amazon_count: result.quantity,
               rakuten_count: 0,
               yahoo_count: 0,
               mercari_count: 0,
               base_count: 0,
               qoo10_count: 0,
+              report_month: reportMonth,
+              report_date: reportMonth,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
