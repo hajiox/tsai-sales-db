@@ -1,4 +1,4 @@
-// /app/api/learning/amazon-reset/route.ts ver.1
+// /app/api/learning/amazon-reset/route.ts ver.1-
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "../../../../lib/supabase"
 
