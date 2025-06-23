@@ -1,235 +1,139 @@
-// /components/AmazonCsvImportModal.tsx ver.13
+// /components/AmazonCsvImportModal.tsx ver.6 (ボタン修正版)
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
-import AmazonCsvConfirmModal from "./AmazonCsvConfirmModal"
-
-interface AmazonImportResult {
-  productId: string
-  productName: string
-  amazonTitle: string
-  quantity: number
-  matched: boolean
-  matchType?: 'exact' | 'learned' | 'high' | 'medium' | 'low'
-}
-
-interface UnmatchedProduct {
-  amazonTitle: string
-  quantity: number
-  matched: false
-}
 
 interface AmazonCsvImportModalProps {
   isOpen: boolean
-  onClose: () => void
   month: string
+  onClose: () => void
+  onSuccess: (results: any) => void
 }
 
-export default function AmazonCsvImportModal({ isOpen, onClose, month }: AmazonCsvImportModalProps) {
-  const [amazonFile, setAmazonFile] = useState<File | null>(null)
-  const [amazonImportMessage, setAmazonImportMessage] = useState<string>("")
-  const [amazonImportLoading, setAmazonImportLoading] = useState(false)
-  const [importResults, setImportResults] = useState<AmazonImportResult[]>([])
-  const [unmatchedProducts, setUnmatchedProducts] = useState<UnmatchedProduct[]>([])
-  const [csvSummary, setCsvSummary] = useState<any>(null)
-  const [productMaster, setProductMaster] = useState<{ id: string; name: string }[]>([])
-  const [showConfirmModal, setShowConfirmModal] = useState(false)
-  const [isSubmittingImport, setIsSubmittingImport] = useState(false)
+export default function AmazonCsvImportModal({
+  isOpen,
+  month,
+  onClose,
+  onSuccess
+}: AmazonCsvImportModalProps) {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
-  const dialogRef = useRef<HTMLDialogElement>(null)
 
-  // isOpenに応じてモーダルを表示/非表示
-  useEffect(() => {
-    if (dialogRef.current) {
-      if (isOpen) {
-        dialogRef.current.showModal()
-        fetchProductMaster()
-      } else {
-        dialogRef.current.close()
-      }
-    }
-  }, [isOpen])
-
-  const fetchProductMaster = async () => {
-    try {
-      const { data: products, error } = await supabase
-        .from('products')
-        .select('id, name')
-        .order('series_code, product_number')
-      
-      if (error) {
-        console.error('Product master fetch error:', error)
-        return
-      }
-      
-      console.log('商品マスター取得:', products?.length || 0, '件')
-      setProductMaster(products?.map((p: any) => ({ id: p.id, name: p.name })) || [])
-    } catch (error) {
-      console.error('Product master fetch error:', error)
-    }
-  }
-
-  const handleAmazonFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setAmazonFile(e.target.files[0])
-      setAmazonImportMessage("")
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type === 'text/csv') {
+      setSelectedFile(file)
+      setError(null)
     } else {
-      setAmazonFile(null)
+      setError('CSVファイルを選択してください')
+      setSelectedFile(null)
     }
   }
 
-  const handleAmazonUpload = async () => {
-    if (!amazonFile) {
-      setAmazonImportMessage("ファイルを選択してください。")
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setError('ファイルを選択してください')
       return
     }
 
-    setAmazonImportLoading(true)
-    setAmazonImportMessage("CSVを解析中...")
-
-    const formData = new FormData()
-    formData.append("file", amazonFile)
-    formData.append("month", month)
+    setIsUploading(true)
+    setError(null)
 
     try {
-      const response = await fetch("/api/import/amazon-parse", {
-        method: "POST",
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+
+      const response = await fetch('/api/import/amazon-parse', {
+        method: 'POST',
         body: formData,
       })
 
-      const result = await response.json()
-
-      if (response.ok) {
-        setImportResults(result.matchedResults || [])
-        setUnmatchedProducts(result.unmatchedProducts || [])
-        setCsvSummary(result.summary || null)
-        setAmazonImportMessage("")
-        onClose()
-        setShowConfirmModal(true)
-      } else {
-        setAmazonImportMessage(result.error || "Amazon CSVの解析に失敗しました。")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'アップロードに失敗しました')
       }
+
+      const result = await response.json()
+      console.log('アップロード成功:', result)
+      
+      onSuccess(result)
     } catch (error) {
-      console.error("Amazon CSV解析エラー:", error)
-      setAmazonImportMessage("ファイルの解析中にエラーが発生しました。")
+      console.error('Upload error:', error)
+      setError(error instanceof Error ? error.message : 'アップロードに失敗しました')
     } finally {
-      setAmazonImportLoading(false)
+      setIsUploading(false)
     }
   }
 
-  const handleConfirmImport = async (updatedResults: AmazonImportResult[]) => {
-    setIsSubmittingImport(true)
-    
-    try {
-      const response = await fetch("/api/import/amazon-confirm", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          results: updatedResults,
-          month: month
-        }),
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        setAmazonImportMessage(result.message || "Amazonデータが正常にインポートされました。")
-        setShowConfirmModal(false)
-        
-        router.refresh()
-        window.location.reload()
-        
-        setTimeout(() => {
-          onClose()
-          setAmazonFile(null)
-          setImportResults([])
-          setAmazonImportMessage("")
-        }, 1000)
-      } else {
-        setAmazonImportMessage(result.error || "Amazonデータのインポートに失敗しました。")
-        setShowConfirmModal(false)
-      }
-    } catch (error) {
-      console.error("Amazon確定インポートエラー:", error)
-      setAmazonImportMessage("データの保存中にエラーが発生しました。")
-      setShowConfirmModal(false)
-    } finally {
-      setIsSubmittingImport(false)
-    }
-  }
-
-  const handleCloseConfirmModal = () => {
-    setShowConfirmModal(false)
-    setImportResults([])
-    setUnmatchedProducts([])
-    setCsvSummary(null)
-  }
+  if (!isOpen) return null
 
   return (
-    <>
-      <dialog ref={dialogRef} className="modal p-6 rounded-lg shadow-xl backdrop:bg-black backdrop:bg-opacity-50">
-        <div className="modal-box">
-          <h3 className="font-bold text-lg mb-4">Amazon CSVインポート</h3>
-          <p className="py-2 text-sm text-gray-600">
-            Amazonの売上CSVファイルを選択してアップロードしてください。
-            商品名のマッチング確認画面を経由してAmazon列のみを更新します。
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-hidden">
+        <div className="p-6 border-b">
+          <h3 className="text-lg font-semibold">Amazon CSVインポート</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            AmazonのCファイルを選択してアップロードしてください。商品名のマッチング確認画面を経由してAmazon列のみを更新します。
           </p>
-          <div className="form-control w-full my-4">
-            <label htmlFor="amazon-csv-file" className="label cursor-pointer justify-start">
-              <span className="label-text mr-2">Amazon CSVファイル:</span>
-              <input
-                id="amazon-csv-file"
-                type="file"
-                onChange={handleAmazonFileChange}
-                accept=".csv"
-                className="file-input file-input-bordered file-input-sm w-full max-w-xs"
-              />
-            </label>
+        </div>
+
+        <div className="p-6">
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Amazon CSVファイル:</label>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileChange}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              disabled={isUploading}
+            />
+            {selectedFile && (
+              <p className="text-xs text-green-600 mt-1">
+                選択済み: {selectedFile.name}
+              </p>
+            )}
           </div>
-          {amazonImportMessage && (
-            <p className={`text-sm ${amazonImportLoading ? 'text-blue-500' : (amazonImportMessage.includes('成功') ? 'text-green-500' : 'text-red-500')}`}>
-              {amazonImportMessage}
-            </p>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
           )}
-          <div className="modal-action flex justify-end gap-2 mt-6">
+        </div>
+
+        <div className="border-t bg-gray-50 p-6">
+          <div className="flex justify-end gap-3">
             <button
-              className="btn btn-sm btn-ghost"
-              onClick={() => {
-                setAmazonImportMessage("")
-                setAmazonFile(null)
-                setImportResults([])
-                onClose()
-              }}
-              disabled={amazonImportLoading}
+              onClick={onClose}
+              disabled={isUploading}
+              className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 transition-colors"
             >
               キャンセル
             </button>
             <button
-              className={`btn btn-sm btn-primary ${amazonImportLoading ? 'loading' : ''}`}
-              onClick={handleAmazonUpload}
-              disabled={!amazonFile || amazonImportLoading}
+              onClick={handleUpload}
+              disabled={!selectedFile || isUploading}
+              className={`px-4 py-2 text-sm text-white rounded disabled:opacity-50 transition-colors ${
+                isUploading 
+                  ? 'bg-blue-400 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
-              {amazonImportLoading ? "解析中..." : "次へ（確認画面）"}
+              {isUploading ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                  解析中...
+                </span>
+              ) : (
+                '次へ（確認画面）'
+              )}
             </button>
           </div>
         </div>
-      </dialog>
-
-      <AmazonCsvConfirmModal
-        isOpen={showConfirmModal}
-        results={importResults}
-        unmatchedProducts={unmatchedProducts}
-        csvSummary={csvSummary}
-        productMaster={productMaster}
-        month={month}
-        isSubmitting={isSubmittingImport}
-        onClose={handleCloseConfirmModal}
-        onConfirm={handleConfirmImport}
-      />
-    </>
+      </div>
+    </div>
   )
 }
