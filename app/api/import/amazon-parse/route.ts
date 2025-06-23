@@ -45,14 +45,26 @@ function extractImportantKeywords(text: string): {
   
   // 商品種別（最重要）
   const productType: string[] = []
-  if (cleanText.includes('チャーシュー')) productType.push('チャーシュー')
+  if (cleanText.includes('チャーシュー') && !cleanText.includes('たれ') && !cleanText.includes('ソース')) {
+    productType.push('チャーシュー')
+  }
+  if (cleanText.includes('たれ') || cleanText.includes('専用だれ')) {
+    productType.push('たれ')
+  }
   if (cleanText.includes('つけ麺')) productType.push('つけ麺')
-  if (cleanText.includes('ラーメン')) productType.push('ラーメン')
+  if (cleanText.includes('ラーメン') && !cleanText.includes('たれ') && !cleanText.includes('ふりかけ')) {
+    productType.push('ラーメン')
+  }
   if (cleanText.includes('焼きそば')) productType.push('焼きそば')
   if (cleanText.includes('カレー')) productType.push('カレー')
   if (cleanText.includes('ドレッシング')) productType.push('ドレッシング')
-  if (cleanText.includes('ソース')) productType.push('ソース')
+  if (cleanText.includes('ソース') && !cleanText.includes('チャーシュー')) {
+    productType.push('ソース')
+  }
   if (cleanText.includes('スープ')) productType.push('スープ')
+  if (cleanText.includes('ふりかけ')) productType.push('ふりかけ')
+  if (cleanText.includes('馬刺し')) productType.push('馬刺し')
+  if (cleanText.includes('米') || cleanText.includes('コシヒカリ')) productType.push('米')
   
   // 仕様・特徴（重要）
   const specifications: string[] = []
@@ -152,6 +164,8 @@ function findBestMatchSimplified(amazonTitle: string, products: any[], learningD
     // 2. 商品種別マッチング（最重要 - 必須条件）
     let productTypeScore = 0
     let hasProductTypeMatch = false
+    let hasProductTypeConflict = false
+    
     for (const amazonType of amazonKeywords.productType) {
       if (productKeywords.productType.includes(amazonType)) {
         productTypeScore += 50
@@ -160,10 +174,22 @@ function findBestMatchSimplified(amazonTitle: string, products: any[], learningD
       }
     }
     
-    // 商品種別が一致しない場合は大幅減点
+    // 商品種別が完全に異なる場合は大幅減点
     if (!hasProductTypeMatch && amazonKeywords.productType.length > 0 && productKeywords.productType.length > 0) {
-      productTypeScore = -50
-      console.log('商品種別不一致 (-50点)')
+      // 特に危険な組み合わせをチェック
+      const amazonTypes = amazonKeywords.productType
+      const productTypes = productKeywords.productType
+      
+      if ((amazonTypes.includes('チャーシュー') && productTypes.includes('たれ')) ||
+          (amazonTypes.includes('ラーメン') && productTypes.includes('ふりかけ')) ||
+          (amazonTypes.includes('ラーメン') && productTypes.includes('ソース'))) {
+        productTypeScore = -100 // 完全に異なる商品は大幅減点
+        hasProductTypeConflict = true
+        console.log(`商品種別重大不一致 (-100点): Amazon[${amazonTypes.join(',')}] vs 商品[${productTypes.join(',')}]`)
+      } else {
+        productTypeScore = -50
+        console.log('商品種別不一致 (-50点)')
+      }
     }
     totalScore += productTypeScore
 
@@ -231,9 +257,15 @@ function findBestMatchSimplified(amazonTitle: string, products: any[], learningD
 
     console.log(`最終スコア: ${totalScore}`)
 
-    // マッチング条件（数量考慮）
-    const minScore = hasProductTypeMatch ? 80 : 120 // 商品種別一致なら条件緩和
+    // マッチング条件（商品種別重視）
+    const minScore = hasProductTypeMatch ? 80 : 150 // 商品種別一致なら条件緩和、不一致なら厳格化
     const minFrontSimilarity = 0.2 // 20%以上の文字列類似度
+    
+    // 商品種別が重大に異なる場合は除外
+    if (hasProductTypeConflict) {
+      console.log('商品種別重大不一致により除外')
+      continue
+    }
     
     // 数量不一致がある場合は高いスコアが必要
     const adjustedMinScore = hasQuantityConflict ? minScore + 50 : minScore
@@ -241,16 +273,16 @@ function findBestMatchSimplified(amazonTitle: string, products: any[], learningD
     if (totalScore >= adjustedMinScore && frontSimilarity >= minFrontSimilarity && totalScore > bestScore) {
       bestScore = totalScore
       
-      // 信頼度判定（数量マッチング考慮）
+      // 信頼度判定（商品種別重視）
       let confidence = 'low'
-      if (totalScore >= 200 && hasQuantityMatch) {
+      if (totalScore >= 200 && hasQuantityMatch && hasProductTypeMatch) {
         confidence = 'exact'
       } else if (totalScore >= 150 && hasProductTypeMatch && !hasQuantityConflict) {
         confidence = 'high'
-      } else if (totalScore >= 100 && !hasQuantityConflict) {
+      } else if (totalScore >= 100 && hasProductTypeMatch && !hasQuantityConflict) {
         confidence = 'medium'
-      } else if (hasQuantityConflict) {
-        confidence = 'low' // 数量不一致は信頼度を下げる
+      } else {
+        confidence = 'low' // 商品種別不一致や数量不一致は信頼度低下
       }
       
       bestMatch = { ...product, matchType: confidence }
