@@ -1,5 +1,4 @@
-// /components/websales-summary-cards.tsx
-// ver5 (引数型修正版)
+// /components/websales-summary-cards.tsx ver.6 (集計統一版)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -55,7 +54,6 @@ export default function WebSalesSummaryCards({
           console.log('=== デバッグ開始 ===');
           console.log('月:', month);
           
-          // target_monthをtext型として渡す（引数名も正しく指定）
           const { data, error } = await supabase.rpc("web_sales_full_month", { 
             target_month: month 
           });
@@ -132,8 +130,9 @@ export default function WebSalesSummaryCards({
     );
   }
 
-  const grandTotalCount = seriesSummary.reduce((sum, s) => sum + s.count, 0);
-  const grandTotalSales = seriesSummary.reduce((sum, s) => sum + s.sales, 0);
+  // 🔧 修正: ECサイト別集計から総合計を計算（テーブルと同じ計算方法）
+  const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
+  const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
 
   return (
     <div className="space-y-6">
