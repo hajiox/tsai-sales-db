@@ -1,113 +1,96 @@
 // /app/api/import/amazon-confirm/route.ts ver.1
-import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { NextRequest, NextResponse } from 'next/server'
+import { supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-interface AmazonImportResult {
-  productId: string
-  productName: string
-  amazonTitle: string
-  quantity: number
-  matched: boolean
-}
-
 export async function POST(request: NextRequest) {
   try {
-    console.log('Amazon CSV確定処理開始')
+    const { month, results } = await request.json()
 
-    const body = await request.json()
-    const { results, month } = body
-
-    if (!results || !Array.isArray(results)) {
-      return NextResponse.json({ error: '処理データが不正です' }, { status: 400 })
+    if (!month || !results || !Array.isArray(results)) {
+      return NextResponse.json(
+        { error: '必要なデータが不足しています' },
+        { status: 400 }
+      )
     }
 
-    if (!month) {
-      return NextResponse.json({ error: '対象月が指定されていません' }, { status: 400 })
-    }
+    console.log(`Amazon確定処理開始: ${month}月, ${results.length}件`)
 
-    console.log('処理対象:', {
-      month,
-      resultCount: results.length
-    })
-
-    // 月の形式を調整 (YYYY-MM → YYYY-MM-01)
-    const reportMonth = month.includes('-01') ? month : `${month}-01`
-
-    // データベース更新処理
-    let updateCount = 0
+    let successCount = 0
     let errorCount = 0
 
-    for (const result of results as AmazonImportResult[]) {
-      if (!result.productId || result.quantity <= 0) {
-        console.log('スキップ:', result)
-        continue
-      }
-
+    for (const result of results) {
       try {
-        // 既存データを確認
-        const { data: existingData, error: selectError } = await supabase
-          .from('web_sales_summary')
-          .select('amazon_count')
+        const { data: existingData } = await supabase
+          .from('web_sales_data')
+          .select('*')
           .eq('product_id', result.productId)
-          .eq('report_month', reportMonth)
+          .eq('month', month)
           .single()
 
-        if (selectError && selectError.code !== 'PGRST116') {
-          console.error('既存データ確認エラー:', selectError)
-          errorCount++
-          continue
-        }
+        if (existingData) {
+          // 既存データを更新（Amazon列のみ）
+          const { error: updateError } = await supabase
+            .from('web_sales_data')
+            .update({
+              amazon_count: result.quantity,
+              updated_at: new Date().toISOString()
+            })
+            .eq('product_id', result.productId)
+            .eq('month', month)
 
-        // upsert実行
-        const { error: upsertError } = await supabase
-          .from('web_sales_summary')
-          .upsert({
-            product_id: result.productId,
-            report_month: reportMonth,
-            amazon_count: result.quantity,
-            // 他の列は既存値を保持するため、明示的に指定しない
-          }, {
-            onConflict: 'product_id,report_month',
-            ignoreDuplicates: false
-          })
-
-        if (upsertError) {
-          console.error('Upsert error for product:', result.productId, upsertError)
-          errorCount++
+          if (updateError) {
+            console.error(`更新エラー (${result.productId}):`, updateError)
+            errorCount++
+          } else {
+            successCount++
+          }
         } else {
-          updateCount++
-          console.log(`更新成功: ${result.productName} → ${result.quantity}個`)
+          // 新規データを挿入
+          const { error: insertError } = await supabase
+            .from('web_sales_data')
+            .insert({
+              product_id: result.productId,
+              month: month,
+              amazon_count: result.quantity,
+              rakuten_count: 0,
+              yahoo_count: 0,
+              mercari_count: 0,
+              base_count: 0,
+              qoo10_count: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+
+          if (insertError) {
+            console.error(`挿入エラー (${result.productId}):`, insertError)
+            errorCount++
+          } else {
+            successCount++
+          }
         }
-      } catch (updateError) {
-        console.error('個別更新エラー:', updateError)
+      } catch (itemError) {
+        console.error(`処理エラー (${result.productId}):`, itemError)
         errorCount++
       }
     }
 
-    console.log('更新完了:', {
-      updateCount,
-      errorCount,
-      totalAttempts: results.length
-    })
-
-    const totalQuantity = results.reduce((sum: number, r: AmazonImportResult) => sum + r.quantity, 0)
+    console.log(`Amazon確定処理完了: 成功${successCount}件, エラー${errorCount}件`)
 
     return NextResponse.json({
-      message: `Amazon データを正常に更新しました。${updateCount}件の商品を処理しました。`,
-      summary: {
-        updatedRecords: updateCount,
-        errorCount,
-        totalQuantity,
-        targetMonth: month
-      }
+      message: 'Amazon データの更新が完了しました',
+      success: true,
+      successCount,
+      errorCount,
+      totalCount: results.length
     })
 
   } catch (error) {
-    console.error('Amazon CSV確定処理エラー:', error)
-    return NextResponse.json({ 
-      error: '確定処理中にエラーが発生しました: ' + (error as Error).message 
-    }, { status: 500 })
+    console.error('Amazon確定API エラー:', error)
+    return NextResponse.json(
+      { error: 'サーバーエラーが発生しました' },
+      { status: 500 }
+    )
   }
 }
