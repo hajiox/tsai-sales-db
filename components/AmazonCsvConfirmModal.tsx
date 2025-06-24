@@ -205,8 +205,9 @@ export default function AmazonCsvConfirmModal({
 
   // 🔥 品質管理機能
   const qualityCheck = useMemo((): QualityCheck => {
-    const csvOriginalTotal = results.reduce((sum, r) => sum + r.quantity, 0) + unmatchedProducts.reduce((sum, u) => sum + u.quantity, 0)
-    const csvRecordCount = results.length + unmatchedProducts.length
+    // CSV元データはsummaryから正確に取得
+    const csvOriginalTotal = csvSummary?.csvTotalQuantity || (results.reduce((sum, r) => sum + r.quantity, 0) + unmatchedProducts.reduce((sum, u) => sum + u.quantity, 0))
+    const csvRecordCount = csvSummary?.totalRows || (results.length + unmatchedProducts.length)
     
     let matchedTotal = 0
     let productCount = 0
