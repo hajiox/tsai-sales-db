@@ -453,7 +453,7 @@ export default function AmazonCsvConfirmModal({
 
         {/* メインコンテンツ */}
         <div className="flex-1 p-4 overflow-y-auto">
-          {!showDuplicateResolver && (
+          {!showDuplicateResolver ? (
             <ProductListView
               displayResults={displayResults}
               productMaster={productMaster}
@@ -463,6 +463,10 @@ export default function AmazonCsvConfirmModal({
               onRemoveResult={removeResult}
               onShowDuplicateResolver={() => setShowDuplicateResolver(true)}
             />
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              重複解消モードが開いています
+            </div>
           )}
         </div>
 
