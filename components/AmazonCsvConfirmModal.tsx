@@ -197,7 +197,7 @@ export default function AmazonCsvConfirmModal({
     setIndividualCsvProducts(individualProducts)
   }, [results, productMaster])
 
-  // 品質管理機能（progressInfo依存を削除）
+  // 品質管理機能（修正後の数量を正確に計算）
   const qualityCheck = useMemo((): QualityCheck => {
     console.log('csvSummary:', csvSummary)
     const csvOriginalTotal = 1956  // 実際のCSV値を強制使用
@@ -217,18 +217,36 @@ export default function AmazonCsvConfirmModal({
       productCount = validResults.length
     }
     
-    const unmatchedTotal = unmatchedProducts.reduce((sum, u) => sum + u.quantity, 0)
-    const finalTotal = matchedTotal
-    const discrepancy = csvOriginalTotal - (matchedTotal + unmatchedTotal + Math.abs(deletedTotal))
+    // 未マッチング商品の内、修正済みのものを加算
+    const resolvedUnmatchedQuantity = unmatchedProducts
+      .filter(u => manualSelections.some(s => s.amazonTitle === u.amazonTitle))
+      .reduce((sum, u) => sum + u.quantity, 0)
+    
+    // 未修正の未マッチング商品のみを計算
+    const unresolvedUnmatchedTotal = unmatchedProducts
+      .filter(u => !manualSelections.some(s => s.amazonTitle === u.amazonTitle))
+      .reduce((sum, u) => sum + u.quantity, 0)
+    
+    const finalTotal = matchedTotal + resolvedUnmatchedQuantity
+    const discrepancy = csvOriginalTotal - finalTotal - unresolvedUnmatchedTotal
     const isQuantityValid = Math.abs(discrepancy) <= 5
     const warningLevel = Math.abs(discrepancy) > 20 ? 'error' : Math.abs(discrepancy) > 0 ? 'warning' : 'none'
     
     return {
-      csvOriginalTotal, csvRecordCount, matchedTotal, unmatchedTotal,
-      duplicateAdjustment: 0, deletedTotal, finalTotal, isQuantityValid,
-      discrepancy, warningLevel, duplicateCount: duplicates.length, productCount
+      csvOriginalTotal, 
+      csvRecordCount, 
+      matchedTotal: matchedTotal + resolvedUnmatchedQuantity, 
+      unmatchedTotal: unresolvedUnmatchedTotal,
+      duplicateAdjustment: 0, 
+      deletedTotal, 
+      finalTotal, 
+      isQuantityValid,
+      discrepancy, 
+      warningLevel, 
+      duplicateCount: duplicates.length, 
+      productCount: productCount + manualSelections.length
     }
-  }, [results, allProductsResults, individualCsvProducts, unmatchedProducts, duplicates, showDuplicateResolver])
+  }, [results, allProductsResults, individualCsvProducts, unmatchedProducts, duplicates, showDuplicateResolver, manualSelections])
 
   // ハンドラー関数群（簡素化）
   const handleProductChange = (index: number, newProductId: string) => {
@@ -360,9 +378,11 @@ export default function AmazonCsvConfirmModal({
     total: allProductsResults.length,
     withData: showDuplicateResolver ? 
       individualCsvProducts.filter(p => p.quantity > 0).length :
-      allProductsResults.filter(r => r.hasData && r.quantity > 0).length,
+      allProductsResults.filter(r => r.hasData && r.quantity > 0).length + manualSelections.length,
     duplicateCount: duplicates.length,
-    totalQuantity: qualityCheck.finalTotal
+    totalQuantity: qualityCheck.finalTotal,
+    resolvedUnmatched: manualSelections.length,
+    unresolvedUnmatched: unmatchedProducts.length - manualSelections.length
   }
 
   return (
@@ -432,13 +452,15 @@ export default function AmazonCsvConfirmModal({
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={isSubmitting || stats.withData === 0 || (qualityCheck.warningLevel === 'error')}
+                disabled={isSubmitting || stats.withData === 0 || (qualityCheck.warningLevel === 'error') || qualityCheck.unmatchedTotal > 0}
                 className={`px-4 py-2 text-sm text-white rounded disabled:opacity-50 ${
+                  qualityCheck.unmatchedTotal > 0 ? 'bg-gray-400 cursor-not-allowed' :
                   qualityCheck.warningLevel === 'error' ? 'bg-red-400' :
                   qualityCheck.isQuantityValid ? 'bg-blue-600 hover:bg-blue-700' : 'bg-yellow-600 hover:bg-yellow-700'
                 }`}
               >
                 {isSubmitting ? '処理中...' : 
+                 qualityCheck.unmatchedTotal > 0 ? `未マッチング${qualityCheck.unmatchedTotal}個を修正してください` :
                  qualityCheck.warningLevel === 'error' ? '品質エラーのため登録不可' :
                  !qualityCheck.isQuantityValid ? `要確認: ${stats.withData}件をDBに反映` :
                  `${stats.withData}件をDBに反映`}
