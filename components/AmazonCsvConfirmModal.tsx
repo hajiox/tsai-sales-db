@@ -205,40 +205,55 @@ export default function AmazonCsvConfirmModal({
     
     let matchedTotal = 0
     let productCount = 0
-    let deletedTotal = 0
     
     if (showDuplicateResolver) {
+      // 重複解消モードでは個別商品の合計
       const validProducts = individualCsvProducts.filter(p => p.quantity > 0)
       matchedTotal = validProducts.reduce((sum, p) => sum + p.quantity, 0)
       productCount = validProducts.length
     } else {
+      // 通常モードでは重複は統合されているので、そのまま計算
       const validResults = allProductsResults.filter(r => r.hasData && r.quantity > 0)
       matchedTotal = validResults.reduce((sum, r) => sum + r.quantity, 0)
       productCount = validResults.length
     }
     
-    // 未マッチング商品の内、修正済みのものを加算
+    // 修正済み未マッチング商品の数量（二重カウント防止）
     const resolvedUnmatchedQuantity = unmatchedProducts
       .filter(u => manualSelections.some(s => s.amazonTitle === u.amazonTitle))
       .reduce((sum, u) => sum + u.quantity, 0)
     
-    // 未修正の未マッチング商品のみを計算
+    // 未修正の未マッチング商品
     const unresolvedUnmatchedTotal = unmatchedProducts
       .filter(u => !manualSelections.some(s => s.amazonTitle === u.amazonTitle))
       .reduce((sum, u) => sum + u.quantity, 0)
     
-    const finalTotal = matchedTotal + resolvedUnmatchedQuantity
+    // 最終合計（重複解消モードでは個別商品の合計を使用）
+    const finalTotal = showDuplicateResolver 
+      ? matchedTotal + resolvedUnmatchedQuantity
+      : matchedTotal + resolvedUnmatchedQuantity
+    
     const discrepancy = csvOriginalTotal - finalTotal - unresolvedUnmatchedTotal
     const isQuantityValid = Math.abs(discrepancy) <= 5
     const warningLevel = Math.abs(discrepancy) > 20 ? 'error' : Math.abs(discrepancy) > 0 ? 'warning' : 'none'
     
+    console.log('品質チェック詳細:', {
+      csvOriginalTotal,
+      matchedTotal,
+      resolvedUnmatchedQuantity,
+      unresolvedUnmatchedTotal,
+      finalTotal,
+      discrepancy,
+      showDuplicateResolver
+    })
+    
     return {
       csvOriginalTotal, 
       csvRecordCount, 
-      matchedTotal: matchedTotal + resolvedUnmatchedQuantity, 
+      matchedTotal: showDuplicateResolver ? matchedTotal : matchedTotal + resolvedUnmatchedQuantity, 
       unmatchedTotal: unresolvedUnmatchedTotal,
       duplicateAdjustment: 0, 
-      deletedTotal, 
+      deletedTotal: 0, 
       finalTotal, 
       isQuantityValid,
       discrepancy, 
@@ -277,21 +292,18 @@ export default function AmazonCsvConfirmModal({
     if (!productId) return
     const selectedProduct = productMaster.find(p => p.id === productId)
     if (!selectedProduct) return
-    const unmatchedProduct = unmatchedProducts[unmatchedIndex]
-    const updated = [...allProductsResults]
-    const existingIndex = updated.findIndex(p => p.productId === productId)
     
-    if (existingIndex !== -1) {
-      updated[existingIndex] = {
-        ...updated[existingIndex],
-        amazonTitle: unmatchedProduct.amazonTitle,
-        quantity: updated[existingIndex].quantity + unmatchedProduct.quantity,
-        hasData: true,
-        matchType: 'medium'
+    // 未マッチング商品の情報を保存（二重カウント防止）
+    setManualSelections(prev => {
+      // 既に選択済みの場合は更新のみ
+      const existing = prev.findIndex(s => s.amazonTitle === unmatchedProducts[unmatchedIndex].amazonTitle)
+      if (existing >= 0) {
+        const updated = [...prev]
+        updated[existing] = { amazonTitle: unmatchedProducts[unmatchedIndex].amazonTitle, productId }
+        return updated
       }
-      setAllProductsResults(updated)
-    }
-    setManualSelections(prev => [...prev, { amazonTitle: unmatchedProduct.amazonTitle, productId: selectedProduct.id }])
+      return [...prev, { amazonTitle: unmatchedProducts[unmatchedIndex].amazonTitle, productId }]
+    })
   }
 
   const openAddProductModal = (unmatchedIndex: number) => {
