@@ -417,6 +417,18 @@ export default function AmazonCsvConfirmModal({
             onUnmatchedProductSelect={handleUnmatchedProductSelect}
             onOpenAddProductModal={openAddProductModal}
             manualSelections={manualSelections}
+            onLearnMapping={async (amazonTitle, productId) => {
+              try {
+                await fetch('/api/products/add-learning', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ amazonTitle, productId }),
+                })
+                toast.success('マッピングを学習しました')
+              } catch (error) {
+                console.error('学習エラー:', error)
+              }
+            }}
           />
         </div>
 
