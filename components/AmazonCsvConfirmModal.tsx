@@ -309,6 +309,41 @@ export default function AmazonCsvConfirmModal({
     setAllProductsResults(updated)
   }
 
+  // 未マッチング商品の手動選択
+  const handleUnmatchedProductSelect = (unmatchedIndex: number, productId: string) => {
+    if (!productId) return
+    
+    const selectedProduct = productMaster.find(p => p.id === productId)
+    if (!selectedProduct) return
+
+    const unmatchedProduct = unmatchedProducts[unmatchedIndex]
+    
+    const updated = [...allProductsResults]
+    const existingIndex = updated.findIndex(p => p.productId === productId)
+    
+    if (existingIndex !== -1) {
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        amazonTitle: unmatchedProduct.amazonTitle,
+        quantity: updated[existingIndex].quantity + unmatchedProduct.quantity,
+        hasData: true,
+        matchType: 'medium'
+      }
+      setAllProductsResults(updated)
+    }
+
+    setManualSelections(prev => [...prev, {
+      amazonTitle: unmatchedProduct.amazonTitle,
+      productId: selectedProduct.id
+    }])
+  }
+
+  // 商品追加モーダルを開く
+  const openAddProductModal = (unmatchedIndex: number) => {
+    setSelectedUnmatchedIndex(unmatchedIndex)
+    setIsAddingProduct(true)
+  }
+
   // 品質チェック付き確定処理
   const handleConfirm = async () => {
     if (!qualityCheck.isQuantityValid) {
@@ -425,6 +460,22 @@ export default function AmazonCsvConfirmModal({
             </div>
           )}
 
+          {/* 未マッチング警告・表示ボタン */}
+          {unmatchedProducts.length > 0 && (
+            <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <h4 className="text-orange-800 font-semibold mb-2">⚠️ 未マッチング検出！</h4>
+              <p className="text-sm text-orange-700 mb-2">
+                <strong>{unmatchedProducts.length}商品（{unmatchedProducts.reduce((sum, u) => sum + u.quantity, 0)}個）</strong>が未マッチングです。手動で商品を選択してください。
+              </p>
+              <button
+                onClick={() => setShowUnmatched(!showUnmatched)}
+                className="px-4 py-2 bg-orange-600 text-white rounded text-sm hover:bg-orange-700"
+              >
+                {showUnmatched ? '未マッチング商品を非表示' : '🔍 未マッチング商品を表示・修正'}
+              </button>
+            </div>
+          )}
+
           {/* 表示切り替えボタン */}
           {!showDuplicateResolver && (
             <div className="mt-4 flex gap-2 flex-wrap">
@@ -454,15 +505,67 @@ export default function AmazonCsvConfirmModal({
         {/* メインコンテンツ - 最小高さ設定 */}
         <div className="flex-1 p-4 overflow-y-auto min-h-[200px]">
           {!showDuplicateResolver ? (
-            <ProductListView
-              displayResults={displayResults}
-              productMaster={productMaster}
-              showDuplicatesOnly={showDuplicatesOnly}
-              onProductChange={handleProductChange}
-              onQuantityChange={handleQuantityChange}
-              onRemoveResult={removeResult}
-              onShowDuplicateResolver={() => setShowDuplicateResolver(true)}
-            />
+            <>
+              {/* 未マッチング商品表示 */}
+              {showUnmatched && unmatchedProducts.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold mb-4 text-orange-600">
+                    未マッチング商品一覧 ({unmatchedProducts.length}商品)
+                  </h4>
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    {unmatchedProducts.map((unmatched, index) => (
+                      <div key={index} className="border border-orange-300 rounded-lg p-4 bg-orange-50">
+                        <div className="mb-3">
+                          <label className="text-xs text-gray-500 font-medium">未マッチングCSV商品名</label>
+                          <p className="text-sm font-bold text-gray-800 break-words">{unmatched.amazonTitle}</p>
+                        </div>
+                        
+                        <div className="mb-3">
+                          <label className="text-xs text-gray-500 font-medium block mb-1">商品マスターを選択</label>
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleUnmatchedProductSelect(index, e.target.value)
+                              }
+                            }}
+                            className="w-full text-sm border border-orange-300 rounded px-3 py-2 bg-white"
+                          >
+                            <option value="">商品を選択...</option>
+                            {productMaster.map((product) => (
+                              <option key={product.id} value={product.id}>{product.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm">
+                            <span className="text-gray-500">数量: </span>
+                            <span className="font-medium text-orange-700">{unmatched.quantity}個</span>
+                          </div>
+                          <button
+                            onClick={() => openAddProductModal(index)}
+                            className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                          >
+                            新商品として追加
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 通常の商品リスト */}
+              <ProductListView
+                displayResults={displayResults}
+                productMaster={productMaster}
+                showDuplicatesOnly={showDuplicatesOnly}
+                onProductChange={handleProductChange}
+                onQuantityChange={handleQuantityChange}
+                onRemoveResult={removeResult}
+                onShowDuplicateResolver={() => setShowDuplicateResolver(true)}
+              />
+            </>
           ) : (
             <div className="text-center py-8 text-gray-500">
               重複解消モードが開いています
