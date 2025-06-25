@@ -1,58 +1,21 @@
-// /components/DuplicateResolverModal.tsx ver.1 (重複解消専用UI)
+// /components/DuplicateResolverModal.tsx ver.2
 "use client"
 
 import React, { useState } from "react"
-
-interface AmazonImportResult {
-  productId: string
-  productName: string
-  amazonTitle: string
-  quantity: number
-  matched: boolean
-  matchType?: 'exact' | 'learned' | 'high' | 'medium' | 'low'
-}
-
-interface IndividualCsvProduct {
-  id: string
-  productId: string
-  productName: string
-  amazonTitle: string
-  quantity: number
-  matchType?: 'exact' | 'learned' | 'high' | 'medium' | 'low'
-  isFromDuplicate: boolean
-  originalDuplicateGroup?: string
-}
+import { X, CheckCircle2, AlertCircle, Save } from "lucide-react"
 
 interface DuplicateResolverModalProps {
   isOpen: boolean
-  duplicates: AllProductResult[]
-  individualCsvProducts: IndividualCsvProduct[]
+  duplicates: any[]
+  individualCsvProducts: any[]
   productMaster: { id: string; name: string }[]
   onClose: () => void
   onIndividualProductChange: (csvProductId: string, newProductId: string) => void
   onIndividualQuantityChange: (csvProductId: string, newQuantity: number) => void
   onRemoveIndividualProduct: (csvProductId: string) => void
-  onConfirm: (resolvedProducts: IndividualCsvProduct[]) => void
+  onConfirm: (resolvedProducts: any[]) => void
   isSubmitting: boolean
-}
-
-interface AllProductResult {
-  productId: string
-  productName: string
-  amazonTitle: string
-  quantity: number
-  matched: boolean
-  matchType?: 'exact' | 'learned' | 'high' | 'medium' | 'low' | 'none'
-  hasData: boolean
-  isDuplicate?: boolean
-  duplicateInfo?: DuplicateInfo
-}
-
-interface DuplicateInfo {
-  count: number
-  amazonTitles: string[]
-  totalQuantity: number
-  originalQuantities: number[]
+  onLearnMapping?: (amazonTitle: string, productId: string) => void // 新規追加
 }
 
 export default function DuplicateResolverModal({
@@ -65,192 +28,189 @@ export default function DuplicateResolverModal({
   onIndividualQuantityChange,
   onRemoveIndividualProduct,
   onConfirm,
-  isSubmitting
+  isSubmitting,
+  onLearnMapping
 }: DuplicateResolverModalProps) {
+  const [currentStep, setCurrentStep] = useState(0)
+  const [resolvedDuplicates, setResolvedDuplicates] = useState<string[]>([])
+  const [learnedMappings, setLearnedMappings] = useState<{amazonTitle: string, productId: string}[]>([])
+  
+  if (!isOpen) return null
 
-  // 重複由来の個別商品のみ表示
-  const duplicateProducts = individualCsvProducts.filter(p => p.isFromDuplicate)
+  const currentDuplicate = duplicates[currentStep]
+  const isLastStep = currentStep === duplicates.length - 1
+  
+  // 現在の重複グループのCSV商品を取得
+  const currentGroupProducts = individualCsvProducts.filter(
+    p => p.originalDuplicateGroup === currentDuplicate?.productId
+  )
 
-  const getStats = () => {
-    const withData = duplicateProducts.filter(p => p.quantity > 0)
-    return {
-      total: duplicateProducts.length,
-      withData: withData.length,
-      totalQuantity: withData.reduce((sum, p) => sum + p.quantity, 0),
-      duplicateGroups: duplicates.length
+  // 学習ボタンのハンドラー
+  const handleLearnMapping = (amazonTitle: string, productId: string) => {
+    if (onLearnMapping) {
+      onLearnMapping(amazonTitle, productId)
+    }
+    setLearnedMappings(prev => [...prev, { amazonTitle, productId }])
+  }
+
+  // 次のステップへ
+  const handleNextStep = () => {
+    setResolvedDuplicates(prev => [...prev, currentDuplicate.productId])
+    
+    if (isLastStep) {
+      // 最後のステップなら完了処理
+      handleComplete()
+    } else {
+      setCurrentStep(prev => prev + 1)
     }
   }
 
-  const stats = getStats()
-
-  const handleConfirm = () => {
-    // 数量が0でない商品のみを確定
-    const validProducts = duplicateProducts.filter(p => p.quantity > 0)
-    onConfirm(validProducts)
+  // 完了処理
+  const handleComplete = () => {
+    onConfirm(individualCsvProducts)
+    alert(`✅ 重複解消完了！\n\n${duplicates.length}件の重複を解消しました。\n${learnedMappings.length}件のマッピングを学習しました。`)
+    onClose()
   }
 
-  // 重複グループ別に商品を整理
-  const getProductsByGroup = () => {
-    const groups = new Map<string, IndividualCsvProduct[]>()
-    
-    duplicateProducts.forEach(product => {
-      const groupId = product.originalDuplicateGroup || 'unknown'
-      if (!groups.has(groupId)) {
-        groups.set(groupId, [])
-      }
-      groups.get(groupId)!.push(product)
-    })
-    
-    return Array.from(groups.entries())
+  // 進捗情報
+  const progress = {
+    current: currentStep + 1,
+    total: duplicates.length,
+    percentage: Math.round(((currentStep + 1) / duplicates.length) * 100)
   }
-
-  const productGroups = getProductsByGroup()
-
-  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col">
         
         {/* ヘッダー */}
-        <div className="p-6 border-b bg-blue-50 flex-shrink-0">
-          <h3 className="text-lg font-semibold text-blue-800">🔧 重複解消モード</h3>
-          <p className="text-sm text-blue-600 mt-1">
-            重複していたCSV商品を個別に表示しています。それぞれを適切な商品マスターに紐付け直してください。
+        <div className="p-4 border-b bg-blue-50">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-blue-600" />
+              重複解消モード - ステップ {progress.current} / {progress.total}
+            </h3>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-gray-200 rounded"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          
+          {/* プログレスバー */}
+          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${progress.percentage}%` }}
+            />
+          </div>
+          
+          <p className="text-sm text-gray-600">
+            各商品を個別に修正できます。完了後、未マッチング商品の修正に進みます。
           </p>
-
-          {/* 重複解消統計 */}
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white rounded-lg p-3 border border-blue-200">
-              <div className="text-xs text-gray-500">重複グループ</div>
-              <div className="text-lg font-bold text-red-600">{stats.duplicateGroups}件</div>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-blue-200">
-              <div className="text-xs text-gray-500">個別CSV商品</div>
-              <div className="text-lg font-bold text-blue-600">{stats.total}商品</div>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-blue-200">
-              <div className="text-xs text-gray-500">修正済み商品</div>
-              <div className="text-lg font-bold text-green-600">{stats.withData}商品</div>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-blue-200">
-              <div className="text-xs text-gray-500">合計数量</div>
-              <div className="text-lg font-bold text-green-600">{stats.totalQuantity.toLocaleString()}個</div>
-            </div>
-          </div>
-
-          <div className="mt-4 p-3 bg-blue-100 border border-blue-200 rounded">
-            <p className="text-sm text-blue-700">
-              <strong>💡 重複解消の流れ:</strong> 
-              同じ商品マスターに{stats.duplicateGroups}グループ・{stats.total}個のCSV商品が紐付いていました。
-              各CSV商品を正しい商品マスターに個別に紐付け直してください。
-            </p>
-          </div>
         </div>
 
-        {/* メインコンテンツ */}
+        {/* 現在の重複グループ情報 */}
+        {currentDuplicate && (
+          <div className="p-4 bg-yellow-50 border-b">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-yellow-800">
+                  {currentDuplicate.productName}
+                </h4>
+                <p className="text-sm text-yellow-700 mt-1">
+                  {currentDuplicate.duplicateInfo.count}個のCSV商品が同じ商品として統合されています
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-yellow-800">
+                  {currentDuplicate.duplicateInfo.totalQuantity}個
+                </div>
+                <div className="text-xs text-yellow-700">合計数量</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 個別商品リスト */}
         <div className="flex-1 p-4 overflow-y-auto">
-          <h4 className="text-lg font-semibold mb-4 text-blue-600">
-            重複CSV商品一覧 ({stats.total}商品)
-          </h4>
-
-          {/* 重複グループ別表示 */}
-          <div className="space-y-6">
-            {productGroups.map(([groupId, products]) => {
-              const originalProduct = duplicates.find(d => d.productId === groupId)
+          <div className="space-y-3">
+            {currentGroupProducts.map((product) => {
+              const isLearned = learnedMappings.some(
+                m => m.amazonTitle === product.amazonTitle
+              )
+              
               return (
-                <div key={groupId} className="border-2 border-red-200 rounded-lg p-4 bg-red-50">
-                  
-                  {/* グループヘッダー */}
-                  <div className="mb-4 p-3 bg-red-100 border border-red-200 rounded">
-                    <h5 className="font-semibold text-red-800 mb-2">
-                      🚨 重複グループ: {originalProduct?.productName || '不明な商品'}
-                    </h5>
-                    <div className="text-sm text-red-700">
-                      このグループには{products.length}個のCSV商品が含まれています
+                <div 
+                  key={product.id} 
+                  className={`p-4 border rounded-lg ${
+                    isLearned ? 'bg-green-50 border-green-200' : 'bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="font-medium text-sm mb-1">
+                        {product.amazonTitle}
+                      </div>
+                      {isLearned && (
+                        <div className="text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          学習済み
+                        </div>
+                      )}
                     </div>
-                    {originalProduct?.duplicateInfo && (
-                      <div className="text-xs text-red-600 mt-1">
-                        元の数量: {originalProduct.duplicateInfo.originalQuantities.join(' + ')} = {originalProduct.duplicateInfo.totalQuantity}個
-                      </div>
-                    )}
+                    <div className="ml-4">
+                      <input
+                        type="number"
+                        value={product.quantity}
+                        onChange={(e) => onIndividualQuantityChange(
+                          product.id, 
+                          parseInt(e.target.value) || 0
+                        )}
+                        className="w-20 px-2 py-1 border rounded text-right"
+                        min="0"
+                      />
+                      <span className="ml-1 text-sm">個</span>
+                    </div>
                   </div>
-
-                  {/* グループ内の個別商品 */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {products.map((csvProduct) => (
-                      <div key={csvProduct.id} className="border border-red-300 rounded-lg p-4 bg-white">
-                        
-                        {/* CSV商品情報 */}
-                        <div className="mb-3">
-                          <label className="text-xs text-gray-500 font-medium">CSV商品名</label>
-                          <p className="text-sm font-bold text-gray-800 break-words">{csvProduct.amazonTitle}</p>
-                        </div>
-
-                        {/* 商品選択（修正） */}
-                        <div className="mb-3">
-                          <label className="text-xs text-gray-500 font-medium block mb-1">
-                            正しい商品マスターを選択
-                            <span className="ml-2 text-xs text-red-600">※修正必須</span>
-                          </label>
-                          <select
-                            value={csvProduct.productId}
-                            onChange={(e) => onIndividualProductChange(csvProduct.id, e.target.value)}
-                            className="w-full text-sm border-2 border-red-300 rounded px-3 py-2 bg-white focus:border-red-500 focus:outline-none"
-                          >
-                            <option value="">商品を選択...</option>
-                            {productMaster.map((product) => (
-                              <option key={product.id} value={product.id}>{product.name}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* 数量・削除 */}
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="flex-1">
-                            <label className="text-xs text-gray-500 font-medium block mb-1">販売数</label>
-                            <input
-                              type="number"
-                              value={csvProduct.quantity}
-                              onChange={(e) => onIndividualQuantityChange(csvProduct.id, parseInt(e.target.value) || 0)}
-                              className="w-full text-sm border rounded px-3 py-2 focus:border-blue-500 focus:outline-none"
-                              min="0"
-                            />
-                          </div>
-                          <div className="pt-6">
-                            <button
-                              onClick={() => onRemoveIndividualProduct(csvProduct.id)}
-                              className="text-red-500 hover:text-red-700 text-sm px-3 py-2 border border-red-200 rounded hover:bg-red-50"
-                            >
-                              削除
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* ステータス表示 */}
-                        <div className="flex items-center justify-between">
-                          <div className={`text-xs px-2 py-1 rounded ${
-                            csvProduct.productId && csvProduct.quantity > 0
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {csvProduct.productId && csvProduct.quantity > 0
-                              ? '✅ 修正完了'
-                              : '❌ 修正が必要'
-                            }
-                          </div>
-                          
-                          {csvProduct.matchType && (
-                            <div className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800">
-                              元: {csvProduct.matchType === 'exact' ? '完全一致' :
-                                   csvProduct.matchType === 'learned' ? '学習済み' :
-                                   csvProduct.matchType === 'high' ? '高精度' :
-                                   csvProduct.matchType === 'medium' ? '中精度' : '低精度'}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                  
+                  <div className="flex gap-2 items-center">
+                    <select
+                      value={product.productId}
+                      onChange={(e) => onIndividualProductChange(
+                        product.id, 
+                        e.target.value
+                      )}
+                      className="flex-1 px-3 py-2 border rounded text-sm"
+                    >
+                      <option value="">商品を選択...</option>
+                      {productMaster.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    
+                    {!isLearned && product.productId && (
+                      <button
+                        onClick={() => handleLearnMapping(
+                          product.amazonTitle, 
+                          product.productId
+                        )}
+                        className="px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center gap-1"
+                      >
+                        <Save className="h-3 w-3" />
+                        学習
+                      </button>
+                    )}
+                    
+                    <button
+                      onClick={() => onRemoveIndividualProduct(product.id)}
+                      className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                    >
+                      削除
+                    </button>
                   </div>
                 </div>
               )
@@ -259,28 +219,28 @@ export default function DuplicateResolverModal({
         </div>
 
         {/* フッター */}
-        <div className="border-t bg-gray-50 p-6 flex-shrink-0">
+        <div className="border-t bg-gray-50 p-4">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
-              <div>重複解消後のCSV商品をDBに保存します</div>
-              <div className="text-xs text-blue-600 mt-1">
-                ✅ 修正済み{stats.withData}商品・{stats.totalQuantity.toLocaleString()}個をDBに保存
-              </div>
+              {learnedMappings.length > 0 && (
+                <span className="text-green-600">
+                  {learnedMappings.length}件のマッピングを学習しました
+                </span>
+              )}
             </div>
             <div className="flex gap-3">
               <button
                 onClick={onClose}
-                disabled={isSubmitting}
-                className="px-6 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
               >
-                ← 通常表示に戻る
+                キャンセル
               </button>
               <button
-                onClick={handleConfirm}
-                disabled={isSubmitting || stats.withData === 0}
-                className="px-6 py-2 text-sm text-white rounded disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
+                onClick={handleNextStep}
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
               >
-                {isSubmitting ? '処理中...' : `重複解消完了：${stats.withData}商品をDBに反映`}
+                {isLastStep ? '重複解消を完了' : '次の重複へ →'}
               </button>
             </div>
           </div>
