@@ -476,6 +476,18 @@ export default function AmazonCsvConfirmModal({
         individualCsvProducts={individualCsvProducts}
         productMaster={productMaster}
         onClose={() => setShowDuplicateResolver(false)}
+        onLearnMapping={async (amazonTitle, productId) => {
+          try {
+            await fetch('/api/products/add-learning', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ amazonTitle, productId }),
+            })
+            console.log('学習データ保存:', amazonTitle, productId)
+          } catch (error) {
+            console.error('学習データ保存エラー:', error)
+          }
+        }}
         onIndividualProductChange={(csvProductId, newProductId) => {
           const selectedProduct = productMaster.find(p => p.id === newProductId)
           if (selectedProduct) {
