@@ -172,12 +172,7 @@ export default function UnmatchedProductsView({
                           onChange={(e) => {
                             if (e.target.value) {
                               onUnmatchedProductSelect(index, e.target.value)
-                              
-                              // 学習ボタンを表示
-                              const learnBtn = document.getElementById(`learn-btn-${index}`)
-                              if (learnBtn) {
-                                learnBtn.style.display = 'flex'
-                              }
+                              // 学習ボタンの表示制御を削除（常に表示）
                             }
                           }}
                         >
