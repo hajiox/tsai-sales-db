@@ -1,4 +1,4 @@
-// /components/UnmatchedProductsView.tsx ver.5
+// /components/UnmatchedProductsView.tsx ver.6
 "use client"
 
 import React, { useState } from "react"
@@ -64,7 +64,9 @@ export default function UnmatchedProductsView({
   }
 
   const handleLearn = async (amazonTitle: string, productId: string, index: number) => {
+    console.log('handleLearnが呼び出されました:', amazonTitle, productId, index) // デバッグログ
     if (onLearnMapping) {
+      console.log('onLearnMappingを呼び出します:', amazonTitle, productId) // デバッグログ
       try {
         await onLearnMapping(amazonTitle, productId)
         setLearnedItems(prev => new Set(prev).add(`${index}-${amazonTitle}`))
@@ -72,6 +74,8 @@ export default function UnmatchedProductsView({
       } catch (error) {
         alert('学習に失敗しました')
       }
+    } else {
+      console.log('onLearnMappingが定義されていません。') // デバッグログ
     }
   }
 
@@ -208,10 +212,13 @@ export default function UnmatchedProductsView({
                         </button>
                       </div>
                       
-                      {/* 学習ボタン */}
-                      {onLearnMapping && currentSelection && !isLearned && (
+                      {/* 学習ボタン - デバッグ用に条件を一時的に削除 */}
+                      {onLearnMapping && ( // currentSelection && !isLearnedを削除
                         <button
-                          onClick={() => handleLearn(unmatched.amazonTitle, currentSelection, index)}
+                          onClick={() => {
+                            console.log('学習ボタンがクリックされました'); // デバッグログ
+                            handleLearn(unmatched.amazonTitle, currentSelection, index)
+                          }}
                           className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center justify-center gap-1"
                         >
                           <Save className="h-4 w-4" />
