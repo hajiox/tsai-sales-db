@@ -1,7 +1,7 @@
-// /components/UnmatchedProductsView.tsx ver.7
+// /components/UnmatchedProductsView.tsx ver.8
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react" // useEffectを追加
 import { CheckCircle2, AlertCircle, Plus, Save } from "lucide-react"
 
 interface UnmatchedProduct {
@@ -31,8 +31,7 @@ export default function UnmatchedProductsView({
   manualSelections = [],
   onLearnMapping
 }: UnmatchedProductsViewProps) {
-  // 各商品の選択状態を管理
-  const [localSelections, setLocalSelections] = useState<Record<number, string>>({})
+  // localSelectionsは不要になるため削除
   const [learnedItems, setLearnedItems] = useState<Set<string>>(new Set())
   
   if (unmatchedProducts.length === 0) return null
@@ -57,8 +56,7 @@ export default function UnmatchedProductsView({
   }
 
   const handleSelectChange = (index: number, value: string) => {
-    setLocalSelections(prev => ({ ...prev, [index]: value }))
-    // プルダウンで選択されたら、親のonUnmatchedProductSelectも呼び出す
+    // localSelectionsへの更新は不要、親のonUnmatchedProductSelectを呼び出すのみ
     if (value) {
       onUnmatchedProductSelect(index, value)
     }
@@ -160,12 +158,11 @@ export default function UnmatchedProductsView({
             {unmatchedProducts.map((unmatched, index) => {
               const resolved = isResolved(unmatched.amazonTitle)
               const selectedProductId = manualSelections.find(s => s.amazonTitle === unmatched.amazonTitle)?.productId
-              const selectedProduct = productMaster.find(p => p.id === selectedProductId)
-              const currentSelection = localSelections[index] || ''
+              // currentSelectionはselectedProductIdに置き換える
               const isLearned = learnedItems.has(`${index}-${unmatched.amazonTitle}`)
 
-              // デバッグログを追加
-              console.log(`Item ${index}: currentSelection=${currentSelection}, isLearned=${isLearned}, resolved=${resolved}`); // デバッグログ
+              // デバッグログ
+              console.log(`Item ${index}: selectedProductId=${selectedProductId}, isLearned=${isLearned}, resolved=${resolved}`);
               
               return (
                 <div 
@@ -196,7 +193,8 @@ export default function UnmatchedProductsView({
                     <div className="space-y-2">
                       <div className="flex gap-2">
                         <select
-                          value={currentSelection}
+                          // valueをlocalSelections[index]ではなくselectedProductIdに変更
+                          value={selectedProductId || ''} 
                           onChange={(e) => handleSelectChange(index, e.target.value)}
                           className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
                         >
@@ -216,12 +214,13 @@ export default function UnmatchedProductsView({
                         </button>
                       </div>
                       
-                      {/* 学習ボタン - currentSelection && !isLearned の条件を再度一時的に外し、onLearnMappingがある場合のみ表示 */}
-                      {onLearnMapping && ( 
+                      {/* 学習ボタン - 条件を onLearnMapping && selectedProductId && !isLearned に戻す */}
+                      {onLearnMapping && selectedProductId && !isLearned && ( 
                         <button
                           onClick={() => {
-                            console.log('学習ボタンがクリックされました'); // デバッグログ
-                            handleLearn(unmatched.amazonTitle, currentSelection, index)
+                            console.log('学習ボタンがクリックされました');
+                            // handleLearnに渡すproductIdもselectedProductIdを使用
+                            handleLearn(unmatched.amazonTitle, selectedProductId, index)
                           }}
                           className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center justify-center gap-1"
                         >
