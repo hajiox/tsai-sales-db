@@ -32,6 +32,8 @@ export default function UnmatchedProductsView({
   onLearnMapping
 }: UnmatchedProductsViewProps) {
   
+  console.log('UnmatchedProductsView - onLearnMapping:', !!onLearnMapping)
+  
   if (unmatchedProducts.length === 0) return null
 
   // 修正済みかどうかを判定
@@ -195,24 +197,24 @@ export default function UnmatchedProductsView({
                         </button>
                       </div>
                       
-                      {/* 学習ボタン（初期は非表示） */}
+                      {/* 学習ボタン（商品が選択されている場合のみ表示） */}
                       {onLearnMapping && (
                         <button
                           id={`learn-btn-${index}`}
-                          style={{ display: 'none' }}
                           onClick={() => {
                             const select = document.getElementById(`unmatched-select-${index}`) as HTMLSelectElement
                             if (select?.value) {
+                              console.log('学習ボタンクリック:', unmatched.amazonTitle, select.value)
                               onLearnMapping(unmatched.amazonTitle, select.value)
-                              // 学習後はボタンを非表示に
-                              const btn = document.getElementById(`learn-btn-${index}`)
-                              if (btn) btn.style.display = 'none'
+                              alert('学習処理を実行しました')
+                            } else {
+                              alert('商品を選択してください')
                             }
                           }}
-                          className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 items-center justify-center gap-1"
+                          className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center justify-center gap-1"
                         >
-                          <Save className="h-4 w-4 mr-1" style={{ display: 'inline' }} />
-                          このマッピングを学習する
+                          <Save className="h-4 w-4" />
+                          このマッピングを学習する（デバッグ版）
                         </button>
                       )}
                     </div>
