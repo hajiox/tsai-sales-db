@@ -197,6 +197,44 @@ export default function AmazonCsvConfirmModal({
     setIndividualCsvProducts(individualProducts)
   }, [results, productMaster])
 
+  // 🔥 進捗情報の計算
+  const progressInfo = useMemo(() => {
+    const unmatchedProductCount = unmatchedProducts.length
+    const duplicateProductCount = duplicates.length
+    const totalIssues = unmatchedProductCount + duplicateProductCount
+    
+    // 解決済み問題の計算
+    let resolvedIssues = 0
+    
+    // 重複解消の進捗
+    if (showDuplicateResolver) {
+      // 重複解消モードでは、修正済みの個別商品数をカウント
+      const resolvedDuplicates = individualCsvProducts.filter(p => 
+        p.isFromDuplicate && p.productId && p.quantity > 0
+      ).length
+      resolvedIssues += Math.min(resolvedDuplicates, duplicateProductCount * 2) // 重複は複数商品分
+    } else {
+      // 通常モードでは重複が統合されているので解決済みとカウント
+      resolvedIssues += duplicateProductCount
+    }
+    
+    // 未マッチングの進捗（手動選択された分）
+    const resolvedUnmatched = manualSelections.length
+    resolvedIssues += Math.min(resolvedUnmatched, unmatchedProductCount)
+    
+    const remainingIssues = Math.max(0, totalIssues - resolvedIssues)
+    const canRegister = remainingIssues === 0 && qualityCheck.isQuantityValid
+    
+    return {
+      unmatchedProductCount,
+      duplicateProductCount,
+      totalIssues,
+      resolvedIssues,
+      remainingIssues,
+      canRegister
+    }
+  }, [unmatchedProducts, duplicates, manualSelections, individualCsvProducts, showDuplicateResolver, qualityCheck.isQuantityValid])
+
   // 品質管理機能
   const qualityCheck = useMemo((): QualityCheck => {
     console.log('csvSummary:', csvSummary)
@@ -373,7 +411,12 @@ export default function AmazonCsvConfirmModal({
           <h3 className="text-lg font-semibold">Amazon CSVインポート確認</h3>
           <p className="text-sm text-gray-600 mt-1">{month}月のAmazonデータを確認してください。</p>
           
-          <QualityCheckPanel qualityCheck={qualityCheck} isDuplicateResolverMode={showDuplicateResolver} className="mt-4" />
+          <QualityCheckPanel 
+            qualityCheck={qualityCheck} 
+            progressInfo={progressInfo}
+            isDuplicateResolverMode={showDuplicateResolver} 
+            className="mt-4" 
+          />
           
           {duplicates.length > 0 && !showDuplicateResolver && (
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
