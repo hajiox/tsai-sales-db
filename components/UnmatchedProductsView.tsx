@@ -57,10 +57,12 @@ export default function UnmatchedProductsView({
   }
 
   const handleProductSelect = (index: number, productId: string) => {
+    // 先に内部状態を更新
     setSelectedProducts(prev => ({
       ...prev,
       [index]: productId
     }))
+    // その後、親コンポーネントに通知
     onUnmatchedProductSelect(index, productId)
   }
 
@@ -155,6 +157,12 @@ export default function UnmatchedProductsView({
               const currentSelection = selectedProducts[index]
               const isLearned = learnedMappings.has(`${index}-${unmatched.amazonTitle}`)
               
+              console.log(`商品${index}の状態:`, {
+                currentSelection,
+                isLearned,
+                onLearnMapping: !!onLearnMapping
+              })
+              
               return (
                 <div 
                   key={index} 
@@ -187,6 +195,7 @@ export default function UnmatchedProductsView({
                           className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
                           value={currentSelection || ''}
                           onChange={(e) => {
+                            console.log('商品選択:', index, e.target.value)
                             if (e.target.value) {
                               handleProductSelect(index, e.target.value)
                             }
@@ -211,7 +220,10 @@ export default function UnmatchedProductsView({
                       {/* 商品が選択されていて、まだ学習していない場合に学習ボタンを表示 */}
                       {currentSelection && onLearnMapping && !isLearned && (
                         <button
-                          onClick={() => handleLearnMapping(unmatched.amazonTitle, currentSelection, index)}
+                          onClick={() => {
+                            console.log('学習ボタンクリック:', unmatched.amazonTitle, currentSelection)
+                            handleLearnMapping(unmatched.amazonTitle, currentSelection, index)
+                          }}
                           className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center justify-center gap-1"
                         >
                           <Save className="h-4 w-4" />
