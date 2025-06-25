@@ -393,7 +393,7 @@ export default function AmazonCsvConfirmModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[95vh] flex flex-col">
         
         {/* ヘッダー */}
         <div className="p-6 border-b bg-gray-50 flex-shrink-0">
@@ -452,7 +452,7 @@ export default function AmazonCsvConfirmModal({
         </div>
 
         {/* メインコンテンツ */}
-        <div className="flex-1 p-4 overflow-y-auto">
+        <div className="flex-1 p-4 overflow-y-auto min-h-0">
           {!showDuplicateResolver ? (
             <ProductListView
               displayResults={displayResults}
@@ -470,7 +470,7 @@ export default function AmazonCsvConfirmModal({
           )}
         </div>
 
-        {/* フッター - 常に表示 */}
+        {/* フッター - 強制表示 */}
         <div className="border-t bg-gray-50 p-6 flex-shrink-0">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
