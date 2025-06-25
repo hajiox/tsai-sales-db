@@ -2,6 +2,7 @@
 "use client"
 
 import React, { useState, useMemo } from "react"
+import toast from "react-hot-toast"
 import ProductAddModal from "./ProductAddModal"
 import DuplicateResolverModal from "./DuplicateResolverModal"
 import QualityCheckPanel from "./QualityCheckPanel"
