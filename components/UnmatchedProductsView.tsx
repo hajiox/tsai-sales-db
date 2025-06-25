@@ -161,52 +161,55 @@ export default function UnmatchedProductsView({
                       ✓ 修正済み → {selectedProduct?.name || '商品選択済み'}
                     </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <select
-                        id={`unmatched-select-${index}`}
-                        className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
-                        defaultValue=""
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            onUnmatchedProductSelect(index, e.target.value)
-                            // 学習ボタンを表示するためにDOM更新を待つ
-                            setTimeout(() => {
-                              const learnBtn = document.getElementById(`learn-btn-${index}`)
-                              if (learnBtn) {
-                                learnBtn.style.display = 'flex'
-                              }
-                            }, 100)
-                          }
-                        }}
-                      >
-                        <option value="">商品を選択してください...</option>
-                        {productMaster.map(product => (
-                          <option key={product.id} value={product.id}>
-                            {product.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        id={`learn-btn-${index}`}
-                        style={{ display: 'none' }}
-                        onClick={() => {
-                          const select = document.getElementById(`unmatched-select-${index}`) as HTMLSelectElement
-                          if (select?.value && onLearnMapping) {
-                            onLearnMapping(unmatched.amazonTitle, select.value)
-                          }
-                        }}
-                        className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 items-center gap-1"
-                      >
-                        <Save className="h-3 w-3" />
-                        学習
-                      </button>
-                      <button
-                        onClick={() => onOpenAddProductModal(index)}
-                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 flex items-center gap-1"
-                      >
-                        <Plus className="h-3 w-3" />
-                        新規追加
-                      </button>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <select
+                          id={`unmatched-select-${index}`}
+                          className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
+                          defaultValue=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              onUnmatchedProductSelect(index, e.target.value)
+                            }
+                          }}
+                        >
+                          <option value="">商品を選択してください...</option>
+                          {productMaster.map(product => (
+                            <option key={product.id} value={product.id}>
+                              {product.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => onOpenAddProductModal(index)}
+                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 flex items-center gap-1"
+                        >
+                          <Plus className="h-3 w-3" />
+                          新規追加
+                        </button>
+                      </div>
+                      {/* 選択後に学習ボタンを表示 */}
+                      {(() => {
+                        const select = document.getElementById(`unmatched-select-${index}`) as HTMLSelectElement
+                        if (select?.value && onLearnMapping) {
+                          return (
+                            <button
+                              onClick={() => {
+                                onLearnMapping(unmatched.amazonTitle, select.value)
+                                // ボタンを押したら非表示にする
+                                const btn = document.getElementById(`learn-btn-unmatched-${index}`)
+                                if (btn) btn.style.display = 'none'
+                              }}
+                              id={`learn-btn-unmatched-${index}`}
+                              className="w-full px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center justify-center gap-1"
+                            >
+                              <Save className="h-3 w-3" />
+                              このマッピングを学習する
+                            </button>
+                          )
+                        }
+                        return null
+                      })()}
                     </div>
                   )}
                 </div>
