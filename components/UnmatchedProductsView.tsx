@@ -1,18 +1,8 @@
-// /components/UnmatchedProductsView.tsx ver.15 – 完全版
+// /components/UnmatchedProductsView.tsx ver.16 – 依存ゼロ版
 "use client"
 
 import React, { useState } from "react"
-import { AlertCircle, CheckCircle2, Plus } from "lucide-react"
-
-// shadcn/ui
-import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select"
+import { CheckCircle2, AlertCircle } from "lucide-react"
 
 // ----------------------------
 // 型定義
@@ -29,101 +19,93 @@ interface ProductMasterItem {
 }
 
 interface UnmatchedProductsViewProps {
-  /** 未マッチ Amazon 商品一覧 */
   unmatchedProducts: UnmatchedProduct[]
-  /** 自社商品マスター */
   productMaster: ProductMasterItem[]
-  /** true のとき一覧を表示（デフォルト true） */
-  showUnmatched?: boolean
-  /** 学習ボタン押下時に呼び出すコールバック */
+  showUnmatched: boolean
   onLearnMapping?: (amazonTitle: string, productId: string) => void
 }
 
 // ----------------------------
-// 本体コンポーネント
+// コンポーネント本体
 // ----------------------------
-export default function UnmatchedProductsView({
+const UnmatchedProductsView: React.FC<UnmatchedProductsViewProps> = ({
   unmatchedProducts,
   productMaster,
-  showUnmatched = true,
+  showUnmatched,
   onLearnMapping,
-}: UnmatchedProductsViewProps) {
-  // 商品ごとの選択状態を index → productId で管理
-  const [selection, setSelection] = useState<Record<number, string | "">>({})
+}) => {
+  // 行ごとの選択状態を保持（amazonTitle → productId）
+  const [selectedMap, setSelectedMap] = useState<Record<string, string>>({})
 
-  // 非表示指定 or 該当なしなら何も出さない
-  if (!showUnmatched || unmatchedProducts.length === 0) return null
+  if (!showUnmatched) return null
+
+  const handleSelect = (amazonTitle: string, productId: string) => {
+    setSelectedMap((prev) => ({ ...prev, [amazonTitle]: productId }))
+  }
+
+  const handleLearn = (amazonTitle: string) => {
+    const productId = selectedMap[amazonTitle]
+    if (!productId) return
+    onLearnMapping?.(amazonTitle, productId)
+    // リセットして次の商品へ
+    setSelectedMap((prev) => ({ ...prev, [amazonTitle]: "" }))
+  }
 
   return (
     <div className="space-y-4">
-      {unmatchedProducts.map((item, idx) => {
-        const selectedId = selection[idx] ?? ""
-        const readyToLearn = selectedId !== ""
+      {unmatchedProducts.map((p) => {
+        const selectedId = selectedMap[p.amazonTitle] ?? ""
+        const isReady = selectedId !== ""
+        const learned = false // TODO: サーバー反映済み判定が必要なら prop で渡す
 
         return (
           <div
-            key={idx}
-            className="rounded-md border p-4 space-y-3 bg-background/40"
+            key={p.amazonTitle}
+            className={`border rounded p-3 space-y-2 ${
+              learned ? "bg-green-50" : "bg-orange-50"
+            }`}
           >
-            {/* ① ヘッダー部分 */}
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-              <div className="flex-1 space-y-1">
-                <p className="font-medium leading-snug">{item.amazonTitle}</p>
-                <p className="text-xs text-muted-foreground">数量: {item.quantity}</p>
-              </div>
-            </div>
-
-            {/* ② マッピング UI */}
-            <div className="flex items-center gap-4">
-              {/* プルダウン */}
-              <Select
-                value={selectedId}
-                onValueChange={(value) =>
-                  setSelection((prev) => ({ ...prev, [idx]: value }))
-                }
-              >
-                <SelectTrigger className="w-72">
-                  <SelectValue placeholder="対応する自社商品を選択…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {productMaster.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* 学習ボタン / 警告 */}
-              {onLearnMapping ? (
-                <Button
-                  size="sm"
-                  className="gap-1"
-                  variant="default"
-                  disabled={!readyToLearn}
-                  onClick={() => {
-                    if (!readyToLearn) return
-                    onLearnMapping(item.amazonTitle, selectedId)
-                    // 成功したら UI で完了を分かりやすく
-                    setSelection((prev) => ({ ...prev, [idx]: "" }))
-                  }}
-                >
-                  <Plus className="h-4 w-4" /> このマッピングを学習する
-                </Button>
+            <div className="font-medium text-sm flex items-start gap-2">
+              {learned ? (
+                <CheckCircle2 className="text-green-600 shrink-0" size={18} />
               ) : (
-                <p className="flex items-center gap-1 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" /> onLearnMapping prop が未設定です
-                </p>
+                <AlertCircle className="text-orange-600 shrink-0" size={18} />
               )}
+              <span>{p.amazonTitle}</span>
+              <span className="ml-auto text-xs text-gray-500">{p.quantity}個</span>
             </div>
 
-            {/* ③ 学習済み表示（※例示ロジック。必要に応じて編集可） */}
-            {/* item.matched が true になったら緑色で完了表示したい場合 */}
-            {item.matched && (
-              <div className="flex items-center gap-1 text-emerald-600 text-sm">
-                <CheckCircle2 className="h-4 w-4" /> 学習済み
-              </div>
+            {/* プルダウン */}
+            <select
+              value={selectedId}
+              onChange={(e) => handleSelect(p.amazonTitle, e.target.value)}
+              className="w-full border rounded px-2 py-1 text-sm"
+            >
+              <option value="">商品を選択…</option>
+              {productMaster.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+
+            {/* 学習ボタン or 警告 */}
+            {onLearnMapping ? (
+              <button
+                onClick={() => handleLearn(p.amazonTitle)}
+                disabled={!isReady}
+                className={`mt-1 text-sm font-semibold px-3 py-1.5 rounded ${
+                  isReady
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                このマッピングを学習する
+              </button>
+            ) : (
+              <p className="mt-1 flex items-center gap-1 text-red-600 text-xs">
+                <AlertCircle size={14} /> 親から <code>onLearnMapping</code> が渡されていません
+              </p>
             )}
           </div>
         )
@@ -131,3 +113,5 @@ export default function UnmatchedProductsView({
     </div>
   )
 }
+
+export default UnmatchedProductsView;
