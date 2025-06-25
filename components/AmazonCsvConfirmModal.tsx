@@ -1,4 +1,4 @@
-// /components/AmazonCsvConfirmModal.tsx ver.10 (大幅簡素化版)
+// /components/AmazonCsvConfirmModal.tsx ver.11 (循環参照修正版)
 "use client"
 
 import React, { useState, useMemo } from "react"
@@ -184,7 +184,7 @@ export default function AmazonCsvConfirmModal({
   const [allProductsResults, setAllProductsResults] = useState<AllProductResult[]>(cleanResults)
   const [individualCsvProducts, setIndividualCsvProducts] = useState<IndividualCsvProduct[]>(individualProducts)
   const [showDuplicateResolver, setShowDuplicateResolver] = useState(false)
-  const [showUnmatched, setShowUnmatched] = useState(false) // 🔥 修正: state追加
+  const [showUnmatched, setShowUnmatched] = useState(false)
   const [showZeroQuantity, setShowZeroQuantity] = useState(false)
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false)
   const [isAddingProduct, setIsAddingProduct] = useState(false)
@@ -197,45 +197,7 @@ export default function AmazonCsvConfirmModal({
     setIndividualCsvProducts(individualProducts)
   }, [results, productMaster])
 
-  // 🔥 進捗情報の計算（修正版）
-  const progressInfo = useMemo(() => {
-    const unmatchedProductCount = unmatchedProducts.length
-    const duplicateProductCount = duplicates.length
-    const totalIssues = unmatchedProductCount + duplicateProductCount
-    
-    // 解決済み問題の計算
-    let resolvedIssues = 0
-    
-    // 重複解消の進捗
-    if (showDuplicateResolver) {
-      // 重複解消モードでは、修正済みの個別商品数をカウント
-      const resolvedDuplicates = individualCsvProducts.filter(product => 
-        product.isFromDuplicate && product.productId && product.quantity > 0
-      ).length
-      resolvedIssues += Math.min(resolvedDuplicates, duplicateProductCount * 2)
-    } else {
-      // 通常モードでは重複が統合されているので解決済みとカウント
-      resolvedIssues += duplicateProductCount
-    }
-    
-    // 未マッチングの進捗（手動選択された分）
-    const resolvedUnmatched = manualSelections.length
-    resolvedIssues += Math.min(resolvedUnmatched, unmatchedProductCount)
-    
-    const remainingIssues = Math.max(0, totalIssues - resolvedIssues)
-    const canRegister = remainingIssues === 0 && qualityCheck.isQuantityValid
-    
-    return {
-      unmatchedProductCount,
-      duplicateProductCount,
-      totalIssues,
-      resolvedIssues,
-      remainingIssues,
-      canRegister
-    }
-  }, [unmatchedProducts.length, duplicates.length, manualSelections.length, individualCsvProducts, showDuplicateResolver, qualityCheck.isQuantityValid])
-
-  // 品質管理機能
+  // 品質管理機能（progressInfo依存を削除）
   const qualityCheck = useMemo((): QualityCheck => {
     console.log('csvSummary:', csvSummary)
     const csvOriginalTotal = 1956  // 実際のCSV値を強制使用
@@ -413,7 +375,6 @@ export default function AmazonCsvConfirmModal({
           
           <QualityCheckPanel 
             qualityCheck={qualityCheck} 
-            progressInfo={progressInfo}
             isDuplicateResolverMode={showDuplicateResolver} 
             className="mt-4" 
           />
