@@ -1,7 +1,8 @@
-// /components/UnmatchedProductsView.tsx ver.1 (未マッチング商品表示専用)
+// /components/UnmatchedProductsView.tsx ver.2
 "use client"
 
 import React from "react"
+import { CheckCircle2, AlertCircle, Plus } from "lucide-react"
 
 interface UnmatchedProduct {
   amazonTitle: string
@@ -16,6 +17,7 @@ interface UnmatchedProductsViewProps {
   onToggleShow: () => void
   onUnmatchedProductSelect: (unmatchedIndex: number, productId: string) => void
   onOpenAddProductModal: (unmatchedIndex: number) => void
+  manualSelections?: { amazonTitle: string; productId: string }[] // 新規追加
 }
 
 export default function UnmatchedProductsView({
@@ -24,75 +26,171 @@ export default function UnmatchedProductsView({
   showUnmatched,
   onToggleShow,
   onUnmatchedProductSelect,
-  onOpenAddProductModal
+  onOpenAddProductModal,
+  manualSelections = [] // 新規追加
 }: UnmatchedProductsViewProps) {
-
+  
   if (unmatchedProducts.length === 0) return null
 
+  // 修正済みかどうかを判定
+  const isResolved = (amazonTitle: string) => {
+    return manualSelections.some(selection => selection.amazonTitle === amazonTitle)
+  }
+
+  // 統計情報を計算
+  const stats = {
+    total: unmatchedProducts.length,
+    resolved: unmatchedProducts.filter(p => isResolved(p.amazonTitle)).length,
+    unresolved: unmatchedProducts.filter(p => !isResolved(p.amazonTitle)).length,
+    totalQuantity: unmatchedProducts.reduce((sum, p) => sum + p.quantity, 0),
+    resolvedQuantity: unmatchedProducts
+      .filter(p => isResolved(p.amazonTitle))
+      .reduce((sum, p) => sum + p.quantity, 0),
+    unresolvedQuantity: unmatchedProducts
+      .filter(p => !isResolved(p.amazonTitle))
+      .reduce((sum, p) => sum + p.quantity, 0)
+  }
+
   return (
-    <>
-      {/* 未マッチング警告・表示ボタン */}
-      <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-        <h4 className="text-orange-800 font-semibold mb-2">⚠️ 未マッチング検出！</h4>
-        <p className="text-sm text-orange-700 mb-2">
-          <strong>{unmatchedProducts.length}商品（{unmatchedProducts.reduce((sum, u) => sum + u.quantity, 0)}個）</strong>が未マッチングです。手動で商品を選択してください。
-        </p>
-        <button
-          onClick={onToggleShow}
-          className="px-4 py-2 bg-orange-600 text-white rounded text-sm hover:bg-orange-700"
-        >
-          {showUnmatched ? '未マッチング商品を非表示' : '🔍 未マッチング商品を表示・修正'}
-        </button>
-      </div>
-
-      {/* 未マッチング商品リスト */}
-      {showUnmatched && (
-        <div className="mt-6">
-          <h4 className="text-lg font-semibold mb-4 text-orange-600">
-            未マッチング商品一覧 ({unmatchedProducts.length}商品)
+    <div className="mt-4">
+      <div className={`p-4 border rounded-lg ${stats.unresolved > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className={`font-semibold flex items-center gap-2 ${stats.unresolved > 0 ? 'text-orange-800' : 'text-green-800'}`}>
+            {stats.unresolved > 0 ? (
+              <>
+                <AlertCircle className="h-5 w-5" />
+                未マッチング商品あり
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-5 w-5" />
+                すべて修正済み！
+              </>
+            )}
           </h4>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {unmatchedProducts.map((unmatched, index) => (
-              <div key={index} className="border border-orange-300 rounded-lg p-4 bg-orange-50">
-                <div className="mb-3">
-                  <label className="text-xs text-gray-500 font-medium">未マッチングCSV商品名</label>
-                  <p className="text-sm font-bold text-gray-800 break-words">{unmatched.amazonTitle}</p>
-                </div>
-                
-                <div className="mb-3">
-                  <label className="text-xs text-gray-500 font-medium block mb-1">商品マスターを選択</label>
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        onUnmatchedProductSelect(index, e.target.value)
-                      }
-                    }}
-                    className="w-full text-sm border border-orange-300 rounded px-3 py-2 bg-white"
-                  >
-                    <option value="">商品を選択...</option>
-                    {productMaster.map((product) => (
-                      <option key={product.id} value={product.id}>{product.name}</option>
-                    ))}
-                  </select>
-                </div>
+          <button
+            onClick={onToggleShow}
+            className={`text-sm px-3 py-1 rounded ${
+              stats.unresolved > 0 
+                ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                : 'bg-green-600 text-white hover:bg-green-700'
+            }`}
+          >
+            {showUnmatched ? '詳細を隠す' : '詳細を表示'}
+          </button>
+        </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="text-sm">
-                    <span className="text-gray-500">数量: </span>
-                    <span className="font-medium text-orange-700">{unmatched.quantity}個</span>
-                  </div>
-                  <button
-                    onClick={() => onOpenAddProductModal(index)}
-                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    新商品として追加
-                  </button>
-                </div>
+        {/* 修正進捗サマリー */}
+        <div className="grid grid-cols-2 gap-4 mb-3">
+          <div className="bg-white p-3 rounded border border-gray-200">
+            <div className="text-sm text-gray-600">商品数</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-lg font-bold text-green-600">{stats.resolved}</span>
+              <span className="text-sm text-gray-500">/</span>
+              <span className="text-lg font-bold">{stats.total}</span>
+              <span className="text-xs text-gray-500">修正済み</span>
+            </div>
+            {stats.unresolved > 0 && (
+              <div className="text-xs text-orange-600 mt-1">
+                残り{stats.unresolved}商品の修正が必要
               </div>
-            ))}
+            )}
+          </div>
+          
+          <div className="bg-white p-3 rounded border border-gray-200">
+            <div className="text-sm text-gray-600">数量</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-lg font-bold text-green-600">{stats.resolvedQuantity}</span>
+              <span className="text-sm text-gray-500">/</span>
+              <span className="text-lg font-bold">{stats.totalQuantity}</span>
+              <span className="text-xs text-gray-500">個</span>
+            </div>
+            {stats.unresolvedQuantity > 0 && (
+              <div className="text-xs text-orange-600 mt-1">
+                {stats.unresolvedQuantity}個が未処理
+              </div>
+            )}
           </div>
         </div>
-      )}
-    </>
+
+        {/* プログレスバー */}
+        <div className="mb-3">
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-green-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(stats.resolved / stats.total) * 100}%` }}
+            />
+          </div>
+          <div className="text-xs text-gray-600 mt-1 text-center">
+            修正進捗: {Math.round((stats.resolved / stats.total) * 100)}%
+          </div>
+        </div>
+
+        {showUnmatched && (
+          <div className="space-y-2 mt-4 max-h-96 overflow-y-auto">
+            {unmatchedProducts.map((unmatched, index) => {
+              const resolved = isResolved(unmatched.amazonTitle)
+              const selectedProductId = manualSelections.find(s => s.amazonTitle === unmatched.amazonTitle)?.productId
+              const selectedProduct = productMaster.find(p => p.id === selectedProductId)
+              
+              return (
+                <div 
+                  key={index} 
+                  className={`p-3 rounded-lg border ${
+                    resolved 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'bg-white border-orange-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {resolved && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                      <span className={`text-sm font-medium ${resolved ? 'text-green-800' : 'text-gray-800'}`}>
+                        {unmatched.amazonTitle}
+                      </span>
+                    </div>
+                    <span className={`text-sm font-bold ${resolved ? 'text-green-600' : 'text-orange-600'}`}>
+                      {unmatched.quantity}個
+                    </span>
+                  </div>
+                  
+                  {resolved ? (
+                    <div className="text-sm text-green-700 bg-green-100 px-3 py-1 rounded">
+                      ✓ 修正済み → {selectedProduct?.name || '商品選択済み'}
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            onUnmatchedProductSelect(index, e.target.value)
+                          }
+                        }}
+                      >
+                        <option value="">商品を選択してください...</option>
+                        {productMaster.map(product => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => onOpenAddProductModal(index)}
+                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 flex items-center gap-1"
+                      >
+                        <Plus className="h-3 w-3" />
+                        新規追加
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
