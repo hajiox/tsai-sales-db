@@ -1,4 +1,4 @@
-// /components/QualityCheckPanel.tsx ver.1 (品質管理専用パネル)
+// /components/QualityCheckPanel.tsx ver.2 (進捗表示機能追加)
 "use client"
 
 import React from "react"
@@ -22,14 +22,25 @@ interface QualityCheck {
   productCount: number        // 商品種類数
 }
 
+interface ProgressInfo {
+  unmatchedProductCount: number    // 未マッチング商品数
+  duplicateProductCount: number    // 重複商品数
+  totalIssues: number             // 総問題数
+  resolvedIssues: number          // 解決済み問題数
+  remainingIssues: number         // 残り問題数
+  canRegister: boolean            // 登録可能かどうか
+}
+
 interface QualityCheckPanelProps {
   qualityCheck: QualityCheck
+  progressInfo?: ProgressInfo
   isDuplicateResolverMode: boolean
   className?: string
 }
 
 export default function QualityCheckPanel({
   qualityCheck,
+  progressInfo,
   isDuplicateResolverMode,
   className = ""
 }: QualityCheckPanelProps) {
@@ -97,6 +108,62 @@ export default function QualityCheckPanel({
         )}
       </div>
 
+      {/* 🔥 進捗表示パネル */}
+      {progressInfo && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+          <h5 className="text-blue-800 font-semibold mb-2">📊 修正進捗</h5>
+          <div className="grid grid-cols-2 gap-4 mb-3">
+            <div className="text-sm">
+              <div className="text-blue-700">未マッチング商品</div>
+              <div className="font-bold text-orange-600">{progressInfo.unmatchedProductCount}商品</div>
+            </div>
+            <div className="text-sm">
+              <div className="text-blue-700">重複商品</div>
+              <div className="font-bold text-red-600">{progressInfo.duplicateProductCount}商品</div>
+            </div>
+          </div>
+          
+          {/* プログレスバー */}
+          <div className="mb-2">
+            <div className="flex justify-between text-xs text-blue-700 mb-1">
+              <span>修正進捗</span>
+              <span>{progressInfo.resolvedIssues} / {progressInfo.totalIssues}</span>
+            </div>
+            <div className="w-full bg-blue-200 rounded-full h-2">
+              <div 
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  progressInfo.canRegister ? 'bg-green-500' : 'bg-blue-500'
+                }`}
+                style={{ 
+                  width: progressInfo.totalIssues > 0 
+                    ? `${Math.round((progressInfo.resolvedIssues / progressInfo.totalIssues) * 100)}%` 
+                    : '100%' 
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 登録可能状態 */}
+          <div className={`text-sm p-2 rounded ${
+            progressInfo.canRegister 
+              ? 'bg-green-100 text-green-800 border border-green-200' 
+              : 'bg-orange-100 text-orange-800 border border-orange-200'
+          }`}>
+            {progressInfo.canRegister ? (
+              <span className="flex items-center gap-1">
+                <span>🎉</span>
+                <strong>登録可能！</strong>すべての問題が解決されました
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <span>⏳</span>
+                <strong>あと{progressInfo.remainingIssues}件</strong>の修正で登録可能になります
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 数量フロー表示 */}
       <div className="space-y-3">
         
@@ -124,6 +191,9 @@ export default function QualityCheckPanel({
             <span className="text-sm text-gray-600">❓ 未マッチング</span>
             <div className="text-right">
               <div className="font-medium text-orange-600">{unmatchedTotal.toLocaleString()}個</div>
+              {progressInfo && (
+                <div className="text-xs text-orange-600">({progressInfo.unmatchedProductCount}商品)</div>
+              )}
             </div>
           </div>
         )}
