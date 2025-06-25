@@ -1,4 +1,4 @@
-// /components/UnmatchedProductsView.tsx ver.9
+// /components/UnmatchedProductsView.tsx ver.11
 "use client"
 
 import React, { useState } from "react" 
@@ -53,16 +53,17 @@ export default function UnmatchedProductsView({
   }
 
   const handleSelectChange = (index: number, value: string) => {
-    console.log(`handleSelectChange: Index=${index}, Value=${value}`); // デバッグログ
+    // 親コンポーネントへ渡す引数をログに出力
+    console.log(`Calling onUnmatchedProductSelect with index: ${index}, productId: ${value}`);
     if (value) {
       onUnmatchedProductSelect(index, value)
     }
   }
 
   const handleLearn = async (amazonTitle: string, productId: string, index: number) => {
-    console.log('handleLearnが呼び出されました:', amazonTitle, productId, index) // デバッグログ
+    console.log('handleLearnが呼び出されました:', amazonTitle, productId, index) 
     if (onLearnMapping) {
-      console.log('onLearnMappingを呼び出します:', amazonTitle, productId) // デバッグログ
+      console.log('onLearnMappingを呼び出します:', amazonTitle, productId) 
       try {
         await onLearnMapping(amazonTitle, productId)
         setLearnedItems(prev => new Set(prev).add(`${index}-${amazonTitle}`))
@@ -71,7 +72,7 @@ export default function UnmatchedProductsView({
         alert('学習に失敗しました')
       }
     } else {
-      console.log('onLearnMappingが定義されていません。') // デバッグログ
+      console.log('onLearnMappingが定義されていません。') 
     }
   }
 
@@ -155,13 +156,12 @@ export default function UnmatchedProductsView({
             {unmatchedProducts.map((unmatched, index) => {
               const resolved = isResolved(unmatched.amazonTitle)
               const selectedProductId = manualSelections.find(s => s.amazonTitle === unmatched.amazonTitle)?.productId
-              // selectedProductの定義を、selectedProductIdが利用可能になった後に行う
-              const selectedProduct = productMaster.find(p => p.id === selectedProductId) // ここで定義
+              const selectedProduct = productMaster.find(p => p.id === selectedProductId) 
 
               const isLearned = learnedItems.has(`${index}-${unmatched.amazonTitle}`)
 
               // デバッグログ
-              console.log(`Item ${index}: selectedProductId=${selectedProductId}, isLearned=${isLearned}, resolved=${resolved}`);
+              console.log(`UnmatchedItem[${index}]: amazonTitle="${unmatched.amazonTitle}", selectedProductId="${selectedProductId}", isLearned=${isLearned}, resolved=${resolved}`);
               
               return (
                 <div 
@@ -212,7 +212,7 @@ export default function UnmatchedProductsView({
                         </button>
                       </div>
                       
-                      {/* 学習ボタン - 条件を onLearnMapping && selectedProductId && !isLearned に戻す */}
+                      {/* 学習ボタン */}
                       {onLearnMapping && selectedProductId && !isLearned && ( 
                         <button
                           onClick={() => {
