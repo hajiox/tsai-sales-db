@@ -2,7 +2,7 @@
 "use client"
 
 import React from "react"
-import { CheckCircle2, AlertCircle, Plus } from "lucide-react"
+import { CheckCircle2, AlertCircle, Plus, Save } from "lucide-react"
 
 interface UnmatchedProduct {
   amazonTitle: string
@@ -17,7 +17,8 @@ interface UnmatchedProductsViewProps {
   onToggleShow: () => void
   onUnmatchedProductSelect: (unmatchedIndex: number, productId: string) => void
   onOpenAddProductModal: (unmatchedIndex: number) => void
-  manualSelections?: { amazonTitle: string; productId: string }[] // 新規追加
+  manualSelections?: { amazonTitle: string; productId: string }[]
+  onLearnMapping?: (amazonTitle: string, productId: string) => void // 新規追加
 }
 
 export default function UnmatchedProductsView({
@@ -27,7 +28,8 @@ export default function UnmatchedProductsView({
   onToggleShow,
   onUnmatchedProductSelect,
   onOpenAddProductModal,
-  manualSelections = [] // 新規追加
+  manualSelections = [],
+  onLearnMapping
 }: UnmatchedProductsViewProps) {
   
   if (unmatchedProducts.length === 0) return null
@@ -161,11 +163,19 @@ export default function UnmatchedProductsView({
                   ) : (
                     <div className="flex gap-2">
                       <select
+                        id={`unmatched-select-${index}`}
                         className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
                         defaultValue=""
                         onChange={(e) => {
                           if (e.target.value) {
                             onUnmatchedProductSelect(index, e.target.value)
+                            // 学習ボタンを表示するためにDOM更新を待つ
+                            setTimeout(() => {
+                              const learnBtn = document.getElementById(`learn-btn-${index}`)
+                              if (learnBtn) {
+                                learnBtn.style.display = 'flex'
+                              }
+                            }, 100)
                           }
                         }}
                       >
@@ -176,6 +186,20 @@ export default function UnmatchedProductsView({
                           </option>
                         ))}
                       </select>
+                      <button
+                        id={`learn-btn-${index}`}
+                        style={{ display: 'none' }}
+                        onClick={() => {
+                          const select = document.getElementById(`unmatched-select-${index}`) as HTMLSelectElement
+                          if (select?.value && onLearnMapping) {
+                            onLearnMapping(unmatched.amazonTitle, select.value)
+                          }
+                        }}
+                        className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 items-center gap-1"
+                      >
+                        <Save className="h-3 w-3" />
+                        学習
+                      </button>
                       <button
                         onClick={() => onOpenAddProductModal(index)}
                         className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 flex items-center gap-1"
