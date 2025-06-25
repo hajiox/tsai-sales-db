@@ -1,7 +1,7 @@
-// /components/UnmatchedProductsView.tsx ver.3
+// /components/UnmatchedProductsView.tsx ver.4
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
 import { CheckCircle2, AlertCircle, Plus, Save } from "lucide-react"
 
 interface UnmatchedProduct {
@@ -31,9 +31,6 @@ export default function UnmatchedProductsView({
   manualSelections = [],
   onLearnMapping
 }: UnmatchedProductsViewProps) {
-  // 各商品の選択状態を管理
-  const [selectedProducts, setSelectedProducts] = useState<Record<number, string>>({})
-  const [learnedMappings, setLearnedMappings] = useState<Set<string>>(new Set())
   
   if (unmatchedProducts.length === 0) return null
 
@@ -54,23 +51,6 @@ export default function UnmatchedProductsView({
     unresolvedQuantity: unmatchedProducts
       .filter(p => !isResolved(p.amazonTitle))
       .reduce((sum, p) => sum + p.quantity, 0)
-  }
-
-  const handleProductSelect = (index: number, productId: string) => {
-    // 先に内部状態を更新
-    setSelectedProducts(prev => ({
-      ...prev,
-      [index]: productId
-    }))
-    // その後、親コンポーネントに通知
-    onUnmatchedProductSelect(index, productId)
-  }
-
-  const handleLearnMapping = (amazonTitle: string, productId: string, index: number) => {
-    if (onLearnMapping) {
-      onLearnMapping(amazonTitle, productId)
-      setLearnedMappings(prev => new Set(prev).add(`${index}-${amazonTitle}`))
-    }
   }
 
   return (
@@ -154,14 +134,6 @@ export default function UnmatchedProductsView({
               const resolved = isResolved(unmatched.amazonTitle)
               const selectedProductId = manualSelections.find(s => s.amazonTitle === unmatched.amazonTitle)?.productId
               const selectedProduct = productMaster.find(p => p.id === selectedProductId)
-              const currentSelection = selectedProducts[index]
-              const isLearned = learnedMappings.has(`${index}-${unmatched.amazonTitle}`)
-              
-              console.log(`商品${index}の状態:`, {
-                currentSelection,
-                isLearned,
-                onLearnMapping: !!onLearnMapping
-              })
               
               return (
                 <div 
@@ -192,12 +164,18 @@ export default function UnmatchedProductsView({
                     <div className="space-y-2">
                       <div className="flex gap-2">
                         <select
+                          id={`unmatched-select-${index}`}
                           className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
-                          value={currentSelection || ''}
+                          defaultValue=""
                           onChange={(e) => {
-                            console.log('商品選択:', index, e.target.value)
                             if (e.target.value) {
-                              handleProductSelect(index, e.target.value)
+                              onUnmatchedProductSelect(index, e.target.value)
+                              
+                              // 学習ボタンを表示
+                              const learnBtn = document.getElementById(`learn-btn-${index}`)
+                              if (learnBtn) {
+                                learnBtn.style.display = 'flex'
+                              }
                             }
                           }}
                         >
@@ -217,25 +195,25 @@ export default function UnmatchedProductsView({
                         </button>
                       </div>
                       
-                      {/* 商品が選択されていて、まだ学習していない場合に学習ボタンを表示 */}
-                      {currentSelection && onLearnMapping && !isLearned && (
+                      {/* 学習ボタン（初期は非表示） */}
+                      {onLearnMapping && (
                         <button
+                          id={`learn-btn-${index}`}
+                          style={{ display: 'none' }}
                           onClick={() => {
-                            console.log('学習ボタンクリック:', unmatched.amazonTitle, currentSelection)
-                            handleLearnMapping(unmatched.amazonTitle, currentSelection, index)
+                            const select = document.getElementById(`unmatched-select-${index}`) as HTMLSelectElement
+                            if (select?.value) {
+                              onLearnMapping(unmatched.amazonTitle, select.value)
+                              // 学習後はボタンを非表示に
+                              const btn = document.getElementById(`learn-btn-${index}`)
+                              if (btn) btn.style.display = 'none'
+                            }
                           }}
-                          className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center justify-center gap-1"
+                          className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 items-center justify-center gap-1"
                         >
-                          <Save className="h-4 w-4" />
+                          <Save className="h-4 w-4 mr-1" style={{ display: 'inline' }} />
                           このマッピングを学習する
                         </button>
-                      )}
-                      
-                      {/* 学習済みメッセージ */}
-                      {isLearned && (
-                        <div className="text-center text-sm text-green-600 bg-green-100 px-3 py-1 rounded">
-                          ✓ 学習済み
-                        </div>
                       )}
                     </div>
                   )}
