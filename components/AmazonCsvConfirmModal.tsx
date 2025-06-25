@@ -431,14 +431,17 @@ export default function AmazonCsvConfirmModal({
             manualSelections={manualSelections}
             onLearnMapping={async (amazonTitle, productId) => {
               try {
-                await fetch('/api/products/add-learning', {
+                const response = await fetch('/api/products/add-learning', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ amazonTitle, productId }),
                 })
-                alert('マッピングを学習しました')
+                if (response.ok) {
+                  alert('マッピングを学習しました')
+                }
               } catch (error) {
                 console.error('学習エラー:', error)
+                alert('学習に失敗しました')
               }
             }}
           />
