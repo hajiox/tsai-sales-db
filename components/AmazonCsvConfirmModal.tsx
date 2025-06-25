@@ -197,7 +197,7 @@ export default function AmazonCsvConfirmModal({
     setIndividualCsvProducts(individualProducts)
   }, [results, productMaster])
 
-  // 🔥 進捗情報の計算
+  // 🔥 進捗情報の計算（修正版）
   const progressInfo = useMemo(() => {
     const unmatchedProductCount = unmatchedProducts.length
     const duplicateProductCount = duplicates.length
@@ -209,10 +209,10 @@ export default function AmazonCsvConfirmModal({
     // 重複解消の進捗
     if (showDuplicateResolver) {
       // 重複解消モードでは、修正済みの個別商品数をカウント
-      const resolvedDuplicates = individualCsvProducts.filter(p => 
-        p.isFromDuplicate && p.productId && p.quantity > 0
+      const resolvedDuplicates = individualCsvProducts.filter(product => 
+        product.isFromDuplicate && product.productId && product.quantity > 0
       ).length
-      resolvedIssues += Math.min(resolvedDuplicates, duplicateProductCount * 2) // 重複は複数商品分
+      resolvedIssues += Math.min(resolvedDuplicates, duplicateProductCount * 2)
     } else {
       // 通常モードでは重複が統合されているので解決済みとカウント
       resolvedIssues += duplicateProductCount
@@ -233,7 +233,7 @@ export default function AmazonCsvConfirmModal({
       remainingIssues,
       canRegister
     }
-  }, [unmatchedProducts, duplicates, manualSelections, individualCsvProducts, showDuplicateResolver, qualityCheck.isQuantityValid])
+  }, [unmatchedProducts.length, duplicates.length, manualSelections.length, individualCsvProducts, showDuplicateResolver, qualityCheck.isQuantityValid])
 
   // 品質管理機能
   const qualityCheck = useMemo((): QualityCheck => {
