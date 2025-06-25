@@ -396,6 +396,7 @@ export default function AmazonCsvConfirmModal({
             onToggleShow={() => setShowUnmatched(!showUnmatched)}
             onUnmatchedProductSelect={handleUnmatchedProductSelect}
             onOpenAddProductModal={openAddProductModal}
+            manualSelections={manualSelections}
           />
         </div>
 
