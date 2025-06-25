@@ -1,7 +1,7 @@
-// /components/UnmatchedProductsView.tsx ver.11
+// /components/UnmatchedProductsView.tsx ver.12
 "use client"
 
-import React, { useState } from "react" 
+import React, { useState } from "react"
 import { CheckCircle2, AlertCircle, Plus, Save } from "lucide-react"
 
 interface UnmatchedProduct {
@@ -32,7 +32,9 @@ export default function UnmatchedProductsView({
   onLearnMapping
 }: UnmatchedProductsViewProps) {
   const [learnedItems, setLearnedItems] = useState<Set<string>>(new Set())
-  
+  // コンポーネント内で選択状態を一時的に保持するstateを追加
+  const [internalSelections, setInternalSelections] = useState<{ [key: number]: string }>({});
+
   if (unmatchedProducts.length === 0) return null
 
   const isResolved = (amazonTitle: string) => {
@@ -52,18 +54,21 @@ export default function UnmatchedProductsView({
       .reduce((sum, p) => sum + p.quantity, 0)
   }
 
+  // 選択時の処理を更新
   const handleSelectChange = (index: number, value: string) => {
-    // 親コンポーネントへ渡す引数をログに出力
-    console.log(`Calling onUnmatchedProductSelect with index: ${index}, productId: ${value}`);
+    // 内部stateを更新して即時UIに反映させる
+    setInternalSelections(prev => ({ ...prev, [index]: value }));
+
+    // 親コンポーネントに変更を通知する
     if (value) {
-      onUnmatchedProductSelect(index, value)
+      onUnmatchedProductSelect(index, value);
     }
   }
 
   const handleLearn = async (amazonTitle: string, productId: string, index: number) => {
-    console.log('handleLearnが呼び出されました:', amazonTitle, productId, index) 
+    console.log('handleLearnが呼び出されました:', amazonTitle, productId, index)
     if (onLearnMapping) {
-      console.log('onLearnMappingを呼び出します:', amazonTitle, productId) 
+      console.log('onLearnMappingを呼び出します:', amazonTitle, productId)
       try {
         await onLearnMapping(amazonTitle, productId)
         setLearnedItems(prev => new Set(prev).add(`${index}-${amazonTitle}`))
@@ -72,7 +77,7 @@ export default function UnmatchedProductsView({
         alert('学習に失敗しました')
       }
     } else {
-      console.log('onLearnMappingが定義されていません。') 
+      console.log('onLearnMappingが定義されていません。')
     }
   }
 
@@ -96,8 +101,8 @@ export default function UnmatchedProductsView({
           <button
             onClick={onToggleShow}
             className={`text-sm px-3 py-1 rounded ${
-              stats.unresolved > 0 
-                ? 'bg-orange-600 text-white hover:bg-orange-700' 
+              stats.unresolved > 0
+                ? 'bg-orange-600 text-white hover:bg-orange-700'
                 : 'bg-green-600 text-white hover:bg-green-700'
             }`}
           >
@@ -121,7 +126,7 @@ export default function UnmatchedProductsView({
               </div>
             )}
           </div>
-          
+
           <div className="bg-white p-3 rounded border border-gray-200">
             <div className="text-sm text-gray-600">数量</div>
             <div className="flex items-baseline gap-2">
@@ -141,7 +146,7 @@ export default function UnmatchedProductsView({
         {/* プログレスバー */}
         <div className="mb-3">
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
+            <div
               className="bg-green-500 h-2 rounded-full transition-all duration-300"
               style={{ width: `${(stats.resolved / stats.total) * 100}%` }}
             />
@@ -154,21 +159,19 @@ export default function UnmatchedProductsView({
         {showUnmatched && (
           <div className="space-y-2 mt-4 max-h-96 overflow-y-auto">
             {unmatchedProducts.map((unmatched, index) => {
-              const resolved = isResolved(unmatched.amazonTitle)
-              const selectedProductId = manualSelections.find(s => s.amazonTitle === unmatched.amazonTitle)?.productId
-              const selectedProduct = productMaster.find(p => p.id === selectedProductId) 
+              const resolved = isResolved(unmatched.amazonTitle);
+              // 選択された商品IDを、まず内部stateから取得し、なければpropsから取得
+              const selectedProductId = internalSelections[index] || manualSelections.find(s => s.amazonTitle === unmatched.amazonTitle)?.productId;
+              const selectedProduct = productMaster.find(p => p.id === selectedProductId);
 
-              const isLearned = learnedItems.has(`${index}-${unmatched.amazonTitle}`)
+              const isLearned = learnedItems.has(`${index}-${unmatched.amazonTitle}`);
 
-              // デバッグログ
-              console.log(`UnmatchedItem[${index}]: amazonTitle="${unmatched.amazonTitle}", selectedProductId="${selectedProductId}", isLearned=${isLearned}, resolved=${resolved}`);
-              
               return (
-                <div 
-                  key={index} 
+                <div
+                  key={index}
                   className={`p-3 rounded-lg border ${
-                    resolved 
-                      ? 'bg-green-50 border-green-200' 
+                    resolved
+                      ? 'bg-green-50 border-green-200'
                       : 'bg-white border-orange-200'
                   }`}
                 >
@@ -183,7 +186,7 @@ export default function UnmatchedProductsView({
                       {unmatched.quantity}個
                     </span>
                   </div>
-                  
+
                   {resolved ? (
                     <div className="text-sm text-green-700 bg-green-100 px-3 py-1 rounded">
                       ✓ 修正済み → {selectedProduct?.name || '商品選択済み'}
@@ -192,7 +195,7 @@ export default function UnmatchedProductsView({
                     <div className="space-y-2">
                       <div className="flex gap-2">
                         <select
-                          value={selectedProductId || ''} 
+                          value={selectedProductId || ''} // 更新されたIDを使用
                           onChange={(e) => handleSelectChange(index, e.target.value)}
                           className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
                         >
@@ -211,13 +214,14 @@ export default function UnmatchedProductsView({
                           新規追加
                         </button>
                       </div>
-                      
-                      {/* 学習ボタン */}
-                      {onLearnMapping && selectedProductId && !isLearned && ( 
+
+                      {/* 学習ボタンの表示条件 */}
+                      {onLearnMapping && selectedProductId && !isLearned && (
                         <button
                           onClick={() => {
-                            console.log('学習ボタンがクリックされました');
-                            handleLearn(unmatched.amazonTitle, selectedProductId, index)
+                            if (selectedProductId) { // selectedProductIdが確実にあることを確認
+                               handleLearn(unmatched.amazonTitle, selectedProductId, index);
+                            }
                           }}
                           className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center justify-center gap-1"
                         >
@@ -225,7 +229,7 @@ export default function UnmatchedProductsView({
                           このマッピングを学習する
                         </button>
                       )}
-                      
+
                       {/* 学習済み表示 */}
                       {isLearned && (
                         <div className="text-center text-sm text-green-600 bg-green-100 px-3 py-1 rounded">
