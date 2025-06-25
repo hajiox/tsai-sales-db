@@ -2,7 +2,6 @@
 "use client"
 
 import React, { useState, useMemo } from "react"
-import toast from "react-hot-toast"
 import ProductAddModal from "./ProductAddModal"
 import DuplicateResolverModal from "./DuplicateResolverModal"
 import QualityCheckPanel from "./QualityCheckPanel"
@@ -437,7 +436,7 @@ export default function AmazonCsvConfirmModal({
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ amazonTitle, productId }),
                 })
-                toast.success('マッピングを学習しました')
+                alert('マッピングを学習しました')
               } catch (error) {
                 console.error('学習エラー:', error)
               }
