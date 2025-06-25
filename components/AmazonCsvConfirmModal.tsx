@@ -393,10 +393,10 @@ export default function AmazonCsvConfirmModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[95vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full h-[90vh] flex flex-col">
         
-        {/* ヘッダー */}
-        <div className="p-6 border-b bg-gray-50 flex-shrink-0">
+        {/* ヘッダー - 高さ制限 */}
+        <div className="p-4 border-b bg-gray-50 flex-shrink-0 max-h-[50vh] overflow-y-auto">
           <h3 className="text-lg font-semibold">Amazon CSVインポート確認</h3>
           <p className="text-sm text-gray-600 mt-1">
             {month}月のAmazonデータを確認し、必要に応じて修正してください。
@@ -430,29 +430,29 @@ export default function AmazonCsvConfirmModal({
             <div className="mt-4 flex gap-2 flex-wrap">
               <button
                 onClick={() => setShowZeroQuantity(!showZeroQuantity)}
-                className={`px-4 py-2 rounded-lg text-sm ${
+                className={`px-3 py-1 rounded text-sm ${
                   showZeroQuantity ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                {showZeroQuantity ? `データなし商品を非表示` : `すべて表示 (${stats.total}品種)`}
+                {showZeroQuantity ? `データなし非表示` : `すべて表示 (${stats.total}品種)`}
               </button>
               
               {stats.duplicateCount > 0 && (
                 <button
                   onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
-                  className={`px-4 py-2 rounded-lg text-sm ${
+                  className={`px-3 py-1 rounded text-sm ${
                     showDuplicatesOnly ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800 hover:bg-red-200'
                   }`}
                 >
-                  {showDuplicatesOnly ? '全商品表示' : `重複商品のみ表示 (${stats.duplicateCount}品種)`}
+                  {showDuplicatesOnly ? '全商品' : `重複のみ (${stats.duplicateCount}品種)`}
                 </button>
               )}
             </div>
           )}
         </div>
 
-        {/* メインコンテンツ */}
-        <div className="flex-1 p-4 overflow-y-auto min-h-0">
+        {/* メインコンテンツ - 最小高さ設定 */}
+        <div className="flex-1 p-4 overflow-y-auto min-h-[200px]">
           {!showDuplicateResolver ? (
             <ProductListView
               displayResults={displayResults}
@@ -470,14 +470,14 @@ export default function AmazonCsvConfirmModal({
           )}
         </div>
 
-        {/* フッター - 強制表示 */}
-        <div className="border-t bg-gray-50 p-6 flex-shrink-0">
-          <div className="flex justify-between items-center">
+        {/* フッター - 確実に表示 */}
+        <div className="border-t bg-gray-50 p-4 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div className="text-sm text-gray-600">
-              <div>Amazon列のみを更新します（他のECサイトデータは保持）</div>
+              <div>Amazon列のみを更新します</div>
               <div className={`text-xs mt-1 ${qualityCheck.isQuantityValid ? 'text-green-600' : 'text-red-600'}`}>
                 {qualityCheck.isQuantityValid ? '✅' : '⚠️'} 
-                品質チェック: {stats.withData}件・{stats.totalQuantity.toLocaleString()}個をDBに保存
+                {stats.withData}件・{stats.totalQuantity.toLocaleString()}個をDBに保存
                 {!qualityCheck.isQuantityValid && <span> (差分: {qualityCheck.discrepancy}個)</span>}
               </div>
             </div>
@@ -485,14 +485,14 @@ export default function AmazonCsvConfirmModal({
               <button
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="px-6 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
               >
                 キャンセル
               </button>
               <button
                 onClick={handleConfirm}
                 disabled={isSubmitting || stats.withData === 0 || (qualityCheck.warningLevel === 'error')}
-                className={`px-6 py-2 text-sm text-white rounded disabled:opacity-50 ${
+                className={`px-4 py-2 text-sm text-white rounded disabled:opacity-50 ${
                   qualityCheck.warningLevel === 'error' ? 'bg-red-400' :
                   qualityCheck.isQuantityValid ? 'bg-blue-600 hover:bg-blue-700' :
                   'bg-yellow-600 hover:bg-yellow-700'
