@@ -1,4 +1,4 @@
-// /components/UnmatchedProductsView.tsx ver.6
+// /components/UnmatchedProductsView.tsx ver.7
 "use client"
 
 import React, { useState } from "react"
@@ -58,6 +58,7 @@ export default function UnmatchedProductsView({
 
   const handleSelectChange = (index: number, value: string) => {
     setLocalSelections(prev => ({ ...prev, [index]: value }))
+    // プルダウンで選択されたら、親のonUnmatchedProductSelectも呼び出す
     if (value) {
       onUnmatchedProductSelect(index, value)
     }
@@ -162,6 +163,9 @@ export default function UnmatchedProductsView({
               const selectedProduct = productMaster.find(p => p.id === selectedProductId)
               const currentSelection = localSelections[index] || ''
               const isLearned = learnedItems.has(`${index}-${unmatched.amazonTitle}`)
+
+              // デバッグログを追加
+              console.log(`Item ${index}: currentSelection=${currentSelection}, isLearned=${isLearned}, resolved=${resolved}`); // デバッグログ
               
               return (
                 <div 
@@ -212,8 +216,8 @@ export default function UnmatchedProductsView({
                         </button>
                       </div>
                       
-                      {/* 学習ボタン - デバッグ用に条件を一時的に削除 */}
-                      {onLearnMapping && ( // currentSelection && !isLearnedを削除
+                      {/* 学習ボタン - currentSelection && !isLearned の条件を再度一時的に外し、onLearnMappingがある場合のみ表示 */}
+                      {onLearnMapping && ( 
                         <button
                           onClick={() => {
                             console.log('学習ボタンがクリックされました'); // デバッグログ
