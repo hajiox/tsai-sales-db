@@ -470,7 +470,7 @@ export default function AmazonCsvConfirmModal({
           )}
         </div>
 
-        {/* フッター */}
+        {/* フッター - 常に表示 */}
         <div className="border-t bg-gray-50 p-6 flex-shrink-0">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
