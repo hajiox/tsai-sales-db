@@ -1,14 +1,8 @@
-// /components/RakutenCsvImportModal.tsx ver.1
+// /components/RakutenCsvImportModal.tsx ver.2 (既存UIコンポーネント対応版)
 
 'use client';
 
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface RakutenProduct {
@@ -49,6 +43,8 @@ export default function RakutenCsvImportModal({
   const [newMappings, setNewMappings] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+
+  if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -160,145 +156,154 @@ export default function RakutenCsvImportModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>楽天CSV インポート</DialogTitle>
-        </DialogHeader>
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {success && (
-          <Alert className="border-green-200 bg-green-50">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">{success}</AlertDescription>
-          </Alert>
-        )}
-
-        {step === 'upload' && (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="saleDate">売上日</Label>
-              <Input
-                id="saleDate"
-                type="date"
-                value={saleDate}
-                onChange={(e) => setSaleDate(e.target.value)}
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="csvFile">楽天CSV ファイル</Label>
-              <Input
-                id="csvFile"
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                required
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                楽天市場の商品別売上CSVをアップロードしてください（8行目から商品データを読み取ります）
-              </p>
-            </div>
-
-            <Button 
-              onClick={parseCSV} 
-              disabled={loading || !file || !saleDate}
-              className="w-full"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl max-h-[80vh] overflow-y-auto w-full mx-4">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">楽天CSV インポート</h2>
+            <button
+              onClick={handleClose}
+              className="text-gray-400 hover:text-gray-600"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  解析中...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  CSV解析
-                </>
-              )}
-            </Button>
+              ✕
+            </button>
           </div>
-        )}
 
-        {step === 'confirm' && parseResult && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="bg-green-50 p-3 rounded">
-                <div className="font-semibold text-green-800">マッチ済み</div>
-                <div className="text-green-600">{parseResult.matchedProducts.length}件</div>
-              </div>
-              <div className="bg-yellow-50 p-3 rounded">
-                <div className="font-semibold text-yellow-800">未マッチ</div>
-                <div className="text-yellow-600">{parseResult.unmatchedProducts.length}件</div>
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded">
+              <div className="flex items-center">
+                <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+                <span className="text-red-800">{error}</span>
               </div>
             </div>
+          )}
 
-            {parseResult.unmatchedProducts.length > 0 && (
-              <div>
-                <h3 className="font-semibold mb-3">未マッチ商品の割り当て</h3>
-                <div className="space-y-3 max-h-60 overflow-y-auto">
-                  {parseResult.unmatchedProducts.map((item, index) => (
-                    <div key={index} className="border p-3 rounded">
-                      <div className="font-medium text-sm mb-2">
-                        {item.rakutenTitle.length > 50 
-                          ? `${item.rakutenTitle.substring(0, 50)}...` 
-                          : item.rakutenTitle}
-                      </div>
-                      <div className="text-sm text-gray-600 mb-2">数量: {item.quantity}</div>
-                      <Select
-                        value={newMappings[item.rakutenTitle] || ''}
-                        onValueChange={(value) => handleMappingChange(item.rakutenTitle, value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="商品を選択..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              {product.series} - {product.product_number} ({product.series_code}-{product.product_code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
-                </div>
+          {success && (
+            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded">
+              <div className="flex items-center">
+                <CheckCircle2 className="h-4 w-4 text-green-600 mr-2" />
+                <span className="text-green-800">{success}</span>
               </div>
-            )}
+            </div>
+          )}
 
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setStep('upload')}
-                disabled={loading}
-              >
-                戻る
-              </Button>
-              <Button 
-                onClick={confirmImport}
-                disabled={loading}
-                className="flex-1"
+          {step === 'upload' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">売上日</label>
+                <input
+                  type="date"
+                  value={saleDate}
+                  onChange={(e) => setSaleDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">楽天CSV ファイル</label>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  楽天市場の商品別売上CSVをアップロードしてください（8行目から商品データを読み取ります）
+                </p>
+              </div>
+
+              <button 
+                onClick={parseCSV} 
+                disabled={loading || !file || !saleDate}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    インポート中...
+                    解析中...
                   </>
                 ) : (
-                  'インポート実行'
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    CSV解析
+                  </>
                 )}
-              </Button>
+              </button>
             </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+          )}
+
+          {step === 'confirm' && parseResult && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="bg-green-50 p-3 rounded border border-green-200">
+                  <div className="font-semibold text-green-800">マッチ済み</div>
+                  <div className="text-green-600">{parseResult.matchedProducts.length}件</div>
+                </div>
+                <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
+                  <div className="font-semibold text-yellow-800">未マッチ</div>
+                  <div className="text-yellow-600">{parseResult.unmatchedProducts.length}件</div>
+                </div>
+              </div>
+
+              {parseResult.unmatchedProducts.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3">未マッチ商品の割り当て</h3>
+                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                    {parseResult.unmatchedProducts.map((item, index) => (
+                      <div key={index} className="border p-3 rounded">
+                        <div className="font-medium text-sm mb-2">
+                          {item.rakutenTitle.length > 50 
+                            ? `${item.rakutenTitle.substring(0, 50)}...` 
+                            : item.rakutenTitle}
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">数量: {item.quantity}</div>
+                        <select
+                          value={newMappings[item.rakutenTitle] || ''}
+                          onChange={(e) => handleMappingChange(item.rakutenTitle, e.target.value)}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">商品を選択...</option>
+                          {products.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.series} - {product.product_number} ({product.series_code}-{product.product_code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setStep('upload')}
+                  disabled={loading}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200"
+                >
+                  戻る
+                </button>
+                <button 
+                  onClick={confirmImport}
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 flex items-center justify-center"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      インポート中...
+                    </>
+                  ) : (
+                    'インポート実行'
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
