@@ -24,11 +24,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 🔥 全行削除（正しい方法）
+    // 🔥 全行削除（最も確実な方法）
     const { data, error } = await supabase
       .from('amazon_product_mapping')
       .delete()
-      .not('id', 'is', null) // idがnullでないもの（実質全行）を削除
+      .neq('id', -999999) // 存在しないIDで条件指定（実質全行削除）
 
     if (error) {
       console.error('学習データ削除エラー:', error)
