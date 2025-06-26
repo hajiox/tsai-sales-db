@@ -44,7 +44,7 @@ export default function AmazonCsvConfirmModal({
     handleLearnAllMappings,
     handleConfirm: handleConfirmLogic,
     setIndividualCsvProducts,
-    setManualSelections
+    forceResetAfterDuplicateResolution,
   } = useAmazonCsvLogic({
     results,
     unmatchedProducts,
@@ -130,9 +130,19 @@ export default function AmazonCsvConfirmModal({
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <h4 className="text-red-800 font-semibold mb-2">⚠️ 重複検出！</h4>
               <p className="text-sm text-red-700 mb-2"><strong>{duplicates.length}商品</strong>で重複が検出されました。</p>
-              <button onClick={() => setShowDuplicateResolver(true)} className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700">
-                🔧 重複を個別に修正する
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setShowDuplicateResolver(true)} className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700">
+                  🔧 重複を個別に修正する
+                </button>
+                {qualityCheck.discrepancy === 0 && (
+                  <button 
+                    onClick={forceResetAfterDuplicateResolution}
+                    className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                  >
+                    🔄 品質エラーをリセット
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
