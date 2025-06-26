@@ -8,6 +8,7 @@ import DuplicateResolverModal from "./DuplicateResolverModal"
 import QualityCheckPanel from "./QualityCheckPanel"
 import ProductListView from "./ProductListView"
 import UnmatchedProductsView from "./UnmatchedProductsView"
+import CsvDebugAnalyzer from "./CsvDebugAnalyzer"
 import { AmazonCsvConfirmModalProps, NewProduct } from "../types/amazonCsvTypes"
 
 export default function AmazonCsvConfirmModal({
@@ -162,6 +163,18 @@ export default function AmazonCsvConfirmModal({
                 alert('学習に失敗しました')
               }
             }}
+          />
+
+          {/* 詳細比較分析パネル */}
+          <CsvDebugAnalyzer
+            results={results}
+            unmatchedProducts={unmatchedProducts}
+            allProductsResults={allProductsResults}
+            individualCsvProducts={individualCsvProducts}
+            manualSelections={manualSelections}
+            duplicates={duplicates}
+            showDuplicateResolver={showDuplicateResolver}
+            csvSummary={csvSummary}
           />
         </div>
 
