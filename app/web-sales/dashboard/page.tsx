@@ -73,13 +73,13 @@ function WebSalesDashboardContent() {
       try {
         const { data, error } = await supabase
           .from('products')
-          .select('*') // 🔥 全列を取得して実際の構造を確認
-          .order('name');
+          .select('id, name, price, series, series_code, product_code')
+          .order('series_code')
+          .order('product_code');
         
         if (error) {
           console.error('商品マスター取得エラー:', error);
         } else {
-          console.log('商品マスターデータ構造:', data?.[0]); // 🔥 構造をログ出力
           setProductMaster(data || []);
         }
       } catch (error) {
@@ -152,9 +152,9 @@ function WebSalesDashboardContent() {
         body: JSON.stringify({
           name: productData.productName,
           price: productData.price,
-          series_number: productData.seriesNumber,
-          product_number: productData.productNumber,
-          series_name: productData.seriesName
+          series_code: productData.seriesNumber,
+          product_code: productData.productNumber,
+          series: productData.seriesName
         }),
       });
       
@@ -320,10 +320,10 @@ function WebSalesDashboardContent() {
           onClose={() => setIsAddingProduct(false)}
           onAdd={handleAddProduct}
           existingProducts={productMaster.map(p => ({
-            seriesNumber: p.series_number,
-            productNumber: p.product_number,
+            seriesNumber: p.series_code,
+            productNumber: p.product_code,
             name: p.name,
-            seriesName: p.series_name
+            seriesName: p.series
           }))}
         />
       )}
