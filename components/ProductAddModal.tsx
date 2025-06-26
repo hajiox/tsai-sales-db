@@ -20,14 +20,16 @@ interface ProductAddModalProps {
   isOpen: boolean
   unmatchedProduct?: UnmatchedProduct  // 🔥 オプショナルに変更
   onClose: () => void
-  onAdd: (productData: NewProduct | { productName: string; price: number }) => void
+  onAdd: (productData: NewProduct | { productName: string; price: number; seriesNumber: number; productNumber: number; seriesName: string }) => void
+  existingProducts?: { seriesNumber: number; productNumber: number; name: string; seriesName: string }[] // 🔥 既存商品データ
 }
 
 export default function ProductAddModal({ 
   isOpen, 
   unmatchedProduct, 
   onClose, 
-  onAdd 
+  onAdd,
+  existingProducts = [] // 🔥 既存商品データ
 }: ProductAddModalProps) {
   const [productName, setProductName] = useState(unmatchedProduct?.amazonTitle || '')
   const [seriesNumber, setSeriesNumber] = useState<number | ''>('') // 🔥 シリーズ番号追加
@@ -35,12 +37,41 @@ export default function ProductAddModal({
   const [seriesName, setSeriesName] = useState('') // 🔥 シリーズ名追加
   const [price, setPrice] = useState<number>(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showSeriesSuggestions, setShowSeriesSuggestions] = useState(false) // 🔥 シリーズ名候補表示
+
+  // 🔥 既存のシリーズ名を取得
+  const existingSeriesNames = [...new Set(existingProducts.map(p => p.seriesName))].filter(Boolean)
+  
+  // 🔥 シリーズ名の候補をフィルタリング
+  const seriesNameSuggestions = existingSeriesNames.filter(name => 
+    name.toLowerCase().includes(seriesName.toLowerCase())
+  )
+
+  // 🔥 重複チェック関数
+  const isDuplicate = () => {
+    if (!seriesNumber || !productNumber) return false
+    return existingProducts.some(p => 
+      p.seriesNumber === Number(seriesNumber) && p.productNumber === Number(productNumber)
+    )
+  }
+
+  // 🔥 重複する商品情報を取得
+  const duplicateProduct = existingProducts.find(p => 
+    p.seriesNumber === Number(seriesNumber) && p.productNumber === Number(productNumber)
+  )
 
   // 🔥 未マッチング商品からの追加か、新規商品マスター追加かを判定
   const isFromUnmatched = !!unmatchedProduct
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // 🔥 重複チェック
+    if (isDuplicate()) {
+      alert(`エラー: シリーズ番号${seriesNumber}・商品番号${productNumber}は既に存在します。\n既存商品: ${duplicateProduct?.name}`)
+      return
+    }
+    
     if (!productName || !seriesNumber || !productNumber || !seriesName || !price) {
       alert('全ての項目を入力してください')
       return
@@ -127,7 +158,7 @@ export default function ProductAddModal({
                 type="number"
                 value={seriesNumber}
                 onChange={(e) => setSeriesNumber(e.target.value ? Number(e.target.value) : '')}
-                className="w-full border rounded px-3 py-2"
+                className={`w-full border rounded px-3 py-2 ${isDuplicate() ? 'border-red-500 bg-red-50' : ''}`}
                 placeholder="例: 1"
                 min="1"
                 required
@@ -139,13 +170,23 @@ export default function ProductAddModal({
                 type="number"
                 value={productNumber}
                 onChange={(e) => setProductNumber(e.target.value ? Number(e.target.value) : '')}
-                className="w-full border rounded px-3 py-2"
+                className={`w-full border rounded px-3 py-2 ${isDuplicate() ? 'border-red-500 bg-red-50' : ''}`}
                 placeholder="例: 10"
                 min="1"
                 required
               />
             </div>
           </div>
+
+          {/* 🔥 重複エラー表示 */}
+          {isDuplicate() && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-800">
+                ⚠️ <strong>エラー:</strong> シリーズ番号{seriesNumber}・商品番号{productNumber}は既に存在します<br />
+                <strong>既存商品:</strong> {duplicateProduct?.name} ({duplicateProduct?.seriesName})
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium mb-2">商品名 *</label>
@@ -159,16 +200,47 @@ export default function ProductAddModal({
             />
           </div>
 
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium mb-2">シリーズ名 *</label>
             <input
               type="text"
               value={seriesName}
-              onChange={(e) => setSeriesName(e.target.value)}
+              onChange={(e) => {
+                setSeriesName(e.target.value)
+                setShowSeriesSuggestions(e.target.value.length > 0)
+              }}
+              onFocus={() => setShowSeriesSuggestions(seriesName.length > 0)}
+              onBlur={() => setTimeout(() => setShowSeriesSuggestions(false), 200)}
               className="w-full border rounded px-3 py-2"
               placeholder="例: チャーシュー焼豚"
               required
             />
+            
+            {/* 🔥 シリーズ名候補表示 */}
+            {showSeriesSuggestions && seriesNameSuggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                {seriesNameSuggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => {
+                      setSeriesName(suggestion)
+                      setShowSeriesSuggestions(false)
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {existingSeriesNames.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                既存シリーズ: {existingSeriesNames.slice(0, 3).join(', ')}
+                {existingSeriesNames.length > 3 && ` 他${existingSeriesNames.length - 3}件`}
+              </p>
+            )}
           </div>
 
           <div>
@@ -195,8 +267,8 @@ export default function ProductAddModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              disabled={isSubmitting || isDuplicate()} // 🔥 重複時は登録ボタン無効化
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '登録中...' : (isFromUnmatched ? '商品を追加' : '商品を登録')}
             </button>
