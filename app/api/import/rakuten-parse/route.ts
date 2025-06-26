@@ -9,6 +9,41 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// 商品名の類似度を計算（楽天は前半40文字のみ使用）
+function calculateSimilarity(rakutenTitle: string, productName: string): number {
+  // 楽天タイトルの前半40文字のみを取得
+  const rakutenCore = rakutenTitle.substring(0, 40).trim();
+  
+  // テキストを正規化
+  const normalizeText = (text: string) => {
+    return text
+      .toLowerCase()
+      .replace(/<br>/g, ' ')
+      .replace(/[【】（）()「」]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const rakutenNormalized = normalizeText(rakutenCore);
+  const productNormalized = normalizeText(productName);
+
+  // 商品名のキーワードを抽出（2文字以上）
+  const productKeywords = productNormalized.split(' ').filter(word => word.length > 1);
+  
+  if (productKeywords.length === 0) return 0;
+
+  // 各キーワードが楽天タイトル（前半40文字）に含まれているかチェック
+  let matchCount = 0;
+  for (const keyword of productKeywords) {
+    if (rakutenNormalized.includes(keyword)) {
+      matchCount++;
+    }
+  }
+
+  // マッチ率を計算（0-1の範囲）
+  return matchCount / productKeywords.length;
+}
+
 interface RakutenCSVRow {
   productName: string;
   quantity: number;
