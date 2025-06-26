@@ -93,7 +93,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
       products?.map(p => [p.id, p]) || []
     );
 
-    // マッチング処理
+    // マッチング処理（部分マッチング機能付き）
     const matchedProducts = [];
     const unmatchedProducts = [];
 
@@ -101,6 +101,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
       const productId = mappingMap.get(item.productName);
       
       if (productId && productMap.has(productId)) {
+        // 既存の学習データでマッチング
         matchedProducts.push({
           rakutenTitle: item.productName,
           productId: productId,
@@ -109,11 +110,35 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
           originalRow: item.originalRow
         });
       } else {
-        unmatchedProducts.push({
-          rakutenTitle: item.productName,
-          quantity: item.quantity,
-          originalRow: item.originalRow
-        });
+        // 学習データがない場合、商品名の部分マッチングを試行
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const [id, product] of productMap) {
+          const score = calculateSimilarity(item.productName, product.name);
+          if (score > bestScore && score > 0.3) { // 30%以上の類似度
+            bestScore = score;
+            bestMatch = { productId: id, productInfo: product };
+          }
+        }
+
+        if (bestMatch) {
+          matchedProducts.push({
+            rakutenTitle: item.productName,
+            productId: bestMatch.productId,
+            productInfo: bestMatch.productInfo,
+            quantity: item.quantity,
+            originalRow: item.originalRow,
+            isAutoMatched: true, // 自動マッチングフラグ
+            matchScore: bestScore
+          });
+        } else {
+          unmatchedProducts.push({
+            rakutenTitle: item.productName,
+            quantity: item.quantity,
+            originalRow: item.originalRow
+          });
+        }
       }
     }
 
