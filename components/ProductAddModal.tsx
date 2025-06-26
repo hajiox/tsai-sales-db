@@ -1,4 +1,4 @@
-// /components/ProductAddModal.tsx ver.2 (汎用版)
+// /components/ProductAddModal.tsx ver.3 (完全版)
 "use client"
 
 import React, { useState } from "react"
@@ -14,14 +14,17 @@ interface NewProduct {
   productName: string
   price: number
   quantity: number
+  seriesNumber: number
+  productNumber: number
+  seriesName: string
 }
 
 interface ProductAddModalProps {
   isOpen: boolean
-  unmatchedProduct?: UnmatchedProduct  // 🔥 オプショナルに変更
+  unmatchedProduct?: UnmatchedProduct
   onClose: () => void
   onAdd: (productData: NewProduct | { productName: string; price: number; seriesNumber: number; productNumber: number; seriesName: string }) => void
-  existingProducts?: { seriesNumber: number; productNumber: number; name: string; seriesName: string }[] // 🔥 既存商品データ
+  existingProducts?: { seriesNumber: number; productNumber: number; name: string; seriesName: string }[]
 }
 
 export default function ProductAddModal({ 
@@ -29,25 +32,28 @@ export default function ProductAddModal({
   unmatchedProduct, 
   onClose, 
   onAdd,
-  existingProducts = [] // 🔥 既存商品データ
+  existingProducts = []
 }: ProductAddModalProps) {
   const [productName, setProductName] = useState(unmatchedProduct?.amazonTitle || '')
-  const [seriesNumber, setSeriesNumber] = useState<number | ''>('') // 🔥 シリーズ番号追加
-  const [productNumber, setProductNumber] = useState<number | ''>('') // 🔥 商品番号追加
-  const [seriesName, setSeriesName] = useState('') // 🔥 シリーズ名追加
+  const [seriesNumber, setSeriesNumber] = useState<number | ''>('')
+  const [productNumber, setProductNumber] = useState<number | ''>('')
+  const [seriesName, setSeriesName] = useState('')
   const [price, setPrice] = useState<number>(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showSeriesSuggestions, setShowSeriesSuggestions] = useState(false) // 🔥 シリーズ名候補表示
+  const [showSeriesSuggestions, setShowSeriesSuggestions] = useState(false)
 
-  // 🔥 既存のシリーズ名を取得
+  // 未マッチング商品からの追加か、新規商品マスター追加かを判定
+  const isFromUnmatched = !!unmatchedProduct
+
+  // 既存のシリーズ名を取得
   const existingSeriesNames = [...new Set(existingProducts.map(p => p.seriesName))].filter(Boolean)
   
-  // 🔥 シリーズ名の候補をフィルタリング
+  // シリーズ名の候補をフィルタリング
   const seriesNameSuggestions = existingSeriesNames.filter(name => 
     name.toLowerCase().includes(seriesName.toLowerCase())
   )
 
-  // 🔥 重複チェック関数
+  // 重複チェック関数
   const isDuplicate = () => {
     if (!seriesNumber || !productNumber) return false
     return existingProducts.some(p => 
@@ -55,18 +61,15 @@ export default function ProductAddModal({
     )
   }
 
-  // 🔥 重複する商品情報を取得
+  // 重複する商品情報を取得
   const duplicateProduct = existingProducts.find(p => 
     p.seriesNumber === Number(seriesNumber) && p.productNumber === Number(productNumber)
   )
 
-  // 🔥 未マッチング商品からの追加か、新規商品マスター追加かを判定
-  const isFromUnmatched = !!unmatchedProduct
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // 🔥 重複チェック
+    // 重複チェック
     if (isDuplicate()) {
       alert(`エラー: シリーズ番号${seriesNumber}・商品番号${productNumber}は既に存在します。\n既存商品: ${duplicateProduct?.name}`)
       return
@@ -132,7 +135,7 @@ export default function ProductAddModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* 🔥 未マッチング商品の場合のみ表示 */}
+          {/* 未マッチング商品の場合のみ表示 */}
           {isFromUnmatched && (
             <>
               <div>
@@ -178,7 +181,7 @@ export default function ProductAddModal({
             </div>
           </div>
 
-          {/* 🔥 重複エラー表示 */}
+          {/* 重複エラー表示 */}
           {isDuplicate() && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-md">
               <p className="text-sm text-red-800">
@@ -216,7 +219,7 @@ export default function ProductAddModal({
               required
             />
             
-            {/* 🔥 シリーズ名候補表示 */}
+            {/* シリーズ名候補表示 */}
             {showSeriesSuggestions && seriesNameSuggestions.length > 0 && (
               <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
                 {seriesNameSuggestions.map((suggestion, index) => (
@@ -267,7 +270,7 @@ export default function ProductAddModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || isDuplicate()} // 🔥 重複時は登録ボタン無効化
+              disabled={isSubmitting || isDuplicate()}
               className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '登録中...' : (isFromUnmatched ? '商品を追加' : '商品を登録')}
