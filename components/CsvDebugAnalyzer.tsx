@@ -38,7 +38,8 @@ export default function CsvDebugAnalyzer({
     individualCsvProducts,
     manualSelections,
     duplicates,
-    showDuplicateResolver
+    showDuplicateResolver,
+    csvSummary  // 🔥 csvSummaryを渡して正確な元データ総数を取得
   })
 
   if (!isOpen) {
