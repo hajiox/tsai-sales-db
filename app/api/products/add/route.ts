@@ -42,8 +42,7 @@ export async function POST(request: NextRequest) {
         series: series.trim(),
         series_code: parseInt(series_code),
         product_code: parseInt(product_code),
-        price: parseInt(price),
-        global_product: false
+        price: parseInt(price)
       })
       .select()
       .single()
