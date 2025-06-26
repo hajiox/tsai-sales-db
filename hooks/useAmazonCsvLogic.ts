@@ -1,4 +1,4 @@
-// /hooks/useAmazonCsvLogic.ts ver.2
+// /hooks/useAmazonCsvLogic.ts ver.3
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -126,21 +126,6 @@ export function useAmazonCsvLogic({
     setIndividualCsvProducts(individualProducts)
   }, [results, productMaster])
 
-  // 🔥 重複解消完了後の強制リセット関数
-  const forceResetAfterDuplicateResolution = () => {
-    console.log('重複解消後の強制リセット実行')
-    
-    // 重複フラグを全てクリア
-    const updatedResults = allProductsResults.map(result => ({
-      ...result,
-      isDuplicate: false,
-      duplicateInfo: undefined
-    }))
-    setAllProductsResults(updatedResults)
-    
-    console.log('リセット完了: 重複フラグクリア、品質チェック再計算')
-  }
-
   // 品質管理機能（強制リセット対応版）
   const qualityCheck = useMemo((): QualityCheck => {
     const csvOriginalTotal = 1956
@@ -170,7 +155,7 @@ export function useAmazonCsvLogic({
     const finalTotal = matchedTotal + resolvedUnmatchedQuantity
     const discrepancy = csvOriginalTotal - finalTotal - unresolvedUnmatchedTotal
     
-    // 🔥 強制的に品質判定をリセット: 差異が0かつ未マッチが0なら品質OK
+    // 強制的に品質判定をリセット: 差異が0かつ未マッチが0なら品質OK
     const isQuantityValid = Math.abs(discrepancy) <= 5 && unresolvedUnmatchedTotal === 0
     const warningLevel = unresolvedUnmatchedTotal > 0 ? 'error' : 
                         Math.abs(discrepancy) > 20 ? 'error' : 
@@ -260,7 +245,6 @@ export function useAmazonCsvLogic({
       return
     }
 
-    // ローディング状態を表示
     const loadingAlert = setTimeout(() => {
       console.log('学習処理中...')
     }, 100)
@@ -294,7 +278,6 @@ export function useAmazonCsvLogic({
       
       clearTimeout(loadingAlert)
       
-      // 結果の表示
       if (successCount === manualSelections.length) {
         alert(`✅ 全${successCount}件のマッピングを学習しました！`)
       } else if (successCount > 0) {
@@ -308,6 +291,19 @@ export function useAmazonCsvLogic({
       console.error('学習エラー:', error)
       alert(`❌ ネットワークエラーが発生しました\n${error instanceof Error ? error.message : '不明なエラー'}`)
     }
+  }
+
+  const forceResetAfterDuplicateResolution = () => {
+    console.log('重複解消後の強制リセット実行')
+    
+    const updatedResults = allProductsResults.map(result => ({
+      ...result,
+      isDuplicate: false,
+      duplicateInfo: undefined
+    }))
+    setAllProductsResults(updatedResults)
+    
+    console.log('リセット完了: 重複フラグクリア、品質チェック再計算')
   }
 
   const handleConfirm = async () => {
@@ -333,7 +329,6 @@ export function useAmazonCsvLogic({
       }))
     }
 
-    // 修正済み未マッチング商品を結果に追加
     for (const selection of manualSelections) {
       const unmatchedProduct = unmatchedProducts.find(u => u.amazonTitle === selection.amazonTitle)
       const selectedProduct = productMaster.find(p => p.id === selection.productId)
