@@ -105,7 +105,23 @@ export function useAmazonCsvLogic({
       }
     })
     
-    return { cleanResults, duplicates, individualProducts }
+    // 🔥 重複解消完了後の強制リセット関数
+  const forceResetAfterDuplicateResolution = () => {
+    console.log('重複解消後の強制リセット実行')
+    
+    // 重複フラグを全てクリア
+    const updatedResults = allProductsResults.map(result => ({
+      ...result,
+      isDuplicate: false,
+      duplicateInfo: undefined
+    }))
+    setAllProductsResults(updatedResults)
+    
+    // 重複リストをクリア
+    // duplicatesは新しい配列として再計算される
+    
+    console.log('リセット完了: 重複フラグクリア、品質チェック再計算')
+  } cleanResults, duplicates, individualProducts }
   }
 
   const { cleanResults, duplicates, individualProducts } = detectDuplicates(results)
@@ -126,7 +142,7 @@ export function useAmazonCsvLogic({
     setIndividualCsvProducts(individualProducts)
   }, [results, productMaster])
 
-  // 品質管理機能
+  // 品質管理機能（強制リセット対応版）
   const qualityCheck = useMemo((): QualityCheck => {
     const csvOriginalTotal = 1956
     const csvRecordCount = csvSummary?.totalRows ?? (results.length + unmatchedProducts.length)
@@ -154,8 +170,25 @@ export function useAmazonCsvLogic({
     
     const finalTotal = matchedTotal + resolvedUnmatchedQuantity
     const discrepancy = csvOriginalTotal - finalTotal - unresolvedUnmatchedTotal
-    const isQuantityValid = Math.abs(discrepancy) <= 5
-    const warningLevel = Math.abs(discrepancy) > 20 ? 'error' : Math.abs(discrepancy) > 0 ? 'warning' : 'none'
+    
+    // 🔥 強制的に品質判定をリセット: 差異が0かつ未マッチが0なら品質OK
+    const isQuantityValid = Math.abs(discrepancy) <= 5 && unresolvedUnmatchedTotal === 0
+    const warningLevel = unresolvedUnmatchedTotal > 0 ? 'error' : 
+                        Math.abs(discrepancy) > 20 ? 'error' : 
+                        Math.abs(discrepancy) > 0 ? 'warning' : 'none'
+    
+    console.log('品質チェック詳細（強制リセット版）:', {
+      csvOriginalTotal,
+      matchedTotal,
+      resolvedUnmatchedQuantity,
+      unresolvedUnmatchedTotal,
+      finalTotal,
+      discrepancy,
+      isQuantityValid,
+      warningLevel,
+      重複数: duplicates.length,
+      完全一致: discrepancy === 0 && unresolvedUnmatchedTotal === 0
+    })
     
     return {
       csvOriginalTotal, 
@@ -342,6 +375,7 @@ export function useAmazonCsvLogic({
     removeResult,
     handleUnmatchedProductSelect,
     handleLearnAllMappings,
-    handleConfirm
+    handleConfirm,
+    forceResetAfterDuplicateResolution
   }
 }
