@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.2 (既存UIコンポーネント対応版)
+// /components/RakutenCsvImportModal.tsx ver.3 (Amazonと統一デザイン版)
 
 'use client';
 
@@ -33,7 +33,6 @@ export default function RakutenCsvImportModal({
   products
 }: RakutenCsvImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [saleDate, setSaleDate] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'upload' | 'confirm'>('upload');
   const [parseResult, setParseResult] = useState<{
@@ -55,8 +54,8 @@ export default function RakutenCsvImportModal({
   };
 
   const parseCSV = async () => {
-    if (!file || !saleDate) {
-      setError('ファイルと売上日を入力してください');
+    if (!file) {
+      setError('ファイルを選択してください');
       return;
     }
 
@@ -105,6 +104,10 @@ export default function RakutenCsvImportModal({
     setError('');
 
     try {
+      // 現在の日付から売上月を取得（YYYY-MM形式）
+      const currentDate = new Date();
+      const saleDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`;
+
       const newMappingsArray = parseResult.unmatchedProducts
         .filter(item => newMappings[item.rakutenTitle])
         .map(item => ({
@@ -146,7 +149,6 @@ export default function RakutenCsvImportModal({
 
   const handleClose = () => {
     setFile(null);
-    setSaleDate('');
     setStep('upload');
     setParseResult(null);
     setNewMappings({});
@@ -169,6 +171,10 @@ export default function RakutenCsvImportModal({
             </button>
           </div>
 
+          <p className="text-sm text-gray-600 mb-4">
+            楽天市場の商品別売上CSVをアップロードしてください。商品名のマッチング確認画面を経由して楽天列のみを更新します。
+          </p>
+
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded">
               <div className="flex items-center">
@@ -190,44 +196,41 @@ export default function RakutenCsvImportModal({
           {step === 'upload' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">売上日</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">楽天CSV ファイル:</label>
+                <div className="flex">
+                  <button
+                    onClick={() => document.getElementById('rakuten-file-input')?.click()}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-l-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    ファイルを選択
+                  </button>
+                  <div className="flex-1 px-3 py-2 border-t border-b border-r border-gray-300 rounded-r-md bg-gray-50 text-gray-500">
+                    {file ? file.name : '選択されていません'}
+                  </div>
+                </div>
                 <input
-                  type="date"
-                  value={saleDate}
-                  onChange={(e) => setSaleDate(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">楽天CSV ファイル</label>
-                <input
+                  id="rakuten-file-input"
                   type="file"
                   accept=".csv"
                   onChange={handleFileChange}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
+                  className="hidden"
                 />
-                <p className="text-sm text-gray-500 mt-1">
-                  楽天市場の商品別売上CSVをアップロードしてください（8行目から商品データを読み取ります）
-                </p>
               </div>
 
               <button 
                 onClick={parseCSV} 
-                disabled={loading || !file || !saleDate}
-                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center"
+                disabled={loading || !file}
+                className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    解析中...
+                    処理中...
                   </>
                 ) : (
                   <>
                     <Upload className="mr-2 h-4 w-4" />
-                    CSV解析
+                    次へ（確認画面）
                   </>
                 )}
               </button>
@@ -283,7 +286,7 @@ export default function RakutenCsvImportModal({
                   disabled={loading}
                   className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200"
                 >
-                  戻る
+                  キャンセル
                 </button>
                 <button 
                   onClick={confirmImport}
