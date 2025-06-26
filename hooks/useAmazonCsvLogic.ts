@@ -1,4 +1,4 @@
-// /hooks/useAmazonCsvLogic.ts ver.1
+// /hooks/useAmazonCsvLogic.ts ver.2
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -105,23 +105,7 @@ export function useAmazonCsvLogic({
       }
     })
     
-    // 🔥 重複解消完了後の強制リセット関数
-  const forceResetAfterDuplicateResolution = () => {
-    console.log('重複解消後の強制リセット実行')
-    
-    // 重複フラグを全てクリア
-    const updatedResults = allProductsResults.map(result => ({
-      ...result,
-      isDuplicate: false,
-      duplicateInfo: undefined
-    }))
-    setAllProductsResults(updatedResults)
-    
-    // 重複リストをクリア
-    // duplicatesは新しい配列として再計算される
-    
-    console.log('リセット完了: 重複フラグクリア、品質チェック再計算')
-  } cleanResults, duplicates, individualProducts }
+    return { cleanResults, duplicates, individualProducts }
   }
 
   const { cleanResults, duplicates, individualProducts } = detectDuplicates(results)
@@ -141,6 +125,21 @@ export function useAmazonCsvLogic({
     setAllProductsResults(cleanResults)
     setIndividualCsvProducts(individualProducts)
   }, [results, productMaster])
+
+  // 🔥 重複解消完了後の強制リセット関数
+  const forceResetAfterDuplicateResolution = () => {
+    console.log('重複解消後の強制リセット実行')
+    
+    // 重複フラグを全てクリア
+    const updatedResults = allProductsResults.map(result => ({
+      ...result,
+      isDuplicate: false,
+      duplicateInfo: undefined
+    }))
+    setAllProductsResults(updatedResults)
+    
+    console.log('リセット完了: 重複フラグクリア、品質チェック再計算')
+  }
 
   // 品質管理機能（強制リセット対応版）
   const qualityCheck = useMemo((): QualityCheck => {
