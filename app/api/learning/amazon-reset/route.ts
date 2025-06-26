@@ -6,37 +6,47 @@ export async function POST(request: NextRequest) {
   try {
     console.log('Amazon学習データリセット開始')
 
-    // 🔥 まずテーブルの存在確認
-    const { data: tableCheck, error: tableError } = await supabase
+    // 🔥 まずテーブルの存在とデータ確認
+    const { data: existingData, error: selectError } = await supabase
       .from('amazon_product_mapping')
-      .select('count(*)')
-      .limit(1)
+      .select('*')
+      .limit(5)
 
-    if (tableError) {
-      console.error('テーブル存在確認エラー:', tableError)
+    if (selectError) {
+      console.error('テーブル確認エラー:', selectError)
       return NextResponse.json(
         { 
           success: false, 
-          error: 'amazon_product_mappingテーブルが見つかりません',
-          details: tableError.message
+          error: `テーブルアクセスエラー: ${selectError.message}`,
+          details: 'amazon_product_mappingテーブルが存在しないか、アクセス権限がありません'
         },
         { status: 500 }
       )
     }
 
-    // 🔥 全行削除（最も確実な方法）
+    console.log('既存データ確認:', existingData?.length || 0, '件')
+
+    if (!existingData || existingData.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'Amazon学習データは既に空です',
+        deletedCount: 0
+      })
+    }
+
+    // 🔥 既存データがある場合は削除実行
     const { data, error } = await supabase
       .from('amazon_product_mapping')
       .delete()
-      .neq('id', -999999) // 存在しないIDで条件指定（実質全行削除）
+      .in('id', existingData.map(item => item.id)) // 存在するIDのみ削除
 
     if (error) {
       console.error('学習データ削除エラー:', error)
       return NextResponse.json(
         { 
           success: false, 
-          error: '学習データの削除に失敗しました',
-          details: error.message
+          error: `削除処理エラー: ${error.message}`,
+          details: error.details || 'データ削除に失敗しました'
         },
         { status: 500 }
       )
