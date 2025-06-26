@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.10
+// /app/web-sales/dashboard/page.tsx ver.11 (商品管理機能復活版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -8,8 +8,10 @@ import WebSalesRankingTable from "@/components/websales-ranking-table"
 import WebSalesEditableTable from "@/components/web-sales-editable-table"
 import WebSalesCharts from "@/components/websales-charts"
 import WebSalesAiSection from "@/components/web-sales-ai-section"
+import ProductAddModal from "@/components/ProductAddModal"
 import { supabase } from "@/lib/supabase"
 import { WebSalesData } from "@/types/db"
+import { Plus, Trash2 } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +40,12 @@ function WebSalesDashboardContent() {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [periodMonths, setPeriodMonths] = useState<6 | 12>(6);
 
+  // 🔥 商品管理機能の状態
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [selectedProductsForDelete, setSelectedProductsForDelete] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [productMaster, setProductMaster] = useState<{ id: string; name: string; price: number }[]>([]);
+
   // 月が変更された時にURLを更新（useCallbackで安定化）
   const handleMonthChange = useCallback((newMonth: string) => {
     if (newMonth === month) return; // 同じ月の場合は何もしない
@@ -58,6 +66,28 @@ function WebSalesDashboardContent() {
       isInitializedRef.current = true;
     }
   }, []);
+
+  // 🔥 商品マスターデータ取得
+  useEffect(() => {
+    const fetchProductMaster = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name, price')
+          .order('name');
+        
+        if (error) {
+          console.error('商品マスター取得エラー:', error);
+        } else {
+          setProductMaster(data || []);
+        }
+      } catch (error) {
+        console.error('商品マスター取得エラー:', error);
+      }
+    };
+
+    fetchProductMaster();
+  }, [refreshTrigger]);
 
   // データ取得（monthとrefreshTriggerのみに依存）
   useEffect(() => {
@@ -112,6 +142,70 @@ function WebSalesDashboardContent() {
     setViewMode('period');
   }, []);
 
+  // 🔥 商品追加処理
+  const handleAddProduct = async (productData: { productName: string; price: number; amazonTitle?: string }) => {
+    try {
+      const response = await fetch('/api/products/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: productData.productName,
+          price: productData.price,
+          amazonTitle: productData.amazonTitle || ''
+        }),
+      });
+      
+      if (!response.ok) throw new Error('商品追加に失敗しました');
+      
+      setIsAddingProduct(false);
+      setRefreshTrigger(prev => prev + 1);
+      alert('商品を追加しました');
+    } catch (error) {
+      console.error('商品追加エラー:', error);
+      alert('商品追加に失敗しました');
+    }
+  };
+
+  // 🔥 商品削除処理
+  const handleDeleteProducts = async () => {
+    if (selectedProductsForDelete.length === 0) {
+      alert('削除する商品を選択してください');
+      return;
+    }
+
+    if (!confirm(`選択した${selectedProductsForDelete.length}件の商品を削除しますか？`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .in('id', selectedProductsForDelete);
+
+      if (error) throw error;
+
+      setSelectedProductsForDelete([]);
+      setRefreshTrigger(prev => prev + 1);
+      alert(`${selectedProductsForDelete.length}件の商品を削除しました`);
+    } catch (error) {
+      console.error('商品削除エラー:', error);
+      alert('商品削除に失敗しました');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // 🔥 商品選択ハンドラー
+  const handleProductSelect = (productId: string, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedProductsForDelete(prev => [...prev, productId]);
+    } else {
+      setSelectedProductsForDelete(prev => prev.filter(id => id !== productId));
+    }
+  };
+
   return (
     <div className="w-full space-y-6">
       <header className="space-y-4">
@@ -144,16 +238,34 @@ function WebSalesDashboardContent() {
               過去12ヶ月
             </button>
           </div>
-          {viewMode === 'month' && (
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
+            {/* 🔥 商品管理ボタン */}
+            <button
+              onClick={() => setIsAddingProduct(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+            >
+              <Plus className="h-4 w-4" />
+              商品登録
+            </button>
+            {selectedProductsForDelete.length > 0 && (
+              <button
+                onClick={handleDeleteProducts}
+                disabled={isDeleting}
+                className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeleting ? '削除中...' : `選択商品削除 (${selectedProductsForDelete.length}件)`}
+              </button>
+            )}
+            {viewMode === 'month' && (
               <input
                 type="month"
                 value={month}
                 onChange={(e) => handleMonthChange(e.target.value)}
                 className="border rounded-md text-base p-2 bg-white"
               />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
       
@@ -179,6 +291,9 @@ function WebSalesDashboardContent() {
               <WebSalesEditableTable 
                 initialWebSalesData={webSalesData}
                 month={month}
+                productMaster={productMaster}
+                selectedProductsForDelete={selectedProductsForDelete}
+                onProductSelect={handleProductSelect}
               />
             )}
             <WebSalesRankingTable month={month} />
@@ -186,6 +301,15 @@ function WebSalesDashboardContent() {
           </>
         )}
       </div>
+
+      {/* 🔥 商品追加モーダル */}
+      {isAddingProduct && (
+        <ProductAddModal
+          isOpen={isAddingProduct}
+          onClose={() => setIsAddingProduct(false)}
+          onAdd={handleAddProduct}
+        />
+      )}
     </div>
   );
 }
