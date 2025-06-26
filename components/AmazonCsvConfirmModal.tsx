@@ -195,9 +195,14 @@ export default function AmazonCsvConfirmModal({
               {manualSelections.length > 0 && (
                 <button
                   onClick={handleLearnAllMappings}
-                  className="px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                  disabled={isSubmitting}
+                  className={`px-3 py-2 text-sm text-white rounded transition-all duration-200 ${
+                    isSubmitting 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-green-600 hover:bg-green-700 active:bg-green-800'
+                  }`}
                 >
-                  修正結果を学習 ({manualSelections.length}件)
+                  {isSubmitting ? '学習中...' : `修正結果を学習 (${manualSelections.length}件)`}
                 </button>
               )}
               <button onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">
