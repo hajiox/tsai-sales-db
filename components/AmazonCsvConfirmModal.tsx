@@ -233,17 +233,16 @@ export default function AmazonCsvConfirmModal({
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={isSubmitting || stats.withData === 0 || (qualityCheck.warningLevel === 'error') || qualityCheck.unmatchedTotal > 0}
+                disabled={isSubmitting || stats.withData === 0 || qualityCheck.unmatchedTotal > 0}
                 className={`px-4 py-2 text-sm text-white rounded disabled:opacity-50 ${
                   qualityCheck.unmatchedTotal > 0 ? 'bg-gray-400 cursor-not-allowed' :
-                  qualityCheck.warningLevel === 'error' ? 'bg-red-400' :
+                  qualityCheck.warningLevel === 'error' ? 'bg-yellow-600 hover:bg-yellow-700' :  // errorでも黄色で登録可能
                   qualityCheck.isQuantityValid ? 'bg-blue-600 hover:bg-blue-700' : 'bg-yellow-600 hover:bg-yellow-700'
                 }`}
               >
                 {isSubmitting ? '処理中...' : 
                  qualityCheck.unmatchedTotal > 0 ? `未マッチング${qualityCheck.unmatchedTotal}個を修正してください` :
-                 qualityCheck.warningLevel === 'error' ? '品質エラーのため登録不可' :
-                 !qualityCheck.isQuantityValid ? `要確認: ${stats.withData}件をDBに反映` :
+                 Math.abs(qualityCheck.discrepancy) > 0 ? `注意: 差異${Math.abs(qualityCheck.discrepancy)}個で登録` :
                  `${stats.withData}件をDBに反映`}
               </button>
             </div>
