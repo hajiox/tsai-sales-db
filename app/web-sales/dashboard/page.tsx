@@ -261,68 +261,6 @@ function WebSalesDashboardContent() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* 🔥 商品マスター管理セクション */}
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-semibold">全商品一覧 ({productMaster.length}商品)</h2>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setIsAddingProduct(true)}
-                      className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-                    >
-                      <Plus className="h-4 w-4" />
-                      商品登録
-                    </button>
-                  </div>
-                </div>
-                
-                {/* 🔥 商品マスター一覧テーブル（縞々表示付き） */}
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">シリーズ番号</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">商品番号</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">商品名</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">シリーズ名</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">価格</th>
-                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">削除</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {productMaster.map((product, index) => (
-                          <tr 
-                            key={product.id} 
-                            className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.series_code}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.product_code}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.name}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.series}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">¥{product.price?.toLocaleString()}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-center">
-                              <button
-                                onClick={() => handleDeleteProduct(product.id, product.name)}
-                                disabled={isDeleting}
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 disabled:opacity-50"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                                削除
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  {productMaster.length === 0 && (
-                    <div className="p-8 text-center text-gray-500">
-                      商品マスターにデータがありません
-                    </div>
-                  )}
-                </div>
-                
                 {/* 🔥 WebSalesEditableTable - ここで1回だけ呼び出し */}
                 <WebSalesEditableTable 
                   initialWebSalesData={webSalesData}
