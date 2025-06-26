@@ -239,24 +239,6 @@ function WebSalesDashboardContent() {
             </button>
           </div>
           <div className="flex items-center gap-3">
-            {/* 🔥 商品管理ボタン */}
-            <button
-              onClick={() => setIsAddingProduct(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-            >
-              <Plus className="h-4 w-4" />
-              商品登録
-            </button>
-            {selectedProductsForDelete.length > 0 && (
-              <button
-                onClick={handleDeleteProducts}
-                disabled={isDeleting}
-                className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700 disabled:opacity-50"
-              >
-                <Trash2 className="h-4 w-4" />
-                {isDeleting ? '削除中...' : `選択商品削除 (${selectedProductsForDelete.length}件)`}
-              </button>
-            )}
             {viewMode === 'month' && (
               <input
                 type="month"
@@ -288,13 +270,39 @@ function WebSalesDashboardContent() {
                 </div>
               </div>
             ) : (
-              <WebSalesEditableTable 
-                initialWebSalesData={webSalesData}
-                month={month}
-                productMaster={productMaster}
-                selectedProductsForDelete={selectedProductsForDelete}
-                onProductSelect={handleProductSelect}
-              />
+              <div className="space-y-4">
+                {/* 🔥 商品マスター管理セクション */}
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">全商品一覧 ({productMaster.length}商品)</h2>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsAddingProduct(true)}
+                      className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+                    >
+                      <Plus className="h-4 w-4" />
+                      商品登録
+                    </button>
+                    {selectedProductsForDelete.length > 0 && (
+                      <button
+                        onClick={handleDeleteProducts}
+                        disabled={isDeleting}
+                        className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {isDeleting ? '削除中...' : `選択商品削除 (${selectedProductsForDelete.length}件)`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                <WebSalesEditableTable 
+                  initialWebSalesData={webSalesData}
+                  month={month}
+                  productMaster={productMaster}
+                  selectedProductsForDelete={selectedProductsForDelete}
+                  onProductSelect={handleProductSelect}
+                />
+              </div>
             )}
             <WebSalesRankingTable month={month} />
             <WebSalesAiSection month={month} />
