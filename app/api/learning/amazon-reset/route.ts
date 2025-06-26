@@ -1,4 +1,4 @@
-// /app/api/learning/amazon-reset/route.ts ver.1-
+// /app/api/learning/amazon-reset/route.ts ver.2 (修正版)
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "../../../../lib/supabase"
 
@@ -6,15 +6,40 @@ export async function POST(request: NextRequest) {
   try {
     console.log('Amazon学習データリセット開始')
 
-    // Amazon学習データテーブルを全削除
+    // 🔥 まずテーブルの存在確認
+    const { data: tableCheck, error: tableError } = await supabase
+      .from('amazon_product_mapping')
+      .select('count(*)')
+      .limit(1)
+
+    if (tableError) {
+      console.error('テーブル存在確認エラー:', tableError)
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'amazon_product_mappingテーブルが見つかりません',
+          details: tableError.message
+        },
+        { status: 500 }
+      )
+    }
+
+    // 🔥 全行削除（正しい方法）
     const { data, error } = await supabase
       .from('amazon_product_mapping')
       .delete()
-      .neq('id', 'dummy') // 全行削除（dummy条件で全削除）
+      .not('id', 'is', null) // idがnullでないもの（実質全行）を削除
 
     if (error) {
       console.error('学習データ削除エラー:', error)
-      throw error
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: '学習データの削除に失敗しました',
+          details: error.message
+        },
+        { status: 500 }
+      )
     }
 
     console.log('Amazon学習データリセット完了:', data)
