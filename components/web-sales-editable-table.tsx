@@ -276,6 +276,8 @@ export default function WebSalesEditableTable({
         onSave={handleSaveWithDeps}
         onEditValueChange={setEditedValue}
         onCancel={handleCancel}
+        productMaster={Array.from(productMap.values())}
+        onRefresh={() => window.location.reload()}
       />
 
       <WebSalesImportButtons
