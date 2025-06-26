@@ -228,22 +228,53 @@ export function useAmazonCsvLogic({
       return
     }
 
+    // ローディング状態を表示
+    const loadingAlert = setTimeout(() => {
+      console.log('学習処理中...')
+    }, 100)
+
     try {
       let successCount = 0
+      let errorMessages: string[] = []
+      
       for (const selection of manualSelections) {
+        console.log(`学習中: ${selection.amazonTitle} -> ${selection.productId}`)
+        
         const response = await fetch('/api/products/add-learning', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amazonTitle: selection.amazonTitle, productId: selection.productId }),
+          body: JSON.stringify({ 
+            amazonTitle: selection.amazonTitle, 
+            productId: selection.productId 
+          }),
         })
+        
         if (response.ok) {
           successCount++
+          console.log(`✅ 学習成功: ${selection.amazonTitle}`)
+        } else {
+          const errorText = await response.text()
+          const errorMsg = `${selection.amazonTitle}: ${response.status} ${errorText}`
+          errorMessages.push(errorMsg)
+          console.error(`❌ 学習失敗: ${errorMsg}`)
         }
       }
-      alert(`${successCount}件のマッピングを学習しました`)
+      
+      clearTimeout(loadingAlert)
+      
+      // 結果の表示
+      if (successCount === manualSelections.length) {
+        alert(`✅ 全${successCount}件のマッピングを学習しました！`)
+      } else if (successCount > 0) {
+        alert(`⚠️ ${successCount}/${manualSelections.length}件のマッピングを学習しました\n\nエラー:\n${errorMessages.join('\n')}`)
+      } else {
+        alert(`❌ 学習に失敗しました\n\nエラー:\n${errorMessages.join('\n')}`)
+      }
+      
     } catch (error) {
+      clearTimeout(loadingAlert)
       console.error('学習エラー:', error)
-      alert('学習に失敗しました')
+      alert(`❌ ネットワークエラーが発生しました\n${error instanceof Error ? error.message : '不明なエラー'}`)
     }
   }
 
