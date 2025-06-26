@@ -1,4 +1,4 @@
-// /components/WebSalesImportButtons.tsx
+// /components/WebSalesImportButtons.tsx ver.2
 "use client"
 
 import React from "react"
@@ -7,12 +7,14 @@ interface WebSalesImportButtonsProps {
   isUploading: boolean
   onCsvClick: () => void
   onAmazonClick: () => void
+  onRakutenClick: () => void
 }
 
 export default function WebSalesImportButtons({
   isUploading,
   onCsvClick,
   onAmazonClick,
+  onRakutenClick,
 }: WebSalesImportButtonsProps) {
   return (
     <div className="p-3 border-t">
@@ -32,8 +34,8 @@ export default function WebSalesImportButtons({
           Amazon
         </button>
         <button
+          onClick={onRakutenClick}
           className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700"
-          disabled
         >
           楽天
         </button>
