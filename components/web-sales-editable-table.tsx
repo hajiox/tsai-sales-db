@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.45 (リセット機能統合版)
+// /components/web-sales-editable-table.tsx ver.46 (楽天CSV機能統合版)
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
@@ -17,6 +17,7 @@ import WebSalesSummary from "./WebSalesSummary"
 import CsvImportConfirmModal from "./CsvImportConfirmModal"
 import AmazonCsvImportModal from "./AmazonCsvImportModal"
 import AmazonCsvConfirmModal from "./AmazonCsvConfirmModal"
+import RakutenCsvImportModal from "./RakutenCsvImportModal"
 
 // Utils
 import { 
@@ -87,11 +88,14 @@ export default function WebSalesEditableTable({
     handleCancel,
   } = useTableEdit()
 
-  // Amazon CSV Modal (useDisclosureを使わずにシンプルなstateで管理)
+  // Amazon CSV Modal & Rakuten CSV Modal (useDisclosureを使わずにシンプルなstateで管理)
   const [isAmazonCsvModalOpen, setIsAmazonCsvModalOpen] = useState(false)
+  const [isRakutenCsvModalOpen, setIsRakutenCsvModalOpen] = useState(false)
   
   const onOpenAmazonCsvModal = () => setIsAmazonCsvModalOpen(true)
   const onCloseAmazonCsvModal = () => setIsAmazonCsvModalOpen(false)
+  const onOpenRakutenCsvModal = () => setIsRakutenCsvModalOpen(true)
+  const onCloseRakutenCsvModal = () => setIsRakutenCsvModalOpen(false)
 
   // Set product master for CSV import - 安全な依存関係
   useEffect(() => {
@@ -278,6 +282,7 @@ export default function WebSalesEditableTable({
         isUploading={isUploading}
         onCsvClick={handleCsvButtonClick}
         onAmazonClick={onOpenAmazonCsvModal}
+        onRakutenClick={onOpenRakutenCsvModal}
         onLearningReset={handleLearningReset}
       />
 
@@ -330,6 +335,18 @@ export default function WebSalesEditableTable({
         onClose={onCloseAmazonCsvModal}
         month={month}
         onSuccess={handleAmazonCsvSuccess}
+      />
+
+      <RakutenCsvImportModal
+        isOpen={isRakutenCsvModalOpen}
+        onClose={onCloseRakutenCsvModal}
+        onSuccess={() => {
+          onCloseRakutenCsvModal()
+          setTimeout(() => {
+            window.location.reload()
+          }, 1000)
+        }}
+        products={Array.from(productMap.values())}
       />
 
       {/* Amazon CSV確認モーダル */}
