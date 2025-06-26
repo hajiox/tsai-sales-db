@@ -327,7 +327,6 @@ function WebSalesDashboardContent() {
                 <WebSalesEditableTable 
                   initialWebSalesData={webSalesData}
                   month={month}
-                  productMaster={productMaster}
                 />
               </div>
             )}
