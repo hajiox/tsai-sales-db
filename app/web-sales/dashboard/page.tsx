@@ -44,7 +44,7 @@ function WebSalesDashboardContent() {
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [selectedProductsForDelete, setSelectedProductsForDelete] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [productMaster, setProductMaster] = useState<{ id: string; name: string; price: number }[]>([]);
+  const [productMaster, setProductMaster] = useState<{ id: string; name: string; price: number; series_number: number; product_number: number; series_name: string }[]>([]);
 
   // 月が変更された時にURLを更新（useCallbackで安定化）
   const handleMonthChange = useCallback((newMonth: string) => {
@@ -73,8 +73,9 @@ function WebSalesDashboardContent() {
       try {
         const { data, error } = await supabase
           .from('products')
-          .select('id, name, price')
-          .order('name');
+          .select('id, name, price, series_number, product_number, series_name')
+          .order('series_number')
+          .order('product_number');
         
         if (error) {
           console.error('商品マスター取得エラー:', error);
@@ -143,7 +144,7 @@ function WebSalesDashboardContent() {
   }, []);
 
   // 🔥 商品追加処理
-  const handleAddProduct = async (productData: { productName: string; price: number; amazonTitle?: string }) => {
+  const handleAddProduct = async (productData: { productName: string; price: number; seriesNumber: number; productNumber: number; seriesName: string }) => {
     try {
       const response = await fetch('/api/products/add', {
         method: 'POST',
@@ -151,7 +152,9 @@ function WebSalesDashboardContent() {
         body: JSON.stringify({
           name: productData.productName,
           price: productData.price,
-          amazonTitle: productData.amazonTitle || ''
+          series_number: productData.seriesNumber,
+          product_number: productData.productNumber,
+          series_name: productData.seriesName
         }),
       });
       
@@ -316,6 +319,12 @@ function WebSalesDashboardContent() {
           isOpen={isAddingProduct}
           onClose={() => setIsAddingProduct(false)}
           onAdd={handleAddProduct}
+          existingProducts={productMaster.map(p => ({
+            seriesNumber: p.series_number,
+            productNumber: p.product_number,
+            name: p.name,
+            seriesName: p.series_name
+          }))}
         />
       )}
     </div>
