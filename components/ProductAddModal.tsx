@@ -30,6 +30,9 @@ export default function ProductAddModal({
   onAdd 
 }: ProductAddModalProps) {
   const [productName, setProductName] = useState(unmatchedProduct?.amazonTitle || '')
+  const [seriesNumber, setSeriesNumber] = useState<number | ''>('') // 🔥 シリーズ番号追加
+  const [productNumber, setProductNumber] = useState<number | ''>('') // 🔥 商品番号追加
+  const [seriesName, setSeriesName] = useState('') // 🔥 シリーズ名追加
   const [price, setPrice] = useState<number>(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -38,8 +41,8 @@ export default function ProductAddModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!productName || !price) {
-      alert('商品名と価格を入力してください')
+    if (!productName || !seriesNumber || !productNumber || !seriesName || !price) {
+      alert('全ての項目を入力してください')
       return
     }
 
@@ -50,6 +53,9 @@ export default function ProductAddModal({
         await onAdd({
           amazonTitle: unmatchedProduct!.amazonTitle,
           productName,
+          seriesNumber: Number(seriesNumber),
+          productNumber: Number(productNumber),
+          seriesName,
           price,
           quantity: unmatchedProduct!.quantity
         })
@@ -57,6 +63,9 @@ export default function ProductAddModal({
         // 商品マスター直接追加
         await onAdd({
           productName,
+          seriesNumber: Number(seriesNumber),
+          productNumber: Number(productNumber),
+          seriesName,
           price
         })
       }
@@ -67,6 +76,9 @@ export default function ProductAddModal({
 
   const handleClose = () => {
     setProductName('')
+    setSeriesNumber('')
+    setProductNumber('')
+    setSeriesName('')
     setPrice(0)
     onClose()
   }
@@ -108,6 +120,33 @@ export default function ProductAddModal({
             </>
           )}
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">シリーズ番号 *</label>
+              <input
+                type="number"
+                value={seriesNumber}
+                onChange={(e) => setSeriesNumber(e.target.value ? Number(e.target.value) : '')}
+                className="w-full border rounded px-3 py-2"
+                placeholder="例: 1"
+                min="1"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">商品番号 *</label>
+              <input
+                type="number"
+                value={productNumber}
+                onChange={(e) => setProductNumber(e.target.value ? Number(e.target.value) : '')}
+                className="w-full border rounded px-3 py-2"
+                placeholder="例: 10"
+                min="1"
+                required
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium mb-2">商品名 *</label>
             <input
@@ -116,6 +155,18 @@ export default function ProductAddModal({
               onChange={(e) => setProductName(e.target.value)}
               className="w-full border rounded px-3 py-2"
               placeholder="商品マスターに登録する商品名"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">シリーズ名 *</label>
+            <input
+              type="text"
+              value={seriesName}
+              onChange={(e) => setSeriesName(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+              placeholder="例: チャーシュー焼豚"
               required
             />
           </div>
