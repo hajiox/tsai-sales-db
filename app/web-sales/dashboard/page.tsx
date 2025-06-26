@@ -44,7 +44,7 @@ function WebSalesDashboardContent() {
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [selectedProductsForDelete, setSelectedProductsForDelete] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [productMaster, setProductMaster] = useState<{ id: string; name: string; price: number; series_number: number; product_number: number; series_name: string }[]>([]);
+  const [productMaster, setProductMaster] = useState<any[]>([]) // 🔥 一時的にanyで型を緩和;
 
   // 月が変更された時にURLを更新（useCallbackで安定化）
   const handleMonthChange = useCallback((newMonth: string) => {
@@ -73,13 +73,13 @@ function WebSalesDashboardContent() {
       try {
         const { data, error } = await supabase
           .from('products')
-          .select('id, name, price, series_number, product_number, series_name')
-          .order('series_number')
-          .order('product_number');
+          .select('*') // 🔥 全列を取得して実際の構造を確認
+          .order('name');
         
         if (error) {
           console.error('商品マスター取得エラー:', error);
         } else {
+          console.log('商品マスターデータ構造:', data?.[0]); // 🔥 構造をログ出力
           setProductMaster(data || []);
         }
       } catch (error) {
