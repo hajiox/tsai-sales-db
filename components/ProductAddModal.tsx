@@ -41,12 +41,40 @@ export default function ProductAddModal({
   const [price, setPrice] = useState<number>(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSeriesSuggestions, setShowSeriesSuggestions] = useState(false)
+  const [isNewSeries, setIsNewSeries] = useState(true) // 🔥 新規シリーズかどうか
 
   // 未マッチング商品からの追加か、新規商品マスター追加かを判定
   const isFromUnmatched = !!unmatchedProduct
 
   // 既存のシリーズ名を取得
   const existingSeriesNames = [...new Set(existingProducts.map(p => p.seriesName))].filter(Boolean)
+  
+  // 🔥 シリーズ番号から既存シリーズを検索
+  const existingSeriesByNumber = existingProducts.find(p => 
+    p.seriesNumber === Number(seriesNumber)
+  )
+
+  // 🔥 シリーズ番号が変更された時の処理
+  const handleSeriesNumberChange = (value: string) => {
+    const numValue = value ? Number(value) : ''
+    setSeriesNumber(numValue)
+    
+    if (numValue) {
+      const existingSeries = existingProducts.find(p => p.seriesNumber === Number(numValue))
+      if (existingSeries) {
+        // 既存シリーズの場合
+        setSeriesName(existingSeries.seriesName)
+        setIsNewSeries(false)
+      } else {
+        // 新規シリーズの場合
+        setSeriesName('')
+        setIsNewSeries(true)
+      }
+    } else {
+      setSeriesName('')
+      setIsNewSeries(true)
+    }
+  }
   
   // シリーズ名の候補をフィルタリング
   const seriesNameSuggestions = existingSeriesNames.filter(name => 
@@ -114,6 +142,7 @@ export default function ProductAddModal({
     setProductNumber('')
     setSeriesName('')
     setPrice(0)
+    setIsNewSeries(true) // 🔥 リセット時は新規シリーズに戻す
     onClose()
   }
 
@@ -160,12 +189,18 @@ export default function ProductAddModal({
               <input
                 type="number"
                 value={seriesNumber}
-                onChange={(e) => setSeriesNumber(e.target.value ? Number(e.target.value) : '')}
+                onChange={(e) => handleSeriesNumberChange(e.target.value)}
                 className={`w-full border rounded px-3 py-2 ${isDuplicate() ? 'border-red-500 bg-red-50' : ''}`}
                 placeholder="例: 1"
                 min="1"
                 required
               />
+              {/* 🔥 既存シリーズの表示 */}
+              {seriesNumber && existingSeriesByNumber && (
+                <p className="text-xs text-blue-600 mt-1">
+                  既存シリーズ: {existingSeriesByNumber.seriesName}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">商品番号 *</label>
