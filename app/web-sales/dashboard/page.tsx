@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.12 (削除機能・縞々表示付き)
+// /app/web-sales/dashboard/page.tsx ver.13 (楽天CSV統合・重複削除版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -323,6 +323,7 @@ function WebSalesDashboardContent() {
                   )}
                 </div>
                 
+                {/* 🔥 WebSalesEditableTable - ここで1回だけ呼び出し */}
                 <WebSalesEditableTable 
                   initialWebSalesData={webSalesData}
                   month={month}
