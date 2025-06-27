@@ -1,7 +1,6 @@
-// /app/api/import/rakuten-parse/route.ts ver.3 (マッチング改善版)
+// /app/api/import/rakuten-parse/route.ts ver.4 - マッチング精度50%版
 
 import { NextRequest, NextResponse } from 'next/server';
-import Papa from 'papaparse';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -9,229 +8,159 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// 商品名の類似度を計算（楽天は前半40文字のみ使用）
-function calculateSimilarity(rakutenTitle: string, productName: string): number {
-  // 入力値の安全性チェック
-  if (!rakutenTitle || !productName) {
-    console.log('入力値エラー:', { rakutenTitle, productName });
-    return 0;
-  }
+// 類似度計算関数（キーワードベース）
+function calculateSimilarity(text1: string, text2: string): number {
+  const normalize = (text: string) => text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
   
-  // 楽天タイトルの前半40文字のみを取得
-  const rakutenCore = rakutenTitle.substring(0, 40).trim();
-  console.log('楽天コア部分:', rakutenCore);
+  const normalized1 = normalize(text1);
+  const normalized2 = normalize(text2);
   
-  // テキストを正規化
-  const normalizeText = (text: string) => {
-    if (!text || typeof text !== 'string') return '';
-    
-    return text
-      .toLowerCase()
-      .replace(/<br>/g, ' ')
-      .replace(/[【】（）()「」]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
-
-  const rakutenNormalized = normalizeText(rakutenCore);
-  const productNormalized = normalizeText(productName);
+  const words1 = normalized1.split(' ').filter(word => word.length > 1);
+  const words2 = normalized2.split(' ').filter(word => word.length > 1);
   
-  console.log('正規化後 - 楽天:', rakutenNormalized);
-  console.log('正規化後 - 商品:', productNormalized);
-
-  // 正規化後の値をチェック
-  if (!rakutenNormalized || !productNormalized) {
-    console.log('正規化失敗');
-    return 0;
-  }
-
-  // 商品名のキーワードを抽出（1文字以上に変更、より細かくマッチング）
-  const productKeywords = productNormalized.split(' ').filter(word => word && word.length > 0);
-  console.log('商品キーワード:', productKeywords);
+  if (words1.length === 0 || words2.length === 0) return 0;
   
-  if (productKeywords.length === 0) {
-    console.log('キーワードなし');
-    return 0;
-  }
-
-  // 各キーワードが楽天タイトル（前半40文字）に含まれているかチェック
-  let matchCount = 0;
-  for (const keyword of productKeywords) {
-    if (rakutenNormalized.includes(keyword)) {
-      console.log('マッチしたキーワード:', keyword);
-      matchCount++;
-    } else {
-      console.log('マッチしなかったキーワード:', keyword);
+  let matchingWords = 0;
+  words1.forEach(word1 => {
+    if (words2.some(word2 => word2.includes(word1) || word1.includes(word2))) {
+      matchingWords++;
     }
-  }
-
-  // マッチ率を計算（0-1の範囲）
-  const score = matchCount / productKeywords.length;
-  console.log('最終スコア:', score, `(${matchCount}/${productKeywords.length})`);
-  return score;
+  });
+  
+  return matchingWords / Math.max(words1.length, words2.length);
 }
 
-interface RakutenCSVRow {
-  productName: string;
-  quantity: number;
-  originalRow: number;
+interface RakutenParseRequest {
+  csvContent: string;
 }
 
-interface ParseResult {
+interface RakutenParseResult {
   success: boolean;
-  data?: RakutenCSVRow[];
-  matchedProducts?: Array<{
-    rakutenTitle: string;
-    productId: string;
-    productInfo: any;
-    quantity: number;
-    originalRow: number;
-    isAutoMatched?: boolean;
-    matchScore?: number;
-  }>;
-  unmatchedProducts?: Array<{
-    rakutenTitle: string;
-    quantity: number;
-    originalRow: number;
-  }>;
+  totalProducts?: number;
+  totalQuantity?: number;
+  processableQuantity?: number;
+  matchedProducts?: any[];
+  unmatchedProducts?: any[];
   error?: string;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<ParseResult>> {
+export async function POST(request: NextRequest): Promise<NextResponse<RakutenParseResult>> {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    
-    if (!file) {
-      return NextResponse.json({ success: false, error: 'ファイルが見つかりません' });
+    const { csvContent }: RakutenParseRequest = await request.json();
+
+    if (!csvContent) {
+      return NextResponse.json({ success: false, error: 'CSVコンテンツが提供されていません' });
     }
 
-    const csvText = await file.text();
-    
-    // CSVをパース（ヘッダー行を含む全行を取得）
-    const parseResult = Papa.parse(csvText, {
-      header: false,
-      skipEmptyLines: true,
-      encoding: 'UTF-8'
-    });
+    // CSVを行に分割（8行目からデータ開始）
+    const lines = csvContent.split('\n');
+    const dataLines = lines.slice(7).filter(line => line.trim() !== '');
 
-    if (parseResult.errors.length > 0) {
+    // 楽天CSVデータをパース
+    const rakutenData = dataLines.map((line, index) => {
+      const columns = line.split(',');
+      const productName = columns[0]?.replace(/"/g, '').trim();
+      const quantity = parseInt(columns[4]?.replace(/"/g, '').trim() || '0');
+
+      return {
+        rowIndex: index + 8,
+        rakutenTitle: productName,
+        quantity: quantity
+      };
+    }).filter(item => item.rakutenTitle && item.quantity > 0);
+
+    // 商品マスターデータを取得
+    const { data: products, error: productsError } = await supabase
+      .from('products')
+      .select('id, name, series, series_code, product_code');
+
+    if (productsError) {
       return NextResponse.json({ 
         success: false, 
-        error: `CSV解析エラー: ${parseResult.errors[0].message}` 
+        error: `商品データ取得エラー: ${productsError.message}` 
       });
     }
 
-    const rows = parseResult.data as string[][];
-    
-    // 8行目以降が商品データ（配列は0ベースなので index 7 以降）
-    const productRows = rows.slice(7).filter(row => 
-      row.length > 4 && 
-      row[0] && 
-      row[4] && 
-      !isNaN(parseInt(row[4]))
-    );
-
-    // 楽天データを構造化
-    const rakutenData: RakutenCSVRow[] = productRows.map((row, index) => ({
-      productName: row[0].trim(),
-      quantity: parseInt(row[4]),
-      originalRow: index + 8 // 実際のCSV行番号
-    }));
-
-    // 既存の楽天商品マッピングを取得
-    const { data: existingMappings } = await supabase
+    // 学習済みマッピングを取得
+    const { data: learnedMappings } = await supabase
       .from('rakuten_product_mapping')
       .select('rakuten_title, product_id');
 
-    const mappingMap = new Map(
-      existingMappings?.map(m => [m.rakuten_title, m.product_id]) || []
+    const learnedMap = new Map(
+      learnedMappings?.map(m => [m.rakuten_title, m.product_id]) || []
     );
 
-    // 商品マスターを取得
-    const { data: products } = await supabase
-      .from('products')
-      .select('id, name, series, product_number, series_code, product_code');
+    // 各楽天商品をマッチング
+    const matchedProducts: any[] = [];
+    const unmatchedProducts: any[] = [];
 
-    const productMap = new Map(
-      products?.map(p => [p.id, p]) || []
-    );
+    for (const rakutenItem of rakutenData) {
+      const { rakutenTitle, quantity } = rakutenItem;
 
-    // マッチング処理（部分マッチング機能付き）
-    const matchedProducts = [];
-    const unmatchedProducts = [];
+      // まず学習済みデータでマッチングを試行
+      if (learnedMap.has(rakutenTitle)) {
+        const productId = learnedMap.get(rakutenTitle);
+        const productInfo = products?.find(p => p.id === productId);
+        
+        if (productInfo) {
+          matchedProducts.push({
+            rakutenTitle,
+            quantity,
+            productId,
+            productInfo,
+            matchType: 'learned'
+          });
+          continue;
+        }
+      }
 
-    console.log('=== 楽天マッチング開始 ===');
-    console.log('楽天商品数:', rakutenData.length);
-    console.log('商品マスター数:', productMap.size);
-    console.log('既存マッピング数:', mappingMap.size);
-
-    for (const item of rakutenData) {
-      console.log('\n--- 商品マッチング処理 ---');
-      console.log('楽天商品名:', item.productName);
-      console.log('楽天商品名(前40文字):', item.productName.substring(0, 40));
+      // 学習済みデータがない場合、類似度計算でマッチング
+      // 楽天商品名の前半40文字のみ使用（SEOキーワード除去）
+      const rakutenCore = rakutenTitle.substring(0, 40).trim();
       
-      const productId = mappingMap.get(item.productName);
-      
-      if (productId && productMap.has(productId)) {
-        // 既存の学習データでマッチング
-        console.log('既存マッピングでマッチ:', productId);
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const product of products || []) {
+        const score = calculateSimilarity(rakutenCore, product.name);
+        
+        // 50%閾値に変更（より厳しく）
+        if (score > bestScore && score > 0.5) {
+          bestMatch = {
+            productId: product.id,
+            productInfo: product,
+            score
+          };
+          bestScore = score;
+        }
+      }
+
+      if (bestMatch) {
         matchedProducts.push({
-          rakutenTitle: item.productName,
-          productId: productId,
-          productInfo: productMap.get(productId),
-          quantity: item.quantity,
-          originalRow: item.originalRow
+          rakutenTitle,
+          quantity,
+          productId: bestMatch.productId,
+          productInfo: bestMatch.productInfo,
+          matchType: 'similarity',
+          score: bestMatch.score
         });
       } else {
-        console.log('学習データなし、AIマッチング開始');
-        // 学習データがない場合、商品名の部分マッチングを試行
-        let bestMatch = null;
-        let bestScore = 0;
-
-        for (const [id, product] of productMap) {
-          // 商品データの安全性チェック
-          if (!product || !product.name) continue;
-          
-          const score = calculateSimilarity(item.productName, product.name);
-          console.log(`商品: ${product.name} => スコア: ${score}`);
-          
-          if (score > bestScore && score > 0.3) { // 30%以上の類似度に戻す
-            bestScore = score;
-            bestMatch = { productId: id, productInfo: product };
-            console.log(`新しいベストマッチ: ${product.name} (スコア: ${score})`);
-          }
-        }
-
-        if (bestMatch) {
-          console.log('AIマッチング成功:', bestMatch.productInfo.name, 'スコア:', bestScore);
-          matchedProducts.push({
-            rakutenTitle: item.productName,
-            productId: bestMatch.productId,
-            productInfo: bestMatch.productInfo,
-            quantity: item.quantity,
-            originalRow: item.originalRow,
-            isAutoMatched: true, // 自動マッチングフラグ
-            matchScore: bestScore
-          });
-        } else {
-          console.log('マッチング失敗 - 未マッチリストに追加');
-          unmatchedProducts.push({
-            rakutenTitle: item.productName,
-            quantity: item.quantity,
-            originalRow: item.originalRow
-          });
-        }
+        unmatchedProducts.push({
+          rakutenTitle,
+          quantity
+        });
       }
     }
 
-    console.log('\n=== マッチング結果 ===');
-    console.log('マッチ済み:', matchedProducts.length);
-    console.log('未マッチ:', unmatchedProducts.length);
+    // 合計数量の計算
+    const totalQuantity = rakutenData.reduce((sum, item) => sum + item.quantity, 0);
+    const processableQuantity = matchedProducts.reduce((sum, item) => sum + item.quantity, 0);
 
     return NextResponse.json({
       success: true,
-      data: rakutenData,
+      totalProducts: rakutenData.length,
+      totalQuantity,
+      processableQuantity,
       matchedProducts,
       unmatchedProducts
     });
