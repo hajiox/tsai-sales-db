@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-parse/route.ts ver.1
+// /app/api/import/rakuten-parse/route.ts ver.3 (マッチング改善版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
@@ -86,6 +86,8 @@ interface ParseResult {
     productInfo: any;
     quantity: number;
     originalRow: number;
+    isAutoMatched?: boolean;
+    matchScore?: number;
   }>;
   unmatchedProducts?: Array<{
     rakutenTitle: string;
@@ -149,7 +151,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
     // 商品マスターを取得
     const { data: products } = await supabase
       .from('products')
-      .select('id, series, product_number, series_code, product_code');
+      .select('id, name, series, product_number, series_code, product_code');
 
     const productMap = new Map(
       products?.map(p => [p.id, p]) || []
@@ -194,7 +196,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
           const score = calculateSimilarity(item.productName, product.name);
           console.log(`商品: ${product.name} => スコア: ${score}`);
           
-          if (score > bestScore && score > 0.1) { // 10%以上の類似度に変更
+          if (score > bestScore && score > 0.3) { // 30%以上の類似度に戻す
             bestScore = score;
             bestMatch = { productId: id, productInfo: product };
             console.log(`新しいベストマッチ: ${product.name} (スコア: ${score})`);
