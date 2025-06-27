@@ -405,7 +405,6 @@ export default function WebSalesEditableTable({
             window.location.reload()
           }, 1000)
         }}
-        products={rakutenProducts}
       />
 
       {/* Amazon CSV確認モーダル */}
