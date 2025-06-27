@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 
 interface RakutenCsvImportModalProps {
@@ -326,7 +325,7 @@ export default function RakutenCsvImportModal({
                 <CardHeader className="pb-3">
                   <CardTitle className="text-orange-700 flex items-center gap-2">
                     🛍️ 楽天商品
-                    <Badge variant="outline">{currentUnmatch.quantity}個</Badge>
+                    <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">{currentUnmatch.quantity}個</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
