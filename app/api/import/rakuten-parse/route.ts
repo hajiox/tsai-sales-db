@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-parse/route.ts ver.4 - マッチング精度50%版
+// /app/api/import/rakuten-parse/route.ts ver.5 - JSONエラー修正版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -30,26 +30,15 @@ function calculateSimilarity(text1: string, text2: string): number {
   return matchingWords / Math.max(words1.length, words2.length);
 }
 
-interface RakutenParseRequest {
-  csvContent: string;
-}
-
-interface RakutenParseResult {
-  success: boolean;
-  totalProducts?: number;
-  totalQuantity?: number;
-  processableQuantity?: number;
-  matchedProducts?: any[];
-  unmatchedProducts?: any[];
-  error?: string;
-}
-
-export async function POST(request: NextRequest): Promise<NextResponse<RakutenParseResult>> {
+export async function POST(request: NextRequest) {
   try {
-    const { csvContent }: RakutenParseRequest = await request.json();
+    const { csvContent } = await request.json();
 
     if (!csvContent) {
-      return NextResponse.json({ success: false, error: 'CSVコンテンツが提供されていません' });
+      return NextResponse.json({ 
+        success: false, 
+        error: 'CSVコンテンツが提供されていません' 
+      });
     }
 
     // CSVを行に分割（8行目からデータ開始）
@@ -91,8 +80,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<RakutenPa
     );
 
     // 各楽天商品をマッチング
-    const matchedProducts: any[] = [];
-    const unmatchedProducts: any[] = [];
+    const matchedProducts = [];
+    const unmatchedProducts = [];
 
     for (const rakutenItem of rakutenData) {
       const { rakutenTitle, quantity } = rakutenItem;
@@ -124,7 +113,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RakutenPa
       for (const product of products || []) {
         const score = calculateSimilarity(rakutenCore, product.name);
         
-        // 50%閾値に変更（より厳しく）
+        // 50%閾値でマッチング
         if (score > bestScore && score > 0.5) {
           bestMatch = {
             productId: product.id,
