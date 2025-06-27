@@ -1,13 +1,13 @@
-// /components/RakutenCsvImportModal.tsx ver.4 - JSONパースエラー修正版
+// /components/RakutenCsvImportModal.tsx ver.5 - 未マッチ修正機能付き
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, AlertCircle } from 'lucide-react';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 
 interface RakutenCsvImportModalProps {
   isOpen: boolean;
@@ -15,15 +15,43 @@ interface RakutenCsvImportModalProps {
   onSuccess: () => void;
 }
 
+interface Product {
+  id: string;
+  name: string;
+  series: string;
+  series_code: number;
+  product_code: number;
+}
+
 export default function RakutenCsvImportModal({ 
   isOpen, 
   onClose, 
   onSuccess 
 }: RakutenCsvImportModalProps) {
+  const [step, setStep] = useState(1); // 1: ファイル選択, 2: 確認, 3: 未マッチ修正
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<any>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [newMappings, setNewMappings] = useState<Array<{rakutenTitle: string; productId: string; quantity: number}>>([]);
+  const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchProducts();
+    }
+  }, [isOpen]);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch('/api/products');
+      const data = await response.json();
+      setProducts(data.products || []);
+    } catch (error) {
+      console.error('商品データ取得エラー:', error);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -33,6 +61,7 @@ export default function RakutenCsvImportModal({
       setCsvFile(file);
       setParseResult(null);
       setError('');
+      setStep(1);
     }
   };
 
@@ -56,16 +85,11 @@ export default function RakutenCsvImportModal({
         body: JSON.stringify({ csvContent }),
       });
 
-      // レスポンステキストを先に取得
       const responseText = await response.text();
-      console.log('楽天API生レスポンス:', responseText);
-
-      // JSONパースを安全に実行
       let result;
       try {
         result = JSON.parse(responseText);
       } catch (jsonError) {
-        console.error('JSONパースエラー:', jsonError);
         throw new Error(`レスポンスのJSONパースに失敗: ${responseText.substring(0, 100)}...`);
       }
 
@@ -74,11 +98,39 @@ export default function RakutenCsvImportModal({
       }
 
       setParseResult(result);
+      setStep(2); // 確認画面に進む
     } catch (error) {
       console.error('楽天CSV解析エラー:', error);
       setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleStartUnmatchFix = () => {
+    setStep(3);
+    setCurrentUnmatchIndex(0);
+    setNewMappings([]);
+  };
+
+  const handleProductSelect = (productId: string) => {
+    const currentUnmatch = parseResult.unmatchedProducts[currentUnmatchIndex];
+    
+    if (productId !== 'skip') {
+      const mapping = {
+        rakutenTitle: currentUnmatch.rakutenTitle,
+        productId: productId,
+        quantity: currentUnmatch.quantity
+      };
+      setNewMappings(prev => [...prev, mapping]);
+    }
+
+    // 次の未マッチ商品に進む
+    if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
+      setCurrentUnmatchIndex(currentUnmatchIndex + 1);
+    } else {
+      // 全て完了
+      setStep(2);
     }
   };
 
@@ -95,20 +147,17 @@ export default function RakutenCsvImportModal({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          saleDate: '2025-03-01', // 固定日付
+          saleDate: '2025-03-01',
           matchedProducts: parseResult.matchedProducts || [],
-          newMappings: [] // 新規マッピングは空
+          newMappings: newMappings
         }),
       });
 
       const responseText = await response.text();
-      console.log('楽天確定API生レスポンス:', responseText);
-
       let result;
       try {
         result = JSON.parse(responseText);
       } catch (jsonError) {
-        console.error('確定APIのJSONパースエラー:', jsonError);
         throw new Error(`確定APIレスポンスのJSONパースに失敗: ${responseText.substring(0, 100)}...`);
       }
 
@@ -127,6 +176,12 @@ export default function RakutenCsvImportModal({
     }
   };
 
+  const currentUnmatch = parseResult?.unmatchedProducts?.[currentUnmatchIndex];
+  const rakutenCore = currentUnmatch?.rakutenTitle?.substring(0, 40).trim();
+  const progress = parseResult?.unmatchedProducts?.length > 0 
+    ? ((currentUnmatchIndex + 1) / parseResult.unmatchedProducts.length) * 100 
+    : 0;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -138,37 +193,43 @@ export default function RakutenCsvImportModal({
         </div>
 
         <div className="p-6">
-          <p className="text-gray-600 mb-4">
-            楽天市場の商品別売上CSVをアップロードしてください。商品名のマッチング確認画面を経由して楽天列のみを更新します。
-          </p>
+          {/* ステップ1: ファイル選択 */}
+          {step === 1 && (
+            <>
+              <p className="text-gray-600 mb-4">
+                楽天市場の商品別売上CSVをアップロードしてください。
+              </p>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
-              <span className="text-red-600 text-sm">{error}</span>
-            </div>
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  <span className="text-red-600 text-sm">{error}</span>
+                </div>
+              )}
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">楽天CSV ファイル:</label>
+                <Input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="mb-2"
+                />
+                <Button 
+                  onClick={handleParse}
+                  disabled={!csvFile || isLoading}
+                  className="w-full"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isLoading ? '解析中...' : '次へ（確認画面）'}
+                </Button>
+              </div>
+            </>
           )}
 
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">楽天CSV ファイル:</label>
-            <Input
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange}
-              className="mb-2"
-            />
-            <Button 
-              onClick={handleParse}
-              disabled={!csvFile || isLoading}
-              className="w-full"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              {isLoading ? '解析中...' : '次へ（確認画面）'}
-            </Button>
-          </div>
-
-          {parseResult && (
-            <div className="space-y-4">
+          {/* ステップ2: 確認画面 */}
+          {step === 2 && parseResult && (
+            <>
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -191,20 +252,20 @@ export default function RakutenCsvImportModal({
                   <div className="text-center">
                     <div className="text-sm text-gray-600">処理可能数量</div>
                     <div className="text-2xl font-bold text-green-600">
-                      {parseResult.processableQuantity}個
+                      {parseResult.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 my-4">
                 <Card className="bg-green-50">
                   <CardHeader>
                     <CardTitle className="text-green-700">マッチ済み</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-green-600">
-                      {parseResult.matchedProducts?.length || 0}件
+                      {(parseResult.matchedProducts?.length || 0) + newMappings.length}件
                     </div>
                   </CardContent>
                 </Card>
@@ -215,25 +276,107 @@ export default function RakutenCsvImportModal({
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-yellow-600">
-                      {parseResult.unmatchedProducts?.length || 0}件
+                      {(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={onClose} className="flex-1">
-                  キャンセル
+                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  戻る
                 </Button>
-                <Button 
-                  onClick={handleConfirm}
-                  disabled={isLoading}
-                  className="flex-1"
-                >
-                  {isLoading ? '処理中...' : 'インポート実行'}
+                
+                {(parseResult.unmatchedProducts?.length || 0) > newMappings.length ? (
+                  <Button onClick={handleStartUnmatchFix} className="flex-1">
+                    <ArrowRight className="h-4 w-4 mr-2" />
+                    未マッチ商品を修正
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handleConfirm}
+                    disabled={isLoading}
+                    className="flex-1"
+                  >
+                    {isLoading ? '処理中...' : 'インポート実行'}
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ステップ3: 未マッチ修正 */}
+          {step === 3 && currentUnmatch && (
+            <>
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span>未マッチ商品修正</span>
+                  <span>{currentUnmatchIndex + 1} / {parseResult.unmatchedProducts.length}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <Card className="border-orange-200 mb-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-orange-700 flex items-center gap-2">
+                    🛍️ 楽天商品
+                    <Badge variant="outline">{currentUnmatch.quantity}個</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-3 bg-orange-50 rounded-md">
+                    <div className="font-medium text-orange-900">
+                      {rakutenCore}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mb-4">
+                <CardHeader>
+                  <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 max-h-64 overflow-y-auto">
+                  {products.map((product) => (
+                    <button
+                      key={product.id}
+                      onClick={() => handleProductSelect(product.id)}
+                      className="w-full p-3 text-left border rounded-md hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                    >
+                      <div className="font-medium text-blue-900">
+                        {product.name}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {product.series} (シリーズ: {product.series_code}, 商品: {product.product_code})
+                      </div>
+                    </button>
+                  ))}
+                  
+                  <button
+                    onClick={() => handleProductSelect('skip')}
+                    className="w-full p-3 text-left border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="font-medium text-gray-600 flex items-center gap-2">
+                      <X className="h-4 w-4" />
+                      この商品をスキップ
+                    </div>
+                  </button>
+                </CardContent>
+              </Card>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  確認画面に戻る
                 </Button>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
