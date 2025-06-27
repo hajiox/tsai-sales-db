@@ -172,20 +172,42 @@ export default function RakutenCsvImportModal({
   const handleConfirm = async () => {
     if (!parseResult) return;
 
+    console.log('🔍 楽天確定処理データ確認:');
+    console.log('parseResult:', parseResult);
+    console.log('parseResult.matchedProducts:', parseResult.matchedProducts);
+    console.log('newMappings:', newMappings);
+
     setIsLoading(true);
     setError('');
 
     try {
+      // 🔥 修正: 楽天データをAmazon形式に変換
+      const convertedMatchedProducts = (parseResult.matchedProducts || []).map(match => ({
+        productId: match.productId,
+        quantity: match.quantity
+      }));
+
+      // 🔥 修正: newMappingsもAmazon形式に変換
+      const convertedNewMappings = newMappings.map(mapping => ({
+        productId: mapping.productId,
+        quantity: mapping.quantity
+      }));
+
+      const requestData = {
+        saleDate: '2025-03-01',
+        matchedProducts: convertedMatchedProducts,
+        newMappings: convertedNewMappings
+      };
+
+      console.log('🔍 変換後送信データ:', requestData);
+      console.log('🔍 送信データ件数:', requestData.matchedProducts.length + requestData.newMappings.length);
+
       const response = await fetch('/api/import/rakuten-confirm', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          saleDate: '2025-03-01',
-          matchedProducts: parseResult.matchedProducts || [],
-          newMappings: newMappings
-        }),
+        body: JSON.stringify(requestData),
       });
 
       const responseText = await response.text();
