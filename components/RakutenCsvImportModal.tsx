@@ -60,6 +60,9 @@ export default function RakutenCsvImportModal({
       return;
     }
 
+    console.log('=== 楽天CSV解析開始 ===');
+    console.log('ファイル:', file.name, file.size, 'bytes');
+
     setLoading(true);
     setError('');
 
@@ -67,12 +70,36 @@ export default function RakutenCsvImportModal({
       const formData = new FormData();
       formData.append('file', file);
 
+      console.log('APIリクエスト送信中...');
       const response = await fetch('/api/import/rakuten-parse', {
         method: 'POST',
         body: formData,
       });
 
+      console.log('APIレスポンス受信:', response.status, response.statusText);
+
       const result = await response.json();
+
+      console.log('=== 楽天API レスポンス ===');
+      console.log('成功:', result.success);
+      console.log('全データ:', result);
+      console.log('マッチ済み:', result.matchedProducts?.length || 0);
+      console.log('未マッチ:', result.unmatchedProducts?.length || 0);
+      
+      // デバッグ: 実際のデータ構造を確認
+      if (result.data) {
+        console.log('楽天商品データ数:', result.data.length);
+        if (result.data.length > 0) {
+          console.log('楽天商品例:', result.data[0]);
+        }
+      }
+      
+      if (result.matchedProducts?.length > 0) {
+        console.log('マッチ済み商品例:', result.matchedProducts[0]);
+      }
+      if (result.unmatchedProducts?.length > 0) {
+        console.log('未マッチ商品例:', result.unmatchedProducts[0]);
+      }
 
       if (!result.success) {
         throw new Error(result.error);
@@ -240,6 +267,40 @@ export default function RakutenCsvImportModal({
 
           {step === 'confirm' && parseResult && (
             <div className="space-y-6">
+              {/* 🔥 合計数チェック機能 */}
+              <div className="bg-blue-50 p-4 rounded border border-blue-200">
+                <h3 className="font-semibold text-blue-800 mb-2">📊 数量チェック</h3>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <div className="font-medium">CSV総商品数</div>
+                    <div className="text-lg font-bold text-blue-600">
+                      {parseResult.matchedProducts.length + parseResult.unmatchedProducts.length}件
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">総販売数量</div>
+                    <div className="text-lg font-bold text-blue-600">
+                      {[...parseResult.matchedProducts, ...parseResult.unmatchedProducts]
+                        .reduce((sum, item) => sum + item.quantity, 0)}個
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">処理可能数量</div>
+                    <div className="text-lg font-bold text-green-600">
+                      {[...parseResult.matchedProducts, 
+                        ...parseResult.unmatchedProducts.filter(item => newMappings[item.rakutenTitle])]
+                        .reduce((sum, item) => sum + item.quantity, 0)}個
+                    </div>
+                  </div>
+                </div>
+                
+                {parseResult.unmatchedProducts.filter(item => !newMappings[item.rakutenTitle]).length > 0 && (
+                  <div className="mt-2 p-2 bg-yellow-100 rounded text-yellow-800 text-sm">
+                    ⚠️ 未割り当て商品があります。すべて割り当てると合計が一致します。
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="bg-green-50 p-3 rounded border border-green-200">
                   <div className="font-semibold text-green-800">マッチ済み</div>
