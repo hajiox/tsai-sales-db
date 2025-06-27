@@ -19,6 +19,7 @@ interface RakutenCsvImportModalProps {
   onSuccess: () => void;
   products: Array<{
     id: string;
+    name: string;
     series: string;
     product_number: number;
     series_code: number;
@@ -270,7 +271,7 @@ export default function RakutenCsvImportModal({
                           <option value="">商品を選択...</option>
                           {products.map((product) => (
                             <option key={product.id} value={product.id}>
-                              {product.series} - {product.product_number} ({product.series_code}-{product.product_code})
+                              {product.name} ({product.series_code}-{product.product_code})
                             </option>
                           ))}
                         </select>
