@@ -58,17 +58,20 @@ export async function POST(request: NextRequest) {
       };
     }).filter(item => item.rakutenTitle && item.quantity > 0);
 
-    // 商品マスターデータを取得
+    // 商品マスターデータを取得（Amazon方式と同じ）
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, name, series, series_code, product_code');
+      .select('*');
 
     if (productsError) {
+      console.error('商品データ取得エラー:', productsError);
       return NextResponse.json({ 
         success: false, 
         error: `商品データ取得エラー: ${productsError.message}` 
       });
     }
+
+    console.log('商品マスター件数:', products?.length || 0);
 
     // 学習済みマッピングを取得
     const { data: learnedMappings } = await supabase
