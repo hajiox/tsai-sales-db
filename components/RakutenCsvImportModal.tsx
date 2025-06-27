@@ -46,8 +46,12 @@ export default function RakutenCsvImportModal({
       setNewMappings([]);
       setCurrentUnmatchIndex(0);
       setError('');
+    } else {
+      // デバッグ: 商品データの確認
+      console.log('楽天モーダル開いた時の商品データ:', products);
+      console.log('商品データ件数:', products?.length || 0);
     }
-  }, [isOpen]);
+  }, [isOpen, products]);
 
   if (!isOpen) return null;
 
@@ -339,12 +343,12 @@ export default function RakutenCsvImportModal({
                 <CardHeader>
                   <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
                   <p className="text-sm text-gray-600">
-                    {products.length}件の商品から選択するか、該当なしの場合はスキップしてください
+                    {products?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 max-h-72 overflow-y-auto border rounded-lg p-3 bg-gray-50">
-                    {products.length > 0 ? (
+                    {products && products.length > 0 ? (
                       products.map((product) => (
                         <button
                           key={product.id}
@@ -361,8 +365,15 @@ export default function RakutenCsvImportModal({
                       ))
                     ) : (
                       <div className="text-center py-8 text-gray-500">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                        商品データを読み込み中...
+                        <div className="text-red-600 mb-2">
+                          ⚠️ 商品データが見つかりません
+                        </div>
+                        <div className="text-sm">
+                          商品マスターにデータが登録されていない可能性があります
+                        </div>
+                        <div className="text-xs text-gray-400 mt-2">
+                          渡された商品データ: {products?.length || 0}件
+                        </div>
                       </div>
                     )}
                   </div>
