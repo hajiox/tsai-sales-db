@@ -113,8 +113,8 @@ export async function POST(request: NextRequest) {
       for (const product of products || []) {
         const score = calculateSimilarity(rakutenCore, product.name);
         
-        // 50%閾値でマッチング
-        if (score > bestScore && score > 0.5) {
+        // 40%閾値でマッチング
+        if (score > bestScore && score > 0.4) {
           bestMatch = {
             productId: product.id,
             productInfo: product,
