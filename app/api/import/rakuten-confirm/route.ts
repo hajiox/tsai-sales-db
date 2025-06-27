@@ -20,20 +20,28 @@ interface ConfirmRequest {
 }
 
 export async function POST(request: NextRequest) {
+  console.log('🚨 楽天確定API開始 - 完全デバッグモード');
+  
   try {
     const body: ConfirmRequest = await request.json();
+    console.log('🔍 受信した生データ:', JSON.stringify(body, null, 2));
+    
     const { saleDate, matchedProducts, newMappings } = body;
 
-    console.log('楽天確定処理開始 (Amazon方式):', { 
+    console.log('🔍 分解後データ:', { 
       saleDate, 
       matchedLength: matchedProducts?.length, 
-      newMappingsLength: newMappings?.length 
+      newMappingsLength: newMappings?.length,
+      matchedProducts: matchedProducts?.slice(0, 3),
+      newMappings: newMappings?.slice(0, 3)
     });
 
     // 月形式に変換（Amazon方式と同じ）
     const month = saleDate.substring(0, 7); // YYYY-MM
+    console.log('🔍 処理月:', month);
 
     if (!month || !matchedProducts || !Array.isArray(matchedProducts)) {
+      console.log('❌ バリデーション失敗:', { month, matchedProducts: !!matchedProducts, isArray: Array.isArray(matchedProducts) });
       return NextResponse.json(
         { error: '必要なデータが不足しています' },
         { status: 400 }
@@ -80,22 +88,12 @@ export async function POST(request: NextRequest) {
       try {
         console.log(`🔍 楽天処理中: product_id=${result.productId}, quantity=${result.quantity}, month=${month}`);
         
-        // 処理前にテーブル確認
-        const { data: beforeData, error: beforeError } = await supabase
-          .from('web_sales_summary')
-          .select('*')
-          .eq('product_id', result.productId)
-          .eq('report_month', `${month}-01`);
-        
-        console.log(`🔍 処理前データ:`, beforeData);
-        if (beforeError) console.log(`🔍 処理前エラー:`, beforeError);
-
-        // Amazon方式と同じupsert処理（暫定: amazon_countを使用）
+        // シンプルなupsert処理
         const { data, error } = await supabase
           .from('web_sales_summary')
           .upsert({
             product_id: result.productId,
-            rakuten_count: result.quantity, // rakuten_count列を使用
+            rakuten_count: result.quantity,
             report_month: `${month}-01`
           }, {
             onConflict: 'product_id,report_month'
