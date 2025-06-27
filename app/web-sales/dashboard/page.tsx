@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.13 (楽天CSV統合・重複削除版)
+// /app/web-sales/dashboard/page.tsx ver.14 (楽天対応・直接クエリ版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -102,22 +102,67 @@ function WebSalesDashboardContent() {
       
       setIsLoading(true);
       try {
-        console.log('Debug - Calling web_sales_full_month with month:', month);
-        const { data, error } = await supabase
-          .rpc('web_sales_full_month', { target_month: month });
+        console.log('🔍 直接クエリでデータ取得開始:', month);
         
-        if (isCancelled) return; // コンポーネントがアンマウントされた場合は処理しない
-        
-        if (error) {
-          console.error('Error fetching web sales data:', error);
+        // 🔥 関数呼び出しを直接クエリに変更
+        const { data: salesData, error: salesError } = await supabase
+          .from('web_sales_summary')
+          .select('*')
+          .eq('report_month', `${month}-01`);
+
+        if (salesError) {
+          console.error('売上データ取得エラー:', salesError);
           setWebSalesData([]);
-        } else {
-          console.log('Debug - Data received:', data);
-          setWebSalesData(data || []);
+          return;
         }
+
+        // 🔥 商品データも取得
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select('*')
+          .order('series_code')
+          .order('product_code');
+
+        if (productsError) {
+          console.error('商品データ取得エラー:', productsError);
+          setWebSalesData([]);
+          return;
+        }
+
+        console.log('🔍 売上データ:', salesData);
+        console.log('🔍 商品データ:', productsData);
+
+        // 🔥 データを結合（関数と同じ形式）
+        const combinedData = productsData.map(product => {
+          const salesItem = salesData?.find(s => s.product_id === product.id);
+          
+          return {
+            product_id: product.id,
+            product_name: product.name,
+            price: product.price,
+            amazon_count: salesItem?.amazon_count || 0,
+            rakuten_count: salesItem?.rakuten_count || 0,
+            yahoo_count: salesItem?.yahoo_count || 0,
+            mercari_count: salesItem?.mercari_count || 0,
+            base_count: salesItem?.base_count || 0,
+            qoo10_count: salesItem?.qoo10_count || 0,
+            name: product.name,
+            series: product.series,
+            series_code: product.series_code,
+            product_code: product.product_code,
+            report_month: salesItem?.report_month || null
+          };
+        });
+
+        console.log('🔍 結合後データ:', combinedData.slice(0, 3));
+        console.log('🔍 楽天データ確認:', combinedData.filter(d => d.rakuten_count > 0));
+        
+        if (isCancelled) return;
+        setWebSalesData(combinedData);
+        
       } catch (error) {
         if (isCancelled) return;
-        console.error('Error during fetch operation:', error);
+        console.error('データ取得エラー:', error);
         setWebSalesData([]);
       } finally {
         if (!isCancelled) {
