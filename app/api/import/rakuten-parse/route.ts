@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-parse/route.ts ver.5 - JSONエラー修正版
+// /app/api/import/rakuten-parse/route.ts ver.6 - 30%閾値でゆるいマッチング
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -116,8 +116,8 @@ export async function POST(request: NextRequest) {
       for (const product of products || []) {
         const score = calculateSimilarity(rakutenCore, product.name);
         
-        // 40%閾値でマッチング
-        if (score > bestScore && score > 0.4) {
+        // 30%閾値でマッチング（40%から緩和）
+        if (score > bestScore && score > 0.3) {
           bestMatch = {
             productId: product.id,
             productInfo: product,
