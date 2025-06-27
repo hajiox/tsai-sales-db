@@ -317,6 +317,126 @@ export default function RakutenCsvImportModal({
                 </Card>
               </div>
 
+              {/* マッチング詳細一覧 */}
+              {parseResult.matchedProducts && parseResult.matchedProducts.length > 0 && (
+                <Card className="my-4">
+                  <CardHeader>
+                    <CardTitle>✅ マッチング詳細一覧</CardTitle>
+                    <p className="text-sm text-gray-600">
+                      以下の商品がマッチしました。確認後、インポートを実行してください。
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-60 overflow-y-auto border rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="p-2 text-left">楽天商品名</th>
+                            <th className="p-2 text-left">マッチした商品</th>
+                            <th className="p-2 text-center">数量</th>
+                            <th className="p-2 text-center">精度</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parseResult.matchedProducts.map((match, index) => (
+                            <tr key={index} className="border-t hover:bg-gray-50">
+                              <td className="p-2 text-xs">
+                                <div className="font-medium text-orange-700">
+                                  {match.rakutenTitle.length > 40 
+                                    ? match.rakutenTitle.substring(0, 40) + '...' 
+                                    : match.rakutenTitle}
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <div className="font-medium text-blue-700">
+                                  {match.productInfo?.name || 'Unknown'}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {match.productInfo?.series} | コード: {match.productInfo?.series_code}-{match.productInfo?.product_code}
+                                </div>
+                              </td>
+                              <td className="p-2 text-center">
+                                <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                                  {match.quantity}個
+                                </span>
+                              </td>
+                              <td className="p-2 text-center">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  match.matchType === 'exact' ? 'bg-green-100 text-green-800' :
+                                  match.matchType === 'high' ? 'bg-blue-100 text-blue-800' :
+                                  match.matchType === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  match.matchType === 'learned' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {match.matchType === 'exact' ? '完全' :
+                                   match.matchType === 'high' ? '高' :
+                                   match.matchType === 'medium' ? '中' :
+                                   match.matchType === 'learned' ? '学習' : '低'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* 手動マッチング一覧 */}
+              {newMappings.length > 0 && (
+                <Card className="my-4">
+                  <CardHeader>
+                    <CardTitle>🔧 手動マッチング一覧</CardTitle>
+                    <p className="text-sm text-gray-600">
+                      手動で修正した{newMappings.length}件のマッチングです。
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-40 overflow-y-auto border rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead className="bg-blue-50 sticky top-0">
+                          <tr>
+                            <th className="p-2 text-left">楽天商品名</th>
+                            <th className="p-2 text-left">選択した商品</th>
+                            <th className="p-2 text-center">数量</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {newMappings.map((mapping, index) => {
+                            const product = products?.find(p => p.id === mapping.productId);
+                            return (
+                              <tr key={index} className="border-t hover:bg-blue-50">
+                                <td className="p-2 text-xs">
+                                  <div className="font-medium text-orange-700">
+                                    {mapping.rakutenTitle.length > 30 
+                                      ? mapping.rakutenTitle.substring(0, 30) + '...' 
+                                      : mapping.rakutenTitle}
+                                  </div>
+                                </td>
+                                <td className="p-2">
+                                  <div className="font-medium text-blue-700">
+                                    {product?.name || 'Unknown'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {product?.series} | コード: {product?.series_code}-{product?.product_code}
+                                  </div>
+                                </td>
+                                <td className="p-2 text-center">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                    {mapping.quantity}個
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />
