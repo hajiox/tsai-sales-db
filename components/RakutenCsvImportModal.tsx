@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X, Upload, AlertCircle } from 'lucide-react';
 
 interface RakutenCsvImportModalProps {
@@ -144,12 +143,10 @@ export default function RakutenCsvImportModal({
           </p>
 
           {error && (
-            <Alert className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-red-600">
-                {error}
-              </AlertDescription>
-            </Alert>
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+              <span className="text-red-600 text-sm">{error}</span>
+            </div>
           )}
 
           <div className="mb-6">
