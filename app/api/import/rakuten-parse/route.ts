@@ -11,11 +11,16 @@ const supabase = createClient(
 
 // 商品名の類似度を計算（楽天は前半40文字のみ使用）
 function calculateSimilarity(rakutenTitle: string, productName: string): number {
+  // 入力値の安全性チェック
+  if (!rakutenTitle || !productName) return 0;
+  
   // 楽天タイトルの前半40文字のみを取得
   const rakutenCore = rakutenTitle.substring(0, 40).trim();
   
   // テキストを正規化
   const normalizeText = (text: string) => {
+    if (!text || typeof text !== 'string') return '';
+    
     return text
       .toLowerCase()
       .replace(/<br>/g, ' ')
@@ -27,8 +32,11 @@ function calculateSimilarity(rakutenTitle: string, productName: string): number 
   const rakutenNormalized = normalizeText(rakutenCore);
   const productNormalized = normalizeText(productName);
 
+  // 正規化後の値をチェック
+  if (!rakutenNormalized || !productNormalized) return 0;
+
   // 商品名のキーワードを抽出（2文字以上）
-  const productKeywords = productNormalized.split(' ').filter(word => word.length > 1);
+  const productKeywords = productNormalized.split(' ').filter(word => word && word.length > 1);
   
   if (productKeywords.length === 0) return 0;
 
@@ -150,6 +158,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
         let bestScore = 0;
 
         for (const [id, product] of productMap) {
+          // 商品データの安全性チェック
+          if (!product || !product.name) continue;
+          
           const score = calculateSimilarity(item.productName, product.name);
           if (score > bestScore && score > 0.3) { // 30%以上の類似度
             bestScore = score;
