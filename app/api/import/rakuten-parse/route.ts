@@ -45,8 +45,8 @@ function calculateSimilarity(rakutenTitle: string, productName: string): number 
     return 0;
   }
 
-  // 商品名のキーワードを抽出（2文字以上）
-  const productKeywords = productNormalized.split(' ').filter(word => word && word.length > 1);
+  // 商品名のキーワードを抽出（1文字以上に変更、より細かくマッチング）
+  const productKeywords = productNormalized.split(' ').filter(word => word && word.length > 0);
   console.log('商品キーワード:', productKeywords);
   
   if (productKeywords.length === 0) {
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
           const score = calculateSimilarity(item.productName, product.name);
           console.log(`商品: ${product.name} => スコア: ${score}`);
           
-          if (score > bestScore && score > 0.3) { // 30%以上の類似度
+          if (score > bestScore && score > 0.1) { // 10%以上の類似度に変更
             bestScore = score;
             bestMatch = { productId: id, productInfo: product };
             console.log(`新しいベストマッチ: ${product.name} (スコア: ${score})`);
