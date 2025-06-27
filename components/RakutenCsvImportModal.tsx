@@ -340,32 +340,50 @@ export default function RakutenCsvImportModal({
               <Card className="mb-4">
                 <CardHeader>
                   <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
+                  <p className="text-sm text-gray-600">
+                    {products.length}件の商品から選択するか、該当なしの場合はスキップしてください
+                  </p>
                 </CardHeader>
-                <CardContent className="space-y-2 max-h-64 overflow-y-auto">
-                  {products.map((product) => (
-                    <button
-                      key={product.id}
-                      onClick={() => handleProductSelect(product.id)}
-                      className="w-full p-3 text-left border rounded-md hover:bg-blue-50 hover:border-blue-300 transition-colors"
-                    >
-                      <div className="font-medium text-blue-900">
-                        {product.name}
+                <CardContent>
+                  <div className="space-y-3 max-h-72 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                    {products.length > 0 ? (
+                      products.map((product) => (
+                        <button
+                          key={product.id}
+                          onClick={() => handleProductSelect(product.id)}
+                          className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors bg-white shadow-sm"
+                        >
+                          <div className="font-medium text-blue-900 mb-1">
+                            {product.name}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            シリーズ: {product.series} | コード: {product.series_code}-{product.product_code}
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                        商品データを読み込み中...
                       </div>
-                      <div className="text-sm text-gray-600">
-                        {product.series} (シリーズ: {product.series_code}, 商品: {product.product_code})
+                    )}
+                  </div>
+                  
+                  {/* スキップボタンを分離 */}
+                  <div className="mt-4 pt-4 border-t">
+                    <button
+                      onClick={() => handleProductSelect('skip')}
+                      className="w-full p-4 text-left border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="font-medium text-gray-600 flex items-center gap-2 justify-center">
+                        <X className="h-5 w-5" />
+                        この商品をスキップ（商品マスターに該当商品がない場合）
+                      </div>
+                      <div className="text-sm text-gray-500 text-center mt-1">
+                        スキップした商品は売上データに登録されません
                       </div>
                     </button>
-                  ))}
-                  
-                  <button
-                    onClick={() => handleProductSelect('skip')}
-                    className="w-full p-3 text-left border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="font-medium text-gray-600 flex items-center gap-2">
-                      <X className="h-4 w-4" />
-                      この商品をスキップ
-                    </div>
-                  </button>
+                  </div>
                 </CardContent>
               </Card>
 
