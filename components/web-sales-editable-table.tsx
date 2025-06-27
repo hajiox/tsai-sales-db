@@ -94,7 +94,12 @@ export default function WebSalesEditableTable({
   
   const onOpenAmazonCsvModal = () => setIsAmazonCsvModalOpen(true)
   const onCloseAmazonCsvModal = () => setIsAmazonCsvModalOpen(false)
-  const onOpenRakutenCsvModal = () => setIsRakutenCsvModalOpen(true)
+  const onOpenRakutenCsvModal = () => {
+    console.log('=== 楽天モーダル開く時のデバッグ ===');
+    console.log('rakutenProducts:', rakutenProducts);
+    console.log('rakutenProducts.length:', rakutenProducts.length);
+    setIsRakutenCsvModalOpen(true);
+  }
   const onCloseRakutenCsvModal = () => setIsRakutenCsvModalOpen(false)
 
   // Set product master for CSV import - 安全な依存関係
@@ -108,15 +113,28 @@ export default function WebSalesEditableTable({
 
   // 楽天CSV用の商品データを変換
   const rakutenProducts = useMemo(() => {
-    if (!productMap || productMap.size === 0) return []
+    console.log('=== 楽天商品データ変換デバッグ ===');
+    console.log('productMap:', productMap);
+    console.log('productMap.size:', productMap?.size);
     
-    return Array.from(productMap.values()).map(product => ({
-      id: product.id,
-      name: product.name,
-      series: product.series || '',
-      series_code: product.series_code || 0,
-      product_code: product.product_code || 0
-    }))
+    if (!productMap || productMap.size === 0) {
+      console.log('productMapが空です');
+      return []
+    }
+    
+    const products = Array.from(productMap.values()).map(product => {
+      console.log('変換中の商品:', product);
+      return {
+        id: product.id,
+        name: product.name,
+        series: product.series || '',
+        series_code: product.series_code || 0,
+        product_code: product.product_code || 0
+      }
+    });
+    
+    console.log('変換後の楽天用商品データ:', products);
+    return products;
   }, [productMap.size])
 
   // 月変更処理 - 循環参照を避ける
