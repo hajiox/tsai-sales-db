@@ -12,7 +12,7 @@ interface RakutenCsvImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  products?: Product[]; // 商品データをpropsから受け取る
+  // products プロパティを削除
 }
 
 interface Product {
@@ -343,13 +343,14 @@ export default function RakutenCsvImportModal({
                 <CardHeader>
                   <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
                   <p className="text-sm text-gray-600">
-                    {products?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
+                    {effectiveProducts?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
+                    {products?.length === 0 && <span className="text-red-500"> (デバッグモード)</span>}
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 max-h-72 overflow-y-auto border rounded-lg p-3 bg-gray-50">
-                    {products && products.length > 0 ? (
-                      products.map((product) => (
+                    {effectiveProducts && effectiveProducts.length > 0 ? (
+                      effectiveProducts.map((product) => (
                         <button
                           key={product.id}
                           onClick={() => handleProductSelect(product.id)}
@@ -373,6 +374,16 @@ export default function RakutenCsvImportModal({
                         </div>
                         <div className="text-xs text-gray-400 mt-2">
                           渡された商品データ: {products?.length || 0}件
+                        </div>
+                        <div className="text-xs text-blue-600 mt-2">
+                          コンソールでデバッグ情報を確認してください
+                        </div>
+                        
+                        {/* 緊急回避: スキップのみ表示 */}
+                        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                          <div className="text-sm text-yellow-700">
+                            商品データが取得できないため、この商品はスキップしてください
+                          </div>
                         </div>
                       </div>
                     )}
