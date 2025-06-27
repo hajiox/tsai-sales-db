@@ -12,10 +12,14 @@ const supabase = createClient(
 // 商品名の類似度を計算（楽天は前半40文字のみ使用）
 function calculateSimilarity(rakutenTitle: string, productName: string): number {
   // 入力値の安全性チェック
-  if (!rakutenTitle || !productName) return 0;
+  if (!rakutenTitle || !productName) {
+    console.log('入力値エラー:', { rakutenTitle, productName });
+    return 0;
+  }
   
   // 楽天タイトルの前半40文字のみを取得
   const rakutenCore = rakutenTitle.substring(0, 40).trim();
+  console.log('楽天コア部分:', rakutenCore);
   
   // テキストを正規化
   const normalizeText = (text: string) => {
@@ -31,25 +35,40 @@ function calculateSimilarity(rakutenTitle: string, productName: string): number 
 
   const rakutenNormalized = normalizeText(rakutenCore);
   const productNormalized = normalizeText(productName);
+  
+  console.log('正規化後 - 楽天:', rakutenNormalized);
+  console.log('正規化後 - 商品:', productNormalized);
 
   // 正規化後の値をチェック
-  if (!rakutenNormalized || !productNormalized) return 0;
+  if (!rakutenNormalized || !productNormalized) {
+    console.log('正規化失敗');
+    return 0;
+  }
 
   // 商品名のキーワードを抽出（2文字以上）
   const productKeywords = productNormalized.split(' ').filter(word => word && word.length > 1);
+  console.log('商品キーワード:', productKeywords);
   
-  if (productKeywords.length === 0) return 0;
+  if (productKeywords.length === 0) {
+    console.log('キーワードなし');
+    return 0;
+  }
 
   // 各キーワードが楽天タイトル（前半40文字）に含まれているかチェック
   let matchCount = 0;
   for (const keyword of productKeywords) {
     if (rakutenNormalized.includes(keyword)) {
+      console.log('マッチしたキーワード:', keyword);
       matchCount++;
+    } else {
+      console.log('マッチしなかったキーワード:', keyword);
     }
   }
 
   // マッチ率を計算（0-1の範囲）
-  return matchCount / productKeywords.length;
+  const score = matchCount / productKeywords.length;
+  console.log('最終スコア:', score, `(${matchCount}/${productKeywords.length})`);
+  return score;
 }
 
 interface RakutenCSVRow {
@@ -140,11 +159,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
     const matchedProducts = [];
     const unmatchedProducts = [];
 
+    console.log('=== 楽天マッチング開始 ===');
+    console.log('楽天商品数:', rakutenData.length);
+    console.log('商品マスター数:', productMap.size);
+    console.log('既存マッピング数:', mappingMap.size);
+
     for (const item of rakutenData) {
+      console.log('\n--- 商品マッチング処理 ---');
+      console.log('楽天商品名:', item.productName);
+      console.log('楽天商品名(前40文字):', item.productName.substring(0, 40));
+      
       const productId = mappingMap.get(item.productName);
       
       if (productId && productMap.has(productId)) {
         // 既存の学習データでマッチング
+        console.log('既存マッピングでマッチ:', productId);
         matchedProducts.push({
           rakutenTitle: item.productName,
           productId: productId,
@@ -153,6 +182,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
           originalRow: item.originalRow
         });
       } else {
+        console.log('学習データなし、AIマッチング開始');
         // 学習データがない場合、商品名の部分マッチングを試行
         let bestMatch = null;
         let bestScore = 0;
@@ -162,13 +192,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
           if (!product || !product.name) continue;
           
           const score = calculateSimilarity(item.productName, product.name);
+          console.log(`商品: ${product.name} => スコア: ${score}`);
+          
           if (score > bestScore && score > 0.3) { // 30%以上の類似度
             bestScore = score;
             bestMatch = { productId: id, productInfo: product };
+            console.log(`新しいベストマッチ: ${product.name} (スコア: ${score})`);
           }
         }
 
         if (bestMatch) {
+          console.log('AIマッチング成功:', bestMatch.productInfo.name, 'スコア:', bestScore);
           matchedProducts.push({
             rakutenTitle: item.productName,
             productId: bestMatch.productId,
@@ -179,6 +213,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
             matchScore: bestScore
           });
         } else {
+          console.log('マッチング失敗 - 未マッチリストに追加');
           unmatchedProducts.push({
             rakutenTitle: item.productName,
             quantity: item.quantity,
@@ -187,6 +222,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ParseResu
         }
       }
     }
+
+    console.log('\n=== マッチング結果 ===');
+    console.log('マッチ済み:', matchedProducts.length);
+    console.log('未マッチ:', unmatchedProducts.length);
 
     return NextResponse.json({
       success: true,
