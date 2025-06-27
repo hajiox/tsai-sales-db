@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.5 - 未マッチ修正機能付き
+// /components/RakutenCsvImportModal.tsx ver.6 - effectiveProductsエラー修正版
 
 'use client';
 
@@ -12,7 +12,6 @@ interface RakutenCsvImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  // products プロパティを削除
 }
 
 interface Product {
@@ -36,6 +35,30 @@ export default function RakutenCsvImportModal({
   const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+
+  // 商品データ取得（Amazon方式で直接取得）
+  useEffect(() => {
+    if (isOpen) {
+      fetchProducts();
+    }
+  }, [isOpen]);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch('/api/products');
+      if (response.ok) {
+        const data = await response.json();
+        setProducts(data || []);
+        console.log('楽天モーダル: 商品データ取得成功', data?.length || 0, '件');
+      } else {
+        console.error('商品データ取得失敗:', response.status);
+        setProducts([]);
+      }
+    } catch (error) {
+      console.error('商品データ取得エラー:', error);
+      setProducts([]);
+    }
+  };
 
   useEffect(() => {
     // モーダルが閉じられた時のクリーンアップ
@@ -343,14 +366,14 @@ export default function RakutenCsvImportModal({
                 <CardHeader>
                   <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
                   <p className="text-sm text-gray-600">
-                    {effectiveProducts?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
+                    {products?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
                     {products?.length === 0 && <span className="text-red-500"> (デバッグモード)</span>}
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 max-h-72 overflow-y-auto border rounded-lg p-3 bg-gray-50">
-                    {effectiveProducts && effectiveProducts.length > 0 ? (
-                      effectiveProducts.map((product) => (
+                    {products && products.length > 0 ? (
+                      products.map((product) => (
                         <button
                           key={product.id}
                           onClick={() => handleProductSelect(product.id)}
@@ -373,7 +396,7 @@ export default function RakutenCsvImportModal({
                           商品マスターにデータが登録されていない可能性があります
                         </div>
                         <div className="text-xs text-gray-400 mt-2">
-                          渡された商品データ: {products?.length || 0}件
+                          取得した商品データ: {products?.length || 0}件
                         </div>
                         <div className="text-xs text-blue-600 mt-2">
                           コンソールでデバッグ情報を確認してください
