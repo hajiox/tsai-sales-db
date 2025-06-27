@@ -73,34 +73,59 @@ export async function POST(request: NextRequest) {
     // 2. 売上データを保存（Amazon方式完全準拠）
     const allSalesData = [...matchedProducts, ...(newMappings || [])];
     
-    console.log(`楽天売上データ処理開始: ${allSalesData.length}件`);
+    console.log(`🔍 楽天売上データ処理開始: ${allSalesData.length}件`);
+    console.log('🔍 処理対象データ:', JSON.stringify(allSalesData.slice(0, 3), null, 2)); // 最初の3件をログ
 
     for (const result of allSalesData) {
       try {
-        console.log(`楽天処理中: product_id=${result.productId}, quantity=${result.quantity}`);
+        console.log(`🔍 楽天処理中: product_id=${result.productId}, quantity=${result.quantity}, month=${month}`);
         
+        // 処理前にテーブル確認
+        const { data: beforeData, error: beforeError } = await supabase
+          .from('web_sales_summary')
+          .select('*')
+          .eq('product_id', result.productId)
+          .eq('report_month', `${month}-01`);
+        
+        console.log(`🔍 処理前データ:`, beforeData);
+        if (beforeError) console.log(`🔍 処理前エラー:`, beforeError);
+
         // Amazon方式と同じupsert処理（暫定: amazon_countを使用）
         const { data, error } = await supabase
           .from('web_sales_summary')
           .upsert({
             product_id: result.productId,
-            amazon_count: result.quantity, // 暫定的にamazon_countを使用
+            rakuten_count: result.quantity, // rakuten_count列を使用
             report_month: `${month}-01`
           }, {
             onConflict: 'product_id,report_month'
           })
           .select();
 
+        console.log(`🔍 楽天upsert実行結果:`, { data, error });
+
         if (error) {
-          console.error(`楽天upsertエラー (${result.productId}):`, error.message);
+          console.error(`❌ 楽天upsertエラー (${result.productId}):`, error.message);
+          console.error(`❌ エラー詳細:`, JSON.stringify(error, null, 2));
           errorCount++;
         } else {
-          console.log(`楽天upsert成功 (${result.productId}):`, result.quantity);
-          console.log('楽天upsert結果データ:', data);
+          console.log(`✅ 楽天upsert成功 (${result.productId}): 数量=${result.quantity}`);
+          console.log('✅ upsert結果データ:', JSON.stringify(data, null, 2));
+          
+          // 処理後確認
+          const { data: afterData, error: afterError } = await supabase
+            .from('web_sales_summary')
+            .select('*')
+            .eq('product_id', result.productId)
+            .eq('report_month', `${month}-01`);
+          
+          console.log(`🔍 処理後データ:`, afterData);
+          if (afterError) console.log(`🔍 処理後エラー:`, afterError);
+          
           successCount++;
         }
       } catch (itemError) {
-        console.error(`楽天処理エラー (${result.productId}):`, itemError);
+        console.error(`❌ 楽天処理例外エラー (${result.productId}):`, itemError);
         errorCount++;
       }
     }
