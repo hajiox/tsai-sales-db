@@ -12,6 +12,7 @@ interface RakutenCsvImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  products?: Product[]; // 商品データをpropsから受け取る
 }
 
 interface Product {
@@ -37,20 +38,16 @@ export default function RakutenCsvImportModal({
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    if (isOpen) {
-      fetchProducts();
+    // モーダルが閉じられた時のクリーンアップ
+    if (!isOpen) {
+      setStep(1);
+      setCsvFile(null);
+      setParseResult(null);
+      setNewMappings([]);
+      setCurrentUnmatchIndex(0);
+      setError('');
     }
   }, [isOpen]);
-
-  const fetchProducts = async () => {
-    try {
-      const response = await fetch('/api/products');
-      const data = await response.json();
-      setProducts(data.products || []);
-    } catch (error) {
-      console.error('商品データ取得エラー:', error);
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -59,8 +56,9 @@ export default function RakutenCsvImportModal({
     if (file) {
       setCsvFile(file);
       setParseResult(null);
+      setNewMappings([]);
       setError('');
-      setStep(1);
+      // stepは変更しない（ボタンクリック時のみ）
     }
   };
 
