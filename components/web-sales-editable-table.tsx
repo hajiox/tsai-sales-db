@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.46 (楽天CSV機能統合版)
+// /components/web-sales-editable-table.tsx ver.47 (楽天CSV商品データ修正版)
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
@@ -105,6 +105,19 @@ export default function WebSalesEditableTable({
       setProductMaster(masterData)
     }
   }, [productMap.size]) // sizeのみを監視
+
+  // 楽天CSV用の商品データを変換
+  const rakutenProducts = useMemo(() => {
+    if (!productMap || productMap.size === 0) return []
+    
+    return Array.from(productMap.values()).map(product => ({
+      id: product.id,
+      name: product.name,
+      series: product.series || '',
+      series_code: product.series_code || 0,
+      product_code: product.product_code || 0
+    }))
+  }, [productMap.size])
 
   // 月変更処理 - 循環参照を避ける
   const handleMonthChange = (selectedMonth: string) => {
@@ -315,6 +328,32 @@ export default function WebSalesEditableTable({
         >
           🔄 Amazon学習データリセット
         </button>
+        
+        {/* 楽天学習データリセットボタン */}
+        <button
+          onClick={async () => {
+            if (confirm('楽天学習データを全削除します。この操作は取り消せません。実行しますか？')) {
+              try {
+                const response = await fetch('/api/learning/rakuten-reset', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                })
+                const result = await response.json()
+                if (result.success) {
+                  alert(`楽天学習データをリセットしました（削除件数: ${result.deletedCount}件）`)
+                } else {
+                  alert('リセットに失敗しました')
+                }
+              } catch (error) {
+                console.error('リセットエラー:', error)
+                alert('リセットに失敗しました')
+              }
+            }
+          }}
+          className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200"
+        >
+          🔄 楽天学習データリセット
+        </button>
       </div>
 
       <WebSalesSummary
@@ -348,7 +387,7 @@ export default function WebSalesEditableTable({
             window.location.reload()
           }, 1000)
         }}
-        products={Array.from(productMap.values())}
+        products={rakutenProducts}
       />
 
       {/* Amazon CSV確認モーダル */}
