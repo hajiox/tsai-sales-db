@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-confirm/route.ts ver.1
+// /app/api/import/rakuten-confirm/route.ts ver.3 - 現在のweb_salesテーブル対応版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -34,29 +34,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConfirmRe
     const body: ConfirmRequest = await request.json();
     const { saleDate, matchedProducts, newMappings } = body;
 
-    // 楽天チャンネルIDを取得
-    const { data: rakutenChannel } = await supabase
-      .from('sales_channels')
-      .select('id')
-      .eq('api_code', 'rakuten')
-      .single();
-
-    if (!rakutenChannel) {
-      return NextResponse.json({
-        success: false,
-        error: '楽天チャンネルが見つかりません。sales_channelsテーブルにapi_code="rakuten"を追加してください。'
-      });
-    }
-
-    const channelId = rakutenChannel.id;
-
-    // トランザクション開始
-    const { data: transaction, error: transactionError } = await supabase.rpc('begin_transaction');
-    
-    if (transactionError) {
-      console.error('トランザクション開始エラー:', transactionError);
-    }
-
     try {
       // 1. 新しいマッピングを学習
       let learnedCount = 0;
@@ -79,16 +56,30 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConfirmRe
         learnedCount = newMappings.length;
       }
 
-      // 2. 売上データを挿入（既存データと新規マッピングの両方）
+      // 2. 売上データを現在のテーブル構造に合わせて挿入
       const allSalesData = [...matchedProducts, ...newMappings];
-      const salesToInsert = allSalesData.map(item => ({
-        sale_date: saleDate,
-        channel_id: channelId,
-        product_id: item.productId,
-        quantity: item.quantity,
-        amount: 0, // 楽天CSVには金額が含まれていないため0で挿入
-        note: `楽天: ${item.rakutenTitle}`
-      }));
+      
+      // 商品ごとに数量を集計
+      const productQuantities = new Map<string, number>();
+      allSalesData.forEach(item => {
+        const currentQty = productQuantities.get(item.productId) || 0;
+        productQuantities.set(item.productId, currentQty + item.quantity);
+      });
+
+      // 各商品の売上データを挿入
+      const salesToInsert = Array.from(productQuantities.entries()).map(([productId, quantity]) => {
+        // 商品情報を取得してproduct_nameとseries_nameを設定
+        const productInfo = allSalesData.find(item => item.productId === productId);
+        
+        return {
+          product_id: productId,
+          product_name: `楽天商品: ${productInfo?.rakutenTitle || '不明'}`,
+          rakuten: quantity,
+          rakuten_count: quantity,
+          report_date: saleDate,
+          report_month: saleDate.substring(0, 7) + '-01' // YYYY-MM-01形式
+        };
+      });
 
       const { data: insertedSales, error: salesError } = await supabase
         .from('web_sales')
@@ -99,9 +90,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConfirmRe
         throw new Error(`売上データ挿入エラー: ${salesError.message}`);
       }
 
-      // トランザクション確定
-      await supabase.rpc('commit_transaction');
-
       return NextResponse.json({
         success: true,
         insertedSales: insertedSales?.length || 0,
@@ -109,8 +97,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConfirmRe
       });
 
     } catch (error) {
-      // トランザクション失敗時はロールバック
-      await supabase.rpc('rollback_transaction');
       throw error;
     }
 
