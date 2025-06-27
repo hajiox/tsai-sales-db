@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-confirm/route.ts ver.3 - 現在のweb_salesテーブル対応版
+// /app/api/import/rakuten-confirm/route.ts ver.4 - web_sales_summaryテーブル対応版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -27,12 +27,20 @@ interface ConfirmResult {
   insertedSales?: number;
   learnedMappings?: number;
   error?: string;
+  successCount?: number;
+  errorCount?: number;
+  totalCount?: number;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<ConfirmResult>> {
   try {
     const body: ConfirmRequest = await request.json();
     const { saleDate, matchedProducts, newMappings } = body;
+
+    console.log('楽天確定処理開始:', { saleDate, matchedLength: matchedProducts?.length, newMappingsLength: newMappings?.length });
+
+    // 月形式に変換（YYYY-MM-01形式）
+    const month = saleDate.substring(0, 7); // YYYY-MM
 
     try {
       // 1. 新しいマッピングを学習
@@ -51,52 +59,62 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConfirmRe
           });
 
         if (mappingError) {
-          throw new Error(`マッピング学習エラー: ${mappingError.message}`);
+          console.error('マッピング学習エラー:', mappingError);
+        } else {
+          learnedCount = newMappings.length;
+          console.log(`楽天学習データ保存完了: ${learnedCount}件`);
         }
-        learnedCount = newMappings.length;
       }
 
-      // 2. 売上データを現在のテーブル構造に合わせて挿入
+      // 2. 売上データをweb_sales_summaryテーブルに保存（Amazonと同じ方式）
       const allSalesData = [...matchedProducts, ...newMappings];
       
-      // 商品ごとに数量を集計
-      const productQuantities = new Map<string, number>();
-      allSalesData.forEach(item => {
-        const currentQty = productQuantities.get(item.productId) || 0;
-        productQuantities.set(item.productId, currentQty + item.quantity);
-      });
+      let successCount = 0;
+      let errorCount = 0;
 
-      // 各商品の売上データを挿入
-      const salesToInsert = Array.from(productQuantities.entries()).map(([productId, quantity]) => {
-        // 商品情報を取得してproduct_nameとseries_nameを設定
-        const productInfo = allSalesData.find(item => item.productId === productId);
-        
-        return {
-          product_id: productId,
-          product_name: `楽天商品: ${productInfo?.rakutenTitle || '不明'}`,
-          rakuten: quantity,
-          rakuten_count: quantity,
-          report_date: saleDate,
-          report_month: saleDate.substring(0, 7) + '-01' // YYYY-MM-01形式
-        };
-      });
+      for (const item of allSalesData) {
+        try {
+          console.log(`楽天処理中: product_id=${item.productId}, quantity=${item.quantity}`);
+          
+          // upsert処理（Amazon方式と同じ）
+          const { data, error } = await supabase
+            .from('web_sales_summary')
+            .upsert({
+              product_id: item.productId,
+              rakuten_count: item.quantity, // Amazon → amazon_count, 楽天 → rakuten_count
+              report_month: `${month}-01`
+            }, {
+              onConflict: 'product_id,report_month'
+            })
+            .select();
 
-      const { data: insertedSales, error: salesError } = await supabase
-        .from('web_sales')
-        .insert(salesToInsert)
-        .select('id');
-
-      if (salesError) {
-        throw new Error(`売上データ挿入エラー: ${salesError.message}`);
+          if (error) {
+            console.error(`楽天upsertエラー (${item.productId}):`, error.message);
+            errorCount++;
+          } else {
+            console.log(`楽天upsert成功 (${item.productId}):`, item.quantity);
+            successCount++;
+          }
+        } catch (itemError) {
+          console.error(`楽天処理エラー (${item.productId}):`, itemError);
+          errorCount++;
+        }
       }
 
+      console.log(`楽天確定処理完了: 成功${successCount}件, エラー${errorCount}件`);
+
       return NextResponse.json({
-        success: true,
-        insertedSales: insertedSales?.length || 0,
-        learnedMappings: learnedCount
+        success: successCount > 0,
+        insertedSales: successCount,
+        learnedMappings: learnedCount,
+        successCount,
+        errorCount,
+        totalCount: allSalesData.length,
+        message: `楽天データの更新が完了しました (成功: ${successCount}件)`
       });
 
     } catch (error) {
+      console.error('楽天確定処理エラー:', error);
       throw error;
     }
 
