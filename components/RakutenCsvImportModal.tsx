@@ -36,7 +36,7 @@ export default function RakutenCsvImportModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
-  // 商品データ取得（Amazon方式で直接取得）
+  // 商品データ取得（Supabase直接取得）
   useEffect(() => {
     if (isOpen) {
       fetchProducts();
@@ -45,15 +45,26 @@ export default function RakutenCsvImportModal({
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch('/api/products');
-      if (response.ok) {
-        const data = await response.json();
-        setProducts(data || []);
-        console.log('楽天モーダル: 商品データ取得成功', data?.length || 0, '件');
-      } else {
-        console.error('商品データ取得失敗:', response.status);
+      // Supabaseから直接取得（Amazon確定API方式）
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, series, series_code, product_code')
+        .order('series_code', { ascending: true });
+
+      if (error) {
+        console.error('Supabase商品データ取得エラー:', error);
         setProducts([]);
+        return;
       }
+
+      setProducts(data || []);
+      console.log('楽天モーダル: 商品データ取得成功', data?.length || 0, '件');
     } catch (error) {
       console.error('商品データ取得エラー:', error);
       setProducts([]);
