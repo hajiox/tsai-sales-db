@@ -135,7 +135,7 @@ export default function WebSalesEditableTable({
     
     console.log('変換後の楽天用商品データ:', products);
     return products;
-  }, [productMap.size])
+  }, [productMap]) // 依存関係をproductMap全体に変更
 
   // 月変更処理 - 循環参照を避ける
   const handleMonthChange = (selectedMonth: string) => {
