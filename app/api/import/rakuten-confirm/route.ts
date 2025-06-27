@@ -79,12 +79,12 @@ export async function POST(request: NextRequest) {
       try {
         console.log(`楽天処理中: product_id=${result.productId}, quantity=${result.quantity}`);
         
-        // Amazon方式と同じupsert処理
+        // Amazon方式と同じupsert処理（暫定: amazon_countを使用）
         const { data, error } = await supabase
           .from('web_sales_summary')
           .upsert({
             product_id: result.productId,
-            rakuten_count: result.quantity, // 楽天専用列
+            amazon_count: result.quantity, // 暫定的にamazon_countを使用
             report_month: `${month}-01`
           }, {
             onConflict: 'product_id,report_month'
