@@ -1,4 +1,4 @@
-// /components/AmazonCsvImportModal.tsx ver.10 (不具合修正・完全版)
+// /components/AmazonCsvImportModal.tsx ver.11 (Definitive Fix)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -19,17 +19,18 @@ interface AmazonCsvImportModalProps {
  isOpen: boolean;
  onClose: () => void;
  onSuccess: () => void;
+ products: Product[];
 }
 
 export default function AmazonCsvImportModal({ 
  isOpen, 
  onClose, 
- onSuccess 
+ onSuccess,
+ products
 }: AmazonCsvImportModalProps) {
  const [step, setStep] = useState(1);
  const [csvFile, setCsvFile] = useState<File | null>(null);
  const [parseResult, setParseResult] = useState<any>(null);
- const [products, setProducts] = useState<Product[]>([]);
  const [newMappings, setNewMappings] = useState<Array<{amazonTitle: string; productId: string; quantity: number}>>([]);
  const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
  const [isLoading, setIsLoading] = useState(false);
@@ -38,30 +39,6 @@ export default function AmazonCsvImportModal({
    const now = new Date();
    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
  });
-
- useEffect(() => {
-   if (isOpen) {
-     const fetchProducts = async () => {
-       try {
-         const { createClient } = await import('@supabase/supabase-js');
-         const supabase = createClient(
-           process.env.NEXT_PUBLIC_SUPABASE_URL!,
-           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-         );
-         const { data, error } = await supabase
-           .from('products')
-           .select('id, name, series, series_code, product_code')
-           .order('series_code', { ascending: true });
-         if (error) throw error;
-         setProducts(data || []);
-       } catch (error) {
-         console.error('商品データ取得エラー:', error);
-         setProducts([]);
-       }
-     };
-     fetchProducts();
-   }
- }, [isOpen]);
 
  useEffect(() => {
    if (!isOpen) {
@@ -75,6 +52,16 @@ export default function AmazonCsvImportModal({
  }, [isOpen]);
 
  if (!isOpen) return null;
+
+ const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        setCsvFile(file);
+        setParseResult(null);
+        setNewMappings([]);
+        setError('');
+    }
+ };
 
  const handleParse = async () => {
    if (!csvFile) {
@@ -254,7 +241,7 @@ export default function AmazonCsvImportModal({
                  <CardContent><div className="text-2xl font-bold text-green-600">{(parseResult.matchedProducts?.length || 0) + newMappings.length}件</div></CardContent>
                </Card>
                <Card className="bg-yellow-50">
-                 <CardHeader><CardTitle className="text-yellow-700">未マッチ</CardTitle></CardHeader>
+                 <CardHeader><CardTitle className="text-yellow-700">未マッチ</CardTitle></Header>
                  <CardContent><div className="text-2xl font-bold text-yellow-600">{(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件</div></CardContent>
                </Card>
              </div>
