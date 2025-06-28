@@ -1,7 +1,9 @@
-// /app/components/WebSalesImportButtons.tsx ver.3 (正しい構造に修正)
+// /app/components/WebSalesImportButtons.tsx ver.4 (楽天機能を追加統合)
 import React from 'react';
 import AmazonCsvImportModal from './AmazonCsvImportModal';
-import RakutenCsvImportModal from './RakutenCsvImportModal';
+import YahooCsvImportModal from './YahooCsvImportModal';
+import BaseCsvImportModal from './BaseCsvImportModal';
+import RakutenCsvImportModal from './RakutenCsvImportModal'; // 楽天モーダルを追加
 
 interface WebSalesImportButtonsProps {
     onImportSuccess: () => void;
@@ -9,9 +11,10 @@ interface WebSalesImportButtonsProps {
 
 const WebSalesImportButtons: React.FC<WebSalesImportButtonsProps> = ({ onImportSuccess }) => {
     return (
-        <div className="flex gap-2 mb-4">
-            {/* 各モーダルコンポーネントが、それぞれ自身のボタンを持つ */}
+        <div className="flex flex-wrap gap-2 mb-4">
             <AmazonCsvImportModal onImportSuccess={onImportSuccess} />
+            <YahooCsvImportModal onImportSuccess={onImportSuccess} />
+            <BaseCsvImportModal onImportSuccess={onImportSuccess} />
             <RakutenCsvImportModal onImportSuccess={onImportSuccess} />
         </div>
     );
