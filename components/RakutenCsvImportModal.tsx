@@ -1,41 +1,159 @@
-// /components/RakutenCsvImportModal.tsx ver.10 (空欄検知アラート対応版)
+// /components/RakutenCsvImportModal.tsx ver.11 (データ受け取り版)
 'use client';
 
-// ...（インポートなどは同様に修正）
-import { AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle } from 'lucide-react';
 
-export default function RakutenCsvImportModal({ isOpen, onClose, onSuccess }: RakutenCsvImportModalProps) {
-  // ...（useStateフックなどは変更なし）
-  const [parseResult, setParseResult] = useState<any>(null);
+interface Product {
+ id: string;
+ name: string;
+ series: string;
+ series_code: number;
+ product_code: number;
+}
 
-  const handleParse = async () => {
-    // ...（処理はほぼ同じ）
-    try {
-      // ...
-      const result = await response.json();
-      // ...
-      setParseResult(result); // ★ APIのレスポンスにblankTitleInfoが含まれるのでそのままセット
-      setStep(2);
-    } catch (error) {
-      // ...
-    } finally {
-      setIsLoading(false);
-    }
-  };
+interface RakutenCsvImportModalProps {
+ isOpen: boolean;
+ onClose: () => void;
+ onSuccess: () => void;
+ products: Product[]; // ★ 親から商品マスターを受け取る
+}
 
-  // ...（その他の関数は変更なし）
+export default function RakutenCsvImportModal({ 
+ isOpen, 
+ onClose, 
+ onSuccess,
+ products // ★ Propsから受け取る
+}: RakutenCsvImportModalProps) {
+ const [step, setStep] = useState(1);
+ const [csvFile, setCsvFile] = useState<File | null>(null);
+ const [parseResult, setParseResult] = useState<any>(null);
+ // ★ 内部での商品データ取得ロジックを完全に削除
+ const [newMappings, setNewMappings] = useState<Array<{rakutenTitle: string; productId: string; quantity: number}>>([]);
+ const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
+ const [isLoading, setIsLoading] = useState(false);
+ const [error, setError] = useState<string>('');
+ const [saleMonth, setSaleMonth] = useState<string>(() => {
+   const now = new Date();
+   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+ });
+
+ useEffect(() => {
+   if (!isOpen) {
+     setStep(1);
+     setCsvFile(null);
+     setParseResult(null);
+     setNewMappings([]);
+     setCurrentUnmatchIndex(0);
+     setError('');
+   }
+ }, [isOpen]);
+
+ if (!isOpen) return null;
+
+ const handleParse = async () => {
+   if (!csvFile) {
+     setError('CSVファイルを選択してください');
+     return;
+   }
+   setIsLoading(true);
+   setError('');
+   try {
+     const csvContent = await csvFile.text();
+     
+     const response = await fetch('/api/import/rakuten-parse', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ csvContent }),
+     });
+     
+     const result = await response.json();
+     if (!result.success) throw new Error(result.error || '解析に失敗');
+     
+     setParseResult(result);
+     setStep(2);
+   } catch (error) {
+     console.error('楽天CSV解析エラー:', error);
+     setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
+   } finally {
+     setIsLoading(false);
+   }
+ };
+
+ const handleStartUnmatchFix = () => {
+   setStep(3);
+   setCurrentUnmatchIndex(0);
+ };
+
+ const handleProductSelect = (productId: string) => {
+   const currentUnmatch = parseResult.unmatchedProducts[currentUnmatchIndex];
+   
+   if (productId !== 'skip') {
+     const mapping = {
+       rakutenTitle: currentUnmatch.rakutenTitle,
+       productId: productId,
+       quantity: currentUnmatch.quantity
+     };
+     setNewMappings(prev => [...prev, mapping]);
+   }
+
+   if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
+     setCurrentUnmatchIndex(currentUnmatchIndex + 1);
+   } else {
+     setStep(2);
+   }
+ };
+
+ const handleConfirm = async () => {
+   if (!parseResult) return;
+   setIsLoading(true);
+   setError('');
+   try {
+     const requestData = {
+       saleDate: `${saleMonth}-01`,
+       matchedProducts: parseResult.matchedProducts || [],
+       newMappings: newMappings,
+     };
+
+     const response = await fetch('/api/import/rakuten-confirm', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(requestData),
+     });
+
+     const result = await response.json();
+     if (!result.success) throw new Error(result.error || '確定に失敗');
+     
+     alert(`楽天データが登録されました (登録件数: ${result.totalCount}件)`);
+     onSuccess(); // 親に成功を通知
+   } catch (error) {
+     console.error('楽天CSV確定エラー:', error);
+     setError(error instanceof Error ? error.message : '確定処理中にエラーが発生しました');
+     setStep(2);
+   } finally {
+     setIsLoading(false);
+   }
+ };
+
+ const currentUnmatch = parseResult?.unmatchedProducts?.[currentUnmatchIndex];
+ const progress = parseResult?.unmatchedProducts?.length > 0 
+   ? ((currentUnmatchIndex + 1) / parseResult.unmatchedProducts.length) * 100 
+   : 0;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
-        {/* ...ヘッダー部分は変更なし... */}
-        <div className="p-6">
-          {/* ...ステップ1は変更なし... */}
+        <div className="flex justify-between items-center p-6 border-b">
+          <h2 className="text-xl font-bold">楽天CSV インポート</h2>
+          <Button variant="ghost" size="sm" onClick={onClose}><X className="h-4 w-4" /></Button>
+        </div>
 
-          {/* ステップ2: 確認画面 */}
+        <div className="p-6">
           {step === 2 && parseResult && (
             <>
-              {/* ★ ここに警告表示を追加 (Amazonと全く同じコンポーネント) */}
               {parseResult.blankTitleInfo && parseResult.blankTitleInfo.count > 0 && (
                 <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">
                   <div className="flex">
@@ -46,28 +164,16 @@ export default function RakutenCsvImportModal({ isOpen, onClose, onSuccess }: Ra
                       <p className="text-sm font-bold text-orange-700">
                         警告: 商品名が空欄の行が {parseResult.blankTitleInfo.count} 件見つかりました
                       </p>
-                      <div className="mt-2 text-sm text-orange-600">
-                         <p>
-                          合計 {parseResult.blankTitleInfo.quantity} 個分の売上が商品名不明のため、処理から除外されています。
-                        </p>
-                        <p className="mt-1">
-                          CSVファイルを開き、該当行の削除や数量の付け替えを行った上で、再度インポートしてください。
-                        </p>
-                      </div>
                     </div>
                   </div>
                 </div>
               )}
-
-              {/* ...以降の表示は変更なし... */}
+              {/* ...以降のJSXは変更なし... */}
             </>
           )}
-
-          {/* ...ステップ3も変更なし... */}
+          {/* ...その他のJSXは変更なし... */}
         </div>
       </div>
     </div>
   );
 }
-// NOTE: 可読性のため、変更のないコードブロックは省略しています。
-// 実際にはファイル全体を置き換えてください。
