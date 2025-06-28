@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-parse/route.ts ver.11 (Definitive Fix)
+// /app/api/import/rakuten-parse/route.ts ver.13 (Amazon方式への完全統一版)
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -46,8 +46,10 @@ export async function POST(request: NextRequest) {
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
     let blankTitleRows: any[] = [];
+    let errorRows: any[] = [];
 
     for (let i = 0; i < lines.length; i++) {
+      try {
         const columns = parseCsvLine(lines[i]);
         if (columns.length < 5) continue;
 
@@ -64,24 +66,26 @@ export async function POST(request: NextRequest) {
         const productInfo = findBestMatchSimplified(rakutenTitle, products || [], learningData || []);
 
         if (productInfo) {
-            // This is the critical fix. Construct the object explicitly and safely, just like the Amazon API.
+            // ★★★ Amazonと完全に同じ、平坦なデータ構造でオブジェクトを作成 ★★★
             matchedProducts.push({
                 rakutenTitle,
                 quantity,
                 productId: productInfo.id,
                 productName: productInfo.name,
-                productInfo: { // The frontend expects this nested object for display
-                    id: productInfo.id,
-                    name: productInfo.name,
-                    series: productInfo.series,
-                    series_code: productInfo.series_code,
-                    product_code: productInfo.product_code
-                },
-                matchType: productInfo.matchType || 'medium' // Use a fallback for safety
+                matchType: productInfo.matchType || 'medium'
             });
         } else {
             unmatchedProducts.push({ rakutenTitle, quantity });
         }
+      } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        console.error(`CSV処理エラー発生 (行: ${i + 8}): `, lines[i], error.message);
+        errorRows.push({
+          row: i + 8,
+          content: lines[i],
+          error: error.message
+        });
+      }
     }
 
     const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
@@ -98,10 +102,15 @@ export async function POST(request: NextRequest) {
         blankTitleInfo: {
             count: blankTitleRows.length,
             quantity: blankTitleQuantity
+        },
+        errorInfo: {
+            count: errorRows.length,
+            details: errorRows.slice(0, 10)
         }
     });
+
   } catch (error) {
-      console.error('楽天CSV解析エラー:', error);
+      console.error('楽天CSV解析API全体のエラー:', error);
       const errorMessage = error instanceof Error ? error.message : '不明なエラーが発生しました';
       return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
