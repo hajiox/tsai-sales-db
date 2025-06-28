@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.12 (不具合修正・完全版)
+// /components/RakutenCsvImportModal.tsx ver.13 (Definitive Fix)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -19,17 +19,18 @@ interface RakutenCsvImportModalProps {
  isOpen: boolean;
  onClose: () => void;
  onSuccess: () => void;
+ products: Product[];
 }
 
 export default function RakutenCsvImportModal({ 
  isOpen, 
  onClose, 
- onSuccess 
+ onSuccess,
+ products
 }: RakutenCsvImportModalProps) {
  const [step, setStep] = useState(1);
  const [csvFile, setCsvFile] = useState<File | null>(null);
  const [parseResult, setParseResult] = useState<any>(null);
- const [products, setProducts] = useState<Product[]>([]);
  const [newMappings, setNewMappings] = useState<Array<{rakutenTitle: string; productId: string; quantity: number}>>([]);
  const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
  const [isLoading, setIsLoading] = useState(false);
@@ -38,31 +39,6 @@ export default function RakutenCsvImportModal({
    const now = new Date();
    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
  });
-
- useEffect(() => {
-   if (isOpen) {
-     const fetchProducts = async () => {
-       try {
-         const { createClient } = await import('@supabase/supabase-js');
-         const supabase = createClient(
-           process.env.NEXT_PUBLIC_SUPABASE_URL!,
-           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-         );
-         const { data, error } = await supabase
-           .from('products')
-           .select('id, name, series, series_code, product_code')
-           .order('series_code', { ascending: true });
-         if (error) throw error;
-         setProducts(data || []);
-       } catch (error) {
-         console.error('商品データ取得エラー:', error);
-         setProducts([]);
-       }
-     };
-     fetchProducts();
-   }
- }, [isOpen]);
-
 
  useEffect(() => {
    if (!isOpen) {
@@ -76,17 +52,17 @@ export default function RakutenCsvImportModal({
  }, [isOpen]);
 
  if (!isOpen) return null;
- 
- const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-   const file = e.target.files?.[0];
-   if (file) {
-     setCsvFile(file);
-     setParseResult(null);
-     setNewMappings([]);
-     setError('');
-   }
- };
 
+ const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        setCsvFile(file);
+        setParseResult(null);
+        setNewMappings([]);
+        setError('');
+    }
+ };
+ 
  const handleParse = async () => {
    if (!csvFile) {
      setError('CSVファイルを選択してください');
@@ -126,7 +102,6 @@ export default function RakutenCsvImportModal({
  const handleStartUnmatchFix = () => {
    setStep(3);
    setCurrentUnmatchIndex(0);
-   setNewMappings([]);
  };
 
  const handleProductSelect = (productId: string) => {
