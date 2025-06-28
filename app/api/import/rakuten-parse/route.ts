@@ -1,6 +1,4 @@
-// 【正しいファイル】/app/api/import/rakuten-parse/route.ts の内容
-// version: 13 (Amazon方式への完全統一版)
-
+// /app/api/import/rakuten-parse/route.ts ver.15 (ヘッダー行数のズレ修正版)
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -37,8 +35,26 @@ export async function POST(request: NextRequest) {
     if (!csvContent) {
         return NextResponse.json({ success: false, error: 'CSVデータがありません' }, { status: 400 });
     }
+    
+    const allLines = csvContent.split('\n');
 
-    const lines = csvContent.split('\n').slice(7).filter((line: string) => line.trim() !== '');
+    // ヘッダー（6行）と最低1行のデータ行があるかチェック
+    if (allLines.length < 7) {
+        return NextResponse.json({
+            success: false, 
+            error: `CSVファイルの行数が不足しています。ヘッダー6行＋データ1行の計7行以上が必要ですが、現在は${allLines.length}行です。` 
+        }, { status: 400 });
+    }
+
+    // ★★★ 修正点：.slice(7) から正しい .slice(6) へ変更 ★★★
+    const lines = allLines.slice(6).filter((line: string) => line.trim() !== '');
+
+    if (lines.length === 0) {
+        return NextResponse.json({
+            success: false, 
+            error: 'CSVファイルに処理可能なデータ行が見つかりませんでした。'
+        }, { status: 400 });
+    }
 
     const { data: products, error: productsError } = await supabase.from('products').select('*');
     if (productsError) throw new Error(`商品マスターの取得に失敗: ${productsError.message}`);
@@ -61,7 +77,7 @@ export async function POST(request: NextRequest) {
         if (quantity <= 0) continue;
 
         if (!rakutenTitle) {
-            blankTitleRows.push({ rowNumber: i + 8, quantity });
+            blankTitleRows.push({ rowNumber: i + 7, quantity }); // 7行目からなので+7
             continue;
         }
 
@@ -80,9 +96,9 @@ export async function POST(request: NextRequest) {
         }
       } catch (e) {
         const error = e instanceof Error ? e : new Error(String(e));
-        console.error(`CSV処理エラー発生 (行: ${i + 8}): `, lines[i], error.message);
+        console.error(`CSV処理エラー発生 (行: ${i + 7}): `, lines[i], error.message);
         errorRows.push({
-          row: i + 8,
+          row: i + 7,
           content: lines[i],
           error: error.message
         });
