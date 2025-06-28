@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.14 (クリーン版)
+// /app/web-sales/dashboard/page.tsx ver.14 (クリーンな状態に戻すためのオリジナルコード)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -189,12 +189,56 @@ function WebSalesDashboardContent() {
 
   // 🔥 商品追加処理
   const handleAddProduct = async (productData: { productName: string; price: number; seriesNumber: number; productNumber: number; seriesName: string }) => {
-    // 省略
+    try {
+      const response = await fetch('/api/products/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: productData.productName,
+          price: productData.price,
+          series_code: productData.seriesNumber,
+          product_code: productData.productNumber,
+          series: productData.seriesName
+        }),
+      });
+      
+      if (!response.ok) throw new Error('商品追加に失敗しました');
+      
+      setIsAddingProduct(false);
+      setRefreshTrigger(prev => prev + 1);
+      alert('商品を追加しました');
+    } catch (error) {
+      console.error('商品追加エラー:', error);
+      alert('商品追加に失敗しました');
+    }
   };
 
   // 🔥 商品削除処理（個別削除）
   const handleDeleteProduct = async (productId: string, productName: string) => {
-    // 省略
+    if (!confirm(`商品「${productName}」を削除しますか？\nこの操作は取り消せません。`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch('/api/products/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: productId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('商品削除に失敗しました');
+      }
+
+      setRefreshTrigger(prev => prev + 1);
+      alert('商品を削除しました');
+    } catch (error) {
+      console.error('商品削除エラー:', error);
+      alert('商品削除に失敗しました');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
