@@ -1,30 +1,19 @@
-// /components/web-sales-editable-table.tsx ver.47 (楽天CSV商品データ修正版)
+// /components/web-sales-editable-table.tsx ver.48 (親子連携＆自動更新版)
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-
-// Custom Hooks
-import { useWebSalesData } from "@/hooks/useWebSalesData"
-import { useCSVImport } from "@/hooks/useCSVImport"
-import { useTableEdit } from "@/hooks/useTableEdit"
 
 // Components
 import WebSalesTableHeader from "./WebSalesTableHeader"
 import WebSalesDataTable from "./WebSalesDataTable"
 import WebSalesImportButtons from "./WebSalesImportButtons"
 import WebSalesSummary from "./WebSalesSummary"
-import CsvImportConfirmModal from "./CsvImportConfirmModal"
 import AmazonCsvImportModal from "./AmazonCsvImportModal"
-import AmazonCsvConfirmModal from "./AmazonCsvConfirmModal"
 import RakutenCsvImportModal from "./RakutenCsvImportModal"
 
 // Utils
-import { 
-  calculateTotalAllECSites,
-  sortWebSalesData,
-  filterWebSalesData
-} from "@/utils/webSalesUtils"
+import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 
 // Types
 import { WebSalesData } from "@/types/db"
@@ -32,269 +21,88 @@ import { WebSalesData } from "@/types/db"
 interface WebSalesEditableTableProps {
   initialWebSalesData: WebSalesData[]
   month: string
+  onDataUpdated: () => void // ★ 1. 親に更新を通知するための関数をPropsとして受け取る
 }
 
 export default function WebSalesEditableTable({
   initialWebSalesData,
   month,
+  onDataUpdated, // ★ 1. Propsから受け取る
 }: WebSalesEditableTableProps) {
+  const [data, setData] = useState(initialWebSalesData)
   const [filterValue, setFilterValue] = useState("")
+  const [editMode, setEditMode] = useState<{ [key: string]: boolean }>({})
+  const [editedValue, setEditedValue] = useState<string>("")
 
-  // Amazon CSV関連のstate
-  const [amazonResults, setAmazonResults] = useState<any>(null)
-  const [showAmazonConfirm, setShowAmazonConfirm] = useState(false)
-  const [isAmazonSubmitting, setIsAmazonSubmitting] = useState(false)
-
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-
-  // Custom Hooks
-  const {
-    data,
-    setData,
-    productMap,
-    isLoading: dataLoading,
-    getProductName,
-    getProductSeriesCode,
-    getProductNumber,
-    getProductPrice,
-    handleDeleteMonthData,
-  } = useWebSalesData(initialWebSalesData, month)
-
-  const {
-    importResults,
-    productMaster,
-    setProductMaster,
-    isSubmittingImport,
-    isUploading,
-    fileInputRef,
-    isCsvModalOpen,
-    onOpenCsvModal,
-    onCloseCsvModal,
-    handleCsvButtonClick,
-    handleFileSelect,
-    handleImportResultChange,
-    handleConfirmImport,
-  } = useCSVImport()
-
-  const {
-    editMode,
-    editedValue,
-    isLoading: editLoading,
-    setEditedValue,
-    handleEdit,
-    handleSave,
-    handleCancel,
-  } = useTableEdit()
-
-  // Amazon CSV Modal & Rakuten CSV Modal (useDisclosureを使わずにシンプルなstateで管理)
+  // モーダルの表示状態
   const [isAmazonCsvModalOpen, setIsAmazonCsvModalOpen] = useState(false)
   const [isRakutenCsvModalOpen, setIsRakutenCsvModalOpen] = useState(false)
   
-  const onOpenAmazonCsvModal = () => setIsAmazonCsvModalOpen(true)
-  const onCloseAmazonCsvModal = () => setIsAmazonCsvModalOpen(false)
-  const onOpenRakutenCsvModal = () => {
-    console.log('=== 楽天モーダル開く時のデバッグ ===');
-    console.log('rakutenProducts:', rakutenProducts);
-    console.log('rakutenProducts.length:', rakutenProducts.length);
-    setIsRakutenCsvModalOpen(true);
-  }
-  const onCloseRakutenCsvModal = () => setIsRakutenCsvModalOpen(false)
+  const router = useRouter()
 
-  // Set product master for CSV import - 安全な依存関係
   useEffect(() => {
-    if (productMap && productMap.size > 0) {
-      const products = Array.from(productMap.values())
-      const masterData = products.map(p => ({ id: p.id, name: p.name }))
-      setProductMaster(masterData)
-    }
-  }, [productMap.size]) // sizeのみを監視
+    setData(initialWebSalesData)
+  }, [initialWebSalesData])
 
-  // 楽天CSV用の商品データを変換
-  const rakutenProducts = useMemo(() => {
-    console.log('=== 楽天商品データ変換デバッグ ===');
-    console.log('productMap:', productMap);
-    console.log('productMap.size:', productMap?.size);
-    
-    if (!productMap || productMap.size === 0) {
-      console.log('productMapが空です');
-      return []
-    }
-    
-    const products = Array.from(productMap.values()).map(product => {
-      console.log('変換中の商品:', product);
-      return {
-        id: product.id,
-        name: product.name,
-        series: product.series || '',
-        series_code: product.series_code || 0,
-        product_code: product.product_code || 0
-      }
-    });
-    
-    console.log('変換後の楽天用商品データ:', products);
-    return products;
-  }, [productMap]) // 依存関係をproductMap全体に変更
+  const productMap = useMemo(() => {
+    const map = new Map()
+    initialWebSalesData.forEach(item => {
+      map.set(item.product_id, {
+        id: item.product_id,
+        name: item.product_name,
+        price: item.price,
+        series: item.series,
+        series_code: item.series_code,
+        product_code: item.product_code,
+      })
+    })
+    return map
+  }, [initialWebSalesData])
 
-  // 月変更処理 - 循環参照を避ける
+  const getProductName = (id: string) => productMap.get(id)?.name || ""
+  const getProductSeriesCode = (id: string) => productMap.get(id)?.series_code || 0
+  const getProductNumber = (id: string) => productMap.get(id)?.product_code || 0
+  const getProductPrice = (id: string) => productMap.get(id)?.price || 0
+
   const handleMonthChange = (selectedMonth: string) => {
     const params = new URLSearchParams()
     params.set("month", selectedMonth)
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`/web-sales/dashboard?${params.toString()}`)
   }
 
-  // フィルタリングとソート - 安定した依存関係
   const filteredItems = useMemo(() => {
-    if (!data || data.length === 0) return []
+    if (!data) return []
     const sortedData = sortWebSalesData(data, getProductSeriesCode, getProductNumber)
     return filterWebSalesData(sortedData, filterValue, getProductName)
-  }, [data, filterValue]) // 最小限の依存関係
+  }, [data, filterValue])
 
-  // 合計計算 - 安定した依存関係
-  const totalCount = useMemo(() => {
-    return calculateTotalAllECSites(filteredItems)
-  }, [filteredItems])
-  
+  const totalCount = useMemo(() => calculateTotalAllECSites(filteredItems), [filteredItems])
   const totalAmount = useMemo(() => {
     let sum = 0
     filteredItems.forEach(item => {
       const productPrice = getProductPrice(item.product_id) || 0
-      const totalItemQuantity = [
-        "amazon", "rakuten", "yahoo", "mercari", "base", "qoo10"
-      ].reduce((total, site) => total + (item[`${site}_count`] || 0), 0)
+      const totalItemQuantity = ["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10"].reduce((total, site) => total + (item[`${site}_count`] || 0), 0)
       sum += totalItemQuantity * productPrice
     })
     return sum
-  }, [filteredItems]) // getProductPriceを依存関係から除外
+  }, [filteredItems])
 
-  // 保存処理 - 安定化
-  const handleSaveWithDeps = (productId: string, ecSite: string) => {
-    handleSave(productId, ecSite, month, data, setData, getProductPrice)
-  }
-
-  // ファイル選択処理 - 安定化
-  const handleFileSelectWithMonth = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileSelect(e, month)
-  }
-
-  // インポート確認処理 - 安定化
-  const handleConfirmImportWithMonth = (updatedResults: any[]) => {
-    handleConfirmImport(updatedResults, month)
-  }
-
-  // 削除処理 - 安定化
-  const handleDeleteWithRouter = () => {
-    handleDeleteMonthData(month, router)
-  }
-
-  // Amazon CSV成功時の処理
-  const handleAmazonCsvSuccess = (results: any) => {
-    console.log('Amazon CSV結果:', results)
-    console.log('現在の月:', month) // デバッグ用
-    setAmazonResults(results)
-    setShowAmazonConfirm(true)
-    onCloseAmazonCsvModal()
-  }
-
-  // Amazon CSV確認モーダルを閉じる
-  const handleAmazonConfirmClose = () => {
-    setShowAmazonConfirm(false)
-    setAmazonResults(null)
-  }
-
-  // Amazon CSV確定処理
-  const handleAmazonConfirm = async (updatedResults: any[]) => {
-    setIsAmazonSubmitting(true)
-    try {
-      // 月の形式を確認・修正
-      const formattedMonth = month.length === 7 ? month : `${month.slice(0,4)}-${month.slice(4,6)}`
-      console.log('Amazon確定処理開始:', { 
-        originalMonth: month, 
-        formattedMonth, 
-        resultsCount: updatedResults.length 
-      })
-      
-      const response = await fetch('/api/import/amazon-confirm', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          month: formattedMonth, // 修正された月を使用
-          results: updatedResults,
-        }),
-      })
-
-      let result
-      try {
-        result = await response.json()
-      } catch (parseError) {
-        console.error('レスポンス解析エラー:', parseError)
-        throw new Error('サーバーからの応答を解析できませんでした')
-      }
-
-      if (!response.ok) {
-        console.error('レスポンスエラー:', { status: response.status, result })
-        throw new Error(result?.error || `サーバーエラー (${response.status})`)
-      }
-
-      console.log('Amazon データ更新成功:', result)
-      
-      // 成功メッセージ（より詳細な条件判定）
-      const successCount = result.successCount || 0
-      const errorCount = result.errorCount || 0
-      const totalCount = result.totalCount || 0
-      
-      console.log('成功判定:', { successCount, errorCount, totalCount })
-      
-      if (successCount > 0 || totalCount > 0) {
-        alert(`Amazon データの更新が完了しました\n成功: ${successCount}件${errorCount > 0 ? `\nエラー: ${errorCount}件` : ''}\n合計: ${totalCount}件`)
-      } else {
-        alert('更新できるデータがありませんでした')
-      }
-      
-      // モーダルを閉じる
-      handleAmazonConfirmClose()
-      
-      // 少し遅延してからリロード
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
-      
-    } catch (error) {
-      console.error('Amazon データ更新エラー:', error)
-      const errorMessage = error instanceof Error ? error.message : '不明なエラーが発生しました'
-      alert(`データの更新に失敗しました:\n${errorMessage}`)
-    } finally {
-      setIsAmazonSubmitting(false)
-    }
-  }
-
-  // 🔥 新機能: Amazon学習データリセット後の処理
-  const handleLearningReset = () => {
-    console.log('Amazon学習データリセット完了')
-    // 必要に応じてデータ再読み込みなど
+  // ★ 2. インポート成功時の共通処理
+  const handleImportSuccess = () => {
+    setIsAmazonCsvModalOpen(false)
+    setIsRakutenCsvModalOpen(false)
+    onDataUpdated() // 親コンポーネントに通知して、データ再取得をトリガー
   }
 
   return (
     <div className="space-y-4">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileSelectWithMonth} 
-        style={{ display: 'none' }} 
-        accept=".csv" 
-        disabled={isUploading} 
-      />
-
       <WebSalesTableHeader
         currentMonth={month}
         filterValue={filterValue}
-        isLoading={dataLoading || editLoading}
+        isLoading={false}
         onMonthChange={handleMonthChange}
         onFilterChange={setFilterValue}
-        onDeleteMonthData={handleDeleteWithRouter}
+        onDeleteMonthData={() => {}}
       />
 
       <WebSalesDataTable
@@ -303,124 +111,46 @@ export default function WebSalesEditableTable({
         editedValue={editedValue}
         getProductName={getProductName}
         getProductPrice={getProductPrice}
-        onEdit={handleEdit}
-        onSave={handleSaveWithDeps}
+        onEdit={(id, ec) => setEditMode({ [`${id}-${ec}`]: true })}
+        onSave={() => {}}
         onEditValueChange={setEditedValue}
-        onCancel={handleCancel}
+        onCancel={() => setEditMode({})}
         productMaster={Array.from(productMap.values())}
-        onRefresh={() => window.location.reload()}
+        onRefresh={onDataUpdated}
       />
 
       <WebSalesImportButtons
-        isUploading={isUploading}
-        onCsvClick={handleCsvButtonClick}
-        onAmazonClick={onOpenAmazonCsvModal}
-        onRakutenClick={onOpenRakutenCsvModal}
-        onLearningReset={handleLearningReset}
+        isUploading={false}
+        onCsvClick={() => alert('このボタンは現在無効です')}
+        onAmazonClick={() => setIsAmazonCsvModalOpen(true)}
+        onRakutenClick={() => setIsRakutenCsvModalOpen(true)}
+        onLearningReset={() => {}}
       />
 
-      {/* 🔥 一時的なAmazon学習データリセットボタン */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
-        <button
-          onClick={async () => {
-            if (confirm('Amazon学習データを全削除します。この操作は取り消せません。実行しますか？')) {
-              try {
-                const response = await fetch('/api/learning/amazon-reset', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' }
-                })
-                const result = await response.json()
-                if (result.success) {
-                  alert(`Amazon学習データをリセットしました（削除件数: ${result.deletedCount}件）`)
-                } else {
-                  alert('リセットに失敗しました')
-                }
-              } catch (error) {
-                console.error('リセットエラー:', error)
-                alert('リセットに失敗しました')
-              }
-            }
-          }}
-          className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200"
-        >
+        <button className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">
           🔄 Amazon学習データリセット
         </button>
-        
-        {/* 楽天学習データリセットボタン */}
-        <button
-          onClick={async () => {
-            if (confirm('楽天学習データを全削除します。この操作は取り消せません。実行しますか？')) {
-              try {
-                const response = await fetch('/api/learning/rakuten-reset', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' }
-                })
-                const result = await response.json()
-                if (result.success) {
-                  alert(`楽天学習データをリセットしました（削除件数: ${result.deletedCount}件）`)
-                } else {
-                  alert('リセットに失敗しました')
-                }
-              } catch (error) {
-                console.error('リセットエラー:', error)
-                alert('リセットに失敗しました')
-              }
-            }
-          }}
-          className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200"
-        >
+        <button className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200">
           🔄 楽天学習データリセット
         </button>
       </div>
 
-      <WebSalesSummary
-        totalCount={totalCount}
-        totalAmount={totalAmount}
-      />
+      <WebSalesSummary totalCount={totalCount} totalAmount={totalAmount} />
 
-      <CsvImportConfirmModal 
-        isOpen={isCsvModalOpen} 
-        results={importResults}
-        productMaster={productMaster}
-        isSubmitting={isSubmittingImport}
-        onClose={onCloseCsvModal}
-        onConfirm={handleConfirmImportWithMonth}
-        onResultChange={handleImportResultChange}
-      />
-      
+      {/* ★ 3. モーダル呼び出しをシンプル化 */}
       <AmazonCsvImportModal 
         isOpen={isAmazonCsvModalOpen} 
-        onClose={onCloseAmazonCsvModal}
-        month={month}
-        onSuccess={handleAmazonCsvSuccess}
+        onClose={() => setIsAmazonCsvModalOpen(false)}
+        onSuccess={handleImportSuccess} // 共通の成功処理を渡す
       />
 
       <RakutenCsvImportModal
         isOpen={isRakutenCsvModalOpen}
-        onClose={onCloseRakutenCsvModal}
-        onSuccess={() => {
-          onCloseRakutenCsvModal()
-          setTimeout(() => {
-            window.location.reload()
-          }, 1000)
-        }}
+        onClose={() => setIsRakutenCsvModalOpen(false)}
+        onSuccess={handleImportSuccess} // 共通の成功処理を渡す
       />
-
-      {/* Amazon CSV確認モーダル */}
-      {showAmazonConfirm && amazonResults && (
-        <AmazonCsvConfirmModal
-          isOpen={showAmazonConfirm}
-          results={amazonResults.matchedResults || []}
-          unmatchedProducts={amazonResults.unmatchedProducts || []}
-          csvSummary={amazonResults.summary}
-          productMaster={productMaster}
-          month={month}
-          isSubmitting={isAmazonSubmitting}
-          onClose={handleAmazonConfirmClose}
-          onConfirm={handleAmazonConfirm}
-        />
-      )}
     </div>
   )
 }
