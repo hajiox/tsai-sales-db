@@ -1,69 +1,129 @@
-// /app/api/import/amazon-confirm/route.ts ver.9 (upsert対応版)
-import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+// /app/api/import/amazon-confirm/route.ts ver.10 (楽天ロジック移植版)
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
+
+interface AmazonConfirmRequest {
+  saleDate: string;
+  matchedProducts: Array<{
+    amazonTitle: string;
+    productId: string;
+    quantity: number;
+  }>;
+  newMappings: Array<{
+    amazonTitle: string;
+    productId: string;
+    quantity: number;
+  }>;
+}
 
 export async function POST(request: NextRequest) {
+  console.log('🚨 Amazon確定API開始 - ver.10 (楽天ロジック移植版)');
+  
   try {
-    const { month, results } = await request.json()
+    const body: AmazonConfirmRequest = await request.json();
+    const { saleDate, matchedProducts, newMappings } = body;
+    const month = saleDate.substring(0, 7);
 
-    console.log('Amazon確定処理開始:', { month, resultsLength: results?.length })
-
-    if (!month || !results || !Array.isArray(results)) {
+    if (!month || !matchedProducts || !Array.isArray(matchedProducts)) {
       return NextResponse.json(
         { error: '必要なデータが不足しています' },
         { status: 400 }
-      )
+      );
     }
 
-    let successCount = 0
-    let errorCount = 0
+    let successCount = 0;
+    let errorCount = 0;
+    let learnedCount = 0;
 
-    for (const result of results) {
+    // 1. 新しいマッピングを学習
+    if (newMappings && newMappings.length > 0) {
       try {
-        console.log(`処理中: product_id=${result.productId}, quantity=${result.quantity}`)
-        
-        // upsert処理（重複対応）
-        const { data, error } = await supabase
-          .from('web_sales_summary')
-          .upsert({
-            product_id: result.productId,
-            amazon_count: result.quantity,
-            report_month: `${month}-01`
-          }, {
-            onConflict: 'product_id,report_month'
-          })
-          .select()
+        const mappingsToInsert = newMappings.map(mapping => ({
+          amazon_title: mapping.amazonTitle,
+          product_id: mapping.productId
+        }));
 
-        if (error) {
-          console.error(`upsertエラー (${result.productId}):`, error.message)
-          errorCount++
-        } else {
-          console.log(`upsert成功 (${result.productId}):`, result.quantity)
-          successCount++
-        }
-      } catch (itemError) {
-        console.error(`処理エラー (${result.productId}):`, itemError.message)
-        errorCount++
+        const { error: mappingError } = await supabase
+          .from('amazon_product_mapping')
+          .upsert(mappingsToInsert, { onConflict: 'amazon_title' });
+
+        if (mappingError) throw mappingError;
+        learnedCount = newMappings.length;
+        console.log(`📚 Amazon学習データ保存完了: ${learnedCount}件`);
+      } catch (mappingError) {
+        console.error('Amazonマッピング処理エラー:', mappingError);
       }
     }
 
-    console.log(`Amazon確定処理完了: 成功${successCount}件, エラー${errorCount}件`)
+    // 2. 売上データを商品IDごとに【集計】する (楽天から移植したロジック)
+    const allSalesData = [...matchedProducts, ...(newMappings || [])];
+    const aggregatedSales = new Map<string, number>();
+
+    for (const item of allSalesData) {
+      const currentQuantity = aggregatedSales.get(item.productId) || 0;
+      aggregatedSales.set(item.productId, currentQuantity + item.quantity);
+    }
+    console.log(`🔍 元データ件数: ${allSalesData.length}件 → 集計後: ${aggregatedSales.size}件`);
+
+    // 3. 集計後のデータでDBを更新
+    for (const [productId, totalQuantity] of aggregatedSales.entries()) {
+      try {
+        const reportMonth = `${month}-01`;
+        
+        const { data: existingData, error: selectError } = await supabase
+          .from('web_sales_summary')
+          .select('id')
+          .eq('product_id', productId)
+          .eq('report_month', reportMonth)
+          .single();
+
+        if (selectError && selectError.code !== 'PGRST116') {
+          throw selectError;
+        }
+
+        if (existingData) {
+          // 更新
+          const { error: updateError } = await supabase
+            .from('web_sales_summary')
+            .update({ amazon_count: totalQuantity }) // amazon_count を更新
+            .eq('id', existingData.id);
+          if (updateError) throw updateError;
+        } else {
+          // 新規挿入
+          const { error: insertError } = await supabase
+            .from('web_sales_summary')
+            .insert({
+              product_id: productId,
+              report_month: reportMonth,
+              amazon_count: totalQuantity, // amazon_count を挿入
+            });
+          if (insertError) throw insertError;
+        }
+        successCount++;
+      } catch (itemError) {
+        console.error(`❌ DB処理エラー (product_id: ${productId}):`, itemError);
+        errorCount++;
+      }
+    }
+
+    console.log(`Amazon確定処理完了: 成功${successCount}件, エラー${errorCount}件, 学習${learnedCount}件`);
 
     return NextResponse.json({
-      message: `Amazon データの更新が完了しました (成功: ${successCount}件)`,
-      success: successCount > 0,
+      message: `Amazonデータの更新が完了しました (成功: ${successCount}件)`,
+      success: successCount > 0 && errorCount === 0,
       successCount,
       errorCount,
-      totalCount: results.length
-    })
+      totalCount: aggregatedSales.size,
+      learnedMappings: learnedCount,
+    });
 
   } catch (error) {
-    console.error('Amazon確定API エラー:', error)
+    console.error('Amazon確定API エラー:', error);
     return NextResponse.json(
-      { error: 'サーバーエラーが発生しました' },
+      { error: 'サーバーエラーが発生しました: ' + (error instanceof Error ? error.message : '不明なエラー') },
       { status: 500 }
-    )
+    );
   }
 }
