@@ -1,4 +1,4 @@
-// /components/AmazonCsvImportModal.tsx ver.11 (Definitive Fix)
+// /components/AmazonCsvImportModal.tsx ver.12 (構文エラー修正・完全版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -210,6 +210,9 @@ export default function AmazonCsvImportModal({
                       <p className="text-sm font-bold text-orange-700">
                         警告: 商品名が空欄の行が {parseResult.summary.blankTitleInfo.count} 件見つかりました
                       </p>
+                       <p className="text-xs text-orange-600 mt-1">
+                          合計 {parseResult.summary.blankTitleInfo.quantity} 個分が処理から除外されます。CSVを修正し再実行してください。
+                        </p>
                     </div>
                   </div>
                 </div>
@@ -241,7 +244,7 @@ export default function AmazonCsvImportModal({
                  <CardContent><div className="text-2xl font-bold text-green-600">{(parseResult.matchedProducts?.length || 0) + newMappings.length}件</div></CardContent>
                </Card>
                <Card className="bg-yellow-50">
-                 <CardHeader><CardTitle className="text-yellow-700">未マッチ</CardTitle></Header>
+                 <CardHeader><CardTitle className="text-yellow-700">未マッチ</CardTitle></CardHeader>
                  <CardContent><div className="text-2xl font-bold text-yellow-600">{(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件</div></CardContent>
                </Card>
              </div>
