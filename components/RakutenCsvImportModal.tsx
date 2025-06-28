@@ -1,5 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.9 - ファイル選択UI改善版
-
+// /components/AmazonCsvImportModal.tsx ver.7 (楽天ロジック移植版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText } from 'lucide-react';
 
-interface RakutenCsvImportModalProps {
+interface AmazonCsvImportModalProps {
  isOpen: boolean;
  onClose: () => void;
  onSuccess: () => void;
@@ -22,16 +21,16 @@ interface Product {
  product_code: number;
 }
 
-export default function RakutenCsvImportModal({ 
+export default function AmazonCsvImportModal({ 
  isOpen, 
  onClose, 
  onSuccess 
-}: RakutenCsvImportModalProps) {
+}: AmazonCsvImportModalProps) {
  const [step, setStep] = useState(1); // 1: ファイル選択, 2: 確認, 3: 未マッチ修正
  const [csvFile, setCsvFile] = useState<File | null>(null);
  const [parseResult, setParseResult] = useState<any>(null);
  const [products, setProducts] = useState<Product[]>([]);
- const [newMappings, setNewMappings] = useState<Array<{rakutenTitle: string; productId: string; quantity: number}>>([]);
+ const [newMappings, setNewMappings] = useState<Array<{amazonTitle: string; productId: string; quantity: number}>>([]);
  const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
  const [isLoading, setIsLoading] = useState(false);
  const [error, setError] = useState<string>('');
@@ -40,42 +39,32 @@ export default function RakutenCsvImportModal({
    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
  });
 
- // 商品データ取得（Supabase直接取得）
+ // 商品データ取得
  useEffect(() => {
    if (isOpen) {
+     const fetchProducts = async () => {
+       try {
+         const { createClient } = await import('@supabase/supabase-js');
+         const supabase = createClient(
+           process.env.NEXT_PUBLIC_SUPABASE_URL!,
+           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+         );
+         const { data, error } = await supabase
+           .from('products')
+           .select('id, name, series, series_code, product_code')
+           .order('series_code', { ascending: true });
+         if (error) throw error;
+         setProducts(data || []);
+       } catch (error) {
+         console.error('商品データ取得エラー:', error);
+         setProducts([]);
+       }
+     };
      fetchProducts();
    }
  }, [isOpen]);
 
- const fetchProducts = async () => {
-   try {
-     // Supabaseから直接取得（Amazon確定API方式）
-     const { createClient } = await import('@supabase/supabase-js');
-     const supabase = createClient(
-       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-     );
-     
-     const { data, error } = await supabase
-       .from('products')
-       .select('id, name, series, series_code, product_code')
-       .order('series_code', { ascending: true });
-
-     if (error) {
-       console.error('Supabase商品データ取得エラー:', error);
-       setProducts([]);
-       return;
-     }
-
-     setProducts(data || []);
-   } catch (error) {
-     console.error('商品データ取得エラー:', error);
-     setProducts([]);
-   }
- };
-
  useEffect(() => {
-   // モーダルが閉じられた時のクリーンアップ
    if (!isOpen) {
      setStep(1);
      setCsvFile(null);
@@ -103,37 +92,35 @@ export default function RakutenCsvImportModal({
      setError('CSVファイルを選択してください');
      return;
    }
-
    setIsLoading(true);
    setError('');
-
    try {
-     const csvContent = await csvFile.text();
-     
-     const response = await fetch('/api/import/rakuten-parse', {
+     const formData = new FormData();
+     formData.append('file', csvFile);
+
+     const response = await fetch('/api/import/amazon-parse', {
        method: 'POST',
-       headers: {
-         'Content-Type': 'application/json',
-       },
-       body: JSON.stringify({ csvContent }),
+       body: formData,
      });
 
-     const responseText = await response.text();
-     let result;
-     try {
-       result = JSON.parse(responseText);
-     } catch (jsonError) {
-       throw new Error(`レスポンスのJSONパースに失敗: ${responseText.substring(0, 100)}...`);
-     }
+     const result = await response.json();
 
-     if (!result.success) {
-       throw new Error(result.error || '楽天CSVの解析に失敗しました');
+     if (!response.ok) {
+       throw new Error(result.error || 'Amazon CSVの解析に失敗しました');
      }
+     
+     // APIのレスポンス構造をUIが期待する形式に変換
+     setParseResult({
+        matchedProducts: result.matchedResults,
+        unmatchedProducts: result.unmatchedProducts,
+        totalRows: result.summary.totalRows,
+        csvTotalQuantity: result.summary.csvTotalQuantity,
+        matchedQuantity: result.summary.matchedQuantity,
+     });
 
-     setParseResult(result);
      setStep(2); // 確認画面に進む
    } catch (error) {
-     console.error('楽天CSV解析エラー:', error);
+     console.error('Amazon CSV解析エラー:', error);
      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
    } finally {
      setIsLoading(false);
@@ -143,7 +130,7 @@ export default function RakutenCsvImportModal({
  const handleStartUnmatchFix = () => {
    setStep(3);
    setCurrentUnmatchIndex(0);
-   setNewMappings([]);
+   // newMappingsは修正完了時にセットされるのでここではクリアしない
  };
 
  const handleProductSelect = (productId: string) => {
@@ -151,28 +138,24 @@ export default function RakutenCsvImportModal({
    
    if (productId !== 'skip') {
      const mapping = {
-       rakutenTitle: currentUnmatch.rakutenTitle,
+       amazonTitle: currentUnmatch.amazonTitle,
        productId: productId,
        quantity: currentUnmatch.quantity
      };
      setNewMappings(prev => [...prev, mapping]);
    }
 
-   // 次の未マッチ商品に進む
    if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
      setCurrentUnmatchIndex(currentUnmatchIndex + 1);
    } else {
-     // 全て完了
-     setStep(2);
+     setStep(2); // 全て完了したら確認画面に戻る
    }
  };
 
  const handleConfirm = async () => {
    if (!parseResult) return;
-   
    setIsLoading(true);
    setError('');
-
    try {
      const requestData = {
        saleDate: `${saleMonth}-01`,
@@ -180,39 +163,31 @@ export default function RakutenCsvImportModal({
        newMappings: newMappings,
      };
 
-     const response = await fetch('/api/import/rakuten-confirm', {
+     const response = await fetch('/api/import/amazon-confirm', {
        method: 'POST',
-       headers: {
-         'Content-Type': 'application/json',
-       },
+       headers: { 'Content-Type': 'application/json' },
        body: JSON.stringify(requestData),
      });
 
-     const responseText = await response.text();
-     let result;
-     try {
-       result = JSON.parse(responseText);
-     } catch (jsonError) {
-       throw new Error(`確定APIレスポンスのJSONパースに失敗: ${responseText.substring(0, 100)}...`);
-     }
+     const result = await response.json();
 
      if (!result.success) {
-       throw new Error(result.error || '楽天CSVの確定に失敗しました');
+       throw new Error(result.error || 'Amazon CSVの確定に失敗しました');
      }
 
-     alert(`楽天CSVデータが正常に登録されました\n登録件数: ${result.totalCount}件`);
+     alert(`Amazon CSVデータが正常に登録されました\n登録件数: ${result.totalCount}件`);
      onSuccess();
      onClose();
    } catch (error) {
-     console.error('楽天CSV確定エラー:', error);
+     console.error('Amazon CSV確定エラー:', error);
      setError(error instanceof Error ? error.message : '確定処理中にエラーが発生しました');
+     setStep(2); // エラーが発生したら確認画面に戻る
    } finally {
      setIsLoading(false);
    }
  };
 
  const currentUnmatch = parseResult?.unmatchedProducts?.[currentUnmatchIndex];
- const rakutenCore = currentUnmatch?.rakutenTitle?.substring(0, 40).trim();
  const progress = parseResult?.unmatchedProducts?.length > 0 
    ? ((currentUnmatchIndex + 1) / parseResult.unmatchedProducts.length) * 100 
    : 0;
@@ -221,52 +196,32 @@ export default function RakutenCsvImportModal({
    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
        <div className="flex justify-between items-center p-6 border-b">
-         <h2 className="text-xl font-bold">楽天CSV インポート</h2>
-         <Button variant="ghost" size="sm" onClick={onClose}>
-           <X className="h-4 w-4" />
-         </Button>
+         <h2 className="text-xl font-bold">Amazon CSV インポート</h2>
+         <Button variant="ghost" size="sm" onClick={onClose}><X className="h-4 w-4" /></Button>
        </div>
 
        <div className="p-6">
          {/* ステップ1: ファイル選択 */}
          {step === 1 && (
            <>
-             <p className="text-gray-600 mb-4">
-               楽天市場の商品別売上CSVをアップロードしてください。
-             </p>
-
+             <p className="text-gray-600 mb-4">Amazonの注文レポートCSVをアップロードしてください。</p>
              {error && (
                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
                  <span className="text-red-600 text-sm">{error}</span>
                </div>
              )}
-
              <div className="mb-6">
-               <label className="block text-sm font-medium mb-2">楽天CSV ファイル:</label>
-               {/* 🔧 UI修正: ファイル選択をボタン風に */}
+               <label className="block text-sm font-medium mb-2">Amazon CSV ファイル:</label>
                <div className="flex items-center gap-4 p-4 border-2 border-dashed rounded-lg">
-                 <label htmlFor="rakuten-csv-upload" className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition-colors">
-                   ファイルを選択
-                 </label>
-                 <Input
-                   id="rakuten-csv-upload"
-                   type="file"
-                   accept=".csv"
-                   onChange={handleFileChange}
-                   className="hidden"
-                 />
+                 <label htmlFor="amazon-csv-upload" className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition-colors">ファイルを選択</label>
+                 <Input id="amazon-csv-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
                  <div className="flex items-center gap-2 text-gray-600">
-                    <FileText className="h-5 w-5 text-gray-400" />
-                    <span>{csvFile ? csvFile.name : '選択されていません'}</span>
+                   <FileText className="h-5 w-5 text-gray-400" />
+                   <span>{csvFile ? csvFile.name : '選択されていません'}</span>
                  </div>
                </div>
-               
-               <Button 
-                 onClick={handleParse}
-                 disabled={!csvFile || isLoading}
-                 className="w-full mt-4"
-               >
+               <Button onClick={handleParse} disabled={!csvFile || isLoading} className="w-full mt-4">
                  <Upload className="h-4 w-4 mr-2" />
                  {isLoading ? '解析中...' : '次へ（確認画面）'}
                </Button>
@@ -277,208 +232,49 @@ export default function RakutenCsvImportModal({
          {/* ステップ2: 確認画面 */}
          {step === 2 && parseResult && (
            <>
-             {/* 売上月選択を追加 */}
              <div className="mb-4">
                <label className="block text-sm font-medium mb-2">売上月:</label>
-               <input
-                 type="month"
-                 value={saleMonth}
-                 onChange={(e) => setSaleMonth(e.target.value)}
-                 className="border rounded-md p-2 w-full"
-               />
+               <input type="month" value={saleMonth} onChange={(e) => setSaleMonth(e.target.value)} className="border rounded-md p-2 w-full" />
              </div>
-
              <Card>
-               <CardHeader>
-                 <CardTitle className="flex items-center gap-2">
-                   📊 数量チェック
-                 </CardTitle>
-               </CardHeader>
+               <CardHeader><CardTitle className="flex items-center gap-2">📊 数量チェック</CardTitle></CardHeader>
                <CardContent className="grid grid-cols-3 gap-4">
                  <div className="text-center">
-                   <div className="text-sm text-gray-600">CSV総商品数</div>
-                   <div className="text-2xl font-bold text-blue-600">
-                     {parseResult.totalProducts}件
-                   </div>
+                   <div className="text-sm text-gray-600">CSV総行数</div>
+                   <div className="text-2xl font-bold text-blue-600">{parseResult.totalRows}件</div>
                  </div>
                  <div className="text-center">
-                   <div className="text-sm text-gray-600">総販売数量</div>
-                   <div className="text-2xl font-bold text-blue-600">
-                     {parseResult.totalQuantity}個
-                   </div>
+                   <div className="text-sm text-gray-600">CSV総販売数量</div>
+                   <div className="text-2xl font-bold text-blue-600">{parseResult.csvTotalQuantity}個</div>
                  </div>
                  <div className="text-center">
-                   <div className="text-sm text-gray-600">処理可能数量</div>
-                   <div className="text-2xl font-bold text-green-600">
-                     {parseResult.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
-                   </div>
+                   <div className="text-sm text-gray-600">登録可能数量</div>
+                   <div className="text-2xl font-bold text-green-600">{parseResult.matchedQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個</div>
                  </div>
                </CardContent>
              </Card>
-
              <div className="grid grid-cols-2 gap-4 my-4">
                <Card className="bg-green-50">
-                 <CardHeader>
-                   <CardTitle className="text-green-700">マッチ済み</CardTitle>
-                 </CardHeader>
-                 <CardContent>
-                   <div className="text-2xl font-bold text-green-600">
-                     {(parseResult.matchedProducts?.length || 0) + newMappings.length}件
-                   </div>
-                 </CardContent>
+                 <CardHeader><CardTitle className="text-green-700">マッチ済み</CardTitle></CardHeader>
+                 <CardContent><div className="text-2xl font-bold text-green-600">{(parseResult.matchedProducts?.length || 0) + newMappings.length}件</div></CardContent>
                </Card>
-
                <Card className="bg-yellow-50">
-                 <CardHeader>
-                   <CardTitle className="text-yellow-700">未マッチ</CardTitle>
-                 </CardHeader>
-                 <CardContent>
-                   <div className="text-2xl font-bold text-yellow-600">
-                     {(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件
-                   </div>
-                 </CardContent>
+                 <CardHeader><CardTitle className="text-yellow-700">未マッチ</CardTitle></CardHeader>
+                 <CardContent><div className="text-2xl font-bold text-yellow-600">{(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件</div></CardContent>
                </Card>
              </div>
-
-             {/* マッチング詳細一覧 */}
-             {parseResult.matchedProducts && parseResult.matchedProducts.length > 0 && (
-               <Card className="my-4">
-                 <CardHeader>
-                   <CardTitle>✅ マッチング詳細一覧</CardTitle>
-                   <p className="text-sm text-gray-600">
-                     以下の商品がマッチしました。確認後、インポートを実行してください。
-                   </p>
-                 </CardHeader>
-                 <CardContent>
-                   <div className="max-h-60 overflow-y-auto border rounded-lg">
-                     <table className="w-full text-sm">
-                       <thead className="bg-gray-50 sticky top-0">
-                         <tr>
-                           <th className="p-2 text-left">楽天商品名</th>
-                           <th className="p-2 text-left">マッチした商品</th>
-                           <th className="p-2 text-center">数量</th>
-                           <th className="p-2 text-center">精度</th>
-                         </tr>
-                       </thead>
-                       <tbody>
-                         {parseResult.matchedProducts.map((match, index) => (
-                           <tr key={index} className="border-t hover:bg-gray-50">
-                             <td className="p-2 text-xs">
-                               <div className="font-medium text-orange-700">
-                                 {match.rakutenTitle.length > 40 
-                                   ? match.rakutenTitle.substring(0, 40) + '...' 
-                                   : match.rakutenTitle}
-                               </div>
-                             </td>
-                             <td className="p-2">
-                               <div className="font-medium text-blue-700">
-                                 {match.productInfo?.name || 'Unknown'}
-                               </div>
-                               <div className="text-xs text-gray-500">
-                                 {match.productInfo?.series} | コード: {match.productInfo?.series_code}-{match.productInfo?.product_code}
-                               </div>
-                             </td>
-                             <td className="p-2 text-center">
-                               <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                                 {match.quantity}個
-                               </span>
-                             </td>
-                             <td className="p-2 text-center">
-                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                 match.matchType === 'exact' ? 'bg-green-100 text-green-800' :
-                                 match.matchType === 'high' ? 'bg-blue-100 text-blue-800' :
-                                 match.matchType === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                 match.matchType === 'learned' ? 'bg-purple-100 text-purple-800' :
-                                 'bg-gray-100 text-gray-800'
-                               }`}>
-                                 {match.matchType === 'exact' ? '完全' :
-                                  match.matchType === 'high' ? '高' :
-                                  match.matchType === 'medium' ? '中' :
-                                  match.matchType === 'learned' ? '学習' : '低'}
-                               </span>
-                             </td>
-                           </tr>
-                         ))}
-                       </tbody>
-                     </table>
-                   </div>
-                 </CardContent>
-               </Card>
-             )}
-
-             {/* 手動マッチング一覧 */}
-             {newMappings.length > 0 && (
-               <Card className="my-4">
-                 <CardHeader>
-                   <CardTitle>🔧 手動マッチング一覧</CardTitle>
-                   <p className="text-sm text-gray-600">
-                     手動で修正した{newMappings.length}件のマッチングです。
-                   </p>
-                 </CardHeader>
-                 <CardContent>
-                   <div className="max-h-40 overflow-y-auto border rounded-lg">
-                     <table className="w-full text-sm">
-                       <thead className="bg-blue-50 sticky top-0">
-                         <tr>
-                           <th className="p-2 text-left">楽天商品名</th>
-                           <th className="p-2 text-left">選択した商品</th>
-                           <th className="p-2 text-center">数量</th>
-                         </tr>
-                       </thead>
-                       <tbody>
-                         {newMappings.map((mapping, index) => {
-                           const product = products?.find(p => p.id === mapping.productId);
-                           return (
-                             <tr key={index} className="border-t hover:bg-blue-50">
-                               <td className="p-2 text-xs">
-                                 <div className="font-medium text-orange-700">
-                                   {mapping.rakutenTitle.length > 30 
-                                     ? mapping.rakutenTitle.substring(0, 30) + '...' 
-                                     : mapping.rakutenTitle}
-                                 </div>
-                               </td>
-                               <td className="p-2">
-                                 <div className="font-medium text-blue-700">
-                                   {product?.name || 'Unknown'}
-                                 </div>
-                                 <div className="text-xs text-gray-500">
-                                   {product?.series} | コード: {product?.series_code}-{product?.product_code}
-                                 </div>
-                               </td>
-                               <td className="p-2 text-center">
-                                 <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                                   {mapping.quantity}個
-                                 </span>
-                               </td>
-                             </tr>
-                           );
-                         })}
-                       </tbody>
-                     </table>
-                   </div>
-                 </CardContent>
-               </Card>
-             )}
-
+             {error && (
+                <div className="my-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  <span className="text-red-600 text-sm">{error}</span>
+                </div>
+              )}
              <div className="flex gap-2">
-               <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
-                 <ArrowLeft className="h-4 w-4 mr-2" />
-                 戻る
-               </Button>
-               
-               {(parseResult.unmatchedProducts?.length || 0) > newMappings.length ? (
-                 <Button onClick={handleStartUnmatchFix} className="flex-1">
-                   <ArrowRight className="h-4 w-4 mr-2" />
-                   未マッチ商品を修正
-                 </Button>
+               <Button variant="outline" onClick={() => setStep(1)} className="flex-1"><ArrowLeft className="h-4 w-4 mr-2" />戻る</Button>
+               {((parseResult.unmatchedProducts?.length || 0) - newMappings.length) > 0 ? (
+                 <Button onClick={handleStartUnmatchFix} className="flex-1"><ArrowRight className="h-4 w-4 mr-2" />未マッチ商品を修正</Button>
                ) : (
-                 <Button 
-                   onClick={handleConfirm}
-                   disabled={isLoading}
-                   className="flex-1"
-                 >
-                   {isLoading ? '処理中...' : 'インポート実行'}
-                 </Button>
+                 <Button onClick={handleConfirm} disabled={isLoading} className="flex-1">{isLoading ? '処理中...' : 'インポート実行'}</Button>
                )}
              </div>
            </>
@@ -493,102 +289,45 @@ export default function RakutenCsvImportModal({
                  <span>{currentUnmatchIndex + 1} / {parseResult.unmatchedProducts.length}</span>
                </div>
                <div className="w-full bg-gray-200 rounded-full h-2">
-                 <div 
-                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                   style={{ width: `${progress}%` }}
-                 ></div>
+                 <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
                </div>
              </div>
-
              <Card className="border-orange-200 mb-4">
                <CardHeader className="pb-3">
-                 <CardTitle className="text-orange-700 flex items-center gap-2">
-                   🛍️ 楽天商品
-                   <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">{currentUnmatch.quantity}個</span>
-                 </CardTitle>
+                 <CardTitle className="text-orange-700 flex items-center gap-2">🛍️ Amazon商品 <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">{currentUnmatch.quantity}個</span></CardTitle>
                </CardHeader>
                <CardContent>
-                 <div className="p-3 bg-orange-50 rounded-md">
-                   <div className="font-medium text-orange-900">
-                     {rakutenCore}
-                   </div>
-                 </div>
+                 <div className="p-3 bg-orange-50 rounded-md font-medium text-orange-900">{currentUnmatch.amazonTitle}</div>
                </CardContent>
              </Card>
-
              <Card className="mb-4">
                <CardHeader>
                  <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
-                 <p className="text-sm text-gray-600">
-                   {products?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
-                   {products?.length === 0 && <span className="text-red-500"> (デバッグモード)</span>}
-                 </p>
+                 <p className="text-sm text-gray-600">{products?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください。</p>
                </CardHeader>
                <CardContent>
                  <div className="space-y-3 max-h-72 overflow-y-auto border rounded-lg p-3 bg-gray-50">
                    {products && products.length > 0 ? (
                      products.map((product) => (
-                       <button
-                         key={product.id}
-                         onClick={() => handleProductSelect(product.id)}
-                         className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors bg-white shadow-sm"
-                       >
-                         <div className="font-medium text-blue-900 mb-1">
-                           {product.name}
-                         </div>
-                         <div className="text-sm text-gray-600">
-                           シリーズ: {product.series} | コード: {product.series_code}-{product.product_code}
-                         </div>
+                       <button key={product.id} onClick={() => handleProductSelect(product.id)} className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors bg-white shadow-sm">
+                         <div className="font-medium text-blue-900 mb-1">{product.name}</div>
+                         <div className="text-sm text-gray-600">シリーズ: {product.series} | コード: {product.series_code}-{product.product_code}</div>
                        </button>
                      ))
                    ) : (
-                     <div className="text-center py-8 text-gray-500">
-                       <div className="text-red-600 mb-2">
-                         ⚠️ 商品データが見つかりません
-                       </div>
-                       <div className="text-sm">
-                         商品マスターにデータが登録されていない可能性があります
-                       </div>
-                       <div className="text-xs text-gray-400 mt-2">
-                         取得した商品データ: {products?.length || 0}件
-                       </div>
-                       <div className="text-xs text-blue-600 mt-2">
-                         コンソールでデバッグ情報を確認してください
-                       </div>
-                       
-                       {/* 緊急回避: スキップのみ表示 */}
-                       <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                         <div className="text-sm text-yellow-700">
-                           商品データが取得できないため、この商品はスキップしてください
-                         </div>
-                       </div>
-                     </div>
+                     <div className="text-center py-8 text-gray-500">商品データが見つかりません。</div>
                    )}
                  </div>
-                 
-                 {/* スキップボタンを分離 */}
                  <div className="mt-4 pt-4 border-t">
-                   <button
-                     onClick={() => handleProductSelect('skip')}
-                     className="w-full p-4 text-left border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                   >
-                     <div className="font-medium text-gray-600 flex items-center gap-2 justify-center">
-                       <X className="h-5 w-5" />
-                       この商品をスキップ（商品マスターに該当商品がない場合）
-                     </div>
-                     <div className="text-sm text-gray-500 text-center mt-1">
-                       スキップした商品は売上データに登録されません
-                     </div>
+                   <button onClick={() => handleProductSelect('skip')} className="w-full p-4 text-left border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                     <div className="font-medium text-gray-600 flex items-center gap-2 justify-center"><X className="h-5 w-5" />この商品をスキップ</div>
+                     <div className="text-sm text-gray-500 text-center mt-1">スキップした商品は売上データに登録されません</div>
                    </button>
                  </div>
                </CardContent>
              </Card>
-
              <div className="flex gap-2">
-               <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
-                 <ArrowLeft className="h-4 w-4 mr-2" />
-                 確認画面に戻る
-               </Button>
+               <Button variant="outline" onClick={() => setStep(2)} className="flex-1"><ArrowLeft className="h-4 w-4 mr-2" />確認画面に戻る</Button>
              </div>
            </>
          )}
