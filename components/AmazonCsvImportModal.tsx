@@ -1,5 +1,5 @@
-// /app/components/AmazonCsvImportModal.tsx ver.13 (自己完結型に修正)
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+// /app/components/AmazonCsvImportModal.tsx ver.14 (クラッシュ原因を削除)
+import React, { useState, useCallback, useRef } from 'react';
 import {
     Modal,
     ModalContent,
@@ -17,7 +17,6 @@ import {
     TableBody,
     TableRow,
     TableCell,
-    useDisclosure,
 } from "@nextui-org/react";
 import { Upload, AlertTriangle, CheckCircle, Info, Edit } from 'lucide-react';
 
@@ -55,9 +54,7 @@ interface AmazonCsvImportModalProps {
 }
 
 const AmazonCsvImportModal: React.FC<AmazonCsvImportModalProps> = ({ onImportSuccess }) => {
-  // ★★★ 自己完結型にするための状態管理を追加 ★★★
   const [isOpen, setIsOpen] = useState(false);
-
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [salesMonth, setSalesMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [step, setStep] = useState(1);
@@ -179,7 +176,6 @@ const AmazonCsvImportModal: React.FC<AmazonCsvImportModalProps> = ({ onImportSuc
   
   return (
     <>
-      {/* ★★★ 本来あるべきトリガーボタン ★★★ */}
       <Button
         color="warning"
         startContent={<Upload size={18} />}
@@ -188,7 +184,6 @@ const AmazonCsvImportModal: React.FC<AmazonCsvImportModalProps> = ({ onImportSuc
         Amazon
       </Button>
 
-      {/* ★★★ モーダル部分を正しくラップ ★★★ */}
       <Modal isOpen={isOpen} onOpenChange={handleClose} size="5xl" scrollBehavior="inside">
         <ModalContent>
           <>
@@ -208,8 +203,7 @@ const AmazonCsvImportModal: React.FC<AmazonCsvImportModalProps> = ({ onImportSuc
 
               {step === 2 && parseResult && (
                 <div>
-                  {/* ... (中身のテーブル表示部分は変更なし) ... */}
-                  <h3 className="text-lg font-semibold">内容確認</h3>
+                   <h3 className="text-lg font-semibold">内容確認</h3>
                    <Table aria-label="CSV確認テーブル">
                       <TableHeader>
                           <TableCell>商品名（Amazon）</TableCell>
@@ -234,6 +228,7 @@ const AmazonCsvImportModal: React.FC<AmazonCsvImportModalProps> = ({ onImportSuc
                                        <select
                                            onChange={(e) => handleUpdateMapping(e.target.value)}
                                            defaultValue=""
+                                           className="p-2 border rounded-md w-full"
                                        >
                                            <option value="" disabled>商品を選択...</option>
                                            {allProducts.map(ap => (
@@ -246,7 +241,7 @@ const AmazonCsvImportModal: React.FC<AmazonCsvImportModalProps> = ({ onImportSuc
                                </TableCell>
                                <TableCell>{p.quantity}</TableCell>
                                <TableCell>
-                                   <Button isIconOnly size="sm" onPress={() => setEditingProduct(p)}><Edit size={16}/></Button>
+                                   <Button isIconOnly size="sm" variant="light" onPress={() => setEditingProduct(p)}><Edit size={16}/></Button>
                                </TableCell>
                              </TableRow>
                           ))}
