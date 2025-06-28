@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.7 - 日付選択機能追加版
+// /components/RakutenCsvImportModal.tsx ver.8 - 確定APIレスポンス対応版
 
 'use client';
 
@@ -185,26 +185,14 @@ export default function RakutenCsvImportModal({
    setError('');
 
    try {
-     // 🔥 修正: 楽天データをAmazon形式に変換
-     const convertedMatchedProducts = (parseResult.matchedProducts || []).map(match => ({
-       productId: match.productId,
-       quantity: match.quantity
-     }));
-
-     // 🔥 修正: newMappingsもAmazon形式に変換
-     const convertedNewMappings = newMappings.map(mapping => ({
-       productId: mapping.productId,
-       quantity: mapping.quantity
-     }));
-
      const requestData = {
        saleDate: `${saleMonth}-01`,
-       matchedProducts: convertedMatchedProducts,
-       newMappings: convertedNewMappings
+       matchedProducts: parseResult.matchedProducts || [],
+       newMappings: newMappings,
      };
 
-     console.log('🔍 変換後送信データ:', requestData);
-     console.log('🔍 送信データ件数:', requestData.matchedProducts.length + requestData.newMappings.length);
+     console.log('🔍 送信データ:', requestData);
+     console.log('🔍 送信データ件数:', (requestData.matchedProducts.length || 0) + (requestData.newMappings.length || 0));
 
      const response = await fetch('/api/import/rakuten-confirm', {
        method: 'POST',
@@ -226,7 +214,8 @@ export default function RakutenCsvImportModal({
        throw new Error(result.error || '楽天CSVの確定に失敗しました');
      }
 
-     alert(`楽天CSVデータが正常に登録されました\n登録件数: ${result.insertedSales}件`);
+     // 🔧 修正: 古い`insertedSales`から新しい`totalCount`に変更
+     alert(`楽天CSVデータが正常に登録されました\n登録件数: ${result.totalCount}件`);
      onSuccess();
      onClose();
    } catch (error) {
