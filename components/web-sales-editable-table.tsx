@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.49 (データ注入最終版)
+// /components/web-sales-editable-table.tsx ver.50 (Definitive Fix)
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
@@ -41,24 +41,27 @@ export default function WebSalesEditableTable({
   const productMap = useMemo(() => {
     const map = new Map()
     initialWebSalesData.forEach(item => {
-      map.set(item.product_id, {
-        id: item.product_id,
-        name: item.product_name,
-        price: item.price,
-        series: item.series,
-        series_code: item.series_code,
-        product_code: item.product_code,
-      })
+      if (item.product_id && item.product_name) {
+          map.set(item.product_id, {
+            id: item.product_id,
+            name: item.product_name,
+            price: item.price,
+            series: item.series,
+            series_code: item.series_code,
+            product_code: item.product_code,
+          })
+      }
     })
     return map
   }, [initialWebSalesData])
-
-  // ★ 1. モーダルに渡すための商品マスターリストを作成
-  const productMasterList = useMemo(() => Array.from(productMap.values()), [productMap]);
+  
+  const productMasterList = useMemo(() => {
+    return Array.from(productMap.values());
+  }, [productMap]);
 
   const getProductName = (id: string) => productMap.get(id)?.name || ""
-  const getProductSeriesCode = (id: string) => productMap.get(id)?.series_code || 0
-  const getProductNumber = (id: string) => productMap.get(id)?.product_code || 0
+  const getProductSeriesCode = (id:string) => productMap.get(id)?.series_code || 0
+  const getProductNumber = (id:string) => productMap.get(id)?.product_code || 0
   const getProductPrice = (id: string) => productMap.get(id)?.price || 0
 
   const handleMonthChange = (selectedMonth: string) => {
@@ -85,6 +88,7 @@ export default function WebSalesEditableTable({
   }, [filteredItems])
 
   const handleImportSuccess = () => {
+    console.log("Import successful. Notifying parent to refresh.");
     setIsAmazonCsvModalOpen(false)
     setIsRakutenCsvModalOpen(false)
     onDataUpdated()
@@ -98,7 +102,7 @@ export default function WebSalesEditableTable({
         isLoading={false}
         onMonthChange={handleMonthChange}
         onFilterChange={setFilterValue}
-        onDeleteMonthData={() => {}}
+        onDeleteMonthData={() => { console.log("Delete button clicked"); }}
       />
 
       <WebSalesDataTable
@@ -108,7 +112,7 @@ export default function WebSalesEditableTable({
         getProductName={getProductName}
         getProductPrice={getProductPrice}
         onEdit={(id, ec) => setEditMode({ [`${id}-${ec}`]: true })}
-        onSave={() => {}}
+        onSave={() => { console.log("Save button clicked"); }}
         onEditValueChange={setEditedValue}
         onCancel={() => setEditMode({})}
         productMaster={productMasterList}
@@ -117,12 +121,12 @@ export default function WebSalesEditableTable({
 
       <WebSalesImportButtons
         isUploading={false}
-        onCsvClick={() => alert('このボタンは現在無効です')}
+        onCsvClick={() => alert('This button is currently disabled')}
         onAmazonClick={() => setIsAmazonCsvModalOpen(true)}
         onRakutenClick={() => setIsRakutenCsvModalOpen(true)}
         onLearningReset={() => {}}
       />
-
+      
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
         <button className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">
