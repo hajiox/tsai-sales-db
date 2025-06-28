@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.14 (Clean Version)
+// /app/web-sales/dashboard/page.tsx ver.18 (Definitive Fix)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -170,11 +170,11 @@ function WebSalesDashboardContent() {
   }, []);
   
   const handleAddProduct = async (productData: { productName: string; price: number; seriesNumber: number; productNumber: number; seriesName: string }) => {
-    // Implementation omitted for brevity
+    // Implementation omitted
   };
   
   const handleDeleteProduct = async (productId: string, productName: string) => {
-    // Implementation omitted for brevity
+    // Implementation omitted
   };
 
   return (
@@ -245,6 +245,7 @@ function WebSalesDashboardContent() {
                 <WebSalesEditableTable 
                   initialWebSalesData={webSalesData}
                   month={month}
+                  onDataUpdated={handleDataSaved}
                 />
               </div>
             )}
