@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-confirm/route.ts ver.5 - Amazon方式完全準拠版
+// /app/api/import/rakuten-confirm/route.ts ver.6 - 楽天列のみ更新版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
@@ -20,28 +20,17 @@ interface ConfirmRequest {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🚨 楽天確定API開始 - 完全デバッグモード');
+  console.log('🚨 楽天確定API開始 - 楽天列のみ更新版');
   
   try {
     const body: ConfirmRequest = await request.json();
-    console.log('🔍 受信した生データ:', JSON.stringify(body, null, 2));
+    console.log('🔍 受信データ:', JSON.stringify(body, null, 2));
     
     const { saleDate, matchedProducts, newMappings } = body;
-
-    console.log('🔍 分解後データ:', { 
-      saleDate, 
-      matchedLength: matchedProducts?.length, 
-      newMappingsLength: newMappings?.length,
-      matchedProducts: matchedProducts?.slice(0, 3),
-      newMappings: newMappings?.slice(0, 3)
-    });
-
-    // 月形式に変換（Amazon方式と同じ）
-    const month = saleDate.substring(0, 7); // YYYY-MM
+    const month = saleDate.substring(0, 7);
     console.log('🔍 処理月:', month);
 
     if (!month || !matchedProducts || !Array.isArray(matchedProducts)) {
-      console.log('❌ バリデーション失敗:', { month, matchedProducts: !!matchedProducts, isArray: Array.isArray(matchedProducts) });
       return NextResponse.json(
         { error: '必要なデータが不足しています' },
         { status: 400 }
@@ -52,7 +41,7 @@ export async function POST(request: NextRequest) {
     let errorCount = 0;
     let learnedCount = 0;
 
-    // 1. 新しいマッピングを学習（Amazon方式準拠）
+    // 1. 新しいマッピングを学習
     if (newMappings && newMappings.length > 0) {
       try {
         const mappingsToInsert = newMappings.map(mapping => ({
@@ -78,59 +67,77 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. 売上データを保存（Amazon方式完全準拠）
+    // 2. 売上データを保存（楽天列のみ更新）
     const allSalesData = [...matchedProducts, ...(newMappings || [])];
     
     console.log(`🔍 楽天売上データ処理開始: ${allSalesData.length}件`);
-    console.log('🔍 処理対象データ:', JSON.stringify(allSalesData.slice(0, 3), null, 2)); // 最初の3件をログ
 
     for (const result of allSalesData) {
       try {
-        console.log(`🔍 楽天処理中: product_id=${result.productId}, quantity=${result.quantity}, month=${month}`);
+        console.log(`🔍 処理中: product_id=${result.productId}, quantity=${result.quantity}`);
         
-        // シンプルなupsert処理
-        const { data, error } = await supabase
+        // まず既存レコードを確認
+        const { data: existingData, error: selectError } = await supabase
           .from('web_sales_summary')
-          .upsert({
-            product_id: result.productId,
-            rakuten_count: result.quantity,
-            report_month: `${month}-01`
-          }, {
-            onConflict: 'product_id,report_month'
-          })
-          .select();
+          .select('*')
+          .eq('product_id', result.productId)
+          .eq('report_month', `${month}-01`)
+          .single();
 
-        console.log(`🔍 楽天upsert実行結果:`, { data, error });
-
-        if (error) {
-          console.error(`❌ 楽天upsertエラー (${result.productId}):`, error.message);
-          console.error(`❌ エラー詳細:`, JSON.stringify(error, null, 2));
+        if (selectError && selectError.code !== 'PGRST116') { // レコードなしエラー以外
+          console.error('既存データ確認エラー:', selectError);
           errorCount++;
-        } else {
-          console.log(`✅ 楽天upsert成功 (${result.productId}): 数量=${result.quantity}`);
-          console.log('✅ upsert結果データ:', JSON.stringify(data, null, 2));
-          
-          // 処理後確認
-          const { data: afterData, error: afterError } = await supabase
+          continue;
+        }
+
+        if (existingData) {
+          // 既存レコードがある場合は楽天列のみ更新
+          const { error: updateError } = await supabase
             .from('web_sales_summary')
-            .select('*')
+            .update({ 
+              rakuten_count: result.quantity 
+            })
             .eq('product_id', result.productId)
             .eq('report_month', `${month}-01`);
-          
-          console.log(`🔍 処理後データ:`, afterData);
-          if (afterError) console.log(`🔍 処理後エラー:`, afterError);
-          
-          successCount++;
+
+          if (updateError) {
+            console.error(`❌ 楽天更新エラー:`, updateError);
+            errorCount++;
+          } else {
+            console.log(`✅ 楽天列更新成功: quantity=${result.quantity}`);
+            successCount++;
+          }
+        } else {
+          // 新規レコードの場合
+          const { error: insertError } = await supabase
+            .from('web_sales_summary')
+            .insert({
+              product_id: result.productId,
+              rakuten_count: result.quantity,
+              amazon_count: 0,
+              yahoo_count: 0,
+              mercari_count: 0,
+              base_count: 0,
+              qoo10_count: 0,
+              report_month: `${month}-01`
+            });
+
+          if (insertError) {
+            console.error(`❌ 楽天新規挿入エラー:`, insertError);
+            errorCount++;
+          } else {
+            console.log(`✅ 楽天新規挿入成功: quantity=${result.quantity}`);
+            successCount++;
+          }
         }
       } catch (itemError) {
-        console.error(`❌ 楽天処理例外エラー (${result.productId}):`, itemError);
+        console.error(`❌ 楽天処理例外エラー:`, itemError);
         errorCount++;
       }
     }
 
     console.log(`楽天確定処理完了: 成功${successCount}件, エラー${errorCount}件, 学習${learnedCount}件`);
 
-    // Amazon方式と同じレスポンス形式
     return NextResponse.json({
       message: `楽天データの更新が完了しました (成功: ${successCount}件)`,
       success: successCount > 0,
