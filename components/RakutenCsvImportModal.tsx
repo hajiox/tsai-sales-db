@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.8 - 確定APIレスポンス対応版
+// /components/RakutenCsvImportModal.tsx ver.9 - ファイル選択UI改善版
 
 'use client';
 
@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText } from 'lucide-react';
 
 interface RakutenCsvImportModalProps {
  isOpen: boolean;
@@ -68,7 +68,6 @@ export default function RakutenCsvImportModal({
      }
 
      setProducts(data || []);
-     console.log('楽天モーダル: 商品データ取得成功', data?.length || 0, '件');
    } catch (error) {
      console.error('商品データ取得エラー:', error);
      setProducts([]);
@@ -84,12 +83,8 @@ export default function RakutenCsvImportModal({
      setNewMappings([]);
      setCurrentUnmatchIndex(0);
      setError('');
-   } else {
-     // デバッグ: 商品データの確認
-     console.log('楽天モーダル開いた時の商品データ:', products);
-     console.log('商品データ件数:', products?.length || 0);
    }
- }, [isOpen, products]);
+ }, [isOpen]);
 
  if (!isOpen) return null;
 
@@ -100,7 +95,6 @@ export default function RakutenCsvImportModal({
      setParseResult(null);
      setNewMappings([]);
      setError('');
-     // stepは変更しない（ボタンクリック時のみ）
    }
  };
 
@@ -175,12 +169,7 @@ export default function RakutenCsvImportModal({
 
  const handleConfirm = async () => {
    if (!parseResult) return;
-
-   console.log('🔍 楽天確定処理データ確認:');
-   console.log('parseResult:', parseResult);
-   console.log('parseResult.matchedProducts:', parseResult.matchedProducts);
-   console.log('newMappings:', newMappings);
-
+   
    setIsLoading(true);
    setError('');
 
@@ -190,9 +179,6 @@ export default function RakutenCsvImportModal({
        matchedProducts: parseResult.matchedProducts || [],
        newMappings: newMappings,
      };
-
-     console.log('🔍 送信データ:', requestData);
-     console.log('🔍 送信データ件数:', (requestData.matchedProducts.length || 0) + (requestData.newMappings.length || 0));
 
      const response = await fetch('/api/import/rakuten-confirm', {
        method: 'POST',
@@ -214,7 +200,6 @@ export default function RakutenCsvImportModal({
        throw new Error(result.error || '楽天CSVの確定に失敗しました');
      }
 
-     // 🔧 修正: 古い`insertedSales`から新しい`totalCount`に変更
      alert(`楽天CSVデータが正常に登録されました\n登録件数: ${result.totalCount}件`);
      onSuccess();
      onClose();
@@ -259,16 +244,28 @@ export default function RakutenCsvImportModal({
 
              <div className="mb-6">
                <label className="block text-sm font-medium mb-2">楽天CSV ファイル:</label>
-               <Input
-                 type="file"
-                 accept=".csv"
-                 onChange={handleFileChange}
-                 className="mb-2"
-               />
+               {/* 🔧 UI修正: ファイル選択をボタン風に */}
+               <div className="flex items-center gap-4 p-4 border-2 border-dashed rounded-lg">
+                 <label htmlFor="rakuten-csv-upload" className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition-colors">
+                   ファイルを選択
+                 </label>
+                 <Input
+                   id="rakuten-csv-upload"
+                   type="file"
+                   accept=".csv"
+                   onChange={handleFileChange}
+                   className="hidden"
+                 />
+                 <div className="flex items-center gap-2 text-gray-600">
+                    <FileText className="h-5 w-5 text-gray-400" />
+                    <span>{csvFile ? csvFile.name : '選択されていません'}</span>
+                 </div>
+               </div>
+               
                <Button 
                  onClick={handleParse}
                  disabled={!csvFile || isLoading}
-                 className="w-full"
+                 className="w-full mt-4"
                >
                  <Upload className="h-4 w-4 mr-2" />
                  {isLoading ? '解析中...' : '次へ（確認画面）'}
