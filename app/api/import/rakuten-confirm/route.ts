@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-confirm/route.ts ver.6 - 楽天列のみ更新版
+// /app/api/import/rakuten-confirm/route.ts ver.7 - 数量集計機能追加版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
@@ -20,15 +20,12 @@ interface ConfirmRequest {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🚨 楽天確定API開始 - 楽天列のみ更新版');
+  console.log('🚨 楽天確定API開始 - ver.7 (数量集計機能付き)');
   
   try {
     const body: ConfirmRequest = await request.json();
-    console.log('🔍 受信データ:', JSON.stringify(body, null, 2));
-    
     const { saleDate, matchedProducts, newMappings } = body;
     const month = saleDate.substring(0, 7);
-    console.log('🔍 処理月:', month);
 
     if (!month || !matchedProducts || !Array.isArray(matchedProducts)) {
       return NextResponse.json(
@@ -41,7 +38,7 @@ export async function POST(request: NextRequest) {
     let errorCount = 0;
     let learnedCount = 0;
 
-    // 1. 新しいマッピングを学習
+    // 1. 新しいマッピングを学習（変更なし）
     if (newMappings && newMappings.length > 0) {
       try {
         const mappingsToInsert = newMappings.map(mapping => ({
@@ -51,87 +48,66 @@ export async function POST(request: NextRequest) {
 
         const { error: mappingError } = await supabase
           .from('rakuten_product_mapping')
-          .upsert(mappingsToInsert, { 
-            onConflict: 'rakuten_title',
-            ignoreDuplicates: false 
-          });
+          .upsert(mappingsToInsert, { onConflict: 'rakuten_title' });
 
-        if (mappingError) {
-          console.error('楽天マッピング学習エラー:', mappingError);
-        } else {
-          learnedCount = newMappings.length;
-          console.log(`楽天学習データ保存完了: ${learnedCount}件`);
-        }
+        if (mappingError) throw mappingError;
+        learnedCount = newMappings.length;
+        console.log(`📚 楽天学習データ保存完了: ${learnedCount}件`);
       } catch (mappingError) {
         console.error('楽天マッピング処理エラー:', mappingError);
       }
     }
 
-    // 2. 売上データを保存（楽天列のみ更新）
+    // 2. 売上データを商品IDごとに【集計】する
     const allSalesData = [...matchedProducts, ...(newMappings || [])];
-    
-    console.log(`🔍 楽天売上データ処理開始: ${allSalesData.length}件`);
+    const aggregatedSales = new Map<string, number>();
 
-    for (const result of allSalesData) {
+    for (const item of allSalesData) {
+      const currentQuantity = aggregatedSales.get(item.productId) || 0;
+      aggregatedSales.set(item.productId, currentQuantity + item.quantity);
+    }
+    console.log(`🔍 元データ件数: ${allSalesData.length}件 → 集計後: ${aggregatedSales.size}件`);
+
+    // 3. 集計後のデータでDBを更新
+    for (const [productId, totalQuantity] of aggregatedSales.entries()) {
       try {
-        console.log(`🔍 処理中: product_id=${result.productId}, quantity=${result.quantity}`);
+        const reportMonth = `${month}-01`;
+        console.log(`🔄 処理中: product_id=${productId}, quantity=${totalQuantity}`);
         
-        // まず既存レコードを確認
         const { data: existingData, error: selectError } = await supabase
           .from('web_sales_summary')
-          .select('*')
-          .eq('product_id', result.productId)
-          .eq('report_month', `${month}-01`)
+          .select('id')
+          .eq('product_id', productId)
+          .eq('report_month', reportMonth)
           .single();
 
-        if (selectError && selectError.code !== 'PGRST116') { // レコードなしエラー以外
-          console.error('既存データ確認エラー:', selectError);
-          errorCount++;
-          continue;
+        if (selectError && selectError.code !== 'PGRST116') {
+          throw selectError;
         }
 
         if (existingData) {
-          // 既存レコードがある場合は楽天列のみ更新
+          // 更新
           const { error: updateError } = await supabase
             .from('web_sales_summary')
-            .update({ 
-              rakuten_count: result.quantity 
-            })
-            .eq('product_id', result.productId)
-            .eq('report_month', `${month}-01`);
-
-          if (updateError) {
-            console.error(`❌ 楽天更新エラー:`, updateError);
-            errorCount++;
-          } else {
-            console.log(`✅ 楽天列更新成功: quantity=${result.quantity}`);
-            successCount++;
-          }
+            .update({ rakuten_count: totalQuantity })
+            .eq('id', existingData.id);
+          if (updateError) throw updateError;
+          console.log(`✅ 更新成功`);
         } else {
-          // 新規レコードの場合
+          // 新規挿入
           const { error: insertError } = await supabase
             .from('web_sales_summary')
             .insert({
-              product_id: result.productId,
-              rakuten_count: result.quantity,
-              amazon_count: 0,
-              yahoo_count: 0,
-              mercari_count: 0,
-              base_count: 0,
-              qoo10_count: 0,
-              report_month: `${month}-01`
+              product_id: productId,
+              report_month: reportMonth,
+              rakuten_count: totalQuantity,
             });
-
-          if (insertError) {
-            console.error(`❌ 楽天新規挿入エラー:`, insertError);
-            errorCount++;
-          } else {
-            console.log(`✅ 楽天新規挿入成功: quantity=${result.quantity}`);
-            successCount++;
-          }
+          if (insertError) throw insertError;
+          console.log(`✅ 新規挿入成功`);
         }
+        successCount++;
       } catch (itemError) {
-        console.error(`❌ 楽天処理例外エラー:`, itemError);
+        console.error(`❌ DB処理エラー (product_id: ${productId}):`, itemError);
         errorCount++;
       }
     }
@@ -140,12 +116,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       message: `楽天データの更新が完了しました (成功: ${successCount}件)`,
-      success: successCount > 0,
+      success: successCount > 0 && errorCount === 0,
       successCount,
       errorCount,
-      totalCount: allSalesData.length,
+      totalCount: aggregatedSales.size,
       learnedMappings: learnedCount,
-      insertedSales: successCount
     });
 
   } catch (error) {
