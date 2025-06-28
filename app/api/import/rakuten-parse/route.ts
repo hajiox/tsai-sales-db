@@ -1,13 +1,32 @@
-// /app/api/import/rakuten-parse/route.ts ver.10 (空欄検知アラート対応版)
+// /app/api/import/rakuten-parse/route.ts ver.11 (Definitive Fix)
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
 export const dynamic = 'force-dynamic';
 
-// ...（parseCsvLine関数は変更なし）...
 function parseCsvLine(line: string): string[] {
-  // ...
+  const columns = [];
+  let currentColumn = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        currentColumn += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      columns.push(currentColumn.trim());
+      currentColumn = '';
+    } else {
+      currentColumn += char;
+    }
+  }
+  columns.push(currentColumn.trim());
+  return columns;
 }
 
 export async function POST(request: NextRequest) {
@@ -26,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
-    let blankTitleRows: any[] = []; // ★1. 空欄行を格納
+    let blankTitleRows: any[] = [];
 
     for (let i = 0; i < lines.length; i++) {
         const columns = parseCsvLine(lines[i]);
@@ -37,16 +56,29 @@ export async function POST(request: NextRequest) {
 
         if (quantity <= 0) continue;
 
-        // ★2. 商品名が空欄の場合の処理
         if (!rakutenTitle) {
-            blankTitleRows.push({ rowNumber: i + 8, quantity }); // 楽天は8行目からなので+8
+            blankTitleRows.push({ rowNumber: i + 8, quantity });
             continue;
         }
 
         const productInfo = findBestMatchSimplified(rakutenTitle, products || [], learningData || []);
 
         if (productInfo) {
-            matchedProducts.push({ rakutenTitle, quantity, productInfo, matchType: productInfo.matchType });
+            // This is the critical fix. Construct the object explicitly and safely, just like the Amazon API.
+            matchedProducts.push({
+                rakutenTitle,
+                quantity,
+                productId: productInfo.id,
+                productName: productInfo.name,
+                productInfo: { // The frontend expects this nested object for display
+                    id: productInfo.id,
+                    name: productInfo.name,
+                    series: productInfo.series,
+                    series_code: productInfo.series_code,
+                    product_code: productInfo.product_code
+                },
+                matchType: productInfo.matchType || 'medium' // Use a fallback for safety
+            });
         } else {
             unmatchedProducts.push({ rakutenTitle, quantity });
         }
@@ -63,7 +95,6 @@ export async function POST(request: NextRequest) {
         matchedProducts,
         unmatchedProducts,
         processableQuantity,
-        // ★3. フロントに渡す情報に追加
         blankTitleInfo: {
             count: blankTitleRows.length,
             quantity: blankTitleQuantity
@@ -71,6 +102,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
       console.error('楽天CSV解析エラー:', error);
-      return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
+      const errorMessage = error instanceof Error ? error.message : '不明なエラーが発生しました';
+      return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
