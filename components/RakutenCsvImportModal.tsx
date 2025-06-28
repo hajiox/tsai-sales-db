@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.13 (Definitive Fix)
+// /components/RakutenCsvImportModal.tsx ver.14 (構文エラー修正・完全版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -54,13 +54,13 @@ export default function RakutenCsvImportModal({
  if (!isOpen) return null;
 
  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-        setCsvFile(file);
-        setParseResult(null);
-        setNewMappings([]);
-        setError('');
-    }
+   const file = e.target.files?.[0];
+   if (file) {
+     setCsvFile(file);
+     setParseResult(null);
+     setNewMappings([]);
+     setError('');
+   }
  };
  
  const handleParse = async () => {
@@ -231,6 +231,9 @@ export default function RakutenCsvImportModal({
                     <div className="ml-3">
                       <p className="text-sm font-bold text-orange-700">
                         警告: 商品名が空欄の行が {parseResult.blankTitleInfo.count} 件見つかりました
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                          合計 {parseResult.blankTitleInfo.quantity} 個分が処理から除外されます。CSVを修正し再実行してください。
                       </p>
                     </div>
                   </div>
