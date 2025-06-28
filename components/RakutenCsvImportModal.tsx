@@ -1,4 +1,4 @@
-// /app/components/RakutenCsvImportModal.tsx ver.19 (自己完結型に修正)
+// /app/components/RakutenCsvImportModal.tsx ver.21 (ボタン表示名を短縮)
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
     Modal,
@@ -15,44 +15,18 @@ import {
 } from "@nextui-org/react";
 import { Upload, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 
-// --- 型定義 ---
-interface Product {
-  rakutenTitle: string;
-  quantity: number;
-  productId?: string;
-  productName?: string;
-  matchType?: string;
-}
-
-interface BlankTitleInfo {
-  count: number;
-  quantity: number;
-}
-
-interface ParseResult {
-  totalProducts: number;
-  totalQuantity: number;
-  matchedProducts: Product[];
-  unmatchedProducts: Product[];
-  processableQuantity: number;
-  blankTitleInfo: BlankTitleInfo;
-}
-
-// --- Propsの型定義 ---
 interface RakutenCsvImportModalProps {
   onImportSuccess: () => void;
 }
 
 const RakutenCsvImportModal: React.FC<RakutenCsvImportModalProps> = ({ onImportSuccess }) => {
-  // モーダルの開閉状態をコンポーネント内部で管理
   const [isOpen, setIsOpen] = useState(false);
-  
   const [fileName, setFileName] = useState('');
   const [salesMonth, setSalesMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+  const [parseResult, setParseResult] = useState<any | null>(null);
   const [csvContent, setCsvContent] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,7 +118,7 @@ const RakutenCsvImportModal: React.FC<RakutenCsvImportModalProps> = ({ onImportS
       handleModalClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-setError(`インポートエラー: ${message}`);
+      setError(`インポートエラー: ${message}`);
     } finally {
       setIsLoading(false);
     }
@@ -152,13 +126,12 @@ setError(`インポートエラー: ${message}`);
 
   return (
     <>
-      {/* このコンポーネント自身がボタンを持つ */}
       <Button
-        color="primary"
+        color="danger"
         startContent={<Upload size={18} />}
         onPress={() => setIsOpen(true)}
       >
-        楽天CSVインポート
+        楽天
       </Button>
 
       <Modal isOpen={isOpen} onOpenChange={setIsOpen} onClose={handleModalClose} size="3xl" scrollBehavior="inside">
