@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.14 (クリーンな状態に戻すためのオリジナルコード)
+// /app/web-sales/dashboard/page.tsx ver.17 (最終連携版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -306,10 +306,10 @@ function WebSalesDashboardContent() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* 🔥 WebSalesEditableTable - ここで1回だけ呼び出し */}
                 <WebSalesEditableTable 
                   initialWebSalesData={webSalesData}
                   month={month}
+                  onDataUpdated={handleDataSaved}
                 />
               </div>
             )}
