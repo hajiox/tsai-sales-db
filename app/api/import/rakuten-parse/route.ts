@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-parse/route.ts ver.16 (完全修正版)
+// /app/api/import/rakuten-parse/route.ts ver.17 (undefined対策版)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -54,7 +54,15 @@ export async function POST(request: NextRequest) {
     const { data: products, error: productsError } = await supabase.from('products').select('*');
     if (productsError) throw new Error(`商品マスターの取得に失敗: ${productsError.message}`);
 
+    // 商品データのname部分をnullチェック
+    const validProducts = (products || []).filter(p => p.name && typeof p.name === 'string');
+    console.log('有効な商品数:', validProducts.length);
+
     const { data: learningData } = await supabase.from('rakuten_product_mapping').select('rakuten_title, product_id');
+
+    // 学習データのrakuten_titleをnullチェック
+    const validLearningData = (learningData || []).filter(l => l.rakuten_title && typeof l.rakuten_title === 'string');
+    console.log('有効な学習データ数:', validLearningData.length);
 
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
@@ -74,7 +82,7 @@ export async function POST(request: NextRequest) {
             continue;
         }
 
-        const productInfo = findBestMatchSimplified(rakutenTitle, products || [], learningData || []);
+        const productInfo = findBestMatchSimplified(rakutenTitle, validProducts, validLearningData);
 
         if (productInfo) {
             matchedProducts.push({ rakutenTitle, quantity, productInfo, matchType: productInfo.matchType });
