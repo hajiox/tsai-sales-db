@@ -1,4 +1,6 @@
-// /components/WebSalesImportButtons.tsx ver.2
+// /components/WebSalesImportButtons.tsx ver.3
+// Yahoo機能統合版
+
 "use client"
 
 import React from "react"
@@ -8,6 +10,7 @@ interface WebSalesImportButtonsProps {
   onCsvClick: () => void
   onAmazonClick: () => void
   onRakutenClick: () => void
+  onYahooClick: () => void
 }
 
 export default function WebSalesImportButtons({
@@ -15,6 +18,7 @@ export default function WebSalesImportButtons({
   onCsvClick,
   onAmazonClick,
   onRakutenClick,
+  onYahooClick,
 }: WebSalesImportButtonsProps) {
   return (
     <div className="p-3 border-t">
@@ -40,8 +44,8 @@ export default function WebSalesImportButtons({
           楽天
         </button>
         <button
-          className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600"
-          disabled
+          onClick={onYahooClick}
+          className="px-3 py-1 text-xs font-semibold text-white bg-purple-600 rounded hover:bg-purple-700"
         >
           Yahoo
         </button>
