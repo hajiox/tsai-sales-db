@@ -184,7 +184,10 @@ export default function WebSalesEditableTable({
         onCsvClick={() => alert('This button is currently disabled')}
         onAmazonClick={() => setIsAmazonCsvModalOpen(true)}
         onRakutenClick={() => setIsRakutenCsvModalOpen(true)}
-        onYahooClick={() => setIsYahooCsvModalOpen(true)}
+        onYahooClick={() => {
+          console.log('Yahoo button clicked!');
+          setIsYahooCsvModalOpen(true);
+        }}
       />
       
       <div className="flex items-center gap-2">
@@ -233,6 +236,8 @@ export default function WebSalesEditableTable({
         <YahooCsvImportModal
           onImportComplete={handleImportSuccess}
           selectedMonth={month}
+          isOpen={isYahooCsvModalOpen}
+          onClose={() => setIsYahooCsvModalOpen(false)}
         />
       )}
     </div>
