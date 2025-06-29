@@ -1,4 +1,4 @@
-// /app/verify/page.tsx ver.2 (Amazon対応版)
+// /app/verify/page.tsx ver.3 (デバッグボタン追加版)
 
 'use client';
 
@@ -80,6 +80,20 @@ export default function VerifyPage() {
     }
   };
 
+  const handleDebugCsv = () => {
+    if (csvFile) {
+      const formData = new FormData();
+      formData.append('csvFile', csvFile);
+      fetch('/api/debug/amazon-csv', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(result => {
+          console.log('=== CSV構造デバッグ結果 ===');
+          console.log(result);
+        })
+        .catch(console.error);
+    }
+  };
+
   const channelDisplayName = channel === 'amazon' ? 'Amazon' : '楽天';
   const channelColor = channel === 'amazon' ? 'orange' : 'red';
 
@@ -143,6 +157,16 @@ export default function VerifyPage() {
             <Upload className="h-4 w-4 mr-2" />
             {isLoading ? '検証中...' : `${channelDisplayName}データの答え合わせを実行`}
           </Button>
+
+          {channel === 'amazon' && csvFile && (
+            <Button 
+              onClick={handleDebugCsv}
+              variant="outline" 
+              className="w-full"
+            >
+              🔍 CSV構造デバッグ
+            </Button>
+          )}
 
           {summary && (
             <div className={`p-4 bg-${channelColor}-50 rounded-lg text-center border border-${channelColor}-200`}>
