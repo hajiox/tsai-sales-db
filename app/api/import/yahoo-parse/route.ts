@@ -24,21 +24,16 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // 文字化けチェックと対処
+    // 文字化けチェック（情報出力のみ）
     console.log('受信したCSVデータの最初の100文字:', csvData.substring(0, 100));
     
-    // 文字化け検出（制御文字や不正な文字の存在チェック）
     const hasGarbledText = /[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(csvData) || 
                           csvData.includes('�') || 
-                          csvData.includes('繧�') ||  // Shift-JIS文字化けパターン
-                          csvData.includes('繝�');    // Shift-JIS文字化けパターン
+                          csvData.includes('繧�') ||
+                          csvData.includes('繝�');
 
     if (hasGarbledText) {
-      console.error('CSV文字化けを検出しました');
-      return NextResponse.json({ 
-        success: false, 
-        error: 'CSVファイルの文字エンコーディングに問題があります。ファイルをUTF-8で保存し直してアップロードしてください。' 
-      }, { status: 400 });
+      console.warn('CSV文字化けを検出しましたが、処理を継続します');
     }
 
     // 1. CSVを行に分割（Yahoo：1行目ヘッダー）
