@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-parse/route.ts ver.11 (parseCsvLine関数復元版)
+// /app/api/import/rakuten-parse/route.ts ver.12 (Amazon型parseCsvLine適用版)
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -6,30 +6,27 @@ import { findBestMatchSimplified } from '@/lib/csvHelpers';
 export const dynamic = 'force-dynamic';
 
 function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
+  const columns = [];
+  let currentColumn = '';
   let inQuotes = false;
-  
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    
     if (char === '"') {
       if (inQuotes && line[i + 1] === '"') {
-        current += '"';
+        currentColumn += '"';
         i++;
       } else {
         inQuotes = !inQuotes;
       }
     } else if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
+      columns.push(currentColumn.trim());
+      currentColumn = '';
     } else {
-      current += char;
+      currentColumn += char;
     }
   }
-  
-  result.push(current);
-  return result;
+  columns.push(currentColumn.trim());
+  return columns;
 }
 
 export async function POST(request: NextRequest) {
