@@ -1,4 +1,4 @@
-// /app/api/debug/amazon-csv/route.ts ver.1 (デバッグ専用)
+// /app/api/debug/amazon-csv/route.ts ver.1
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -28,8 +28,14 @@ function parseAmazonCsvLine(line: string): string[] {
 
 export async function POST(request: NextRequest) {
   try {
-    const { csvContent } = await request.json();
+    const formData = await request.formData();
+    const file = formData.get('csvFile') as File;
+    
+    if (!file) {
+      return NextResponse.json({ success: false, error: 'ファイルが見つかりません' });
+    }
 
+    const csvContent = await file.text();
     const lines = csvContent.split('\n').filter((line: string) => line.trim() !== '');
     
     console.log('=== Amazon CSV デバッグ解析 ===');
