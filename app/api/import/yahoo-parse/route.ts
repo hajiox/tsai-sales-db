@@ -77,6 +77,33 @@ export async function POST(request: NextRequest) {
     }));
 
     console.log(`商品マスタ: ${products.length}件, 学習データ: ${learningData.length}件`);
+    
+    // デバッグ: 商品マスタと学習データの詳細
+    if (products.length > 0) {
+      console.log('商品マスタサンプル（最初の3件）:');
+      products.slice(0, 3).forEach((p, idx) => {
+        console.log(`  ${idx + 1}: id="${p.id}", name="${p.name}"`);
+      });
+    } else {
+      console.error('⚠️ 商品マスタが空です！');
+    }
+    
+    if (learningData.length > 0) {
+      console.log('学習データサンプル（最初の3件）:');
+      learningData.slice(0, 3).forEach((l, idx) => {
+        console.log(`  ${idx + 1}: amazon_title="${l.amazon_title}", product_id="${l.product_id}"`);
+      });
+    } else {
+      console.log('学習データは空です（初回実行のため正常）');
+    }
+    
+    // 元の学習データも確認
+    if (learnedMappings.length > 0) {
+      console.log('元の学習データサンプル（最初の3件）:');
+      learnedMappings.slice(0, 3).forEach((m, idx) => {
+        console.log(`  ${idx + 1}: yahoo_title="${m.yahoo_title}", product_id="${m.product_id}"`);
+      });
+    }
 
     // 5. CSV行を解析してマッチング
     const matchedProducts = [];
@@ -117,27 +144,50 @@ export async function POST(request: NextRequest) {
         }
 
         // 商品マッチング実行
-        console.log(`行${i + 2}: マッチング開始: "${productTitle}"`);
+        console.log(`\n=== 行${i + 2}: マッチング詳細開始 ===`);
+        console.log(`入力商品名: "${productTitle}"`);
+        console.log(`商品マスタ件数: ${products.length}件`);
+        console.log(`学習データ件数: ${learningData.length}件`);
         
-        // null安全性チェック
-        if (!products || !Array.isArray(products)) {
-          console.error('商品マスタデータが不正です');
-          throw new Error('商品マスタデータが取得できませんでした');
+        // 最初の行でのみ詳細サンプル表示
+        if (i === 0) {
+          console.log('\n【商品マスタサンプル】:');
+          products.slice(0, 5).forEach((p, idx) => {
+            console.log(`  ${idx + 1}: id="${p.id}", name="${p.name}"`);
+          });
+          
+          if (learningData.length > 0) {
+            console.log('\n【学習データサンプル】:');
+            learningData.slice(0, 3).forEach((l, idx) => {
+              console.log(`  ${idx + 1}: amazon_title="${l.amazon_title}", product_id="${l.product_id}"`);
+            });
+          }
         }
         
-        if (!learningData || !Array.isArray(learningData)) {
-          console.error('学習データが不正です');
-          throw new Error('学習データが取得できませんでした');
-        }
-
+        // findBestMatchSimplified関数を呼び出し
+        console.log(`\nfindBestMatchSimplified実行開始...`);
         const matchResult = findBestMatchSimplified(productTitle, products, learningData);
+        console.log(`findBestMatchSimplified実行完了`);
         
         if (!matchResult) {
-          console.error(`マッチング関数がnullを返しました: "${productTitle}"`);
+          console.error(`❌ マッチング関数がnullを返しました: "${productTitle}"`);
           throw new Error('マッチング処理でエラーが発生しました');
         }
         
-        console.log(`行${i + 2}: マッチング結果: スコア=${matchResult.score}, 商品=${matchResult.product?.name || '未マッチ'}`);
+        console.log(`\n【マッチング結果】:`);
+        console.log(`  - 入力: "${productTitle}"`);
+        console.log(`  - スコア: ${matchResult.score}`);
+        console.log(`  - マッチした商品: ${matchResult.product?.name || 'なし'}`);
+        console.log(`  - マッチした商品ID: ${matchResult.product?.id || 'なし'}`);
+        console.log(`  - 学習データ利用: ${matchResult.isLearned ? 'はい' : 'いいえ'}`);
+        console.log(`=== 行${i + 2}: マッチング詳細終了 ===\n`);
+        
+        // Amazon/楽天と同じ閾値でチェック（通常0.3以上でマッチとみなす）
+        if (matchResult.score >= 0.3) {
+          console.log(`✅ スコア${matchResult.score}で商品マッチ成功`);
+        } else {
+          console.log(`⚠️ スコア${matchResult.score}で商品マッチ失敗（閾値0.3未満）`);
+        }
         
         matchedProducts.push({
           productTitle,
