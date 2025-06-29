@@ -1,4 +1,4 @@
-// /app/api/verify/amazon-sales/route.ts ver.6 (引数修正版)
+// /app/api/verify/amazon-sales/route.ts ver.6 (CSV対応版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Amazon CSVパース（TSV形式、固定列）
+// Amazon CSVパース（CSV形式 - カンマ区切り）
 function parseAmazonCsvLine(line: string): string[] {
   const columns: string[] = [];
   let currentColumn = '';
@@ -22,7 +22,7 @@ function parseAmazonCsvLine(line: string): string[] {
       i++;
     } else if (char === '"') {
       inQuotes = !inQuotes;
-    } else if (char === '\t' && !inQuotes) {
+    } else if (char === ',' && !inQuotes) { // ← TSVからCSVに変更
       columns.push(currentColumn.trim());
       currentColumn = '';
     } else {
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     
     console.log('📊 データ行数:', dataLines.length);
 
-    // 2. Amazon固定フォーマットで解析
+    // 2. Amazon固定フォーマットで解析（CSV形式）
     const csvSalesData = dataLines.map((line: string, index: number) => {
       const columns = parseAmazonCsvLine(line);
       const title = columns[2]?.replace(/"/g, '').trim(); // C列: タイトル
@@ -75,7 +75,6 @@ export async function POST(request: NextRequest) {
     let matchCount = 0;
     
     for (const item of csvSalesData) {
-      // 👇 ここが重要：引数の順序と名前を正確に
       const matched = findBestMatchSimplified(item.amazonTitle, products || [], learningData);
       if (matched) {
         const currentQty = csvAggregated.get(matched.id) || 0;
