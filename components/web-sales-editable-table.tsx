@@ -102,7 +102,7 @@ export default function WebSalesEditableTable({
     try {
       console.log("Delete button clicked - executing deletion for month:", month);
       
-      const response = await fetch(`/api/web-sales/delete?month=${month}`, {
+      const response = await fetch(`/api/web-sales-data?month=${month}`, {
         method: 'DELETE',
       })
 
