@@ -112,8 +112,9 @@ export default function WebSalesEditableTable({
 
       const result = await response.json()
       
-      if (result.success) {
-        alert(`${month}のデータを削除しました（${result.deletedCount}件）`)
+      if (result.success || result.message) {
+        const deletedCount = result.deletedCount !== null ? result.deletedCount : '不明'
+        alert(`${month}のデータを削除しました（${deletedCount}件）`)
         onDataUpdated() // 親コンポーネントにデータ更新を通知
       } else {
         throw new Error(result.error || '削除に失敗しました')
