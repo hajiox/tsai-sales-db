@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.14 (構文エラー修正・完全版)
+// /components/RakutenCsvImportModal.tsx ver.15 (参照方式統一版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -222,7 +222,7 @@ export default function RakutenCsvImportModal({
 
          {step === 2 && parseResult && (
            <>
-             {parseResult.blankTitleInfo && parseResult.blankTitleInfo.count > 0 && (
+             {parseResult.summary.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
                 <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">
                   <div className="flex">
                     <div className="flex-shrink-0">
@@ -230,10 +230,10 @@ export default function RakutenCsvImportModal({
                     </div>
                     <div className="ml-3">
                       <p className="text-sm font-bold text-orange-700">
-                        警告: 商品名が空欄の行が {parseResult.blankTitleInfo.count} 件見つかりました
+                        警告: 商品名が空欄の行が {parseResult.summary.blankTitleInfo.count} 件見つかりました
                       </p>
                       <p className="text-xs text-orange-600 mt-1">
-                          合計 {parseResult.blankTitleInfo.quantity} 個分が処理から除外されます。CSVを修正し再実行してください。
+                          合計 {parseResult.summary.blankTitleInfo.quantity} 個分が処理から除外されます。CSVを修正し再実行してください。
                       </p>
                     </div>
                   </div>
@@ -259,19 +259,19 @@ export default function RakutenCsvImportModal({
                  <div className="text-center">
                    <div className="text-sm text-gray-600">CSV総商品数</div>
                    <div className="text-2xl font-bold text-blue-600">
-                     {parseResult.totalProducts}件
+                     {parseResult.summary.totalProducts}件
                    </div>
                  </div>
                  <div className="text-center">
                    <div className="text-sm text-gray-600">総販売数量</div>
                    <div className="text-2xl font-bold text-blue-600">
-                     {parseResult.totalQuantity}個
+                     {parseResult.summary.totalQuantity}個
                    </div>
                  </div>
                  <div className="text-center">
                    <div className="text-sm text-gray-600">処理可能数量</div>
                    <div className="text-2xl font-bold text-green-600">
-                     {parseResult.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
+                     {parseResult.summary.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
                    </div>
                  </div>
                </CardContent>
