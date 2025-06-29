@@ -238,6 +238,7 @@ export default function WebSalesEditableTable({
           selectedMonth={month}
           isOpen={isYahooCsvModalOpen}
           onClose={() => setIsYahooCsvModalOpen(false)}
+          products={productMasterList}
         />
       )}
     </div>
