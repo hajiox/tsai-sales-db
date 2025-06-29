@@ -1,102 +1,62 @@
-// /app/api/import/rakuten-parse/route.ts ver.15 (Amazon方式統一・確実動作版)
+// /app/api/import/rakuten/route.ts（v20250629 全面修正版）
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { findBestMatchSimplified } from '@/lib/csvHelpers';
+import { createAuthenticatedSupabaseClient } from '@/utils/supabase';
+import { findBestMatchSimplified } from '@/utils/csvHelpers';
 
-const supabase = createClient(
- process.env.NEXT_PUBLIC_SUPABASE_URL!,
- process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export async function POST(req: NextRequest) {
+  try {
+    const supabase = createAuthenticatedSupabaseClient();
+    const formData = await req.formData();
+    const file = formData.get('file') as File;
 
-export const dynamic = 'force-dynamic';
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    }
 
-function parseCsvLine(line: string): string[] {
- const columns = [];
- let currentColumn = '';
- let inQuotes = false;
+    const text = await file.text();
+    const lines = text.split('\n').filter((line) => line.trim() !== '');
+    if (lines.length === 0) {
+      return NextResponse.json({ error: 'Empty CSV' }, { status: 400 });
+    }
 
- for (let i = 0; i < line.length; i++) {
-   const char = line[i];
+    const headers = lines[0].split(',');
+    const rows = lines.slice(1).map((line) => {
+      const values = line.split(',');
+      const entry: Record<string, string> = {};
+      headers.forEach((h, i) => (entry[h.trim()] = (values[i] || '').trim()));
+      return entry;
+    });
 
-   if (char === '"') {
-     if (inQuotes && line[i + 1] === '"') {
-       currentColumn += '"';
-       i++;
-     } else {
-       inQuotes = !inQuotes;
-     }
-   } else if (char === ',' && !inQuotes) {
-     columns.push(currentColumn.trim());
-     currentColumn = '';
-   } else {
-     currentColumn += char;
-   }
- }
- columns.push(currentColumn.trim());
- return columns;
-}
+    // 商品名と個数を抽出（列名固定：A列→商品名、E列→個数）
+    const parsedItems = rows.map((row) => {
+      return {
+        name: row[headers[0]],
+        quantity: Number(row[headers[4]]) || 0,
+      };
+    });
 
-export async function POST(request: NextRequest) {
- try {
-   const { csvContent } = await request.json();
-   if (!csvContent) {
-       return NextResponse.json({ success: false, error: 'CSVデータがありません' }, { status: 400 });
-   }
+    // AI補正データの読み込み（web_sales_ai_reports）
+    const { data: aiReports, error: aiError } = await supabase
+      .from('web_sales_ai_reports')
+      .select('product_id, name');
 
-   const lines = csvContent.split('\n').slice(7).filter((line: string) => line.trim() !== '');
+    if (aiError) {
+      return NextResponse.json({ error: 'Failed to fetch AI reports' }, { status: 500 });
+    }
 
-   const { data: products, error: productsError } = await supabase.from('products').select('*');
-   if (productsError) throw new Error(`商品マスターの取得に失敗: ${productsError.message}`);
+    const results = parsedItems.map((item) => {
+      const matched = findBestMatchSimplified(item.name, aiReports || []);
+      return {
+        original: item.name,
+        quantity: item.quantity,
+        matched_product_id: matched?.product_id || null,
+        matched_name: matched?.name || null,
+      };
+    });
 
-   const { data: learningData } = await supabase.from('rakuten_product_mapping').select('rakuten_title, product_id');
-
-   let matchedProducts: any[] = [];
-   let unmatchedProducts: any[] = [];
-   let blankTitleRows: any[] = [];
-
-   for (let i = 0; i < lines.length; i++) {
-       const columns = parseCsvLine(lines[i]);
-       if (columns.length < 5) continue;
-
-       const rakutenTitle = columns[0]?.trim();
-       const quantity = parseInt(columns[4], 10) || 0;
-
-       if (quantity <= 0) continue;
-
-       if (!rakutenTitle) {
-           blankTitleRows.push({ rowNumber: i + 8, quantity });
-           continue;
-       }
-
-       const productInfo = findBestMatchSimplified(rakutenTitle, products || [], learningData || []);
-
-       if (productInfo) {
-           matchedProducts.push({ rakutenTitle, quantity, productInfo, matchType: productInfo.matchType });
-       } else {
-           unmatchedProducts.push({ rakutenTitle, quantity });
-       }
-   }
-
-   const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
-   const unmatchQuantity = unmatchedProducts.reduce((sum, p) => sum + p.quantity, 0);
-   const blankTitleQuantity = blankTitleRows.reduce((sum, r) => sum + r.quantity, 0);
-
-   return NextResponse.json({
-       success: true,
-       matchedProducts,
-       unmatchedProducts,
-       summary: {
-           totalProducts: matchedProducts.length + unmatchedProducts.length,
-           totalQuantity: processableQuantity + unmatchQuantity,
-           processableQuantity,
-           blankTitleInfo: {
-               count: blankTitleRows.length,
-               quantity: blankTitleQuantity
-           }
-       }
-   });
- } catch (error) {
-     console.error('楽天CSV解析エラー:', error);
-     return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
- }
+    return NextResponse.json({ success: true, data: results });
+  } catch (err) {
+    console.error('CSV parse error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 }
