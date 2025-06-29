@@ -24,6 +24,23 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // 文字化けチェックと対処
+    console.log('受信したCSVデータの最初の100文字:', csvData.substring(0, 100));
+    
+    // 文字化け検出（制御文字や不正な文字の存在チェック）
+    const hasGarbledText = /[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(csvData) || 
+                          csvData.includes('�') || 
+                          csvData.includes('繧�') ||  // Shift-JIS文字化けパターン
+                          csvData.includes('繝�');    // Shift-JIS文字化けパターン
+
+    if (hasGarbledText) {
+      console.error('CSV文字化けを検出しました');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'CSVファイルの文字エンコーディングに問題があります。ファイルをUTF-8で保存し直してアップロードしてください。' 
+      }, { status: 400 });
+    }
+
     // 1. CSVを行に分割（Yahoo：1行目ヘッダー）
     const lines = csvData.split('\n').filter(line => line.trim());
     console.log(`CSVファイル: ${lines.length}行（ヘッダー含む）`);
@@ -70,78 +87,113 @@ export async function POST(request: NextRequest) {
     const matchedProducts = [];
     const blankTitleProducts = [];
     
-    for (const line of dataLines) {
-      // CSVパース（カンマ区切り）
-      const columns = line.split(',').map(col => col.trim().replace(/"/g, ''));
-      
-      if (columns.length < 6) {
-        console.log(`列数不足の行をスキップ: ${columns.length}列`);
-        continue;
-      }
+    for (let i = 0; i < dataLines.length; i++) {
+      const line = dataLines[i];
+      try {
+        // CSVパース（カンマ区切り）
+        const columns = line.split(',').map(col => col.trim().replace(/"/g, ''));
+        
+        if (columns.length < 6) {
+          console.log(`行${i + 2}: 列数不足の行をスキップ: ${columns.length}列`);
+          continue;
+        }
 
-      // Yahoo仕様: A列=商品名(0), F列=数量(5)
-      const productTitle = columns[0];
-      const quantityStr = columns[5];
-      const quantity = parseInt(quantityStr) || 0;
+        // Yahoo仕様: A列=商品名(0), F列=数量(5)
+        const productTitle = columns[0];
+        const quantityStr = columns[5];
+        const quantity = parseInt(quantityStr) || 0;
 
-      if (quantity <= 0) {
-        console.log(`数量0の商品をスキップ: ${productTitle}`);
-        continue;
-      }
+        console.log(`行${i + 2}: 商品名="${productTitle}", 数量="${quantityStr}" -> ${quantity}`);
 
-      // 商品名空欄チェック
-      if (!productTitle || productTitle.trim() === '') {
-        blankTitleProducts.push({
-          productTitle: '（空欄）',
+        if (quantity <= 0) {
+          console.log(`行${i + 2}: 数量0の商品をスキップ: ${productTitle}`);
+          continue;
+        }
+
+        // 商品名空欄チェック
+        if (!productTitle || productTitle.trim() === '') {
+          blankTitleProducts.push({
+            productTitle: '（空欄）',
+            quantity,
+            rawLine: line
+          });
+          console.log(`行${i + 2}: 空欄商品名: 数量=${quantity}`);
+          continue;
+        }
+
+        // 商品マッチング実行
+        console.log(`行${i + 2}: マッチング開始: "${productTitle}"`);
+        
+        // null安全性チェック
+        if (!products || !Array.isArray(products)) {
+          console.error('商品マスタデータが不正です');
+          throw new Error('商品マスタデータが取得できませんでした');
+        }
+        
+        if (!learningData || !Array.isArray(learningData)) {
+          console.error('学習データが不正です');
+          throw new Error('学習データが取得できませんでした');
+        }
+
+        const matchResult = findBestMatchSimplified(productTitle, products, learningData);
+        
+        if (!matchResult) {
+          console.error(`マッチング関数がnullを返しました: "${productTitle}"`);
+          throw new Error('マッチング処理でエラーが発生しました');
+        }
+        
+        console.log(`行${i + 2}: マッチング結果: スコア=${matchResult.score}, 商品=${matchResult.product?.name || '未マッチ'}`);
+        
+        matchedProducts.push({
+          productTitle,
           quantity,
+          score: matchResult.score || 0,
+          productInfo: matchResult.product || null,
+          isLearned: matchResult.isLearned || false,
           rawLine: line
         });
-        console.log(`空欄商品名: 数量=${quantity}`);
+
+      } catch (lineError) {
+        console.error(`行${i + 2}の処理エラー:`, lineError);
+        console.error(`問題の行: "${line}"`);
+        // エラーが発生した行はスキップして処理を続行
         continue;
       }
-
-      // 商品マッチング実行
-      const matchResult = findBestMatchSimplified(productTitle, products, learningData);
-      
-      matchedProducts.push({
-        productTitle,
-        quantity,
-        score: matchResult.score,
-        productInfo: matchResult.product,
-        isLearned: matchResult.isLearned,
-        rawLine: line
-      });
-
-      console.log(`マッチング: ${productTitle} -> ${matchResult.product?.name || '未マッチ'} (スコア: ${matchResult.score})`);
     }
 
     // 6. 結果サマリー作成
-    const matchedCount = matchedProducts.filter(p => p.productInfo).length;
-    const unmatchedCount = matchedProducts.filter(p => !p.productInfo).length;
-    const learnedCount = matchedProducts.filter(p => p.isLearned).length;
+    try {
+      const matchedCount = matchedProducts.filter(p => p.productInfo).length;
+      const unmatchedCount = matchedProducts.filter(p => !p.productInfo).length;
+      const learnedCount = matchedProducts.filter(p => p.isLearned).length;
 
-    const summary = {
-      totalProducts: matchedProducts.length,
-      matchedProducts: matchedCount,
-      unmatchedProducts: unmatchedCount, 
-      learnedMatches: learnedCount,
-      blankTitleInfo: {
-        count: blankTitleProducts.length,
-        totalQuantity: blankTitleProducts.reduce((sum, p) => sum + p.quantity, 0)
-      }
-    };
+      const summary = {
+        totalProducts: matchedProducts.length,
+        matchedProducts: matchedCount,
+        unmatchedProducts: unmatchedCount, 
+        learnedMatches: learnedCount,
+        blankTitleInfo: {
+          count: blankTitleProducts.length,
+          totalQuantity: blankTitleProducts.reduce((sum, p) => sum + (p.quantity || 0), 0)
+        }
+      };
 
-    console.log('=== Yahoo CSV解析完了 ===');
-    console.log('サマリー:', summary);
+      console.log('=== Yahoo CSV解析完了 ===');
+      console.log('サマリー:', summary);
 
-    // 7. 統一レスポンス構造（summaryオブジェクト必須）
-    return NextResponse.json({
-      success: true,
-      summary,
-      matchedProducts,
-      blankTitleProducts,
-      csvRowCount: dataLines.length
-    });
+      // 7. 統一レスポンス構造（summaryオブジェクト必須）
+      return NextResponse.json({
+        success: true,
+        summary,
+        matchedProducts,
+        blankTitleProducts,
+        csvRowCount: dataLines.length
+      });
+      
+    } catch (summaryError) {
+      console.error('サマリー作成エラー:', summaryError);
+      throw new Error('結果サマリーの作成に失敗しました');
+    }
 
   } catch (error) {
     console.error('Yahoo CSV解析エラー:', error);
