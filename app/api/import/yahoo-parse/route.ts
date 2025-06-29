@@ -199,14 +199,28 @@ export async function POST(request: NextRequest) {
         console.log(`  - マッチした商品: ${matchResult.product?.name || 'なし'}`);
         console.log(`  - マッチした商品ID: ${matchResult.product?.id || 'なし'}`);
         console.log(`  - 学習データ利用: ${matchResult.isLearned ? 'はい' : 'いいえ'}`);
-        console.log(`=== 行${i + 2}: マッチング詳細終了 ===\n`);
         
-        // Amazon/楽天と同じ閾値でチェック（通常0.3以上でマッチとみなす）
-        if (matchResult.score >= 0.3) {
-          console.log(`✅ スコア${matchResult.score}で商品マッチ成功`);
+        // 重要：マッチング成功判定の詳細表示
+        const isMatched = matchResult.product !== null && matchResult.product !== undefined;
+        const hasValidScore = matchResult.score > 0;
+        
+        console.log(`  - マッチング成功判定: ${isMatched}`);
+        console.log(`  - 有効スコア判定: ${hasValidScore}`);
+        console.log(`  - findBestMatchSimplified戻り値の型: ${typeof matchResult}`);
+        console.log(`  - matchResult.product の型: ${typeof matchResult.product}`);
+        
+        if (matchResult.product) {
+          console.log(`✅ マッチング成功: スコア${matchResult.score}で "${matchResult.product.name}" にマッチ`);
         } else {
-          console.log(`⚠️ スコア${matchResult.score}で商品マッチ失敗（閾値0.3未満）`);
+          console.log(`❌ マッチング失敗: スコア${matchResult.score}、商品=null`);
+          
+          // スコアが高いのにproductがnullの場合は内部ロジック問題
+          if (matchResult.score > 100) {
+            console.error(`🚨 異常: 高スコア(${matchResult.score})なのにproduct=null。findBestMatchSimplified内部ロジック問題の可能性`);
+          }
         }
+        
+        console.log(`=== 行${i + 2}: マッチング詳細終了 ===\n`);
         
         matchedProducts.push({
           productTitle,
