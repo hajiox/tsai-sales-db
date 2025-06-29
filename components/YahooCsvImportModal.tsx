@@ -72,12 +72,24 @@ export default function YahooCsvImportModal({
     return parseResult.matchedProducts.filter(p => !p.productInfo);
   };
 
-  // 修正済み未マッチ商品を除外
+  // 修正済み未マッチ商品を除外（より厳密なチェック）
   const getRemainingUnmatchedProducts = () => {
-    const unmatchedProducts = getUnmatchedProducts();
-    return unmatchedProducts.filter(p => 
-      !newMappings.some(m => m.yahooTitle === p.productTitle)
-    );
+    if (!parseResult) return [];
+    
+    const unmatchedProducts = parseResult.matchedProducts.filter(p => !p.productInfo);
+    const remaining = unmatchedProducts.filter(p => {
+      const alreadyMapped = newMappings.some(m => m.yahooTitle === p.productTitle);
+      return !alreadyMapped;
+    });
+    
+    console.log('未マッチ商品計算:', {
+      total: unmatchedProducts.length,
+      mapped: newMappings.length,
+      remaining: remaining.length,
+      mappedTitles: newMappings.map(m => m.yahooTitle)
+    });
+    
+    return remaining;
   };
 
   // propsでisOpenが渡された場合は外部制御
@@ -478,20 +490,41 @@ export default function YahooCsvImportModal({
                   戻る
                 </Button>
                 
-                {getRemainingUnmatchedProducts().length > 0 ? (
-                  <Button onClick={handleStartUnmatchFix} className="flex-1 bg-purple-600 hover:bg-purple-700">
-                    <ArrowRight className="h-4 w-4 mr-2" />
-                    未マッチ商品を修正
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={handleConfirm}
-                    disabled={isLoading}
-                    className="flex-1 bg-purple-600 hover:bg-purple-700"
-                  >
-                    {isLoading ? '処理中...' : 'インポート実行'}
-                  </Button>
-                )}
+                {(() => {
+                  const remainingCount = getRemainingUnmatchedProducts().length;
+                  console.log('ボタン表示判定:', { remainingCount, newMappingsCount: newMappings.length });
+                  
+                  if (remainingCount > 0) {
+                    return (
+                      <Button onClick={handleStartUnmatchFix} className="flex-1 bg-purple-600 hover:bg-purple-700">
+                        <ArrowRight className="h-4 w-4 mr-2" />
+                        未マッチ商品を修正 ({remainingCount}件)
+                      </Button>
+                    );
+                  } else {
+                    return (
+                      <Button 
+                        onClick={handleConfirm}
+                        disabled={isLoading}
+                        className="flex-1 bg-purple-600 hover:bg-purple-700"
+                      >
+                        {isLoading ? '処理中...' : 'インポート実行'}
+                      </Button>
+                    );
+                  }
+                })()}
+              </div>
+              
+              {/* 緊急インポート実行ボタン */}
+              <div className="mt-4 pt-4 border-t">
+                <Button 
+                  onClick={handleConfirm}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="w-full text-green-600 border-green-300 hover:bg-green-50"
+                >
+                  🚀 修正完了 - インポート実行
+                </Button>
               </div>
             </>
           )}
