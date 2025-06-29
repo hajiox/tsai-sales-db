@@ -98,6 +98,14 @@ export default function YahooCsvImportModal({
     }
   }, [isOpen]);
 
+  // ステップ3で未マッチ商品がなくなったら自動的にステップ2に戻る
+  useEffect(() => {
+    if (step === 3 && getRemainingUnmatchedProducts().length === 0) {
+      setStep(2);
+      setCurrentUnmatchIndex(0);
+    }
+  }, [step, newMappings, parseResult]);
+
   const handleClose = () => {
     if (propOnClose) {
       propOnClose();
@@ -211,9 +219,11 @@ export default function YahooCsvImportModal({
       setNewMappings(prev => [...prev, mapping]);
     }
 
+    // 次の未マッチ商品があるかチェック
     if (currentUnmatchIndex < remainingUnmatched.length - 1) {
       setCurrentUnmatchIndex(currentUnmatchIndex + 1);
     } else {
+      // 全ての修正が完了したらステップ2に戻る
       setStep(2);
       setCurrentUnmatchIndex(0);
     }
@@ -459,7 +469,21 @@ export default function YahooCsvImportModal({
             </>
           )}
 
-          {step === 3 && currentUnmatch && (
+          {step === 3 && remainingUnmatchedProducts.length === 0 && (
+            <div className="text-center py-8">
+              <div className="text-green-600 text-xl font-bold mb-4">
+                ✅ 全ての商品修正が完了しました！
+              </div>
+              <Button 
+                onClick={() => setStep(2)}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                確認画面に戻る
+              </Button>
+            </div>
+          )}
+
+          {step === 3 && currentUnmatch && remainingUnmatchedProducts.length > 0 && (
             <>
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
