@@ -1,5 +1,5 @@
 // /app/components/YahooCsvImportModal.tsx ver.2
-// 楽天UIパターン完全統一版（3ステップ式・未マッチ修正UI完備）
+// 楽天UIパターン完全統一版（3ステップ式・未マッチ修正UI完備・件数計算修正版）
 
 'use client';
 
@@ -65,6 +65,20 @@ export default function YahooCsvImportModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [saleMonth, setSaleMonth] = useState<string>(selectedMonth);
+
+  // 未マッチ商品を正確に特定
+  const getUnmatchedProducts = () => {
+    if (!parseResult) return [];
+    return parseResult.matchedProducts.filter(p => !p.productInfo);
+  };
+
+  // 修正済み未マッチ商品を除外
+  const getRemainingUnmatchedProducts = () => {
+    const unmatchedProducts = getUnmatchedProducts();
+    return unmatchedProducts.filter(p => 
+      !newMappings.some(m => m.yahooTitle === p.productTitle)
+    );
+  };
 
   // propsでisOpenが渡された場合は外部制御
   useEffect(() => {
@@ -175,15 +189,18 @@ export default function YahooCsvImportModal({
   };
 
   const handleStartUnmatchFix = () => {
-    setStep(3);
-    setCurrentUnmatchIndex(0);
+    const remainingUnmatched = getRemainingUnmatchedProducts();
+    if (remainingUnmatched.length > 0) {
+      setStep(3);
+      setCurrentUnmatchIndex(0);
+    }
   };
 
   const handleProductSelect = (productId: string) => {
     if (!parseResult) return;
     
-    const unmatchedProducts = parseResult.matchedProducts.filter(p => !p.productInfo);
-    const currentUnmatch = unmatchedProducts[currentUnmatchIndex];
+    const remainingUnmatched = getRemainingUnmatchedProducts();
+    const currentUnmatch = remainingUnmatched[currentUnmatchIndex];
     
     if (productId !== 'skip') {
       const mapping = {
@@ -194,10 +211,11 @@ export default function YahooCsvImportModal({
       setNewMappings(prev => [...prev, mapping]);
     }
 
-    if (currentUnmatchIndex < unmatchedProducts.length - 1) {
+    if (currentUnmatchIndex < remainingUnmatched.length - 1) {
       setCurrentUnmatchIndex(currentUnmatchIndex + 1);
     } else {
       setStep(2);
+      setCurrentUnmatchIndex(0);
     }
   };
 
@@ -272,11 +290,11 @@ export default function YahooCsvImportModal({
 
   if (!isOpen) return null;
 
-  const unmatchedProducts = parseResult?.matchedProducts?.filter(p => !p.productInfo) || [];
-  const currentUnmatch = unmatchedProducts[currentUnmatchIndex];
+  const remainingUnmatchedProducts = getRemainingUnmatchedProducts();
+  const currentUnmatch = remainingUnmatchedProducts[currentUnmatchIndex];
   const yahooCore = currentUnmatch?.productTitle?.substring(0, 40).trim();
-  const progress = unmatchedProducts.length > 0 
-    ? ((currentUnmatchIndex + 1) / unmatchedProducts.length) * 100 
+  const progress = remainingUnmatchedProducts.length > 0 
+    ? ((currentUnmatchIndex + 1) / remainingUnmatchedProducts.length) * 100 
     : 0;
 
   return (
@@ -411,7 +429,7 @@ export default function YahooCsvImportModal({
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-yellow-600">
-                      {parseResult.summary.unmatchedProducts - newMappings.length}件
+                      {getRemainingUnmatchedProducts().length}件
                     </div>
                   </CardContent>
                 </Card>
@@ -423,7 +441,7 @@ export default function YahooCsvImportModal({
                   戻る
                 </Button>
                 
-                {parseResult.summary.unmatchedProducts > newMappings.length ? (
+                {getRemainingUnmatchedProducts().length > 0 ? (
                   <Button onClick={handleStartUnmatchFix} className="flex-1 bg-purple-600 hover:bg-purple-700">
                     <ArrowRight className="h-4 w-4 mr-2" />
                     未マッチ商品を修正
@@ -446,7 +464,7 @@ export default function YahooCsvImportModal({
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
                   <span>未マッチ商品修正</span>
-                  <span>{currentUnmatchIndex + 1} / {unmatchedProducts.length}</span>
+                  <span>{currentUnmatchIndex + 1} / {remainingUnmatchedProducts.length}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
