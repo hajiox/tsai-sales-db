@@ -1,4 +1,4 @@
-// /app/api/verify/amazon-sales/route.ts ver.1
+// /app/api/verify/amazon-sales/route.ts ver.3 (固定列対応版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// AmazonのCSVパース関数
+// Amazon CSVパース（TSV形式、固定列）
 function parseAmazonCsvLine(line: string): string[] {
   const columns: string[] = [];
   let currentColumn = '';
@@ -22,7 +22,7 @@ function parseAmazonCsvLine(line: string): string[] {
       i++;
     } else if (char === '"') {
       inQuotes = !inQuotes;
-    } else if (char === '\t' && !inQuotes) { // AmazonはTSV形式
+    } else if (char === '\t' && !inQuotes) {
       columns.push(currentColumn.trim());
       currentColumn = '';
     } else {
@@ -38,42 +38,33 @@ export async function POST(request: NextRequest) {
     const { csvContent, saleMonth } = await request.json();
     const reportMonth = `${saleMonth}-01`;
 
-    // 1. AmazonCSVをパースし、商品ごとの合計数量を計算
+    console.log('📂 Amazon CSV検証開始 - 対象月:', saleMonth);
+
+    // 1. CSVを行分割（ヘッダー1行スキップ）
     const lines = csvContent.split('\n').filter((line: string) => line.trim() !== '');
+    const dataLines = lines.slice(1); // ヘッダー行をスキップ
     
-    // ヘッダー行を探す（"商品名"を含む行）
-    let headerIndex = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes('商品名') || lines[i].includes('title')) {
-        headerIndex = i;
-        break;
-      }
-    }
-    
-    if (headerIndex === -1) {
-      throw new Error('Amazon CSVのヘッダー行が見つかりません');
-    }
-    
-    const dataLines = lines.slice(headerIndex + 1);
+    console.log('📊 データ行数:', dataLines.length);
+
+    // 2. Amazon固定フォーマットで解析
+    // C列 = タイトル（インデックス2）
+    // N列 = 注文された商品点数（インデックス13）
     const csvSalesData = dataLines.map((line: string) => {
       const columns = parseAmazonCsvLine(line);
-      return {
-        amazonTitle: columns[0]?.replace(/"/g, '').trim(), // 商品名
-        quantity: parseInt(columns[1]?.replace(/"/g, '').trim() || '0', 10), // 数量
-      };
+      const title = columns[2]?.replace(/"/g, '').trim(); // C列: タイトル
+      const quantity = parseInt(columns[13]?.replace(/"/g, '').trim() || '0', 10); // N列: 注文された商品点数
+      
+      return { amazonTitle: title, quantity };
     }).filter((item: any) => item.amazonTitle && item.quantity > 0);
 
-    console.log('Amazon CSV解析結果:', csvSalesData.length, '件');
+    console.log('✅ 有効データ数:', csvSalesData.length, '件');
 
-    // 2. 商品マスターと学習データを取得
+    // 3. 商品マスターと学習データを取得
     const { data: products } = await supabase.from('products').select('*');
     const { data: learnedMappings } = await supabase.from('amazon_product_mapping').select('amazon_title, product_id');
     const learningData = (learnedMappings || []).map(m => ({ amazon_title: m.amazon_title, product_id: m.product_id }));
 
-    console.log('商品マスター:', products?.length, '件');
-    console.log('Amazon学習データ:', learningData.length, '件');
-
-    // 3. CSVデータから商品IDごとに数量を集計
+    // 4. CSVデータから商品IDごとに数量を集計
     const csvAggregated = new Map<string, number>();
     for (const item of csvSalesData) {
       const matched = findBestMatchSimplified(item.amazonTitle, products || [], learningData);
@@ -83,9 +74,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('CSV集計結果:', csvAggregated.size, '商品');
+    console.log('📊 CSV集計結果:', csvAggregated.size, '商品');
 
-    // 4. DBから指定月の売上データを取得
+    // 5. DBから指定月の売上データを取得
     const { data: dbData } = await supabase
       .from('web_sales_summary')
       .select('product_id, amazon_count')
@@ -98,9 +89,9 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    console.log('DB集計結果:', dbAggregated.size, '商品');
+    console.log('📊 DB集計結果:', dbAggregated.size, '商品');
 
-    // 5. CSVとDBを比較
+    // 6. CSVとDBを比較
     const verificationResults = [];
     const allProductIds = new Set([...csvAggregated.keys(), ...dbAggregated.keys()]);
 
@@ -119,15 +110,14 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // シリーズ名でソート
     verificationResults.sort((a, b) => (a.series > b.series) ? 1 : -1);
 
-    console.log('検証結果:', verificationResults.length, '商品');
+    console.log('🎉 検証完了:', verificationResults.length, '商品');
 
     return NextResponse.json({ success: true, results: verificationResults });
 
   } catch (error) {
-    console.error('Amazon売上検証APIエラー:', error);
+    console.error('🚨 Amazon売上検証APIエラー:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : '不明なエラーが発生しました',
