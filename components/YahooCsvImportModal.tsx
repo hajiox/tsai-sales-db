@@ -9,6 +9,8 @@ import { Upload, Check, X, AlertCircle, FileText } from "lucide-react";
 interface YahooCsvImportModalProps {
   onImportComplete: () => void;
   selectedMonth: string;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 interface MatchedProduct {
@@ -34,13 +36,20 @@ interface ParseResult {
   matchedProducts: MatchedProduct[];
 }
 
-export default function YahooCsvImportModal({ onImportComplete, selectedMonth }: YahooCsvImportModalProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export default function YahooCsvImportModal({ onImportComplete, selectedMonth, isOpen: propIsOpen, onClose: propOnClose }: YahooCsvImportModalProps) {
+  const [isOpen, setIsOpen] = useState(propIsOpen || false);
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+
+  // propsでisOpenが渡された場合は外部制御
+  React.useEffect(() => {
+    if (propIsOpen !== undefined) {
+      setIsOpen(propIsOpen);
+    }
+  }, [propIsOpen]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -105,8 +114,7 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth }:
       const result = await response.json();
 
       if (result.success) {
-        setIsOpen(false);
-        resetState();
+        handleClose();
         onImportComplete();
       } else {
         setError(result.error || '確定処理に失敗しました');
@@ -127,11 +135,16 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth }:
   };
 
   const handleClose = () => {
-    setIsOpen(false);
+    if (propOnClose) {
+      propOnClose();
+    } else {
+      setIsOpen(false);
+    }
     resetState();
   };
 
-  if (!isOpen) {
+  // プロップが渡されていない場合は独立ボタンとして表示
+  if (!propIsOpen && !isOpen) {
     return (
       <button
         onClick={() => setIsOpen(true)}
@@ -140,6 +153,11 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth }:
         Yahoo
       </button>
     );
+  }
+
+  // プロップでisOpenが管理されているが、falseの場合は何も表示しない
+  if (propIsOpen !== undefined && !propIsOpen) {
+    return null;
   }
 
   return (
