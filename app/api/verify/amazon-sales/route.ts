@@ -1,4 +1,4 @@
-// /app/api/verify/amazon-sales/route.ts ver.3 (固定列対応版)
+// /app/api/verify/amazon-sales/route.ts ver.5 (テーブル参照修正版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -47,8 +47,6 @@ export async function POST(request: NextRequest) {
     console.log('📊 データ行数:', dataLines.length);
 
     // 2. Amazon固定フォーマットで解析
-    // C列 = タイトル（インデックス2）
-    // N列 = 注文された商品点数（インデックス13）
     const csvSalesData = dataLines.map((line: string) => {
       const columns = parseAmazonCsvLine(line);
       const title = columns[2]?.replace(/"/g, '').trim(); // C列: タイトル
@@ -61,6 +59,7 @@ export async function POST(request: NextRequest) {
 
     // 3. 商品マスターと学習データを取得
     const { data: products } = await supabase.from('products').select('*');
+    // 👆 Amazon用の学習データテーブルに修正
     const { data: learnedMappings } = await supabase.from('amazon_product_mapping').select('amazon_title, product_id');
     const learningData = (learnedMappings || []).map(m => ({ amazon_title: m.amazon_title, product_id: m.product_id }));
 
@@ -79,7 +78,7 @@ export async function POST(request: NextRequest) {
     // 5. DBから指定月の売上データを取得
     const { data: dbData } = await supabase
       .from('web_sales_summary')
-      .select('product_id, amazon_count')
+      .select('product_id, amazon_count') // 👆 amazon_countに修正（rakuten_countではない）
       .eq('report_month', reportMonth);
       
     const dbAggregated = new Map<string, number>();
