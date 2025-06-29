@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.50 (Definitive Fix)
+// /components/web-sales-editable-table.tsx ver.51 (削除機能修復版)
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
@@ -94,6 +94,36 @@ export default function WebSalesEditableTable({
     onDataUpdated()
   }
 
+  const handleDeleteMonthData = async () => {
+    if (!confirm(`${month}のデータを削除しますか？この操作は取り消せません。`)) {
+      return
+    }
+
+    try {
+      console.log("Delete button clicked - executing deletion for month:", month);
+      
+      const response = await fetch(`/api/web-sales/delete?month=${month}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('削除に失敗しました')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        alert(`${month}のデータを削除しました（${result.deletedCount}件）`)
+        onDataUpdated() // 親コンポーネントにデータ更新を通知
+      } else {
+        throw new Error(result.error || '削除に失敗しました')
+      }
+    } catch (error) {
+      console.error('削除エラー:', error)
+      alert('削除中にエラーが発生しました: ' + (error instanceof Error ? error.message : '不明なエラー'))
+    }
+  }
+
   return (
     <div className="space-y-4">
       <WebSalesTableHeader
@@ -102,7 +132,7 @@ export default function WebSalesEditableTable({
         isLoading={false}
         onMonthChange={handleMonthChange}
         onFilterChange={setFilterValue}
-        onDeleteMonthData={() => { console.log("Delete button clicked"); }}
+        onDeleteMonthData={handleDeleteMonthData}
       />
 
       <WebSalesDataTable
