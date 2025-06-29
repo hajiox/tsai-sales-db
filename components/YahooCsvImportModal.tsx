@@ -4,15 +4,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
-} from "@/components/ui/dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Upload, Check, X, AlertCircle, FileText } from "lucide-react";
 
 interface YahooCsvImportModalProps {
@@ -151,49 +142,63 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth }:
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-        >
-          <FileText className="h-4 w-4 mr-2" />
-          Yahoo CSV
-        </Button>
-      </DialogTrigger>
-      
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-purple-600" />
-            Yahoo売上CSVインポート（{selectedMonth}）
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      {/* トリガーボタン */}
+      <button
+        onClick={() => setIsOpen(true)}
+        className="px-3 py-1 text-xs font-semibold text-white bg-purple-600 rounded hover:bg-purple-700"
+      >
+        <FileText className="h-4 w-4 mr-2 inline" />
+        Yahoo CSV
+      </button>
 
-        <div className="space-y-6">
-          {/* ファイル選択セクション */}
-          <div className="space-y-2">
-            <Label htmlFor="yahoo-csv-file">Yahoo売上CSV選択</Label>
-            <Input
-              id="yahoo-csv-file"
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange}
-              disabled={isLoading || isConfirming}
-            />
-            <p className="text-sm text-gray-500">
-              Yahoo売上CSV形式（商品名：A列、数量：F列）に対応
-            </p>
-          </div>
+      {/* モーダル */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* オーバーレイ */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50"
+            onClick={handleClose}
+          ></div>
+          
+          {/* モーダルコンテンツ */}
+          <div className="relative bg-white rounded-lg shadow-xl max-w-4xl max-h-[90vh] overflow-y-auto m-4 w-full">
+            <div className="p-6 space-y-6">
+              {/* ヘッダー */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-purple-600" />
+                  Yahoo売上CSVインポート（{selectedMonth}）
+                </h2>
+                <button 
+                  onClick={handleClose}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              >
+              {/* ファイル選択セクション */}
+              <div className="space-y-2">
+                <label htmlFor="yahoo-csv-file" className="block text-sm font-medium">Yahoo売上CSV選択</label>
+                <Input
+                  id="yahoo-csv-file"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  disabled={isLoading || isConfirming}
+                />
+                <p className="text-sm text-gray-500">
+                  Yahoo売上CSV形式（商品名：A列、数量：F列）に対応
+                </p>
+              </div>
 
-          {/* エラー表示 */}
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+              {/* エラー表示 */}
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  <span className="text-red-600 text-sm">{error}</span>
+                </div>
+              )}
 
           {/* 解析ボタン */}
           <div className="flex gap-2">
@@ -343,9 +348,9 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth }:
                 </ul>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </>
   );
 }
