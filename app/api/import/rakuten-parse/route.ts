@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-parse/route.ts ver.13 (動作確認済みver.9ベース復元版)
+// /app/api/import/rakuten-parse/route.ts ver.14 (Amazon形式レスポンス統一版)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -83,14 +83,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
         success: true,
-        totalProducts: matchedProducts.length + unmatchedProducts.length,
-        totalQuantity: processableQuantity + unmatchQuantity,
         matchedProducts,
         unmatchedProducts,
-        processableQuantity,
-        blankTitleInfo: {
-            count: blankTitleRows.length,
-            quantity: blankTitleQuantity
+        summary: {
+            totalProducts: matchedProducts.length + unmatchedProducts.length,
+            totalQuantity: processableQuantity + unmatchQuantity,
+            processableQuantity,
+            blankTitleInfo: {
+                count: blankTitleRows.length,
+                quantity: blankTitleQuantity
+            }
         }
     });
   } catch (error) {
