@@ -100,9 +100,13 @@ export default function YahooCsvImportModal({
 
   // ステップ3で未マッチ商品がなくなったら自動的にステップ2に戻る
   useEffect(() => {
-    if (step === 3 && getRemainingUnmatchedProducts().length === 0) {
-      setStep(2);
-      setCurrentUnmatchIndex(0);
+    if (step === 3 && parseResult) {
+      const remaining = getRemainingUnmatchedProducts();
+      if (remaining.length === 0) {
+        console.log('未マッチ商品が0件になったため、ステップ2に自動遷移');
+        setStep(2);
+        setCurrentUnmatchIndex(0);
+      }
     }
   }, [step, newMappings, parseResult]);
 
@@ -210,6 +214,13 @@ export default function YahooCsvImportModal({
     const remainingUnmatched = getRemainingUnmatchedProducts();
     const currentUnmatch = remainingUnmatched[currentUnmatchIndex];
     
+    if (!currentUnmatch) {
+      // 現在の未マッチ商品がない場合は強制的にステップ2に戻る
+      setStep(2);
+      setCurrentUnmatchIndex(0);
+      return;
+    }
+    
     if (productId !== 'skip') {
       const mapping = {
         yahooTitle: currentUnmatch.productTitle,
@@ -219,13 +230,29 @@ export default function YahooCsvImportModal({
       setNewMappings(prev => [...prev, mapping]);
     }
 
-    // 次の未マッチ商品があるかチェック
-    if (currentUnmatchIndex < remainingUnmatched.length - 1) {
+    // 修正後の残り未マッチ商品数を再計算
+    const updatedMappings = productId !== 'skip' 
+      ? [...newMappings, { yahooTitle: currentUnmatch.productTitle, productId, quantity: currentUnmatch.quantity }]
+      : newMappings;
+    
+    const stillUnmatched = remainingUnmatched.filter(p => 
+      !updatedMappings.some(m => m.yahooTitle === p.productTitle)
+    );
+
+    if (stillUnmatched.length <= 1) {
+      // 最後の商品処理完了、またはもう未マッチがない場合
+      setTimeout(() => {
+        setStep(2);
+        setCurrentUnmatchIndex(0);
+      }, 100);
+    } else if (currentUnmatchIndex < stillUnmatched.length - 1) {
       setCurrentUnmatchIndex(currentUnmatchIndex + 1);
     } else {
-      // 全ての修正が完了したらステップ2に戻る
-      setStep(2);
-      setCurrentUnmatchIndex(0);
+      // インデックスを調整してステップ2に戻る
+      setTimeout(() => {
+        setStep(2);
+        setCurrentUnmatchIndex(0);
+      }, 100);
     }
   };
 
@@ -474,11 +501,37 @@ export default function YahooCsvImportModal({
               <div className="text-green-600 text-xl font-bold mb-4">
                 ✅ 全ての商品修正が完了しました！
               </div>
+              <div className="space-y-2">
+                <Button 
+                  onClick={() => setStep(2)}
+                  className="bg-purple-600 hover:bg-purple-700 w-full"
+                >
+                  確認画面に戻る
+                </Button>
+                <Button 
+                  onClick={handleConfirm}
+                  disabled={isLoading}
+                  className="bg-green-600 hover:bg-green-700 w-full"
+                >
+                  {isLoading ? '処理中...' : 'インポート実行'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* 緊急脱出ボタン（デバッグ用） */}
+          {step === 3 && (
+            <div className="mt-4 pt-4 border-t">
               <Button 
-                onClick={() => setStep(2)}
-                className="bg-purple-600 hover:bg-purple-700"
+                variant="outline"
+                onClick={() => {
+                  console.log('緊急脱出: ステップ2に強制遷移');
+                  setStep(2);
+                  setCurrentUnmatchIndex(0);
+                }}
+                className="w-full text-gray-600"
               >
-                確認画面に戻る
+                🚨 確認画面に戻る（緊急脱出）
               </Button>
             </div>
           )}
