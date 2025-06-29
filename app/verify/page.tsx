@@ -1,4 +1,4 @@
-// /app/verify/page.tsx ver.1
+// /app/verify/page.tsx ver.2 (Amazon対応版)
 
 'use client';
 
@@ -17,8 +17,9 @@ interface VerificationResult {
   isMatch: boolean;
 }
 
-export default function VerifyRakutenPage() {
+export default function VerifyPage() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [channel, setChannel] = useState<'amazon' | 'rakuten'>('rakuten');
   const [saleMonth, setSaleMonth] = useState<string>(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -51,7 +52,11 @@ export default function VerifyRakutenPage() {
 
     try {
       const csvContent = await csvFile.text();
-      const response = await fetch('/api/verify/rakuten-sales', {
+      const apiEndpoint = channel === 'amazon' 
+        ? '/api/verify/amazon-sales' 
+        : '/api/verify/rakuten-sales';
+        
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ csvContent, saleMonth }),
@@ -75,11 +80,14 @@ export default function VerifyRakutenPage() {
     }
   };
 
+  const channelDisplayName = channel === 'amazon' ? 'Amazon' : '楽天';
+  const channelColor = channel === 'amazon' ? 'orange' : 'red';
+
   return (
     <div className="container mx-auto p-4 md:p-8">
       <Card className="max-w-4xl mx-auto">
         <CardHeader>
-          <CardTitle>楽天売上データ 整合性チェック</CardTitle>
+          <CardTitle>{channelDisplayName}売上データ 整合性チェック</CardTitle>
           <p className="text-gray-600 text-sm">
             CSVファイルとデータベースに登録された売上データを比較し、数量が一致しているか確認します。
           </p>
@@ -92,9 +100,20 @@ export default function VerifyRakutenPage() {
             </div>
           )}
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">① 売上月を選択</label>
+              <label className="block text-sm font-medium mb-1">① ECサイトを選択</label>
+              <select
+                value={channel}
+                onChange={(e) => setChannel(e.target.value as 'amazon' | 'rakuten')}
+                className="border rounded-md p-2 w-full"
+              >
+                <option value="rakuten">楽天</option>
+                <option value="amazon">Amazon</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">② 売上月を選択</label>
               <input
                 type="month"
                 value={saleMonth}
@@ -103,7 +122,7 @@ export default function VerifyRakutenPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">② 対象のCSVファイルを選択</label>
+              <label className="block text-sm font-medium mb-1">③ 対象のCSVファイルを選択</label>
               <div className="flex items-center gap-2 text-sm">
                 <label htmlFor="verify-csv-upload" className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-3 rounded-md border border-gray-300">
                   ファイル選択
@@ -122,11 +141,11 @@ export default function VerifyRakutenPage() {
           
           <Button onClick={handleVerification} disabled={!csvFile || isLoading} className="w-full">
             <Upload className="h-4 w-4 mr-2" />
-            {isLoading ? '検証中...' : '答え合わせを実行'}
+            {isLoading ? '検証中...' : `${channelDisplayName}データの答え合わせを実行`}
           </Button>
 
           {summary && (
-            <div className="p-4 bg-gray-50 rounded-lg text-center">
+            <div className={`p-4 bg-${channelColor}-50 rounded-lg text-center border border-${channelColor}-200`}>
               <h3 className="font-bold text-lg">検証結果</h3>
               <p>
                 全 {summary.total} 商品中、
