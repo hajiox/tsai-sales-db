@@ -82,13 +82,13 @@ export async function POST(request: NextRequest) {
     const learnedMappings = learnedMappingsResponse.data || [];
     
     // 4. 学習データをcsvHelpers期待形式に変換
-    // Amazon/楽天と同じ形式にする（amazon_title変換不要）
-    const validLearningData = learnedMappings.map(m => ({ 
+    // Amazon/楽天と同じ形式にする
+    const learningData = learnedMappings.map(m => ({ 
       yahoo_title: m.yahoo_title,
       product_id: m.product_id 
     }));
 
-    console.log(`商品マスタ: ${products.length}件, 学習データ: ${validLearningData.length}件`);
+    console.log(`商品マスタ: ${products.length}件, 学習データ: ${learningData.length}件`);
     
     // デバッグ: 商品マスタと学習データの詳細
     console.log(`商品マスタ取得結果: ${products.length}件`);
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
         console.log(`学習データ件数: ${learningData.length}件`);
         
         // Amazon/楽天と同じ処理方式に修正
-        const matchedProduct = findBestMatchSimplified(productTitle, products, validLearningData);
+        const matchedProduct = findBestMatchSimplified(productTitle, products, learningData);
         
         console.log(`findBestMatchSimplified戻り値:`, matchedProduct);
         console.log(`戻り値の型: ${typeof matchedProduct}`);
