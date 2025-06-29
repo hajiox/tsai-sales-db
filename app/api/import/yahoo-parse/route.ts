@@ -81,13 +81,14 @@ export async function POST(request: NextRequest) {
     const products = productsResponse.data || [];
     const learnedMappings = learnedMappingsResponse.data || [];
     
-    // 4. 学習データをcsvHelpers期待形式に変換（yahoo_title → amazon_title）
-    const learningData = learnedMappings.map(m => ({ 
-      amazon_title: m.yahoo_title,  // 統一フィールド名に変換
+    // 4. 学習データをcsvHelpers期待形式に変換
+    // Amazon/楽天と同じ形式にする（amazon_title変換不要）
+    const validLearningData = learnedMappings.map(m => ({ 
+      yahoo_title: m.yahoo_title,
       product_id: m.product_id 
     }));
 
-    console.log(`商品マスタ: ${products.length}件, 学習データ: ${learningData.length}件`);
+    console.log(`商品マスタ: ${products.length}件, 学習データ: ${validLearningData.length}件`);
     
     // デバッグ: 商品マスタと学習データの詳細
     console.log(`商品マスタ取得結果: ${products.length}件`);
@@ -168,68 +169,43 @@ export async function POST(request: NextRequest) {
         console.log(`商品マスタ件数: ${products.length}件`);
         console.log(`学習データ件数: ${learningData.length}件`);
         
-        // 最初の行でのみ詳細サンプル表示
-        if (i === 0) {
-          console.log('\n【商品マスタサンプル】:');
-          products.slice(0, 5).forEach((p, idx) => {
-            console.log(`  ${idx + 1}: id="${p.id}", name="${p.name}"`);
+        // Amazon/楽天と同じ処理方式に修正
+        const matchedProduct = findBestMatchSimplified(productTitle, products, validLearningData);
+        
+        console.log(`findBestMatchSimplified戻り値:`, matchedProduct);
+        console.log(`戻り値の型: ${typeof matchedProduct}`);
+        
+        if (matchedProduct) {
+          console.log(`✅ マッチング成功:`);
+          console.log(`  - 商品ID: ${matchedProduct.id}`);
+          console.log(`  - 商品名: ${matchedProduct.name}`);
+          console.log(`  - マッチタイプ: ${matchedProduct.matchType || 'unknown'}`);
+          
+          matchedProducts.push({
+            productTitle,
+            quantity,
+            score: 100, // 仮のスコア（マッチング成功時）
+            productInfo: {
+              id: matchedProduct.id,
+              name: matchedProduct.name
+            },
+            isLearned: matchedProduct.matchType === 'learned' || false,
+            rawLine: line
           });
-          
-          if (learningData.length > 0) {
-            console.log('\n【学習データサンプル】:');
-            learningData.slice(0, 3).forEach((l, idx) => {
-              console.log(`  ${idx + 1}: amazon_title="${l.amazon_title}", product_id="${l.product_id}"`);
-            });
-          }
-        }
-        
-        // findBestMatchSimplified関数を呼び出し
-        console.log(`\nfindBestMatchSimplified実行開始...`);
-        const matchResult = findBestMatchSimplified(productTitle, products, learningData);
-        console.log(`findBestMatchSimplified実行完了`);
-        
-        if (!matchResult) {
-          console.error(`❌ マッチング関数がnullを返しました: "${productTitle}"`);
-          throw new Error('マッチング処理でエラーが発生しました');
-        }
-        
-        console.log(`\n【マッチング結果】:`);
-        console.log(`  - 入力: "${productTitle}"`);
-        console.log(`  - スコア: ${matchResult.score}`);
-        console.log(`  - マッチした商品: ${matchResult.product?.name || 'なし'}`);
-        console.log(`  - マッチした商品ID: ${matchResult.product?.id || 'なし'}`);
-        console.log(`  - 学習データ利用: ${matchResult.isLearned ? 'はい' : 'いいえ'}`);
-        
-        // 重要：マッチング成功判定の詳細表示
-        const isMatched = matchResult.product !== null && matchResult.product !== undefined;
-        const hasValidScore = matchResult.score > 0;
-        
-        console.log(`  - マッチング成功判定: ${isMatched}`);
-        console.log(`  - 有効スコア判定: ${hasValidScore}`);
-        console.log(`  - findBestMatchSimplified戻り値の型: ${typeof matchResult}`);
-        console.log(`  - matchResult.product の型: ${typeof matchResult.product}`);
-        
-        if (matchResult.product) {
-          console.log(`✅ マッチング成功: スコア${matchResult.score}で "${matchResult.product.name}" にマッチ`);
         } else {
-          console.log(`❌ マッチング失敗: スコア${matchResult.score}、商品=null`);
+          console.log(`❌ マッチング失敗: 商品が見つかりませんでした`);
           
-          // スコアが高いのにproductがnullの場合は内部ロジック問題
-          if (matchResult.score > 100) {
-            console.error(`🚨 異常: 高スコア(${matchResult.score})なのにproduct=null。findBestMatchSimplified内部ロジック問題の可能性`);
-          }
+          matchedProducts.push({
+            productTitle,
+            quantity,
+            score: 0,
+            productInfo: null,
+            isLearned: false,
+            rawLine: line
+          });
         }
         
         console.log(`=== 行${i + 2}: マッチング詳細終了 ===\n`);
-        
-        matchedProducts.push({
-          productTitle,
-          quantity,
-          score: matchResult.score || 0,
-          productInfo: matchResult.product || null,
-          isLearned: matchResult.isLearned || false,
-          rawLine: line
-        });
 
       } catch (lineError) {
         console.error(`行${i + 2}の処理エラー:`, lineError);
