@@ -1,9 +1,9 @@
-// /app/api/debug/amazon-csv/route.ts ver.1
+// /app/api/debug/amazon-csv/route.ts ver.2 (TSV/CSV両対応版)
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// Amazon CSVパース（TSV形式）
-function parseAmazonCsvLine(line: string): string[] {
+// Amazon CSVパース（TSV/CSV自動判定）
+function parseAmazonCsvLine(line: string, delimiter: string = '\t'): string[] {
   const columns: string[] = [];
   let currentColumn = '';
   let inQuotes = false;
@@ -15,7 +15,7 @@ function parseAmazonCsvLine(line: string): string[] {
       i++;
     } else if (char === '"') {
       inQuotes = !inQuotes;
-    } else if (char === '\t' && !inQuotes) {
+    } else if (char === delimiter && !inQuotes) {
       columns.push(currentColumn.trim());
       currentColumn = '';
     } else {
@@ -41,9 +41,18 @@ export async function POST(request: NextRequest) {
     console.log('=== Amazon CSV デバッグ解析 ===');
     console.log('総行数:', lines.length);
     
+    // 区切り文字を自動判定
+    const firstLine = lines[0] || '';
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const delimiter = tabCount > commaCount ? '\t' : ',';
+    
+    console.log(`区切り文字判定: ${delimiter === '\t' ? 'TSV(タブ)' : 'CSV(カンマ)'}`);
+    console.log(`タブ数: ${tabCount}, カンマ数: ${commaCount}`);
+    
     // ヘッダー行を表示
     if (lines.length > 0) {
-      const headerColumns = parseAmazonCsvLine(lines[0]);
+      const headerColumns = parseAmazonCsvLine(lines[0], delimiter);
       console.log('ヘッダー行の列数:', headerColumns.length);
       console.log('ヘッダー列:');
       headerColumns.forEach((col, index) => {
@@ -55,7 +64,7 @@ export async function POST(request: NextRequest) {
     console.log('\n=== データ行サンプル ===');
     const dataLines = lines.slice(1, 6);
     dataLines.forEach((line, index) => {
-      const columns = parseAmazonCsvLine(line);
+      const columns = parseAmazonCsvLine(line, delimiter);
       console.log(`\n行${index + 2}:`);
       console.log(`  C列(2): "${columns[2] || ''}"`);
       console.log(`  N列(13): "${columns[13] || ''}"`);
@@ -68,7 +77,7 @@ export async function POST(request: NextRequest) {
     const sampleValidData: any[] = [];
     
     allDataLines.forEach((line, index) => {
-      const columns = parseAmazonCsvLine(line);
+      const columns = parseAmazonCsvLine(line, delimiter);
       const title = columns[2]?.replace(/"/g, '').trim();
       const quantity = parseInt(columns[13]?.replace(/"/g, '').trim() || '0', 10);
       
@@ -89,10 +98,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      delimiter: delimiter === '\t' ? 'TSV' : 'CSV',
       totalLines: lines.length,
       validDataCount: validCount,
       sampleData: sampleValidData,
-      headerInfo: lines.length > 0 ? parseAmazonCsvLine(lines[0]).length : 0
+      headerInfo: lines.length > 0 ? parseAmazonCsvLine(lines[0], delimiter).length : 0
     });
 
   } catch (error) {
