@@ -1,5 +1,5 @@
 // /app/api/web-sales-data/route.ts
-// ver.5 (デバッグ強化版)
+// ver.6 (レスポンス修正版)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month')
 
-    console.log('🔍 WEB-SALES-DATA API ver.5 - 受信パラメータ:', { month, url: request.url })
+    console.log('🔍 WEB-SALES-DATA API ver.6 - 受信パラメータ:', { month, url: request.url })
 
     if (!month) {
       return NextResponse.json({ error: 'monthパラメータが必要です' }, { status: 400 })
@@ -49,7 +49,10 @@ export async function DELETE(request: NextRequest) {
     const month = searchParams.get('month')
 
     if (!month) {
-      return NextResponse.json({ error: 'monthパラメータが必要です' }, { status: 400 })
+      return NextResponse.json({ 
+        success: false, 
+        error: 'monthパラメータが必要です' 
+      }, { status: 400 })
     }
 
     console.log('🗑️ DELETE要求:', { month })
@@ -67,17 +70,24 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('🚨 DELETE エラー:', error)
-      throw error
+      return NextResponse.json({ 
+        success: false, 
+        error: 'データの削除に失敗しました: ' + error.message 
+      }, { status: 500 })
     }
 
     console.log('✅ DELETE完了:', { deletedCount: count })
 
     return NextResponse.json({ 
+      success: true,
       message: `${month}の販売データを削除しました`,
-      deletedCount: count 
+      deletedCount: count || 0
     })
   } catch (error) {
     console.error('🚨 DELETE API エラー:', error)
-    return NextResponse.json({ error: 'データの削除に失敗しました' }, { status: 500 })
+    return NextResponse.json({ 
+      success: false, 
+      error: 'データの削除に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー')
+    }, { status: 500 })
   }
 }
