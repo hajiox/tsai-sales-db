@@ -52,10 +52,21 @@ export async function POST(request: NextRequest) {
     console.log(`データ行数: ${dataLines.length}行`);
 
     // 3. 商品データと学習データを並行取得
+    console.log('商品マスタと学習データを取得中...');
     const [productsResponse, learnedMappingsResponse] = await Promise.all([
       supabase.from('products').select('id, name'),
       supabase.from('yahoo_product_mapping').select('yahoo_title, product_id')
     ]);
+
+    console.log('商品マスタ取得レスポンス:', {
+      data: productsResponse.data ? `${productsResponse.data.length}件` : 'null',
+      error: productsResponse.error
+    });
+    
+    console.log('学習データ取得レスポンス:', {
+      data: learnedMappingsResponse.data ? `${learnedMappingsResponse.data.length}件` : 'null', 
+      error: learnedMappingsResponse.error
+    });
 
     if (productsResponse.error) {
       console.error('商品データ取得エラー:', productsResponse.error);
@@ -79,11 +90,19 @@ export async function POST(request: NextRequest) {
     console.log(`商品マスタ: ${products.length}件, 学習データ: ${learningData.length}件`);
     
     // デバッグ: 商品マスタと学習データの詳細
+    console.log(`商品マスタ取得結果: ${products.length}件`);
     if (products.length > 0) {
-      console.log('商品マスタサンプル（最初の3件）:');
-      products.slice(0, 3).forEach((p, idx) => {
-        console.log(`  ${idx + 1}: id="${p.id}", name="${p.name}"`);
+      console.log('商品マスタの最初の1件の全プロパティ:');
+      console.log(JSON.stringify(products[0], null, 2));
+      
+      console.log('商品マスタサンプル（最初の5件）:');
+      products.slice(0, 5).forEach((p, idx) => {
+        console.log(`  ${idx + 1}: ${JSON.stringify(p)}`);
       });
+      
+      // プロパティ名の確認
+      const firstProduct = products[0];
+      console.log('商品マスタの利用可能プロパティ:', Object.keys(firstProduct));
     } else {
       console.error('⚠️ 商品マスタが空です！');
     }
