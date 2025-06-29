@@ -1,10 +1,3 @@
-問題を発見しました。
-
-`parseCsvLine`関数が`// ...（parseCsvLine関数は変更なし）...`というコメントに置き換えられており、実際の関数定義が削除されています。これが`Cannot read properties of undefined (reading 'length')`エラーの原因です。
-
-以下が修正版です：
-
-```typescript
 // /app/api/import/rakuten-parse/route.ts ver.11 (parseCsvLine関数復元版)
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
@@ -101,6 +94,3 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
   }
 }
-```
-
-`parseCsvLine`関数を復元しました。これで楽天CSVインポートが正常に動作するはずです。
