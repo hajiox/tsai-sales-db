@@ -1,7 +1,12 @@
-// /app/api/import/rakuten-parse/route.ts ver.12 (Amazon型parseCsvLine適用版)
+// /app/api/import/rakuten-parse/route.ts ver.13 (動作確認済みver.9ベース復元版)
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export const dynamic = 'force-dynamic';
 
@@ -9,8 +14,10 @@ function parseCsvLine(line: string): string[] {
   const columns = [];
   let currentColumn = '';
   let inQuotes = false;
+
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
+
     if (char === '"') {
       if (inQuotes && line[i + 1] === '"') {
         currentColumn += '"';
