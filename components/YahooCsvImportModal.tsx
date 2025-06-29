@@ -1,16 +1,28 @@
-// /app/components/YahooCsvImportModal.tsx ver.1
-// Yahoo CSVインポートモーダル（既存UIパターン準拠・簡潔版）
+// /app/components/YahooCsvImportModal.tsx ver.2
+// 楽天UIパターン完全統一版（3ステップ式・未マッチ修正UI完備）
 
-import React, { useState } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Upload, Check, X, AlertCircle, FileText } from "lucide-react";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle } from 'lucide-react';
+
+interface Product {
+  id: string;
+  name: string;
+  series: string;
+  series_code: number;
+  product_code: number;
+}
 
 interface YahooCsvImportModalProps {
   onImportComplete: () => void;
   selectedMonth: string;
   isOpen?: boolean;
   onClose?: () => void;
+  products: Product[];
 }
 
 interface MatchedProduct {
@@ -34,44 +46,84 @@ interface ParseResult {
     };
   };
   matchedProducts: MatchedProduct[];
+  blankTitleProducts: any[];
 }
 
-export default function YahooCsvImportModal({ onImportComplete, selectedMonth, isOpen: propIsOpen, onClose: propOnClose }: YahooCsvImportModalProps) {
+export default function YahooCsvImportModal({ 
+  onImportComplete, 
+  selectedMonth, 
+  isOpen: propIsOpen, 
+  onClose: propOnClose,
+  products 
+}: YahooCsvImportModalProps) {
   const [isOpen, setIsOpen] = useState(propIsOpen || false);
-  const [file, setFile] = useState<File | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState(1);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isConfirming, setIsConfirming] = useState(false);
+  const [newMappings, setNewMappings] = useState<Array<{yahooTitle: string; productId: string; quantity: number}>>([]);
+  const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [saleMonth, setSaleMonth] = useState<string>(selectedMonth);
 
   // propsでisOpenが渡された場合は外部制御
-  React.useEffect(() => {
+  useEffect(() => {
     if (propIsOpen !== undefined) {
       setIsOpen(propIsOpen);
     }
   }, [propIsOpen]);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
+  useEffect(() => {
+    if (!isOpen) {
+      setStep(1);
+      setCsvFile(null);
       setParseResult(null);
-      setError(null);
+      setNewMappings([]);
+      setCurrentUnmatchIndex(0);
+      setError('');
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    if (propOnClose) {
+      propOnClose();
+    } else {
+      setIsOpen(false);
+    }
+    resetState();
+  };
+
+  const resetState = () => {
+    setStep(1);
+    setCsvFile(null);
+    setParseResult(null);
+    setNewMappings([]);
+    setCurrentUnmatchIndex(0);
+    setError('');
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setCsvFile(selectedFile);
+      setParseResult(null);
+      setNewMappings([]);
+      setError('');
     }
   };
 
-  const handleAnalyze = async () => {
-    if (!file) {
-      setError('ファイルを選択してください');
+  const handleParse = async () => {
+    if (!csvFile) {
+      setError('CSVファイルを選択してください');
       return;
     }
 
     setIsLoading(true);
-    setError(null);
+    setError('');
 
     try {
-      // ファイルをArrayBufferとして読み込み、エンコーディング自動判定
-      const arrayBuffer = await file.arrayBuffer();
+      // ファイルをUTF-8として読み込み（エンコーディング自動判定）
+      const arrayBuffer = await csvFile.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
       
       let csvData: string;
@@ -80,10 +132,8 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
       const decoder = new TextDecoder('utf-8');
       const utf8Text = decoder.decode(uint8Array);
       
-      // UTF-8で正常に読めるかチェック
       if (!utf8Text.includes('�') && !utf8Text.includes('\uFFFD')) {
         csvData = utf8Text;
-        console.log('UTF-8として正常に読み込み完了');
       } else {
         // Shift-JISで試行
         try {
@@ -92,22 +142,15 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
           
           if (!sjisText.includes('�') && !sjisText.includes('\uFFFD')) {
             csvData = sjisText;
-            console.log('Shift-JISとして正常に読み込み完了');
           } else {
             // EUC-JPで試行
             const eucDecoder = new TextDecoder('euc-jp');
-            const eucText = eucDecoder.decode(uint8Array);
-            csvData = eucText;
-            console.log('EUC-JPとして読み込み完了（結果不明）');
+            csvData = eucDecoder.decode(uint8Array);
           }
         } catch (sjisError) {
-          // Shift-JISが使えない環境の場合はUTF-8を使用
           csvData = utf8Text;
-          console.log('Shift-JIS未対応のため、UTF-8で処理を継続');
         }
       }
-      
-      console.log('Yahoo CSV読み込み成功 - 最初の100文字:', csvData.substring(0, 100));
       
       const response = await fetch('/api/import/yahoo-parse', {
         method: 'POST',
@@ -117,68 +160,97 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
 
       const result = await response.json();
 
-      if (result.success) {
-        setParseResult(result);
-      } else {
-        setError(result.error || 'CSV解析に失敗しました');
+      if (!result.success) {
+        throw new Error(result.error || 'Yahoo CSVの解析に失敗しました');
       }
-    } catch (err) {
-      console.error('Yahoo CSV解析エラー:', err);
-      setError('CSV解析中にエラーが発生しました');
+
+      setParseResult(result);
+      setStep(2);
+    } catch (error) {
+      console.error('Yahoo CSV解析エラー:', error);
+      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleConfirm = async () => {
-    if (!parseResult?.matchedProducts) {
-      setError('解析結果がありません');
-      return;
+  const handleStartUnmatchFix = () => {
+    setStep(3);
+    setCurrentUnmatchIndex(0);
+  };
+
+  const handleProductSelect = (productId: string) => {
+    if (!parseResult) return;
+    
+    const unmatchedProducts = parseResult.matchedProducts.filter(p => !p.productInfo);
+    const currentUnmatch = unmatchedProducts[currentUnmatchIndex];
+    
+    if (productId !== 'skip') {
+      const mapping = {
+        yahooTitle: currentUnmatch.productTitle,
+        productId: productId,
+        quantity: currentUnmatch.quantity
+      };
+      setNewMappings(prev => [...prev, mapping]);
     }
 
-    setIsConfirming(true);
-    setError(null);
+    if (currentUnmatchIndex < unmatchedProducts.length - 1) {
+      setCurrentUnmatchIndex(currentUnmatchIndex + 1);
+    } else {
+      setStep(2);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!parseResult) return;
+    
+    setIsLoading(true);
+    setError('');
 
     try {
+      // マッチング済み商品を準備
+      const matchedProducts = parseResult.matchedProducts.filter(p => p.productInfo);
+      
+      // 新しいマッピングを追加
+      const updatedMatchedProducts = [
+        ...matchedProducts,
+        ...newMappings.map(mapping => ({
+          productTitle: mapping.yahooTitle,
+          quantity: mapping.quantity,
+          score: 100,
+          productInfo: {
+            id: mapping.productId,
+            name: products.find(p => p.id === mapping.productId)?.name || ''
+          },
+          isLearned: false,
+          rawLine: ''
+        }))
+      ];
+
       const response = await fetch('/api/import/yahoo-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          matchedProducts: parseResult.matchedProducts,
-          targetMonth: selectedMonth
+          matchedProducts: updatedMatchedProducts,
+          targetMonth: saleMonth
         }),
       });
 
       const result = await response.json();
-
-      if (result.success) {
-        handleClose();
-        onImportComplete();
-      } else {
-        setError(result.error || '確定処理に失敗しました');
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Yahoo CSVの確定に失敗しました');
       }
-    } catch (err) {
-      setError('確定処理中にエラーが発生しました');
+
+      alert(`Yahoo CSVデータが正常に登録されました\n登録件数: ${result.totalCount || result.successCount}件`);
+      handleClose();
+      onImportComplete();
+    } catch (error) {
+      console.error('Yahoo CSV確定エラー:', error);
+      setError(error instanceof Error ? error.message : '確定処理中にエラーが発生しました');
     } finally {
-      setIsConfirming(false);
+      setIsLoading(false);
     }
-  };
-
-  const resetState = () => {
-    setFile(null);
-    setParseResult(null);
-    setError(null);
-    setIsLoading(false);
-    setIsConfirming(false);
-  };
-
-  const handleClose = () => {
-    if (propOnClose) {
-      propOnClose();
-    } else {
-      setIsOpen(false);
-    }
-    resetState();
   };
 
   // プロップが渡されていない場合は独立ボタンとして表示
@@ -198,186 +270,261 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
     return null;
   }
 
+  if (!isOpen) return null;
+
+  const unmatchedProducts = parseResult?.matchedProducts?.filter(p => !p.productInfo) || [];
+  const currentUnmatch = unmatchedProducts[currentUnmatchIndex];
+  const yahooCore = currentUnmatch?.productTitle?.substring(0, 40).trim();
+  const progress = unmatchedProducts.length > 0 
+    ? ((currentUnmatchIndex + 1) / unmatchedProducts.length) * 100 
+    : 0;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={handleClose}></div>
-      
-      <div className="relative bg-white rounded-lg shadow-xl max-w-4xl max-h-[90vh] overflow-y-auto m-4 w-full">
-        <div className="p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <FileText className="h-5 w-5 text-purple-600" />
-              Yahoo売上CSVインポート（{selectedMonth}）
-            </h2>
-            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center p-6 border-b">
+          <h2 className="text-xl font-bold">Yahoo CSV インポート</h2>
+          <Button variant="ghost" size="sm" onClick={handleClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Yahoo売上CSV選択</label>
-              <Input
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                disabled={isLoading || isConfirming}
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Yahoo売上CSV形式（商品名：A列、数量：F列）に対応<br />
-                <span className="text-blue-600 font-medium">※ 文字エンコーディング自動判定対応（UTF-8, Shift-JIS, EUC-JP）</span>
+        <div className="p-6">
+          {step === 1 && (
+            <>
+              <p className="text-gray-600 mb-4">
+                Yahoo売上CSVをアップロードしてください。文字エンコーディング自動判定対応。
               </p>
-            </div>
 
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
-                <span className="text-red-600 text-sm">{error}</span>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <Button 
-                onClick={handleAnalyze}
-                disabled={!file || isLoading || isConfirming}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    解析中...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4 mr-2" />
-                    CSV解析
-                  </>
-                )}
-              </Button>
-              
-              {parseResult && (
-                <Button 
-                  onClick={handleConfirm}
-                  disabled={isConfirming}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {isConfirming ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      確定中...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-4 w-4 mr-2" />
-                      確定実行
-                    </>
-                  )}
-                </Button>
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  <span className="text-red-600 text-sm">{error}</span>
+                </div>
               )}
-            </div>
 
-            {parseResult && (
-              <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-3">Yahoo CSV解析結果</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="bg-white p-3 rounded border">
-                      <div className="text-gray-600">総商品数</div>
-                      <div className="text-lg font-bold text-purple-600">
-                        {parseResult.summary.totalProducts}件
-                      </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">Yahoo CSV ファイル:</label>
+                <div className="flex items-center gap-4 p-4 border-2 border-dashed rounded-lg">
+                  <label htmlFor="yahoo-csv-upload" className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition-colors">
+                    ファイルを選択
+                  </label>
+                  <Input
+                    id="yahoo-csv-upload"
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <FileText className="h-5 w-5 text-gray-400" />
+                    <span>{csvFile ? csvFile.name : '選択されていません'}</span>
+                  </div>
+                </div>
+                
+                <Button 
+                  onClick={handleParse}
+                  disabled={!csvFile || isLoading}
+                  className="w-full mt-4 bg-purple-600 hover:bg-purple-700"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isLoading ? '解析中...' : '次へ（確認画面）'}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {step === 2 && parseResult && (
+            <>
+              {parseResult.summary.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
+                <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="h-5 w-5 text-orange-400" aria-hidden="true" />
                     </div>
-                    <div className="bg-white p-3 rounded border">
-                      <div className="text-gray-600">マッチング成功</div>
-                      <div className="text-lg font-bold text-green-600">
-                        {parseResult.summary.matchedProducts}件
-                      </div>
-                    </div>
-                    <div className="bg-white p-3 rounded border">
-                      <div className="text-gray-600">未マッチング</div>
-                      <div className="text-lg font-bold text-orange-600">
-                        {parseResult.summary.unmatchedProducts}件
-                      </div>
-                    </div>
-                    <div className="bg-white p-3 rounded border">
-                      <div className="text-gray-600">学習活用</div>
-                      <div className="text-lg font-bold text-blue-600">
-                        {parseResult.summary.learnedMatches}件
-                      </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-bold text-orange-700">
+                        警告: 商品名が空欄の行が {parseResult.summary.blankTitleInfo.count} 件見つかりました
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        合計 {parseResult.summary.blankTitleInfo.totalQuantity} 個分が処理から除外されます。CSVを修正し再実行してください。
+                      </p>
                     </div>
                   </div>
-                  
-                  {parseResult.summary.blankTitleInfo.count > 0 && (
-                    <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                      <div className="text-sm text-yellow-800">
-                        <AlertCircle className="h-4 w-4 inline mr-1" />
-                        商品名空欄: {parseResult.summary.blankTitleInfo.count}件 
-                        (数量合計: {parseResult.summary.blankTitleInfo.totalQuantity})
-                      </div>
-                    </div>
-                  )}
                 </div>
+              )}
 
-                <div className="max-h-64 overflow-y-auto border rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-100 sticky top-0">
-                      <tr>
-                        <th className="text-left p-2 border-b">Yahoo商品名</th>
-                        <th className="text-left p-2 border-b">数量</th>
-                        <th className="text-left p-2 border-b">マッチング商品</th>
-                        <th className="text-left p-2 border-b">状態</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parseResult.matchedProducts.slice(0, 10).map((product, index) => (
-                        <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="p-2 max-w-xs truncate" title={product.productTitle}>
-                            {product.productTitle}
-                          </td>
-                          <td className="p-2 text-right">{product.quantity}</td>
-                          <td className="p-2 max-w-xs truncate" title={product.productInfo?.name || ''}>
-                            {product.productInfo?.name || '未マッチ'}
-                          </td>
-                          <td className="p-2">
-                            {product.productInfo ? (
-                              <span className="flex items-center gap-1">
-                                <Check className="h-3 w-3 text-green-600" />
-                                {product.isLearned ? (
-                                  <span className="text-blue-600 text-xs">学習</span>
-                                ) : (
-                                  <span className="text-green-600 text-xs">マッチ</span>
-                                )}
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1">
-                                <X className="h-3 w-3 text-red-600" />
-                                <span className="text-red-600 text-xs">未マッチ</span>
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {parseResult.matchedProducts.length > 10 && (
-                    <div className="p-2 text-center text-sm text-gray-500">
-                      ... 他 {parseResult.matchedProducts.length - 10} 件
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">売上月:</label>
+                <input
+                  type="month"
+                  value={saleMonth}
+                  onChange={(e) => setSaleMonth(e.target.value)}
+                  className="border rounded-md p-2 w-full"
+                />
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    📊 数量チェック
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600">CSV総商品数</div>
+                    <div className="text-2xl font-bold text-purple-600">
+                      {parseResult.summary.totalProducts}件
                     </div>
-                  )}
-                </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600">総販売数量</div>
+                    <div className="text-2xl font-bold text-purple-600">
+                      {parseResult.matchedProducts.reduce((sum, p) => sum + p.quantity, 0)}個
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600">処理可能数量</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {parseResult.matchedProducts.filter(p => p.productInfo).reduce((sum, p) => sum + p.quantity, 0) + 
+                       newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <h4 className="font-semibold text-blue-800 mb-2">確定実行について</h4>
-                  <ul className="text-sm text-blue-700 space-y-1">
-                    <li>• マッチングした商品のみがデータベースに登録されます</li>
-                    <li>• 未マッチング商品は学習データとして保存されます</li>
-                    <li>• 対象月: {selectedMonth}</li>
-                    <li>• 既存データがある場合は数量が加算されます</li>
-                  </ul>
+              <div className="grid grid-cols-2 gap-4 my-4">
+                <Card className="bg-green-50">
+                  <CardHeader>
+                    <CardTitle className="text-green-700">マッチ済み</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">
+                      {parseResult.summary.matchedProducts + newMappings.length}件
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-yellow-50">
+                  <CardHeader>
+                    <CardTitle className="text-yellow-700">未マッチ</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {parseResult.summary.unmatchedProducts - newMappings.length}件
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  戻る
+                </Button>
+                
+                {parseResult.summary.unmatchedProducts > newMappings.length ? (
+                  <Button onClick={handleStartUnmatchFix} className="flex-1 bg-purple-600 hover:bg-purple-700">
+                    <ArrowRight className="h-4 w-4 mr-2" />
+                    未マッチ商品を修正
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handleConfirm}
+                    disabled={isLoading}
+                    className="flex-1 bg-purple-600 hover:bg-purple-700"
+                  >
+                    {isLoading ? '処理中...' : 'インポート実行'}
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+
+          {step === 3 && currentUnmatch && (
+            <>
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span>未マッチ商品修正</span>
+                  <span>{currentUnmatchIndex + 1} / {unmatchedProducts.length}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  ></div>
                 </div>
               </div>
-            )}
-          </div>
+
+              <Card className="border-purple-200 mb-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-purple-700 flex items-center gap-2">
+                    🛍️ Yahoo商品
+                    <span className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded-full">{currentUnmatch.quantity}個</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-3 bg-purple-50 rounded-md">
+                    <div className="font-medium text-purple-900">
+                      {yahooCore}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mb-4">
+                <CardHeader>
+                  <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
+                  <p className="text-sm text-gray-600">
+                    {products?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 max-h-72 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                    {products && products.length > 0 ? (
+                      products.map((product) => (
+                        <button
+                          key={product.id}
+                          onClick={() => handleProductSelect(product.id)}
+                          className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition-colors bg-white shadow-sm"
+                        >
+                          <div className="font-medium text-purple-900 mb-1">
+                            {product.name}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            シリーズ: {product.series} | コード: {product.series_code}-{product.product_code}
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        商品データが見つかりません
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t">
+                    <button
+                      onClick={() => handleProductSelect('skip')}
+                      className="w-full p-4 text-left border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="font-medium text-gray-600 flex items-center gap-2 justify-center">
+                        <X className="h-5 w-5" />
+                        この商品をスキップ
+                      </div>
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  確認画面に戻る
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
