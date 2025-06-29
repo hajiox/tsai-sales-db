@@ -70,7 +70,21 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
     setError(null);
 
     try {
-      const csvData = await file.text();
+      // ファイルをUTF-8として読み込み
+      let csvData = await file.text();
+      
+      // 文字化けチェック
+      const hasGarbledText = csvData.includes('�') || 
+                            csvData.includes('繧�') || 
+                            csvData.includes('繝�') ||
+                            /[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(csvData);
+      
+      if (hasGarbledText) {
+        setError('CSVファイルの文字エンコーディングに問題があります。ファイルをUTF-8で保存し直してアップロードしてください。');
+        return;
+      }
+      
+      console.log('Yahoo CSV読み込み成功 - 最初の100文字:', csvData.substring(0, 100));
       
       const response = await fetch('/api/import/yahoo-parse', {
         method: 'POST',
@@ -86,6 +100,7 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
         setError(result.error || 'CSV解析に失敗しました');
       }
     } catch (err) {
+      console.error('Yahoo CSV解析エラー:', err);
       setError('CSV解析中にエラーが発生しました');
     } finally {
       setIsLoading(false);
@@ -186,7 +201,8 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
                 disabled={isLoading || isConfirming}
               />
               <p className="text-sm text-gray-500 mt-1">
-                Yahoo売上CSV形式（商品名：A列、数量：F列）に対応
+                Yahoo売上CSV形式（商品名：A列、数量：F列）に対応<br />
+                <span className="text-orange-600 font-medium">※ 文字化けする場合は、CSVファイルをUTF-8エンコーディングで保存し直してください</span>
               </p>
             </div>
 
