@@ -1,13 +1,42 @@
-// /app/api/import/rakuten-parse/route.ts ver.10 (空欄検知アラート対応版)
+問題を発見しました。
+
+`parseCsvLine`関数が`// ...（parseCsvLine関数は変更なし）...`というコメントに置き換えられており、実際の関数定義が削除されています。これが`Cannot read properties of undefined (reading 'length')`エラーの原因です。
+
+以下が修正版です：
+
+```typescript
+// /app/api/import/rakuten-parse/route.ts ver.11 (parseCsvLine関数復元版)
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
 export const dynamic = 'force-dynamic';
 
-// ...（parseCsvLine関数は変更なし）...
 function parseCsvLine(line: string): string[] {
-  // ...
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current);
+  return result;
 }
 
 export async function POST(request: NextRequest) {
@@ -26,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
-    let blankTitleRows: any[] = []; // ★1. 空欄行を格納
+    let blankTitleRows: any[] = [];
 
     for (let i = 0; i < lines.length; i++) {
         const columns = parseCsvLine(lines[i]);
@@ -37,9 +66,8 @@ export async function POST(request: NextRequest) {
 
         if (quantity <= 0) continue;
 
-        // ★2. 商品名が空欄の場合の処理
         if (!rakutenTitle) {
-            blankTitleRows.push({ rowNumber: i + 8, quantity }); // 楽天は8行目からなので+8
+            blankTitleRows.push({ rowNumber: i + 8, quantity });
             continue;
         }
 
@@ -63,7 +91,6 @@ export async function POST(request: NextRequest) {
         matchedProducts,
         unmatchedProducts,
         processableQuantity,
-        // ★3. フロントに渡す情報に追加
         blankTitleInfo: {
             count: blankTitleRows.length,
             quantity: blankTitleQuantity
@@ -74,3 +101,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
   }
 }
+```
+
+`parseCsvLine`関数を復元しました。これで楽天CSVインポートが正常に動作するはずです。
