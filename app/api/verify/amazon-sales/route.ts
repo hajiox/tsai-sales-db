@@ -1,4 +1,4 @@
-// /app/api/verify/amazon-sales/route.ts ver.5 (テーブル参照修正版)
+// /app/api/verify/amazon-sales/route.ts ver.6 (引数修正版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -47,10 +47,15 @@ export async function POST(request: NextRequest) {
     console.log('📊 データ行数:', dataLines.length);
 
     // 2. Amazon固定フォーマットで解析
-    const csvSalesData = dataLines.map((line: string) => {
+    const csvSalesData = dataLines.map((line: string, index: number) => {
       const columns = parseAmazonCsvLine(line);
       const title = columns[2]?.replace(/"/g, '').trim(); // C列: タイトル
       const quantity = parseInt(columns[13]?.replace(/"/g, '').trim() || '0', 10); // N列: 注文された商品点数
+      
+      // デバッグ出力（最初の5件）
+      if (index < 5) {
+        console.log(`📝 CSV行${index + 1}: "${title}" (数量: ${quantity})`);
+      }
       
       return { amazonTitle: title, quantity };
     }).filter((item: any) => item.amazonTitle && item.quantity > 0);
@@ -59,26 +64,43 @@ export async function POST(request: NextRequest) {
 
     // 3. 商品マスターと学習データを取得
     const { data: products } = await supabase.from('products').select('*');
-    // 👆 Amazon用の学習データテーブルに修正
     const { data: learnedMappings } = await supabase.from('amazon_product_mapping').select('amazon_title, product_id');
     const learningData = (learnedMappings || []).map(m => ({ amazon_title: m.amazon_title, product_id: m.product_id }));
 
+    console.log('📚 商品マスター数:', products?.length);
+    console.log('📚 Amazon学習データ数:', learningData.length);
+
     // 4. CSVデータから商品IDごとに数量を集計
     const csvAggregated = new Map<string, number>();
+    let matchCount = 0;
+    
     for (const item of csvSalesData) {
+      // 👇 ここが重要：引数の順序と名前を正確に
       const matched = findBestMatchSimplified(item.amazonTitle, products || [], learningData);
       if (matched) {
         const currentQty = csvAggregated.get(matched.id) || 0;
         csvAggregated.set(matched.id, currentQty + item.quantity);
+        matchCount++;
+        
+        // マッチした場合のデバッグ出力（最初の3件）
+        if (matchCount <= 3) {
+          console.log(`🎯 マッチ成功 ${matchCount}: "${item.amazonTitle}" → ${matched.name} (${matched.id})`);
+        }
+      } else {
+        // マッチしなかった場合のデバッグ出力（最初の3件）
+        if (csvSalesData.length - matchCount <= 3) {
+          console.log(`❌ マッチ失敗: "${item.amazonTitle}"`);
+        }
       }
     }
 
+    console.log(`🎯 マッチング結果: ${matchCount}/${csvSalesData.length}件がマッチ`);
     console.log('📊 CSV集計結果:', csvAggregated.size, '商品');
 
     // 5. DBから指定月の売上データを取得
     const { data: dbData } = await supabase
       .from('web_sales_summary')
-      .select('product_id, amazon_count') // 👆 amazon_countに修正（rakuten_countではない）
+      .select('product_id, amazon_count')
       .eq('report_month', reportMonth);
       
     const dbAggregated = new Map<string, number>();
