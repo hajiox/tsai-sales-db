@@ -70,18 +70,41 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
     setError(null);
 
     try {
-      // ファイルをUTF-8として読み込み
-      let csvData = await file.text();
+      // ファイルをArrayBufferとして読み込み、エンコーディング自動判定
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
       
-      // 文字化けチェック
-      const hasGarbledText = csvData.includes('�') || 
-                            csvData.includes('繧�') || 
-                            csvData.includes('繝�') ||
-                            /[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(csvData);
+      let csvData: string;
       
-      if (hasGarbledText) {
-        setError('CSVファイルの文字エンコーディングに問題があります。ファイルをUTF-8で保存し直してアップロードしてください。');
-        return;
+      // UTF-8で試行
+      const decoder = new TextDecoder('utf-8');
+      const utf8Text = decoder.decode(uint8Array);
+      
+      // UTF-8で正常に読めるかチェック
+      if (!utf8Text.includes('�') && !utf8Text.includes('\uFFFD')) {
+        csvData = utf8Text;
+        console.log('UTF-8として正常に読み込み完了');
+      } else {
+        // Shift-JISで試行
+        try {
+          const sjisDecoder = new TextDecoder('shift-jis');
+          const sjisText = sjisDecoder.decode(uint8Array);
+          
+          if (!sjisText.includes('�') && !sjisText.includes('\uFFFD')) {
+            csvData = sjisText;
+            console.log('Shift-JISとして正常に読み込み完了');
+          } else {
+            // EUC-JPで試行
+            const eucDecoder = new TextDecoder('euc-jp');
+            const eucText = eucDecoder.decode(uint8Array);
+            csvData = eucText;
+            console.log('EUC-JPとして読み込み完了（結果不明）');
+          }
+        } catch (sjisError) {
+          // Shift-JISが使えない環境の場合はUTF-8を使用
+          csvData = utf8Text;
+          console.log('Shift-JIS未対応のため、UTF-8で処理を継続');
+        }
       }
       
       console.log('Yahoo CSV読み込み成功 - 最初の100文字:', csvData.substring(0, 100));
@@ -202,7 +225,7 @@ export default function YahooCsvImportModal({ onImportComplete, selectedMonth, i
               />
               <p className="text-sm text-gray-500 mt-1">
                 Yahoo売上CSV形式（商品名：A列、数量：F列）に対応<br />
-                <span className="text-orange-600 font-medium">※ 文字化けする場合は、CSVファイルをUTF-8エンコーディングで保存し直してください</span>
+                <span className="text-blue-600 font-medium">※ 文字エンコーディング自動判定対応（UTF-8, Shift-JIS, EUC-JP）</span>
               </p>
             </div>
 
