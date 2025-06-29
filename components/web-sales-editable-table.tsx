@@ -1,4 +1,6 @@
-// /components/web-sales-editable-table.tsx ver.51 (削除機能修復版)
+// /components/web-sales-editable-table.tsx ver.52
+// Yahoo CSVインポート機能統合版
+
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
@@ -10,6 +12,7 @@ import WebSalesImportButtons from "./WebSalesImportButtons"
 import WebSalesSummary from "./WebSalesSummary"
 import AmazonCsvImportModal from "./AmazonCsvImportModal"
 import RakutenCsvImportModal from "./RakutenCsvImportModal"
+import YahooCsvImportModal from "./YahooCsvImportModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
 
@@ -31,6 +34,7 @@ export default function WebSalesEditableTable({
 
   const [isAmazonCsvModalOpen, setIsAmazonCsvModalOpen] = useState(false)
   const [isRakutenCsvModalOpen, setIsRakutenCsvModalOpen] = useState(false)
+  const [isYahooCsvModalOpen, setIsYahooCsvModalOpen] = useState(false)
   
   const router = useRouter()
 
@@ -91,6 +95,7 @@ export default function WebSalesEditableTable({
     console.log("Import successful. Notifying parent to refresh.");
     setIsAmazonCsvModalOpen(false)
     setIsRakutenCsvModalOpen(false)
+    setIsYahooCsvModalOpen(false)
     onDataUpdated()
   }
 
@@ -125,6 +130,30 @@ export default function WebSalesEditableTable({
     }
   }
 
+  // 学習データリセット処理
+  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo') => {
+    if (!confirm(`${channel === 'amazon' ? 'Amazon' : channel === 'rakuten' ? '楽天' : 'Yahoo'}の学習データをリセットしますか？`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/learning/${channel}-reset`, {
+        method: 'POST',
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        alert(`${channel === 'amazon' ? 'Amazon' : channel === 'rakuten' ? '楽天' : 'Yahoo'}の学習データをリセットしました`)
+      } else {
+        throw new Error(result.error || 'リセットに失敗しました')
+      }
+    } catch (error) {
+      console.error('学習データリセットエラー:', error)
+      alert('リセット中にエラーが発生しました: ' + (error instanceof Error ? error.message : '不明なエラー'))
+    }
+  }
+
   return (
     <div className="space-y-4">
       <WebSalesTableHeader
@@ -155,16 +184,28 @@ export default function WebSalesEditableTable({
         onCsvClick={() => alert('This button is currently disabled')}
         onAmazonClick={() => setIsAmazonCsvModalOpen(true)}
         onRakutenClick={() => setIsRakutenCsvModalOpen(true)}
-        onLearningReset={() => {}}
+        onYahooClick={() => setIsYahooCsvModalOpen(true)}
       />
       
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
-        <button className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">
+        <button 
+          onClick={() => handleLearningReset('amazon')}
+          className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200"
+        >
           🔄 Amazon学習データリセット
         </button>
-        <button className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200">
+        <button 
+          onClick={() => handleLearningReset('rakuten')}
+          className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200"
+        >
           🔄 楽天学習データリセット
+        </button>
+        <button 
+          onClick={() => handleLearningReset('yahoo')}
+          className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200"
+        >
+          🔄 Yahoo学習データリセット
         </button>
       </div>
 
@@ -185,6 +226,13 @@ export default function WebSalesEditableTable({
           onClose={() => setIsRakutenCsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+        />
+      )}
+
+      {isYahooCsvModalOpen && (
+        <YahooCsvImportModal
+          onImportComplete={handleImportSuccess}
+          selectedMonth={month}
         />
       )}
     </div>
