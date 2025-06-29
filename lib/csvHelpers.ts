@@ -1,5 +1,5 @@
 
-// /lib/csvHelpers.ts - 修正済みバージョン
+// /lib/csvHelpers.ts - 最終修正版（with findBestMatchSimplified）
 
 // CSVを安全にパースする関数
 export function parseCSVLine(line: string): string[] {
@@ -31,6 +31,31 @@ export function parseCSVLine(line: string): string[] {
   return result
 }
 
+// 商品名に基づき学習データ or 商品一覧から一致候補を探す
+export function findBestMatchSimplified(
+  title: string,
+  products: any[],
+  learningData: any[]
+): { matchType: 'learning' | 'product', productId: string } | null {
+  const normalized = title.toLowerCase().replace(/\s/g, '')
+
+  for (const p of learningData) {
+    const target = p.rakuten_title?.toLowerCase().replace(/\s/g, '')
+    if (target && normalized.includes(target)) {
+      return { matchType: 'learning', productId: p.product_id }
+    }
+  }
+
+  for (const p of products) {
+    const name = p.name?.toLowerCase().replace(/\s/g, '')
+    if (name && normalized.includes(name)) {
+      return { matchType: 'product', productId: p.id }
+    }
+  }
+
+  return null
+}
+
 // 重要キーワードを抽出する関数（nullや未定義にも対応）
 export function extractImportantKeywords(text: any): {
   productType: string[],
@@ -48,8 +73,6 @@ export function extractImportantKeywords(text: any): {
   if (cleanText.includes('チャーシュー') && !cleanText.includes('たれ') && !cleanText.includes('ソース')) {
     productType.push('チャーシュー')
   }
-
-  // 以下、必要に応じて既存条件を追加してください
 
   return { productType, specifications, quantities, brands }
 }
