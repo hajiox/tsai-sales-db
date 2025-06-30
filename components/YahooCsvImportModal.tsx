@@ -56,12 +56,16 @@ export default function YahooCsvImportModal({
   if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('ファイル選択イベント:', e.target.files);
     const file = e.target.files?.[0];
     if (file) {
+      console.log('選択されたファイル:', file.name, file.size);
       setCsvFile(file);
       setParseResult(null);
       setNewMappings([]);
       setError('');
+    } else {
+      console.log('ファイルが選択されていません');
     }
   };
 
