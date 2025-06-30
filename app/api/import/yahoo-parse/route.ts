@@ -1,5 +1,5 @@
-// /app/api/import/yahoo-parse/route.ts ver.2
-// 数量サマリー計算機能を追加した修正版
+// /app/api/import/yahoo-parse/route.ts ver.3
+// 学習データが正しく使用されるように形式を整える修正版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -12,7 +12,7 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo CSV解析API開始 ver.2 ===');
+    console.log('=== Yahoo CSV解析API開始 ver.3 ===');
     
     const { csvData } = await request.json();
     if (!csvData) {
@@ -36,6 +36,15 @@ export async function POST(request: NextRequest) {
     const products = productsResponse.data || [];
     const learnedMappings = learnedMappingsResponse.data || [];
     
+    // ★★★ ここからが修正箇所 ★★★
+    // 共通のマッチング関数が理解できるよう、プロパティ名を汎用的な 'title' に変換する
+    const preparedLearningData = learnedMappings.map(m => ({
+      title: m.yahoo_title,
+      product_id: m.product_id
+    }));
+    console.log(`学習データを共通関数向けに変換: ${preparedLearningData.length}件`);
+    // ★★★ 修正箇所ここまで ★★★
+
     const allParsedProducts = [];
     const blankTitleProducts = [];
     
@@ -54,7 +63,8 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const matchedProduct = findBestMatchSimplified(productTitle, products, learnedMappings);
+        // 修正した `preparedLearningData` を使用する
+        const matchedProduct = findBestMatchSimplified(productTitle, products, preparedLearningData);
         
         allParsedProducts.push({
           yahooTitle: productTitle,
@@ -69,13 +79,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ★★★ ここからが修正・追加箇所 ★★★
-    
-    // 6. 結果をマッチ済みと未マッチに分類
     const matchedProducts = allParsedProducts.filter(p => p.productInfo);
     const unmatchedProducts = allParsedProducts.filter(p => !p.productInfo);
 
-    // 7. 数量サマリーを計算
     const totalQuantity = allParsedProducts.reduce((sum, p) => sum + p.quantity, 0) +
                         blankTitleProducts.reduce((sum, p) => sum + p.quantity, 0);
 
@@ -83,8 +89,8 @@ export async function POST(request: NextRequest) {
     
     const summary = {
       totalProducts: allParsedProducts.length,
-      totalQuantity: totalQuantity, // 【追加】総販売数量
-      processableQuantity: processableQuantity, // 【追加】処理可能数量（マッチ済み数量）
+      totalQuantity: totalQuantity,
+      processableQuantity: processableQuantity,
       matchedProducts: matchedProducts.length,
       unmatchedProducts: unmatchedProducts.length, 
       learnedMatches: matchedProducts.filter(p => p.isLearned).length,
@@ -97,12 +103,11 @@ export async function POST(request: NextRequest) {
     console.log('=== Yahoo CSV解析完了 ===');
     console.log('サマリー:', summary);
 
-    // 8. 統一レスポンス構造で返す
     return NextResponse.json({
       success: true,
       summary,
       matchedProducts,
-      unmatchedProducts, // 未マッチ商品を明確に分離
+      unmatchedProducts,
       blankTitleProducts,
       csvRowCount: dataLines.length
     });
