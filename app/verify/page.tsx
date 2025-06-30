@@ -50,10 +50,40 @@ export default function VerifyPage() {
  };
 
  const handleVerification = async () => {
-   if (!csvFile) {
-     setError('CSVファイルを選択してください');
-     return;
-   }
+  if (!csvFile) {
+    setError('CSVファイルを選択してください');
+    return;
+  }
+
+  setIsLoading(true);
+  setError('');
+  setResults([]);
+  setSummary(null);
+
+  try {
+    const fd = new FormData();
+    fd.append('file', csvFile);
+    fd.append('saleMonth', targetMonth);
+
+    const response = await fetch(`/api/verify/${channel}-sales`, {
+      method: 'POST',
+      body: fd,
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || '検証処理でエラーが発生しました');
+    }
+
+    setResults(data.results || data.verification_results || []);
+    setSummary(data.summary || null);
+  } catch (err: any) {
+    setError(err?.message || '不明なエラーです');
+  } finally {
+    setIsLoading(false);
+  }
+};
    
    setIsLoading(true);
    setError('');
