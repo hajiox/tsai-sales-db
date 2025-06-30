@@ -1,5 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.52
-// Yahoo CSVインポート機能統合版
+// /components/web-sales-editable-table.tsx ver.53
+// Yahooモーダルのプロパティ名修正版
 
 "use client"
 
@@ -120,7 +120,7 @@ export default function WebSalesEditableTable({
       if (result.success || result.message) {
         const deletedCount = result.deletedCount !== null ? result.deletedCount : '不明'
         alert(`${month}のデータを削除しました（${deletedCount}件）`)
-        onDataUpdated() // 親コンポーネントにデータ更新を通知
+        onDataUpdated()
       } else {
         throw new Error(result.error || '削除に失敗しました')
       }
@@ -130,7 +130,6 @@ export default function WebSalesEditableTable({
     }
   }
 
-  // 学習データリセット処理
   const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo') => {
     if (!confirm(`${channel === 'amazon' ? 'Amazon' : channel === 'rakuten' ? '楽天' : 'Yahoo'}の学習データをリセットしますか？`)) {
       return
@@ -234,10 +233,9 @@ export default function WebSalesEditableTable({
 
       {isYahooCsvModalOpen && (
         <YahooCsvImportModal
-          onImportComplete={handleImportSuccess}
-          selectedMonth={month}
           isOpen={isYahooCsvModalOpen}
           onClose={() => setIsYahooCsvModalOpen(false)}
+          onSuccess={handleImportSuccess} // ★★★ ここを 'onImportComplete' から 'onSuccess' に修正しました ★★★
           products={productMasterList}
         />
       )}
