@@ -1,5 +1,5 @@
-// /app/verify/page.tsx ver.4
-// Yahoo検証機能統合版（Amazon/楽天ベース）
+// /app/verify/page.tsx ver.5
+// ファイルをバイナリ形式で送信するように修正
 
 'use client';
 
@@ -61,35 +61,27 @@ export default function VerifyPage() {
     setSummary(null);
 
     try {
-      const csvData = await csvFile.text();
+      // ★★★ 修正箇所: ファイルをFormDataで送信する ★★★
+      const formData = new FormData();
+      formData.append('csvFile', csvFile);
+      formData.append('targetMonth', targetMonth);
       
-      // チャンネル別APIエンドポイント
       const apiEndpoint = `/api/verify/${channel}-sales`;
         
       const response = await fetch(apiEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          csvData: csvData,
-          targetMonth: targetMonth,
-          // 旧API互換性のため
-          csvContent: csvData,
-          saleMonth: targetMonth
-        }),
+        body: formData, // JSONではなくFormDataを送信
       });
+      // ★★★ 修正箇所ここまで ★★★
 
       const data = await response.json();
 
       if (!data.success) {
         throw new Error(data.error || '検証処理でエラーが発生しました');
       }
-
-      // レスポンス形式統一（新形式優先、旧形式フォールバック）
-      const verificationResults = data.verification_results || data.results || [];
-      const verificationSummary = data.summary;
-
-      setResults(verificationResults);
-      setSummary(verificationSummary);
+      
+      setResults(data.verification_results || []);
+      setSummary(data.summary || null);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : '不明なエラーです');
@@ -97,22 +89,7 @@ export default function VerifyPage() {
       setIsLoading(false);
     }
   };
-
-  const handleDebugCsv = () => {
-    if (csvFile && channel === 'amazon') {
-      const formData = new FormData();
-      formData.append('csvFile', csvFile);
-      fetch('/api/debug/amazon-csv', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(result => {
-          console.log('=== CSV構造デバッグ結果 ===');
-          console.log(result);
-        })
-        .catch(console.error);
-    }
-  };
-
-  // チャンネル設定
+  
   const channelConfig = {
     amazon: { name: 'Amazon', color: 'orange', bgColor: 'orange-50', borderColor: 'orange-200' },
     rakuten: { name: '楽天', color: 'red', bgColor: 'red-50', borderColor: 'red-200' },
@@ -189,57 +166,17 @@ export default function VerifyPage() {
             <Upload className="h-4 w-4 mr-2" />
             {isLoading ? '検証中...' : `${config.name}データの答え合わせを実行`}
           </Button>
-
-          {channel === 'amazon' && csvFile && (
-            <Button 
-              onClick={handleDebugCsv}
-              variant="outline" 
-              className="w-full"
-            >
-              🔍 CSV構造デバッグ
-            </Button>
-          )}
-
+          
           {summary && (
             <div className={`p-4 bg-${config.bgColor} rounded-lg text-center border border-${config.borderColor}`}>
               <h3 className="font-bold text-lg">検証結果サマリー</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-3 text-sm">
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-gray-600">総商品数</div>
-                  <div className={`text-lg font-bold text-${config.color}-600`}>
-                    {summary.total_products}件
-                  </div>
-                </div>
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-gray-600">一致商品</div>
-                  <div className="text-lg font-bold text-green-600">
-                    {summary.matched_products}件
-                  </div>
-                </div>
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-gray-600">不一致商品</div>
-                  <div className="text-lg font-bold text-red-600">
-                    {summary.mismatched_products}件
-                  </div>
-                </div>
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-gray-600">CSV合計数量</div>
-                  <div className="text-lg font-bold text-blue-600">
-                    {summary.csv_total_quantity}
-                  </div>
-                </div>
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-gray-600">DB合計数量</div>
-                  <div className="text-lg font-bold text-blue-600">
-                    {summary.db_total_quantity}
-                  </div>
-                </div>
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-gray-600">差分</div>
-                  <div className={`text-lg font-bold ${summary.total_difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {summary.total_difference > 0 ? '+' : ''}{summary.total_difference}
-                  </div>
-                </div>
+                <div><div className="text-gray-600">総商品数</div><div className={`text-lg font-bold text-${config.color}-600`}>{summary.total_products}件</div></div>
+                <div><div className="text-gray-600">一致商品</div><div className="text-lg font-bold text-green-600">{summary.matched_products}件</div></div>
+                <div><div className="text-gray-600">不一致商品</div><div className="text-lg font-bold text-red-600">{summary.mismatched_products}件</div></div>
+                <div><div className="text-gray-600">CSV合計数量</div><div className="text-lg font-bold text-blue-600">{summary.csv_total_quantity}</div></div>
+                <div><div className="text-gray-600">DB合計数量</div><div className="text-lg font-bold text-blue-600">{summary.db_total_quantity}</div></div>
+                <div><div className="text-gray-600">差分</div><div className={`text-lg font-bold ${summary.total_difference === 0 ? 'text-green-600' : 'text-red-600'}`}>{summary.total_difference > 0 ? '+' : ''}{summary.total_difference}</div></div>
               </div>
             </div>
           )}
@@ -251,30 +188,16 @@ export default function VerifyPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 sticky top-0">
                     <tr>
-                      <th className="p-2 text-left">商品名</th>
-                      <th className="p-2 text-center">CSVの数量</th>
-                      <th className="p-2 text-center">DBの数量</th>
-                      <th className="p-2 text-center">差分</th>
-                      <th className="p-2 text-center">結果</th>
+                      <th className="p-2 text-left">商品名</th><th className="p-2 text-center">CSVの数量</th><th className="p-2 text-center">DBの数量</th><th className="p-2 text-center">差分</th><th className="p-2 text-center">結果</th>
                     </tr>
                   </thead>
                   <tbody>
                     {results.map((r) => (
                       <tr key={r.product_id} className={`border-t ${!r.is_match ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
-                        <td className="p-2 font-medium" title={r.product_name}>
-                          <div className="max-w-xs truncate">{r.product_name}</div>
-                        </td>
-                        <td className="p-2 text-center">{r.csv_count}</td>
-                        <td className="p-2 text-center">{r.db_count}</td>
-                        <td className={`p-2 text-center font-medium ${r.difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {r.difference > 0 ? '+' : ''}{r.difference}
-                        </td>
-                        <td className={`p-2 text-center font-bold ${r.is_match ? 'text-green-600' : 'text-red-600'}`}>
-                          <div className="flex justify-center items-center gap-1">
-                            {r.is_match ? <CheckCircle size={16} /> : <XCircle size={16} />}
-                            {r.is_match ? '一致' : '不一致'}
-                          </div>
-                        </td>
+                        <td className="p-2 font-medium" title={r.product_name}><div className="max-w-xs truncate">{r.product_name}</div></td>
+                        <td className="p-2 text-center">{r.csv_count}</td><td className="p-2 text-center">{r.db_count}</td>
+                        <td className={`p-2 text-center font-medium ${r.difference === 0 ? 'text-green-600' : 'text-red-600'}`}>{r.difference > 0 ? '+' : ''}{r.difference}</td>
+                        <td className={`p-2 text-center font-bold ${r.is_match ? 'text-green-600' : 'text-red-600'}`}><div className="flex justify-center items-center gap-1">{r.is_match ? <CheckCircle size={16} /> : <XCircle size={16} />}{r.is_match ? '一致' : '不一致'}</div></td>
                       </tr>
                     ))}
                   </tbody>
