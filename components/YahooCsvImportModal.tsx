@@ -97,7 +97,7 @@ export default function YahooCsvImportModal({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ csvContent }),
+        body: JSON.stringify({ csvContent: csvContent }),
       });
 
       const result = await response.json();
