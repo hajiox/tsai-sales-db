@@ -1,5 +1,5 @@
-// /app/api/verify/yahoo-sales/route.ts ver.4
-// データ取得時の安全チェックを追加した最終版
+// /app/api/verify/yahoo-sales/route.ts ver.5
+// 楽天の正常動作ロジックを適用
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -10,14 +10,37 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// ★★★ 修正点1: 安全な文字列検証関数を追加 ★★★
+// 安全な文字列検証関数
 function isValidString(value: any): value is string {
   return value && typeof value === 'string' && value.trim().length > 0;
 }
 
+// 引用符付きCSVをパースする関数（楽天から移植）
+function parseCsvLine(line: string): string[] {
+  const columns: string[] = [];
+  let currentColumn = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"' && inQuotes && line[i + 1] === '"') {
+      currentColumn += '"';
+      i++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      columns.push(currentColumn.trim());
+      currentColumn = '';
+    } else {
+      currentColumn += char;
+    }
+  }
+  columns.push(currentColumn.trim());
+  return columns;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo売上検証API開始 (ver.4) ===');
+    console.log('=== Yahoo売上検証API開始 (ver.5) ===');
     
     const formData = await request.formData();
     const csvFile = formData.get('csvFile') as File;
@@ -38,34 +61,41 @@ export async function POST(request: NextRequest) {
     const formattedMonth = targetMonth.includes('-01') ? targetMonth : `${targetMonth}-01`;
     const lines = csvData.split('\n').filter((line: string) => line.trim()).slice(1);
 
+    // データベースからデータを取得
     const [productsResponse, learnedMappingsResponse, dbSalesResponse] = await Promise.all([
-      supabase.from('products').select('id, name'),
+      supabase.from('products').select('id, name, series'),
       supabase.from('yahoo_product_mapping').select('yahoo_title, product_id'),
       supabase
         .from('web_sales_summary')
         .select('product_id, yahoo_count')
         .eq('report_month', formattedMonth)
-        .not('yahoo_count', 'is', null)
     ]);
 
     if (dbSalesResponse.error) throw new Error(`DB売上データの取得に失敗: ${dbSalesResponse.error.message}`);
     if (productsResponse.error) throw new Error(`商品データの取得に失敗: ${productsResponse.error.message}`);
     if (learnedMappingsResponse.error) throw new Error(`学習データの取得に失敗: ${learnedMappingsResponse.error.message}`);
 
-    // ★★★ 修正点2: 取得したデータに安全チェックを適用 ★★★
-    const products = (productsResponse.data || []).filter(p => p && isValidString(p.name));
-    const learningData = (learnedMappingsResponse.data || []).filter(l => l && isValidString(l.yahoo_title));
+    const products = productsResponse.data || [];
+    // ★★★ 重要な修正: 楽天と同じ形式に変換 ★★★
+    const learningData = (learnedMappingsResponse.data || []).map(m => ({ 
+      amazon_title: m.yahoo_title, 
+      product_id: m.product_id 
+    }));
     const dbSales = dbSalesResponse.data || [];
 
-    console.log(`有効な商品: ${products.length}件, 有効な学習データ: ${learningData.length}件, DB売上: ${dbSales.length}件`);
+    console.log(`商品マスタ: ${products.length}件, 学習データ: ${learningData.length}件, DB売上: ${dbSales.length}件`);
 
+    // CSVデータを集計
     const csvProducts = new Map<string, number>();
+    let unmatchedCount = 0;
+    
     for (const line of lines) {
-      const columns = line.split(',').map(col => col.trim().replace(/"/g, ''));
+      // ★★★ 修正: 楽天と同じCSVパース関数を使用 ★★★
+      const columns = parseCsvLine(line);
       if (columns.length < 6) continue;
 
-      const productTitle = columns[0];
-      const quantity = parseInt(columns[5]) || 0;
+      const productTitle = columns[0]?.replace(/"/g, '').trim();
+      const quantity = parseInt(columns[5]?.replace(/"/g, '').trim() || '0', 10);
 
       if (!isValidString(productTitle) || quantity <= 0) continue;
       
@@ -73,10 +103,21 @@ export async function POST(request: NextRequest) {
       if (matchResult?.id) {
         const productId = matchResult.id;
         csvProducts.set(productId, (csvProducts.get(productId) || 0) + quantity);
+      } else {
+        unmatchedCount++;
+        console.log(`未マッチ商品: ${productTitle}`);
       }
     }
 
-    const dbProducts = new Map(dbSales.map(sale => [sale.product_id, sale.yahoo_count || 0]));
+    console.log(`CSVから${csvProducts.size}商品を集計。未マッチ: ${unmatchedCount}件`);
+
+    // DBデータを集計
+    const dbProducts = new Map<string, number>();
+    dbSales.forEach(row => {
+      dbProducts.set(row.product_id, row.yahoo_count || 0);
+    });
+
+    // 比較結果を作成
     const allProductIds = new Set([...csvProducts.keys(), ...dbProducts.keys()]);
     const comparisonResults = [];
 
@@ -84,9 +125,11 @@ export async function POST(request: NextRequest) {
       const csvCount = csvProducts.get(productId) || 0;
       const dbCount = dbProducts.get(productId) || 0;
       const product = products.find(p => p.id === productId);
+      
       comparisonResults.push({
         product_id: productId,
         product_name: product?.name || '商品名不明',
+        series: product?.series || '未分類',
         csv_count: csvCount,
         db_count: dbCount,
         difference: csvCount - dbCount,
@@ -94,12 +137,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // シリーズ順でソート
+    comparisonResults.sort((a, b) => {
+      if (a.series !== b.series) return a.series.localeCompare(b.series);
+      return a.product_name.localeCompare(b.product_name);
+    });
+
     const csvTotal = Array.from(csvProducts.values()).reduce((sum, count) => sum + count, 0);
     const dbTotal = Array.from(dbProducts.values()).reduce((sum, count) => sum + count, 0);
 
     return NextResponse.json({
       success: true,
-      verification_results: comparisonResults.sort((a, b) => (a.product_name || '').localeCompare(b.product_name || '')),
+      verification_results: comparisonResults,
       summary: {
         total_products: comparisonResults.length,
         matched_products: comparisonResults.filter(r => r.is_match).length,
@@ -112,6 +161,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Yahoo売上検証エラー:', error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '検証処理でエラーが発生しました' }, { status: 500 });
+    return NextResponse.json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : '検証処理でエラーが発生しました' 
+    }, { status: 500 });
   }
 }
