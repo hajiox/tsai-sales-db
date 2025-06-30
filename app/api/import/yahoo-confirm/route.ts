@@ -1,5 +1,5 @@
-// /app/api/import/yahoo-confirm/route.ts ver.4
-// APIロジックのみを修正し、エラーハンドリングを堅牢にした代替案
+// /app/api/import/yahoo-confirm/route.ts ver.5
+// 学習データ保存時の変数名不一致を修正した最終版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -9,9 +9,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// ★★★ 修正ポイント1: 正しいプロパティ名 `yahooTitle` を使用する ★★★
 interface MatchedProduct {
   productInfo?: { id: string };
-  productTitle: string;
+  yahooTitle: string; // `productTitle` から `yahooTitle` に変更
   quantity: number;
   isLearned: boolean;
 }
@@ -23,9 +24,8 @@ interface NewMapping {
 }
 
 export async function POST(request: NextRequest) {
-  // ★修正ポイント：処理全体を一つのtry...catchで囲む
   try {
-    console.log('=== Yahoo CSV確定処理開始 ver.4 (API修正版) ===');
+    console.log('=== Yahoo CSV確定処理開始 ver.5 (最終修正版) ===');
     
     const { matchedProducts, newMappings, targetMonth } = await request.json() as {
         matchedProducts: MatchedProduct[],
@@ -43,78 +43,80 @@ export async function POST(request: NextRequest) {
     
     const formattedMonth = targetMonth.includes('-01') ? targetMonth : `${targetMonth}-01`;
 
-    // 1. 全ての更新対象データを集約
     const productSummary = new Map<string, number>();
     const learningMappings: { yahoo_title: string; product_id: string }[] = [];
 
+    // newMappingsには手動で紐付けた未学習データが含まれる
     const allProducts = [
-        ...matchedProducts.map(p => ({
-            productId: p.productInfo?.id,
-            productTitle: p.productTitle,
-            quantity: p.quantity,
-            isLearned: p.isLearned,
-        })),
+        ...matchedProducts,
         ...newMappings.map(p => ({
             productId: p.productId,
-            productTitle: p.yahooTitle,
+            yahooTitle: p.yahooTitle,
             quantity: p.quantity,
-            isLearned: false,
+            isLearned: false, // newMappingsは常に学習対象
+            productInfo: { id: p.productId, name: '' } // productInfoを擬似的に作成
         }))
     ];
 
     for (const item of allProducts) {
-        if (!item.productId) continue;
-        const currentQuantity = productSummary.get(item.productId) || 0;
-        productSummary.set(item.productId, currentQuantity + (item.quantity || 0));
+        if (!item.productInfo?.id) continue;
+        const currentQuantity = productSummary.get(item.productInfo.id) || 0;
+        productSummary.set(item.productInfo.id, currentQuantity + (item.quantity || 0));
+        
+        // ★★★ 修正ポイント2: isLearnedフラグを尊重し、かつyahooTitleを正しく参照する ★★★
         if (!item.isLearned) {
-            const existing = learningMappings.find(m => m.yahoo_title === item.productTitle);
-            if (!existing) {
-                learningMappings.push({ yahoo_title: item.productTitle, product_id: item.productId });
+            const title = item.yahooTitle;
+            const productId = item.productInfo.id;
+            
+            // yahooTitleが空やnullでないことを確認
+            if (title && productId) {
+                const existing = learningMappings.find(m => m.yahoo_title === title);
+                if (!existing) {
+                    learningMappings.push({ yahoo_title: title, product_id: productId });
+                }
             }
         }
     }
 
-    // 2. データベース更新処理 (ループ処理だがエラーハンドリングを修正)
+    // 売上サマリーの更新
     for (const [productId, totalQuantity] of productSummary) {
-      // ★修正ポイント: .single()を使わず、エラーを内部で握りつぶさない
-      const { data: existing, error: selectError } = await supabase
+      const { error: selectError, data: existing } = await supabase
         .from('web_sales_summary')
         .select('id, yahoo_count')
         .eq('product_id', productId)
         .eq('report_month', formattedMonth)
         .limit(1);
 
-      if (selectError) throw selectError; // DBエラーがあれば処理を中断
+      if (selectError) throw selectError;
 
       if (existing && existing.length > 0) {
-        // 更新
         const newCount = (existing[0].yahoo_count || 0) + totalQuantity;
         const { error: updateError } = await supabase
           .from('web_sales_summary')
           .update({ yahoo_count: newCount })
           .eq('id', existing[0].id);
-        if (updateError) throw updateError; // DBエラーがあれば処理を中断
+        if (updateError) throw updateError;
       } else {
-        // 新規挿入
         const { error: insertError } = await supabase
           .from('web_sales_summary')
           .insert({ product_id: productId, report_month: formattedMonth, yahoo_count: totalQuantity });
-        if (insertError) throw insertError; // DBエラーがあれば処理を中断
+        if (insertError) throw insertError;
       }
     }
     console.log(`DB更新成功: ${productSummary.size}件`);
 
-    // 3. 学習データを保存
+    // 学習データの保存
     let learnedCount = 0;
     if (learningMappings.length > 0) {
+      console.log(`学習データを保存します: ${learningMappings.length}件`, learningMappings);
       const { count, error } = await supabase
         .from('yahoo_product_mapping')
         .upsert(learningMappings, { onConflict: 'yahoo_title', count: 'estimated' });
-      if (error) throw error;
+      if (error) throw error; // ここでエラーが発生していた
       learnedCount = count || 0;
     }
 
-    console.log('=== Yahoo CSV確定処理完了 ver.4 ===');
+    console.log('=== Yahoo CSV確定処理完了 ver.5 ===');
     return NextResponse.json({
       success: true,
       message: 'Yahoo売上データを正常に登録しました。',
