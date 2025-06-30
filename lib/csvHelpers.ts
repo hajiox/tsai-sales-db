@@ -1,4 +1,4 @@
-// /lib/csvHelpers.ts ver.4 (Amazon/楽天/Yahoo 3チャネル対応 最終修正版)
+// /lib/csvHelpers.ts ver.5 (Yahoo対応 + ブランド名追加 最終版)
 // CSVを安全にパースする関数
 export function parseCSVLine(line: string): string[] {
   const result: string[] = []
@@ -111,6 +111,11 @@ function extractImportantKeywords(text: string): {
   if (cleanText.includes('家系')) brands.push('家系')
   if (cleanText.includes('会津')) brands.push('会津')
   
+  // --- ここから追加 ---
+  if (cleanText.includes('馬肉物語')) brands.push('馬肉物語')
+  if (cleanText.includes('福島のもも')) brands.push('福島のもも')
+  // --- ここまで追加 ---
+  
   return { productType, specifications, quantities, brands }
 }
 
@@ -213,7 +218,6 @@ export function findBestMatchSimplified(productTitle: string, products: any[], l
       )
     }
 
-    // ★★★ ここからが修正箇所 ★★★
     // Yahoo学習データをチェック（見つからない場合）
     if (!learnedMatch) {
       learnedMatch = learningData.find(entry => 
@@ -221,7 +225,6 @@ export function findBestMatchSimplified(productTitle: string, products: any[], l
         entry.yahoo_title.toLowerCase() === cleanProductTitle
       )
     }
-    // ★★★ 修正箇所ここまで ★★★
     
     if (learnedMatch && learnedMatch.product_id) {
       const product = products.find(p => p && p.id === learnedMatch.product_id)
