@@ -1,4 +1,4 @@
-// /app/api/verify/yahoo-sales/route.ts ver.13
+// /app/api/verify/yahoo-sales/route.ts ver.14
 // 楽天・Amazonと同じJSON形式に変更
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -33,9 +33,37 @@ function parseCsvLine(line: string): string[] {
  return columns;
 }
 
-export async function POST(request: NextRequest) {
- try {
-   const { csvContent, saleMonth } = await request.json();
+export async function POST(req: NextRequest) {
+  try {
+    // 1. --------------- 受信 ----------------
+    const form = await req.formData();
+    const file = form.get('file') as File | null;
+    const saleMonth = form.get('saleMonth') as string | null;
+
+    if (!file || !saleMonth) {
+      return NextResponse.json(
+        { success: false, error: 'file または saleMonth が空です' },
+        { status: 400 }
+      );
+    }
+
+    // 2. ---------- Shift-JIS → UTF-8 ----------
+    const buf = Buffer.from(await file.arrayBuffer());
+    const csvText = detectAndDecode(buf);
+    const reportMonth = `${saleMonth}-01`;
+
+    // 3. ---------- CSV パース --------------
+    const lines = csvText.split(/
+?
+/).slice(1).filter(l => l.trim());
+    const csvSalesData = lines.map(l => {
+      const columns = parseCsvLine(l);
+      return {
+        yahooTitle: columns[0]?.replace(/"/g, '').trim(),
+        quantity: parseInt(columns[5]?.replace(/"/g, '').replace('個', '').trim() || '0', 10)
+      };
+    }).filter(r => r.yahooTitle && r.quantity > 0);
+ csvContent, saleMonth } = await request.json();
    const reportMonth = `${saleMonth}-01`;
 
    // 1. CSVをパースし、商品ごとの合計数量を計算
