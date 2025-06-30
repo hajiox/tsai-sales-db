@@ -1,11 +1,10 @@
-// /app/api/import/yahoo-parse/route.ts ver.1
-// Yahoo CSV解析API（楽天パターンベース・CSV形式対応）
+// /app/api/import/yahoo-parse/route.ts ver.2
+// 数量サマリー計算機能を追加した修正版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
-// Supabase直接初期化
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -13,241 +12,100 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo CSV解析API開始 ===');
+    console.log('=== Yahoo CSV解析API開始 ver.2 ===');
     
     const { csvData } = await request.json();
-    
     if (!csvData) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'CSVデータが必要です' 
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'CSVデータが必要です' }, { status: 400 });
     }
 
-    // 文字化けチェック（情報出力のみ）
-    console.log('受信したCSVデータの最初の100文字:', csvData.substring(0, 100));
-    
-    const hasGarbledText = /[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(csvData) || 
-                          csvData.includes('�') || 
-                          csvData.includes('繧�') ||
-                          csvData.includes('繝�');
-
-    if (hasGarbledText) {
-      console.warn('CSV文字化けを検出しましたが、処理を継続します');
-    }
-
-    // 1. CSVを行に分割（Yahoo：1行目ヘッダー）
-    const lines = csvData.split('\n').filter(line => line.trim());
-    console.log(`CSVファイル: ${lines.length}行（ヘッダー含む）`);
-    
+    const lines = csvData.split('\n').filter((line: string) => line.trim());
     if (lines.length < 2) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'データが不足しています' 
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'データが不足しています' }, { status: 400 });
     }
 
-    // 2. ヘッダーをスキップしてデータ行を処理
     const dataLines = lines.slice(1);
-    console.log(`データ行数: ${dataLines.length}行`);
-
-    // 3. 商品データと学習データを並行取得
-    console.log('商品マスタと学習データを取得中...');
     const [productsResponse, learnedMappingsResponse] = await Promise.all([
       supabase.from('products').select('id, name'),
       supabase.from('yahoo_product_mapping').select('yahoo_title, product_id')
     ]);
 
-    console.log('商品マスタ取得レスポンス:', {
-      data: productsResponse.data ? `${productsResponse.data.length}件` : 'null',
-      error: productsResponse.error
-    });
-    
-    console.log('学習データ取得レスポンス:', {
-      data: learnedMappingsResponse.data ? `${learnedMappingsResponse.data.length}件` : 'null', 
-      error: learnedMappingsResponse.error
-    });
-
-    if (productsResponse.error) {
-      console.error('商品データ取得エラー:', productsResponse.error);
-      throw new Error('商品データの取得に失敗しました');
-    }
-
-    if (learnedMappingsResponse.error) {
-      console.error('学習データ取得エラー:', learnedMappingsResponse.error);
-      throw new Error('学習データの取得に失敗しました');
-    }
+    if (productsResponse.error) throw new Error('商品データの取得に失敗しました');
+    if (learnedMappingsResponse.error) throw new Error('学習データの取得に失敗しました');
 
     const products = productsResponse.data || [];
     const learnedMappings = learnedMappingsResponse.data || [];
     
-    // 4. 学習データをcsvHelpers期待形式に変換
-    // Amazon/楽天と同じ形式にする
-    const learningData = learnedMappings.map(m => ({ 
-      yahoo_title: m.yahoo_title,
-      product_id: m.product_id 
-    }));
-
-    console.log(`商品マスタ: ${products.length}件, 学習データ: ${learningData.length}件`);
-    
-    // デバッグ: 商品マスタと学習データの詳細
-    console.log(`商品マスタ取得結果: ${products.length}件`);
-    if (products.length > 0) {
-      console.log('商品マスタの最初の1件の全プロパティ:');
-      console.log(JSON.stringify(products[0], null, 2));
-      
-      console.log('商品マスタサンプル（最初の5件）:');
-      products.slice(0, 5).forEach((p, idx) => {
-        console.log(`  ${idx + 1}: ${JSON.stringify(p)}`);
-      });
-      
-      // プロパティ名の確認
-      const firstProduct = products[0];
-      console.log('商品マスタの利用可能プロパティ:', Object.keys(firstProduct));
-    } else {
-      console.error('⚠️ 商品マスタが空です！');
-    }
-    
-    if (learningData.length > 0) {
-      console.log('学習データサンプル（最初の3件）:');
-      learningData.slice(0, 3).forEach((l, idx) => {
-        console.log(`  ${idx + 1}: amazon_title="${l.amazon_title}", product_id="${l.product_id}"`);
-      });
-    } else {
-      console.log('学習データは空です（初回実行のため正常）');
-    }
-    
-    // 元の学習データも確認
-    if (learnedMappings.length > 0) {
-      console.log('元の学習データサンプル（最初の3件）:');
-      learnedMappings.slice(0, 3).forEach((m, idx) => {
-        console.log(`  ${idx + 1}: yahoo_title="${m.yahoo_title}", product_id="${m.product_id}"`);
-      });
-    }
-
-    // 5. CSV行を解析してマッチング
-    const matchedProducts = [];
+    const allParsedProducts = [];
     const blankTitleProducts = [];
     
     for (let i = 0; i < dataLines.length; i++) {
       const line = dataLines[i];
       try {
-        // CSVパース（カンマ区切り）
-        const columns = line.split(',').map(col => col.trim().replace(/"/g, ''));
-        
-        if (columns.length < 6) {
-          console.log(`行${i + 2}: 列数不足の行をスキップ: ${columns.length}列`);
-          continue;
-        }
+        const columns = line.split(',').map((col: string) => col.trim().replace(/"/g, ''));
+        if (columns.length < 6) continue;
 
-        // Yahoo仕様: A列=商品名(0), F列=数量(5)
         const productTitle = columns[0];
-        const quantityStr = columns[5];
-        const quantity = parseInt(quantityStr) || 0;
+        const quantity = parseInt(columns[5]) || 0;
+        if (quantity <= 0) continue;
 
-        console.log(`行${i + 2}: 商品名="${productTitle}", 数量="${quantityStr}" -> ${quantity}`);
-
-        if (quantity <= 0) {
-          console.log(`行${i + 2}: 数量0の商品をスキップ: ${productTitle}`);
-          continue;
-        }
-
-        // 商品名空欄チェック
         if (!productTitle || productTitle.trim() === '') {
-          blankTitleProducts.push({
-            productTitle: '（空欄）',
-            quantity,
-            rawLine: line
-          });
-          console.log(`行${i + 2}: 空欄商品名: 数量=${quantity}`);
+          blankTitleProducts.push({ productTitle: '（空欄）', quantity });
           continue;
         }
 
-        // 商品マッチング実行
-        console.log(`\n=== 行${i + 2}: マッチング詳細開始 ===`);
-        console.log(`入力商品名: "${productTitle}"`);
-        console.log(`商品マスタ件数: ${products.length}件`);
-        console.log(`学習データ件数: ${learningData.length}件`);
+        const matchedProduct = findBestMatchSimplified(productTitle, products, learnedMappings);
         
-        // Amazon/楽天と同じ処理方式に修正
-        const matchedProduct = findBestMatchSimplified(productTitle, products, learningData);
-        
-        console.log(`findBestMatchSimplified戻り値:`, matchedProduct);
-        console.log(`戻り値の型: ${typeof matchedProduct}`);
-        
-        if (matchedProduct) {
-          console.log(`✅ マッチング成功:`);
-          console.log(`  - 商品ID: ${matchedProduct.id}`);
-          console.log(`  - 商品名: ${matchedProduct.name}`);
-          console.log(`  - マッチタイプ: ${matchedProduct.matchType || 'unknown'}`);
-          
-          matchedProducts.push({
-            productTitle,
-            quantity,
-            score: 100, // 仮のスコア（マッチング成功時）
-            productInfo: {
-              id: matchedProduct.id,
-              name: matchedProduct.name
-            },
-            isLearned: matchedProduct.matchType === 'learned' || false,
-            rawLine: line
-          });
-        } else {
-          console.log(`❌ マッチング失敗: 商品が見つかりませんでした`);
-          
-          matchedProducts.push({
-            productTitle,
-            quantity,
-            score: 0,
-            productInfo: null,
-            isLearned: false,
-            rawLine: line
-          });
-        }
-        
-        console.log(`=== 行${i + 2}: マッチング詳細終了 ===\n`);
+        allParsedProducts.push({
+          yahooTitle: productTitle,
+          quantity,
+          productInfo: matchedProduct ? { id: matchedProduct.id, name: matchedProduct.name } : null,
+          isLearned: matchedProduct?.matchType === 'learned' || false,
+        });
 
       } catch (lineError) {
-        console.error(`行${i + 2}の処理エラー:`, lineError);
-        console.error(`問題の行: "${line}"`);
-        // エラーが発生した行はスキップして処理を続行
+        console.error(`行${i + 2}の処理エラー:`, lineError, `問題の行: "${line}"`);
         continue;
       }
     }
 
-    // 6. 結果サマリー作成
-    try {
-      const matchedCount = matchedProducts.filter(p => p.productInfo).length;
-      const unmatchedCount = matchedProducts.filter(p => !p.productInfo).length;
-      const learnedCount = matchedProducts.filter(p => p.isLearned).length;
+    // ★★★ ここからが修正・追加箇所 ★★★
+    
+    // 6. 結果をマッチ済みと未マッチに分類
+    const matchedProducts = allParsedProducts.filter(p => p.productInfo);
+    const unmatchedProducts = allParsedProducts.filter(p => !p.productInfo);
 
-      const summary = {
-        totalProducts: matchedProducts.length,
-        matchedProducts: matchedCount,
-        unmatchedProducts: unmatchedCount, 
-        learnedMatches: learnedCount,
-        blankTitleInfo: {
-          count: blankTitleProducts.length,
-          totalQuantity: blankTitleProducts.reduce((sum, p) => sum + (p.quantity || 0), 0)
-        }
-      };
+    // 7. 数量サマリーを計算
+    const totalQuantity = allParsedProducts.reduce((sum, p) => sum + p.quantity, 0) +
+                        blankTitleProducts.reduce((sum, p) => sum + p.quantity, 0);
 
-      console.log('=== Yahoo CSV解析完了 ===');
-      console.log('サマリー:', summary);
+    const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
+    
+    const summary = {
+      totalProducts: allParsedProducts.length,
+      totalQuantity: totalQuantity, // 【追加】総販売数量
+      processableQuantity: processableQuantity, // 【追加】処理可能数量（マッチ済み数量）
+      matchedProducts: matchedProducts.length,
+      unmatchedProducts: unmatchedProducts.length, 
+      learnedMatches: matchedProducts.filter(p => p.isLearned).length,
+      blankTitleInfo: {
+        count: blankTitleProducts.length,
+        totalQuantity: blankTitleProducts.reduce((sum, p) => sum + p.quantity, 0)
+      }
+    };
+    
+    console.log('=== Yahoo CSV解析完了 ===');
+    console.log('サマリー:', summary);
 
-      // 7. 統一レスポンス構造（summaryオブジェクト必須）
-      return NextResponse.json({
-        success: true,
-        summary,
-        matchedProducts,
-        blankTitleProducts,
-        csvRowCount: dataLines.length
-      });
-      
-    } catch (summaryError) {
-      console.error('サマリー作成エラー:', summaryError);
-      throw new Error('結果サマリーの作成に失敗しました');
-    }
+    // 8. 統一レスポンス構造で返す
+    return NextResponse.json({
+      success: true,
+      summary,
+      matchedProducts,
+      unmatchedProducts, // 未マッチ商品を明確に分離
+      blankTitleProducts,
+      csvRowCount: dataLines.length
+    });
 
   } catch (error) {
     console.error('Yahoo CSV解析エラー:', error);
