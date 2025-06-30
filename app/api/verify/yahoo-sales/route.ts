@@ -1,5 +1,5 @@
-// /app/api/verify/yahoo-sales/route.ts ver.3
-// 文字コード自動判定機能を追加した最終版
+// /app/api/verify/yahoo-sales/route.ts ver.4
+// データ取得時の安全チェックを追加した最終版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -10,11 +10,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// ★★★ 修正点1: 安全な文字列検証関数を追加 ★★★
+function isValidString(value: any): value is string {
+  return value && typeof value === 'string' && value.trim().length > 0;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo売上検証API開始 (ver.3) ===');
+    console.log('=== Yahoo売上検証API開始 (ver.4) ===');
     
-    // FormDataからデータを取得
     const formData = await request.formData();
     const csvFile = formData.get('csvFile') as File;
     const targetMonth = formData.get('targetMonth') as string;
@@ -23,22 +27,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'CSVファイルと対象月が必要です' }, { status: 400 });
     }
 
-    // 文字コードを自動判定してCSVデータを取得
     const buffer = await csvFile.arrayBuffer();
-    const decoder = new TextDecoder('utf-8');
     let csvData;
     try {
-      // UTF-8でデコードを試みる
-      csvData = decoder.decode(buffer, { fatal: true });
+      csvData = new TextDecoder('utf-8').decode(buffer, { fatal: true });
     } catch (error) {
-      // 失敗したらShift-JISでデコードする
-      console.log('UTF-8デコード失敗, Shift-JISで再試行');
-      const sjisDecoder = new TextDecoder('shift-jis');
-      csvData = sjisDecoder.decode(buffer);
+      csvData = new TextDecoder('shift-jis').decode(buffer);
     }
     
     const formattedMonth = targetMonth.includes('-01') ? targetMonth : `${targetMonth}-01`;
-
     const lines = csvData.split('\n').filter((line: string) => line.trim()).slice(1);
 
     const [productsResponse, learnedMappingsResponse, dbSalesResponse] = await Promise.all([
@@ -55,21 +52,27 @@ export async function POST(request: NextRequest) {
     if (productsResponse.error) throw new Error(`商品データの取得に失敗: ${productsResponse.error.message}`);
     if (learnedMappingsResponse.error) throw new Error(`学習データの取得に失敗: ${learnedMappingsResponse.error.message}`);
 
-    const products = productsResponse.data || [];
-    const learningData = learnedMappingsResponse.data || [];
+    // ★★★ 修正点2: 取得したデータに安全チェックを適用 ★★★
+    const products = (productsResponse.data || []).filter(p => p && isValidString(p.name));
+    const learningData = (learnedMappingsResponse.data || []).filter(l => l && isValidString(l.yahoo_title));
     const dbSales = dbSalesResponse.data || [];
 
-    const csvProducts = new Map();
+    console.log(`有効な商品: ${products.length}件, 有効な学習データ: ${learningData.length}件, DB売上: ${dbSales.length}件`);
+
+    const csvProducts = new Map<string, number>();
     for (const line of lines) {
       const columns = line.split(',').map(col => col.trim().replace(/"/g, ''));
       if (columns.length < 6) continue;
+
       const productTitle = columns[0];
       const quantity = parseInt(columns[5]) || 0;
-      if (!productTitle || quantity <= 0) continue;
+
+      if (!isValidString(productTitle) || quantity <= 0) continue;
       
       const matchResult = findBestMatchSimplified(productTitle, products, learningData);
       if (matchResult?.id) {
-        csvProducts.set(matchResult.id, (csvProducts.get(matchResult.id) || 0) + quantity);
+        const productId = matchResult.id;
+        csvProducts.set(productId, (csvProducts.get(productId) || 0) + quantity);
       }
     }
 
