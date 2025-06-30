@@ -55,6 +55,7 @@
     "date-fns": "latest",
     "embla-carousel-react": "latest",
     "framer-motion": "^11.0.0",
+    "iconv-lite": "^0.6.3",
     "input-otp": "latest",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.454.0",
@@ -62,6 +63,7 @@
     "next-themes": "latest",
     "next-auth": "latest",
     "openai": "latest",
+    "papaparse": "^5.4.1",
     "react": "^19",
     "react-calendar": "^5.0.0",
     "react-day-picker": "latest",
@@ -74,8 +76,7 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "latest",
     "ws": "latest",
-    "zod": "^3.24.1",
-    "papaparse": "^5.4.1"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.6",
