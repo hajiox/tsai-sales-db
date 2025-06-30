@@ -1,5 +1,5 @@
-// /app/api/import/yahoo-confirm/route.ts ver.1
-// Yahoo CSV確定処理API（統一アーキテクチャ適用）
+// /app/api/import/yahoo-confirm/route.ts ver.2
+// Yahoo CSV確定処理API（カラム名・日付形式修正版）
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -12,7 +12,7 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo CSV確定処理開始 ===');
+    console.log('=== Yahoo CSV確定処理開始 ver.2 ===');
     
     const { matchedProducts, targetMonth } = await request.json();
     
@@ -23,7 +23,10 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log(`確定処理: ${matchedProducts.length}件, 対象月: ${targetMonth}`);
+    // 日付形式を'YYYY-MM-DD'に変換（'2025-06' → '2025-06-01'）
+    const formattedMonth = targetMonth.includes('-01') ? targetMonth : `${targetMonth}-01`;
+    
+    console.log(`確定処理: ${matchedProducts.length}件, 対象月: ${targetMonth} → ${formattedMonth}`);
 
     // 1. 商品IDごとにデータを集約
     const productSummary = new Map();
@@ -63,18 +66,18 @@ export async function POST(request: NextRequest) {
 
     console.log(`集約結果: ${productSummary.size}商品, 学習データ: ${learningMappings.length}件`);
 
-    // 2. データベース更新処理
+    // 2. データベース更新処理（修正：report_month使用）
     let successCount = 0;
     let errorCount = 0;
 
     for (const [productId, totalQuantity] of productSummary) {
       try {
-        // 既存レコード確認
+        // 既存レコード確認（修正：report_month使用）
         const { data: existingRecord } = await supabase
           .from('web_sales_summary')
           .select('id, yahoo_count')
           .eq('product_id', productId)
-          .eq('month', targetMonth)
+          .eq('report_month', formattedMonth)
           .single();
 
         if (existingRecord) {
@@ -94,12 +97,12 @@ export async function POST(request: NextRequest) {
             successCount++;
           }
         } else {
-          // 新規挿入
+          // 新規挿入（修正：report_month使用）
           const { error: insertError } = await supabase
             .from('web_sales_summary')
             .insert({
               product_id: productId,
-              month: targetMonth,
+              report_month: formattedMonth,
               yahoo_count: totalQuantity
             });
 
@@ -138,13 +141,13 @@ export async function POST(request: NextRequest) {
 
     const totalCount = successCount + errorCount;
 
-    console.log('=== Yahoo CSV確定処理完了 ===');
+    console.log('=== Yahoo CSV確定処理完了 ver.2 ===');
     console.log(`成功: ${successCount}件, エラー: ${errorCount}件, 学習: ${learnedMappingsCount}件`);
 
     // 4. 統一レスポンス構造（successフィールド必須）
     return NextResponse.json({
       success: true,
-      message: `Yahoo売上データを正常に登録しました`,
+      message: `Yahoo売上データを正常に登録しました（実修正版）`,
       successCount,
       errorCount,
       totalCount,
