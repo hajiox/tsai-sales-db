@@ -1,6 +1,4 @@
-// /components/YahooCsvImportModal.tsx ver.3
-// Yahoo CSV インポートモーダル（楽天ロジック完全移植・無限ループ解決版）
-
+// /components/YahooCsvImportModal.tsx ver.4
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -56,16 +54,12 @@ export default function YahooCsvImportModal({
   if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('ファイル選択イベント:', e.target.files);
     const file = e.target.files?.[0];
     if (file) {
-      console.log('選択されたファイル:', file.name, file.size);
       setCsvFile(file);
       setParseResult(null);
       setNewMappings([]);
       setError('');
-    } else {
-      console.log('ファイルが選択されていません');
     }
   };
 
@@ -79,18 +73,16 @@ export default function YahooCsvImportModal({
     setError('');
 
     try {
-      // Yahoo固有：文字エンコーディング自動判定
       const arrayBuffer = await csvFile.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
-      
-      // UTF-8で試行
-      const utf8Decoder = new TextDecoder('utf-8');
-      const utf8Text = utf8Decoder.decode(uint8Array);
-      
-      // 文字化けチェック
-      const csvData = utf8Text.includes('�') 
-        ? new TextDecoder('shift-jis').decode(uint8Array)
-        : utf8Text;
+      const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+      let csvData;
+      try {
+        csvData = utf8Decoder.decode(uint8Array);
+      } catch (e) {
+        console.log('UTF-8でのデコードに失敗、Shift-JISで再試行します');
+        csvData = new TextDecoder('shift-jis').decode(uint8Array);
+      }
 
       const response = await fetch('/api/import/yahoo-parse', {
         method: 'POST',
@@ -121,26 +113,22 @@ export default function YahooCsvImportModal({
     setCurrentUnmatchIndex(0);
   };
 
-  // 【修正】楽天と同じロジックに統一
   const handleProductSelect = (productId: string) => {
-    if (!parseResult?.unmatchedProducts) return;
-    
     const currentUnmatch = parseResult.unmatchedProducts[currentUnmatchIndex];
     
     if (productId !== 'skip') {
       const mapping = {
-        yahooTitle: currentUnmatch.productTitle,
+        yahooTitle: currentUnmatch.yahooTitle, // 【修正】プロパティ名を `productTitle` -> `yahooTitle` に変更
         productId: productId,
         quantity: currentUnmatch.quantity
       };
       setNewMappings(prev => [...prev, mapping]);
     }
 
-    // 【重要】楽天と同じ進行ロジック
     if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
-      setCurrentUnmatchIndex(currentUnmatchIndex + 1); // 次の商品へ
+      setCurrentUnmatchIndex(currentUnmatchIndex + 1);
     } else {
-      setStep(2); // 全て完了したらステップ2に戻る
+      setStep(2);
     }
   };
 
@@ -152,9 +140,9 @@ export default function YahooCsvImportModal({
 
     try {
       const requestData = {
+        targetMonth: `${saleMonth}-01`, // 【修正】日付形式を 'YYYY-MM-DD' に統一
         matchedProducts: parseResult.matchedProducts || [],
-        targetMonth: saleMonth,
-        newMappings: newMappings
+        newMappings: newMappings,
       };
 
       const response = await fetch('/api/import/yahoo-confirm', {
@@ -180,12 +168,14 @@ export default function YahooCsvImportModal({
     }
   };
 
-  // 【修正】楽天と同じ進捗計算
   const currentUnmatch = parseResult?.unmatchedProducts?.[currentUnmatchIndex];
-  const yahooCore = currentUnmatch?.productTitle?.substring(0, 40).trim();
+  const yahooCore = currentUnmatch?.yahooTitle?.substring(0, 40).trim(); // 【修正】プロパティ名を `productTitle` -> `yahooTitle` に変更
   const progress = parseResult?.unmatchedProducts?.length > 0 
     ? ((currentUnmatchIndex + 1) / parseResult.unmatchedProducts.length) * 100 
     : 0;
+    
+  // 【追加】軽微なNaN表示問題に対応するため、数値がNaNの場合は0を表示する
+  const displayQuantity = (q: any) => isNaN(parseInt(q)) ? 0 : parseInt(q);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -255,7 +245,7 @@ export default function YahooCsvImportModal({
                          警告: 商品名が空欄の行が {parseResult.summary.blankTitleInfo.count} 件見つかりました
                        </p>
                        <p className="text-xs text-orange-600 mt-1">
-                           合計 {parseResult.summary.blankTitleInfo.totalQuantity} 個分が処理から除外されます。CSVを修正し再実行してください。
+                           合計 {displayQuantity(parseResult.summary.blankTitleInfo.quantity)} 個分が処理から除外されます。CSVを修正し再実行してください。
                        </p>
                      </div>
                    </div>
@@ -281,19 +271,19 @@ export default function YahooCsvImportModal({
                   <div className="text-center">
                     <div className="text-sm text-gray-600">CSV総商品数</div>
                     <div className="text-2xl font-bold text-purple-600">
-                      {parseResult.summary.totalProducts}件
+                      {displayQuantity(parseResult.summary.totalProducts)}件
                     </div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">総販売数量</div>
                     <div className="text-2xl font-bold text-purple-600">
-                      {parseResult.summary.totalQuantity}個
+                      {displayQuantity(parseResult.summary.totalQuantity)}個
                     </div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">処理可能数量</div>
                     <div className="text-2xl font-bold text-green-600">
-                      {parseResult.summary.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
+                      {displayQuantity(parseResult.summary.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0))}個
                     </div>
                   </div>
                 </CardContent>
@@ -306,7 +296,8 @@ export default function YahooCsvImportModal({
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-green-600">
-                      {(parseResult.summary.matchedProducts || 0) + newMappings.length}件
+                      {/* 【修正】`summary`からではなく配列のlengthを見る */}
+                      {(parseResult.matchedProducts?.length || 0) + newMappings.length}件
                     </div>
                   </CardContent>
                 </Card>
@@ -317,7 +308,8 @@ export default function YahooCsvImportModal({
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-yellow-600">
-                      {(parseResult.summary.unmatchedProducts || 0) - newMappings.length}件
+                      {/* 【修正】`summary`からではなく配列のlengthを見る */}
+                      {(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件
                     </div>
                   </CardContent>
                 </Card>
@@ -329,11 +321,11 @@ export default function YahooCsvImportModal({
                   戻る
                 </Button>
                 
-                {/* 【修正】楽天と同じ未マッチ判定ロジック */}
-                {(parseResult.summary.unmatchedProducts || 0) > newMappings.length ? (
+                {/* 【修正】未マッチ判定ロジックを楽天と統一 */}
+                {(parseResult.unmatchedProducts?.length || 0) > newMappings.length ? (
                   <Button onClick={handleStartUnmatchFix} className="flex-1">
                     <ArrowRight className="h-4 w-4 mr-2" />
-                    未マッチ商品を修正 ({(parseResult.summary.unmatchedProducts || 0) - newMappings.length}件)
+                    未マッチ商品を修正 ({(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件)
                   </Button>
                 ) : (
                   <Button 
