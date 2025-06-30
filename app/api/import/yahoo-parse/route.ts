@@ -1,5 +1,5 @@
-// /app/api/import/yahoo-parse/route.ts ver.3
-// 学習データが正しく使用されるように形式を整える修正版
+// /app/api/import/yahoo-parse/route.ts ver.4
+// 共通ヘルパー関数のバグを回避するため、学習データのキーを偽装する最終修正版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -12,7 +12,7 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo CSV解析API開始 ver.3 ===');
+    console.log('=== Yahoo CSV解析API開始 ver.4 ===');
     
     const { csvData } = await request.json();
     if (!csvData) {
@@ -36,13 +36,14 @@ export async function POST(request: NextRequest) {
     const products = productsResponse.data || [];
     const learnedMappings = learnedMappingsResponse.data || [];
     
-    // ★★★ ここからが修正箇所 ★★★
-    // 共通のマッチング関数が理解できるよう、プロパティ名を汎用的な 'title' に変換する
+    // ★★★ ここが最重要の修正箇所 ★★★
+    // 共通のマッチング関数が 'amazon_title' を決め打ちで参照するバグに対応するため、
+    // 'yahoo_title' を 'amazon_title' というキーに付け替えて渡す。
     const preparedLearningData = learnedMappings.map(m => ({
-      title: m.yahoo_title,
+      amazon_title: m.yahoo_title,
       product_id: m.product_id
     }));
-    console.log(`学習データを共通関数向けに変換: ${preparedLearningData.length}件`);
+    console.log(`ヘルパー関数に渡すため、学習データのキーを偽装: ${preparedLearningData.length}件`);
     // ★★★ 修正箇所ここまで ★★★
 
     const allParsedProducts = [];
