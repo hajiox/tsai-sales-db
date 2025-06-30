@@ -88,7 +88,7 @@ export default function YahooCsvImportModal({
       const utf8Text = utf8Decoder.decode(uint8Array);
       
       // 文字化けチェック
-      const csvContent = utf8Text.includes('�') 
+      const csvData = utf8Text.includes('�') 
         ? new TextDecoder('shift-jis').decode(uint8Array)
         : utf8Text;
 
@@ -97,7 +97,7 @@ export default function YahooCsvImportModal({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ csvContent: csvContent }),
+        body: JSON.stringify({ csvData }),
       });
 
       const result = await response.json();
