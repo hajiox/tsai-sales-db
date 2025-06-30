@@ -1,3 +1,18 @@
+import iconv from 'iconv-lite';
+
+/**
+ * バイナリ Buffer を UTF-8 文字列へ変換するユーティリティ
+ * - UTF-8 としてデコードして � の割合が3%以上なら Shift-JIS で再デコード
+ */
+export function detectAndDecode(buf: Buffer): string {
+  const utf8Text = buf.toString('utf8');
+  const replacementCount = (utf8Text.match(/\uFFFD/g) || []).length;
+  if (replacementCount / utf8Text.length > 0.03) {
+    return iconv.decode(buf, 'shift_jis');
+  }
+  return utf8Text;
+}
+
 // /lib/csvHelpers.ts ver.5 (Yahoo対応 + ブランド名追加 最終版)
 // CSVを安全にパースする関数
 export function parseCSVLine(line: string): string[] {
