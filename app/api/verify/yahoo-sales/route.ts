@@ -1,5 +1,5 @@
-// /app/api/verify/yahoo-sales/route.ts ver.9
-// 完全修正版
+// /app/api/verify/yahoo-sales/route.ts ver.10
+// Yahoo parseと同じCSVパース方式を採用
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -16,6 +16,8 @@ function isValidString(value: any): value is string {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== Yahoo売上検証API開始 (ver.10) ===');
+    
     const formData = await request.formData();
     const csvFile = formData.get('csvFile') as File;
     const targetMonth = formData.get('targetMonth') as string;
@@ -33,7 +35,8 @@ export async function POST(request: NextRequest) {
     }
     
     const formattedMonth = targetMonth.includes('-01') ? targetMonth : `${targetMonth}-01`;
-    const lines = csvData.split('\n').filter((line: string) => line.trim()).slice(1);
+    // Yahoo parseと同じ方式でCSVをパース
+    const lines = csvData.split('\n').slice(1).filter((line: string) => line.trim() !== '');
 
     // データベースからデータを取得
     const [productsResponse, learnedMappingsResponse, dbSalesResponse] = await Promise.all([
@@ -56,20 +59,21 @@ export async function POST(request: NextRequest) {
     }));
     const dbSales = dbSalesResponse.data || [];
 
-    // CSVデータを集計（シンプルなsplit方式）
+    console.log(`商品マスタ: ${products.length}件, 学習データ: ${learningData.length}件, DB売上: ${dbSales.length}件`);
+
+    // CSVデータを集計（Yahoo parseと同じ方式）
     const csvProducts = new Map<string, number>();
     let unmatchedCount = 0;
     
-    for (const line of lines) {
-      // シンプルにカンマで分割
-      const columns = line.split(',');
+    for (let i = 0; i < lines.length; i++) {
+      // Yahoo parseと同じパース方式
+      const columns = lines[i].split(',').map((col: string) => col.trim().replace(/"/g, ''));
       if (columns.length < 6) continue;
 
-      const productTitle = columns[0].trim();
-      const quantityStr = columns[5].trim();
-      const quantity = parseInt(quantityStr, 10);
+      const productTitle = columns[0];
+      const quantity = parseInt(columns[5], 10) || 0;
 
-      if (!isValidString(productTitle) || isNaN(quantity) || quantity <= 0) continue;
+      if (!isValidString(productTitle) || quantity <= 0) continue;
       
       const matchResult = findBestMatchSimplified(productTitle, products, learningData);
       if (matchResult?.id) {
@@ -77,8 +81,11 @@ export async function POST(request: NextRequest) {
         csvProducts.set(productId, (csvProducts.get(productId) || 0) + quantity);
       } else {
         unmatchedCount++;
+        console.log(`未マッチ商品: ${productTitle} (数量: ${quantity})`);
       }
     }
+
+    console.log(`CSVから${csvProducts.size}商品を集計。未マッチ: ${unmatchedCount}件`);
 
     // DBデータを集計
     const dbProducts = new Map<string, number>();
