@@ -1,5 +1,5 @@
-// /app/api/verify/yahoo-sales/route.ts ver.11
-// デバッグログ追加版
+// /app/api/verify/yahoo-sales/route.ts ver.12
+// 日付フォーマット確認版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -16,7 +16,7 @@ function isValidString(value: any): value is string {
 
 export async function POST(request: NextRequest) {
  try {
-   console.log('=== Yahoo売上検証API開始 (ver.11) ===');
+   console.log('=== Yahoo売上検証API開始 (ver.12) ===');
    
    const formData = await request.formData();
    const csvFile = formData.get('csvFile') as File;
@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
    }
    
    const formattedMonth = targetMonth.includes('-01') ? targetMonth : `${targetMonth}-01`;
+   console.log(`対象月: ${targetMonth} → フォーマット後: ${formattedMonth}`);
+   
    const lines = csvData.split('\n').slice(1).filter((line: string) => line.trim() !== '');
 
    // データベースからデータを取得
@@ -46,6 +48,11 @@ export async function POST(request: NextRequest) {
        .select('product_id, yahoo_count')
        .eq('report_month', formattedMonth)
    ]);
+
+   console.log(`DBクエリ結果: ${dbSalesResponse.data?.length || 0}件`);
+   if (dbSalesResponse.data && dbSalesResponse.data.length > 0) {
+     console.log(`最初のレコード:`, dbSalesResponse.data[0]);
+   }
 
    if (dbSalesResponse.error) throw new Error(`DB売上データの取得に失敗: ${dbSalesResponse.error.message}`);
    if (productsResponse.error) throw new Error(`商品データの取得に失敗: ${productsResponse.error.message}`);
@@ -100,7 +107,7 @@ export async function POST(request: NextRequest) {
        matchedCount++;
      } else {
        unmatchedCount++;
-       if (unmatchedCount <= 5) { // 最初の5件のみログ出力
+       if (unmatchedCount <= 5) {
          console.log(`未マッチ商品: ${productTitle} (数量: ${quantity})`);
        }
      }
