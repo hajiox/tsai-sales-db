@@ -1,5 +1,5 @@
-// /app/api/verify/yahoo-sales/route.ts ver.12
-// 日付フォーマット確認版
+// /app/api/verify/yahoo-sales/route.ts ver.13
+// 楽天・Amazonと同じJSON形式に変更
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -10,167 +10,98 @@ const supabase = createClient(
  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-function isValidString(value: any): value is string {
- return value && typeof value === 'string' && value.trim().length > 0;
+// 引用符付きCSVをパースする関数（楽天から移植）
+function parseCsvLine(line: string): string[] {
+ const columns: string[] = [];
+ let currentColumn = '';
+ let inQuotes = false;
+ for (let i = 0; i < line.length; i++) {
+   const char = line[i];
+   if (char === '"' && inQuotes && line[i + 1] === '"') {
+     currentColumn += '"';
+     i++;
+   } else if (char === '"') {
+     inQuotes = !inQuotes;
+   } else if (char === ',' && !inQuotes) {
+     columns.push(currentColumn.trim());
+     currentColumn = '';
+   } else {
+     currentColumn += char;
+   }
+ }
+ columns.push(currentColumn.trim());
+ return columns;
 }
 
 export async function POST(request: NextRequest) {
  try {
-   console.log('=== Yahoo売上検証API開始 (ver.12) ===');
-   
-   const formData = await request.formData();
-   const csvFile = formData.get('csvFile') as File;
-   const targetMonth = formData.get('targetMonth') as string;
+   const { csvContent, saleMonth } = await request.json();
+   const reportMonth = `${saleMonth}-01`;
 
-   if (!csvFile || !targetMonth) {
-     return NextResponse.json({ success: false, error: 'CSVファイルと対象月が必要です' }, { status: 400 });
-   }
+   // 1. CSVをパースし、商品ごとの合計数量を計算
+   const lines = csvContent.split('\n').slice(1).filter((line: string) => line.trim() !== '');
+   const csvSalesData = lines.map((line: string) => {
+     const columns = parseCsvLine(line);
+     return {
+       yahooTitle: columns[0]?.replace(/"/g, '').trim(),
+       quantity: parseInt(columns[5]?.replace(/"/g, '').replace('個', '').trim() || '0', 10),
+     };
+   }).filter((item: any) => item.yahooTitle && item.quantity > 0);
 
-   const buffer = await csvFile.arrayBuffer();
-   let csvData;
-   try {
-     csvData = new TextDecoder('utf-8').decode(buffer, { fatal: true });
-   } catch (error) {
-     csvData = new TextDecoder('shift-jis').decode(buffer);
-   }
-   
-   const formattedMonth = targetMonth.includes('-01') ? targetMonth : `${targetMonth}-01`;
-   console.log(`対象月: ${targetMonth} → フォーマット後: ${formattedMonth}`);
-   
-   const lines = csvData.split('\n').slice(1).filter((line: string) => line.trim() !== '');
+   // 2. 商品マスターと学習データを取得
+   const { data: products } = await supabase.from('products').select('*');
+   const { data: learnedMappings } = await supabase.from('yahoo_product_mapping').select('yahoo_title, product_id');
+   const learningData = (learnedMappings || []).map(m => ({ amazon_title: m.yahoo_title, product_id: m.product_id }));
 
-   // データベースからデータを取得
-   const [productsResponse, learnedMappingsResponse, dbSalesResponse] = await Promise.all([
-     supabase.from('products').select('id, name, series'),
-     supabase.from('yahoo_product_mapping').select('yahoo_title, product_id'),
-     supabase
-       .from('web_sales_summary')
-       .select('product_id, yahoo_count')
-       .eq('report_month', formattedMonth)
-   ]);
-
-   console.log(`DBクエリ結果: ${dbSalesResponse.data?.length || 0}件`);
-   if (dbSalesResponse.data && dbSalesResponse.data.length > 0) {
-     console.log(`最初のレコード:`, dbSalesResponse.data[0]);
-   }
-
-   if (dbSalesResponse.error) throw new Error(`DB売上データの取得に失敗: ${dbSalesResponse.error.message}`);
-   if (productsResponse.error) throw new Error(`商品データの取得に失敗: ${productsResponse.error.message}`);
-   if (learnedMappingsResponse.error) throw new Error(`学習データの取得に失敗: ${learnedMappingsResponse.error.message}`);
-
-   const products = productsResponse.data || [];
-   const learningData = (learnedMappingsResponse.data || []).map(m => ({ 
-     amazon_title: m.yahoo_title, 
-     product_id: m.product_id 
-   }));
-   const dbSales = dbSalesResponse.data || [];
-
-   console.log(`商品マスタ: ${products.length}件, 学習データ: ${learningData.length}件, DB売上: ${dbSales.length}件`);
-
-   // デバッグ: 最初の3行をテスト
-   for (let i = 0; i < lines.length && i < 3; i++) {
-     const columns = lines[i].split(',').map((col: string) => col.trim().replace(/"/g, ''));
-     if (columns.length < 6) continue;
-     
-     const productTitle = columns[0];
-     const quantity = parseInt(columns[5], 10) || 0;
-     
-     console.log(`=== テスト行${i + 1} ===`);
-     console.log(`CSV商品名: "${productTitle}"`);
-     console.log(`数量: ${quantity}`);
-     
-     if (productTitle && quantity > 0) {
-       const matchResult = findBestMatchSimplified(productTitle, products, learningData);
-       console.log(`マッチ結果: ${matchResult ? matchResult.name : '未マッチ'}`);
-       console.log(`マッチタイプ: ${matchResult ? matchResult.matchType : '-'}`);
+   // 3. CSVデータから商品IDごとに数量を集計
+   const csvAggregated = new Map<string, number>();
+   for (const item of csvSalesData) {
+     const matched = findBestMatchSimplified(item.yahooTitle, products || [], learningData);
+     if (matched) {
+       const currentQty = csvAggregated.get(matched.id) || 0;
+       csvAggregated.set(matched.id, currentQty + item.quantity);
      }
    }
 
-   // CSVデータを集計
-   const csvProducts = new Map<string, number>();
-   let unmatchedCount = 0;
-   let matchedCount = 0;
-   
-   for (let i = 0; i < lines.length; i++) {
-     const columns = lines[i].split(',').map((col: string) => col.trim().replace(/"/g, ''));
-     if (columns.length < 6) continue;
-
-     const productTitle = columns[0];
-     const quantity = parseInt(columns[5], 10) || 0;
-
-     if (!isValidString(productTitle) || quantity <= 0) continue;
+   // 4. DBから指定月の売上データを取得
+   const { data: dbData } = await supabase
+     .from('web_sales_summary')
+     .select('product_id, yahoo_count')
+     .eq('report_month', reportMonth);
      
-     const matchResult = findBestMatchSimplified(productTitle, products, learningData);
-     if (matchResult?.id) {
-       const productId = matchResult.id;
-       csvProducts.set(productId, (csvProducts.get(productId) || 0) + quantity);
-       matchedCount++;
-     } else {
-       unmatchedCount++;
-       if (unmatchedCount <= 5) {
-         console.log(`未マッチ商品: ${productTitle} (数量: ${quantity})`);
-       }
-     }
-   }
-
-   console.log(`CSVマッチング結果: マッチ${matchedCount}件、未マッチ${unmatchedCount}件`);
-   console.log(`CSVから${csvProducts.size}商品を集計`);
-
-   // DBデータを集計
-   const dbProducts = new Map<string, number>();
-   dbSales.forEach(row => {
-     dbProducts.set(row.product_id, row.yahoo_count || 0);
+   const dbAggregated = new Map<string, number>();
+   (dbData || []).forEach(row => {
+     dbAggregated.set(row.product_id, row.yahoo_count || 0);
    });
 
-   // 比較結果を作成
-   const allProductIds = new Set([...csvProducts.keys(), ...dbProducts.keys()]);
-   const comparisonResults = [];
+   // 5. CSVとDBを比較
+   const verificationResults = [];
+   const allProductIds = new Set([...csvAggregated.keys(), ...dbAggregated.keys()]);
 
    for (const productId of allProductIds) {
-     const csvCount = csvProducts.get(productId) || 0;
-     const dbCount = dbProducts.get(productId) || 0;
-     const product = products.find(p => p.id === productId);
+     const productInfo = products?.find(p => p.id === productId);
+     const csvCount = csvAggregated.get(productId) || 0;
+     const dbCount = dbAggregated.get(productId) || 0;
      
-     comparisonResults.push({
-       product_id: productId,
-       product_name: product?.name || '商品名不明',
-       series: product?.series || '未分類',
-       csv_count: csvCount,
-       db_count: dbCount,
-       difference: csvCount - dbCount,
-       is_match: csvCount === dbCount
+     verificationResults.push({
+       productId,
+       productName: productInfo?.name || '不明な商品',
+       series: productInfo?.series || '未分類',
+       csvCount,
+       dbCount,
+       isMatch: csvCount === dbCount,
      });
    }
+   
+   verificationResults.sort((a,b) => (a.series > b.series) ? 1 : -1);
 
-   // シリーズ順でソート
-   comparisonResults.sort((a, b) => {
-     if (a.series !== b.series) return a.series.localeCompare(b.series);
-     return a.product_name.localeCompare(b.product_name);
-   });
-
-   const csvTotal = Array.from(csvProducts.values()).reduce((sum, count) => sum + count, 0);
-   const dbTotal = Array.from(dbProducts.values()).reduce((sum, count) => sum + count, 0);
-
-   console.log(`最終結果: CSV合計${csvTotal}、DB合計${dbTotal}`);
-
-   return NextResponse.json({
-     success: true,
-     verification_results: comparisonResults,
-     summary: {
-       total_products: comparisonResults.length,
-       matched_products: comparisonResults.filter(r => r.is_match).length,
-       mismatched_products: comparisonResults.filter(r => !r.is_match).length,
-       csv_total_quantity: csvTotal,
-       db_total_quantity: dbTotal,
-       total_difference: csvTotal - dbTotal
-     }
-   });
+   return NextResponse.json({ success: true, results: verificationResults });
 
  } catch (error) {
-   console.error('Yahoo売上検証エラー:', error);
-   return NextResponse.json({ 
-     success: false, 
-     error: error instanceof Error ? error.message : '検証処理でエラーが発生しました' 
+   console.error('Yahoo売上検証APIエラー:', error);
+   return NextResponse.json({
+     success: false,
+     error: error instanceof Error ? error.message : '不明なエラーが発生しました',
    }, { status: 500 });
  }
 }
