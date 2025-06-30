@@ -1,5 +1,5 @@
-// /app/api/verify/yahoo-sales/route.ts ver.6
-// 数量パースの修正版
+// /app/api/verify/yahoo-sales/route.ts ver.7
+// デバッグ強化版
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -40,7 +40,7 @@ function parseCsvLine(line: string): string[] {
 
 export async function POST(request: NextRequest) {
  try {
-   console.log('=== Yahoo売上検証API開始 (ver.6) ===');
+   console.log('=== Yahoo売上検証API開始 (ver.7) ===');
    
    const formData = await request.formData();
    const csvFile = formData.get('csvFile') as File;
@@ -87,13 +87,24 @@ export async function POST(request: NextRequest) {
    // CSVデータを集計
    const csvProducts = new Map<string, number>();
    let unmatchedCount = 0;
+   let debugCount = 0;
    
    for (const line of lines) {
      const columns = parseCsvLine(line);
+     
+     // 最初の3行を詳細にデバッグ
+     if (debugCount < 3) {
+       console.log(`=== 行${debugCount + 1} ===`);
+       console.log(`列数: ${columns.length}`);
+       console.log(`列0（商品名）: ${columns[0]}`);
+       console.log(`列5（数量）: "${columns[5]}"`);
+       console.log(`全列: ${JSON.stringify(columns)}`);
+       debugCount++;
+     }
+     
      if (columns.length < 6) continue;
 
      const productTitle = columns[0]?.replace(/"/g, '').trim();
-     // 修正: "個"を削除してから数値に変換
      const quantityStr = columns[5]?.replace(/"/g, '').trim() || '0';
      const quantity = parseInt(quantityStr.replace('個', ''), 10);
 
@@ -105,11 +116,10 @@ export async function POST(request: NextRequest) {
        csvProducts.set(productId, (csvProducts.get(productId) || 0) + quantity);
      } else {
        unmatchedCount++;
-       console.log(`未マッチ商品: ${productTitle}`);
      }
    }
 
-   console.log(`CSVから${csvProducts.size}商品を集計。未マッチ: ${unmatchedCount}件`);
+   console.log(`CSV処理完了: ${csvProducts.size}商品、未マッチ: ${unmatchedCount}件`);
 
    // DBデータを集計
    const dbProducts = new Map<string, number>();
