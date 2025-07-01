@@ -1,6 +1,6 @@
-// /lib/csvHelpers.ts  ver.6
+// /lib/csvHelpers.ts  ver.7
 // ------------------------------------------------------------
-// 共通ユーティリティと簡易マッチングヘルパー
+// 共通ユーティリティと簡易マッチングヘルパー（メルカリ対応）
 // ------------------------------------------------------------
 import iconv from 'iconv-lite';
 
@@ -26,12 +26,14 @@ export interface Product {
   amazon_title?: string;
   rakuten_title?: string;
   yahoo_title?: string;
+  mercari_title?: string;
 }
 
 interface LearningMap {
   amazon_title?: string;
   rakuten_title?: string;
   yahoo_title?: string;
+  mercari_title?: string;
   product_id: string;
 }
 
@@ -41,6 +43,8 @@ interface LearningMap {
 export function extractImportantKeywords(title: string): string[] {
   const brands = [
     '激辛', 'チャーシュー', '訳あり', 'レトルト', '極厚', 'カット', '650g',
+    '個包装', '冷凍発送', '焼豚', 'ラーメン', '炒飯', 'トッピング', '送料無料',
+    '会津ブランド館', 'プロ仕様', '二郎インスパイア系'
   ];
   return Array.from(
     new Set(
@@ -54,7 +58,7 @@ export function extractImportantKeywords(title: string): string[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. シンプル類似度マッチング                                        */
+/* 4. シンプル類似度マッチング（メルカリ対応）                        */
 /* ------------------------------------------------------------------ */
 export function findBestMatchSimplified(
   title: string,
@@ -63,7 +67,7 @@ export function findBestMatchSimplified(
 ): Product | null {
   // 4-1. 学習データ完全一致
   const learned = learning.find((m) =>
-    [m.amazon_title, m.rakuten_title, m.yahoo_title].includes(title)
+    [m.amazon_title, m.rakuten_title, m.yahoo_title, m.mercari_title].includes(title)
   );
   if (learned) {
     return products.find((p) => p.id === learned.product_id) || null;
@@ -71,7 +75,7 @@ export function findBestMatchSimplified(
 
   // 4-2. 商品名の完全一致
   const direct = products.find((p) =>
-    [p.amazon_title, p.rakuten_title, p.yahoo_title, p.name].includes(title)
+    [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.name].includes(title)
   );
   if (direct) return direct;
 
@@ -80,7 +84,7 @@ export function findBestMatchSimplified(
   let best: Product | null = null;
   let maxScore = 0;
   for (const p of products) {
-    const target = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.name]
+    const target = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.name]
       .filter(Boolean)
       .join(' ');
     const score = keywords.filter((k) => target.includes(k)).length;
