@@ -1,5 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.55
-// ECチャネル別削除機能追加版
+// /components/web-sales-editable-table.tsx ver.56
+// BASE機能統合版
 
 "use client"
 
@@ -14,6 +14,7 @@ import AmazonCsvImportModal from "./AmazonCsvImportModal"
 import RakutenCsvImportModal from "./RakutenCsvImportModal"
 import YahooCsvImportModal from "./YahooCsvImportModal"
 import MercariCsvImportModal from "./MercariCsvImportModal"
+import BaseCsvImportModal from "./BaseCsvImportModal"  // 🏪 BASE追加
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
 
@@ -37,6 +38,7 @@ export default function WebSalesEditableTable({
   const [isRakutenCsvModalOpen, setIsRakutenCsvModalOpen] = useState(false)
   const [isYahooCsvModalOpen, setIsYahooCsvModalOpen] = useState(false)
   const [isMercariCsvModalOpen, setIsMercariCsvModalOpen] = useState(false)
+  const [isBaseCsvModalOpen, setIsBaseCsvModalOpen] = useState(false)  // 🏪 BASE追加
   
   const router = useRouter()
 
@@ -99,6 +101,7 @@ export default function WebSalesEditableTable({
     setIsRakutenCsvModalOpen(false)
     setIsYahooCsvModalOpen(false)
     setIsMercariCsvModalOpen(false)
+    setIsBaseCsvModalOpen(false)  // 🏪 BASE追加
     onDataUpdated()
   }
 
@@ -226,7 +229,7 @@ export default function WebSalesEditableTable({
         onCancel={() => setEditMode({})}
         productMaster={productMasterList}
         onRefresh={onDataUpdated}
-        onChannelDelete={handleChannelDelete} // 新規追加
+        onChannelDelete={handleChannelDelete}
       />
 
       <WebSalesImportButtons
@@ -241,6 +244,10 @@ export default function WebSalesEditableTable({
         onMercariClick={() => {
           console.log('Mercari button clicked!');
           setIsMercariCsvModalOpen(true);
+        }}
+        onBaseClick={() => {  // 🏪 BASE追加
+          console.log('BASE button clicked!');
+          setIsBaseCsvModalOpen(true);
         }}
       />
       
@@ -346,6 +353,16 @@ export default function WebSalesEditableTable({
         <MercariCsvImportModal
           isOpen={isMercariCsvModalOpen}
           onClose={() => setIsMercariCsvModalOpen(false)}
+          onSuccess={handleImportSuccess}
+          products={productMasterList}
+        />
+      )}
+
+      {/* 🏪 BASE Modal追加 */}
+      {isBaseCsvModalOpen && (
+        <BaseCsvImportModal
+          isOpen={isBaseCsvModalOpen}
+          onClose={() => setIsBaseCsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
         />
