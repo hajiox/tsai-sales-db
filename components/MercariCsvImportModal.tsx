@@ -1,4 +1,4 @@
-// /components/MercariCsvImportModal.tsx ver.1 (楽天完全移植版)
+// /components/MercariCsvImportModal.tsx ver.2 (分離構造版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -30,6 +30,7 @@ export default function MercariCsvImportModal({
 }: MercariCsvImportModalProps) {
  const [step, setStep] = useState(1);
  const [csvFile, setCsvFile] = useState<File | null>(null);
+ const [aggregatedData, setAggregatedData] = useState<any>(null);
  const [parseResult, setParseResult] = useState<any>(null);
  const [newMappings, setNewMappings] = useState<Array<{mercariTitle: string; productId: string; quantity: number}>>([]);
  const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
@@ -44,6 +45,7 @@ export default function MercariCsvImportModal({
    if (!isOpen) {
      setStep(1);
      setCsvFile(null);
+     setAggregatedData(null);
      setParseResult(null);
      setNewMappings([]);
      setCurrentUnmatchIndex(0);
@@ -57,13 +59,15 @@ export default function MercariCsvImportModal({
    const file = e.target.files?.[0];
    if (file) {
      setCsvFile(file);
+     setAggregatedData(null);
      setParseResult(null);
      setNewMappings([]);
      setError('');
    }
  };
  
- const handleParse = async () => {
+ // Phase 1: CSV集計処理
+ const handleAggregate = async () => {
    if (!csvFile) {
      setError('CSVファイルを選択してください');
      return;
@@ -75,7 +79,8 @@ export default function MercariCsvImportModal({
    try {
      const csvContent = await csvFile.text();
      
-     const response = await fetch('/api/import/mercari-parse', {
+     console.log('Phase 1: CSV集計処理開始');
+     const aggregateResponse = await fetch('/api/aggregate/mercari-csv', {
        method: 'POST',
        headers: {
          'Content-Type': 'application/json',
@@ -83,24 +88,62 @@ export default function MercariCsvImportModal({
        body: JSON.stringify({ csvContent }),
      });
 
-     const result = await response.json();
+     const aggregateResult = await aggregateResponse.json();
 
-     if (!result.success) {
-       throw new Error(result.error || 'メルカリCSVの解析に失敗しました');
+     if (!aggregateResult.success) {
+       throw new Error(aggregateResult.error || 'メルカリCSVの集計に失敗しました');
      }
 
-     setParseResult(result);
+     console.log('集計結果:', aggregateResult);
+     setAggregatedData(aggregateResult);
      setStep(2);
    } catch (error) {
-     console.error('メルカリCSV解析エラー:', error);
-     setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
+     console.error('メルカリCSV集計エラー:', error);
+     setError(error instanceof Error ? error.message : '集計処理中にエラーが発生しました');
+   } finally {
+     setIsLoading(false);
+   }
+ };
+
+ // Phase 2: マッチング処理
+ const handleMatching = async () => {
+   if (!aggregatedData) {
+     setError('集計データがありません');
+     return;
+   }
+
+   setIsLoading(true);
+   setError('');
+
+   try {
+     console.log('Phase 2: マッチング処理開始');
+     const matchingResponse = await fetch('/api/import/mercari-parse', {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+       },
+       body: JSON.stringify({ aggregatedProducts: aggregatedData.aggregatedProducts }),
+     });
+
+     const matchingResult = await matchingResponse.json();
+
+     if (!matchingResult.success) {
+       throw new Error(matchingResult.error || 'メルカリマッチング処理に失敗しました');
+     }
+
+     console.log('マッチング結果:', matchingResult);
+     setParseResult(matchingResult);
+     setStep(3);
+   } catch (error) {
+     console.error('メルカリマッチング処理エラー:', error);
+     setError(error instanceof Error ? error.message : 'マッチング処理中にエラーが発生しました');
    } finally {
      setIsLoading(false);
    }
  };
 
  const handleStartUnmatchFix = () => {
-   setStep(3);
+   setStep(4);
    setCurrentUnmatchIndex(0);
  };
 
@@ -119,7 +162,7 @@ export default function MercariCsvImportModal({
    if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
      setCurrentUnmatchIndex(currentUnmatchIndex + 1);
    } else {
-     setStep(2);
+     setStep(3);
    }
  };
 
@@ -169,13 +212,14 @@ export default function MercariCsvImportModal({
    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
        <div className="flex justify-between items-center p-6 border-b">
-         <h2 className="text-xl font-bold">メルカリCSV インポート</h2>
+         <h2 className="text-xl font-bold">メルカリCSV インポート (分離構造版)</h2>
          <Button variant="ghost" size="sm" onClick={onClose}>
            <X className="h-4 w-4" />
          </Button>
        </div>
 
        <div className="p-6">
+         {/* Step 1: ファイル選択 */}
          {step === 1 && (
            <>
              <p className="text-gray-600 mb-4">
@@ -209,36 +253,69 @@ export default function MercariCsvImportModal({
                </div>
                
                <Button 
-                 onClick={handleParse}
+                 onClick={handleAggregate}
                  disabled={!csvFile || isLoading}
                  className="w-full mt-4"
                >
                  <Upload className="h-4 w-4 mr-2" />
-                 {isLoading ? '解析中...' : '次へ（確認画面）'}
+                 {isLoading ? '集計中...' : 'Phase 1: CSV集計処理'}
                </Button>
              </div>
            </>
          )}
 
-         {step === 2 && parseResult && (
+         {/* Step 2: 集計結果確認 */}
+         {step === 2 && aggregatedData && (
            <>
-             {parseResult.summary.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
-                <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <AlertTriangle className="h-5 w-5 text-orange-400" aria-hidden="true" />
-                    </div>
-                    <div className="ml-3">
-                      <p className="text-sm font-bold text-orange-700">
-                        警告: 商品名が空欄の行が {parseResult.summary.blankTitleInfo.count} 件見つかりました
-                      </p>
-                      <p className="text-xs text-orange-600 mt-1">
-                          合計 {parseResult.summary.blankTitleInfo.quantity} 個分が処理から除外されます。CSVを修正し再実行してください。
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
+             <Card className="mb-4">
+               <CardHeader>
+                 <CardTitle className="flex items-center gap-2">
+                   📊 集計結果
+                 </CardTitle>
+               </CardHeader>
+               <CardContent className="grid grid-cols-3 gap-4">
+                 <div className="text-center">
+                   <div className="text-sm text-gray-600">集計商品数</div>
+                   <div className="text-2xl font-bold text-blue-600">
+                     {aggregatedData.summary.totalProducts}件
+                   </div>
+                 </div>
+                 <div className="text-center">
+                   <div className="text-sm text-gray-600">総販売数量</div>
+                   <div className="text-2xl font-bold text-blue-600">
+                     {aggregatedData.summary.totalQuantity}個
+                   </div>
+                 </div>
+                 <div className="text-center">
+                   <div className="text-sm text-gray-600">処理した行数</div>
+                   <div className="text-2xl font-bold text-green-600">
+                     {aggregatedData.summary.processedRows}行
+                   </div>
+                 </div>
+               </CardContent>
+             </Card>
+
+             <div className="flex gap-2">
+               <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                 <ArrowLeft className="h-4 w-4 mr-2" />
+                 戻る
+               </Button>
+               
+               <Button 
+                 onClick={handleMatching}
+                 disabled={isLoading}
+                 className="flex-1"
+               >
+                 <ArrowRight className="h-4 w-4 mr-2" />
+                 {isLoading ? 'マッチング中...' : 'Phase 2: マッチング処理'}
+               </Button>
+             </div>
+           </>
+         )}
+
+         {/* Step 3: マッチング結果確認 */}
+         {step === 3 && parseResult && (
+           <>
              <div className="mb-4">
                <label className="block text-sm font-medium mb-2">売上月:</label>
                <input
@@ -252,12 +329,12 @@ export default function MercariCsvImportModal({
              <Card>
                <CardHeader>
                  <CardTitle className="flex items-center gap-2">
-                   📊 数量チェック
+                   🎯 マッチング結果
                  </CardTitle>
                </CardHeader>
                <CardContent className="grid grid-cols-3 gap-4">
                  <div className="text-center">
-                   <div className="text-sm text-gray-600">CSV総商品数</div>
+                   <div className="text-sm text-gray-600">総商品数</div>
                    <div className="text-2xl font-bold text-blue-600">
                      {parseResult.summary.totalProducts}件
                    </div>
@@ -302,7 +379,7 @@ export default function MercariCsvImportModal({
              </div>
 
              <div className="flex gap-2">
-               <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+               <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
                  <ArrowLeft className="h-4 w-4 mr-2" />
                  戻る
                </Button>
@@ -325,7 +402,8 @@ export default function MercariCsvImportModal({
            </>
          )}
 
-         {step === 3 && currentUnmatch && (
+         {/* Step 4: 未マッチ商品修正 */}
+         {step === 4 && currentUnmatch && (
            <>
              <div className="space-y-2 mb-4">
                <div className="flex justify-between text-sm">
@@ -390,27 +468,4 @@ export default function MercariCsvImportModal({
                  <div className="mt-4 pt-4 border-t">
                    <button
                      onClick={() => handleProductSelect('skip')}
-                     className="w-full p-4 text-left border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                   >
-                     <div className="font-medium text-gray-600 flex items-center gap-2 justify-center">
-                       <X className="h-5 w-5" />
-                       この商品をスキップ
-                     </div>
-                   </button>
-                 </div>
-               </CardContent>
-             </Card>
-
-             <div className="flex gap-2">
-               <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
-                 <ArrowLeft className="h-4 w-4 mr-2" />
-                 確認画面に戻る
-               </Button>
-             </div>
-           </>
-         )}
-       </div>
-     </div>
-   </div>
- );
-}
+                     className="w-full p-4
