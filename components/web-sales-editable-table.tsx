@@ -1,5 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.54
-// メルカリ機能追加版
+// /components/web-sales-editable-table.tsx ver.55
+// ECチャネル別削除機能追加版
 
 "use client"
 
@@ -133,6 +133,46 @@ export default function WebSalesEditableTable({
     }
   }
 
+  // 新規追加: ECチャネル別削除機能
+  const handleChannelDelete = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10') => {
+    const channelNames = {
+      amazon: 'Amazon',
+      rakuten: '楽天', 
+      yahoo: 'Yahoo',
+      mercari: 'メルカリ',
+      base: 'BASE',
+      qoo10: 'Qoo10'
+    };
+
+    if (!confirm(`${month}の${channelNames[channel]}データを削除しますか？この操作は取り消せません。`)) {
+      return
+    }
+
+    try {
+      console.log(`${channelNames[channel]} delete button clicked - executing deletion for month:`, month);
+      
+      const response = await fetch(`/api/web-sales-data?month=${month}&channel=${channel}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error(`${channelNames[channel]}データの削除に失敗しました`)
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        alert(`${result.message}（${result.deletedCount}件、${result.totalQuantity}個）`)
+        onDataUpdated()
+      } else {
+        throw new Error(result.error || `${channelNames[channel]}データの削除に失敗しました`)
+      }
+    } catch (error) {
+      console.error(`${channelNames[channel]}削除エラー:`, error)
+      alert(`${channelNames[channel]}データの削除中にエラーが発生しました: ` + (error instanceof Error ? error.message : '不明なエラー'))
+    }
+  }
+
   const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari') => {
     const channelNames = {
       amazon: 'Amazon',
@@ -186,6 +226,7 @@ export default function WebSalesEditableTable({
         onCancel={() => setEditMode({})}
         productMaster={productMasterList}
         onRefresh={onDataUpdated}
+        onChannelDelete={handleChannelDelete} // 新規追加
       />
 
       <WebSalesImportButtons
@@ -228,6 +269,47 @@ export default function WebSalesEditableTable({
           className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200"
         >
           🔄 メルカリ学習データリセット
+        </button>
+      </div>
+
+      {/* 新規追加: ECチャネル別削除ボタン */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-gray-700">ECチャネル別データ削除:</span>
+        <button 
+          onClick={() => handleChannelDelete('amazon')}
+          className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600"
+        >
+          🗑️ Amazon削除
+        </button>
+        <button 
+          onClick={() => handleChannelDelete('rakuten')}
+          className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700"
+        >
+          🗑️ 楽天削除
+        </button>
+        <button 
+          onClick={() => handleChannelDelete('yahoo')}
+          className="px-3 py-1 text-xs font-semibold text-white bg-purple-600 rounded hover:bg-purple-700"
+        >
+          🗑️ Yahoo削除
+        </button>
+        <button 
+          onClick={() => handleChannelDelete('mercari')}
+          className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600"
+        >
+          🗑️ メルカリ削除
+        </button>
+        <button 
+          onClick={() => handleChannelDelete('base')}
+          className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700"
+        >
+          🗑️ BASE削除
+        </button>
+        <button 
+          onClick={() => handleChannelDelete('qoo10')}
+          className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600"
+        >
+          🗑️ Qoo10削除
         </button>
       </div>
 
