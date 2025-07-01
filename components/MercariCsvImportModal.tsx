@@ -468,4 +468,27 @@ export default function MercariCsvImportModal({
                  <div className="mt-4 pt-4 border-t">
                    <button
                      onClick={() => handleProductSelect('skip')}
-                     className="w-full p-4
+                     className="w-full p-4 text-left border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                   >
+                     <div className="font-medium text-gray-600 flex items-center gap-2 justify-center">
+                       <X className="h-5 w-5" />
+                       この商品をスキップ
+                     </div>
+                   </button>
+                 </div>
+               </CardContent>
+             </Card>
+
+             <div className="flex gap-2">
+               <Button variant="outline" onClick={() => setStep(3)} className="flex-1">
+                 <ArrowLeft className="h-4 w-4 mr-2" />
+                 確認画面に戻る
+               </Button>
+             </div>
+           </>
+         )}
+       </div>
+     </div>
+   </div>
+ );
+}
