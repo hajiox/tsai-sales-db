@@ -105,18 +105,18 @@ export default function BaseCsvImportModal({
  };
 
  const handleProductSelect = (productId: string) => {
-   const currentUnmatch = parseResult.data.unmatchedItems[currentUnmatchIndex];
+   const currentUnmatch = parseResult.unmatchedProducts[currentUnmatchIndex];
    
    if (productId !== 'skip') {
      const mapping = {
-       baseTitle: currentUnmatch.csvProductName,
+       baseTitle: currentUnmatch.baseTitle,
        productId: productId,
        quantity: currentUnmatch.quantity
      };
      setNewMappings(prev => [...prev, mapping]);
    }
 
-   if (currentUnmatchIndex < parseResult.data.unmatchedItems.length - 1) {
+   if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
      setCurrentUnmatchIndex(currentUnmatchIndex + 1);
    } else {
      setStep(2);
@@ -132,10 +132,10 @@ export default function BaseCsvImportModal({
    try {
      const requestData = {
        saleDate: `${saleMonth}-01`,
-       matchedProducts: parseResult.data.matchedItems.map((item: any) => ({
-         baseTitle: item.csvProductName,
+       matchedProducts: parseResult.matchedProducts.map((item: any) => ({
+         baseTitle: item.baseTitle,
          productInfo: {
-           id: item.matchedProduct.id
+           id: item.productInfo.id
          },
          quantity: item.quantity
        })),
@@ -165,10 +165,10 @@ export default function BaseCsvImportModal({
    }
  };
 
- const currentUnmatch = parseResult?.data?.unmatchedItems?.[currentUnmatchIndex];
- const baseCore = currentUnmatch?.csvProductName?.substring(0, 40).trim();
- const progress = parseResult?.data?.unmatchedItems?.length > 0 
-   ? ((currentUnmatchIndex + 1) / parseResult.data.unmatchedItems.length) * 100 
+ const currentUnmatch = parseResult?.unmatchedProducts?.[currentUnmatchIndex];
+ const baseCore = currentUnmatch?.baseTitle?.substring(0, 40).trim();
+ const progress = parseResult?.unmatchedProducts?.length > 0 
+   ? ((currentUnmatchIndex + 1) / parseResult.unmatchedProducts.length) * 100 
    : 0;
 
  return (
@@ -248,7 +248,7 @@ export default function BaseCsvImportModal({
                  <div className="text-center">
                    <div className="text-sm text-gray-600">CSV総商品数</div>
                    <div className="text-2xl font-bold text-green-600">
-                     {parseResult.summary.totalItems}件
+                     {parseResult.summary.totalProducts}件
                    </div>
                  </div>
                  <div className="text-center">
@@ -260,7 +260,7 @@ export default function BaseCsvImportModal({
                  <div className="text-center">
                    <div className="text-sm text-gray-600">処理可能数量</div>
                    <div className="text-2xl font-bold text-green-600">
-                     {parseResult.data.matchedItems.reduce((sum: number, item: any) => sum + item.quantity, 0) + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
+                     {parseResult.summary.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
                    </div>
                  </div>
                </CardContent>
@@ -273,7 +273,7 @@ export default function BaseCsvImportModal({
                  </CardHeader>
                  <CardContent>
                    <div className="text-2xl font-bold text-green-600">
-                     {(parseResult.data.matchedItems?.length || 0) + newMappings.length}件
+                     {(parseResult.matchedProducts?.length || 0) + newMappings.length}件
                    </div>
                  </CardContent>
                </Card>
@@ -284,7 +284,7 @@ export default function BaseCsvImportModal({
                  </CardHeader>
                  <CardContent>
                    <div className="text-2xl font-bold text-yellow-600">
-                     {(parseResult.data.unmatchedItems?.length || 0) - newMappings.length}件
+                     {(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件
                    </div>
                  </CardContent>
                </Card>
@@ -296,7 +296,7 @@ export default function BaseCsvImportModal({
                  戻る
                </Button>
                
-               {(parseResult.data.unmatchedItems?.length || 0) > newMappings.length ? (
+               {(parseResult.unmatchedProducts?.length || 0) > newMappings.length ? (
                  <Button onClick={handleStartUnmatchFix} className="flex-1 bg-green-600 hover:bg-green-700">
                    <ArrowRight className="h-4 w-4 mr-2" />
                    未マッチ商品を修正
@@ -319,7 +319,7 @@ export default function BaseCsvImportModal({
              <div className="space-y-2 mb-4">
                <div className="flex justify-between text-sm">
                  <span>未マッチ商品修正</span>
-                 <span>{currentUnmatchIndex + 1} / {parseResult.data.unmatchedItems.length}</span>
+                 <span>{currentUnmatchIndex + 1} / {parseResult.unmatchedProducts.length}</span>
                </div>
                <div className="w-full bg-gray-200 rounded-full h-2">
                  <div 
