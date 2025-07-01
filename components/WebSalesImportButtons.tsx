@@ -1,5 +1,5 @@
-// /components/WebSalesImportButtons.tsx ver.4
-// メルカリ機能有効化版
+// /components/WebSalesImportButtons.tsx ver.5
+// BASE機能有効化版
 
 "use client"
 
@@ -12,6 +12,7 @@ interface WebSalesImportButtonsProps {
   onRakutenClick: () => void
   onYahooClick: () => void
   onMercariClick: () => void
+  onBaseClick: () => void  // 🏪 BASE追加
 }
 
 export default function WebSalesImportButtons({
@@ -21,6 +22,7 @@ export default function WebSalesImportButtons({
   onRakutenClick,
   onYahooClick,
   onMercariClick,
+  onBaseClick,  // 🏪 BASE追加
 }: WebSalesImportButtonsProps) {
   return (
     <div className="p-3 border-t">
@@ -59,16 +61,16 @@ export default function WebSalesImportButtons({
           メルカリ
         </button>
         <button
+          onClick={onBaseClick}  // 🏪 BASE有効化
+          className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700"
+        >
+          BASE
+        </button>
+        <button
           className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600"
           disabled
         >
           Qoo10
-        </button>
-        <button
-          className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700"
-          disabled
-        >
-          BASE
         </button>
       </div>
 
