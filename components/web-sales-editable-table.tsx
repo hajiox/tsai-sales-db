@@ -1,5 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.57
-// メルカリ・BASE学習データリセット対応版
+// /components/web-sales-editable-table.tsx ver.58
+// Qoo10完全統合版
 
 "use client"
 
@@ -15,6 +15,7 @@ import RakutenCsvImportModal from "./RakutenCsvImportModal"
 import YahooCsvImportModal from "./YahooCsvImportModal"
 import MercariCsvImportModal from "./MercariCsvImportModal"
 import BaseCsvImportModal from "./BaseCsvImportModal"
+import Qoo10CsvImportModal from "./Qoo10CsvImportModal"  // 🟣 Qoo10追加
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
 
@@ -39,6 +40,7 @@ export default function WebSalesEditableTable({
   const [isYahooCsvModalOpen, setIsYahooCsvModalOpen] = useState(false)
   const [isMercariCsvModalOpen, setIsMercariCsvModalOpen] = useState(false)
   const [isBaseCsvModalOpen, setIsBaseCsvModalOpen] = useState(false)
+  const [isQoo10CsvModalOpen, setIsQoo10CsvModalOpen] = useState(false)  // 🟣 Qoo10追加
   
   const router = useRouter()
 
@@ -102,6 +104,7 @@ export default function WebSalesEditableTable({
     setIsYahooCsvModalOpen(false)
     setIsMercariCsvModalOpen(false)
     setIsBaseCsvModalOpen(false)
+    setIsQoo10CsvModalOpen(false)  // 🟣 Qoo10追加
     onDataUpdated()
   }
 
@@ -176,14 +179,15 @@ export default function WebSalesEditableTable({
     }
   }
 
-  // 学習データリセット機能（メルカリ・BASE対応）
-  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base') => {
+  // 学習データリセット機能（Qoo10対応）
+  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10') => {
     const channelNames = {
       amazon: 'Amazon',
       rakuten: '楽天', 
       yahoo: 'Yahoo',
       mercari: 'メルカリ',
-      base: 'BASE'
+      base: 'BASE',
+      qoo10: 'Qoo10'
     };
 
     if (!confirm(`${channelNames[channel]}の学習データをリセットしますか？`)) {
@@ -251,9 +255,13 @@ export default function WebSalesEditableTable({
           console.log('BASE button clicked!');
           setIsBaseCsvModalOpen(true);
         }}
+        onQoo10Click={() => {  // 🟣 Qoo10追加
+          console.log('Qoo10 button clicked!');
+          setIsQoo10CsvModalOpen(true);
+        }}
       />
       
-      {/* 学習データ管理ボタン群（メルカリ・BASE追加） */}
+      {/* 学習データ管理ボタン群（Qoo10追加） */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
         <button 
@@ -285,6 +293,12 @@ export default function WebSalesEditableTable({
           className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200"
         >
           🔄 BASE学習データリセット
+        </button>
+        <button 
+          onClick={() => handleLearningReset('qoo10')}
+          className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200"
+        >
+          🔄 Qoo10学習データリセット
         </button>
       </div>
 
@@ -371,6 +385,16 @@ export default function WebSalesEditableTable({
         <BaseCsvImportModal
           isOpen={isBaseCsvModalOpen}
           onClose={() => setIsBaseCsvModalOpen(false)}
+          onSuccess={handleImportSuccess}
+          products={productMasterList}
+        />
+      )}
+
+      {/* 🟣 Qoo10 Modal追加 */}
+      {isQoo10CsvModalOpen && (
+        <Qoo10CsvImportModal
+          isOpen={isQoo10CsvModalOpen}
+          onClose={() => setIsQoo10CsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
         />
