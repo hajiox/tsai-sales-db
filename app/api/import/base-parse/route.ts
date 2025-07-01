@@ -107,12 +107,12 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < lines.length; i++) {
         const columns = parseCsvLine(lines[i]);
-        // BASE CSVは38列、最低でも商品名(17)と数量(21)が必要
-        if (columns.length < 22) continue;
+        // BASE CSVは38列、最低でも商品名(18)と数量(22)が必要
+        if (columns.length < 23) continue;
 
-        // BASE CSVの構造：商品名=18列目（0ベース17）、数量=22列目（0ベース21）
-        const baseTitle = columns[17]?.trim() || '';
-        const quantity = parseInt(columns[21], 10) || 0;
+        // BASE CSVの構造：商品名=18列目（0ベース18）、数量=22列目（0ベース22）
+        const baseTitle = columns[18]?.trim() || '';
+        const quantity = parseInt(columns[22], 10) || 0;
 
         if (quantity <= 0) continue;
 
