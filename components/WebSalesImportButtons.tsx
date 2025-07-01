@@ -1,5 +1,5 @@
 // /components/WebSalesImportButtons.tsx ver.4
-// Yahoo機能統合版 + 注意書き追加
+// メルカリ機能有効化版
 
 "use client"
 
@@ -11,6 +11,7 @@ interface WebSalesImportButtonsProps {
   onAmazonClick: () => void
   onRakutenClick: () => void
   onYahooClick: () => void
+  onMercariClick: () => void
 }
 
 export default function WebSalesImportButtons({
@@ -19,6 +20,7 @@ export default function WebSalesImportButtons({
   onAmazonClick,
   onRakutenClick,
   onYahooClick,
+  onMercariClick,
 }: WebSalesImportButtonsProps) {
   return (
     <div className="p-3 border-t">
@@ -51,8 +53,8 @@ export default function WebSalesImportButtons({
           Yahoo
         </button>
         <button
+          onClick={onMercariClick}
           className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600"
-          disabled
         >
           メルカリ
         </button>
