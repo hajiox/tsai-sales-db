@@ -1,5 +1,5 @@
-// /components/WebSalesImportButtons.tsx ver.3
-// Yahoo機能統合版
+// /components/WebSalesImportButtons.tsx ver.4
+// Yahoo機能統合版 + 注意書き追加
 
 "use client"
 
@@ -22,6 +22,7 @@ export default function WebSalesImportButtons({
 }: WebSalesImportButtonsProps) {
   return (
     <div className="p-3 border-t">
+      {/* 取り込みボタン群 */}
       <div className="flex items-center justify-center gap-3">
         <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
         <button
@@ -68,6 +69,11 @@ export default function WebSalesImportButtons({
           BASE
         </button>
       </div>
+
+      {/* ▼ 追加した注意書き */}
+      <p className="mt-1 text-xs text-gray-500 text-center">
+        ※ Yahoo CSV はアップロード前に <span className="font-semibold">必ず「CSV UTF-8 (カンマ区切り)」形式</span> で保存してください。
+      </p>
     </div>
-  )
+  );
 }
