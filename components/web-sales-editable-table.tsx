@@ -272,42 +272,42 @@ export default function WebSalesEditableTable({
         </button>
       </div>
 
-      {/* 新規追加: ECチャネル別削除ボタン */}
-      <div className="flex items-center gap-2">
+      {/* 新規追加: ECチャネル別削除ボタン（統一スタイル） */}
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">ECチャネル別データ削除:</span>
         <button 
           onClick={() => handleChannelDelete('amazon')}
-          className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600"
+          className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200"
         >
           🗑️ Amazon削除
         </button>
         <button 
           onClick={() => handleChannelDelete('rakuten')}
-          className="px-3 py-1 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700"
+          className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200"
         >
           🗑️ 楽天削除
         </button>
         <button 
           onClick={() => handleChannelDelete('yahoo')}
-          className="px-3 py-1 text-xs font-semibold text-white bg-purple-600 rounded hover:bg-purple-700"
+          className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200"
         >
           🗑️ Yahoo削除
         </button>
         <button 
           onClick={() => handleChannelDelete('mercari')}
-          className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600"
+          className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200"
         >
           🗑️ メルカリ削除
         </button>
         <button 
           onClick={() => handleChannelDelete('base')}
-          className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700"
+          className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200"
         >
           🗑️ BASE削除
         </button>
         <button 
           onClick={() => handleChannelDelete('qoo10')}
-          className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600"
+          className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200"
         >
           🗑️ Qoo10削除
         </button>
