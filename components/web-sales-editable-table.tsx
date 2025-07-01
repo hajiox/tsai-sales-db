@@ -1,5 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.53
-// Yahooモーダルのプロパティ名修正版
+// /components/web-sales-editable-table.tsx ver.54
+// メルカリ機能追加版
 
 "use client"
 
@@ -13,6 +13,7 @@ import WebSalesSummary from "./WebSalesSummary"
 import AmazonCsvImportModal from "./AmazonCsvImportModal"
 import RakutenCsvImportModal from "./RakutenCsvImportModal"
 import YahooCsvImportModal from "./YahooCsvImportModal"
+import MercariCsvImportModal from "./MercariCsvImportModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
 
@@ -35,6 +36,7 @@ export default function WebSalesEditableTable({
   const [isAmazonCsvModalOpen, setIsAmazonCsvModalOpen] = useState(false)
   const [isRakutenCsvModalOpen, setIsRakutenCsvModalOpen] = useState(false)
   const [isYahooCsvModalOpen, setIsYahooCsvModalOpen] = useState(false)
+  const [isMercariCsvModalOpen, setIsMercariCsvModalOpen] = useState(false)
   
   const router = useRouter()
 
@@ -96,6 +98,7 @@ export default function WebSalesEditableTable({
     setIsAmazonCsvModalOpen(false)
     setIsRakutenCsvModalOpen(false)
     setIsYahooCsvModalOpen(false)
+    setIsMercariCsvModalOpen(false)
     onDataUpdated()
   }
 
@@ -130,8 +133,15 @@ export default function WebSalesEditableTable({
     }
   }
 
-  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo') => {
-    if (!confirm(`${channel === 'amazon' ? 'Amazon' : channel === 'rakuten' ? '楽天' : 'Yahoo'}の学習データをリセットしますか？`)) {
+  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari') => {
+    const channelNames = {
+      amazon: 'Amazon',
+      rakuten: '楽天', 
+      yahoo: 'Yahoo',
+      mercari: 'メルカリ'
+    };
+
+    if (!confirm(`${channelNames[channel]}の学習データをリセットしますか？`)) {
       return
     }
 
@@ -143,7 +153,7 @@ export default function WebSalesEditableTable({
       const result = await response.json()
       
       if (result.success) {
-        alert(`${channel === 'amazon' ? 'Amazon' : channel === 'rakuten' ? '楽天' : 'Yahoo'}の学習データをリセットしました`)
+        alert(`${channelNames[channel]}の学習データをリセットしました`)
       } else {
         throw new Error(result.error || 'リセットに失敗しました')
       }
@@ -187,6 +197,10 @@ export default function WebSalesEditableTable({
           console.log('Yahoo button clicked!');
           setIsYahooCsvModalOpen(true);
         }}
+        onMercariClick={() => {
+          console.log('Mercari button clicked!');
+          setIsMercariCsvModalOpen(true);
+        }}
       />
       
       <div className="flex items-center gap-2">
@@ -208,6 +222,12 @@ export default function WebSalesEditableTable({
           className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200"
         >
           🔄 Yahoo学習データリセット
+        </button>
+        <button 
+          onClick={() => handleLearningReset('mercari')}
+          className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200"
+        >
+          🔄 メルカリ学習データリセット
         </button>
       </div>
 
@@ -235,7 +255,16 @@ export default function WebSalesEditableTable({
         <YahooCsvImportModal
           isOpen={isYahooCsvModalOpen}
           onClose={() => setIsYahooCsvModalOpen(false)}
-          onSuccess={handleImportSuccess} // ★★★ ここを 'onImportComplete' から 'onSuccess' に修正しました ★★★
+          onSuccess={handleImportSuccess}
+          products={productMasterList}
+        />
+      )}
+
+      {isMercariCsvModalOpen && (
+        <MercariCsvImportModal
+          isOpen={isMercariCsvModalOpen}
+          onClose={() => setIsMercariCsvModalOpen(false)}
+          onSuccess={handleImportSuccess}
           products={productMasterList}
         />
       )}
