@@ -1,5 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.56
-// BASE機能統合版
+// /components/web-sales-editable-table.tsx ver.57
+// メルカリ・BASE学習データリセット対応版
 
 "use client"
 
@@ -14,7 +14,7 @@ import AmazonCsvImportModal from "./AmazonCsvImportModal"
 import RakutenCsvImportModal from "./RakutenCsvImportModal"
 import YahooCsvImportModal from "./YahooCsvImportModal"
 import MercariCsvImportModal from "./MercariCsvImportModal"
-import BaseCsvImportModal from "./BaseCsvImportModal"  // 🏪 BASE追加
+import BaseCsvImportModal from "./BaseCsvImportModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
 
@@ -38,7 +38,7 @@ export default function WebSalesEditableTable({
   const [isRakutenCsvModalOpen, setIsRakutenCsvModalOpen] = useState(false)
   const [isYahooCsvModalOpen, setIsYahooCsvModalOpen] = useState(false)
   const [isMercariCsvModalOpen, setIsMercariCsvModalOpen] = useState(false)
-  const [isBaseCsvModalOpen, setIsBaseCsvModalOpen] = useState(false)  // 🏪 BASE追加
+  const [isBaseCsvModalOpen, setIsBaseCsvModalOpen] = useState(false)
   
   const router = useRouter()
 
@@ -101,7 +101,7 @@ export default function WebSalesEditableTable({
     setIsRakutenCsvModalOpen(false)
     setIsYahooCsvModalOpen(false)
     setIsMercariCsvModalOpen(false)
-    setIsBaseCsvModalOpen(false)  // 🏪 BASE追加
+    setIsBaseCsvModalOpen(false)
     onDataUpdated()
   }
 
@@ -136,7 +136,7 @@ export default function WebSalesEditableTable({
     }
   }
 
-  // 新規追加: ECチャネル別削除機能
+  // ECチャネル別削除機能
   const handleChannelDelete = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10') => {
     const channelNames = {
       amazon: 'Amazon',
@@ -176,12 +176,14 @@ export default function WebSalesEditableTable({
     }
   }
 
-  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari') => {
+  // 学習データリセット機能（メルカリ・BASE対応）
+  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base') => {
     const channelNames = {
       amazon: 'Amazon',
       rakuten: '楽天', 
       yahoo: 'Yahoo',
-      mercari: 'メルカリ'
+      mercari: 'メルカリ',
+      base: 'BASE'
     };
 
     if (!confirm(`${channelNames[channel]}の学習データをリセットしますか？`)) {
@@ -196,7 +198,7 @@ export default function WebSalesEditableTable({
       const result = await response.json()
       
       if (result.success) {
-        alert(`${channelNames[channel]}の学習データをリセットしました`)
+        alert(`${channelNames[channel]}の学習データをリセットしました（${result.deletedCount}件削除）`)
       } else {
         throw new Error(result.error || 'リセットに失敗しました')
       }
@@ -245,13 +247,14 @@ export default function WebSalesEditableTable({
           console.log('Mercari button clicked!');
           setIsMercariCsvModalOpen(true);
         }}
-        onBaseClick={() => {  // 🏪 BASE追加
+        onBaseClick={() => {
           console.log('BASE button clicked!');
           setIsBaseCsvModalOpen(true);
         }}
       />
       
-      <div className="flex items-center gap-2">
+      {/* 学習データ管理ボタン群（メルカリ・BASE追加） */}
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
         <button 
           onClick={() => handleLearningReset('amazon')}
@@ -277,9 +280,15 @@ export default function WebSalesEditableTable({
         >
           🔄 メルカリ学習データリセット
         </button>
+        <button 
+          onClick={() => handleLearningReset('base')}
+          className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200"
+        >
+          🔄 BASE学習データリセット
+        </button>
       </div>
 
-      {/* 新規追加: ECチャネル別削除ボタン（統一スタイル） */}
+      {/* ECチャネル別削除ボタン群 */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">ECチャネル別データ削除:</span>
         <button 
@@ -358,7 +367,6 @@ export default function WebSalesEditableTable({
         />
       )}
 
-      {/* 🏪 BASE Modal追加 */}
       {isBaseCsvModalOpen && (
         <BaseCsvImportModal
           isOpen={isBaseCsvModalOpen}
