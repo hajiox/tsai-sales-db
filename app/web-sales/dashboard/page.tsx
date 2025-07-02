@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.18 (Definitive Fix)
+// /app/web-sales/dashboard/page.tsx ver.19 (12ヶ月表示対応)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -232,7 +232,11 @@ function WebSalesDashboardContent() {
 
         {viewMode === 'month' && (
           <>
-            <WebSalesCharts month={month} refreshTrigger={refreshTrigger} />
+            <WebSalesCharts 
+              month={month} 
+              refreshTrigger={refreshTrigger}
+              periodMonths={viewMode === 'period' ? periodMonths : 6}
+            />
             {isLoading ? (
               <div className="p-4">
                 <div className="animate-pulse">
