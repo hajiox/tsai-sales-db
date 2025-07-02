@@ -1,4 +1,5 @@
-// /app/api/import/csv-confirm/route.ts (元のデバッグ強化版)
+// /app/api/import/csv-confirm/route.ts ver.3
+// 汎用CSV確定API（uuid型対応・引き継ぎ資料⑰準拠）
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -10,7 +11,10 @@ const supabase = createClient(
 
 interface ConfirmItem {
   csvTitle: string
-  productId: string
+  matchedProduct?: {
+    id: string
+    name: string
+  }
   amazonCount: number
   rakutenCount: number
   yahooCount: number
@@ -21,143 +25,181 @@ interface ConfirmItem {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("=== CSV Confirm API開始 (デバッグ強化版) ===")
+    console.log("=== CSV Confirm API開始 (uuid対応版 ver.3) ===")
     
-    const { items, month } = await request.json()
+    const body = await request.json()
+    const { data: items, month } = body
+    
     console.log(`受信データ - items数: ${items?.length}, month: ${month}`)
 
     if (!items || !Array.isArray(items)) {
-      return NextResponse.json({ error: 'アイテムデータが無効です' }, { status: 400 })
+      return NextResponse.json({ 
+        success: false,
+        error: 'アイテムデータが無効です' 
+      }, { status: 400 })
     }
 
     if (!month) {
-      return NextResponse.json({ error: '月が指定されていません' }, { status: 400 })
+      return NextResponse.json({ 
+        success: false,
+        error: '月が指定されていません' 
+      }, { status: 400 })
     }
 
     // 月の形式をYYYY-MM-DD に変換
     const reportMonth = `${month}-01`
     console.log(`保存対象月: ${reportMonth}`)
 
-    let savedCount = 0
-    let learnedCount = 0
-    let totalQuantity = 0
+    let successCount = 0
+    let errorCount = 0
+    let learnedMappings = 0
+    let skippedCount = 0
 
+    // 商品IDごとに数量を集約
+    const aggregatedData = new Map<string, {
+      productId: string
+      productName: string
+      csvTitle: string
+      amazonCount: number
+      rakutenCount: number
+      yahooCount: number
+      mercariCount: number
+      baseCount: number
+      qoo10Count: number
+    }>()
+
+    // データ集約処理
     for (const item of items) {
-      const {
-        csvTitle,
-        productId,
-        amazonCount,
-        rakutenCount,
-        yahooCount,
-        mercariCount,
-        baseCount,
-        qoo10Count
-      } = item
-
-      console.log(`\n--- 商品処理開始 ---`)
-      console.log(`商品名: ${csvTitle}`)
-      console.log(`商品ID: ${productId}`)
-      console.log(`受信数値詳細:`)
-      console.log(`  Amazon: ${amazonCount} (型: ${typeof amazonCount})`)
-      console.log(`  楽天: ${rakutenCount} (型: ${typeof rakutenCount})`)
-      console.log(`  Yahoo: ${yahooCount} (型: ${typeof yahooCount})`)
-      console.log(`  メルカリ: ${mercariCount} (型: ${typeof mercariCount})`)
-      console.log(`  BASE: ${baseCount} (型: ${typeof baseCount})`)
-      console.log(`  Qoo10: ${qoo10Count} (型: ${typeof qoo10Count})`)
-
-      if (!productId) {
-        console.warn(`商品ID未設定のためスキップ: ${csvTitle}`)
+      if (!item.matchedProduct?.id) {
+        console.log(`❌ スキップ: 商品IDなし - "${item.csvTitle}"`)
+        skippedCount++
         continue
       }
 
-      const safeAmazonCount = Number(amazonCount) || 0
-      const safeRakutenCount = Number(rakutenCount) || 0
-      const safeYahooCount = Number(yahooCount) || 0
-      const safeMercariCount = Number(mercariCount) || 0
-      const safeBaseCount = Number(baseCount) || 0
-      const safeQoo10Count = Number(qoo10Count) || 0
+      const productId = item.matchedProduct.id
+      const existing = aggregatedData.get(productId)
 
-      console.log(`変換後数値:`)
-      console.log(`  Amazon: ${safeAmazonCount}`)
-      console.log(`  楽天: ${safeRakutenCount}`)
-      console.log(`  Yahoo: ${safeYahooCount}`)
-      console.log(`  メルカリ: ${safeMercariCount}`)
-      console.log(`  BASE: ${safeBaseCount}`)
-      console.log(`  Qoo10: ${safeQoo10Count}`)
-      
-      const itemTotal = safeAmazonCount + safeRakutenCount + safeYahooCount + safeMercariCount + safeBaseCount + safeQoo10Count
-      totalQuantity += itemTotal
-
-      const upsertData = {
-        product_id: productId,
-        report_month: reportMonth,
-        amazon_count: safeAmazonCount,
-        rakuten_count: safeRakutenCount,
-        yahoo_count: safeYahooCount,
-        mercari_count: safeMercariCount,
-        base_count: safeBaseCount,
-        qoo10_count: safeQoo10Count,
-        report_date: reportMonth
-      }
-      
-      console.log(`UPSERT実行データ:`, JSON.stringify(upsertData, null, 2))
-
-      // web_sales_summaryにUPSERT
-      const { data: upsertResult, error: upsertError } = await supabase
-        .from('web_sales_summary')
-        .upsert(upsertData, {
-          onConflict: 'product_id,report_month'
+      if (existing) {
+        // 既存データに数量を加算
+        existing.amazonCount += Number(item.amazonCount) || 0
+        existing.rakutenCount += Number(item.rakutenCount) || 0
+        existing.yahooCount += Number(item.yahooCount) || 0
+        existing.mercariCount += Number(item.mercariCount) || 0
+        existing.baseCount += Number(item.baseCount) || 0
+        existing.qoo10Count += Number(item.qoo10Count) || 0
+      } else {
+        // 新規データ追加
+        aggregatedData.set(productId, {
+          productId,
+          productName: item.matchedProduct.name,
+          csvTitle: item.csvTitle,
+          amazonCount: Number(item.amazonCount) || 0,
+          rakutenCount: Number(item.rakutenCount) || 0,
+          yahooCount: Number(item.yahooCount) || 0,
+          mercariCount: Number(item.mercariCount) || 0,
+          baseCount: Number(item.baseCount) || 0,
+          qoo10Count: Number(item.qoo10Count) || 0
         })
-        .select()
-
-      if (upsertError) {
-        console.error(`❌ 売上データ保存エラー (${productId}):`, upsertError)
-        continue
-      }
-
-      console.log(`✅ UPSERT成功:`, upsertResult)
-      savedCount++
-
-      // CSV学習データの保存
-      const { data: existingMapping } = await supabase
-        .from('csv_product_mapping')
-        .select('csv_title')
-        .eq('csv_title', csvTitle)
-        .single()
-
-      if (!existingMapping) {
-        const { error: learningError } = await supabase
-          .from('csv_product_mapping')
-          .insert({
-            csv_title: csvTitle,
-            product_id: productId
-          })
-
-        if (learningError) {
-          console.error(`CSV学習データ保存エラー (${csvTitle}):`, learningError)
-        } else {
-          learnedCount++
-        }
       }
     }
 
-    console.log(`=== CSV保存完了 ===`)
-    console.log(`保存件数: ${savedCount}件`)
-    console.log(`学習件数: ${learnedCount}件`)
-    console.log(`総数量: ${totalQuantity}`)
+    console.log(`📊 集約結果: ${aggregatedData.size}個の商品`)
+
+    // データベース保存処理
+    for (const [productId, data] of aggregatedData) {
+      try {
+        console.log(`\n--- 商品処理: ${data.productName} (${productId}) ---`)
+        
+        // 既存データ確認
+        const { data: existingData } = await supabase
+          .from('web_sales_summary')
+          .select('*')
+          .eq('product_id', productId)
+          .eq('report_month', reportMonth)
+          .single()
+
+        const upsertData = {
+          product_id: productId,
+          report_month: reportMonth,
+          amazon_count: data.amazonCount,
+          rakuten_count: data.rakutenCount,
+          yahoo_count: data.yahooCount,
+          mercari_count: data.mercariCount,
+          base_count: data.baseCount,
+          qoo10_count: data.qoo10Count,
+          report_date: reportMonth
+        }
+
+        console.log(`💾 UPSERT実行:`, JSON.stringify(upsertData, null, 2))
+
+        // web_sales_summaryにUPSERT
+        const { error: upsertError } = await supabase
+          .from('web_sales_summary')
+          .upsert(upsertData, {
+            onConflict: 'product_id,report_month'
+          })
+
+        if (upsertError) {
+          console.error(`❌ 売上データ保存エラー (${productId}):`, upsertError)
+          errorCount++
+          continue
+        }
+
+        console.log(`✅ 売上データ保存成功: ${data.productName}`)
+        successCount++
+
+        // CSV学習データの保存
+        const { data: existingMapping } = await supabase
+          .from('csv_product_mapping')
+          .select('csv_title')
+          .eq('csv_title', data.csvTitle)
+          .single()
+
+        if (!existingMapping) {
+          const { error: learningError } = await supabase
+            .from('csv_product_mapping')
+            .upsert({
+              csv_title: data.csvTitle,
+              product_id: productId
+            })
+
+          if (learningError) {
+            console.error(`CSV学習データ保存エラー (${data.csvTitle}):`, learningError)
+          } else {
+            console.log(`📚 学習データ保存: "${data.csvTitle}" -> ${data.productName}`)
+            learnedMappings++
+          }
+        }
+
+      } catch (itemError) {
+        console.error(`商品処理エラー (${productId}):`, itemError)
+        errorCount++
+      }
+    }
+
+    const totalCount = successCount + errorCount + skippedCount
+
+    console.log(`\n=== CSV Confirm API完了 ===`)
+    console.log(`✅ 成功: ${successCount}件`)
+    console.log(`❌ エラー: ${errorCount}件`)
+    console.log(`⏭️ スキップ: ${skippedCount}件`)
+    console.log(`📚 学習: ${learnedMappings}件`)
+    console.log(`📊 合計: ${totalCount}件`)
 
     return NextResponse.json({
       success: true,
-      message: `${month}のCSVデータを保存しました`,
-      savedCount,
-      learnedCount,
-      totalQuantity,
-      month: month
+      message: `${month}月のCSVデータを正常に保存しました`,
+      successCount,
+      errorCount,
+      totalCount,
+      learnedMappings,
+      month
     })
 
   } catch (error) {
     console.error('❌ CSV Confirm API エラー:', error)
     return NextResponse.json({ 
+      success: false,
       error: 'CSV保存中にエラーが発生しました',
       details: error instanceof Error ? error.message : '不明なエラー'
     }, { status: 500 })
