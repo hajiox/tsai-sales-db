@@ -1,6 +1,7 @@
 // /components/websales-charts.tsx ver.1 (12ヶ月表示対応)
+"use client"
+
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { 
   Chart as ChartJS, 
   CategoryScale, 
