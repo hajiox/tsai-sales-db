@@ -1,5 +1,5 @@
-// /app/api/import/csv-parse/route.ts ver.4
-// 汎用CSV解析API（CSV解析強化版）
+// /app/api/import/csv-parse/route.ts ver.5
+// 汎用CSV解析API（列名スペース対応版）
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -23,7 +23,7 @@ interface ParsedItem {
   matchType?: string
 }
 
-// 🎯 楽天と同じ高機能CSV解析関数
+// 高機能CSV解析関数
 function parseCsvLine(line: string): string[] {
   const columns = [];
   let currentColumn = '';
@@ -40,24 +40,36 @@ function parseCsvLine(line: string): string[] {
         inQuotes = !inQuotes;
       }
     } else if (char === ',' && !inQuotes) {
-      columns.push(currentColumn.trim());
+      columns.push(currentColumn.trim()); // trim()でスペース除去
       currentColumn = '';
     } else {
       currentColumn += char;
     }
   }
-  columns.push(currentColumn.trim());
+  columns.push(currentColumn.trim()); // 最後の列もtrim()
   return columns;
 }
 
-// 楽天と同じ安全な文字列検証関数
+// 安全な文字列検証関数
 function isValidString(value: any): value is string {
   return value && typeof value === 'string' && value.trim().length > 0;
 }
 
+// 🎯 安全な数値取得関数（列名の曖昧さに対応）
+function getSafeNumber(csvRow: any, possibleKeys: string[]): number {
+  for (const key of possibleKeys) {
+    const value = csvRow[key];
+    if (value !== undefined && value !== null && value !== '') {
+      const numValue = parseInt(String(value)) || 0;
+      return numValue;
+    }
+  }
+  return 0;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    console.log("=== 汎用CSV Parse API開始 (CSV解析強化版) ===")
+    console.log("=== 汎用CSV Parse API開始 (列名スペース対応版) ===")
     
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -83,7 +95,7 @@ export async function POST(request: NextRequest) {
     const headers = parseCsvLine(lines[0])
     console.log("CSV Headers:", headers)
 
-    // 商品マスター取得（楽天方式の厳密検証）
+    // 商品マスター取得
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('*')
@@ -93,7 +105,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '商品マスター取得に失敗しました' }, { status: 500 })
     }
 
-    // 商品データの厳密な検証（楽天方式）
     const validProducts = (products || []).filter(p => {
       if (!p || !isValidString(p.name)) {
         console.log('無効な商品データを除外:', p);
@@ -103,7 +114,7 @@ export async function POST(request: NextRequest) {
     });
     console.log('有効な商品数:', validProducts.length);
 
-    // CSV学習データ取得（楽天方式）
+    // CSV学習データ取得
     const { data: csvMappings, error: csvMappingsError } = await supabase
       .from('csv_product_mapping')
       .select('csv_title, product_id')
@@ -113,7 +124,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSV学習データ取得に失敗しました' }, { status: 500 })
     }
 
-    // 学習データの厳密な検証（楽天方式）
     const validLearningData = (csvMappings || []).filter(l => {
       if (!l || !isValidString(l.csv_title)) {
         console.log('無効なCSV学習データを除外:', l);
@@ -129,7 +139,6 @@ export async function POST(request: NextRequest) {
     let unmatchedCount = 0
     
     for (let i = 1; i < lines.length; i++) {
-      // 🎯 高機能CSV解析を使用
       const values = parseCsvLine(lines[i])
       
       if (values.length < headers.length) {
@@ -144,36 +153,47 @@ export async function POST(request: NextRequest) {
         csvRow[header] = values[index] || ''
       })
 
-      const productName = csvRow['商品名　　　2025.2更新'] || csvRow['商品名']
+      // 🎯 商品名の取得（複数パターンに対応）
+      const productName = csvRow['商品名　　　2025.2更新'] || 
+                         csvRow['商品名'] || 
+                         csvRow[' 商品名　　　2025.2更新'] || 
+                         values[0] // フォールバック: 0列目を直接取得
       
-      // 楽天方式の厳密な文字列検証
       if (!isValidString(productName)) {
         console.warn(`行 ${i + 1}: 商品名が空またはnullです`)
         continue
       }
 
-      // 数量データ抽出（数値変換）- より安全な変換
-      const amazonCount = parseInt(csvRow['Amazon']) || 0
-      const rakutenCount = parseInt(csvRow['楽天市場']) || 0
-      const yahooCount = parseInt(csvRow['Yahoo!']) || 0
-      const mercariCount = parseInt(csvRow['メルカリ']) || 0
-      const baseCount = parseInt(csvRow['BASE']) || 0
-      const qoo10Count = parseInt(csvRow['Qoo10']) || 0
+      // 🎯 数量データ抽出（複数の列名パターンに対応）
+      const amazonCount = getSafeNumber(csvRow, ['Amazon', ' Amazon']) || parseInt(values[2]) || 0
+      const rakutenCount = getSafeNumber(csvRow, ['楽天市場', ' 楽天市場']) || parseInt(values[3]) || 0
+      const yahooCount = getSafeNumber(csvRow, ['Yahoo!', ' Yahoo!']) || parseInt(values[4]) || 0
+      const mercariCount = getSafeNumber(csvRow, ['メルカリ', ' メルカリ']) || parseInt(values[5]) || 0
+      const baseCount = getSafeNumber(csvRow, ['BASE', ' BASE']) || parseInt(values[6]) || 0
+      const qoo10Count = getSafeNumber(csvRow, ['Qoo10', ' Qoo10']) || parseInt(values[8]) || 0
 
-      // 異常値チェック（Amazon異常値対策）
+      // デバッグログ追加
+      console.log(`行 ${i + 1} 数量確認:`, {
+        商品名: productName,
+        Amazon: amazonCount,
+        楽天: rakutenCount,
+        Yahoo: yahooCount,
+        メルカリ: mercariCount,
+        BASE: baseCount,
+        Qoo10: qoo10Count,
+        生データ: values.slice(0, 11)
+      })
+
+      // 異常値チェック
       if (amazonCount > 10000 || rakutenCount > 10000 || yahooCount > 10000 || 
           mercariCount > 10000 || baseCount > 10000 || qoo10Count > 10000) {
-        console.warn(`行 ${i + 1}: 異常な数値を検出 - 商品名:"${productName}", Amazon:${amazonCount}, 楽天:${rakutenCount}, Yahoo:${yahooCount}, メルカリ:${mercariCount}, BASE:${baseCount}, Qoo10:${qoo10Count}`)
-        console.warn(`行データ詳細:`, values)
+        console.warn(`行 ${i + 1}: 異常な数値を検出 - スキップ`)
         continue
       }
 
-      console.log(`処理中: "${productName}" (Amazon:${amazonCount}, 楽天:${rakutenCount}, Yahoo:${yahooCount}, メルカリ:${mercariCount}, BASE:${baseCount}, Qoo10:${qoo10Count})`)
-
       try {
-        // 楽天方式の高機能マッチング呼び出し前の最終検証
         if (!isValidString(productName) || !validProducts || !validLearningData) {
-          console.error('findBestMatchSimplified呼び出し前の検証失敗');
+          console.error('マッチング前の検証失敗');
           unmatchedCount++
           parsedItems.push({
             csvTitle: productName,
@@ -189,7 +209,6 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // 🎯 楽天と同じ高機能マッチング関数を使用
         const productInfo = findBestMatchSimplified(productName, validProducts, validLearningData)
 
         if (productInfo) {
@@ -223,7 +242,7 @@ export async function POST(request: NextRequest) {
           console.log(`マッチ失敗: "${productName}"`)
         }
       } catch (error) {
-        console.error(`findBestMatchSimplified エラー (${productName}):`, error);
+        console.error(`マッチング エラー (${productName}):`, error);
         unmatchedCount++
         parsedItems.push({
           csvTitle: productName,
