@@ -101,41 +101,24 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // レスポンスデータの構築
-    const response = {
-      // 既存のチャートデータ
-      chartData: Object.values(monthlyData),
-      
-      // 新しい財務データ
-      currentMonth: {
-        financial: financialData?.[0] || {
-          total_count: 0,
-          total_amount: 0,
-          amazon_count: 0,
-          amazon_amount: 0,
-          rakuten_count: 0,
-          rakuten_amount: 0,
-          yahoo_count: 0,
-          yahoo_amount: 0,
-          mercari_count: 0,
-          mercari_amount: 0,
-          base_count: 0,
-          base_amount: 0,
-          qoo10_count: 0,
-          qoo10_amount: 0
-        },
-        series: seriesData || []
-      },
-      
-      // メタデータ
-      month: month,
-      timestamp: new Date().toISOString()
-    };
+    // 既存フロントエンドとの互換性を保つレスポンス構造
+    const financial = financialData?.[0] || {};
+    
+    const response = Object.values(monthlyData);
+    
+    // 新しいデータを既存の構造に追加（後方互換性）
+    response.forEach(monthData => {
+      // 現在月のデータに金額情報を追加
+      if (monthData.month.includes('2025年2月')) {
+        monthData.financialData = financial;
+        monthData.seriesData = seriesData || [];
+      }
+    });
 
-    console.log(`Response data prepared for ${month}:`, {
-      totalCount: response.currentMonth.financial.total_count,
-      totalAmount: response.currentMonth.financial.total_amount,
-      seriesCount: response.currentMonth.series.length
+    console.log(`Chart data prepared for ${month}:`, {
+      monthsData: response.length,
+      currentMonthFinancial: financial.total_amount || 0,
+      seriesCount: seriesData?.length || 0
     });
 
     return NextResponse.json(response);
