@@ -1,5 +1,5 @@
-// /app/api/import/csv-parse/route.ts ver.3
-// 汎用CSV解析API（楽天マッチングシステム移植版）
+// /app/api/import/csv-parse/route.ts ver.4
+// 汎用CSV解析API（CSV解析強化版）
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -23,6 +23,33 @@ interface ParsedItem {
   matchType?: string
 }
 
+// 🎯 楽天と同じ高機能CSV解析関数
+function parseCsvLine(line: string): string[] {
+  const columns = [];
+  let currentColumn = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        currentColumn += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      columns.push(currentColumn.trim());
+      currentColumn = '';
+    } else {
+      currentColumn += char;
+    }
+  }
+  columns.push(currentColumn.trim());
+  return columns;
+}
+
 // 楽天と同じ安全な文字列検証関数
 function isValidString(value: any): value is string {
   return value && typeof value === 'string' && value.trim().length > 0;
@@ -30,7 +57,7 @@ function isValidString(value: any): value is string {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("=== 汎用CSV Parse API開始 (楽天方式) ===")
+    console.log("=== 汎用CSV Parse API開始 (CSV解析強化版) ===")
     
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -52,8 +79,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSVファイルが空か、ヘッダーのみです' }, { status: 400 })
     }
 
-    // ヘッダー解析
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+    // ヘッダー解析（高機能解析使用）
+    const headers = parseCsvLine(lines[0])
     console.log("CSV Headers:", headers)
 
     // 商品マスター取得（楽天方式の厳密検証）
@@ -102,17 +129,19 @@ export async function POST(request: NextRequest) {
     let unmatchedCount = 0
     
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
+      // 🎯 高機能CSV解析を使用
+      const values = parseCsvLine(lines[i])
       
       if (values.length < headers.length) {
-        console.warn(`行 ${i + 1}: 列数が不足しています`)
+        console.warn(`行 ${i + 1}: 列数が不足しています (期待:${headers.length}, 実際:${values.length})`)
+        console.warn(`行内容: ${lines[i]}`)
         continue
       }
 
       // CSV行データ作成
       const csvRow: any = {}
       headers.forEach((header, index) => {
-        csvRow[header] = values[index]
+        csvRow[header] = values[index] || ''
       })
 
       const productName = csvRow['商品名　　　2025.2更新'] || csvRow['商品名']
@@ -123,13 +152,21 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      // 数量データ抽出（数値変換）
+      // 数量データ抽出（数値変換）- より安全な変換
       const amazonCount = parseInt(csvRow['Amazon']) || 0
       const rakutenCount = parseInt(csvRow['楽天市場']) || 0
       const yahooCount = parseInt(csvRow['Yahoo!']) || 0
       const mercariCount = parseInt(csvRow['メルカリ']) || 0
       const baseCount = parseInt(csvRow['BASE']) || 0
       const qoo10Count = parseInt(csvRow['Qoo10']) || 0
+
+      // 異常値チェック（Amazon異常値対策）
+      if (amazonCount > 10000 || rakutenCount > 10000 || yahooCount > 10000 || 
+          mercariCount > 10000 || baseCount > 10000 || qoo10Count > 10000) {
+        console.warn(`行 ${i + 1}: 異常な数値を検出 - 商品名:"${productName}", Amazon:${amazonCount}, 楽天:${rakutenCount}, Yahoo:${yahooCount}, メルカリ:${mercariCount}, BASE:${baseCount}, Qoo10:${qoo10Count}`)
+        console.warn(`行データ詳細:`, values)
+        continue
+      }
 
       console.log(`処理中: "${productName}" (Amazon:${amazonCount}, 楽天:${rakutenCount}, Yahoo:${yahooCount}, メルカリ:${mercariCount}, BASE:${baseCount}, Qoo10:${qoo10Count})`)
 
