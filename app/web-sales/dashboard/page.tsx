@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.19 (12ヶ月表示対応)
+// /app/web-sales/dashboard/page.tsx ver.20 (チャート常時表示対応)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -230,13 +230,16 @@ function WebSalesDashboardContent() {
           periodMonths={periodMonths}
         />
 
+        {/* グラフを常に表示するように修正 */}
+        <WebSalesCharts 
+          month={month} 
+          refreshTrigger={refreshTrigger}
+          periodMonths={viewMode === 'period' ? periodMonths : 6}
+        />
+
+        {/* 月別表示モードの場合のみ表示するコンポーネント */}
         {viewMode === 'month' && (
           <>
-            <WebSalesCharts 
-              month={month} 
-              refreshTrigger={refreshTrigger}
-              periodMonths={viewMode === 'period' ? periodMonths : 6}
-            />
             {isLoading ? (
               <div className="p-4">
                 <div className="animate-pulse">
