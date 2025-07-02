@@ -1,10 +1,10 @@
-// /components/CsvImportModal.tsx ver.1
-// 汎用CSVインポートModal（社内集計済みEXCEL取り込み用）
+// /components/CsvImportModal.tsx ver.2
+// 汎用CSVインポートModal（UI改善版）
 
 "use client"
 
 import React, { useState } from "react"
-import { X, Upload, Check, AlertCircle } from "lucide-react"
+import { X, Upload, Check, AlertCircle, FileText } from "lucide-react"
 
 interface Product {
   id: string
@@ -232,22 +232,27 @@ export default function CsvImportModal({
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                 <Upload className="mx-auto h-12 w-12 text-gray-400" />
                 <div className="mt-4">
-                  <label htmlFor="csv-file" className="cursor-pointer">
-                    <span className="mt-2 block text-sm font-medium text-gray-900">
-                      CSVファイルを選択してください
-                    </span>
+                  {/* 🆕 ボタン風ファイル選択 */}
+                  <div className="relative inline-block">
                     <input
                       id="csv-file"
                       type="file"
                       accept=".csv"
                       onChange={handleFileSelect}
-                      className="hidden"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
-                  </label>
+                    <button className="inline-flex items-center px-6 py-3 border-2 border-blue-300 text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 font-medium transition-colors">
+                      <FileText className="mr-2 h-5 w-5" />
+                      CSVファイルを選択
+                    </button>
+                  </div>
                   {file && (
-                    <p className="mt-2 text-sm text-gray-500">
-                      選択ファイル: {file.name}
-                    </p>
+                    <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <div className="flex items-center justify-center">
+                        <FileText className="h-5 w-5 text-green-600 mr-2" />
+                        <span className="text-green-700 font-medium">{file.name}</span>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -265,7 +270,7 @@ export default function CsvImportModal({
                 <button
                   onClick={handleUpload}
                   disabled={!file || isLoading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 font-medium"
                 >
                   {isLoading ? '解析中...' : 'アップロード'}
                 </button>
