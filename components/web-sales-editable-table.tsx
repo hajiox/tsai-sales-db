@@ -1,5 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.58
-// Qoo10完全統合版
+// /components/web-sales-editable-table.tsx ver.59
+// 汎用CSV機能統合版
 
 "use client"
 
@@ -15,7 +15,8 @@ import RakutenCsvImportModal from "./RakutenCsvImportModal"
 import YahooCsvImportModal from "./YahooCsvImportModal"
 import MercariCsvImportModal from "./MercariCsvImportModal"
 import BaseCsvImportModal from "./BaseCsvImportModal"
-import Qoo10CsvImportModal from "./Qoo10CsvImportModal"  // 🟣 Qoo10追加
+import Qoo10CsvImportModal from "./Qoo10CsvImportModal"
+import CsvImportModal from "./CsvImportModal"  // 🆕 汎用CSV追加
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
 
@@ -35,12 +36,13 @@ export default function WebSalesEditableTable({
   const [editMode, setEditMode] = useState<{ [key: string]: boolean }>({})
   const [editedValue, setEditedValue] = useState<string>("")
 
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false)  // 🆕 汎用CSV追加
   const [isAmazonCsvModalOpen, setIsAmazonCsvModalOpen] = useState(false)
   const [isRakutenCsvModalOpen, setIsRakutenCsvModalOpen] = useState(false)
   const [isYahooCsvModalOpen, setIsYahooCsvModalOpen] = useState(false)
   const [isMercariCsvModalOpen, setIsMercariCsvModalOpen] = useState(false)
   const [isBaseCsvModalOpen, setIsBaseCsvModalOpen] = useState(false)
-  const [isQoo10CsvModalOpen, setIsQoo10CsvModalOpen] = useState(false)  // 🟣 Qoo10追加
+  const [isQoo10CsvModalOpen, setIsQoo10CsvModalOpen] = useState(false)
   
   const router = useRouter()
 
@@ -99,12 +101,13 @@ export default function WebSalesEditableTable({
 
   const handleImportSuccess = () => {
     console.log("Import successful. Notifying parent to refresh.");
+    setIsCsvModalOpen(false)  // 🆕 汎用CSV追加
     setIsAmazonCsvModalOpen(false)
     setIsRakutenCsvModalOpen(false)
     setIsYahooCsvModalOpen(false)
     setIsMercariCsvModalOpen(false)
     setIsBaseCsvModalOpen(false)
-    setIsQoo10CsvModalOpen(false)  // 🟣 Qoo10追加
+    setIsQoo10CsvModalOpen(false)
     onDataUpdated()
   }
 
@@ -139,15 +142,16 @@ export default function WebSalesEditableTable({
     }
   }
 
-  // ECチャネル別削除機能
-  const handleChannelDelete = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10') => {
+  // ECチャネル別削除機能（CSV追加）
+  const handleChannelDelete = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10' | 'csv') => {
     const channelNames = {
       amazon: 'Amazon',
       rakuten: '楽天', 
       yahoo: 'Yahoo',
       mercari: 'メルカリ',
       base: 'BASE',
-      qoo10: 'Qoo10'
+      qoo10: 'Qoo10',
+      csv: '汎用CSV'  // 🆕 汎用CSV追加
     };
 
     if (!confirm(`${month}の${channelNames[channel]}データを削除しますか？この操作は取り消せません。`)) {
@@ -179,15 +183,16 @@ export default function WebSalesEditableTable({
     }
   }
 
-  // 学習データリセット機能（Qoo10対応）
-  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10') => {
+  // 学習データリセット機能（CSV追加）
+  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10' | 'csv') => {
     const channelNames = {
       amazon: 'Amazon',
       rakuten: '楽天', 
       yahoo: 'Yahoo',
       mercari: 'メルカリ',
       base: 'BASE',
-      qoo10: 'Qoo10'
+      qoo10: 'Qoo10',
+      csv: '汎用CSV'  // 🆕 汎用CSV追加
     };
 
     if (!confirm(`${channelNames[channel]}の学習データをリセットしますか？`)) {
@@ -240,7 +245,10 @@ export default function WebSalesEditableTable({
 
       <WebSalesImportButtons
         isUploading={false}
-        onCsvClick={() => alert('This button is currently disabled')}
+        onCsvClick={() => {  // 🆕 汎用CSV有効化
+          console.log('CSV button clicked!');
+          setIsCsvModalOpen(true);
+        }}
         onAmazonClick={() => setIsAmazonCsvModalOpen(true)}
         onRakutenClick={() => setIsRakutenCsvModalOpen(true)}
         onYahooClick={() => {
@@ -255,15 +263,21 @@ export default function WebSalesEditableTable({
           console.log('BASE button clicked!');
           setIsBaseCsvModalOpen(true);
         }}
-        onQoo10Click={() => {  // 🟣 Qoo10追加
+        onQoo10Click={() => {
           console.log('Qoo10 button clicked!');
           setIsQoo10CsvModalOpen(true);
         }}
       />
       
-      {/* 学習データ管理ボタン群（Qoo10追加） */}
+      {/* 学習データ管理ボタン群（CSV追加） */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
+        <button 
+          onClick={() => handleLearningReset('csv')}
+          className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+        >
+          🔄 汎用CSV学習データリセット
+        </button>
         <button 
           onClick={() => handleLearningReset('amazon')}
           className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200"
@@ -302,9 +316,15 @@ export default function WebSalesEditableTable({
         </button>
       </div>
 
-      {/* ECチャネル別削除ボタン群 */}
+      {/* ECチャネル別削除ボタン群（CSV追加） */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">ECチャネル別データ削除:</span>
+        <button 
+          onClick={() => handleChannelDelete('csv')}
+          className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+        >
+          🗑️ 汎用CSV削除
+        </button>
         <button 
           onClick={() => handleChannelDelete('amazon')}
           className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200"
@@ -345,6 +365,16 @@ export default function WebSalesEditableTable({
 
       <WebSalesSummary totalCount={totalCount} totalAmount={totalAmount} />
       
+      {/* 🆕 汎用CSV Modal追加 */}
+      {isCsvModalOpen && (
+        <CsvImportModal
+          isOpen={isCsvModalOpen}
+          onClose={() => setIsCsvModalOpen(false)}
+          onSuccess={handleImportSuccess}
+          products={productMasterList}
+        />
+      )}
+
       {isAmazonCsvModalOpen && (
         <AmazonCsvImportModal 
           isOpen={isAmazonCsvModalOpen} 
@@ -390,7 +420,6 @@ export default function WebSalesEditableTable({
         />
       )}
 
-      {/* 🟣 Qoo10 Modal追加 */}
       {isQoo10CsvModalOpen && (
         <Qoo10CsvImportModal
           isOpen={isQoo10CsvModalOpen}
