@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.20 (チャート常時表示対応)
+// /app/web-sales/dashboard/page.tsx ver.21 (インラインスタイル版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -41,6 +41,11 @@ function WebSalesDashboardContent() {
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [productMaster, setProductMaster] = useState<any[]>([])
+
+  // デバッグ用ログ出力
+  useEffect(() => {
+    console.log("Dashboard state:", { viewMode, periodMonths, month });
+  }, [viewMode, periodMonths, month]);
 
   const handleMonthChange = useCallback((newMonth: string) => {
     if (newMonth === month) return;
@@ -165,6 +170,7 @@ function WebSalesDashboardContent() {
   }, []);
 
   const selectPeriod = useCallback((months: 6 | 12) => {
+    console.log(`Selecting period: ${months} months`);
     setPeriodMonths(months);
     setViewMode('period');
   }, []);
@@ -188,38 +194,94 @@ function WebSalesDashboardContent() {
               : `${month}月を基準とした過去${periodMonths}ヶ月間の集計結果`}
           </p>
         </div>
-        <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-          <div className="flex items-center gap-2">
+        
+        {/* モード切り替えボタン部分を修正 - インラインスタイルを使用 */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px',
+          backgroundColor: '#f9fafb',
+          borderRadius: '8px',
+          marginBottom: '16px',
+          border: '1px solid #e5e7eb'
+        }}>
+          <div style={{display: 'flex', gap: '8px'}}>
             <button 
-              onClick={() => setViewMode('month')} 
-              className={`px-3 py-2 text-sm rounded-md ${viewMode === 'month' ? 'bg-black text-white' : 'bg-white border'}`}
+              onClick={() => setViewMode('month')}
+              style={{
+                padding: '8px 12px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                backgroundColor: viewMode === 'month' ? '#000' : '#fff',
+                color: viewMode === 'month' ? '#fff' : '#000',
+                border: '1px solid #ddd',
+                cursor: 'pointer'
+              }}
             >
               月別表示
             </button>
+            
             <button 
-              onClick={() => selectPeriod(6)} 
-              className={`px-3 py-2 text-sm rounded-md ${viewMode === 'period' && periodMonths === 6 ? 'bg-black text-white' : 'bg-white border'}`}
+              onClick={() => selectPeriod(6)}
+              style={{
+                padding: '8px 12px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                backgroundColor: viewMode === 'period' && periodMonths === 6 ? '#000' : '#fff',
+                color: viewMode === 'period' && periodMonths === 6 ? '#fff' : '#000',
+                border: '1px solid #ddd',
+                cursor: 'pointer'
+              }}
             >
               過去6ヶ月
             </button>
+            
             <button 
-              onClick={() => selectPeriod(12)} 
-              className={`px-3 py-2 text-sm rounded-md ${viewMode === 'period' && periodMonths === 12 ? 'bg-black text-white' : 'bg-white border'}`}
+              onClick={() => selectPeriod(12)}
+              style={{
+                padding: '8px 12px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                backgroundColor: viewMode === 'period' && periodMonths === 12 ? '#000' : '#fff',
+                color: viewMode === 'period' && periodMonths === 12 ? '#fff' : '#000',
+                border: '1px solid #ddd',
+                cursor: 'pointer'
+              }}
             >
               過去12ヶ月
             </button>
           </div>
-          <div className="flex items-center gap-3">
+          
+          <div>
             {viewMode === 'month' && (
               <input
                 type="month"
                 value={month}
                 onChange={(e) => handleMonthChange(e.target.value)}
-                className="border rounded-md text-base p-2 bg-white"
+                style={{
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  backgroundColor: '#fff'
+                }}
               />
             )}
           </div>
         </div>
+        
+        {/* デバッグ表示 (必要に応じてコメントアウト) */}
+        {/* <div style={{
+          backgroundColor: '#ffffcc', 
+          padding: '10px', 
+          borderRadius: '6px', 
+          marginBottom: '16px',
+          border: '1px solid #ffcc00'
+        }}>
+          <p>現在のモード: {viewMode}</p>
+          <p>表示月数: {periodMonths}</p>
+          <p>選択中の月: {month}</p>
+        </div> */}
       </header>
       
       <div className="space-y-6">
