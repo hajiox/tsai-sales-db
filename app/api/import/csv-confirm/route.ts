@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
           .single()
 
         const upsertData = {
-          product_id: productId,
+          product_id: productId,  // フロントエンドからuuid文字列として送信される
           report_month: reportMonth,
           amazon_count: data.amazonCount,
           rakuten_count: data.rakutenCount,
@@ -147,6 +147,7 @@ export async function POST(request: NextRequest) {
 
         if (upsertError) {
           console.error(`❌ 売上データ保存エラー (${productId}):`, upsertError)
+          console.error(`❌ エラー詳細:`, JSON.stringify(upsertError, null, 2))
           errorCount++
           continue
         }
@@ -154,14 +155,18 @@ export async function POST(request: NextRequest) {
         console.log(`📊 UPSERT結果:`, JSON.stringify(upsertResult, null, 2))
         
         // 実際に保存されたかを即座に確認
-        const { data: verifyData } = await supabase
+        const { data: verifyData, error: verifyError } = await supabase
           .from('web_sales_summary')
           .select('*')
           .eq('product_id', productId)
           .eq('report_month', reportMonth)
           .single()
         
-        console.log(`🔍 保存確認:`, JSON.stringify(verifyData, null, 2))
+        if (verifyError) {
+          console.error(`❌ 保存確認エラー:`, verifyError)
+        } else {
+          console.log(`🔍 保存確認:`, JSON.stringify(verifyData, null, 2))
+        }
 
         console.log(`✅ 売上データ保存成功: ${data.productName}`)
         successCount++
