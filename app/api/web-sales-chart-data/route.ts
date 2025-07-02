@@ -1,4 +1,4 @@
-// /api/web-sales-chart-data/route.ts (関数呼び出し対応版)
+// /api/web-sales-chart-data/route.ts (修正版 - 選択月基準・12ヶ月切替対応)
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -13,8 +13,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7); // YYYY-MM format
+    const monthsToShow = searchParams.get('months') === '12' ? 12 : 6; // 6か12ヶ月表示
     
-    console.log(`Chart data requested for month: ${month}`);
+    console.log(`Chart data requested for month: ${month}, showing: ${monthsToShow} months`);
 
     // 新しいデータベース関数を呼び出し
     const { data: financialData, error: financialError } = await supabase
@@ -33,11 +34,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Series data error' }, { status: 500 });
     }
 
-    // 過去6ヶ月のチャートデータを取得（既存のロジックを維持）
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-    const startDate = sixMonthsAgo.toISOString().split('T')[0];
-
+    // 選択月を基準に過去の月数分のデータを取得
+    const selectedDate = new Date(`${month}-01`);
+    const startDate = new Date(selectedDate);
+    startDate.setMonth(startDate.getMonth() - (monthsToShow - 1)); // 選択月を含め指定月数分
+    
+    const endDate = new Date(selectedDate);
+    endDate.setMonth(endDate.getMonth() + 1);
+    endDate.setDate(0); // 選択月の末日
+    
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    
+    console.log(`Data range: ${startDateStr} to ${endDateStr}`);
+    
     const { data: chartData, error: chartError } = await supabase
       .from('web_sales_summary')
       .select(`
@@ -49,7 +59,8 @@ export async function GET(request: NextRequest) {
         base_count,
         qoo10_count
       `)
-      .gte('report_month', startDate)
+      .gte('report_month', startDateStr)
+      .lte('report_month', endDateStr)
       .order('report_month', { ascending: true });
 
     if (chartError) {
@@ -57,12 +68,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Chart data error' }, { status: 500 });
     }
 
-    // 過去6ヶ月分の枠を作成
+    // 選択月を含む過去の月数分の枠を作成
     const monthlyData: { [key: string]: any } = {};
-    const currentDate = new Date();
     
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date(currentDate);
+    for (let i = monthsToShow - 1; i >= 0; i--) {
+      const date = new Date(selectedDate);
       date.setMonth(date.getMonth() - i);
       const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`;
       
@@ -101,27 +111,70 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // 選択された月のキー
+    const selectedMonthKey = `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月`;
+    
     // 既存フロントエンドとの互換性を保つレスポンス構造
     const financial = financialData?.[0] || {};
-    
     const response = Object.values(monthlyData);
     
-    // 新しいデータを既存の構造に追加（後方互換性）
+    // 選択月にデータが存在しない場合、DBから取得した情報で追加
+    if (!monthlyData[selectedMonthKey]?.total && financial.total_count) {
+      const missingMonthData = {
+        month: selectedMonthKey,
+        amazon: financial.amazon_count || 0,
+        rakuten: financial.rakuten_count || 0,
+        yahoo: financial.yahoo_count || 0,
+        mercari: financial.mercari_count || 0,
+        base: financial.base_count || 0,
+        qoo10: financial.qoo10_count || 0,
+        total: financial.total_count || 0
+      };
+      
+      // 既存のmonthlyDataに追加
+      monthlyData[selectedMonthKey] = missingMonthData;
+      
+      // responseを更新
+      response.push(missingMonthData);
+    }
+    
+    // 選択月のデータに財務情報を追加
     response.forEach(monthData => {
-      // 現在月のデータに金額情報を追加
-      if (monthData.month.includes('2025年2月')) {
+      if (monthData.month === selectedMonthKey) {
         monthData.financialData = financial;
         monthData.seriesData = seriesData || [];
       }
     });
 
-    console.log(`Chart data prepared for ${month}:`, {
-      monthsData: response.length,
-      currentMonthFinancial: financial.total_amount || 0,
-      seriesCount: seriesData?.length || 0
+    // 日付順にソート
+    response.sort((a, b) => {
+      const aYear = parseInt(a.month.substring(0, 4));
+      const aMonth = parseInt(a.month.substring(5, a.month.length - 1));
+      
+      const bYear = parseInt(b.month.substring(0, 4));
+      const bMonth = parseInt(b.month.substring(5, b.month.length - 1));
+      
+      if (aYear !== bYear) return aYear - bYear;
+      return aMonth - bMonth;
     });
 
-    return NextResponse.json(response);
+    // 月数表示設定を追加
+    const result = {
+      data: response,
+      config: {
+        selectedMonth: selectedMonthKey,
+        monthsToShow: monthsToShow
+      }
+    };
+
+    console.log(`Chart data prepared for ${month}:`, {
+      monthsData: response.length,
+      months: response.map(m => m.month),
+      selectedMonth: selectedMonthKey,
+      monthsToShow: monthsToShow
+    });
+
+    return NextResponse.json(result);
     
   } catch (error) {
     console.error('API error:', error);
