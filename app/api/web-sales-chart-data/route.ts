@@ -15,6 +15,9 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7); // YYYY-MM format
     const monthsToShow = searchParams.get('months') === '12' ? 12 : 6; // 6か12ヶ月表示
     
+    // URLにmonthsパラメータがある場合、それを使用する
+    // 例: ?months=12 (12ヶ月表示) or ?months=6 (6ヶ月表示、デフォルト)
+    
     console.log(`Chart data requested for month: ${month}, showing: ${monthsToShow} months`);
 
     // 新しいデータベース関数を呼び出し
@@ -158,15 +161,7 @@ export async function GET(request: NextRequest) {
       return aMonth - bMonth;
     });
 
-    // 月数表示設定を追加
-    const result = {
-      data: response,
-      config: {
-        selectedMonth: selectedMonthKey,
-        monthsToShow: monthsToShow
-      }
-    };
-
+    // レスポンスメタデータをログに記録
     console.log(`Chart data prepared for ${month}:`, {
       monthsData: response.length,
       months: response.map(m => m.month),
@@ -174,7 +169,8 @@ export async function GET(request: NextRequest) {
       monthsToShow: monthsToShow
     });
 
-    return NextResponse.json(result);
+    // 重要: 既存のフロントエンドコードとの互換性を保つために配列を直接返す
+    return NextResponse.json(response);
     
   } catch (error) {
     console.error('API error:', error);
