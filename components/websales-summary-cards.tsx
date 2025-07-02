@@ -169,4 +169,33 @@ export default function WebSalesSummaryCards({
         <Card className="text-center bg-blue-50 border-blue-200">
           <CardHeader><CardTitle className="text-sm">総合計</CardTitle></CardHeader>
           <CardContent className="space-y-1">
-            <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</d
+            <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
+            <div className="text-sm text-gray-600">¥{formatNumber(grandTotalSales)}</div>
+          </CardContent>
+        </Card>
+        {SITES.map((s) => (
+          <Card key={s.key}>
+            <CardHeader><CardTitle className="text-sm">{s.name}</CardTitle></CardHeader>
+            <CardContent className="space-y-1">
+              <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
+              <div className="text-sm text-gray-500">¥{totals ? formatNumber(totals[s.key]?.amount ?? 0) : "-"}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle>シリーズ別 売上サマリー</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+          {seriesSummary.map((series) => (
+            <div key={series.seriesName} className="text-center p-2 border rounded-md">
+              <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
+              <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
+              <p className="text-xs text-gray-500">¥{formatNumber(series.sales)}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
