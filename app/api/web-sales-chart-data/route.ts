@@ -1,4 +1,4 @@
-// /api/web-sales-chart-data/route.ts (修正版 - 選択月基準・12ヶ月切替対応)
+// /api/web-sales-chart-data/route.ts ver.1 (12ヶ月表示対応)
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
