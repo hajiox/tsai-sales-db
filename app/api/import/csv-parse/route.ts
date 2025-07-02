@@ -1,5 +1,5 @@
-// /app/api/import/csv-parse/route.ts ver.5
-// 汎用CSV解析API（列名スペース対応版）
+// /app/api/import/csv-parse/route.ts ver.6
+// 汎用CSV解析API（デバッグ強化版）
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -40,36 +40,43 @@ function parseCsvLine(line: string): string[] {
         inQuotes = !inQuotes;
       }
     } else if (char === ',' && !inQuotes) {
-      columns.push(currentColumn.trim()); // trim()でスペース除去
+      columns.push(currentColumn.trim());
       currentColumn = '';
     } else {
       currentColumn += char;
     }
   }
-  columns.push(currentColumn.trim()); // 最後の列もtrim()
+  columns.push(currentColumn.trim());
   return columns;
 }
 
-// 安全な文字列検証関数
 function isValidString(value: any): value is string {
   return value && typeof value === 'string' && value.trim().length > 0;
 }
 
-// 🎯 安全な数値取得関数（列名の曖昧さに対応）
-function getSafeNumber(csvRow: any, possibleKeys: string[]): number {
+// 🎯 安全な数値取得関数（デバッグ強化）
+function getSafeNumber(csvRow: any, possibleKeys: string[], rowIndex: number, columnName: string): number {
+  console.log(`\n🔍 getSafeNumber デバッグ - 行${rowIndex}, 列${columnName}:`)
+  console.log(`  可能なキー: [${possibleKeys.join(', ')}]`)
+  
   for (const key of possibleKeys) {
     const value = csvRow[key];
+    console.log(`  キー"${key}": 値="${value}" (型: ${typeof value})`)
+    
     if (value !== undefined && value !== null && value !== '') {
       const numValue = parseInt(String(value)) || 0;
+      console.log(`  ✅ 採用: "${key}" = ${numValue}`)
       return numValue;
     }
   }
+  
+  console.log(`  ❌ 全てのキーで値が見つからない → 0を返す`)
   return 0;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("=== 汎用CSV Parse API開始 (列名スペース対応版) ===")
+    console.log("=== 汎用CSV Parse API開始 (デバッグ強化版) ===")
     
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -87,13 +94,16 @@ export async function POST(request: NextRequest) {
     const fileContent = await file.text()
     const lines = fileContent.split('\n').filter(line => line.trim())
     
+    console.log(`📁 ファイル情報: ${file.name}, 総行数: ${lines.length}`)
+    
     if (lines.length < 2) {
       return NextResponse.json({ error: 'CSVファイルが空か、ヘッダーのみです' }, { status: 400 })
     }
 
-    // ヘッダー解析（高機能解析使用）
+    // ヘッダー解析
     const headers = parseCsvLine(lines[0])
-    console.log("CSV Headers:", headers)
+    console.log("📋 CSV Headers:", headers)
+    console.log(`ヘッダー数: ${headers.length}`)
 
     // 商品マスター取得
     const { data: products, error: productsError } = await supabase
@@ -138,12 +148,18 @@ export async function POST(request: NextRequest) {
     let matchedCount = 0
     let unmatchedCount = 0
     
+    // 🎯 特定の商品（訪あり 1Kg）をフォーカス
+    const targetProductName = "チャーシュー 訳あり ラーメン屋が作る本物のチャーシュー訳アリ1Kg";
+    
     for (let i = 1; i < lines.length; i++) {
       const values = parseCsvLine(lines[i])
       
+      console.log(`\n🔍 行${i}解析開始:`)
+      console.log(`生データ: ${lines[i]}`)
+      console.log(`分割結果: [${values.map((v, idx) => `${idx}:"${v}"`).join(', ')}]`)
+      
       if (values.length < headers.length) {
-        console.warn(`行 ${i + 1}: 列数が不足しています (期待:${headers.length}, 実際:${values.length})`)
-        console.warn(`行内容: ${lines[i]}`)
+        console.warn(`❌ 行 ${i}: 列数が不足 (期待:${headers.length}, 実際:${values.length})`)
         continue
       }
 
@@ -152,42 +168,53 @@ export async function POST(request: NextRequest) {
       headers.forEach((header, index) => {
         csvRow[header] = values[index] || ''
       })
+      
+      console.log(`📊 csvRow構築結果:`, Object.entries(csvRow).slice(0, 11))
 
-      // 🎯 商品名の取得（複数パターンに対応）
+      // 商品名の取得
       const productName = csvRow['商品名　　　2025.2更新'] || 
                          csvRow['商品名'] || 
                          csvRow[' 商品名　　　2025.2更新'] || 
-                         values[0] // フォールバック: 0列目を直接取得
+                         values[0]
+      
+      console.log(`📝 商品名: "${productName}"`)
       
       if (!isValidString(productName)) {
-        console.warn(`行 ${i + 1}: 商品名が空またはnullです`)
+        console.warn(`❌ 行 ${i}: 商品名が空またはnull`)
         continue
       }
 
-      // 🎯 数量データ抽出（複数の列名パターンに対応）
-      const amazonCount = getSafeNumber(csvRow, ['Amazon', ' Amazon']) || parseInt(values[2]) || 0
-      const rakutenCount = getSafeNumber(csvRow, ['楽天市場', ' 楽天市場']) || parseInt(values[3]) || 0
-      const yahooCount = getSafeNumber(csvRow, ['Yahoo!', ' Yahoo!']) || parseInt(values[4]) || 0
-      const mercariCount = getSafeNumber(csvRow, ['メルカリ', ' メルカリ']) || parseInt(values[5]) || 0
-      const baseCount = getSafeNumber(csvRow, ['BASE', ' BASE']) || parseInt(values[6]) || 0
-      const qoo10Count = getSafeNumber(csvRow, ['Qoo10', ' Qoo10']) || parseInt(values[8]) || 0
+      // 🎯 数量データ抽出（デバッグ強化）
+      console.log(`\n💰 数量データ抽出 (行${i}):`)
+      
+      const amazonCount = getSafeNumber(csvRow, ['Amazon', ' Amazon'], i, 'Amazon') || parseInt(values[2]) || 0
+      const rakutenCount = getSafeNumber(csvRow, ['楽天市場', ' 楽天市場'], i, '楽天') || parseInt(values[3]) || 0
+      const yahooCount = getSafeNumber(csvRow, ['Yahoo!', ' Yahoo!'], i, 'Yahoo') || parseInt(values[4]) || 0
+      const mercariCount = getSafeNumber(csvRow, ['メルカリ', ' メルカリ'], i, 'メルカリ') || parseInt(values[5]) || 0
+      const baseCount = getSafeNumber(csvRow, ['BASE', ' BASE'], i, 'BASE') || parseInt(values[6]) || 0
+      const qoo10Count = getSafeNumber(csvRow, ['Qoo10', ' Qoo10'], i, 'Qoo10') || parseInt(values[8]) || 0
 
-      // デバッグログ追加
-      console.log(`行 ${i + 1} 数量確認:`, {
-        商品名: productName,
-        Amazon: amazonCount,
-        楽天: rakutenCount,
-        Yahoo: yahooCount,
-        メルカリ: mercariCount,
-        BASE: baseCount,
-        Qoo10: qoo10Count,
-        生データ: values.slice(0, 11)
-      })
+      // 🎯 特定商品の詳細ログ
+      if (productName.includes("訳あり") && productName.includes("1Kg")) {
+        console.log(`\n🎯 特定商品発見: "${productName}"`)
+        console.log(`生データ詳細: ${lines[i]}`)
+        console.log(`各列の値:`)
+        values.forEach((val, idx) => {
+          console.log(`  [${idx}]: "${val}"`)
+        })
+        console.log(`抽出された数量:`)
+        console.log(`  Amazon: ${amazonCount}`)
+        console.log(`  楽天: ${rakutenCount}`) 
+        console.log(`  Yahoo: ${yahooCount}`)
+        console.log(`  メルカリ: ${mercariCount}`)
+        console.log(`  BASE: ${baseCount}`)
+        console.log(`  Qoo10: ${qoo10Count}`)
+      }
 
       // 異常値チェック
       if (amazonCount > 10000 || rakutenCount > 10000 || yahooCount > 10000 || 
           mercariCount > 10000 || baseCount > 10000 || qoo10Count > 10000) {
-        console.warn(`行 ${i + 1}: 異常な数値を検出 - スキップ`)
+        console.warn(`❌ 行 ${i}: 異常な数値を検出 - スキップ`)
         continue
       }
 
@@ -213,6 +240,14 @@ export async function POST(request: NextRequest) {
 
         if (productInfo) {
           matchedCount++
+          
+          // 🎯 特定商品のマッチング結果
+          if (productName.includes("訳あり") && productName.includes("1Kg")) {
+            console.log(`🎯 特定商品マッチング結果:`)
+            console.log(`  マッチした商品: ${productInfo.name}`)
+            console.log(`  商品ID: ${productInfo.id}`)
+          }
+          
           parsedItems.push({
             csvTitle: productName,
             amazonCount,
@@ -225,7 +260,7 @@ export async function POST(request: NextRequest) {
             confidence: 0.9,
             matchType: productInfo.matchType || 'auto'
           })
-          console.log(`マッチ成功: "${productName}" -> ${productInfo.name}`)
+          console.log(`✅ マッチ成功: "${productName}" -> ${productInfo.name}`)
         } else {
           unmatchedCount++
           parsedItems.push({
@@ -239,7 +274,7 @@ export async function POST(request: NextRequest) {
             matchedProduct: null,
             confidence: 0
           })
-          console.log(`マッチ失敗: "${productName}"`)
+          console.log(`❌ マッチ失敗: "${productName}"`)
         }
       } catch (error) {
         console.error(`マッチング エラー (${productName}):`, error);
