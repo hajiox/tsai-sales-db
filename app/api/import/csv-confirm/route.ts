@@ -1,5 +1,5 @@
-// /app/api/import/csv-confirm/route.ts ver.4
-// 汎用CSV保存API（デバッグ強化版）
+// /app/api/import/csv-confirm/route.ts ver.5
+// 汎用CSV保存API（超詳細デバッグ版）
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -22,10 +22,16 @@ interface ConfirmItem {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("=== CSV Confirm API開始 (デバッグ強化版) ===")
+    console.log("=== CSV Confirm API開始 (超詳細デバッグ版) ===")
     
-    const { items, month } = await request.json()
-    console.log(`受信データ - items数: ${items?.length}, month: ${month}`)
+    const body = await request.json()
+    console.log("受信したbodyの型:", typeof body)
+    console.log("bodyのキー:", Object.keys(body))
+    
+    const { items, month } = body
+    console.log(`month: ${month}`)
+    console.log(`itemsの型: ${typeof items}`)
+    console.log(`items.length: ${items?.length}`)
 
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: 'アイテムデータが無効です' }, { status: 400 })
@@ -43,7 +49,25 @@ export async function POST(request: NextRequest) {
     let learnedCount = 0
     let totalQuantity = 0
 
-    for (const item of items) {
+    // 特定商品のデバッグ用フラグ
+    const debugTargetName = "訳あり";
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
+      
+      // 特定商品の詳細デバッグ
+      if (item.csvTitle && item.csvTitle.includes(debugTargetName)) {
+        console.log(`\n🎯🎯🎯 === 特定商品（${debugTargetName}）の詳細デバッグ開始 === 🎯🎯🎯`)
+        console.log(`インデックス: ${idx}`)
+        console.log(`受信したitemオブジェクト（JSON文字列化）:`)
+        console.log(JSON.stringify(item, null, 2))
+        
+        console.log(`\n各プロパティの詳細:`)
+        Object.entries(item).forEach(([key, value]) => {
+          console.log(`  ${key}: ${value} (型: ${typeof value})`)
+        })
+      }
+
       const {
         csvTitle,
         productId,
@@ -55,24 +79,26 @@ export async function POST(request: NextRequest) {
         qoo10Count
       } = item
 
-      // 🎯 デバッグ: 受信データの詳細ログ
-      console.log(`\n--- 商品処理開始 ---`)
-      console.log(`商品名: ${csvTitle}`)
-      console.log(`商品ID: ${productId}`)
-      console.log(`受信数値詳細:`)
-      console.log(`  Amazon: ${amazonCount} (型: ${typeof amazonCount})`)
-      console.log(`  楽天: ${rakutenCount} (型: ${typeof rakutenCount})`)
-      console.log(`  Yahoo: ${yahooCount} (型: ${typeof yahooCount})`)
-      console.log(`  メルカリ: ${mercariCount} (型: ${typeof mercariCount})`)
-      console.log(`  BASE: ${baseCount} (型: ${typeof baseCount})`)
-      console.log(`  Qoo10: ${qoo10Count} (型: ${typeof qoo10Count})`)
+      // 通常のデバッグログ
+      if (item.csvTitle && item.csvTitle.includes(debugTargetName)) {
+        console.log(`\n--- 🎯 特定商品処理開始 ---`)
+        console.log(`商品名: ${csvTitle}`)
+        console.log(`商品ID: ${productId}`)
+        console.log(`受信した生の値:`)
+        console.log(`  amazonCount: ${amazonCount} (型: ${typeof amazonCount})`)
+        console.log(`  rakutenCount: ${rakutenCount} (型: ${typeof rakutenCount})`)
+        console.log(`  yahooCount: ${yahooCount} (型: ${typeof yahooCount})`)
+        console.log(`  mercariCount: ${mercariCount} (型: ${typeof mercariCount})`)
+        console.log(`  baseCount: ${baseCount} (型: ${typeof baseCount})`)
+        console.log(`  qoo10Count: ${qoo10Count} (型: ${typeof qoo10Count})`)
+      }
 
       if (!productId) {
         console.warn(`商品ID未設定のためスキップ: ${csvTitle}`)
         continue
       }
 
-      // 🎯 数値型チェックと変換
+      // 🎯 数値型変換（詳細ログ付き）
       const safeAmazonCount = Number(amazonCount) || 0
       const safeRakutenCount = Number(rakutenCount) || 0
       const safeYahooCount = Number(yahooCount) || 0
@@ -80,19 +106,19 @@ export async function POST(request: NextRequest) {
       const safeBaseCount = Number(baseCount) || 0
       const safeQoo10Count = Number(qoo10Count) || 0
 
-      console.log(`変換後数値:`)
-      console.log(`  Amazon: ${safeAmazonCount}`)
-      console.log(`  楽天: ${safeRakutenCount}`)
-      console.log(`  Yahoo: ${safeYahooCount}`)
-      console.log(`  メルカリ: ${safeMercariCount}`)
-      console.log(`  BASE: ${safeBaseCount}`)
-      console.log(`  Qoo10: ${safeQoo10Count}`)
+      if (item.csvTitle && item.csvTitle.includes(debugTargetName)) {
+        console.log(`\n変換後の値:`)
+        console.log(`  safeAmazonCount: ${safeAmazonCount}`)
+        console.log(`  safeRakutenCount: ${safeRakutenCount}`)
+        console.log(`  safeYahooCount: ${safeYahooCount}`)
+        console.log(`  safeMercariCount: ${safeMercariCount}`)
+        console.log(`  safeBaseCount: ${safeBaseCount}`)
+        console.log(`  safeQoo10Count: ${safeQoo10Count}`)
+      }
 
       // 売上数量合計計算
       const itemTotal = safeAmazonCount + safeRakutenCount + safeYahooCount + safeMercariCount + safeBaseCount + safeQoo10Count
       totalQuantity += itemTotal
-
-      console.log(`保存準備: ${csvTitle} -> ${productId} (Amazon:${safeAmazonCount}, 楽天:${safeRakutenCount}, Yahoo:${safeYahooCount}, メルカリ:${safeMercariCount}, BASE:${safeBaseCount}, Qoo10:${safeQoo10Count})`)
 
       // 🎯 UPSERT前のデータ確認
       const upsertData = {
@@ -107,7 +133,10 @@ export async function POST(request: NextRequest) {
         report_date: reportMonth
       }
       
-      console.log(`UPSERT実行データ:`, JSON.stringify(upsertData, null, 2))
+      if (item.csvTitle && item.csvTitle.includes(debugTargetName)) {
+        console.log(`\n🎯 UPSERT実行前のデータ:`)
+        console.log(JSON.stringify(upsertData, null, 2))
+      }
 
       // web_sales_summaryにUPSERT
       const { data: upsertResult, error: upsertError } = await supabase
@@ -123,22 +152,36 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      console.log(`✅ UPSERT成功:`, upsertResult)
+      if (item.csvTitle && item.csvTitle.includes(debugTargetName)) {
+        console.log(`\n🎯 UPSERT結果:`)
+        console.log(JSON.stringify(upsertResult, null, 2))
+      }
+
       savedCount++
-      console.log(`保存成功: ${csvTitle} -> ${productId} (${itemTotal}個)`)
 
-      // 🎯 保存後のデータ確認
-      const { data: verifyData, error: verifyError } = await supabase
-        .from('web_sales_summary')
-        .select('amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count')
-        .eq('product_id', productId)
-        .eq('report_month', reportMonth)
-        .single()
+      // 🎯 保存直後のデータ確認（特定商品のみ）
+      if (item.csvTitle && item.csvTitle.includes(debugTargetName)) {
+        const { data: verifyData, error: verifyError } = await supabase
+          .from('web_sales_summary')
+          .select('*')
+          .eq('product_id', productId)
+          .eq('report_month', reportMonth)
+          .single()
 
-      if (!verifyError && verifyData) {
-        console.log(`🔍 保存後確認データ:`, verifyData)
-        if (verifyData.amazon_count !== safeAmazonCount) {
-          console.error(`⚠️ Amazon数量不一致! 期待値:${safeAmazonCount}, 実際:${verifyData.amazon_count}`)
+        if (!verifyError && verifyData) {
+          console.log(`\n🎯🔍 保存直後の検証データ（全列）:`)
+          console.log(JSON.stringify(verifyData, null, 2))
+          
+          // 値の比較
+          console.log(`\n🎯 値の比較:`)
+          console.log(`  Amazon - 期待値:${safeAmazonCount}, 実際:${verifyData.amazon_count}, 一致:${verifyData.amazon_count === safeAmazonCount}`)
+          console.log(`  楽天 - 期待値:${safeRakutenCount}, 実際:${verifyData.rakuten_count}, 一致:${verifyData.rakuten_count === safeRakutenCount}`)
+          console.log(`  Yahoo - 期待値:${safeYahooCount}, 実際:${verifyData.yahoo_count}, 一致:${verifyData.yahoo_count === safeYahooCount}`)
+          console.log(`  メルカリ - 期待値:${safeMercariCount}, 実際:${verifyData.mercari_count}, 一致:${verifyData.mercari_count === safeMercariCount}`)
+          console.log(`  BASE - 期待値:${safeBaseCount}, 実際:${verifyData.base_count}, 一致:${verifyData.base_count === safeBaseCount}`)
+          console.log(`  Qoo10 - 期待値:${safeQoo10Count}, 実際:${verifyData.qoo10_count}, 一致:${verifyData.qoo10_count === safeQoo10Count}`)
+        } else if (verifyError) {
+          console.error(`🎯 検証エラー:`, verifyError)
         }
       }
 
@@ -161,12 +204,11 @@ export async function POST(request: NextRequest) {
           console.error(`CSV学習データ保存エラー (${csvTitle}):`, learningError)
         } else {
           learnedCount++
-          console.log(`新規CSV学習データ保存: ${csvTitle} -> ${productId}`)
         }
       }
     }
 
-    console.log(`=== CSV保存完了 ===`)
+    console.log(`\n=== CSV保存完了 ===`)
     console.log(`保存件数: ${savedCount}件`)
     console.log(`学習件数: ${learnedCount}件`)
     console.log(`総数量: ${totalQuantity}`)
