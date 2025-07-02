@@ -1,27 +1,14 @@
-// /app/api/import/csv-parse/route.ts ver.2
-// 汎用CSV解析API（社内集計済みEXCEL取り込み用）- findBestProductMatch修正版
+// /app/api/import/csv-parse/route.ts ver.3
+// 汎用CSV解析API（楽天マッチングシステム移植版）
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { findBestMatchSimplified } from '@/lib/csvHelpers'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-interface CsvRow {
-  商品名: string
-  価格: number
-  Amazon: number
-  楽天市場: number
-  'Yahoo!': number
-  メルカリ: number
-  BASE: number
-  フロア: number
-  Qoo10: number
-  合計: number
-  売上: string
-}
 
 interface ParsedItem {
   csvTitle: string
@@ -33,37 +20,17 @@ interface ParsedItem {
   qoo10Count: number
   matchedProduct: any
   confidence: number
+  matchType?: string
 }
 
-// 簡易マッチング関数（内部実装）
-function findBestMatch(title: string, products: any[]) {
-  // 完全一致
-  const exactMatch = products.find(p => p.name === title)
-  if (exactMatch) {
-    return { product: exactMatch, confidence: 1.0 }
-  }
-
-  // 学習データマッチング
-  const learningMatch = products.find(p => p.csv_title === title)
-  if (learningMatch) {
-    return { product: learningMatch, confidence: 0.9 }
-  }
-
-  // 部分一致（最初の20文字）
-  const cleanTitle = title.replace(/[【】\[\]()（）]/g, '').substring(0, 20)
-  const partialMatch = products.find(p => 
-    p.name.includes(cleanTitle) || cleanTitle.includes(p.name.substring(0, 15))
-  )
-  if (partialMatch) {
-    return { product: partialMatch, confidence: 0.7 }
-  }
-
-  return { product: null, confidence: 0 }
+// 楽天と同じ安全な文字列検証関数
+function isValidString(value: any): value is string {
+  return value && typeof value === 'string' && value.trim().length > 0;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("CSV Parse API called")
+    console.log("=== 汎用CSV Parse API開始 (楽天方式) ===")
     
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -89,7 +56,7 @@ export async function POST(request: NextRequest) {
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
     console.log("CSV Headers:", headers)
 
-    // 商品マスター取得
+    // 商品マスター取得（楽天方式の厳密検証）
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('*')
@@ -99,24 +66,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '商品マスター取得に失敗しました' }, { status: 500 })
     }
 
-    // CSV学習データ取得
+    // 商品データの厳密な検証（楽天方式）
+    const validProducts = (products || []).filter(p => {
+      if (!p || !isValidString(p.name)) {
+        console.log('無効な商品データを除外:', p);
+        return false;
+      }
+      return true;
+    });
+    console.log('有効な商品数:', validProducts.length);
+
+    // CSV学習データ取得（楽天方式）
     const { data: csvMappings, error: csvMappingsError } = await supabase
       .from('csv_product_mapping')
-      .select('*')
+      .select('csv_title, product_id')
 
     if (csvMappingsError) {
       console.error('CSV学習データ取得エラー:', csvMappingsError)
       return NextResponse.json({ error: 'CSV学習データ取得に失敗しました' }, { status: 500 })
     }
 
-    // 学習データをproductsに統合
-    const productsWithCsvTitles = products.map(product => ({
-      ...product,
-      csv_title: csvMappings.find(m => m.product_id === product.id)?.csv_title || undefined
-    }))
+    // 学習データの厳密な検証（楽天方式）
+    const validLearningData = (csvMappings || []).filter(l => {
+      if (!l || !isValidString(l.csv_title)) {
+        console.log('無効なCSV学習データを除外:', l);
+        return false;
+      }
+      return true;
+    });
+    console.log('有効なCSV学習データ数:', validLearningData.length);
 
     // データ行解析
     const parsedItems: ParsedItem[] = []
+    let matchedCount = 0
+    let unmatchedCount = 0
     
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
@@ -133,8 +116,10 @@ export async function POST(request: NextRequest) {
       })
 
       const productName = csvRow['商品名　　　2025.2更新'] || csvRow['商品名']
-      if (!productName) {
-        console.warn(`行 ${i + 1}: 商品名が空です`)
+      
+      // 楽天方式の厳密な文字列検証
+      if (!isValidString(productName)) {
+        console.warn(`行 ${i + 1}: 商品名が空またはnullです`)
         continue
       }
 
@@ -146,22 +131,80 @@ export async function POST(request: NextRequest) {
       const baseCount = parseInt(csvRow['BASE']) || 0
       const qoo10Count = parseInt(csvRow['Qoo10']) || 0
 
-      // 商品マッチング（内部関数使用）
-      const matchResult = findBestMatch(productName, productsWithCsvTitles)
+      console.log(`処理中: "${productName}" (Amazon:${amazonCount}, 楽天:${rakutenCount}, Yahoo:${yahooCount}, メルカリ:${mercariCount}, BASE:${baseCount}, Qoo10:${qoo10Count})`)
 
-      parsedItems.push({
-        csvTitle: productName,
-        amazonCount,
-        rakutenCount,
-        yahooCount,
-        mercariCount,
-        baseCount,
-        qoo10Count,
-        matchedProduct: matchResult.product,
-        confidence: matchResult.confidence
-      })
+      try {
+        // 楽天方式の高機能マッチング呼び出し前の最終検証
+        if (!isValidString(productName) || !validProducts || !validLearningData) {
+          console.error('findBestMatchSimplified呼び出し前の検証失敗');
+          unmatchedCount++
+          parsedItems.push({
+            csvTitle: productName,
+            amazonCount,
+            rakutenCount,
+            yahooCount,
+            mercariCount,
+            baseCount,
+            qoo10Count,
+            matchedProduct: null,
+            confidence: 0
+          })
+          continue;
+        }
+
+        // 🎯 楽天と同じ高機能マッチング関数を使用
+        const productInfo = findBestMatchSimplified(productName, validProducts, validLearningData)
+
+        if (productInfo) {
+          matchedCount++
+          parsedItems.push({
+            csvTitle: productName,
+            amazonCount,
+            rakutenCount,
+            yahooCount,
+            mercariCount,
+            baseCount,
+            qoo10Count,
+            matchedProduct: productInfo,
+            confidence: 0.9,
+            matchType: productInfo.matchType || 'auto'
+          })
+          console.log(`マッチ成功: "${productName}" -> ${productInfo.name}`)
+        } else {
+          unmatchedCount++
+          parsedItems.push({
+            csvTitle: productName,
+            amazonCount,
+            rakutenCount,
+            yahooCount,
+            mercariCount,
+            baseCount,
+            qoo10Count,
+            matchedProduct: null,
+            confidence: 0
+          })
+          console.log(`マッチ失敗: "${productName}"`)
+        }
+      } catch (error) {
+        console.error(`findBestMatchSimplified エラー (${productName}):`, error);
+        unmatchedCount++
+        parsedItems.push({
+          csvTitle: productName,
+          amazonCount,
+          rakutenCount,
+          yahooCount,
+          mercariCount,
+          baseCount,
+          qoo10Count,
+          matchedProduct: null,
+          confidence: 0
+        })
+      }
     }
 
+    console.log('=== 汎用CSV Parse API完了 ===');
+    console.log('マッチ商品数:', matchedCount);
+    console.log('未マッチ商品数:', unmatchedCount);
     console.log(`CSV解析完了: ${parsedItems.length}件`)
 
     return NextResponse.json({
@@ -170,8 +213,8 @@ export async function POST(request: NextRequest) {
       month: month,
       summary: {
         total: parsedItems.length,
-        matched: parsedItems.filter(item => item.matchedProduct).length,
-        unmatched: parsedItems.filter(item => !item.matchedProduct).length
+        matched: matchedCount,
+        unmatched: unmatchedCount
       }
     })
 
