@@ -137,18 +137,31 @@ export async function POST(request: NextRequest) {
 
         console.log(`💾 UPSERT実行:`, JSON.stringify(upsertData, null, 2))
 
-        // web_sales_summaryにUPSERT
-        const { error: upsertError } = await supabase
+        // web_sales_summaryにUPSERT（詳細ログ付き）
+        const { data: upsertResult, error: upsertError } = await supabase
           .from('web_sales_summary')
           .upsert(upsertData, {
             onConflict: 'product_id,report_month'
           })
+          .select()
 
         if (upsertError) {
           console.error(`❌ 売上データ保存エラー (${productId}):`, upsertError)
           errorCount++
           continue
         }
+
+        console.log(`📊 UPSERT結果:`, JSON.stringify(upsertResult, null, 2))
+        
+        // 実際に保存されたかを即座に確認
+        const { data: verifyData } = await supabase
+          .from('web_sales_summary')
+          .select('*')
+          .eq('product_id', productId)
+          .eq('report_month', reportMonth)
+          .single()
+        
+        console.log(`🔍 保存確認:`, JSON.stringify(verifyData, null, 2))
 
         console.log(`✅ 売上データ保存成功: ${data.productName}`)
         successCount++
