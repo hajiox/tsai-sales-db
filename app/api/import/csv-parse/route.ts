@@ -1,9 +1,8 @@
-// /app/api/import/csv-parse/route.ts ver.1
-// 汎用CSV解析API（社内集計済みEXCEL取り込み用）
+// /app/api/import/csv-parse/route.ts ver.2
+// 汎用CSV解析API（社内集計済みEXCEL取り込み用）- findBestProductMatch修正版
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { findBestProductMatch } from '@/lib/csvHelpers'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,6 +33,32 @@ interface ParsedItem {
   qoo10Count: number
   matchedProduct: any
   confidence: number
+}
+
+// 簡易マッチング関数（内部実装）
+function findBestMatch(title: string, products: any[]) {
+  // 完全一致
+  const exactMatch = products.find(p => p.name === title)
+  if (exactMatch) {
+    return { product: exactMatch, confidence: 1.0 }
+  }
+
+  // 学習データマッチング
+  const learningMatch = products.find(p => p.csv_title === title)
+  if (learningMatch) {
+    return { product: learningMatch, confidence: 0.9 }
+  }
+
+  // 部分一致（最初の20文字）
+  const cleanTitle = title.replace(/[【】\[\]()（）]/g, '').substring(0, 20)
+  const partialMatch = products.find(p => 
+    p.name.includes(cleanTitle) || cleanTitle.includes(p.name.substring(0, 15))
+  )
+  if (partialMatch) {
+    return { product: partialMatch, confidence: 0.7 }
+  }
+
+  return { product: null, confidence: 0 }
 }
 
 export async function POST(request: NextRequest) {
@@ -121,8 +146,8 @@ export async function POST(request: NextRequest) {
       const baseCount = parseInt(csvRow['BASE']) || 0
       const qoo10Count = parseInt(csvRow['Qoo10']) || 0
 
-      // 商品マッチング
-      const matchResult = findBestProductMatch(productName, productsWithCsvTitles)
+      // 商品マッチング（内部関数使用）
+      const matchResult = findBestMatch(productName, productsWithCsvTitles)
 
       parsedItems.push({
         csvTitle: productName,
