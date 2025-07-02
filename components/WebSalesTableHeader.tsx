@@ -1,5 +1,5 @@
-// /components/WebSalesTableHeader.tsx ver.XX
-// CSV入力へのジャンプボタン追加版
+// /components/WebSalesTableHeader.tsx ver.2
+// CSV入力へのジャンプボタン強化版
 
 "use client"
 
@@ -23,16 +23,36 @@ export default function WebSalesTableHeader({
   onFilterChange,
   onDeleteMonthData,
 }: WebSalesTableHeaderProps) {
-  // CSV入力セクションまでスクロール
+  // CSV入力セクションまでスクロール（強化版）
   const scrollToCsvInput = () => {
-    // WebSalesImportButtons の親要素を探してスクロール
-    const csvInputSection = document.querySelector('[data-csv-input-section]')
-    if (csvInputSection) {
-      csvInputSection.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'start'
-      })
+    console.log('CSV入力へボタンクリック') // デバッグ用
+    
+    // 複数の方法でCSV入力セクションを探す
+    const selectors = [
+      '[data-csv-input-section]',
+      '.p-3.border-t',
+      '[class*="border-t"]',
+      'button:contains("CSV")'
+    ]
+    
+    for (const selector of selectors) {
+      const element = document.querySelector(selector)
+      if (element) {
+        console.log(`要素発見: ${selector}`) // デバッグ用
+        element.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        })
+        return
+      }
     }
+    
+    // どれも見つからない場合は、ページ下部にスクロール
+    console.log('要素が見つからないため、ページ下部へスクロール') // デバッグ用
+    window.scrollTo({ 
+      top: document.body.scrollHeight - window.innerHeight, 
+      behavior: 'smooth' 
+    })
   }
 
   return (
@@ -42,10 +62,10 @@ export default function WebSalesTableHeader({
           WEB販売実績 ({currentMonth})
         </h1>
         
-        {/* 🆕 CSV入力へボタン */}
+        {/* 🆕 CSV入力へボタン（強化版） */}
         <button
           onClick={scrollToCsvInput}
-          className="px-3 py-1 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+          className="px-3 py-1 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors active:bg-blue-200"
         >
           📊 CSV入力へ
         </button>
