@@ -117,15 +117,17 @@ export default function WebSalesSummaryCards({
             setTotals(siteTotals);
           }
           
-          // シリーズ別集計を新しい構造に変換
+          // シリーズ別集計を新しい構造に変換（売上順ソート）
           if (seriesData && seriesData.length > 0) {
-            const seriesSummaryData = seriesData.map((series: any) => ({
-              seriesName: series.series_name || '未分類',
-              count: series.series_count || 0,
-              sales: series.series_amount || 0
-            }));
+            const seriesSummaryData = seriesData
+              .map((series: any) => ({
+                seriesName: series.series_name || '未分類',
+                count: series.series_count || 0,
+                sales: series.series_amount || 0
+              }))
+              .sort((a, b) => b.sales - a.sales); // 売上金額順でソート
             
-            console.log('Series summary:', seriesSummaryData);
+            console.log('Series summary (sorted by sales):', seriesSummaryData);
             setSeriesSummary(seriesSummaryData);
           } else {
             setSeriesSummary([]);
