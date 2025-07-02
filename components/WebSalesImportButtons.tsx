@@ -78,7 +78,7 @@ export default function WebSalesImportButtons({
 
       {/* ▼ 追加した注意書き */}
       <p className="mt-1 text-xs text-gray-500 text-center">
-        ※ Yahoo CSV はアップロード前に <span className="font-semibold">必ず「CSV UTF-8 (カンマ区切り)」形式</span> で保存してください。
+        ※ Yahoo・メルカリ・BASE・Qoo10のCSV はアップロード前に <span className="font-semibold">必ず「CSV UTF-8 (カンマ区切り)」形式</span> で保存してください。
       </p>
     </div>
   );
