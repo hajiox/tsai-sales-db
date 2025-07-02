@@ -1,5 +1,5 @@
-// /app/api/import/csv-confirm/route.ts ver.1
-// 汎用CSV保存API（社内集計済みEXCEL取り込み用）
+// /app/api/import/csv-confirm/route.ts ver.3
+// 汎用CSV保存API（テーブル構造対応版）
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -63,7 +63,9 @@ export async function POST(request: NextRequest) {
       const itemTotal = amazonCount + rakutenCount + yahooCount + mercariCount + baseCount + qoo10Count
       totalQuantity += itemTotal
 
-      // web_sales_summaryにUPSERT
+      console.log(`保存準備: ${csvTitle} -> ${productId} (Amazon:${amazonCount}, 楽天:${rakutenCount}, Yahoo:${yahooCount}, メルカリ:${mercariCount}, BASE:${baseCount}, Qoo10:${qoo10Count})`)
+
+      // web_sales_summaryにUPSERT（実際の列構造に合わせて修正）
       const { error: upsertError } = await supabase
         .from('web_sales_summary')
         .upsert({
@@ -75,17 +77,19 @@ export async function POST(request: NextRequest) {
           mercari_count: mercariCount,
           base_count: baseCount,
           qoo10_count: qoo10Count,
-          updated_at: new Date().toISOString()
+          report_date: reportMonth  // report_date列にも同じ値を設定
         }, {
           onConflict: 'product_id,report_month'
         })
 
       if (upsertError) {
         console.error(`売上データ保存エラー (${productId}):`, upsertError)
+        console.error('エラー詳細:', JSON.stringify(upsertError, null, 2))
         continue
       }
 
       savedCount++
+      console.log(`保存成功: ${csvTitle} -> ${productId} (${itemTotal}個)`)
 
       // CSV学習データの保存
       // 既存の学習データをチェック
