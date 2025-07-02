@@ -1,117 +1,192 @@
-"use client";
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
+// /components/websales-charts.tsx ver.1 (12ヶ月表示対応)
 import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { 
+  Chart as ChartJS, 
+  CategoryScale, 
+  LinearScale, 
+  BarElement, 
+  LineElement,
+  PointElement,
+  Title, 
+  Tooltip, 
+  Legend,
+  ChartOptions
+} from 'chart.js';
+import { Bar, Line } from 'react-chartjs-2';
 
-interface MonthlyData {
+// ChartJSの登録
+ChartJS.register(
+  CategoryScale, 
+  LinearScale, 
+  BarElement, 
+  LineElement,
+  PointElement,
+  Title, 
+  Tooltip, 
+  Legend
+);
+
+interface WebSalesChartsProps {
   month: string;
-  total: number;
-  amazon: number;
-  rakuten: number;
-  yahoo: number;
-  mercari: number;
-  base: number;
-  qoo10: number;
+  refreshTrigger?: number;
+  periodMonths?: number; // 追加: 表示する月数
 }
 
 export default function WebSalesCharts({ 
   month, 
-  refreshTrigger 
-}: { 
-  month: string;
-  refreshTrigger?: number;
-}) {
-  const [chartData, setChartData] = useState<MonthlyData[]>([]);
-  const [loading, setLoading] = useState(true);
+  refreshTrigger = 0,
+  periodMonths = 6 // デフォルトは6ヶ月
+}: WebSalesChartsProps) {
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchChartData();
-  }, [month, refreshTrigger]);
-
-  const fetchChartData = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/web-sales-chart-data');
-      if (response.ok) {
+    const fetchChartData = async () => {
+      setIsLoading(true);
+      try {
+        // URLに月数パラメータを追加
+        const response = await fetch(`/api/web-sales-chart-data?month=${month}&months=${periodMonths}`);
         const data = await response.json();
         setChartData(data);
+      } catch (error) {
+        console.error('チャートデータ取得エラー:', error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Chart data fetch error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  if (loading) {
+    fetchChartData();
+  }, [month, refreshTrigger, periodMonths]);
+
+  if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">📊 総売上推移（過去6ヶ月）</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 flex items-center justify-center">
-              <div className="text-gray-500">データ読み込み中...</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">📈 ECサイト別売上（過去6ヶ月）</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 flex items-center justify-center">
-              <div className="text-gray-500">データ読み込み中...</div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="p-4 border rounded-lg shadow bg-white">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+            <div className="h-64 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+        <div className="p-4 border rounded-lg shadow bg-white">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+            <div className="h-64 bg-gray-200 rounded"></div>
+          </div>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="grid grid-cols-2 gap-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">📊 総売上推移（過去6ヶ月）</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="total" fill="#3b82f6" />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+  const totalSalesOptions: ChartOptions<'bar'> = {
+    responsive: true,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            return `総販売数: ${context.parsed.y.toLocaleString()}個`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+      }
+    }
+  };
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">📈 ECサイト別売上（過去6ヶ月）</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="amazon" stroke="#ff9500" name="Amazon" />
-              <Line type="monotone" dataKey="rakuten" stroke="#bf0000" name="楽天" />
-              <Line type="monotone" dataKey="yahoo" stroke="#ff0033" name="Yahoo!" />
-              <Line type="monotone" dataKey="mercari" stroke="#3498db" name="メルカリ" />
-              <Line type="monotone" dataKey="base" stroke="#00b894" name="BASE" />
-              <Line type="monotone" dataKey="qoo10" stroke="#fdcb6e" name="Qoo10" />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+  const totalSalesData = {
+    labels: chartData.map(item => item.month),
+    datasets: [
+      {
+        label: '総販売数',
+        data: chartData.map(item => item.total),
+        backgroundColor: 'rgba(54, 162, 235, 0.8)',
+      }
+    ]
+  };
+
+  const channelSalesOptions: ChartOptions<'line'> = {
+    responsive: true,
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const label = context.dataset.label || '';
+            return `${label}: ${context.parsed.y.toLocaleString()}個`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+      }
+    }
+  };
+
+  const channelSalesData = {
+    labels: chartData.map(item => item.month),
+    datasets: [
+      {
+        label: 'Amazon',
+        data: chartData.map(item => item.amazon),
+        borderColor: 'rgba(255, 153, 0, 1)',
+        backgroundColor: 'rgba(255, 153, 0, 0.5)',
+        tension: 0.3,
+      },
+      {
+        label: '楽天',
+        data: chartData.map(item => item.rakuten),
+        borderColor: 'rgba(191, 0, 0, 1)',
+        backgroundColor: 'rgba(191, 0, 0, 0.5)',
+        tension: 0.3,
+      },
+      {
+        label: 'Yahoo!',
+        data: chartData.map(item => item.yahoo),
+        borderColor: 'rgba(255, 0, 0, 1)',
+        backgroundColor: 'rgba(255, 0, 0, 0.5)',
+        tension: 0.3,
+      },
+      {
+        label: 'メルカリ',
+        data: chartData.map(item => item.mercari),
+        borderColor: 'rgba(34, 139, 230, 1)',
+        backgroundColor: 'rgba(34, 139, 230, 0.5)',
+        tension: 0.3,
+      },
+      {
+        label: 'BASE',
+        data: chartData.map(item => item.base),
+        borderColor: 'rgba(0, 200, 150, 1)',
+        backgroundColor: 'rgba(0, 200, 150, 0.5)',
+        tension: 0.3,
+      },
+      {
+        label: 'Qoo10',
+        data: chartData.map(item => item.qoo10),
+        borderColor: 'rgba(255, 187, 0, 1)', 
+        backgroundColor: 'rgba(255, 187, 0, 0.5)',
+        tension: 0.3,
+      }
+    ]
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="p-4 border rounded-lg shadow bg-white">
+        <h2 className="text-lg font-semibold mb-4">📊 総売上推移 (過去{periodMonths}ヶ月)</h2>
+        <Bar options={totalSalesOptions} data={totalSalesData} />
+      </div>
+      <div className="p-4 border rounded-lg shadow bg-white">
+        <h2 className="text-lg font-semibold mb-4">📈 ECサイト別売上 (過去{periodMonths}ヶ月)</h2>
+        <Line options={channelSalesOptions} data={channelSalesData} />
+      </div>
     </div>
   );
 }
