@@ -28,7 +28,10 @@ export async function POST(request: NextRequest) {
     console.log("=== CSV Confirm API開始 (uuid対応版 ver.3) ===")
     
     const body = await request.json()
-    const { data: items, month } = body
+    const { items, month } = body
+    
+    // デバッグ: 受信したデータ構造を確認
+    console.log("受信したbody:", JSON.stringify(body, null, 2))
     
     console.log(`受信データ - items数: ${items?.length}, month: ${month}`)
 
@@ -70,13 +73,15 @@ export async function POST(request: NextRequest) {
 
     // データ集約処理
     for (const item of items) {
-      if (!item.matchedProduct?.id) {
+      // フロントエンドからのデータ構造に対応
+      const productId = item.matchedProduct?.id || item.productId
+      const productName = item.matchedProduct?.name || item.productName
+      
+      if (!productId) {
         console.log(`❌ スキップ: 商品IDなし - "${item.csvTitle}"`)
         skippedCount++
         continue
       }
-
-      const productId = item.matchedProduct.id
       const existing = aggregatedData.get(productId)
 
       if (existing) {
@@ -91,7 +96,7 @@ export async function POST(request: NextRequest) {
         // 新規データ追加
         aggregatedData.set(productId, {
           productId,
-          productName: item.matchedProduct.name,
+          productName: productName || '商品名不明',
           csvTitle: item.csvTitle,
           amazonCount: Number(item.amazonCount) || 0,
           rakutenCount: Number(item.rakutenCount) || 0,
