@@ -55,35 +55,48 @@ export default function WebSalesTableHeader({
     })
   }
 
-  // AI分析セクションまでスクロール（CSV入力ボタンを参考にした版）
+  // AI分析セクションまでスクロール（:contains()エラー修正版）
   const scrollToAiAnalysis = () => {
     console.log('AI分析へボタンクリック - 関数開始'); // デバッグ用
     
     try {
-      // CSV入力と同じロジックで要素を探す
-      const selectors = [
-        // AI分析特有のセレクタ
-        'h2:contains("AI分析")',
-        'h3:contains("AI分析")', 
-        '[class*="ai"]',
-        '.bg-gradient-to-r',
-        '.bg-gradient-to-br',
-        // CSV入力と同じセレクタも試す
-        '.p-3.border-t',
-        '[class*="border-t"]',
-        // ページの最後の方の要素
-        '.space-y-6 > div:last-child',
-        '.space-y-4 > div:last-child'
-      ]
-      
+      // まず、テキストベースで「AI分析」を含む要素を探す
       let foundElement = null
       
-      for (const selector of selectors) {
-        const element = document.querySelector(selector)
-        if (element) {
-          console.log(`要素発見: ${selector}`) // デバッグ用
+      // 全ての要素をチェックしてAI分析を含むものを探す
+      const allElements = document.querySelectorAll('*')
+      for (const element of allElements) {
+        if (element.textContent && element.textContent.includes('AI分析')) {
+          console.log('AI分析テキストを含む要素発見:', element.tagName, element.className)
           foundElement = element
           break
+        }
+      }
+      
+      // テキストで見つからない場合は、通常のセレクタで探す
+      if (!foundElement) {
+        const selectors = [
+          '.bg-gradient-to-r',
+          '.bg-gradient-to-br', 
+          '[class*="ai"]',
+          '[class*="analysis"]',
+          '.p-3.border-t',
+          '[class*="border-t"]',
+          '.space-y-6 > div:last-child',
+          '.space-y-4 > div:last-child'
+        ]
+        
+        for (const selector of selectors) {
+          try {
+            const element = document.querySelector(selector)
+            if (element) {
+              console.log(`要素発見: ${selector}`)
+              foundElement = element
+              break
+            }
+          } catch (e) {
+            console.log(`セレクタエラー: ${selector}`, e)
+          }
         }
       }
       
@@ -94,10 +107,10 @@ export default function WebSalesTableHeader({
         })
         console.log('要素にスクロール完了')
       } else {
-        // CSV入力ボタンと同じフォールバック処理
-        console.log('要素が見つからないため、ページ下部へスクロール') // デバッグ用
+        // フォールバック: シンプルに下部へスクロール
+        console.log('要素が見つからないため、下部へスクロール')
         window.scrollTo({ 
-          top: document.body.scrollHeight - window.innerHeight, 
+          top: 3000,  // 固定値でテスト
           behavior: 'smooth' 
         })
         console.log('フォールバックスクロール完了')
@@ -105,6 +118,8 @@ export default function WebSalesTableHeader({
       
     } catch (error) {
       console.error('スクロールエラー:', error);
+      // 最後の手段
+      window.scrollTo({ top: 3000, behavior: 'smooth' });
     }
   }
 
