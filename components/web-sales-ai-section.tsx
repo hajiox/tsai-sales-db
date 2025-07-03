@@ -1,3 +1,4 @@
+// /components/web-sales-ai-section.tsx (アンカー追加版)
 "use client";
 
 import { useState, useEffect } from "react";
@@ -88,7 +89,7 @@ export default function WebSalesAiSection({ month }: Props) {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md mt-8">
+    <div id="ai-analysis-section" className="bg-white p-6 rounded-lg shadow-md mt-8">
       <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
         <h2 className="text-xl font-bold text-slate-800">🤖 WEB販売AI分析レポート</h2>
         <button
