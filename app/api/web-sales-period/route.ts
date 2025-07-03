@@ -1,4 +1,4 @@
-// /app/api/web-sales-period/route.ts
+// /app/api/web-sales-period/route.ts ver.3 (report_month列名修正版)
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -23,15 +23,29 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'base_month and period_months are required' }, { status: 400 });
     }
 
-    // 1. 期間の開始月と終了月を計算
-    const baseDate = new Date(`${base_month}-01T00:00:00Z`);
-    const endDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0);
-    const startDate = new Date(baseDate.getFullYear(), baseDate.getMonth() - (period_months - 1), 1);
-    const startDateString = startDate.toISOString().split('T')[0];
-    const endDateString = endDate.toISOString().split('T')[0];
+    // 【修正】期間の開始月と終了月を計算 - 年跨ぎ対応
+    const [baseYear, baseMonth] = base_month.split('-').map(n => parseInt(n));
+    
+    // 開始月の計算（年跨ぎ対応）
+    let startYear = baseYear;
+    let startMonth = baseMonth - (period_months - 1);
+    
+    while (startMonth <= 0) {
+      startMonth += 12;
+      startYear -= 1;
+    }
+    
+    // 終了月は基準月
+    const endYear = baseYear;
+    const endMonth = baseMonth;
+    
+    // 日付文字列の生成（月の1日で統一）
+    const startDateString = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
+    const endDateString = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
 
     // デバッグログ追加
-    console.log('集計期間:', startDateString, 'から', endDateString);
+    console.log('【修正】集計期間:', startDateString, 'から', endDateString);
+    console.log('【修正】期間計算:', `${startYear}/${startMonth} to ${endYear}/${endMonth}`);
 
     // 2. まず商品マスタの全データを取得し、IDをキーにしたマップを作成
     const { data: productsData, error: productsError } = await supabase
@@ -46,12 +60,12 @@ export async function POST(req: Request) {
     console.log('商品マスタ取得数:', productsData?.length || 0);
     const productsMap = new Map(productsData.map(p => [p.id, p]));
 
-    // 3. 期間内の販売実績データを取得
+    // 【修正】3. 期間内の販売実績データを取得 - report_month列を使用
     const { data: salesData, error: salesError } = await supabase
       .from('web_sales_summary')
-      .select('product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count')
-      .gte('report_date', startDateString)
-      .lte('report_date', endDateString);
+      .select('product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count, report_month')
+      .gte('report_month', startDateString)
+      .lte('report_month', endDateString);
 
     if (salesError) {
       console.error('Supabase sales query error:', salesError);
@@ -59,7 +73,8 @@ export async function POST(req: Request) {
     }
 
     // デバッグログ追加
-    console.log('取得した販売データ数:', salesData?.length || 0);
+    console.log('【修正】取得した販売データ数:', salesData?.length || 0);
+    console.log('【修正】取得データサンプル:', salesData?.slice(0, 3));
 
     if (!salesData || salesData.length === 0) {
         console.warn('期間内の販売データが存在しません');
@@ -67,7 +82,6 @@ export async function POST(req: Request) {
     }
 
     // 4. 取得した販売データを集計
-    // ※ キー名を修正：amazon_count → amazon など
     const totals = {
         amazon: { count: 0, amount: 0 },
         rakuten: { count: 0, amount: 0 },
@@ -81,10 +95,14 @@ export async function POST(req: Request) {
 
     for (const sale of salesData) {
         const product = productsMap.get(sale.product_id);
-        if (!product) continue; // 商品マスタにないデータはスキップ
+        if (!product) {
+          console.warn('商品マスタにない商品ID:', sale.product_id);
+          continue; // 商品マスタにないデータはスキップ
+        }
 
         const productPrice = product.price || 0;
-        // ※ キー名を修正
+        
+        // 各チャネルの集計
         totals.amazon.count += sale.amazon_count || 0;
         totals.amazon.amount += (sale.amazon_count || 0) * productPrice;
         totals.rakuten.count += sale.rakuten_count || 0;
@@ -98,6 +116,7 @@ export async function POST(req: Request) {
         totals.qoo10.count += sale.qoo10_count || 0;
         totals.qoo10.amount += (sale.qoo10_count || 0) * productPrice;
 
+        // シリーズ別集計
         const seriesName = product.series || '未分類';
         const totalCount = (sale.amazon_count || 0) + (sale.rakuten_count || 0) + (sale.yahoo_count || 0) + (sale.mercari_count || 0) + (sale.base_count || 0) + (sale.qoo10_count || 0);
         
@@ -113,34 +132,33 @@ export async function POST(req: Request) {
         ...seriesData[seriesName]
     })).sort((a, b) => b.sales - a.sales);
 
-    // デバッグログ追加
-    console.log('集計結果:', {
-      totalCount: Object.values(totals).reduce((sum, site) => sum + site.count, 0),
-      totalAmount: Object.values(totals).reduce((sum, site) => sum + site.amount, 0),
+    // 【修正】デバッグログ追加 - 詳細な集計結果
+    const totalCount = Object.values(totals).reduce((sum, site) => sum + site.count, 0);
+    const totalAmount = Object.values(totals).reduce((sum, site) => sum + site.amount, 0);
+    
+    console.log('【修正】各チャネル集計結果:');
+    Object.entries(totals).forEach(([channel, data]) => {
+      console.log(`  ${channel}: ${data.count}件 ¥${data.amount.toLocaleString()}`);
+    });
+    
+    console.log('【修正】全体集計結果:', {
+      totalCount,
+      totalAmount: totalAmount.toLocaleString(),
       seriesSummaryCount: seriesSummary.length
     });
 
-    // キー名の検証
-    const expectedKeys = ['amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10'];
-    const actualKeys = Object.keys(totals);
-    const missingKeys = expectedKeys.filter(key => !actualKeys.includes(key));
-
-    if (missingKeys.length > 0) {
-      console.warn('警告: 期待されるキーが不足しています:', missingKeys);
-    }
-
     // データの有無を確認
     const hasData = Object.values(totals).some(site => site.count > 0);
-    console.log('データあり:', hasData);
+    console.log('【修正】データあり:', hasData);
 
     if (!hasData) {
-      console.warn('集計結果が全て0です');
+      console.warn('集計結果が全て0です - データベースクエリを確認してください');
     }
 
     // トップ3シリーズのデータをログ
     const top3Series = seriesSummary.slice(0, 3);
     if (top3Series.length > 0) {
-      console.log('トップ3シリーズ:', top3Series.map(s => `${s.seriesName}: ${s.count}個 ¥${s.sales}`).join(', '));
+      console.log('【修正】トップ3シリーズ:', top3Series.map(s => `${s.seriesName}: ${s.count}個 ¥${s.sales.toLocaleString()}`).join(', '));
     }
 
     console.log('=== 期間集計終了 ===');
