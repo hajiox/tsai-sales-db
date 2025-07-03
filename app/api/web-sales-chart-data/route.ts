@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7); // YYYY-MM format
     const monthsToShow = searchParams.get('months') === '12' ? 12 : 6; // 6か12ヶ月表示
     
-    console.log(`Chart data requested for month: ${month}, showing: ${monthsToShow} months`);
+    console.log(`【修正】Chart data requested for month: ${month}, showing: ${monthsToShow} months`);
 
     // ダミーデータを準備（APIエラー時のフォールバック用）
     const dummyData = generateDummyData(month, monthsToShow);
@@ -76,6 +76,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(dummyData);
       }
 
+      console.log(`【修正】Raw chart data from DB:`, chartData?.length || 0, 'records');
+
       // 【修正】月の枠を確実に作成（年跨ぎ対応）
       const monthlyData: { [key: string]: any } = {};
       
@@ -130,6 +132,8 @@ export async function GET(request: NextRequest) {
               monthlyData[monthKey].qoo10;
             
             console.log(`【修正】Data added to ${monthKey}:`, monthlyData[monthKey]);
+          } else {
+            console.warn(`【修正】Month key not found for data:`, monthKey, row.report_month);
           }
         } catch (e) {
           console.error('Error processing row:', row, e);
@@ -197,6 +201,13 @@ export async function GET(request: NextRequest) {
         selectedMonth: selectedMonthKey,
         monthsToShow: monthsToShow,
         dateRange: `${startDateStr} to ${endDateStr}`
+      });
+
+      // 各月のデータ総数をログ
+      response.forEach(monthData => {
+        if (monthData.total > 0) {
+          console.log(`【修正】${monthData.month}: ${monthData.total}件`);
+        }
       });
 
       return NextResponse.json(response);
