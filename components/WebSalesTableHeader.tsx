@@ -1,10 +1,10 @@
-// /components/WebSalesTableHeader.tsx ver.2
-// CSV入力へのジャンプボタン強化版
+// /components/WebSalesTableHeader.tsx ver.3
+// 月選択修正・AI分析ボタン追加版
 
 "use client"
 
 import React from "react"
-import { ChevronDown, Search, Trash2, Download } from "lucide-react"
+import { ChevronDown, Search, Trash2, Brain } from "lucide-react"
 
 interface WebSalesTableHeaderProps {
   currentMonth: string
@@ -55,6 +55,54 @@ export default function WebSalesTableHeader({
     })
   }
 
+  // AI分析セクションまでスクロール
+  const scrollToAiAnalysis = () => {
+    console.log('AI分析へボタンクリック') // デバッグ用
+    
+    // AI分析セクションを探す
+    const selectors = [
+      '[data-ai-section]',
+      '.space-y-4 > div:last-child',
+      'h3:contains("AI分析")',
+      '.bg-gradient-to-r'
+    ]
+    
+    for (const selector of selectors) {
+      const element = document.querySelector(selector)
+      if (element) {
+        console.log(`AI分析セクション発見: ${selector}`) // デバッグ用
+        element.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        })
+        return
+      }
+    }
+    
+    // AI分析セクションが見つからない場合は、ページ最下部にスクロール
+    console.log('AI分析セクションが見つからないため、ページ最下部へスクロール') // デバッグ用
+    window.scrollTo({ 
+      top: document.body.scrollHeight, 
+      behavior: 'smooth' 
+    })
+  }
+
+  // 月選択の処理を修正 - 直接URLを変更する
+  const handleMonthChange = (selectedMonth: string) => {
+    console.log(`月選択変更: ${currentMonth} → ${selectedMonth}`) // デバッグ用
+    
+    // URLパラメータを直接更新
+    const url = new URL(window.location.href)
+    url.searchParams.set('month', selectedMonth)
+    window.history.pushState({}, '', url.toString())
+    
+    // 親コンポーネントの処理も呼ぶ
+    onMonthChange(selectedMonth)
+    
+    // ページリロードして新しい月のデータを取得
+    window.location.reload()
+  }
+
   return (
     <div className="flex items-center justify-between mb-4 p-4 bg-white border rounded-lg shadow-sm">
       <div className="flex items-center space-x-4">
@@ -62,21 +110,30 @@ export default function WebSalesTableHeader({
           WEB販売実績 ({currentMonth})
         </h1>
         
-        {/* 🆕 CSV入力へボタン（強化版） */}
+        {/* CSV入力へボタン（既存） */}
         <button
           onClick={scrollToCsvInput}
           className="px-3 py-1 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors active:bg-blue-200"
         >
           📊 CSV入力へ
         </button>
+
+        {/* 🆕 AI分析へボタン */}
+        <button
+          onClick={scrollToAiAnalysis}
+          className="px-3 py-1 text-sm font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 transition-colors active:bg-purple-200"
+        >
+          <Brain className="h-4 w-4 inline mr-1" />
+          AI分析へ
+        </button>
       </div>
 
       <div className="flex items-center space-x-4">
-        {/* 月選択 */}
+        {/* 月選択（修正版） */}
         <div className="relative">
           <select
             value={currentMonth}
-            onChange={(e) => onMonthChange(e.target.value)}
+            onChange={(e) => handleMonthChange(e.target.value)}
             disabled={isLoading}
             className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
           >
