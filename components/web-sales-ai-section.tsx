@@ -155,9 +155,30 @@ export default function WebSalesAiSection({ month }: Props) {
           <button
             onClick={handleAnalyze}
             disabled={isAnalyzing || isLoading}
-            className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
+            className={`px-4 py-2 font-semibold rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 ${
+              isAnalyzing 
+                ? 'bg-purple-600 text-white cursor-not-allowed transform scale-105' 
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            } ${isLoading ? 'bg-slate-400 cursor-not-allowed' : ''}`}
           >
-            {isAnalyzing ? "分析中..." : "AI分析実行"}
+            {isAnalyzing ? (
+              <div className="flex items-center space-x-2">
+                {/* 回転するブレインアイコン */}
+                <div className="relative">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="absolute inset-0 w-5 h-5 border border-white/30 rounded-full animate-ping"></div>
+                </div>
+                <span className="animate-pulse">AIが考えています...</span>
+                {/* 点滅するドット */}
+                <div className="flex space-x-1">
+                  <div className="w-1 h-1 bg-white rounded-full animate-bounce" style={{animationDelay: '0s'}}></div>
+                  <div className="w-1 h-1 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                  <div className="w-1 h-1 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                </div>
+              </div>
+            ) : (
+              "AI分析実行"
+            )}
           </button>
         </div>
       </div>
@@ -180,7 +201,45 @@ export default function WebSalesAiSection({ month }: Props) {
         </div>
       </div>
 
-      <div className="bg-slate-50 p-4 rounded-md min-h-[300px] border border-slate-200">
+      <div className="bg-slate-50 p-4 rounded-md min-h-[300px] border border-slate-200 relative overflow-hidden">
+        {/* 分析中のオーバーレイアニメーション */}
+        {isAnalyzing && (
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-blue-50 flex items-center justify-center z-10">
+            <div className="text-center space-y-4">
+              {/* メインAIアイコン */}
+              <div className="relative mx-auto w-16 h-16">
+                <div className="absolute inset-0 w-16 h-16 border-4 border-purple-200 rounded-full animate-spin"></div>
+                <div className="absolute inset-2 w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '1s'}}></div>
+                <div className="absolute inset-4 w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full animate-pulse flex items-center justify-center">
+                  <span className="text-white text-sm font-bold">AI</span>
+                </div>
+              </div>
+              
+              {/* 動的メッセージ */}
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-slate-700 animate-pulse">
+                  🤖 AI分析実行中
+                </h3>
+                <div className="text-sm text-slate-600 space-y-1">
+                  <div className="animate-fadeIn">📊 売上データを解析しています...</div>
+                  <div className="animate-fadeIn" style={{animationDelay: '1s'}}>📈 トレンドパターンを分析中...</div>
+                  <div className="animate-fadeIn" style={{animationDelay: '2s'}}>🎯 改善策を生成しています...</div>
+                </div>
+              </div>
+              
+              {/* プログレスバー風アニメーション */}
+              <div className="w-64 mx-auto">
+                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full animate-pulse"></div>
+                </div>
+                <div className="text-xs text-slate-500 mt-1 animate-pulse">
+                  通常1〜2分で完了します...
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {isLoading ? (
           <p className="text-slate-500 text-center pt-10">最新のレポートを読み込んでいます...</p>
         ) : error ? (
@@ -198,6 +257,18 @@ export default function WebSalesAiSection({ month }: Props) {
            <p className="text-slate-500 text-center pt-10">表示できる分析レポートがありません。</p>
         )}
       </div>
+      
+      {/* カスタムアニメーション */}
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.6s ease-out forwards;
+          opacity: 0;
+        }
+      `}</style>
     </div>
   );
 }
