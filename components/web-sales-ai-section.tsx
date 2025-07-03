@@ -1,274 +1,248 @@
-// /components/web-sales-ai-section.tsx (アンカー追加版)
-"use client";
+// /components/web-sales-ai-section.tsx ver.6項目表示専用
+"use client"
 
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { toast } from "sonner";
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  Calendar, 
+  BarChart3, 
+  AlertTriangle, 
+  FileText,
+  Sparkles,
+  Target
+} from 'lucide-react';
 
-interface Props {
+interface WebSalesAISectionProps {
   month: string;
 }
 
-export default function WebSalesAiSection({ month }: Props) {
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  const [latestMonth, setLatestMonth] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+interface AnalysisResult {
+  summary: string;
+  comparison: string;
+  growing: string;
+  declining: string;
+  channels: string;
+  anomalies: string;
+}
+
+export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // 新機能: 分析期間とタイプの選択
-  const [analysisPeriod, setAnalysisPeriod] = useState<string>('1month');
-  const [analysisType, setAnalysisType] = useState<string>('comprehensive');
-  
-  const supabase = createClientComponentClient();
 
-  // "YYYY-MM" 形式を "YYYY年M月" 形式に変換
-  const formatMonth = (month: string | null): string => {
-    if (!month) return "";
-    const [year, monthNum] = month.split("-");
-    return `${year}年${parseInt(monthNum, 10)}月`;
-  };
-
-  // 初回読み込み時に最新のレポートをDBから取得する
-  useEffect(() => {
-    const fetchLatestReport = async () => {
-      setIsLoading(true);
-      setError(null);
-      
-      const { data, error: fetchError } = await supabase
-        .from("web_sales_ai_reports")
-        .select("content, month, analysis_period, analysis_type")
-        .order("month", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (fetchError || !data) {
-        setError("過去の分析レポートを取得できませんでした。");
-      } else if (data.content) {
-        setAnalysisResult(data.content);
-        setLatestMonth(data.month);
-        setAnalysisPeriod(data.analysis_period || '1month');
-        setAnalysisType(data.analysis_type || 'comprehensive');
-      } else {
-        setError("分析レポートが見つかりませんでした。");
-      }
-      setIsLoading(false);
-    };
-
-    fetchLatestReport();
-  }, [supabase]);
-
-  // 分析実行
-  const handleAnalyze = async () => {
-    setIsAnalyzing(true);
+  const executeAnalysis = async () => {
+    setIsLoading(true);
     setError(null);
-    
-    const periodText = {
-      '1month': '単月',
-      '3months': '3ヶ月間',
-      '6months': '半年間', 
-      '1year': '1年間'
-    }[analysisPeriod] || '単月';
-    
-    const typeText = {
-      'immediate': '緊急対応',
-      'growth': '成長戦略',
-      'comprehensive': '総合分析'
-    }[analysisType] || '総合分析';
-
-    toast.info(`${periodText}・${typeText}でAI分析を開始しました。完了まで1〜2分お待ちください。`);
+    setAnalysisResult(null);
 
     try {
-      const response = await fetch("/api/web-sales-analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          month,
-          period: analysisPeriod,
-          analysisType: analysisType
-        })
+      const response = await fetch('/api/web-sales-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "APIリクエストに失敗しました。");
-      }
+      const data = await response.json();
 
-      const result = await response.json();
-      
-      if (result.ok && result.result) {
-        setAnalysisResult(result.result);
-        setLatestMonth(result.month || month);
-        toast.success("WEB販売データのAI分析が完了しました。");
+      if (data.ok) {
+        // AIの結果を6項目に分割
+        const sections = parseAIResult(data.result);
+        setAnalysisResult(sections);
       } else {
-        throw new Error(result.error || "分析結果を取得できませんでした。");
+        setError(data.error || '分析に失敗しました');
       }
-    } catch (err: any) {
-      setError(err.message || "分析中に不明なエラーが発生しました。");
-      toast.error(err.message || "分析中に不明なエラーが発生しました。");
+    } catch (err) {
+      setError('分析中にエラーが発生しました');
+      console.error('AI分析エラー:', err);
     } finally {
-      setIsAnalyzing(false);
+      setIsLoading(false);
     }
   };
 
+  // AIの結果を6項目に分割する関数
+  const parseAIResult = (result: string): AnalysisResult => {
+    const sections = result.split(/##\s*[①②③④⑤⑥]/);
+    
+    return {
+      summary: extractSection(result, '① 今月の総括') || '分析データなし',
+      comparison: extractSection(result, '② 前年同月対比') || '比較データなし',
+      growing: extractSection(result, '③ 伸びている商品') || '成長商品なし',
+      declining: extractSection(result, '④ 落ち込んでいる商品') || '衰退商品なし',
+      channels: extractSection(result, '⑤ 各ECの伸び落ち検証') || 'チャネル分析なし',
+      anomalies: extractSection(result, '⑥ 特異点') || '特異点なし'
+    };
+  };
+
+  // セクションを抽出するヘルパー関数
+  const extractSection = (text: string, sectionTitle: string): string => {
+    const regex = new RegExp(`##\\s*${sectionTitle}([\\s\\S]*?)(?=##\\s*[①②③④⑤⑥]|$)`, 'i');
+    const match = text.match(regex);
+    return match ? match[1].trim() : '';
+  };
+
+  const analysisItems = [
+    {
+      id: 'summary',
+      title: '今月の総括',
+      icon: FileText,
+      color: 'bg-blue-50 border-blue-200',
+      iconColor: 'text-blue-600',
+      content: analysisResult?.summary
+    },
+    {
+      id: 'comparison',
+      title: '前年同月対比',
+      icon: Calendar,
+      color: 'bg-purple-50 border-purple-200',
+      iconColor: 'text-purple-600',
+      content: analysisResult?.comparison
+    },
+    {
+      id: 'growing',
+      title: '伸びている商品',
+      icon: TrendingUp,
+      color: 'bg-green-50 border-green-200',
+      iconColor: 'text-green-600',
+      content: analysisResult?.growing
+    },
+    {
+      id: 'declining',
+      title: '落ち込んでいる商品',
+      icon: TrendingDown,
+      color: 'bg-red-50 border-red-200',
+      iconColor: 'text-red-600',
+      content: analysisResult?.declining
+    },
+    {
+      id: 'channels',
+      title: '各ECの伸び落ち検証',
+      icon: BarChart3,
+      color: 'bg-orange-50 border-orange-200',
+      iconColor: 'text-orange-600',
+      content: analysisResult?.channels
+    },
+    {
+      id: 'anomalies',
+      title: '特異点',
+      icon: AlertTriangle,
+      color: 'bg-yellow-50 border-yellow-200',
+      iconColor: 'text-yellow-600',
+      content: analysisResult?.anomalies
+    }
+  ];
+
   return (
-    <div id="ai-analysis-section" className="bg-white p-6 rounded-lg shadow-md mt-8">
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
-        <h2 className="text-xl font-bold text-slate-800">🤖 WEB販売AI分析レポート</h2>
-        
-        {/* 分析設定パネル */}
-        <div className="flex flex-wrap gap-4 items-center">
-          {/* 分析期間選択 */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-600">分析期間</label>
-            <select 
-              value={analysisPeriod}
-              onChange={(e) => setAnalysisPeriod(e.target.value)}
-              className="px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-              disabled={isAnalyzing}
-            >
-              <option value="1month">当月のみ</option>
-              <option value="3months">過去3ヶ月</option>
-              <option value="6months">過去半年</option>
-              <option value="1year">過去1年</option>
-            </select>
-          </div>
-          
-          {/* 分析タイプ選択 */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-600">分析タイプ</label>
-            <select 
-              value={analysisType}
-              onChange={(e) => setAnalysisType(e.target.value)}
-              className="px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-              disabled={isAnalyzing}
-            >
-              <option value="comprehensive">総合分析</option>
-              <option value="immediate">緊急対応分析</option>
-              <option value="growth">成長戦略分析</option>
-            </select>
-          </div>
-          
-          {/* 分析実行ボタン */}
-          <button
-            onClick={handleAnalyze}
-            disabled={isAnalyzing || isLoading}
-            className={`px-4 py-2 font-semibold rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 ${
-              isAnalyzing 
-                ? 'bg-purple-600 text-white cursor-not-allowed transform scale-105' 
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            } ${isLoading ? 'bg-slate-400 cursor-not-allowed' : ''}`}
+    <div id="ai-analysis-section" className="space-y-6">
+      {/* ヘッダー */}
+      <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+        <CardHeader className="text-center">
+          <CardTitle className="flex items-center justify-center gap-2 text-2xl font-bold text-purple-800">
+            <Sparkles className="w-8 h-8" />
+            WEB販売 AI分析レポート
+            <Target className="w-8 h-8" />
+          </CardTitle>
+          <p className="text-purple-600 font-medium">{month} の売上データを6つの観点で徹底分析</p>
+        </CardHeader>
+        <CardContent className="text-center">
+          <Button
+            onClick={executeAnalysis}
+            disabled={isLoading}
+            size="lg"
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 text-lg font-semibold shadow-lg"
           >
-            {isAnalyzing ? (
-              <div className="flex items-center space-x-2">
-                {/* 回転するブレインアイコン */}
+            {isLoading ? (
+              <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <div className="absolute inset-0 w-5 h-5 border border-white/30 rounded-full animate-ping"></div>
+                  <div className="w-6 h-6 border-2 border-white/30 rounded-full animate-spin"></div>
+                  <div className="absolute inset-1 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" 
+                       style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
                 </div>
-                <span className="animate-pulse">AIが考えています...</span>
-                {/* 点滅するドット */}
-                <div className="flex space-x-1">
-                  <div className="w-1 h-1 bg-white rounded-full animate-bounce" style={{animationDelay: '0s'}}></div>
-                  <div className="w-1 h-1 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                  <div className="w-1 h-1 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                </div>
+                <span>AIが分析中...</span>
               </div>
             ) : (
-              "AI分析実行"
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5" />
+                AI分析を実行
+                <Target className="w-5 h-5" />
+              </div>
             )}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </CardContent>
+      </Card>
 
-      {/* 現在の設定表示 */}
-      <div className="mb-4 p-3 bg-blue-50 rounded-md border border-blue-200">
-        <div className="flex flex-wrap gap-4 text-sm text-blue-700">
-          <span>📊 対象: {formatMonth(month)}</span>
-          <span>📅 期間: {{
-            '1month': '単月分析',
-            '3months': '3ヶ月トレンド分析', 
-            '6months': '半年間戦略分析',
-            '1year': '年間総合分析'
-          }[analysisPeriod]}</span>
-          <span>🎯 目的: {{
-            'comprehensive': '総合的な売上拡大策',
-            'immediate': '即効性のある改善策',
-            'growth': '中長期的な成長戦略'
-          }[analysisType]}</span>
-        </div>
-      </div>
+      {/* エラー表示 */}
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-red-800">
+              <AlertTriangle className="w-5 h-5" />
+              <span className="font-medium">エラー: {error}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      <div className="bg-slate-50 p-4 rounded-md min-h-[300px] border border-slate-200 relative overflow-hidden">
-        {/* 分析中のオーバーレイアニメーション */}
-        {isAnalyzing && (
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-blue-50 flex items-center justify-center z-10">
-            <div className="text-center space-y-4">
-              {/* メインAIアイコン */}
-              <div className="relative mx-auto w-16 h-16">
-                <div className="absolute inset-0 w-16 h-16 border-4 border-purple-200 rounded-full animate-spin"></div>
-                <div className="absolute inset-2 w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '1s'}}></div>
-                <div className="absolute inset-4 w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full animate-pulse flex items-center justify-center">
-                  <span className="text-white text-sm font-bold">AI</span>
+      {/* 6項目分析結果 */}
+      {analysisResult && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {analysisItems.map((item) => {
+            const IconComponent = item.icon;
+            return (
+              <Card key={item.id} className={`${item.color} transition-all duration-300 hover:shadow-lg`}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-3 text-lg font-bold">
+                    <div className={`p-2 rounded-lg bg-white/80 ${item.iconColor}`}>
+                      <IconComponent className="w-5 h-5" />
+                    </div>
+                    {item.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="prose prose-sm max-w-none">
+                    {item.content ? (
+                      <div className="whitespace-pre-line leading-relaxed text-gray-700">
+                        {item.content}
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 italic">
+                        分析中...
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ローディング時のプレースホルダー */}
+      {isLoading && !analysisResult && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {analysisItems.map((item) => (
+            <Card key={item.id} className={`${item.color} animate-pulse`}>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-3 text-lg font-bold">
+                  <div className={`p-2 rounded-lg bg-white/80 ${item.iconColor}`}>
+                    <div className="w-5 h-5 bg-gray-300 rounded"></div>
+                  </div>
+                  {item.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="h-4 bg-gray-300 rounded w-full"></div>
+                  <div className="h-4 bg-gray-300 rounded w-5/6"></div>
+                  <div className="h-4 bg-gray-300 rounded w-4/6"></div>
                 </div>
-              </div>
-              
-              {/* 動的メッセージ */}
-              <div className="space-y-2">
-                <h3 className="text-lg font-semibold text-slate-700 animate-pulse">
-                  🤖 AI分析実行中
-                </h3>
-                <div className="text-sm text-slate-600 space-y-1">
-                  <div className="animate-fadeIn">📊 売上データを解析しています...</div>
-                  <div className="animate-fadeIn" style={{animationDelay: '1s'}}>📈 トレンドパターンを分析中...</div>
-                  <div className="animate-fadeIn" style={{animationDelay: '2s'}}>🎯 改善策を生成しています...</div>
-                </div>
-              </div>
-              
-              {/* プログレスバー風アニメーション */}
-              <div className="w-64 mx-auto">
-                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full animate-pulse"></div>
-                </div>
-                <div className="text-xs text-slate-500 mt-1 animate-pulse">
-                  通常1〜2分で完了します...
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {isLoading ? (
-          <p className="text-slate-500 text-center pt-10">最新のレポートを読み込んでいます...</p>
-        ) : error ? (
-          <p className="text-red-500 text-center pt-10">{error}</p>
-        ) : analysisResult ? (
-          <div>
-            <h3 className="font-semibold text-slate-700 mb-3">
-              {formatMonth(latestMonth)} の売上拡大分析レポート
-            </h3>
-            <div className="text-slate-600 whitespace-pre-wrap leading-relaxed">
-              {analysisResult}
-            </div>
-          </div>
-        ) : (
-           <p className="text-slate-500 text-center pt-10">表示できる分析レポートがありません。</p>
-        )}
-      </div>
-      
-      {/* カスタムアニメーション */}
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.6s ease-out forwards;
-          opacity: 0;
-        }
-      `}</style>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
