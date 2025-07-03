@@ -1,4 +1,4 @@
-// /api/web-sales-chart-data/route.ts ver.2 (エラーハンドリング強化版)
+// /api/web-sales-chart-data/route.ts ver.3 (12ヶ月データ欠損問題修正版)
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -27,7 +27,6 @@ export async function GET(request: NextRequest) {
 
       if (financialError) {
         console.error('Financial data error:', financialError);
-        // エラーがあってもクラッシュせず、ダミーデータを使用して続行
         console.log('Using dummy financial data');
       }
 
@@ -36,29 +35,34 @@ export async function GET(request: NextRequest) {
 
       if (seriesError) {
         console.error('Series data error:', seriesError);
-        // エラーがあってもクラッシュせず続行
         console.log('Using dummy series data');
       }
 
-      // 選択月を基準に過去の月数分のデータを取得
-      const selectedDate = new Date(`${month}-01`);
+      // 【修正】選択月を基準に過去の月数分のデータを取得 - 日付計算を堅牢に修正
+      const [selectedYear, selectedMonth] = month.split('-').map(n => parseInt(n));
       
-      // 日付計算を明示的に行い、コンソールに出力
-      const startDate = new Date(selectedDate);
-      startDate.setMonth(startDate.getMonth() - (monthsToShow - 1)); // 選択月を含め指定月数分
-      startDate.setDate(1); // 月の初日を確実に指定
+      // 開始月の計算（年跨ぎを正確に処理）
+      let startYear = selectedYear;
+      let startMonth = selectedMonth - (monthsToShow - 1);
       
-      const endDate = new Date(selectedDate);
-      endDate.setDate(1); // 月の初日に設定
-      endDate.setMonth(endDate.getMonth() + 1); // 翌月の1日
-      endDate.setDate(0); // 前日 = 当月末日
+      // 月が負数になった場合の年跨ぎ処理
+      while (startMonth <= 0) {
+        startMonth += 12;
+        startYear -= 1;
+      }
       
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      // 終了月は選択月
+      const endYear = selectedYear;
+      const endMonth = selectedMonth;
       
-      console.log(`Data range: ${startDateStr} to ${endDateStr}`);
+      // 日付文字列の生成（ゼロパディング付き）
+      const startDateStr = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
+      const endDateStr = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
       
-      // 簡略化したSQLクエリ
+      console.log(`【修正】Data range: ${startDateStr} to ${endDateStr}`);
+      console.log(`【修正】Months calculation: ${startYear}/${startMonth} to ${endYear}/${endMonth}`);
+      
+      // データベースクエリ
       const { data: chartData, error: chartError } = await supabase
         .from('web_sales_summary')
         .select('report_month, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count')
@@ -69,17 +73,18 @@ export async function GET(request: NextRequest) {
       if (chartError) {
         console.error('Chart data error:', chartError);
         console.error('Query parameters:', { startDateStr, endDateStr });
-        // エラー時はダミーデータを返す
         return NextResponse.json(dummyData);
       }
 
-      // 選択月を含む過去の月数分の枠を作成
+      // 【修正】月の枠を確実に作成（年跨ぎ対応）
       const monthlyData: { [key: string]: any } = {};
       
-      for (let i = monthsToShow - 1; i >= 0; i--) {
-        const date = new Date(selectedDate);
-        date.setMonth(date.getMonth() - i);
-        const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+      // 開始月から選択月まで順番に月枠を作成
+      let currentYear = startYear;
+      let currentMonth = startMonth;
+      
+      for (let i = 0; i < monthsToShow; i++) {
+        const monthKey = `${currentYear}年${currentMonth}月`;
         
         monthlyData[monthKey] = {
           month: monthKey,
@@ -91,7 +96,16 @@ export async function GET(request: NextRequest) {
           qoo10: 0,
           total: 0
         };
+        
+        // 次の月に進む
+        currentMonth += 1;
+        if (currentMonth > 12) {
+          currentMonth = 1;
+          currentYear += 1;
+        }
       }
+      
+      console.log(`【修正】Generated months:`, Object.keys(monthlyData));
       
       // 実際のデータを集計
       chartData?.forEach(row => {
@@ -114,6 +128,8 @@ export async function GET(request: NextRequest) {
               monthlyData[monthKey].mercari + 
               monthlyData[monthKey].base + 
               monthlyData[monthKey].qoo10;
+            
+            console.log(`【修正】Data added to ${monthKey}:`, monthlyData[monthKey]);
           }
         } catch (e) {
           console.error('Error processing row:', row, e);
@@ -121,7 +137,7 @@ export async function GET(request: NextRequest) {
       });
 
       // 選択された月のキー
-      const selectedMonthKey = `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月`;
+      const selectedMonthKey = `${selectedYear}年${selectedMonth}月`;
       
       // 既存フロントエンドとの互換性を保つレスポンス構造
       const financial = financialData?.[0] || {};
@@ -140,10 +156,7 @@ export async function GET(request: NextRequest) {
           total: financial.total_count || 0
         };
         
-        // 既存のmonthlyDataに追加
         monthlyData[selectedMonthKey] = missingMonthData;
-        
-        // responseを更新
         response.push(missingMonthData);
       }
       
@@ -155,14 +168,19 @@ export async function GET(request: NextRequest) {
         }
       });
 
-      // 日付順にソート
+      // 【修正】日付順ソートを堅牢に修正
       response.sort((a, b) => {
         try {
-          const aYear = parseInt(a.month.substring(0, 4));
-          const aMonth = parseInt(a.month.substring(5, a.month.length - 1));
+          // "2024年4月" -> year: 2024, month: 4
+          const aMatch = a.month.match(/(\d{4})年(\d{1,2})月/);
+          const bMatch = b.month.match(/(\d{4})年(\d{1,2})月/);
           
-          const bYear = parseInt(b.month.substring(0, 4));
-          const bMonth = parseInt(b.month.substring(5, b.month.length - 1));
+          if (!aMatch || !bMatch) return 0;
+          
+          const aYear = parseInt(aMatch[1]);
+          const aMonth = parseInt(aMatch[2]);
+          const bYear = parseInt(bMatch[1]);
+          const bMonth = parseInt(bMatch[2]);
           
           if (aYear !== bYear) return aYear - bYear;
           return aMonth - bMonth;
@@ -173,23 +191,22 @@ export async function GET(request: NextRequest) {
       });
 
       // レスポンスメタデータをログに記録
-      console.log(`Chart data prepared for ${month}:`, {
+      console.log(`【修正】Chart data prepared for ${month}:`, {
         monthsData: response.length,
         months: response.map(m => m.month),
         selectedMonth: selectedMonthKey,
-        monthsToShow: monthsToShow
+        monthsToShow: monthsToShow,
+        dateRange: `${startDateStr} to ${endDateStr}`
       });
 
-      // 重要: 既存のフロントエンドコードとの互換性を保つために配列を直接返す
       return NextResponse.json(response);
+      
     } catch (dbError) {
       console.error('Database error:', dbError);
-      // データベースエラー時はダミーデータを返す
       return NextResponse.json(dummyData);
     }
   } catch (error) {
     console.error('API error:', error);
-    // どのような場合でもクラッシュしないよう、ダミーデータを返す
     const dummyData = generateDummyData(
       new Date().toISOString().slice(0, 7), 
       6
@@ -198,14 +215,26 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ダミーデータ生成関数
+// 【修正】ダミーデータ生成関数も年跨ぎ対応
 function generateDummyData(baseMonth: string, months: number) {
   const result = [];
   const [year, month] = baseMonth.split('-').map(n => parseInt(n));
   
+  // 開始月の計算（年跨ぎ対応）
+  let startYear = year;
+  let startMonth = month - (months - 1);
+  
+  while (startMonth <= 0) {
+    startMonth += 12;
+    startYear -= 1;
+  }
+  
+  // 月データを順番に生成
+  let currentYear = startYear;
+  let currentMonth = startMonth;
+  
   for (let i = 0; i < months; i++) {
-    const currentDate = new Date(year, month - 1 - i, 1);
-    const monthStr = `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`;
+    const monthStr = `${currentYear}年${currentMonth}月`;
     
     result.push({
       month: monthStr,
@@ -215,8 +244,15 @@ function generateDummyData(baseMonth: string, months: number) {
       mercari: Math.floor(Math.random() * 200),
       base: Math.floor(Math.random() * 100),
       qoo10: Math.floor(Math.random() * 50),
-      total: 0 // 後で計算
+      total: 0
     });
+    
+    // 次の月に進む
+    currentMonth += 1;
+    if (currentMonth > 12) {
+      currentMonth = 1;
+      currentYear += 1;
+    }
   }
   
   // 合計を計算
