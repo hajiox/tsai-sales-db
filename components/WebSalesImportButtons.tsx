@@ -1,5 +1,5 @@
-// /components/WebSalesImportButtons.tsx ver.5
-// BASE機能有効化版
+// /components/WebSalesImportButtons.tsx ver.6
+// アンカー追加版
 
 "use client"
 
@@ -27,7 +27,7 @@ export default function WebSalesImportButtons({
   onQoo10Click,  // 🟣 Qoo10追加
 }: WebSalesImportButtonsProps) {
   return (
-    <div className="p-3 border-t">
+    <div id="csv-input-section" className="p-3 border-t">
       {/* 取り込みボタン群 */}
       <div className="flex items-center justify-center gap-3">
         <span className="text-sm font-semibold text-gray-600">データ取り込み:</span>
