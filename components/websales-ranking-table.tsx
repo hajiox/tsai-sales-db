@@ -1,4 +1,4 @@
-// /components/websales-ranking-table.tsx ver.3 (金額/件数切り替え対応)
+// /components/websales-ranking-table.tsx ver.4 (金額表示修正版)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -52,8 +52,15 @@ export default function WebSalesRankingTable({ month }: Props) {
         const map = new Map<string, { count: number; amount: number }>()
 
         data.forEach((row: any) => {
+          // データの詳細をログ出力（デバッグ用）
+          if (!map.has(row.product_name)) {
+            console.log('サンプル行データ:', JSON.stringify(row));
+          }
+          
           const name = row.product_name || row.name || ""
-          const price = row.price || 0
+          // 価格データの取得方法を修正 - 数値変換を明示的に行う
+          const price = typeof row.price === 'number' ? row.price : 
+                       (parseFloat(row.price) || 0)
           
           // 各ECサイトの販売数を合計
           const count = 
@@ -64,14 +71,16 @@ export default function WebSalesRankingTable({ month }: Props) {
             (row.base_count || 0) +
             (row.qoo10_count || 0)
 
-          // if (count > 0) { // ← この条件を削除
-            if (!map.has(name)) {
-              map.set(name, { count: 0, amount: 0 })
-            }
-            const entry = map.get(name)!
-            entry.count += count
-            entry.amount += count * price
-          // } // ← この行も削除
+          if (!map.has(name)) {
+            map.set(name, { count: 0, amount: 0 })
+          }
+          const entry = map.get(name)!
+          entry.count += count
+          
+          // 金額計算の処理を明示的に記述
+          const itemAmount = count * price
+          console.log(`金額計算: ${name}, 件数: ${count}, 単価: ${price}, 金額: ${itemAmount}`);
+          entry.amount += itemAmount
         })
 
         console.log('📈 集計結果:', { productCount: map.size })
@@ -82,6 +91,11 @@ export default function WebSalesRankingTable({ month }: Props) {
           total_count: v.count,
           total_amount: v.amount,
         }))
+
+        // サンプルデータをログに出力
+        if (arr.length > 0) {
+          console.log('集計サンプル:', arr.slice(0, 3));
+        }
 
         // 元データを保存
         setOriginalData(arr)
@@ -115,8 +129,14 @@ export default function WebSalesRankingTable({ month }: Props) {
     // 昇順ソート関数
     const sortFuncAsc = (a: Row, b: Row) => {
       if (sortType === 'count') {
+        // 0件のデータは除外（ワースト10の場合）
+        if (a.total_count === 0) return 1;
+        if (b.total_count === 0) return -1;
         return a.total_count - b.total_count // 件数で昇順
       } else {
+        // 0円のデータは除外（ワースト10の場合）
+        if (a.total_amount === 0) return 1;
+        if (b.total_amount === 0) return -1;
         return a.total_amount - b.total_amount // 金額で昇順
       }
     }
@@ -124,9 +144,13 @@ export default function WebSalesRankingTable({ month }: Props) {
     // ソート（降順・昇順）
     const desc = [...data].sort(sortFunc)
     const asc = [...data].sort(sortFuncAsc)
+      .filter(row => sortType === 'count' ? row.total_count > 0 : row.total_amount > 0); // 0は除外
 
-    console.log(`🏆 ベスト10 (${sortType === 'count' ? '件数順' : '金額順'}):`, desc.slice(0, 10))
-    console.log(`📉 ワースト10 (${sortType === 'count' ? '件数順' : '金額順'}):`, asc.slice(0, 10))
+    // ログ出力を詳細化
+    console.log(`🏆 ベスト10 (${sortType === 'count' ? '件数順' : '金額順'}):`, 
+      desc.slice(0, 3).map(r => ({name: r.product_name, count: r.total_count, amount: r.total_amount})));
+    console.log(`📉 ワースト10 (${sortType === 'count' ? '件数順' : '金額順'}):`, 
+      asc.slice(0, 3).map(r => ({name: r.product_name, count: r.total_count, amount: r.total_amount})));
 
     setBestRows(desc.slice(0, 10))
     setWorstRows(asc.slice(0, 10))
@@ -206,11 +230,11 @@ export default function WebSalesRankingTable({ month }: Props) {
             <tbody>
               {bestRows.length > 0 ? (
                 bestRows.map((r, i) => (
-                  <tr key={r.product_name} className="text-center hover:bg-green-50">
+                  <tr key={`best-${i}-${r.product_name}`} className="text-center hover:bg-green-50">
                     <td className="border px-1 py-1 font-medium">{i + 1}</td>
                     <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
                     <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
-                    <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
+                    <td className="border px-1 py-1 text-xs">¥{f(Math.round(r.total_amount))}</td>
                   </tr>
                 ))
               ) : (
@@ -241,11 +265,11 @@ export default function WebSalesRankingTable({ month }: Props) {
             <tbody>
               {worstRows.length > 0 ? (
                 worstRows.map((r, i) => (
-                  <tr key={r.product_name} className="text-center hover:bg-red-50">
+                  <tr key={`worst-${i}-${r.product_name}`} className="text-center hover:bg-red-50">
                     <td className="border px-1 py-1 font-medium">{i + 1}</td>
                     <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
                     <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
-                    <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
+                    <td className="border px-1 py-1 text-xs">¥{f(Math.round(r.total_amount))}</td>
                   </tr>
                 ))
               ) : (
