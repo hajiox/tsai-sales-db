@@ -60,22 +60,26 @@ export async function POST(req: Request) {
     console.log('商品マスタ取得数:', productsData?.length || 0);
     const productsMap = new Map(productsData.map(p => [p.id, p]));
 
-    // 【修正v4】3. 期間内の販売実績データを取得 - 1000件制限を回避
+    // 【修正v5】期間内の販売実績データを関数で取得 - 1000件制限を完全回避
+    const startMonthStr = `${startYear}-${String(startMonth).padStart(2, '0')}`;
+    const endMonthStr = `${endYear}-${String(endMonth).padStart(2, '0')}`;
+    
+    console.log('【修正v5】Using function get_period_sales_data with params:', { startMonthStr, endMonthStr });
+    
     const { data: salesData, error: salesError } = await supabase
-      .from('web_sales_summary')
-      .select('product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count, report_month')
-      .gte('report_month', startDateString)
-      .lte('report_month', endDateString)
-      .range(0, 9999); // 最大10000件まで取得可能に
+      .rpc('get_period_sales_data', {
+        start_month: startMonthStr,
+        end_month: endMonthStr
+      });
 
     if (salesError) {
-      console.error('Supabase sales query error:', salesError);
+      console.error('Supabase function error:', salesError);
       throw new Error(`販売実績の取得に失敗: ${salesError.message}`);
     }
 
     // デバッグログ追加
-    console.log('【修正v4】取得した販売データ数:', salesData?.length || 0);
-    console.log('【修正v4】取得データサンプル:', salesData?.slice(0, 3));
+    console.log('【修正v5】取得した販売データ数:', salesData?.length || 0);
+    console.log('【修正v5】取得データサンプル:', salesData?.slice(0, 3));
 
     if (!salesData || salesData.length === 0) {
         console.warn('期間内の販売データが存在しません');
@@ -103,7 +107,7 @@ export async function POST(req: Request) {
 
         const productPrice = product.price || 0;
         
-        // 各チャネルの集計
+        // 各チャネルの集計（関数から返された集計済みデータを使用）
         totals.amazon.count += sale.amazon_count || 0;
         totals.amazon.amount += (sale.amazon_count || 0) * productPrice;
         totals.rakuten.count += sale.rakuten_count || 0;
@@ -117,9 +121,9 @@ export async function POST(req: Request) {
         totals.qoo10.count += sale.qoo10_count || 0;
         totals.qoo10.amount += (sale.qoo10_count || 0) * productPrice;
 
-        // シリーズ別集計
+        // シリーズ別集計（total_countを使用）
         const seriesName = product.series || '未分類';
-        const totalCount = (sale.amazon_count || 0) + (sale.rakuten_count || 0) + (sale.yahoo_count || 0) + (sale.mercari_count || 0) + (sale.base_count || 0) + (sale.qoo10_count || 0);
+        const totalCount = sale.total_count || 0;
         
         if (!seriesData[seriesName]) {
             seriesData[seriesName] = { count: 0, sales: 0 };
@@ -137,12 +141,12 @@ export async function POST(req: Request) {
     const totalCount = Object.values(totals).reduce((sum, site) => sum + site.count, 0);
     const totalAmount = Object.values(totals).reduce((sum, site) => sum + site.amount, 0);
     
-    console.log('【修正v4】各チャネル集計結果:');
+    console.log('【修正v5】各チャネル集計結果:');
     Object.entries(totals).forEach(([channel, data]) => {
       console.log(`  ${channel}: ${data.count}件 ¥${data.amount.toLocaleString()}`);
     });
     
-    console.log('【修正v4】全体集計結果:', {
+    console.log('【修正v5】全体集計結果:', {
       totalCount,
       totalAmount: totalAmount.toLocaleString(),
       seriesSummaryCount: seriesSummary.length
@@ -150,7 +154,7 @@ export async function POST(req: Request) {
 
     // データの有無を確認
     const hasData = Object.values(totals).some(site => site.count > 0);
-    console.log('【修正v4】データあり:', hasData);
+    console.log('【修正v5】データあり:', hasData);
 
     if (!hasData) {
       console.warn('集計結果が全て0です - データベースクエリを確認してください');
@@ -159,7 +163,7 @@ export async function POST(req: Request) {
     // トップ3シリーズのデータをログ
     const top3Series = seriesSummary.slice(0, 3);
     if (top3Series.length > 0) {
-      console.log('【修正v4】トップ3シリーズ:', top3Series.map(s => `${s.seriesName}: ${s.count}個 ¥${s.sales.toLocaleString()}`).join(', '));
+      console.log('【修正v5】トップ3シリーズ:', top3Series.map(s => `${s.seriesName}: ${s.count}個 ¥${s.sales.toLocaleString()}`).join(', '));
     }
 
     console.log('=== 期間集計終了 ===');
