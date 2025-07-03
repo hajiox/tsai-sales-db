@@ -1,4 +1,4 @@
-// /components/websales-charts.tsx ver.1 (12ヶ月表示対応)
+// /components/websales-charts.tsx ver.2 (色変更対応)
 "use client"
 
 import { useEffect, useState } from 'react';
@@ -136,43 +136,43 @@ export default function WebSalesCharts({
       {
         label: 'Amazon',
         data: chartData.map(item => item.amazon),
-        borderColor: 'rgba(255, 153, 0, 1)',
-        backgroundColor: 'rgba(255, 153, 0, 0.5)',
+        borderColor: 'rgba(16, 185, 129, 1)', // 緑
+        backgroundColor: 'rgba(16, 185, 129, 0.5)',
         tension: 0.3,
       },
       {
         label: '楽天',
         data: chartData.map(item => item.rakuten),
-        borderColor: 'rgba(191, 0, 0, 1)',
-        backgroundColor: 'rgba(191, 0, 0, 0.5)',
+        borderColor: 'rgba(239, 68, 68, 1)', // 赤
+        backgroundColor: 'rgba(239, 68, 68, 0.5)',
         tension: 0.3,
       },
       {
         label: 'Yahoo!',
         data: chartData.map(item => item.yahoo),
-        borderColor: 'rgba(255, 0, 0, 1)',
-        backgroundColor: 'rgba(255, 0, 0, 0.5)',
+        borderColor: 'rgba(249, 115, 22, 1)', // オレンジ
+        backgroundColor: 'rgba(249, 115, 22, 0.5)',
         tension: 0.3,
       },
       {
         label: 'メルカリ',
         data: chartData.map(item => item.mercari),
-        borderColor: 'rgba(34, 139, 230, 1)',
-        backgroundColor: 'rgba(34, 139, 230, 0.5)',
+        borderColor: 'rgba(234, 179, 8, 1)', // 黄色
+        backgroundColor: 'rgba(234, 179, 8, 0.5)',
         tension: 0.3,
       },
       {
         label: 'BASE',
         data: chartData.map(item => item.base),
-        borderColor: 'rgba(0, 200, 150, 1)',
-        backgroundColor: 'rgba(0, 200, 150, 0.5)',
+        borderColor: 'rgba(59, 130, 246, 1)', // 青
+        backgroundColor: 'rgba(59, 130, 246, 0.5)',
         tension: 0.3,
       },
       {
         label: 'Qoo10',
         data: chartData.map(item => item.qoo10),
-        borderColor: 'rgba(255, 187, 0, 1)', 
-        backgroundColor: 'rgba(255, 187, 0, 0.5)',
+        borderColor: 'rgba(236, 72, 153, 1)', // ピンク
+        backgroundColor: 'rgba(236, 72, 153, 0.5)',
         tension: 0.3,
       }
     ]
