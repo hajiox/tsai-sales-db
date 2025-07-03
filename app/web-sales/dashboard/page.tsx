@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.21 (インラインスタイル版)
+// /app/web-sales/dashboard/page.tsx ver.22 (12ヶ月データ表示・月選択ボタン修正版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -195,7 +195,7 @@ function WebSalesDashboardContent() {
           </p>
         </div>
         
-        {/* モード切り替えボタン部分を修正 - インラインスタイルを使用 */}
+        {/* 【修正】モード切り替えボタン部分 - 月選択ボタンを常時表示 */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -253,25 +253,24 @@ function WebSalesDashboardContent() {
             </button>
           </div>
           
+          {/* 【修正】月選択ボタンを常時表示 */}
           <div>
-            {viewMode === 'month' && (
-              <input
-                type="month"
-                value={month}
-                onChange={(e) => handleMonthChange(e.target.value)}
-                style={{
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  padding: '8px',
-                  backgroundColor: '#fff'
-                }}
-              />
-            )}
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => handleMonthChange(e.target.value)}
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                padding: '8px',
+                backgroundColor: '#fff'
+              }}
+            />
           </div>
         </div>
         
-        {/* デバッグ表示 (必要に応じてコメントアウト) */}
-        {/* <div style={{
+        {/* デバッグ表示 */}
+        <div style={{
           backgroundColor: '#ffffcc', 
           padding: '10px', 
           borderRadius: '6px', 
@@ -281,7 +280,8 @@ function WebSalesDashboardContent() {
           <p>現在のモード: {viewMode}</p>
           <p>表示月数: {periodMonths}</p>
           <p>選択中の月: {month}</p>
-        </div> */}
+          <p>グラフに渡される月数: {viewMode === 'period' ? periodMonths : (viewMode === 'month' ? 6 : periodMonths)}</p>
+        </div>
       </header>
       
       <div className="space-y-6">
@@ -292,7 +292,7 @@ function WebSalesDashboardContent() {
           periodMonths={periodMonths}
         />
 
-        {/* グラフを常に表示するように修正 */}
+        {/* 【修正】グラフコンポーネントへの月数パラメータを正確に渡す */}
         <WebSalesCharts 
           month={month} 
           refreshTrigger={refreshTrigger}
