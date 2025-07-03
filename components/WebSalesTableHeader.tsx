@@ -55,64 +55,23 @@ export default function WebSalesTableHeader({
     })
   }
 
-  // AI分析セクションまでスクロール
+  // AI分析セクションまでスクロール（シンプル版）
   const scrollToAiAnalysis = () => {
-    console.log('AI分析へボタンクリック') // デバッグ用
+    console.log('AI分析へボタンクリック - 関数開始'); // デバッグ用
     
-    // AI分析セクションを探す（ランキングの下のコンポーネント）
-    const selectors = [
-      // AI分析セクション特有の要素を探す
-      'h2:contains("AI分析")',
-      'h3:contains("AI分析")',
-      '[class*="ai-analysis"]',
-      '[class*="ai-section"]',
-      // ランキングテーブルの次の兄弟要素
-      '.space-y-6 > div:last-child',
-      '.space-y-4 > div:last-child',
-      // グラデーション背景があるセクション
-      '.bg-gradient-to-r',
-      '.bg-gradient-to-br',
-      // 最後の手段：ページ内の最後のsection要素
-      'section:last-of-type',
-      'div[class*="space-y"]:last-child'
-    ]
-    
-    let foundElement = null
-    
-    // まず特定のテキストを含む要素を探す
-    const allElements = document.querySelectorAll('*')
-    for (const element of allElements) {
-      if (element.textContent && element.textContent.includes('AI分析')) {
-        console.log('AI分析テキストを含む要素発見:', element) // デバッグ用
-        foundElement = element
-        break
-      }
-    }
-    
-    // テキストで見つからない場合はセレクタで探す
-    if (!foundElement) {
-      for (const selector of selectors) {
-        const element = document.querySelector(selector)
-        if (element) {
-          console.log(`AI分析セクション発見: ${selector}`) // デバッグ用
-          foundElement = element
-          break
-        }
-      }
-    }
-    
-    if (foundElement) {
-      foundElement.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'start'
-      })
-    } else {
-      // 最後の手段：ページの80%の位置にスクロール（ランキングの下あたり）
-      console.log('AI分析セクションが見つからないため、ページ下部へスクロール') // デバッグ用
+    try {
+      // シンプルにページの最下部近くにスクロール
+      const targetPosition = document.body.scrollHeight - 800; // 最下部から800px上
+      console.log('スクロール先計算:', targetPosition);
+      
       window.scrollTo({ 
-        top: document.body.scrollHeight * 0.8, 
+        top: targetPosition, 
         behavior: 'smooth' 
-      })
+      });
+      
+      console.log('スクロール実行完了');
+    } catch (error) {
+      console.error('スクロールエラー:', error);
     }
   }
 
@@ -149,7 +108,19 @@ export default function WebSalesTableHeader({
 
         {/* 🆕 AI分析へボタン */}
         <button
-          onClick={scrollToAiAnalysis}
+          onClick={() => {
+            console.log('AI分析へボタンがクリックされました！'); // 最初のテスト
+            try {
+              scrollToAiAnalysis();
+            } catch (error) {
+              console.error('scrollToAiAnalysis エラー:', error);
+              // 簡単なフォールバック
+              window.scrollTo({ 
+                top: document.body.scrollHeight - 500, 
+                behavior: 'smooth' 
+              });
+            }
+          }}
           className="px-3 py-1 text-sm font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 transition-colors active:bg-purple-200"
         >
           <Brain className="h-4 w-4 inline mr-1" />
