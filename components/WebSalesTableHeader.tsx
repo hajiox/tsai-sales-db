@@ -59,32 +59,61 @@ export default function WebSalesTableHeader({
   const scrollToAiAnalysis = () => {
     console.log('AI分析へボタンクリック') // デバッグ用
     
-    // AI分析セクションを探す
+    // AI分析セクションを探す（ランキングの下のコンポーネント）
     const selectors = [
-      '[data-ai-section]',
-      '.space-y-4 > div:last-child',
+      // AI分析セクション特有の要素を探す
+      'h2:contains("AI分析")',
       'h3:contains("AI分析")',
-      '.bg-gradient-to-r'
+      '[class*="ai-analysis"]',
+      '[class*="ai-section"]',
+      // ランキングテーブルの次の兄弟要素
+      '.space-y-6 > div:last-child',
+      '.space-y-4 > div:last-child',
+      // グラデーション背景があるセクション
+      '.bg-gradient-to-r',
+      '.bg-gradient-to-br',
+      // 最後の手段：ページ内の最後のsection要素
+      'section:last-of-type',
+      'div[class*="space-y"]:last-child'
     ]
     
-    for (const selector of selectors) {
-      const element = document.querySelector(selector)
-      if (element) {
-        console.log(`AI分析セクション発見: ${selector}`) // デバッグ用
-        element.scrollIntoView({ 
-          behavior: 'smooth',
-          block: 'start'
-        })
-        return
+    let foundElement = null
+    
+    // まず特定のテキストを含む要素を探す
+    const allElements = document.querySelectorAll('*')
+    for (const element of allElements) {
+      if (element.textContent && element.textContent.includes('AI分析')) {
+        console.log('AI分析テキストを含む要素発見:', element) // デバッグ用
+        foundElement = element
+        break
       }
     }
     
-    // AI分析セクションが見つからない場合は、ページ最下部にスクロール
-    console.log('AI分析セクションが見つからないため、ページ最下部へスクロール') // デバッグ用
-    window.scrollTo({ 
-      top: document.body.scrollHeight, 
-      behavior: 'smooth' 
-    })
+    // テキストで見つからない場合はセレクタで探す
+    if (!foundElement) {
+      for (const selector of selectors) {
+        const element = document.querySelector(selector)
+        if (element) {
+          console.log(`AI分析セクション発見: ${selector}`) // デバッグ用
+          foundElement = element
+          break
+        }
+      }
+    }
+    
+    if (foundElement) {
+      foundElement.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'start'
+      })
+    } else {
+      // 最後の手段：ページの80%の位置にスクロール（ランキングの下あたり）
+      console.log('AI分析セクションが見つからないため、ページ下部へスクロール') // デバッグ用
+      window.scrollTo({ 
+        top: document.body.scrollHeight * 0.8, 
+        behavior: 'smooth' 
+      })
+    }
   }
 
   // 月選択の処理を修正 - 直接URLを変更する
