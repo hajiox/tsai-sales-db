@@ -10,7 +10,9 @@ export async function POST(req: Request) {
   try {
     // ------- input -------
     const { month, period = '1month', analysisType = 'comprehensive' } = await req.json();
-    const targetMonth = month || '2025-06';
+    const targetMonth = month || '2025-03'; // デフォルトを現在月に修正
+    
+    console.log('AI分析開始:', { targetMonth, period, analysisType }); // デバッグログ
 
     // ------- env -------
     const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -28,14 +30,20 @@ export async function POST(req: Request) {
 
     // 期間に応じたデータ取得
     const analysisMonths = getAnalysisMonths(targetMonth, period);
+    console.log('分析対象月:', analysisMonths); // デバッグログ
+    
     const allSalesData = [];
     
     for (const monthStr of analysisMonths) {
+      console.log(`${monthStr}のデータ取得中...`); // デバッグログ
       const { data, error } = await supabase.rpc('web_sales_full_month', {
         target_month: monthStr
       });
       if (!error && data) {
+        console.log(`${monthStr}: ${data.length}商品取得`); // デバッグログ
         allSalesData.push({ month: monthStr, data });
+      } else {
+        console.log(`${monthStr}: データ取得エラーまたはデータなし`, error); // デバッグログ
       }
     }
 
@@ -46,11 +54,14 @@ export async function POST(req: Request) {
       });
     }
 
+    console.log(`総取得データ: ${allSalesData.length}ヶ月分`); // デバッグログ
+
     // 高度な分析データを作成
-    const analysisData = createAdvancedAnalysis(allSalesData, targetMonth);
+    const analysisData = createAdvancedAnalysis(allSalesData, targetMonth, period);
     
     // AI分析プロンプトを生成
     const prompt = generateAnalysisPrompt(analysisData, period, analysisType);
+    console.log('AI分析プロンプト生成完了'); // デバッグログ
 
     // ------- ai -------
     const openai = new OpenAI({ apiKey: okey });
@@ -72,12 +83,18 @@ export async function POST(req: Request) {
         analysis_type: analysisType
       }, { onConflict: 'month' });
 
+    console.log('AI分析完了'); // デバッグログ
+
     return NextResponse.json({ 
       ok: true, 
       result: summary, 
       month: targetMonth,
       period,
-      analysisType
+      analysisType,
+      debugInfo: {
+        analysisMonths,
+        dataCount: allSalesData.length
+      }
     });
   } catch (e: any) {
     console.error('web_sales_analyze_error', e);
@@ -85,8 +102,10 @@ export async function POST(req: Request) {
   }
 }
 
-// 分析期間の月リストを生成
+// 分析期間の月リストを生成（修正版）
 function getAnalysisMonths(targetMonth: string, period: string): string[] {
+  console.log('getAnalysisMonths:', { targetMonth, period }); // デバッグログ
+  
   const [year, month] = targetMonth.split('-').map(Number);
   const months = [];
   
@@ -98,6 +117,9 @@ function getAnalysisMonths(targetMonth: string, period: string): string[] {
     default: monthCount = 1;
   }
 
+  console.log(`${monthCount}ヶ月分のデータを取得します`); // デバッグログ
+
+  // 対象月から遡って指定月数分の月を生成
   for (let i = monthCount - 1; i >= 0; i--) {
     const targetDate = new Date(year, month - 1 - i, 1);
     const y = targetDate.getFullYear();
@@ -105,12 +127,16 @@ function getAnalysisMonths(targetMonth: string, period: string): string[] {
     months.push(`${y}-${m}`);
   }
   
+  console.log('生成された月リスト:', months); // デバッグログ
   return months;
 }
 
-// 高度な分析データを作成
-function createAdvancedAnalysis(allSalesData: any[], targetMonth: string) {
+// 高度な分析データを作成（修正版）
+function createAdvancedAnalysis(allSalesData: any[], targetMonth: string, period: string) {
+  console.log('createAdvancedAnalysis開始:', { targetMonth, period }); // デバッグログ
+  
   const currentData = allSalesData.find(d => d.month === targetMonth)?.data || [];
+  console.log(`現在月(${targetMonth})のデータ: ${currentData.length}商品`); // デバッグログ
   
   // 1. 基本集計
   const siteData = {
@@ -121,6 +147,8 @@ function createAdvancedAnalysis(allSalesData: any[], targetMonth: string) {
     base: currentData.reduce((sum: number, item: any) => sum + (item.base_count || 0), 0),
     qoo10: currentData.reduce((sum: number, item: any) => sum + (item.qoo10_count || 0), 0)
   };
+
+  console.log('ECサイト別集計:', siteData); // デバッグログ
 
   // 2. 売上トップ10 & ワースト5
   const productAnalysis = currentData
@@ -162,7 +190,12 @@ function createAdvancedAnalysis(allSalesData: any[], targetMonth: string) {
 
   // 4. 成長・衰退分析（複数月データがある場合）
   let growthAnalysis = null;
+  let periodAnalysis = null;
+  
   if (allSalesData.length > 1) {
+    console.log(`${allSalesData.length}ヶ月分の成長分析を実行`); // デバッグログ
+    
+    // 前月比分析
     const previousData = allSalesData[allSalesData.length - 2]?.data || [];
     
     growthAnalysis = currentData
@@ -184,6 +217,15 @@ function createAdvancedAnalysis(allSalesData: any[], targetMonth: string) {
       })
       .filter((item: any) => item !== null)
       .sort((a: any, b: any) => b.growth_rate - a.growth_rate);
+
+    // 期間全体のトレンド分析
+    if (allSalesData.length >= 3) {
+      periodAnalysis = {
+        months_analyzed: allSalesData.length,
+        total_trend: calculatePeriodTrend(allSalesData),
+        channel_trends: calculateChannelTrends(allSalesData)
+      };
+    }
   }
 
   // 5. 異常値検知
@@ -201,36 +243,82 @@ function createAdvancedAnalysis(allSalesData: any[], targetMonth: string) {
              (item.price || 0) > 10000 ? '高単価' : '低単価'
     }));
 
-  return {
+  const result = {
     targetMonth,
-    period: allSalesData.length > 1 ? `${allSalesData.length}ヶ月間` : '単月',
+    period: `${allSalesData.length}ヶ月間分析`,
+    analysis_months: allSalesData.map(d => d.month),
     siteData,
     topProducts,
     worstProducts,
     channelGapAnalysis,
     growthAnalysis,
+    periodAnalysis,
     abnormalProducts,
     totalProductCount: currentData.length,
     totalSalesCount: Object.values(siteData).reduce((a: number, b: number) => a + b, 0)
   };
+
+  console.log('分析データ作成完了:', {
+    targetMonth: result.targetMonth,
+    period: result.period,
+    months: result.analysis_months,
+    productCount: result.totalProductCount,
+    salesCount: result.totalSalesCount
+  }); // デバッグログ
+
+  return result;
 }
 
-// AI分析プロンプトを生成
+// 期間トレンド計算
+function calculatePeriodTrend(allSalesData: any[]) {
+  const monthlyTotals = allSalesData.map(monthData => {
+    const total = monthData.data.reduce((sum: number, item: any) => {
+      return sum + (item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0);
+    }, 0);
+    return { month: monthData.month, total };
+  });
+  
+  return monthlyTotals;
+}
+
+// チャネル別トレンド計算
+function calculateChannelTrends(allSalesData: any[]) {
+  return allSalesData.map(monthData => {
+    const siteData = {
+      month: monthData.month,
+      amazon: monthData.data.reduce((sum: number, item: any) => sum + (item.amazon_count || 0), 0),
+      rakuten: monthData.data.reduce((sum: number, item: any) => sum + (item.rakuten_count || 0), 0),
+      yahoo: monthData.data.reduce((sum: number, item: any) => sum + (item.yahoo_count || 0), 0)
+    };
+    return siteData;
+  });
+}
+
+// AI分析プロンプトを生成（修正版）
 function generateAnalysisPrompt(data: any, period: string, analysisType: string): string {
+  const periodText = {
+    '1month': '単月',
+    '3months': '3ヶ月',
+    '6months': '6ヶ月',
+    '1year': '12ヶ月'
+  }[period] || '単月';
+
   const basePrompt = `あなたはデータアナリスト兼ECコンサルタントです。
 以下のWEB販売データを分析し、売上全体拡大に向けた戦略的レポートを作成してください。
 
-【分析対象】${data.targetMonth} (${data.period})
+【分析対象】${data.targetMonth} を基準とした${periodText}間の分析
+【分析期間】${data.analysis_months.join(', ')}
 【主力チャネル】Amazon、楽天、Yahoo (この3チャネルの売上拡大を最優先)
 
 【データ概要】
+・分析期間: ${data.period}
 ・総商品数: ${data.totalProductCount}商品
 ・総売上件数: ${data.totalSalesCount}件
 ・ECサイト別売上件数:
 ${JSON.stringify(data.siteData, null, 2)}
 
 【売上トップ10商品】
-${JSON.stringify(data.topProducts, null, 2)}
+${JSON.stringify(data.topProducts.slice(0, 5), null, 2)}
 
 【チャネル格差が大きい商品】
 ${JSON.stringify(data.channelGapAnalysis, null, 2)}`;
@@ -255,6 +343,9 @@ ${JSON.stringify(data.abnormalProducts, null, 2)}
 【成長・衰退トレンド】
 ${data.growthAnalysis ? JSON.stringify(data.growthAnalysis.slice(0, 10), null, 2) : '前月データなし'}
 
+${data.periodAnalysis ? `【期間トレンド】
+${JSON.stringify(data.periodAnalysis, null, 2)}` : ''}
+
 以下の観点で中期的な売上拡大策を提案してください：
 1. 伸び盛り商品の成功要因分析
 2. 衰退商品のテコ入れ vs 終売判断
@@ -268,13 +359,16 @@ ${data.growthAnalysis ? JSON.stringify(data.growthAnalysis.slice(0, 10), null, 2
 1. 【即効性】異常値商品・チャネル格差の解消策
 2. 【成長戦略】伸び盛り商品の拡大策
 3. 【最適化】主力3チャネル別の商品戦略
-4. 【具体的アクション】今月〜3ヶ月の実行プラン`;
+4. 【具体的アクション】今月〜3ヶ月の実行プラン
+
+${data.periodAnalysis ? `【期間トレンド参考情報】
+${JSON.stringify(data.periodAnalysis, null, 2)}` : ''}`;
   }
 
   return basePrompt + specificPrompt + `
 
 【出力形式】
-■ 概況サマリー
+■ 概況サマリー (${data.targetMonth}基準)
 ■ 主力3チャネル分析
 ■ 重点商品戦略
 ■ 具体的アクションプラン
