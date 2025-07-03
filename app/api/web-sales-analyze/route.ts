@@ -1,4 +1,4 @@
-// /api/web-sales-analyze/route.ts ver.改修対応
+// /api/web-sales-analyze/route.ts ver.6項目分析専用
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
@@ -10,10 +10,10 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     // ------- input -------
-    const { month, period = '1month', analysisType = 'comprehensive' } = await req.json();
+    const { month } = await req.json();
     const targetMonth = month || '2025-03';
     
-    console.log('AI分析開始:', { targetMonth, period, analysisType });
+    console.log('6項目AI分析開始:', { targetMonth });
 
     // ------- env -------
     const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -29,30 +29,20 @@ export async function POST(req: Request) {
       }
     });
 
-    // 期間に応じた開始・終了月を計算
-    const { startMonth, endMonth, analysisMonths } = calculatePeriodRange(targetMonth, period);
-    console.log('分析期間:', { startMonth, endMonth, analysisMonths });
+    // 過去6ヶ月の期間を計算
+    const [year, monthNum] = targetMonth.split('-').map(Number);
+    const endDate = new Date(year, monthNum - 1, 1);
+    const startDate = new Date(year, monthNum - 6, 1);
+    const startMonth = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
 
-    // 新しいDB関数を使用して期間データを効率的に取得
-    const { data: periodData, error: periodError } = await supabase.rpc('get_period_sales_data', {
-      start_month: startMonth,
-      end_month: endMonth
-    });
+    console.log('分析期間:', { startMonth, endMonth: targetMonth });
 
-    if (periodError || !periodData) {
-      console.error('期間データ取得エラー:', periodError);
-      return NextResponse.json({ 
-        ok: false, 
-        error: `期間データの取得に失敗しました: ${periodError?.message}`
-      });
-    }
-
-    // 現在月の詳細データを取得
-    const { data: currentData, error: currentError } = await supabase.rpc('web_sales_full_month', {
+    // 1. 現在月データ取得
+    const { data: currentData, error: currentError } = await supabase.rpc('get_monthly_financial_summary', {
       target_month: targetMonth
     });
 
-    if (currentError || !currentData) {
+    if (currentError || !currentData || currentData.length === 0) {
       console.error('現在月データ取得エラー:', currentError);
       return NextResponse.json({ 
         ok: false, 
@@ -60,31 +50,53 @@ export async function POST(req: Request) {
       });
     }
 
-    // 月次チャートデータを取得（トレンド分析用）
+    // 2. 前年同月データ取得
+    const { data: previousYearData, error: prevYearError } = await supabase.rpc('get_previous_year_data', {
+      target_month: targetMonth
+    });
+
+    if (prevYearError) {
+      console.warn('前年同月データ取得エラー:', prevYearError);
+    }
+
+    // 3. 過去6ヶ月チャートデータ取得
     const { data: chartData, error: chartError } = await supabase.rpc('get_monthly_chart_data', {
       start_month: startMonth,
-      end_month: endMonth
+      end_month: targetMonth
     });
 
     if (chartError) {
       console.warn('チャートデータ取得エラー:', chartError);
     }
 
-    console.log(`データ取得完了: 期間集計${periodData.length}商品, 現在月${currentData.length}商品, チャート${chartData?.length || 0}ヶ月`);
+    // 4. 商品別トレンド分析取得
+    const { data: trendData, error: trendError } = await supabase.rpc('get_product_trend_analysis', {
+      target_month: targetMonth
+    });
 
-    // 効率的な分析データを作成
-    const analysisData = createOptimizedAnalysis(
-      periodData, 
-      currentData, 
+    if (trendError) {
+      console.warn('トレンドデータ取得エラー:', trendError);
+    }
+
+    console.log('データ取得完了:', {
+      currentData: currentData.length,
+      previousYearData: previousYearData?.length || 0,
+      chartData: chartData?.length || 0,
+      trendData: trendData?.length || 0
+    });
+
+    // 分析データを整理
+    const analysisData = organize6ItemsAnalysis(
+      currentData[0], 
+      previousYearData?.[0] || null, 
       chartData || [], 
-      targetMonth, 
-      period,
-      analysisMonths
+      trendData || [], 
+      targetMonth
     );
     
-    // AI分析プロンプトを生成
-    const prompt = generateAnalysisPrompt(analysisData, period, analysisType);
-    console.log('AI分析プロンプト生成完了');
+    // 6項目専用AIプロンプトを生成
+    const prompt = generate6ItemsPrompt(analysisData);
+    console.log('6項目AIプロンプト生成完了');
 
     // ------- ai -------
     const openai = new OpenAI({ apiKey: okey });
@@ -102,278 +114,233 @@ export async function POST(req: Request) {
       .upsert({ 
         month: targetMonth, 
         content: summary,
-        analysis_period: period,
-        analysis_type: analysisType
+        analysis_period: '6months',
+        analysis_type: '6items'
       }, { onConflict: 'month' });
 
-    console.log('AI分析完了');
+    console.log('6項目AI分析完了');
 
     return NextResponse.json({ 
       ok: true, 
       result: summary, 
       month: targetMonth,
-      period,
-      analysisType,
+      analysisType: '6items',
       debugInfo: {
-        startMonth,
-        endMonth,
-        analysisMonths,
-        periodDataCount: periodData.length,
-        currentDataCount: currentData.length,
-        chartDataCount: chartData?.length || 0
+        currentDataExists: !!currentData[0],
+        previousYearDataExists: !!previousYearData?.[0],
+        chartDataCount: chartData?.length || 0,
+        trendDataCount: trendData?.length || 0
       }
     });
   } catch (e: any) {
-    console.error('web_sales_analyze_error', e);
+    console.error('6項目AI分析エラー', e);
     return NextResponse.json({ ok: false, error: e.message });
   }
 }
 
-// 期間範囲計算（新しいDB関数用）
-function calculatePeriodRange(targetMonth: string, period: string) {
-  const [year, month] = targetMonth.split('-').map(Number);
-  
-  let monthCount = 1;
-  switch (period) {
-    case '3months': monthCount = 3; break;
-    case '6months': monthCount = 6; break;
-    case '1year': monthCount = 12; break;
-    default: monthCount = 1;
-  }
-
-  // 開始月を計算（対象月から遡る）
-  const startDate = new Date(year, month - monthCount, 1);
-  const startMonth = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
-  
-  // 終了月は対象月
-  const endMonth = targetMonth;
-  
-  // 分析対象月リストを生成
-  const analysisMonths = [];
-  for (let i = monthCount - 1; i >= 0; i--) {
-    const targetDate = new Date(year, month - 1 - i, 1);
-    const y = targetDate.getFullYear();
-    const m = String(targetDate.getMonth() + 1).padStart(2, '0');
-    analysisMonths.push(`${y}-${m}`);
-  }
-
-  return { startMonth, endMonth, analysisMonths };
-}
-
-// 最適化された分析データ作成（新しいDB関数対応）
-function createOptimizedAnalysis(
-  periodData: any[], 
-  currentData: any[], 
-  chartData: any[], 
-  targetMonth: string, 
-  period: string,
-  analysisMonths: string[]
+// 6項目分析用データ整理
+function organize6ItemsAnalysis(
+  currentData: any,
+  previousYearData: any,
+  chartData: any[],
+  trendData: any[],
+  targetMonth: string
 ) {
-  console.log('最適化された分析データ作成開始');
+  console.log('6項目分析データ整理開始');
 
-  // 1. 現在月の基本集計
-  const siteData = {
-    amazon: currentData.reduce((sum: number, item: any) => sum + (item.amazon_count || 0), 0),
-    rakuten: currentData.reduce((sum: number, item: any) => sum + (item.rakuten_count || 0), 0),
-    yahoo: currentData.reduce((sum: number, item: any) => sum + (item.yahoo_count || 0), 0),
-    mercari: currentData.reduce((sum: number, item: any) => sum + (item.mercari_count || 0), 0),
-    base: currentData.reduce((sum: number, item: any) => sum + (item.base_count || 0), 0),
-    qoo10: currentData.reduce((sum: number, item: any) => sum + (item.qoo10_count || 0), 0)
+  // 1. 今月の総括データ
+  const currentSummary = {
+    month: targetMonth,
+    total_count: currentData.total_count || 0,
+    total_amount: currentData.total_amount || 0,
+    amazon: { count: currentData.amazon_count || 0, amount: currentData.amazon_amount || 0 },
+    rakuten: { count: currentData.rakuten_count || 0, amount: currentData.rakuten_amount || 0 },
+    yahoo: { count: currentData.yahoo_count || 0, amount: currentData.yahoo_amount || 0 },
+    mercari: { count: currentData.mercari_count || 0, amount: currentData.mercari_amount || 0 },
+    base: { count: currentData.base_count || 0, amount: currentData.base_amount || 0 },
+    qoo10: { count: currentData.qoo10_count || 0, amount: currentData.qoo10_amount || 0 }
   };
 
-  // 2. 期間データの集計（DB関数から取得したデータを活用）
-  const periodTotalSales = {
-    amazon: periodData.reduce((sum: number, item: any) => sum + (item.amazon_count || 0), 0),
-    rakuten: periodData.reduce((sum: number, item: any) => sum + (item.rakuten_count || 0), 0),
-    yahoo: periodData.reduce((sum: number, item: any) => sum + (item.yahoo_count || 0), 0),
-    mercari: periodData.reduce((sum: number, item: any) => sum + (item.mercari_count || 0), 0),
-    base: periodData.reduce((sum: number, item: any) => sum + (item.base_count || 0), 0),
-    qoo10: periodData.reduce((sum: number, item: any) => sum + (item.qoo10_count || 0), 0)
-  };
+  // 2. 前年同月対比データ
+  const yearOverYearComparison = previousYearData ? {
+    previous_year_month: `${parseInt(targetMonth.split('-')[0]) - 1}-${targetMonth.split('-')[1]}`,
+    current: currentSummary,
+    previous: {
+      total_count: previousYearData.total_count || 0,
+      total_amount: previousYearData.total_amount || 0,
+      amazon: { count: previousYearData.amazon_count || 0, amount: previousYearData.amazon_amount || 0 },
+      rakuten: { count: previousYearData.rakuten_count || 0, amount: previousYearData.rakuten_amount || 0 },
+      yahoo: { count: previousYearData.yahoo_count || 0, amount: previousYearData.yahoo_amount || 0 }
+    },
+    growth_rates: {
+      total_count_rate: previousYearData.total_count > 0 ? 
+        Math.round(((currentSummary.total_count - previousYearData.total_count) / previousYearData.total_count) * 100) : 0,
+      total_amount_rate: previousYearData.total_amount > 0 ? 
+        Math.round(((currentSummary.total_amount - previousYearData.total_amount) / previousYearData.total_amount) * 100) : 0,
+      amazon_rate: previousYearData.amazon_count > 0 ? 
+        Math.round(((currentSummary.amazon.count - previousYearData.amazon_count) / previousYearData.amazon_count) * 100) : 0,
+      rakuten_rate: previousYearData.rakuten_count > 0 ? 
+        Math.round(((currentSummary.rakuten.count - previousYearData.rakuten_count) / previousYearData.rakuten_count) * 100) : 0,
+      yahoo_rate: previousYearData.yahoo_count > 0 ? 
+        Math.round(((currentSummary.yahoo.count - previousYearData.yahoo_count) / previousYearData.yahoo_count) * 100) : 0
+    }
+  } : null;
 
-  // 3. 商品情報とマージして詳細分析データを作成
-  const enrichedPeriodData = periodData.map(item => {
-    const productInfo = currentData.find(p => p.product_id === item.product_id);
-    return {
-      ...item,
-      product_name: productInfo?.product_name || 'Unknown',
-      price: productInfo?.price || 0,
-      total_count: (item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0) +
-                   (item.mercari_count || 0) + (item.base_count || 0) + (item.qoo10_count || 0),
-      total_amount: ((item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0) +
-                     (item.mercari_count || 0) + (item.base_count || 0) + (item.qoo10_count || 0)) * 
-                    (productInfo?.price || 0)
-    };
-  });
-
-  // 4. 期間売上トップ10
-  const periodTopProducts = enrichedPeriodData
-    .filter(item => item.total_count > 0)
-    .sort((a, b) => b.total_count - a.total_count)
+  // 3. 伸びている商品（成長・大幅成長・新規成長）
+  const growingProducts = trendData
+    .filter(item => ['成長', '大幅成長', '新規成長'].includes(item.trend_type))
     .slice(0, 10);
 
-  // 5. 現在月トップ10
-  const currentTopProducts = currentData
-    .map((item: any) => ({
-      name: item.product_name,
-      price: item.price || 0,
-      amazon: item.amazon_count || 0,
-      rakuten: item.rakuten_count || 0,
-      yahoo: item.yahoo_count || 0,
-      total_count: (item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0),
-      total_amount: ((item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0)) * (item.price || 0)
-    }))
-    .filter(item => item.total_count > 0)
-    .sort((a, b) => b.total_count - a.total_count)
+  // 4. 落ち込んでいる商品（衰退・大幅衰退・急激衰退）
+  const decliningProducts = trendData
+    .filter(item => ['衰退', '大幅衰退', '急激衰退'].includes(item.trend_type))
     .slice(0, 10);
 
-  // 6. チャネル格差分析
-  const periodChannelGapAnalysis = enrichedPeriodData
-    .filter(item => item.amazon_count > 0 || item.rakuten_count > 0 || item.yahoo_count > 0)
-    .map(item => {
-      const counts = [item.amazon_count, item.rakuten_count, item.yahoo_count];
-      const max = Math.max(...counts);
-      const min = Math.min(...counts);
-      return {
-        name: item.product_name,
-        amazon_count: item.amazon_count,
-        rakuten_count: item.rakuten_count,
-        yahoo_count: item.yahoo_count,
-        gap_ratio: max > 0 ? (max - min) / max : 0
-      };
-    })
-    .filter(item => item.gap_ratio > 0.3)
-    .sort((a, b) => b.gap_ratio - a.gap_ratio)
-    .slice(0, 10);
+  // 5. 各ECの6ヶ月推移分析
+  const channelTrends = chartData.length > 0 ? {
+    monthly_data: chartData,
+    amazon_trend: calculateChannelTrend(chartData, 'amazon_count'),
+    rakuten_trend: calculateChannelTrend(chartData, 'rakuten_count'),
+    yahoo_trend: calculateChannelTrend(chartData, 'yahoo_count'),
+    mercari_trend: calculateChannelTrend(chartData, 'mercari_count'),
+    base_trend: calculateChannelTrend(chartData, 'base_count'),
+    qoo10_trend: calculateChannelTrend(chartData, 'qoo10_count')
+  } : null;
 
-  // 7. 月次トレンド分析（チャートデータ活用）
-  const monthlyTrendAnalysis = chartData.map(item => ({
-    month: item.month_label,
-    amazon: item.amazon_count,
-    rakuten: item.rakuten_count,
-    yahoo: item.yahoo_count,
-    total: item.total_count
-  }));
-
-  // 8. 異常値検知
-  const abnormalProducts = currentData
-    .filter((item: any) => {
-      const total = (item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0);
-      return total === 0 || (item.price || 0) > 10000 || (item.price || 0) < 100;
-    })
-    .map((item: any) => ({
-      name: item.product_name,
-      price: item.price || 0,
-      total_sales: (item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0),
-      issue: (item.amazon_count || 0) + (item.rakuten_count || 0) + (item.yahoo_count || 0) === 0 ? '売上ゼロ' : 
-             (item.price || 0) > 10000 ? '高単価' : '低単価'
-    }));
+  // 6. 特異点検知
+  const anomalies = detectAnomalies(currentSummary, trendData, chartData);
 
   const result = {
     targetMonth,
-    period: `${analysisMonths.length}ヶ月間分析`,
-    analysis_months: analysisMonths,
-    
-    // 現在月データ
-    siteData,
-    currentTopProducts,
-    
-    // 期間データ
-    periodTotalSales,
-    periodTopProducts,
-    periodChannelGapAnalysis,
-    
-    // トレンド分析
-    monthlyTrendAnalysis,
-    
-    // その他
-    abnormalProducts,
-    totalProductCount: currentData.length,
-    totalSalesCount: Object.values(siteData).reduce((a: number, b: number) => a + b, 0),
-    periodTotalSalesCount: Object.values(periodTotalSales).reduce((a: number, b: number) => a + b, 0)
+    currentSummary,
+    yearOverYearComparison,
+    growingProducts,
+    decliningProducts,
+    channelTrends,
+    anomalies
   };
 
-  console.log('最適化された分析データ作成完了:', {
-    periodDataCount: periodData.length,
-    currentDataCount: currentData.length,
-    chartDataCount: chartData.length,
-    topProductsCount: result.periodTopProducts.length
+  console.log('6項目分析データ整理完了:', {
+    currentExists: !!currentSummary,
+    yearComparisonExists: !!yearOverYearComparison,
+    growingProductsCount: growingProducts.length,
+    decliningProductsCount: decliningProducts.length,
+    channelTrendsExists: !!channelTrends,
+    anomaliesCount: anomalies.length
   });
 
   return result;
 }
 
-// AI分析プロンプト生成（簡素化版）
-function generateAnalysisPrompt(data: any, period: string, analysisType: string): string {
-  const periodText = {
-    '1month': '単月',
-    '3months': '3ヶ月',
-    '6months': '6ヶ月',
-    '1year': '12ヶ月'
-  }[period] || '単月';
-
-  const basePrompt = `あなたはデータアナリスト兼ECコンサルタントです。
-以下のWEB販売データを分析し、売上拡大に向けた戦略的レポートを作成してください。
-
-【分析対象】${data.targetMonth} を基準とした過去${periodText}間の分析
-【分析期間】${data.analysis_months.join(', ')}
-【主力チャネル】Amazon、楽天、Yahoo (この3チャネルの売上拡大を最優先)
-
-【過去${periodText}間データ概要】
-・総売上件数: ${data.periodTotalSalesCount}件
-・ECサイト別売上: ${JSON.stringify(data.periodTotalSales, null, 2)}
-
-【現在月(${data.targetMonth})データ】
-・総商品数: ${data.totalProductCount}商品
-・月間売上件数: ${data.totalSalesCount}件
-・ECサイト別売上: ${JSON.stringify(data.siteData, null, 2)}
-
-【期間売上トップ5商品】
-${JSON.stringify(data.periodTopProducts.slice(0, 5), null, 2)}
-
-【チャネル格差上位3商品】
-${JSON.stringify(data.periodChannelGapAnalysis.slice(0, 3), null, 2)}`;
-
-  let specificPrompt = '';
+// チャネル別トレンド計算
+function calculateChannelTrend(chartData: any[], channelKey: string) {
+  if (chartData.length < 2) return { trend: '不明', rate: 0 };
   
-  switch (analysisType) {
-    case 'immediate':
-      specificPrompt = `
-【緊急対応課題】
-${JSON.stringify(data.abnormalProducts, null, 2)}
+  const firstHalf = chartData.slice(0, Math.ceil(chartData.length / 2));
+  const secondHalf = chartData.slice(Math.floor(chartData.length / 2));
+  
+  const firstAvg = firstHalf.reduce((sum, item) => sum + (item[channelKey] || 0), 0) / firstHalf.length;
+  const secondAvg = secondHalf.reduce((sum, item) => sum + (item[channelKey] || 0), 0) / secondHalf.length;
+  
+  const rate = firstAvg > 0 ? Math.round(((secondAvg - firstAvg) / firstAvg) * 100) : 0;
+  
+  let trend = '安定';
+  if (rate > 20) trend = '大幅成長';
+  else if (rate > 10) trend = '成長';
+  else if (rate < -20) trend = '大幅衰退';
+  else if (rate < -10) trend = '衰退';
+  
+  return { trend, rate, firstAvg: Math.round(firstAvg), secondAvg: Math.round(secondAvg) };
+}
 
-即効性のある改善策を提案してください：
-1. 現在月の売上異常値の対策
-2. チャネル格差の解消策
-3. 今月実行可能なアクション`;
-      break;
-      
-    case 'growth':
-      specificPrompt = `
-【月次トレンド】
-${JSON.stringify(data.monthlyTrendAnalysis, null, 2)}
-
-中期的な売上拡大策を提案してください：
-1. 伸び盛り商品の拡大戦略
-2. 主力3チャネルでの最適化
-3. 3-6ヶ月での売上目標と施策`;
-      break;
-      
-    default:
-      specificPrompt = `
-包括的な戦略を提案してください：
-1. 即効性のある改善策
-2. 中期的な成長戦略
-3. 主力3チャネル別の最適化
-4. 具体的アクションプラン`;
+// 特異点検知
+function detectAnomalies(currentSummary: any, trendData: any[], chartData: any[]) {
+  const anomalies = [];
+  
+  // 1. ECサイト間の極端な格差
+  const channels = [currentSummary.amazon.count, currentSummary.rakuten.count, currentSummary.yahoo.count];
+  const maxChannel = Math.max(...channels);
+  const minChannel = Math.min(...channels);
+  if (maxChannel > 0 && (maxChannel / Math.max(minChannel, 1)) > 10) {
+    anomalies.push({
+      type: 'チャネル格差',
+      description: 'ECサイト間の売上格差が極端に大きい',
+      detail: `最大${maxChannel}件 vs 最小${minChannel}件`
+    });
   }
+  
+  // 2. 急激な変化の商品
+  const extremeChanges = trendData.filter(item => 
+    ['新規成長', '急激衰退'].includes(item.trend_type) || Math.abs(item.trend_rate) > 200
+  );
+  if (extremeChanges.length > 0) {
+    anomalies.push({
+      type: '急激変化商品',
+      description: `${extremeChanges.length}商品で急激な売上変化を検知`,
+      detail: extremeChanges.slice(0, 3).map(p => `${p.product_name}: ${p.trend_rate}%`).join(', ')
+    });
+  }
+  
+  // 3. 月次売上の異常な変動
+  if (chartData.length >= 2) {
+    const lastMonth = chartData[chartData.length - 1];
+    const secondLastMonth = chartData[chartData.length - 2];
+    const changeRate = secondLastMonth.total_count > 0 ? 
+      ((lastMonth.total_count - secondLastMonth.total_count) / secondLastMonth.total_count) * 100 : 0;
+    
+    if (Math.abs(changeRate) > 50) {
+      anomalies.push({
+        type: '月次急変',
+        description: '前月からの売上変動が異常に大きい',
+        detail: `前月比 ${Math.round(changeRate)}%`
+      });
+    }
+  }
+  
+  return anomalies;
+}
 
-  return basePrompt + specificPrompt + `
+// 6項目専用AIプロンプト生成
+function generate6ItemsPrompt(data: any): string {
+  return `あなたはECデータアナリストです。以下のWEB販売データを6つの項目に分けて分析してください。
 
-【出力形式】
-■ 概況サマリー
-■ 主力3チャネル分析
-■ 重点商品戦略
-■ 具体的アクションプラン
-■ 売上拡大の数値目標`;
+【分析対象月】${data.targetMonth}
+
+【データ概要】
+現在月売上: ${data.currentSummary.total_count}件、¥${data.currentSummary.total_amount?.toLocaleString()}
+${data.yearOverYearComparison ? `前年同月: ${data.yearOverYearComparison.previous.total_count}件、¥${data.yearOverYearComparison.previous.total_amount?.toLocaleString()}` : '前年同月データなし'}
+
+【成長商品】${data.growingProducts.length}商品
+${JSON.stringify(data.growingProducts.slice(0, 5), null, 2)}
+
+【衰退商品】${data.decliningProducts.length}商品  
+${JSON.stringify(data.decliningProducts.slice(0, 5), null, 2)}
+
+【ECサイト別トレンド】
+${data.channelTrends ? JSON.stringify(data.channelTrends, null, 2) : 'トレンドデータなし'}
+
+【特異点】
+${JSON.stringify(data.anomalies, null, 2)}
+
+以下の6項目で分析結果を出力してください：
+
+## ① 今月の総括
+今月の特徴的な売上動向と全体的な傾向
+
+## ② 前年同月対比  
+${data.yearOverYearComparison ? '前年同月との比較分析と成長率評価' : '前年同月データがないため現在月の状況分析'}
+
+## ③ 伸びている商品
+過去6ヶ月で成長している商品の分析と成長要因
+
+## ④ 落ち込んでいる商品  
+過去6ヶ月で衰退している商品の分析と衰退要因
+
+## ⑤ 各ECの伸び落ち検証
+Amazon・楽天・Yahoo等の6ヶ月推移分析
+
+## ⑥ 特異点
+注目すべき異常値や気になる変化点
+
+各項目は簡潔に3-4行でまとめ、具体的な数値と商品名を含めてください。`;
 }
