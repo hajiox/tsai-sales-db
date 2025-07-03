@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const dummyData = generateDummyData(month, monthsToShow);
 
     try {
-      // 新しいデータベース関数を呼び出し
+      // 新しいデータベース関数を呼び出し（これらは最初に呼び出す）
       const { data: financialData, error: financialError } = await supabase
         .rpc('get_monthly_financial_summary', { target_month: month });
 
@@ -95,19 +95,6 @@ export async function GET(request: NextRequest) {
       
       // 選択された月のデータに財務情報を追加
       const selectedMonthKey = `${selectedYear}年${selectedMonth}月`;
-      const { data: financialData, error: financialError } = await supabase
-        .rpc('get_monthly_financial_summary', { target_month: month });
-
-      if (financialError) {
-        console.error('Financial data error:', financialError);
-      }
-
-      const { data: seriesData, error: seriesError } = await supabase
-        .rpc('get_monthly_series_summary', { target_month: month });
-
-      if (seriesError) {
-        console.error('Series data error:', seriesError);
-      }
 
       // 選択月のデータに財務情報を追加
       const financial = financialData?.[0] || {};
