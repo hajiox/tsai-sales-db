@@ -55,71 +55,21 @@ export default function WebSalesTableHeader({
     })
   }
 
-  // AI分析セクションまでスクロール（:contains()エラー修正版）
+  // AI分析セクションまでスクロール（アンカーベース）
   const scrollToAiAnalysis = () => {
-    console.log('AI分析へボタンクリック - 関数開始'); // デバッグ用
+    console.log('AI分析へボタンクリック - アンカーでジャンプ'); // デバッグ用
     
-    try {
-      // まず、テキストベースで「AI分析」を含む要素を探す
-      let foundElement = null
-      
-      // 全ての要素をチェックしてAI分析を含むものを探す
-      const allElements = document.querySelectorAll('*')
-      for (const element of allElements) {
-        if (element.textContent && element.textContent.includes('AI分析')) {
-          console.log('AI分析テキストを含む要素発見:', element.tagName, element.className)
-          foundElement = element
-          break
-        }
-      }
-      
-      // テキストで見つからない場合は、通常のセレクタで探す
-      if (!foundElement) {
-        const selectors = [
-          '.bg-gradient-to-r',
-          '.bg-gradient-to-br', 
-          '[class*="ai"]',
-          '[class*="analysis"]',
-          '.p-3.border-t',
-          '[class*="border-t"]',
-          '.space-y-6 > div:last-child',
-          '.space-y-4 > div:last-child'
-        ]
-        
-        for (const selector of selectors) {
-          try {
-            const element = document.querySelector(selector)
-            if (element) {
-              console.log(`要素発見: ${selector}`)
-              foundElement = element
-              break
-            }
-          } catch (e) {
-            console.log(`セレクタエラー: ${selector}`, e)
-          }
-        }
-      }
-      
-      if (foundElement) {
-        foundElement.scrollIntoView({ 
-          behavior: 'smooth',
-          block: 'start'
-        })
-        console.log('要素にスクロール完了')
-      } else {
-        // フォールバック: シンプルに下部へスクロール
-        console.log('要素が見つからないため、下部へスクロール')
-        window.scrollTo({ 
-          top: 3000,  // 固定値でテスト
-          behavior: 'smooth' 
-        })
-        console.log('フォールバックスクロール完了')
-      }
-      
-    } catch (error) {
-      console.error('スクロールエラー:', error);
-      // 最後の手段
-      window.scrollTo({ top: 3000, behavior: 'smooth' });
+    const aiSection = document.getElementById('ai-analysis-section');
+    if (aiSection) {
+      console.log('AI分析セクション発見 - スクロール実行');
+      aiSection.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    } else {
+      console.log('AI分析セクションが見つかりません');
+      // フォールバック
+      window.scrollTo({ top: 2000, behavior: 'smooth' });
     }
   }
 
