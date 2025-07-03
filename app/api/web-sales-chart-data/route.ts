@@ -1,4 +1,4 @@
-// /api/web-sales-chart-data/route.ts ver.3 (12ヶ月データ欠損問題修正版)
+// /api/web-sales-chart-data/route.ts ver.4 (重複データ問題修正版)
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7); // YYYY-MM format
     const monthsToShow = searchParams.get('months') === '12' ? 12 : 6; // 6か12ヶ月表示
     
-    console.log(`【修正】Chart data requested for month: ${month}, showing: ${monthsToShow} months`);
+    console.log(`【修正v4】Chart data requested for month: ${month}, showing: ${monthsToShow} months`);
 
     // ダミーデータを準備（APIエラー時のフォールバック用）
     const dummyData = generateDummyData(month, monthsToShow);
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         console.log('Using dummy series data');
       }
 
-      // 【修正】選択月を基準に過去の月数分のデータを取得 - 日付計算を堅牢に修正
+      // 選択月を基準に過去の月数分のデータを取得 - 日付計算を堅牢に修正
       const [selectedYear, selectedMonth] = month.split('-').map(n => parseInt(n));
       
       // 開始月の計算（年跨ぎを正確に処理）
@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
       const startDateStr = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
       const endDateStr = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
       
-      console.log(`【修正】Data range: ${startDateStr} to ${endDateStr}`);
-      console.log(`【修正】Months calculation: ${startYear}/${startMonth} to ${endYear}/${endMonth}`);
+      console.log(`【修正v4】Data range: ${startDateStr} to ${endDateStr}`);
+      console.log(`【修正v4】Months calculation: ${startYear}/${startMonth} to ${endYear}/${endMonth}`);
       
       // データベースクエリ
       const { data: chartData, error: chartError } = await supabase
@@ -76,9 +76,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(dummyData);
       }
 
-      console.log(`【修正】Raw chart data from DB:`, chartData?.length || 0, 'records');
+      console.log(`【修正v4】Raw chart data from DB:`, chartData?.length || 0, 'records');
 
-      // 【修正】月の枠を確実に作成（年跨ぎ対応）
+      // 月の枠を確実に作成（年跨ぎ対応）
       const monthlyData: { [key: string]: any } = {};
       
       // 開始月から選択月まで順番に月枠を作成
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      console.log(`【修正】Generated months:`, Object.keys(monthlyData));
+      console.log(`【修正v4】Generated months:`, Object.keys(monthlyData));
       
       // 実際のデータを集計
       chartData?.forEach(row => {
@@ -131,9 +131,9 @@ export async function GET(request: NextRequest) {
               monthlyData[monthKey].base + 
               monthlyData[monthKey].qoo10;
             
-            console.log(`【修正】Data added to ${monthKey}:`, monthlyData[monthKey]);
+            console.log(`【修正v4】Data added to ${monthKey}:`, monthlyData[monthKey].total, '件');
           } else {
-            console.warn(`【修正】Month key not found for data:`, monthKey, row.report_month);
+            console.warn(`【修正v4】Month key not found for data:`, monthKey, row.report_month);
           }
         } catch (e) {
           console.error('Error processing row:', row, e);
@@ -143,36 +143,31 @@ export async function GET(request: NextRequest) {
       // 選択された月のキー
       const selectedMonthKey = `${selectedYear}年${selectedMonth}月`;
       
-      // 既存フロントエンドとの互換性を保つレスポンス構造
-      const financial = financialData?.[0] || {};
+      // Object.valuesで配列化（重複を防ぐ）
       const response = Object.values(monthlyData);
       
-      // 選択月にデータが存在しない場合、DBから取得した情報で追加
-      if (!monthlyData[selectedMonthKey]?.total && financial.total_count) {
-        const missingMonthData = {
-          month: selectedMonthKey,
-          amazon: financial.amazon_count || 0,
-          rakuten: financial.rakuten_count || 0,
-          yahoo: financial.yahoo_count || 0,
-          mercari: financial.mercari_count || 0,
-          base: financial.base_count || 0,
-          qoo10: financial.qoo10_count || 0,
-          total: financial.total_count || 0
-        };
-        
-        monthlyData[selectedMonthKey] = missingMonthData;
-        response.push(missingMonthData);
-      }
-      
-      // 選択月のデータに財務情報を追加
+      // 選択月のデータに財務情報を追加（重複追加せずに既存データを更新）
+      const financial = financialData?.[0] || {};
       response.forEach(monthData => {
         if (monthData.month === selectedMonthKey) {
+          // 選択月にデータが存在しない場合、財務データから補完
+          if (!monthData.total && financial.total_count) {
+            monthData.amazon = financial.amazon_count || 0;
+            monthData.rakuten = financial.rakuten_count || 0;
+            monthData.yahoo = financial.yahoo_count || 0;
+            monthData.mercari = financial.mercari_count || 0;
+            monthData.base = financial.base_count || 0;
+            monthData.qoo10 = financial.qoo10_count || 0;
+            monthData.total = financial.total_count || 0;
+          }
+          
+          // 財務情報とシリーズ情報を追加
           monthData.financialData = financial;
           monthData.seriesData = seriesData || [];
         }
       });
 
-      // 【修正】日付順ソートを堅牢に修正
+      // 日付順ソートを堅牢に修正
       response.sort((a, b) => {
         try {
           // "2024年4月" -> year: 2024, month: 4
@@ -195,20 +190,28 @@ export async function GET(request: NextRequest) {
       });
 
       // レスポンスメタデータをログに記録
-      console.log(`【修正】Chart data prepared for ${month}:`, {
+      console.log(`【修正v4】Chart data prepared for ${month}:`, {
         monthsData: response.length,
         months: response.map(m => m.month),
         selectedMonth: selectedMonthKey,
         monthsToShow: monthsToShow,
-        dateRange: `${startDateStr} to ${endDateStr}`
+        dateRange: `${startDateStr} to ${endDateStr}`,
+        hasDuplicates: response.length !== monthsToShow
       });
 
       // 各月のデータ総数をログ
       response.forEach(monthData => {
         if (monthData.total > 0) {
-          console.log(`【修正】${monthData.month}: ${monthData.total}件`);
+          console.log(`【修正v4】${monthData.month}: ${monthData.total}件`);
         }
       });
+
+      // 重複チェック
+      const monthSet = new Set(response.map(m => m.month));
+      if (monthSet.size !== response.length) {
+        console.error('【修正v4】重複データが検出されました！');
+        console.error('ユニーク月数:', monthSet.size, '実際のデータ数:', response.length);
+      }
 
       return NextResponse.json(response);
       
@@ -226,7 +229,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 【修正】ダミーデータ生成関数も年跨ぎ対応
+// ダミーデータ生成関数も年跨ぎ対応
 function generateDummyData(baseMonth: string, months: number) {
   const result = [];
   const [year, month] = baseMonth.split('-').map(n => parseInt(n));
