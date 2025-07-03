@@ -1,7 +1,7 @@
-// /components/websales-summary-cards.tsx ver.9 (ホバートレンド表示対応版)
+// /components/websales-summary-cards.tsx ver.10 (ツールチップ位置調整対応版)
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { supabase } from "../lib/supabase"
 
@@ -37,6 +37,8 @@ export default function WebSalesSummaryCards({
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
   const [seriesTrendData, setSeriesTrendData] = useState<Record<string, SeriesTrendData[]>>({});
   const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({});
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number; right?: number }>({ top: 0, left: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // シリーズ別トレンドデータを取得（新しいDB関数使用）
   const fetchSeriesTrendData = async (seriesName: string) => {
@@ -189,9 +191,35 @@ export default function WebSalesSummaryCards({
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
-  const handleSeriesHover = (seriesName: string) => {
+  const handleSeriesHover = (seriesName: string, event: React.MouseEvent<HTMLDivElement>) => {
     setHoveredSeries(seriesName);
     fetchSeriesTrendData(seriesName);
+
+    // ツールチップの位置を計算
+    const element = event.currentTarget;
+    const rect = element.getBoundingClientRect();
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    
+    if (containerRect) {
+      const tooltipWidth = 200; // ツールチップの想定幅
+      const elementCenterX = rect.left + rect.width / 2 - containerRect.left;
+      const containerWidth = containerRect.width;
+      
+      // 右端からはみ出る場合は上に表示、そうでなければ右に表示
+      if (elementCenterX + tooltipWidth > containerWidth) {
+        // 上に表示
+        setTooltipPosition({
+          top: rect.top - containerRect.top - 10, // 要素の上に配置
+          left: elementCenterX - tooltipWidth / 2, // 中央揃え
+        });
+      } else {
+        // 右に表示（従来通り）
+        setTooltipPosition({
+          top: rect.top - containerRect.top,
+          left: rect.right - containerRect.left + 8,
+        });
+      }
+    }
   };
 
   const handleSeriesLeave = () => {
@@ -234,59 +262,67 @@ export default function WebSalesSummaryCards({
 
       <Card>
         <CardHeader><CardTitle>シリーズ別 売上サマリー</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 relative">
+        <CardContent ref={containerRef} className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 relative">
           {seriesSummary.map((series) => (
             <div 
               key={series.seriesName} 
               className="text-center p-2 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors relative"
-              onMouseEnter={() => handleSeriesHover(series.seriesName)}
+              onMouseEnter={(e) => handleSeriesHover(series.seriesName, e)}
               onMouseLeave={handleSeriesLeave}
             >
               <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
               <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
               <p className="text-xs text-gray-500">¥{formatNumber(series.sales)}</p>
-              
-              {/* ホバー時のツールチップ */}
-              {hoveredSeries === series.seriesName && (
-                <div className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3 -top-2 left-full ml-2 min-w-48">
-                  <div className="text-xs font-semibold mb-2 text-gray-700">
-                    {series.seriesName} - 過去6ヶ月トレンド
-                  </div>
-                  
-                  {trendLoading[series.seriesName] ? (
-                    <div className="flex items-center justify-center h-16">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
-                      <span className="ml-2 text-xs text-gray-500">読込中...</span>
-                    </div>
-                  ) : seriesTrendData[series.seriesName] && seriesTrendData[series.seriesName].length > 0 ? (
-                    <div className="space-y-1">
-                      {seriesTrendData[series.seriesName].map((trend, index) => {
-                        const maxSales = Math.max(...seriesTrendData[series.seriesName].map(t => t.sales));
-                        const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
-                        
-                        return (
-                          <div key={index} className="flex items-center justify-between text-xs">
-                            <span className="w-12 text-gray-600 text-left">{trend.month}</span>
-                            <div className="flex-1 mx-2 h-3 bg-gray-100 rounded-sm overflow-hidden">
-                              <div 
-                                className="h-full bg-blue-400 transition-all duration-300"
-                                style={{ width: `${barWidth}%` }}
-                              ></div>
-                            </div>
-                            <span className="w-16 text-right text-gray-700 font-mono">
-                              ¥{formatNumber(trend.sales)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-gray-500 text-center">データがありません</div>
-                  )}
-                </div>
-              )}
             </div>
           ))}
+          
+          {/* ツールチップ（位置調整対応） */}
+          {hoveredSeries && (
+            <div 
+              className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3"
+              style={{
+                top: `${tooltipPosition.top}px`,
+                left: `${tooltipPosition.left}px`,
+                width: '200px',
+                transform: tooltipPosition.top < 100 ? 'translateY(-100%)' : 'none' // 上に表示する場合は上向きに調整
+              }}
+            >
+              <div className="text-xs font-semibold mb-2 text-gray-700">
+                {hoveredSeries} - 過去6ヶ月トレンド
+              </div>
+              
+              {trendLoading[hoveredSeries] ? (
+                <div className="flex items-center justify-center h-16">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                  <span className="ml-2 text-xs text-gray-500">読込中...</span>
+                </div>
+              ) : seriesTrendData[hoveredSeries] && seriesTrendData[hoveredSeries].length > 0 ? (
+                <div className="space-y-1">
+                  {seriesTrendData[hoveredSeries].map((trend, index) => {
+                    const maxSales = Math.max(...seriesTrendData[hoveredSeries].map(t => t.sales));
+                    const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
+                    
+                    return (
+                      <div key={index} className="flex items-center justify-between text-xs">
+                        <span className="w-12 text-gray-600 text-left">{trend.month}</span>
+                        <div className="flex-1 mx-2 h-3 bg-gray-100 rounded-sm overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-400 transition-all duration-300"
+                            style={{ width: `${barWidth}%` }}
+                          ></div>
+                        </div>
+                        <span className="w-16 text-right text-gray-700 font-mono text-xs">
+                          ¥{formatNumber(trend.sales)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 text-center">データがありません</div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
