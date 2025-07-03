@@ -1,4 +1,4 @@
-// /components/websales-ranking-table.tsx ver.2
+// /components/websales-ranking-table.tsx ver.3 (金額/件数切り替え対応)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -14,10 +14,14 @@ interface Row {
   total_amount: number
 }
 
+type SortType = 'count' | 'amount';
+
 export default function WebSalesRankingTable({ month }: Props) {
   const [bestRows, setBestRows] = useState<Row[]>([])
   const [worstRows, setWorstRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
+  const [sortBy, setSortBy] = useState<SortType>('count') // 件数/金額の切り替え用
+  const [originalData, setOriginalData] = useState<Row[]>([]) // 元データを保持
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,6 +42,7 @@ export default function WebSalesRankingTable({ month }: Props) {
         console.log('📊 取得データ:', { dataLength: data?.length })
 
         if (!data || data.length === 0) {
+          setOriginalData([])
           setBestRows([])
           setWorstRows([])
           return
@@ -78,16 +83,11 @@ export default function WebSalesRankingTable({ month }: Props) {
           total_amount: v.amount,
         }))
 
-        // ソート（件数順）
-        const desc = [...arr].sort((a, b) => b.total_count - a.total_count)
-        const asc = [...arr]
-          .sort((a, b) => a.total_count - b.total_count)
-
-        console.log('🏆 ベスト10:', desc.slice(0, 10))
-        console.log('📉 ワースト10:', asc.slice(0, 10))
-
-        setBestRows(desc.slice(0, 10))
-        setWorstRows(asc.slice(0, 10))
+        // 元データを保存
+        setOriginalData(arr)
+        
+        // ソート（現在の並び順で）
+        sortAndSetData(arr, sortBy)
         
       } catch (error) {
         console.error("🚨 ランキング処理エラー:", error)
@@ -98,6 +98,51 @@ export default function WebSalesRankingTable({ month }: Props) {
 
     fetchData()
   }, [month])
+
+  // 並び替え処理を関数化
+  const sortAndSetData = (data: Row[], sortType: SortType) => {
+    console.log(`🔄 ソート方法: ${sortType === 'count' ? '件数順' : '金額順'}`)
+    
+    // ソート関数
+    const sortFunc = (a: Row, b: Row) => {
+      if (sortType === 'count') {
+        return b.total_count - a.total_count // 件数で降順
+      } else {
+        return b.total_amount - a.total_amount // 金額で降順
+      }
+    }
+    
+    // 昇順ソート関数
+    const sortFuncAsc = (a: Row, b: Row) => {
+      if (sortType === 'count') {
+        return a.total_count - b.total_count // 件数で昇順
+      } else {
+        return a.total_amount - b.total_amount // 金額で昇順
+      }
+    }
+    
+    // ソート（降順・昇順）
+    const desc = [...data].sort(sortFunc)
+    const asc = [...data].sort(sortFuncAsc)
+
+    console.log(`🏆 ベスト10 (${sortType === 'count' ? '件数順' : '金額順'}):`, desc.slice(0, 10))
+    console.log(`📉 ワースト10 (${sortType === 'count' ? '件数順' : '金額順'}):`, asc.slice(0, 10))
+
+    setBestRows(desc.slice(0, 10))
+    setWorstRows(asc.slice(0, 10))
+  }
+
+  // ソート方法変更時の処理
+  useEffect(() => {
+    if (originalData.length > 0) {
+      sortAndSetData(originalData, sortBy)
+    }
+  }, [sortBy, originalData])
+
+  // 並び替えボタンのハンドラ
+  const handleSortChange = (type: SortType) => {
+    setSortBy(type)
+  }
 
   const f = (n: number) => new Intl.NumberFormat("ja-JP").format(n)
 
@@ -117,71 +162,102 @@ export default function WebSalesRankingTable({ month }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-6">
-      {/* ベスト10 */}
-      <div>
-        <h3 className="font-semibold mb-3 text-green-700">🏆 ベスト10</h3>
-        <table className="min-w-full text-xs border">
-          <thead className="bg-green-50">
-            <tr>
-              <th className="border px-1 py-1 w-12">順位</th>
-              <th className="border px-2 py-1">商品名</th>
-              <th className="border px-1 py-1 w-16">件数</th>
-              <th className="border px-1 py-1 w-20">売上金額</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bestRows.length > 0 ? (
-              bestRows.map((r, i) => (
-                <tr key={r.product_name} className="text-center hover:bg-green-50">
-                  <td className="border px-1 py-1 font-medium">{i + 1}</td>
-                  <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
-                  <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
-                  <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={4} className="border px-2 py-4 text-center text-gray-500">
-                  データがありません
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+    <div className="space-y-4">
+      {/* 並び替えボタン */}
+      <div className="flex justify-end space-x-2 items-center text-sm">
+        <span className="text-gray-600">並び順:</span>
+        <button
+          onClick={() => handleSortChange('count')}
+          className={`px-3 py-1 rounded text-sm ${
+            sortBy === 'count' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          件数順
+        </button>
+        <button
+          onClick={() => handleSortChange('amount')}
+          className={`px-3 py-1 rounded text-sm ${
+            sortBy === 'amount' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          金額順
+        </button>
       </div>
-
-      {/* ワースト10 */}
-      <div>
-        <h3 className="font-semibold mb-3 text-red-700">📉 ワースト10</h3>
-        <table className="min-w-full text-xs border">
-          <thead className="bg-red-50">
-            <tr>
-              <th className="border px-1 py-1 w-12">順位</th>
-              <th className="border px-2 py-1">商品名</th>
-              <th className="border px-1 py-1 w-16">件数</th>
-              <th className="border px-1 py-1 w-20">売上金額</th>
-            </tr>
-          </thead>
-          <tbody>
-            {worstRows.length > 0 ? (
-              worstRows.map((r, i) => (
-                <tr key={r.product_name} className="text-center hover:bg-red-50">
-                  <td className="border px-1 py-1 font-medium">{i + 1}</td>
-                  <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
-                  <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
-                  <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
-                </tr>
-              ))
-            ) : (
+      
+      <div className="grid grid-cols-2 gap-6">
+        {/* ベスト10 */}
+        <div>
+          <h3 className="font-semibold mb-3 text-green-700">
+            🏆 ベスト10 ({sortBy === 'count' ? '件数順' : '金額順'})
+          </h3>
+          <table className="min-w-full text-xs border">
+            <thead className="bg-green-50">
               <tr>
-                <td colSpan={4} className="border px-2 py-4 text-center text-gray-500">
-                  データがありません
-                </td>
+                <th className="border px-1 py-1 w-12">順位</th>
+                <th className="border px-2 py-1">商品名</th>
+                <th className="border px-1 py-1 w-16">件数</th>
+                <th className="border px-1 py-1 w-20">売上金額</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {bestRows.length > 0 ? (
+                bestRows.map((r, i) => (
+                  <tr key={r.product_name} className="text-center hover:bg-green-50">
+                    <td className="border px-1 py-1 font-medium">{i + 1}</td>
+                    <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
+                    <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
+                    <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="border px-2 py-4 text-center text-gray-500">
+                    データがありません
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ワースト10 */}
+        <div>
+          <h3 className="font-semibold mb-3 text-red-700">
+            📉 ワースト10 ({sortBy === 'count' ? '件数順' : '金額順'})
+          </h3>
+          <table className="min-w-full text-xs border">
+            <thead className="bg-red-50">
+              <tr>
+                <th className="border px-1 py-1 w-12">順位</th>
+                <th className="border px-2 py-1">商品名</th>
+                <th className="border px-1 py-1 w-16">件数</th>
+                <th className="border px-1 py-1 w-20">売上金額</th>
+              </tr>
+            </thead>
+            <tbody>
+              {worstRows.length > 0 ? (
+                worstRows.map((r, i) => (
+                  <tr key={r.product_name} className="text-center hover:bg-red-50">
+                    <td className="border px-1 py-1 font-medium">{i + 1}</td>
+                    <td className="border px-2 py-1 text-left text-xs">{r.product_name}</td>
+                    <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
+                    <td className="border px-1 py-1 text-xs">¥{f(r.total_amount)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="border px-2 py-4 text-center text-gray-500">
+                    データがありません
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
