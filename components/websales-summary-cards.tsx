@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.8 (チャネル別色対応版)
+// /components/websales-summary-cards.tsx ver.9 (ホバートレンド表示対応版)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -16,6 +16,7 @@ const SITES = [
 
 type Totals = Record<string, { count: number; amount: number }>
 type SeriesSummary = { seriesName: string; count: number; sales: number; }
+type SeriesTrendData = { month: string; sales: number; }
 
 type WebSalesSummaryCardsProps = {
   month: string;
@@ -33,6 +34,42 @@ export default function WebSalesSummaryCards({
   const [totals, setTotals] = useState<Totals | null>(null);
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
+  const [seriesTrendData, setSeriesTrendData] = useState<Record<string, SeriesTrendData[]>>({});
+  const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({});
+
+  // シリーズ別トレンドデータを取得（新しいDB関数使用）
+  const fetchSeriesTrendData = async (seriesName: string) => {
+    if (seriesTrendData[seriesName] || trendLoading[seriesName]) return;
+    
+    setTrendLoading(prev => ({ ...prev, [seriesName]: true }));
+    
+    try {
+      const { data: trendData, error } = await supabase
+        .rpc('get_series_trend_data', { 
+          target_month: month, 
+          target_series: seriesName 
+        });
+      
+      if (!error && trendData) {
+        const formattedTrendData = trendData.map((item: any) => ({
+          month: item.month_label,
+          sales: item.series_amount || 0
+        }));
+        
+        setSeriesTrendData(prev => ({ ...prev, [seriesName]: formattedTrendData }));
+      } else {
+        console.error('トレンドデータ取得エラー:', error);
+        // エラー時は空配列をセット
+        setSeriesTrendData(prev => ({ ...prev, [seriesName]: [] }));
+      }
+    } catch (error) {
+      console.error('トレンドデータ取得エラー:', error);
+      setSeriesTrendData(prev => ({ ...prev, [seriesName]: [] }));
+    } finally {
+      setTrendLoading(prev => ({ ...prev, [seriesName]: false }));
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -152,6 +189,15 @@ export default function WebSalesSummaryCards({
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
+  const handleSeriesHover = (seriesName: string) => {
+    setHoveredSeries(seriesName);
+    fetchSeriesTrendData(seriesName);
+  };
+
+  const handleSeriesLeave = () => {
+    setHoveredSeries(null);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-40">
@@ -188,12 +234,57 @@ export default function WebSalesSummaryCards({
 
       <Card>
         <CardHeader><CardTitle>シリーズ別 売上サマリー</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 relative">
           {seriesSummary.map((series) => (
-            <div key={series.seriesName} className="text-center p-2 border rounded-md">
+            <div 
+              key={series.seriesName} 
+              className="text-center p-2 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors relative"
+              onMouseEnter={() => handleSeriesHover(series.seriesName)}
+              onMouseLeave={handleSeriesLeave}
+            >
               <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
               <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
               <p className="text-xs text-gray-500">¥{formatNumber(series.sales)}</p>
+              
+              {/* ホバー時のツールチップ */}
+              {hoveredSeries === series.seriesName && (
+                <div className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3 -top-2 left-full ml-2 min-w-48">
+                  <div className="text-xs font-semibold mb-2 text-gray-700">
+                    {series.seriesName} - 過去6ヶ月トレンド
+                  </div>
+                  
+                  {trendLoading[series.seriesName] ? (
+                    <div className="flex items-center justify-center h-16">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                      <span className="ml-2 text-xs text-gray-500">読込中...</span>
+                    </div>
+                  ) : seriesTrendData[series.seriesName] && seriesTrendData[series.seriesName].length > 0 ? (
+                    <div className="space-y-1">
+                      {seriesTrendData[series.seriesName].map((trend, index) => {
+                        const maxSales = Math.max(...seriesTrendData[series.seriesName].map(t => t.sales));
+                        const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
+                        
+                        return (
+                          <div key={index} className="flex items-center justify-between text-xs">
+                            <span className="w-12 text-gray-600 text-left">{trend.month}</span>
+                            <div className="flex-1 mx-2 h-3 bg-gray-100 rounded-sm overflow-hidden">
+                              <div 
+                                className="h-full bg-blue-400 transition-all duration-300"
+                                style={{ width: `${barWidth}%` }}
+                              ></div>
+                            </div>
+                            <span className="w-16 text-right text-gray-700 font-mono">
+                              ¥{formatNumber(trend.sales)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500 text-center">データがありません</div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </CardContent>
