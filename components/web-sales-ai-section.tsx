@@ -1,4 +1,4 @@
-// /components/web-sales-ai-section.tsx ver.10 (エラー修正版)
+// /components/web-sales-ai-section.tsx ver.11 (今月の特徴対応版)
 "use client"
 
 import { useState } from 'react';
@@ -75,7 +75,7 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
 
     try {
       return {
-        summary: extractSection(result, '① 今月の総括') || 'データを分析中です',
+        summary: extractSection(result, '① 今月の特徴') || 'データを分析中です',
         comparison: extractSection(result, '② 前年同月対比') || 'データを分析中です',
         growing: extractSection(result, '③ 伸びている商品') || 'データを分析中です',
         declining: extractSection(result, '④ 落ち込んでいる商品') || 'データを分析中です',
@@ -111,7 +111,7 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
   const analysisItems = [
     {
       id: 'summary',
-      title: '今月の総括',
+      title: '今月の特徴',
       icon: FileText,
       color: 'bg-blue-50 border-blue-200',
       iconColor: 'text-blue-600',
