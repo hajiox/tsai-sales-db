@@ -23,36 +23,25 @@ export default function WebSalesTableHeader({
   onFilterChange,
   onDeleteMonthData,
 }: WebSalesTableHeaderProps) {
-  // CSV入力セクションまでスクロール（強化版）
+  // CSV入力セクションまでスクロール（アンカーベース）
   const scrollToCsvInput = () => {
-    console.log('CSV入力へボタンクリック') // デバッグ用
+    console.log('CSV入力へボタンクリック - アンカーでジャンプ'); // デバッグ用
     
-    // 複数の方法でCSV入力セクションを探す
-    const selectors = [
-      '[data-csv-input-section]',
-      '.p-3.border-t',
-      '[class*="border-t"]',
-      'button:contains("CSV")'
-    ]
-    
-    for (const selector of selectors) {
-      const element = document.querySelector(selector)
-      if (element) {
-        console.log(`要素発見: ${selector}`) // デバッグ用
-        element.scrollIntoView({ 
-          behavior: 'smooth',
-          block: 'start'
-        })
-        return
-      }
+    const csvSection = document.getElementById('csv-input-section');
+    if (csvSection) {
+      console.log('CSV入力セクション発見 - スクロール実行');
+      csvSection.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'start'
+      });
+    } else {
+      console.log('CSV入力セクションが見つかりません');
+      // フォールバック
+      window.scrollTo({ 
+        top: document.body.scrollHeight - window.innerHeight, 
+        behavior: 'smooth' 
+      });
     }
-    
-    // どれも見つからない場合は、ページ下部にスクロール
-    console.log('要素が見つからないため、ページ下部へスクロール') // デバッグ用
-    window.scrollTo({ 
-      top: document.body.scrollHeight - window.innerHeight, 
-      behavior: 'smooth' 
-    })
   }
 
   // AI分析セクションまでスクロール（アンカーベース）
