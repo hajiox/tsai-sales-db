@@ -55,51 +55,54 @@ export default function WebSalesTableHeader({
     })
   }
 
-  // AI分析セクションまでスクロール（修正版）
+  // AI分析セクションまでスクロール（CSV入力ボタンを参考にした版）
   const scrollToAiAnalysis = () => {
     console.log('AI分析へボタンクリック - 関数開始'); // デバッグ用
     
     try {
-      // 複数の方法でページの高さを取得
-      const bodyHeight = document.body.scrollHeight;
-      const htmlHeight = document.documentElement.scrollHeight;
-      const windowHeight = window.innerHeight;
-      const maxHeight = Math.max(bodyHeight, htmlHeight);
+      // CSV入力と同じロジックで要素を探す
+      const selectors = [
+        // AI分析特有のセレクタ
+        'h2:contains("AI分析")',
+        'h3:contains("AI分析")', 
+        '[class*="ai"]',
+        '.bg-gradient-to-r',
+        '.bg-gradient-to-br',
+        // CSV入力と同じセレクタも試す
+        '.p-3.border-t',
+        '[class*="border-t"]',
+        // ページの最後の方の要素
+        '.space-y-6 > div:last-child',
+        '.space-y-4 > div:last-child'
+      ]
       
-      console.log('高さ情報:', {
-        bodyHeight,
-        htmlHeight,
-        windowHeight,
-        maxHeight
-      });
+      let foundElement = null
       
-      // ページの大部分をスクロールしてAI分析セクションに到達
-      const targetPosition = Math.max(
-        maxHeight - 600,  // 最下部から600px上
-        windowHeight * 2  // または画面の2倍の高さ
-      );
+      for (const selector of selectors) {
+        const element = document.querySelector(selector)
+        if (element) {
+          console.log(`要素発見: ${selector}`) // デバッグ用
+          foundElement = element
+          break
+        }
+      }
       
-      console.log('スクロール先計算:', targetPosition);
-      
-      window.scrollTo({ 
-        top: targetPosition, 
-        behavior: 'smooth' 
-      });
-      
-      // 少し待ってから再度スクロール（レンダリング待ち）
-      setTimeout(() => {
-        const finalPosition = Math.max(
-          document.documentElement.scrollHeight - 600,
-          window.innerHeight * 2
-        );
-        console.log('2回目のスクロール:', finalPosition);
+      if (foundElement) {
+        foundElement.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        })
+        console.log('要素にスクロール完了')
+      } else {
+        // CSV入力ボタンと同じフォールバック処理
+        console.log('要素が見つからないため、ページ下部へスクロール') // デバッグ用
         window.scrollTo({ 
-          top: finalPosition, 
+          top: document.body.scrollHeight - window.innerHeight, 
           behavior: 'smooth' 
-        });
-      }, 100);
+        })
+        console.log('フォールバックスクロール完了')
+      }
       
-      console.log('スクロール実行完了');
     } catch (error) {
       console.error('スクロールエラー:', error);
     }
