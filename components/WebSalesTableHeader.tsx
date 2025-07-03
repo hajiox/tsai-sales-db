@@ -55,19 +55,49 @@ export default function WebSalesTableHeader({
     })
   }
 
-  // AI分析セクションまでスクロール（シンプル版）
+  // AI分析セクションまでスクロール（修正版）
   const scrollToAiAnalysis = () => {
     console.log('AI分析へボタンクリック - 関数開始'); // デバッグ用
     
     try {
-      // シンプルにページの最下部近くにスクロール
-      const targetPosition = document.body.scrollHeight - 800; // 最下部から800px上
+      // 複数の方法でページの高さを取得
+      const bodyHeight = document.body.scrollHeight;
+      const htmlHeight = document.documentElement.scrollHeight;
+      const windowHeight = window.innerHeight;
+      const maxHeight = Math.max(bodyHeight, htmlHeight);
+      
+      console.log('高さ情報:', {
+        bodyHeight,
+        htmlHeight,
+        windowHeight,
+        maxHeight
+      });
+      
+      // ページの大部分をスクロールしてAI分析セクションに到達
+      const targetPosition = Math.max(
+        maxHeight - 600,  // 最下部から600px上
+        windowHeight * 2  // または画面の2倍の高さ
+      );
+      
       console.log('スクロール先計算:', targetPosition);
       
       window.scrollTo({ 
         top: targetPosition, 
         behavior: 'smooth' 
       });
+      
+      // 少し待ってから再度スクロール（レンダリング待ち）
+      setTimeout(() => {
+        const finalPosition = Math.max(
+          document.documentElement.scrollHeight - 600,
+          window.innerHeight * 2
+        );
+        console.log('2回目のスクロール:', finalPosition);
+        window.scrollTo({ 
+          top: finalPosition, 
+          behavior: 'smooth' 
+        });
+      }, 100);
       
       console.log('スクロール実行完了');
     } catch (error) {
