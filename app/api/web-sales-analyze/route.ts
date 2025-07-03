@@ -1,4 +1,4 @@
-// /api/web-sales-analyze/route.ts ver.6項目分析専用
+// /api/web-sales-analyze/route.ts ver.6項目分析専用（今月の特徴版）
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
@@ -324,8 +324,8 @@ ${JSON.stringify(data.anomalies, null, 2)}
 
 以下の6項目で分析結果を出力してください：
 
-## ① 今月の総括
-今月の特徴的な売上動向と全体的な傾向
+## ① 今月の特徴
+今月特有の動きやイベント、他の月とは異なる売上パターンや特徴的な傾向を分析してください。単なる売上総括ではなく、今月ならではの特徴に焦点を当ててください。
 
 ## ② 前年同月対比  
 ${data.yearOverYearComparison ? '前年同月との比較分析と成長率評価' : '前年同月データがないため現在月の状況分析'}
