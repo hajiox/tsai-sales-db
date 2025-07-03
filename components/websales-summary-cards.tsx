@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.7 (新関数対応版)
+// /components/websales-summary-cards.tsx ver.8 (チャネル別色対応版)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -6,12 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { supabase } from "../lib/supabase"
 
 const SITES = [
-  { key: "amazon", name: "Amazon" },
-  { key: "rakuten", name: "楽天" },
-  { key: "yahoo", name: "Yahoo" },
-  { key: "mercari", name: "メルカリ" },
-  { key: "base", name: "BASE" },
-  { key: "qoo10", name: "Qoo10" },
+  { key: "amazon", name: "Amazon", bgColor: "bg-green-50", borderColor: "border-green-200" },
+  { key: "rakuten", name: "楽天", bgColor: "bg-red-50", borderColor: "border-red-200" },
+  { key: "yahoo", name: "Yahoo", bgColor: "bg-orange-50", borderColor: "border-orange-200" },
+  { key: "mercari", name: "メルカリ", bgColor: "bg-yellow-50", borderColor: "border-yellow-200" },
+  { key: "base", name: "BASE", bgColor: "bg-blue-50", borderColor: "border-blue-200" },
+  { key: "qoo10", name: "Qoo10", bgColor: "bg-pink-50", borderColor: "border-pink-200" },
 ]
 
 type Totals = Record<string, { count: number; amount: number }>
@@ -168,7 +168,7 @@ export default function WebSalesSummaryCards({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-4 md:grid-cols-7 gap-4">
-        <Card className="text-center bg-blue-50 border-blue-200">
+        <Card className="text-center bg-gray-50 border-gray-200">
           <CardHeader><CardTitle className="text-sm">総合計</CardTitle></CardHeader>
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
@@ -176,7 +176,7 @@ export default function WebSalesSummaryCards({
           </CardContent>
         </Card>
         {SITES.map((s) => (
-          <Card key={s.key}>
+          <Card key={s.key} className={`text-center ${s.bgColor} ${s.borderColor}`}>
             <CardHeader><CardTitle className="text-sm">{s.name}</CardTitle></CardHeader>
             <CardContent className="space-y-1">
               <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
