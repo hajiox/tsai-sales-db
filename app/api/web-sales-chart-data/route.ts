@@ -62,13 +62,14 @@ export async function GET(request: NextRequest) {
       console.log(`【修正v4】Data range: ${startDateStr} to ${endDateStr}`);
       console.log(`【修正v4】Months calculation: ${startYear}/${startMonth} to ${endYear}/${endMonth}`);
       
-      // データベースクエリ - 制限なしで全データ取得
+      // データベースクエリ - rangeを使用して全データ取得
       const { data: chartData, error: chartError } = await supabase
         .from('web_sales_summary')
         .select('report_month, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count')
         .gte('report_month', startDateStr)
         .lte('report_month', endDateStr)
-        .order('report_month');  // limitを削除して全データ取得
+        .order('report_month')
+        .range(0, 9999); // 明示的に大きな範囲を指定
 
       if (chartError) {
         console.error('Chart data error:', chartError);
