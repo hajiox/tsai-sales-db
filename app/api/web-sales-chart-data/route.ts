@@ -77,6 +77,19 @@ export async function GET(request: NextRequest) {
       }
 
       console.log(`【修正v4】Raw chart data from DB:`, chartData?.length || 0, 'records');
+      
+      // 2025年2-4月のデータが存在するか確認
+      const feb2025Data = chartData?.filter(row => row.report_month.startsWith('2025-02'));
+      const mar2025Data = chartData?.filter(row => row.report_month.startsWith('2025-03'));
+      const apr2025Data = chartData?.filter(row => row.report_month.startsWith('2025-04'));
+      
+      console.log(`【修正v4】2025年2月データ数:`, feb2025Data?.length || 0);
+      console.log(`【修正v4】2025年3月データ数:`, mar2025Data?.length || 0);
+      console.log(`【修正v4】2025年4月データ数:`, apr2025Data?.length || 0);
+      
+      if (feb2025Data?.length > 0) {
+        console.log(`【修正v4】2025年2月サンプル:`, feb2025Data[0]);
+      }
 
       // 月の枠を確実に作成（年跨ぎ対応）
       const monthlyData: { [key: string]: any } = {};
@@ -113,7 +126,18 @@ export async function GET(request: NextRequest) {
       chartData?.forEach(row => {
         try {
           const date = new Date(row.report_month);
-          const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+          // デバッグ用：日付の詳細情報を出力
+          const year = date.getFullYear();
+          const month = date.getMonth() + 1; // 0ベースなので+1
+          const monthKey = `${year}年${month}月`;
+          
+          // 2025年2-4月のデータを特別にログ出力
+          if (year === 2025 && month >= 2 && month <= 4) {
+            console.log(`【修正v4】特別デバッグ - ${row.report_month} → ${monthKey}`);
+            console.log(`【修正v4】Date object:`, date.toISOString());
+            console.log(`【修正v4】Year: ${year}, Month: ${month}`);
+            console.log(`【修正v4】Available keys:`, Object.keys(monthlyData));
+          }
           
           if (monthlyData[monthKey]) {
             monthlyData[monthKey].amazon += row.amazon_count || 0;
