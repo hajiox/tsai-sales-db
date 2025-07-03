@@ -62,13 +62,13 @@ export async function GET(request: NextRequest) {
       console.log(`【修正v4】Data range: ${startDateStr} to ${endDateStr}`);
       console.log(`【修正v4】Months calculation: ${startYear}/${startMonth} to ${endYear}/${endMonth}`);
       
-      // データベースクエリ
+      // データベースクエリ - 制限なしで全データ取得
       const { data: chartData, error: chartError } = await supabase
         .from('web_sales_summary')
         .select('report_month, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count')
         .gte('report_month', startDateStr)
         .lte('report_month', endDateStr)
-        .order('report_month');
+        .order('report_month');  // limitを削除して全データ取得
 
       if (chartError) {
         console.error('Chart data error:', chartError);
@@ -77,6 +77,18 @@ export async function GET(request: NextRequest) {
       }
 
       console.log(`【修正v4】Raw chart data from DB:`, chartData?.length || 0, 'records');
+      
+      // 月別のデータ分布を確認
+      const monthDistribution: { [key: string]: number } = {};
+      chartData?.forEach(row => {
+        const monthKey = row.report_month.substring(0, 7); // YYYY-MM形式
+        monthDistribution[monthKey] = (monthDistribution[monthKey] || 0) + 1;
+      });
+      
+      console.log('【修正v4】月別データ分布:');
+      Object.keys(monthDistribution).sort().forEach(month => {
+        console.log(`【修正v4】${month}: ${monthDistribution[month]}件`);
+      });
       
       // 2025年2-4月のデータが存在するか確認
       const feb2025Data = chartData?.filter(row => row.report_month.startsWith('2025-02'));
