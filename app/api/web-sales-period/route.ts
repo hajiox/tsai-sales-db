@@ -1,6 +1,6 @@
-// /api/web-sales-chart-data/route.ts ver.4 (重複データ問題修正版)
+// /app/api/web-sales-period/route.ts ver.4 (1000件制限回避版)
+import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,307 +9,168 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function GET(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const month = searchParams.get('month') || new Date().toISOString().slice(0, 7); // YYYY-MM format
-    const monthsToShow = searchParams.get('months') === '12' ? 12 : 6; // 6か12ヶ月表示
-    
-    console.log(`【修正v4】Chart data requested for month: ${month}, showing: ${monthsToShow} months`);
+    const { base_month, period_months } = await req.json();
 
-    // ダミーデータを準備（APIエラー時のフォールバック用）
-    const dummyData = generateDummyData(month, monthsToShow);
+    // デバッグログ追加
+    console.log('=== 期間集計開始 ===');
+    console.log('基準月:', base_month);
+    console.log('集計期間(月):', period_months);
 
-    try {
-      // 新しいデータベース関数を呼び出し
-      const { data: financialData, error: financialError } = await supabase
-        .rpc('get_monthly_financial_summary', { target_month: month });
-
-      if (financialError) {
-        console.error('Financial data error:', financialError);
-        console.log('Using dummy financial data');
-      }
-
-      const { data: seriesData, error: seriesError } = await supabase
-        .rpc('get_monthly_series_summary', { target_month: month });
-
-      if (seriesError) {
-        console.error('Series data error:', seriesError);
-        console.log('Using dummy series data');
-      }
-
-      // 選択月を基準に過去の月数分のデータを取得 - 日付計算を堅牢に修正
-      const [selectedYear, selectedMonth] = month.split('-').map(n => parseInt(n));
-      
-      // 開始月の計算（年跨ぎを正確に処理）
-      let startYear = selectedYear;
-      let startMonth = selectedMonth - (monthsToShow - 1);
-      
-      // 月が負数になった場合の年跨ぎ処理
-      while (startMonth <= 0) {
-        startMonth += 12;
-        startYear -= 1;
-      }
-      
-      // 終了月は選択月
-      const endYear = selectedYear;
-      const endMonth = selectedMonth;
-      
-      // 日付文字列の生成（ゼロパディング付き）
-      const startDateStr = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
-      const endDateStr = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
-      
-      console.log(`【修正v4】Data range: ${startDateStr} to ${endDateStr}`);
-      console.log(`【修正v4】Months calculation: ${startYear}/${startMonth} to ${endYear}/${endMonth}`);
-      
-      // データベースクエリ - 明示的に大きな範囲を指定して1000件制限を回避
-      const { data: chartData, error: chartError } = await supabase
-        .from('web_sales_summary')
-        .select('report_month, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count')
-        .gte('report_month', startDateStr)
-        .lte('report_month', endDateStr)
-        .order('report_month')
-        .range(0, 9999); // 最大10000件まで取得可能に
-
-      if (chartError) {
-        console.error('Chart data error:', chartError);
-        console.error('Query parameters:', { startDateStr, endDateStr });
-        return NextResponse.json(dummyData);
-      }
-
-      console.log(`【修正v4】Raw chart data from DB:`, chartData?.length || 0, 'records');
-      
-      // 月別のデータ分布を確認
-      const monthDistribution: { [key: string]: number } = {};
-      chartData?.forEach(row => {
-        const monthKey = row.report_month.substring(0, 7); // YYYY-MM形式
-        monthDistribution[monthKey] = (monthDistribution[monthKey] || 0) + 1;
-      });
-      
-      console.log('【修正v4】月別データ分布:');
-      Object.keys(monthDistribution).sort().forEach(month => {
-        console.log(`【修正v4】${month}: ${monthDistribution[month]}件`);
-      });
-      
-      // 2025年2-4月のデータが存在するか確認
-      const feb2025Data = chartData?.filter(row => row.report_month.startsWith('2025-02'));
-      const mar2025Data = chartData?.filter(row => row.report_month.startsWith('2025-03'));
-      const apr2025Data = chartData?.filter(row => row.report_month.startsWith('2025-04'));
-      
-      console.log(`【修正v4】2025年2月データ数:`, feb2025Data?.length || 0);
-      console.log(`【修正v4】2025年3月データ数:`, mar2025Data?.length || 0);
-      console.log(`【修正v4】2025年4月データ数:`, apr2025Data?.length || 0);
-      
-      if (feb2025Data?.length > 0) {
-        console.log(`【修正v4】2025年2月サンプル:`, feb2025Data[0]);
-      }
-
-      // 月の枠を確実に作成（年跨ぎ対応）
-      const monthlyData: { [key: string]: any } = {};
-      
-      // 開始月から選択月まで順番に月枠を作成
-      let currentYear = startYear;
-      let currentMonth = startMonth;
-      
-      for (let i = 0; i < monthsToShow; i++) {
-        const monthKey = `${currentYear}年${currentMonth}月`;
-        
-        monthlyData[monthKey] = {
-          month: monthKey,
-          amazon: 0,
-          rakuten: 0,
-          yahoo: 0,
-          mercari: 0,
-          base: 0,
-          qoo10: 0,
-          total: 0
-        };
-        
-        // 次の月に進む
-        currentMonth += 1;
-        if (currentMonth > 12) {
-          currentMonth = 1;
-          currentYear += 1;
-        }
-      }
-      
-      console.log(`【修正v4】Generated months:`, Object.keys(monthlyData));
-      
-      // 実際のデータを集計
-      chartData?.forEach(row => {
-        try {
-          const date = new Date(row.report_month);
-          // デバッグ用：日付の詳細情報を出力
-          const year = date.getFullYear();
-          const month = date.getMonth() + 1; // 0ベースなので+1
-          const monthKey = `${year}年${month}月`;
-          
-          // 2025年2-4月のデータを特別にログ出力
-          if (year === 2025 && month >= 2 && month <= 4) {
-            console.log(`【修正v4】特別デバッグ - ${row.report_month} → ${monthKey}`);
-            console.log(`【修正v4】Date object:`, date.toISOString());
-            console.log(`【修正v4】Year: ${year}, Month: ${month}`);
-            console.log(`【修正v4】Available keys:`, Object.keys(monthlyData));
-          }
-          
-          if (monthlyData[monthKey]) {
-            monthlyData[monthKey].amazon += row.amazon_count || 0;
-            monthlyData[monthKey].rakuten += row.rakuten_count || 0;
-            monthlyData[monthKey].yahoo += row.yahoo_count || 0;
-            monthlyData[monthKey].mercari += row.mercari_count || 0;
-            monthlyData[monthKey].base += row.base_count || 0;
-            monthlyData[monthKey].qoo10 += row.qoo10_count || 0;
-            
-            monthlyData[monthKey].total = 
-              monthlyData[monthKey].amazon + 
-              monthlyData[monthKey].rakuten + 
-              monthlyData[monthKey].yahoo + 
-              monthlyData[monthKey].mercari + 
-              monthlyData[monthKey].base + 
-              monthlyData[monthKey].qoo10;
-            
-            console.log(`【修正v4】Data added to ${monthKey}:`, monthlyData[monthKey].total, '件');
-          } else {
-            console.warn(`【修正v4】Month key not found for data:`, monthKey, row.report_month);
-          }
-        } catch (e) {
-          console.error('Error processing row:', row, e);
-        }
-      });
-
-      // 選択された月のキー
-      const selectedMonthKey = `${selectedYear}年${selectedMonth}月`;
-      
-      // Object.valuesで配列化（重複を防ぐ）
-      const response = Object.values(monthlyData);
-      
-      // 選択月のデータに財務情報を追加（重複追加せずに既存データを更新）
-      const financial = financialData?.[0] || {};
-      response.forEach(monthData => {
-        if (monthData.month === selectedMonthKey) {
-          // 選択月にデータが存在しない場合、財務データから補完
-          if (!monthData.total && financial.total_count) {
-            monthData.amazon = financial.amazon_count || 0;
-            monthData.rakuten = financial.rakuten_count || 0;
-            monthData.yahoo = financial.yahoo_count || 0;
-            monthData.mercari = financial.mercari_count || 0;
-            monthData.base = financial.base_count || 0;
-            monthData.qoo10 = financial.qoo10_count || 0;
-            monthData.total = financial.total_count || 0;
-          }
-          
-          // 財務情報とシリーズ情報を追加
-          monthData.financialData = financial;
-          monthData.seriesData = seriesData || [];
-        }
-      });
-
-      // 日付順ソートを堅牢に修正
-      response.sort((a, b) => {
-        try {
-          // "2024年4月" -> year: 2024, month: 4
-          const aMatch = a.month.match(/(\d{4})年(\d{1,2})月/);
-          const bMatch = b.month.match(/(\d{4})年(\d{1,2})月/);
-          
-          if (!aMatch || !bMatch) return 0;
-          
-          const aYear = parseInt(aMatch[1]);
-          const aMonth = parseInt(aMatch[2]);
-          const bYear = parseInt(bMatch[1]);
-          const bMonth = parseInt(bMatch[2]);
-          
-          if (aYear !== bYear) return aYear - bYear;
-          return aMonth - bMonth;
-        } catch (e) {
-          console.error('Sorting error:', e);
-          return 0;
-        }
-      });
-
-      // レスポンスメタデータをログに記録
-      console.log(`【修正v4】Chart data prepared for ${month}:`, {
-        monthsData: response.length,
-        months: response.map(m => m.month),
-        selectedMonth: selectedMonthKey,
-        monthsToShow: monthsToShow,
-        dateRange: `${startDateStr} to ${endDateStr}`,
-        hasDuplicates: response.length !== monthsToShow
-      });
-
-      // 各月のデータ総数をログ
-      response.forEach(monthData => {
-        if (monthData.total > 0) {
-          console.log(`【修正v4】${monthData.month}: ${monthData.total}件`);
-        }
-      });
-
-      // 重複チェック
-      const monthSet = new Set(response.map(m => m.month));
-      if (monthSet.size !== response.length) {
-        console.error('【修正v4】重複データが検出されました！');
-        console.error('ユニーク月数:', monthSet.size, '実際のデータ数:', response.length);
-      }
-
-      return NextResponse.json(response);
-      
-    } catch (dbError) {
-      console.error('Database error:', dbError);
-      return NextResponse.json(dummyData);
+    if (!base_month || !period_months) {
+      console.error('必須パラメータが不足: base_month or period_months');
+      return NextResponse.json({ error: 'base_month and period_months are required' }, { status: 400 });
     }
-  } catch (error) {
-    console.error('API error:', error);
-    const dummyData = generateDummyData(
-      new Date().toISOString().slice(0, 7), 
-      6
-    );
-    return NextResponse.json(dummyData);
-  }
-}
 
-// ダミーデータ生成関数も年跨ぎ対応
-function generateDummyData(baseMonth: string, months: number) {
-  const result = [];
-  const [year, month] = baseMonth.split('-').map(n => parseInt(n));
-  
-  // 開始月の計算（年跨ぎ対応）
-  let startYear = year;
-  let startMonth = month - (months - 1);
-  
-  while (startMonth <= 0) {
-    startMonth += 12;
-    startYear -= 1;
-  }
-  
-  // 月データを順番に生成
-  let currentYear = startYear;
-  let currentMonth = startMonth;
-  
-  for (let i = 0; i < months; i++) {
-    const monthStr = `${currentYear}年${currentMonth}月`;
+    // 【修正】期間の開始月と終了月を計算 - 年跨ぎ対応
+    const [baseYear, baseMonth] = base_month.split('-').map(n => parseInt(n));
     
-    result.push({
-      month: monthStr,
-      amazon: Math.floor(Math.random() * 2000),
-      rakuten: Math.floor(Math.random() * 2000),
-      yahoo: Math.floor(Math.random() * 2000),
-      mercari: Math.floor(Math.random() * 200),
-      base: Math.floor(Math.random() * 100),
-      qoo10: Math.floor(Math.random() * 50),
-      total: 0
+    // 開始月の計算（年跨ぎ対応）
+    let startYear = baseYear;
+    let startMonth = baseMonth - (period_months - 1);
+    
+    while (startMonth <= 0) {
+      startMonth += 12;
+      startYear -= 1;
+    }
+    
+    // 終了月は基準月
+    const endYear = baseYear;
+    const endMonth = baseMonth;
+    
+    // 日付文字列の生成（月の1日で統一）
+    const startDateString = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
+    const endDateString = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+
+    // デバッグログ追加
+    console.log('【修正】集計期間:', startDateString, 'から', endDateString);
+    console.log('【修正】期間計算:', `${startYear}/${startMonth} to ${endYear}/${endMonth}`);
+
+    // 2. まず商品マスタの全データを取得し、IDをキーにしたマップを作成
+    const { data: productsData, error: productsError } = await supabase
+      .from('products')
+      .select('id, name, series, price');
+
+    if (productsError) {
+      console.error('Supabase products query error:', productsError);
+      throw new Error(`商品マスタの取得に失敗: ${productsError.message}`);
+    }
+
+    console.log('商品マスタ取得数:', productsData?.length || 0);
+    const productsMap = new Map(productsData.map(p => [p.id, p]));
+
+    // 【修正v4】3. 期間内の販売実績データを取得 - 1000件制限を回避
+    const { data: salesData, error: salesError } = await supabase
+      .from('web_sales_summary')
+      .select('product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count, report_month')
+      .gte('report_month', startDateString)
+      .lte('report_month', endDateString)
+      .range(0, 9999); // 最大10000件まで取得可能に
+
+    if (salesError) {
+      console.error('Supabase sales query error:', salesError);
+      throw new Error(`販売実績の取得に失敗: ${salesError.message}`);
+    }
+
+    // デバッグログ追加
+    console.log('【修正v4】取得した販売データ数:', salesData?.length || 0);
+    console.log('【修正v4】取得データサンプル:', salesData?.slice(0, 3));
+
+    if (!salesData || salesData.length === 0) {
+        console.warn('期間内の販売データが存在しません');
+        return NextResponse.json({ totals: {}, seriesSummary: [] });
+    }
+
+    // 4. 取得した販売データを集計
+    const totals = {
+        amazon: { count: 0, amount: 0 },
+        rakuten: { count: 0, amount: 0 },
+        yahoo: { count: 0, amount: 0 },
+        mercari: { count: 0, amount: 0 },
+        base: { count: 0, amount: 0 },
+        qoo10: { count: 0, amount: 0 },
+    };
+    
+    const seriesData: { [key: string]: { count: number; sales: number } } = {};
+
+    for (const sale of salesData) {
+        const product = productsMap.get(sale.product_id);
+        if (!product) {
+          console.warn('商品マスタにない商品ID:', sale.product_id);
+          continue; // 商品マスタにないデータはスキップ
+        }
+
+        const productPrice = product.price || 0;
+        
+        // 各チャネルの集計
+        totals.amazon.count += sale.amazon_count || 0;
+        totals.amazon.amount += (sale.amazon_count || 0) * productPrice;
+        totals.rakuten.count += sale.rakuten_count || 0;
+        totals.rakuten.amount += (sale.rakuten_count || 0) * productPrice;
+        totals.yahoo.count += sale.yahoo_count || 0;
+        totals.yahoo.amount += (sale.yahoo_count || 0) * productPrice;
+        totals.mercari.count += sale.mercari_count || 0;
+        totals.mercari.amount += (sale.mercari_count || 0) * productPrice;
+        totals.base.count += sale.base_count || 0;
+        totals.base.amount += (sale.base_count || 0) * productPrice;
+        totals.qoo10.count += sale.qoo10_count || 0;
+        totals.qoo10.amount += (sale.qoo10_count || 0) * productPrice;
+
+        // シリーズ別集計
+        const seriesName = product.series || '未分類';
+        const totalCount = (sale.amazon_count || 0) + (sale.rakuten_count || 0) + (sale.yahoo_count || 0) + (sale.mercari_count || 0) + (sale.base_count || 0) + (sale.qoo10_count || 0);
+        
+        if (!seriesData[seriesName]) {
+            seriesData[seriesName] = { count: 0, sales: 0 };
+        }
+        seriesData[seriesName].count += totalCount;
+        seriesData[seriesName].sales += totalCount * productPrice;
+    }
+
+    const seriesSummary = Object.keys(seriesData).map(seriesName => ({
+        seriesName,
+        ...seriesData[seriesName]
+    })).sort((a, b) => b.sales - a.sales);
+
+    // 【修正】デバッグログ追加 - 詳細な集計結果
+    const totalCount = Object.values(totals).reduce((sum, site) => sum + site.count, 0);
+    const totalAmount = Object.values(totals).reduce((sum, site) => sum + site.amount, 0);
+    
+    console.log('【修正v4】各チャネル集計結果:');
+    Object.entries(totals).forEach(([channel, data]) => {
+      console.log(`  ${channel}: ${data.count}件 ¥${data.amount.toLocaleString()}`);
     });
     
-    // 次の月に進む
-    currentMonth += 1;
-    if (currentMonth > 12) {
-      currentMonth = 1;
-      currentYear += 1;
+    console.log('【修正v4】全体集計結果:', {
+      totalCount,
+      totalAmount: totalAmount.toLocaleString(),
+      seriesSummaryCount: seriesSummary.length
+    });
+
+    // データの有無を確認
+    const hasData = Object.values(totals).some(site => site.count > 0);
+    console.log('【修正v4】データあり:', hasData);
+
+    if (!hasData) {
+      console.warn('集計結果が全て0です - データベースクエリを確認してください');
     }
+
+    // トップ3シリーズのデータをログ
+    const top3Series = seriesSummary.slice(0, 3);
+    if (top3Series.length > 0) {
+      console.log('【修正v4】トップ3シリーズ:', top3Series.map(s => `${s.seriesName}: ${s.count}個 ¥${s.sales.toLocaleString()}`).join(', '));
+    }
+
+    console.log('=== 期間集計終了 ===');
+
+    return NextResponse.json({
+      totals,
+      seriesSummary
+    });
+
+  } catch (error: any) {
+    console.error('期間集計APIで予期せぬエラー:', error);
+    return NextResponse.json({ error: `サーバー内部でエラーが発生: ${error.message}` }, { status: 500 });
   }
-  
-  // 合計を計算
-  result.forEach(item => {
-    item.total = item.amazon + item.rakuten + item.yahoo + item.mercari + item.base + item.qoo10;
-  });
-  
-  return result;
 }
