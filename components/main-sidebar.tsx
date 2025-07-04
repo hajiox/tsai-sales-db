@@ -1,3 +1,4 @@
+// /components/main-sidebar.tsx ver.2 (卸販売管理追加版)
 "use client"
 
 import { useState, useEffect } from "react"
@@ -9,22 +10,26 @@ export default function MainSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
-  const [activeModule, setActiveModule] = useState<'sales' | 'web'>('sales')
+  const [activeModule, setActiveModule] = useState<'sales' | 'web' | 'wholesale'>('sales')
 
   useEffect(() => {
     if (pathname.startsWith('/web-sales')) {
       setActiveModule('web')
+    } else if (pathname.startsWith('/wholesale')) {
+      setActiveModule('wholesale')
     } else {
       setActiveModule('sales')
     }
   }, [pathname])
 
-  const handleModuleChange = (module: 'sales' | 'web') => {
+  const handleModuleChange = (module: 'sales' | 'web' | 'wholesale') => {
     setActiveModule(module)
     if (module === 'sales') {
       router.push('/sales/dashboard')
-    } else {
+    } else if (module === 'web') {
       router.push('/web-sales/dashboard')
+    } else if (module === 'wholesale') {
+      router.push('/wholesale/dashboard')
     }
   }
 
@@ -50,6 +55,13 @@ export default function MainSidebar() {
           onClick={() => handleModuleChange('web')}
         >
           WEB販売管理システム
+        </Button>
+        <Button
+          variant={activeModule === 'wholesale' ? 'secondary' : 'ghost'}
+          className="w-full justify-start text-white hover:bg-slate-700"
+          onClick={() => handleModuleChange('wholesale')}
+        >
+          卸販売管理システム
         </Button>
       </nav>
 
