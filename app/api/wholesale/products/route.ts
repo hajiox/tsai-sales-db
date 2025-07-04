@@ -1,4 +1,4 @@
-// /app/api/wholesale/products/route.ts ver.2 (CRUD対応版)
+// /app/api/wholesale/products/route.ts ver.3
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -7,96 +7,108 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET: 商品一覧取得
 export async function GET() {
   try {
+    // display_order順で商品を取得
     const { data: products, error } = await supabase
       .from('wholesale_products')
       .select('*')
-      .eq('is_active', true)
-      .order('product_name', { ascending: true });
-
+      .order('display_order', { ascending: true });
+    
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    return NextResponse.json({ success: true, products });
+    
+    return NextResponse.json({ products });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: '商品の取得に失敗しました' },
+      { status: 500 }
+    );
   }
 }
 
-// POST: 商品追加
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { product_code, product_name, price } = body;
-
+    
     const { data, error } = await supabase
       .from('wholesale_products')
-      .insert({
-        product_code,
-        product_name,
-        price,
-        is_active: true
-      })
+      .insert([body])
       .select()
       .single();
-
+    
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    return NextResponse.json({ success: true, product: data });
+    
+    return NextResponse.json({ product: data });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: '商品の作成に失敗しました' },
+      { status: 500 }
+    );
   }
 }
 
-// PUT: 商品更新
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, product_code, product_name, price } = body;
-
+    const { id, ...updateData } = body;
+    
+    if (!id) {
+      return NextResponse.json(
+        { error: '商品IDが必要です' },
+        { status: 400 }
+      );
+    }
+    
     const { data, error } = await supabase
       .from('wholesale_products')
-      .update({
-        product_code,
-        product_name,
-        price
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
-
+    
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    return NextResponse.json({ success: true, product: data });
+    
+    return NextResponse.json({ product: data });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: '商品の更新に失敗しました' },
+      { status: 500 }
+    );
   }
 }
 
-// DELETE: 商品削除（論理削除）
 export async function DELETE(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id } = body;
-
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    
+    if (!id) {
+      return NextResponse.json(
+        { error: '商品IDが必要です' },
+        { status: 400 }
+      );
+    }
+    
     const { error } = await supabase
       .from('wholesale_products')
-      .update({ is_active: false })
+      .delete()
       .eq('id', id);
-
+    
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
+    
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: '商品の削除に失敗しました' },
+      { status: 500 }
+    );
   }
 }
