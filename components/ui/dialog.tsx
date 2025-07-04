@@ -1,4 +1,4 @@
-// /components/ui/dialog.tsx ver.1
+// /components/ui/dialog.tsx ver.2
 "use client"
 
 import * as React from "react"
