@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.5 (入力対応版)
+// /app/wholesale/dashboard/page.tsx ver.6 (レイアウト改善版)
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -226,13 +226,10 @@ export default function WholesaleDashboard() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b bg-gray-50">
-                      <th className="text-left p-2 font-medium text-gray-700 sticky left-0 bg-gray-50 min-w-[120px]">商品名</th>
-                      <th className="text-center p-2 font-medium text-gray-700 min-w-[60px]">卸価格</th>
-                      <th className="text-center p-2 font-medium text-gray-700 min-w-[60px]">合計数</th>
-                      <th className="text-center p-2 font-medium text-gray-700 min-w-[80px]">合計金額</th>
+                      <th className="text-left p-2 font-medium text-gray-700 sticky left-0 bg-gray-50 min-w-[180px]">商品情報</th>
                       {/* 日付列 */}
                       {Array.from({ length: daysInMonth }, (_, i) => (
-                        <th key={i + 1} className="text-center p-1 font-medium text-gray-700 min-w-[35px]">
+                        <th key={i + 1} className="text-center p-1 font-medium text-gray-700 min-w-[50px]">
                           {i + 1}
                         </th>
                       ))}
@@ -241,7 +238,7 @@ export default function WholesaleDashboard() {
                   <tbody>
                     {loading ? (
                       <tr className="text-center">
-                        <td colSpan={daysInMonth + 4} className="py-6 text-gray-500">
+                        <td colSpan={daysInMonth + 1} className="py-6 text-gray-500">
                           読み込み中...
                         </td>
                       </tr>
@@ -250,10 +247,16 @@ export default function WholesaleDashboard() {
                         const { totalQuantity, totalAmount } = calculateTotals(product.id);
                         return (
                           <tr key={product.id} className="border-b hover:bg-gray-50">
-                            <td className="text-left p-2 sticky left-0 bg-white">{product.product_name}</td>
-                            <td className="text-center p-2">¥{product.price.toLocaleString()}</td>
-                            <td className="text-center p-2 font-semibold">{totalQuantity}</td>
-                            <td className="text-center p-2 font-semibold">¥{totalAmount.toLocaleString()}</td>
+                            <td className="text-left p-2 sticky left-0 bg-white border-r">
+                              <div>
+                                <div className="font-medium text-gray-900">{product.product_name}</div>
+                                <div className="text-xs text-gray-600 mt-1 space-x-3">
+                                  <span>卸価格: ¥{product.price.toLocaleString()}</span>
+                                  <span className="font-semibold text-blue-600">合計数: {totalQuantity}</span>
+                                  <span className="font-semibold text-green-600">合計金額: ¥{totalAmount.toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </td>
                             {/* 日付列 */}
                             {Array.from({ length: daysInMonth }, (_, i) => {
                               const day = i + 1;
@@ -265,7 +268,7 @@ export default function WholesaleDashboard() {
                                     value={value}
                                     onChange={(e) => handleQuantityChange(product.id, day, e.target.value)}
                                     className="w-full text-center p-1 border-0 focus:bg-blue-50 focus:outline-none"
-                                    style={{ minWidth: '35px' }}
+                                    style={{ minWidth: '50px' }}
                                   />
                                 </td>
                               );
