@@ -1,11 +1,10 @@
-// /app/wholesale/dashboard/page.tsx ver.1
+// /app/wholesale/dashboard/page.tsx ver.2 (Select不使用版)
 "use client"
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar, Package, Users, TrendingUp, FileText, DollarSign } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function WholesaleDashboard() {
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -38,18 +37,17 @@ export default function WholesaleDashboard() {
                 <Calendar className="w-4 h-4" />
                 月別表示
               </Button>
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="h-10 px-3 py-2 text-sm rounded-md border border-input bg-background"
+              >
+                {monthOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
