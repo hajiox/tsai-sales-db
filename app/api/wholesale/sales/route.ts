@@ -1,121 +1,158 @@
-// /app/api/wholesale/sales/route.ts ver.2 (UUID対応版)
-import { NextResponse } from 'next/server';
+// /app/api/wholesale/sales/route.ts ver.3
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export async function GET(request: Request) {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const month = searchParams.get('month');
+    const type = searchParams.get('type');
     
-    if (!month) {
-      return NextResponse.json({ error: '月が指定されていません' }, { status: 400 });
+    if (type === 'summary') {
+      // 現在の月と前月を計算
+      const now = new Date();
+      const currentMonth = now.toISOString().slice(0, 7);
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7);
+      
+      // 今月の売上合計
+      const { data: currentSales, error: currentError } = await supabase
+        .from('wholesale_sales')
+        .select('amount')
+        .gte('sale_date', `${currentMonth}-01`)
+        .lte('sale_date', `${currentMonth}-31`);
+      
+      if (currentError) throw currentError;
+      
+      const currentTotal = currentSales?.reduce((sum, sale) => sum + sale.amount, 0) || 0;
+      
+      // 前月の売上合計
+      const { data: lastSales, error: lastError } = await supabase
+        .from('wholesale_sales')
+        .select('amount')
+        .gte('sale_date', `${lastMonth}-01`)
+        .lte('sale_date', `${lastMonth}-31`);
+      
+      if (lastError) throw lastError;
+      
+      const lastTotal = lastSales?.reduce((sum, sale) => sum + sale.amount, 0) || 0;
+      
+      // 前月比計算
+      const monthOverMonth = lastTotal > 0 
+        ? ((currentTotal - lastTotal) / lastTotal) * 100 
+        : 0;
+      
+      return NextResponse.json({
+        currentMonthSales: currentTotal,
+        lastMonthSales: lastTotal,
+        monthOverMonth: Math.round(monthOverMonth * 10) / 10
+      });
+      
+    } else if (type === 'ranking') {
+      // 現在の月を取得
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const lastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString().slice(0, 7);
+      
+      // 商品マスタを取得（display_order順）
+      const { data: products, error: productsError } = await supabase
+        .from('wholesale_products')
+        .select('*')
+        .order('display_order', { ascending: true });
+      
+      if (productsError) throw productsError;
+      
+      // 今月の売上データを取得
+      const { data: currentSales, error: currentError } = await supabase
+        .from('wholesale_sales')
+        .select('product_id, quantity, amount')
+        .gte('sale_date', `${currentMonth}-01`)
+        .lte('sale_date', `${currentMonth}-31`);
+      
+      if (currentError) throw currentError;
+      
+      // 前月の売上データを取得
+      const { data: lastSales, error: lastError } = await supabase
+        .from('wholesale_sales')
+        .select('product_id, quantity')
+        .gte('sale_date', `${lastMonth}-01`)
+        .lte('sale_date', `${lastMonth}-31`);
+      
+      if (lastError) throw lastError;
+      
+      // 商品ごとに集計
+      const productSalesMap = new Map();
+      const lastMonthMap = new Map();
+      
+      // 前月のデータを集計
+      lastSales?.forEach(sale => {
+        const current = lastMonthMap.get(sale.product_id) || 0;
+        lastMonthMap.set(sale.product_id, current + sale.quantity);
+      });
+      
+      // 今月のデータを集計
+      currentSales?.forEach(sale => {
+        const current = productSalesMap.get(sale.product_id) || { quantity: 0, amount: 0 };
+        productSalesMap.set(sale.product_id, {
+          quantity: current.quantity + sale.quantity,
+          amount: current.amount + sale.amount
+        });
+      });
+      
+      // 商品情報と売上データを結合
+      const productSales = products?.map(product => {
+        const salesData = productSalesMap.get(product.id) || { quantity: 0, amount: 0 };
+        const lastMonthQuantity = lastMonthMap.get(product.id) || 0;
+        const growth = lastMonthQuantity > 0 
+          ? ((salesData.quantity - lastMonthQuantity) / lastMonthQuantity) * 100
+          : salesData.quantity > 0 ? 100 : 0;
+        
+        return {
+          ...product,
+          totalQuantity: salesData.quantity,
+          totalAmount: salesData.amount,
+          lastMonthQuantity,
+          growth: Math.round(growth * 10) / 10
+        };
+      }) || [];
+      
+      // ランキングデータの作成
+      const salesRanking = [...productSales]
+        .filter(p => p.totalQuantity > 0)
+        .sort((a, b) => b.totalQuantity - a.totalQuantity);
+      
+      const topProducts = salesRanking.slice(0, 10);
+      const bottomProducts = salesRanking.slice(-5).reverse();
+      
+      const growthRanking = [...productSales]
+        .filter(p => p.growth > 0)
+        .sort((a, b) => b.growth - a.growth)
+        .slice(0, 5);
+      
+      return NextResponse.json({
+        topProducts,
+        bottomProducts,
+        growthProducts: growthRanking
+      });
     }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // 月の開始日と終了日を計算
-    const [year, monthNum] = month.split('-').map(Number);
-    const startDate = `${month}-01`;
-    const endDate = new Date(year, monthNum, 0).toISOString().split('T')[0];
-
-    // 売上データを取得
+    
+    // デフォルトは全売上データを返す
     const { data: sales, error } = await supabase
       .from('wholesale_sales')
-      .select(`
-        *,
-        product:wholesale_products(*)
-      `)
-      .gte('sale_date', startDate)
-      .lte('sale_date', endDate);
-
-    if (error) throw error;
-
-    return NextResponse.json({ 
-      success: true, 
-      sales: sales || []
-    });
-  } catch (error: any) {
-    console.error('売上データ取得エラー:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message 
-    }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const { productId, saleDate, quantity, unitPrice } = await request.json();
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // デフォルト顧客のIDを取得
-    const { data: defaultCustomer, error: customerError } = await supabase
-      .from('wholesale_customers')
-      .select('id')
-      .eq('customer_code', 'DEFAULT')
-      .single();
-
-    if (customerError || !defaultCustomer) {
-      throw new Error('デフォルト顧客が見つかりません');
+      .select('*')
+      .order('sale_date', { ascending: false });
+    
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    const customerId = defaultCustomer.id;
-
-    // 金額を計算
-    const amount = quantity * unitPrice;
-
-    // 既存データを確認
-    const { data: existing } = await supabase
-      .from('wholesale_sales')
-      .select('id')
-      .eq('product_id', productId)
-      .eq('customer_id', customerId)
-      .eq('sale_date', saleDate)
-      .single();
-
-    if (existing) {
-      // 更新
-      if (quantity === 0) {
-        // 削除
-        const { error } = await supabase
-          .from('wholesale_sales')
-          .delete()
-          .eq('id', existing.id);
-        if (error) throw error;
-      } else {
-        // 更新
-        const { error } = await supabase
-          .from('wholesale_sales')
-          .update({ quantity, unit_price: unitPrice, amount })
-          .eq('id', existing.id);
-        if (error) throw error;
-      }
-    } else if (quantity > 0) {
-      // 新規作成
-      const { error } = await supabase
-        .from('wholesale_sales')
-        .insert({
-          product_id: productId,
-          customer_id: customerId,
-          sale_date: saleDate,
-          quantity,
-          unit_price: unitPrice,
-          amount
-        });
-      if (error) throw error;
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error('売上データ保存エラー:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message 
-    }, { status: 500 });
+    
+    return NextResponse.json({ sales });
+  } catch (error) {
+    return NextResponse.json(
+      { error: '売上データの取得に失敗しました' },
+      { status: 500 }
+    );
   }
 }
