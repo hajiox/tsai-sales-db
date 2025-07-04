@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.3 (コンパクト版)
+// /app/wholesale/dashboard/page.tsx ver.4 (データ表示対応版)
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -11,6 +11,27 @@ export default function WholesaleDashboard() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // 商品データを取得
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch('/api/wholesale/products');
+      const data = await response.json();
+      if (data.success) {
+        setProducts(data.products);
+      }
+    } catch (error) {
+      console.error('商品取得エラー:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 月選択肢の生成（過去12ヶ月）
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
@@ -21,6 +42,9 @@ export default function WholesaleDashboard() {
       label: `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月`
     };
   });
+
+  // 合計金額計算（仮）
+  const totalAmount = products.reduce((sum, product) => sum + product.price, 0);
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
@@ -61,8 +85,8 @@ export default function WholesaleDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="py-1 px-3">
-                <div className="text-lg font-bold text-blue-900">0 件</div>
-                <div className="text-xs text-blue-700">¥0</div>
+                <div className="text-lg font-bold text-blue-900">{products.length} 件</div>
+                <div className="text-xs text-blue-700">登録済み</div>
               </CardContent>
             </Card>
 
@@ -88,7 +112,7 @@ export default function WholesaleDashboard() {
               </CardHeader>
               <CardContent className="py-1 px-3">
                 <div className="text-lg font-bold text-purple-900">0 社</div>
-                <div className="text-xs text-purple-700">卸先・OEM発注者</div>
+                <div className="text-sm text-purple-700">卸先・OEM発注者</div>
               </CardContent>
             </Card>
 
@@ -101,7 +125,7 @@ export default function WholesaleDashboard() {
               </CardHeader>
               <CardContent className="py-1 px-3">
                 <div className="text-lg font-bold text-orange-900">¥0</div>
-                <div className="text-xs text-orange-700">卸 + OEM</div>
+                <div className="text-xs text-orange-700">当月売上</div>
               </CardContent>
             </Card>
           </div>
@@ -132,11 +156,34 @@ export default function WholesaleDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="text-center">
-                      <td colSpan={35} className="py-6 text-gray-500">
-                        データがありません
-                      </td>
-                    </tr>
+                    {loading ? (
+                      <tr className="text-center">
+                        <td colSpan={35} className="py-6 text-gray-500">
+                          読み込み中...
+                        </td>
+                      </tr>
+                    ) : products.length > 0 ? (
+                      products.map((product) => (
+                        <tr key={product.id} className="border-b hover:bg-gray-50">
+                          <td className="text-left p-2 sticky left-0 bg-white">{product.product_name}</td>
+                          <td className="text-center p-2">¥{product.price.toLocaleString()}</td>
+                          <td className="text-center p-2">0</td>
+                          <td className="text-center p-2">¥0</td>
+                          {/* 日付列（1日〜31日） */}
+                          {Array.from({ length: 31 }, (_, i) => (
+                            <td key={i + 1} className="text-center p-1 border-l">
+                              -
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="text-center">
+                        <td colSpan={35} className="py-6 text-gray-500">
+                          データがありません
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
