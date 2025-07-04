@@ -1,4 +1,4 @@
-// /app/api/wholesale/sales/route.ts ver.1
+// /app/api/wholesale/sales/route.ts ver.2 (UUID対応版)
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -47,11 +47,24 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { productId, customerId, saleDate, quantity, unitPrice } = await request.json();
+    const { productId, saleDate, quantity, unitPrice } = await request.json();
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // デフォルト顧客のIDを取得
+    const { data: defaultCustomer, error: customerError } = await supabase
+      .from('wholesale_customers')
+      .select('id')
+      .eq('customer_code', 'DEFAULT')
+      .single();
+
+    if (customerError || !defaultCustomer) {
+      throw new Error('デフォルト顧客が見つかりません');
+    }
+
+    const customerId = defaultCustomer.id;
 
     // 金額を計算
     const amount = quantity * unitPrice;
@@ -61,7 +74,7 @@ export async function POST(request: Request) {
       .from('wholesale_sales')
       .select('id')
       .eq('product_id', productId)
-      .eq('customer_id', customerId || 'default')
+      .eq('customer_id', customerId)
       .eq('sale_date', saleDate)
       .single();
 
@@ -88,7 +101,7 @@ export async function POST(request: Request) {
         .from('wholesale_sales')
         .insert({
           product_id: productId,
-          customer_id: customerId || 'default',
+          customer_id: customerId,
           sale_date: saleDate,
           quantity,
           unit_price: unitPrice,
