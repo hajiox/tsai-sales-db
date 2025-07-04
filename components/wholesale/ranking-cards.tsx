@@ -1,4 +1,4 @@
-// /components/wholesale/ranking-cards.tsx ver.1
+// /components/wholesale/ranking-cards.tsx ver.2
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,75 +78,96 @@ export default function RankingCards({ products, salesData, previousMonthData }:
   const { best10, worst5, growth5 } = calculateRankings();
 
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {/* BEST10 */}
-      <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-300">
-        <CardHeader className="py-2 px-3">
-          <CardTitle className="text-sm font-medium text-yellow-900 flex items-center gap-1">
-            <Sparkles className="w-4 h-4" />
-            売上BEST10
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-2 px-3">
-          <div className="space-y-1 max-h-48 overflow-y-auto">
-            {best10.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-yellow-700">{index + 1}.</span>
-                  <span className="truncate max-w-[120px]">{item.name}</span>
+    <div className="space-y-4">
+      {/* BEST10 - 上段10枚 */}
+      <div>
+        <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+          <Sparkles className="w-4 h-4 text-yellow-600" />
+          売上BEST10
+        </h3>
+        <div className="grid grid-cols-10 gap-2">
+          {best10.map((item, index) => (
+            <Card key={item.id} className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-300">
+              <CardHeader className="py-1 px-2">
+                <CardTitle className="text-xs font-bold text-yellow-900 text-center">
+                  {index + 1}位
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="py-1 px-2">
+                <div className="text-center">
+                  <div className="text-xs font-medium text-yellow-800 truncate mb-1">
+                    {item.name}
+                  </div>
+                  <div className="text-xs font-bold text-yellow-900">
+                    {item.totalQuantity}個
+                  </div>
                 </div>
-                <span className="font-semibold text-yellow-900">{item.totalQuantity}個</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
 
-      {/* ワースト5 */}
-      <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-300">
-        <CardHeader className="py-2 px-3">
-          <CardTitle className="text-sm font-medium text-red-900 flex items-center gap-1">
-            <AlertCircle className="w-4 h-4" />
+      {/* 下段：ワースト5 + 前月比増加ベスト5 */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* ワースト5 - 左側5枚 */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+            <AlertCircle className="w-4 h-4 text-red-600" />
             売上ワースト5
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-2 px-3">
-          <div className="space-y-1">
+          </h3>
+          <div className="grid grid-cols-5 gap-2">
             {worst5.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-red-700">{index + 1}.</span>
-                  <span className="truncate max-w-[120px]">{item.name}</span>
-                </div>
-                <span className="font-semibold text-red-900">{item.totalQuantity}個</span>
-              </div>
+              <Card key={item.id} className="bg-gradient-to-br from-red-50 to-red-100 border-red-300">
+                <CardHeader className="py-1 px-2">
+                  <CardTitle className="text-xs font-bold text-red-900 text-center">
+                    {index + 1}位
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-1 px-2">
+                  <div className="text-center">
+                    <div className="text-xs font-medium text-red-800 truncate mb-1">
+                      {item.name}
+                    </div>
+                    <div className="text-xs font-bold text-red-900">
+                      {item.totalQuantity}個
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* 前月比増加ベスト5 */}
-      <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-300">
-        <CardHeader className="py-2 px-3">
-          <CardTitle className="text-sm font-medium text-emerald-900 flex items-center gap-1">
-            <TrendingUp className="w-4 h-4" />
+        {/* 前月比増加ベスト5 - 右側5枚 */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+            <TrendingUp className="w-4 h-4 text-emerald-600" />
             前月比増加ベスト5
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-2 px-3">
-          <div className="space-y-1">
+          </h3>
+          <div className="grid grid-cols-5 gap-2">
             {growth5.map((item, index) => (
-              <div key={item.id} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-emerald-700">{index + 1}.</span>
-                  <span className="truncate max-w-[120px]">{item.name}</span>
-                </div>
-                <span className="font-semibold text-emerald-900">+{item.growthRate.toFixed(0)}%</span>
-              </div>
+              <Card key={item.id} className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-300">
+                <CardHeader className="py-1 px-2">
+                  <CardTitle className="text-xs font-bold text-emerald-900 text-center">
+                    {index + 1}位
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-1 px-2">
+                  <div className="text-center">
+                    <div className="text-xs font-medium text-emerald-800 truncate mb-1">
+                      {item.name}
+                    </div>
+                    <div className="text-xs font-bold text-emerald-900">
+                      +{item.growthRate.toFixed(0)}%
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
