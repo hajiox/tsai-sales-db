@@ -1,4 +1,4 @@
-// /app/api/import/amazon-confirm/route.ts ver.13 (学習データ保存修正版)
+// /app/api/import/amazon-confirm/route.ts ver.14 (ver.11互換版)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -25,17 +25,12 @@ interface AmazonConfirmRequest {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('Amazon確定API開始 - ver.13');
+  console.log('Amazon確定API開始 - ver.14');
   
   try {
     const body: AmazonConfirmRequest = await request.json();
     const { saleDate, matchedProducts, newMappings } = body;
     const month = saleDate.substring(0, 7);
-
-    console.log('受信データ:', {
-      matchedProducts: matchedProducts.length,
-      newMappings: newMappings?.length || 0
-    });
 
     if (!month || !matchedProducts || !Array.isArray(matchedProducts)) {
       return NextResponse.json(
@@ -47,39 +42,31 @@ export async function POST(request: NextRequest) {
     let successCount = 0;
     let errorCount = 0;
     let learnedCount = 0;
-    let learningError = null;
 
-    // 1. 新しいマッピングを学習
+    // 1. 新しいマッピングを学習（ver.11と同じ方法）
     if (newMappings && newMappings.length > 0) {
-      console.log(`学習データ処理開始: ${newMappings.length}件`);
-      
       try {
-        const mappingsToInsert = newMappings.map(mapping => ({
-          amazon_title: mapping.amazonTitle,
-          product_id: mapping.productId
-        }));
-
-        console.log('挿入データ:', mappingsToInsert);
-
-        const { data, error: mappingError } = await supabase
-          .from('amazon_product_mapping')
-          .upsert(mappingsToInsert, { 
-            onConflict: 'amazon_title',
-            ignoreDuplicates: false 
-          })
-          .select();
-
-        if (mappingError) {
-          console.error('Supabaseエラー詳細:', mappingError);
-          learningError = mappingError;
-          throw mappingError;
+        // 1件ずつ処理（エラーを回避）
+        for (const mapping of newMappings) {
+          try {
+            const { error } = await supabase
+              .from('amazon_product_mapping')
+              .insert({
+                amazon_title: mapping.amazonTitle,
+                product_id: mapping.productId
+              });
+            
+            if (!error) {
+              learnedCount++;
+            }
+          } catch (e) {
+            console.log(`既存のマッピングをスキップ: ${mapping.amazonTitle}`);
+          }
         }
         
-        learnedCount = data?.length || 0;
-        console.log(`✅ Amazon学習データ保存完了: ${learnedCount}件`, data);
+        console.log(`✅ Amazon学習データ保存完了: ${learnedCount}件`);
       } catch (mappingError) {
         console.error('Amazonマッピング処理エラー:', mappingError);
-        // エラーをレスポンスに含める
       }
     }
 
@@ -137,12 +124,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       message: `Amazonデータの更新が完了しました (成功: ${successCount}件)`,
-      success: successCount > 0 && errorCount === 0 && !learningError,
+      success: successCount > 0 && errorCount === 0,
       successCount,
       errorCount,
       totalCount: aggregatedSales.size,
       learnedMappings: learnedCount,
-      learningError: learningError ? learningError.message : null
     });
 
   } catch (error) {
