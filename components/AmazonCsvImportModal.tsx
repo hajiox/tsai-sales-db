@@ -35,6 +35,7 @@ export default function AmazonCsvImportModal({
  const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
  const [isLoading, setIsLoading] = useState(false);
  const [error, setError] = useState<string>('');
+ const [duplicateWarning, setDuplicateWarning] = useState<string>('');
  const [saleMonth, setSaleMonth] = useState<string>(() => {
    const now = new Date();
    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -124,6 +125,38 @@ export default function AmazonCsvImportModal({
    const currentUnmatch = parseResult.unmatchedProducts[currentUnmatchIndex];
    
    if (productId !== 'skip') {
+     // 重複チェック：既にマッチ済みまたは新規マッピングに同じ商品IDがないか確認
+     const alreadyMatched = parseResult.matchedProducts?.find((m: any) => m.productId === productId);
+     const alreadyInNewMappings = newMappings.find(m => m.productId === productId);
+     
+     if (alreadyMatched || alreadyInNewMappings) {
+       // 重複警告を表示
+       const productName = alreadyMatched?.productName || 
+         products.find(p => p.id === productId)?.name || '';
+       const existingCount = alreadyMatched?.quantity || 0;
+       const newMappingCount = newMappings
+         .filter(m => m.productId === productId)
+         .reduce((sum, m) => sum + m.quantity, 0);
+       const totalCount = existingCount + newMappingCount + currentUnmatch.quantity;
+       
+       setDuplicateWarning(
+         `⚠️ 警告: "${productName}" には既に${existingCount + newMappingCount}個が紐付けられています。` +
+         `追加すると合計${totalCount}個になります。本当に追加しますか？`
+       );
+       
+       // 確認ダイアログを表示（簡易版：本来はモーダルが望ましい）
+       const confirmed = window.confirm(
+         `警告: "${productName}" には既に他のAmazon商品が紐付けられています。\n` +
+         `現在: ${existingCount + newMappingCount}個\n` +
+         `追加後: ${totalCount}個\n\n` +
+         `本当にこの商品に紐付けますか？`
+       );
+       
+       if (!confirmed) {
+         return; // キャンセルされた場合は何もしない
+       }
+     }
+     
      const mapping = {
        amazonTitle: currentUnmatch.amazonTitle,
        productId: productId,
@@ -131,6 +164,9 @@ export default function AmazonCsvImportModal({
      };
      setNewMappings(prev => [...prev, mapping]);
    }
+
+   // 警告をクリア
+   setDuplicateWarning('');
 
    if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
      setCurrentUnmatchIndex(currentUnmatchIndex + 1);
@@ -319,6 +355,11 @@ export default function AmazonCsvImportModal({
                  <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
                </div>
              </div>
+             {duplicateWarning && (
+               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                 <p className="text-yellow-800 text-sm">{duplicateWarning}</p>
+               </div>
+             )}
              <Card className="border-orange-200 mb-4">
                <CardHeader className="pb-3">
                  <CardTitle className="text-orange-700 flex items-center gap-2">🛍️ Amazon商品 <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">{currentUnmatch.quantity}個</span></CardTitle>
