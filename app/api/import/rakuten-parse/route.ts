@@ -1,4 +1,4 @@
-// /app/api/import/rakuten-parse/route.ts ver.18 (強化版nullガード)
+// /app/api/import/rakuten-parse/route.ts ver.19 (重複防止機能付き)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -43,7 +43,7 @@ function isValidString(value: any): value is string {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== 楽天API開始 ver.18 ===');
+    console.log('=== 楽天API開始 ver.19（重複防止機能付き） ===');
     
     const { csvContent } = await request.json();
     console.log('csvContent受信:', csvContent ? 'OK' : 'NG');
@@ -81,9 +81,19 @@ export async function POST(request: NextRequest) {
     });
     console.log('有効な学習データ数:', validLearningData.length);
 
+    // 🔄 マッチング開始前にリセット（重複防止のため）
+    findBestMatchSimplified('', [], [], true);
+
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
     let blankTitleRows: any[] = [];
+
+    // 重複検出用のマップ（商品IDごとに集計）
+    const productQuantityMap = new Map<string, {
+      productName: string;
+      rakutenTitles: Array<{ title: string; qty: number }>;
+      totalQty: number;
+    }>();
 
     for (let i = 0; i < lines.length; i++) {
         const columns = parseCsvLine(lines[i]);
@@ -114,6 +124,19 @@ export async function POST(request: NextRequest) {
             const productInfo = findBestMatchSimplified(rakutenTitle, validProducts, validLearningData);
 
             if (productInfo) {
+                // 重複マッチの集計
+                if (!productQuantityMap.has(productInfo.id)) {
+                  productQuantityMap.set(productInfo.id, {
+                    productName: productInfo.name,
+                    rakutenTitles: [],
+                    totalQty: 0
+                  });
+                }
+                
+                const mapEntry = productQuantityMap.get(productInfo.id)!;
+                mapEntry.rakutenTitles.push({ title: rakutenTitle, qty: quantity });
+                mapEntry.totalQty += quantity;
+
                 matchedProducts.push({ rakutenTitle, quantity, productInfo, matchType: productInfo.matchType });
                 console.log(`マッチ成功: "${rakutenTitle}" -> ${productInfo.name}`);
             } else {
@@ -126,6 +149,27 @@ export async function POST(request: NextRequest) {
         }
     }
 
+    // 重複マッチの検出
+    const duplicateMatches: any[] = [];
+    productQuantityMap.forEach((value, productId) => {
+      if (value.rakutenTitles.length > 1) {
+        duplicateMatches.push({
+          productId,
+          productName: value.productName,
+          matchCount: value.rakutenTitles.length,
+          totalQty: value.totalQty,
+          rakutenTitles: value.rakutenTitles
+        });
+        
+        console.warn(`⚠️ 重複マッチ検出: ${value.productName}`);
+        console.warn(`  マッチ数: ${value.rakutenTitles.length}件`);
+        console.warn(`  合計数量: ${value.totalQty}個`);
+        value.rakutenTitles.forEach(item => {
+          console.warn(`    - ${item.title} (${item.qty}個)`);
+        });
+      }
+    });
+
     const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
     const unmatchQuantity = unmatchedProducts.reduce((sum, p) => sum + p.quantity, 0);
     const blankTitleQuantity = blankTitleRows.reduce((sum, r) => sum + r.quantity, 0);
@@ -134,6 +178,9 @@ export async function POST(request: NextRequest) {
     console.log('マッチ商品数:', matchedProducts.length);
     console.log('未マッチ商品数:', unmatchedProducts.length);
     console.log('空欄行数:', blankTitleRows.length);
+    if (duplicateMatches.length > 0) {
+      console.log(`🔔 重複マッチ: ${duplicateMatches.length}商品`);
+    }
 
     return NextResponse.json({
         success: true,
@@ -146,7 +193,8 @@ export async function POST(request: NextRequest) {
             blankTitleInfo: {
                 count: blankTitleRows.length,
                 quantity: blankTitleQuantity
-            }
+            },
+            duplicateMatches: duplicateMatches.length > 0 ? duplicateMatches : null
         }
     });
   } catch (error) {
