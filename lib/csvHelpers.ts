@@ -1,6 +1,6 @@
-// /lib/csvHelpers.ts  ver.10
+// /lib/csvHelpers.ts  ver.11
 // ------------------------------------------------------------
-// 共通ユーティリティと簡易マッチングヘルパー（マッチング緩和版）
+// 共通ユーティリティと簡易マッチングヘルパー（マッチング精度重視版）
 // ------------------------------------------------------------
 import iconv from 'iconv-lite';
 
@@ -45,8 +45,8 @@ interface LearningMap {
 /* 3. タイトルから重要キーワード抽出（改善版）                         */
 /* ------------------------------------------------------------------ */
 export function extractImportantKeywords(title: string): string[] {
-  // 一般的すぎるキーワードを除外（緩和：「セット」を除外から外す）
-  const commonWords = ['送料無料', '個', '食'];
+  // 一般的すぎるキーワードを除外
+  const commonWords = ['ラーメン', '送料無料', 'セット', '個', '食', '醤油', '味噌', '塩', '豚骨'];
   
   // ブランド・商品特有のキーワード（重要度高）
   const importantBrands = [
@@ -57,9 +57,7 @@ export function extractImportantKeywords(title: string): string[] {
     'つけ麺', 'パーフェクトラーメン', '極にぼし', '魚介豚骨', 'オーション',
     '極太麺', '付け麺', 'どろスープ', '魚粉', '喜多方', '山塩', 'BUTA', 'IE-K',
     // Qoo10特有キーワード
-    'インスパイア系', 'チャーシュー付き', '備蓄食', '非常食', 'アウトドア', '常温発送',
-    // 追加キーワード（緩和のため）
-    'ラーメン', 'セット', '醤油', '味噌', '塩', '豚骨', '鶏白湯'
+    'インスパイア系', 'チャーシュー付き', '備蓄食', '非常食', 'アウトドア', '常温発送'
   ];
   
   // 数量・重量パターンを抽出（例: 800g, 1Kg, 200g×5個）
@@ -82,7 +80,7 @@ export function extractImportantKeywords(title: string): string[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. シンプル類似度マッチング（緩和版・重複防止機能付き）             */
+/* 4. シンプル類似度マッチング（精度重視版・重複防止機能付き）         */
 /* ------------------------------------------------------------------ */
 // 既にマッチ済みの商品IDを記録するSet（関数外で保持）
 const matchedProductIds = new Set<string>();
@@ -146,7 +144,7 @@ export function findBestMatchSimplified(
     return direct;
   }
 
-  // 4-3. 緩和版キーワードスコアリング
+  // 4-3. 厳格版キーワードスコアリング
   const keywords = extractImportantKeywords(title);
   if (keywords.length === 0) return null;
   
@@ -166,14 +164,18 @@ export function findBestMatchSimplified(
     for (const targetTitle of targetTitles) {
       const targetKeywords = extractImportantKeywords(targetTitle);
       
-      // 単方向マッチング（緩和：titleのキーワードがtargetTitleに含まれるかだけチェック）
-      const matchedInTarget = keywords.filter(k => targetTitle.includes(k)).length;
+      // 双方向マッチング（厳格）
+      const matchedInTitle = keywords.filter(k => targetTitle.includes(k)).length;
+      const matchedInTarget = targetKeywords.filter(k => title.includes(k)).length;
       
-      // マッチ率を計算（緩和：単方向のみ）
-      const matchRatio = matchedInTarget / keywords.length;
+      // マッチ率を計算（双方向）
+      const matchRatio = Math.min(
+        matchedInTitle / keywords.length,
+        matchedInTarget / targetKeywords.length
+      );
       
-      // スコア計算（マッチした数）
-      const score = matchedInTarget;
+      // スコア計算（マッチした数 × マッチ率）
+      const score = Math.min(matchedInTitle, matchedInTarget) * matchRatio;
       
       if (score > maxScore) {
         maxScore = score;
@@ -181,14 +183,14 @@ export function findBestMatchSimplified(
       }
     }
     
-    // より高いスコアを持つ商品を記録
+    // より高いスコアとマッチ率を要求
     if (maxScore > 0 && (!bestMatch || maxScore > bestMatch.score)) {
       bestMatch = { product: p, score: maxScore, matchRatio: bestMatchRatio };
     }
   }
   
-  // 緩和：最低限のマッチ率を20%に下げ、スコアも1以上でOK
-  if (bestMatch && bestMatch.matchRatio >= 0.2 && bestMatch.score >= 1) {
+  // 厳格：最低限のマッチ率（50%以上）とスコア（3以上）を要求
+  if (bestMatch && bestMatch.matchRatio >= 0.5 && bestMatch.score >= 3) {
     matchedProductIds.add(bestMatch.product.id);
     return bestMatch.product;
   }
@@ -211,7 +213,7 @@ export function findBestMatchByChannel(
   );
   if (direct) return { product: direct, confidence: 100 };
 
-  // 5-2. 緩和版キーワードスコアリング
+  // 5-2. 厳格版キーワードスコアリング
   const keywords = extractImportantKeywords(title);
   if (keywords.length === 0) return null;
   
@@ -226,11 +228,15 @@ export function findBestMatchByChannel(
     for (const targetTitle of targetTitles) {
       const targetKeywords = extractImportantKeywords(targetTitle);
       
-      // 単方向マッチング（緩和）
-      const matchedInTarget = keywords.filter(k => targetTitle.includes(k)).length;
+      const matchedInTitle = keywords.filter(k => targetTitle.includes(k)).length;
+      const matchedInTarget = targetKeywords.filter(k => title.includes(k)).length;
       
-      const matchRatio = matchedInTarget / keywords.length;
-      const score = matchedInTarget;
+      const matchRatio = Math.min(
+        matchedInTitle / keywords.length,
+        matchedInTarget / targetKeywords.length
+      );
+      
+      const score = Math.min(matchedInTitle, matchedInTarget) * matchRatio;
       
       if (score > maxScore) {
         maxScore = score;
@@ -243,9 +249,9 @@ export function findBestMatchByChannel(
     }
   }
   
-  // 信頼度計算（緩和版）
-  if (best && best.matchRatio >= 0.2 && best.score >= 1) {
-    const confidence = Math.min(95, Math.round(best.matchRatio * 70 + best.score * 10));
+  // 信頼度計算（厳格版）
+  if (best && best.matchRatio >= 0.5 && best.score >= 3) {
+    const confidence = Math.min(95, Math.round(best.matchRatio * 80 + best.score * 5));
     return { product: best.product, confidence };
   }
   
