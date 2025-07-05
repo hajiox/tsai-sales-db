@@ -85,7 +85,7 @@ export default function AmazonCsvImportModal({
        throw new Error(result.error || 'Amazon CSVの解析に失敗しました');
      }
      
-     // amazon-parse ver.9の新形式に対応
+     // amazon-parse ver.11の新形式に対応（重複マッチ情報含む）
      setParseResult({
         matchedProducts: result.matched?.map((item: any) => ({
           amazonTitle: item.amazonTitle,
@@ -101,7 +101,8 @@ export default function AmazonCsvImportModal({
           ...result.summary,
           csvTotalQuantity: result.summary.csvTotalQty,  // csvTotalQty -> csvTotalQuantity
           matchedQuantity: result.summary.matchedQty,     // matchedQty -> matchedQuantity
-          blankTitleInfo: result.summary.blankTitleInfo   // そのまま（あれば）
+          blankTitleInfo: result.summary.blankTitleInfo,   // そのまま（あれば）
+          duplicateMatches: result.summary.duplicateMatches // 重複マッチ情報
         }
      });
 
@@ -227,6 +228,34 @@ export default function AmazonCsvImportModal({
                        <p className="text-xs text-orange-600 mt-1">
                           合計 {parseResult.summary.blankTitleInfo.quantity} 個分が処理から除外されます。CSVを修正し再実行してください。
                         </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+             {parseResult.summary.duplicateMatches && parseResult.summary.duplicateMatches.length > 0 && (
+                <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-400">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <AlertCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-bold text-red-700">
+                        重複マッチ警告: {parseResult.summary.duplicateMatches.length} 商品で複数のAmazon商品が同じ商品にマッチしています
+                      </p>
+                      <div className="mt-2 text-xs text-red-600">
+                        {parseResult.summary.duplicateMatches.map((dup: any, i: number) => (
+                          <div key={i} className="mt-2 p-2 bg-red-100 rounded">
+                            <p className="font-semibold">{dup.productName}</p>
+                            <p>{dup.matchCount}個のAmazon商品 → 合計{dup.totalQty}個</p>
+                            <ul className="mt-1 ml-4 list-disc">
+                              {dup.amazonTitles.slice(0, 3).map((item: any, j: number) => (
+                                <li key={j}>{item.title} ({item.qty}個)</li>
+                              ))}
+                              {dup.amazonTitles.length > 3 && <li>... 他{dup.amazonTitles.length - 3}件</li>}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
