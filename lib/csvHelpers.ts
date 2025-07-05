@@ -1,6 +1,6 @@
-// /lib/csvHelpers.ts  ver.11
+// /lib/csvHelpers.ts  ver.12
 // ------------------------------------------------------------
-// 共通ユーティリティと簡易マッチングヘルパー（マッチング精度重視版）
+// 共通ユーティリティと簡易マッチングヘルパー（バランス調整版）
 // ------------------------------------------------------------
 import iconv from 'iconv-lite';
 
@@ -42,11 +42,11 @@ interface LearningMap {
 }
 
 /* ------------------------------------------------------------------ */
-/* 3. タイトルから重要キーワード抽出（改善版）                         */
+/* 3. タイトルから重要キーワード抽出（バランス版）                     */
 /* ------------------------------------------------------------------ */
 export function extractImportantKeywords(title: string): string[] {
-  // 一般的すぎるキーワードを除外
-  const commonWords = ['ラーメン', '送料無料', 'セット', '個', '食', '醤油', '味噌', '塩', '豚骨'];
+  // 一般的すぎるキーワードを除外（ただし「ラーメン」「セット」は重要）
+  const commonWords = ['送料無料', '個', '食'];
   
   // ブランド・商品特有のキーワード（重要度高）
   const importantBrands = [
@@ -57,7 +57,9 @@ export function extractImportantKeywords(title: string): string[] {
     'つけ麺', 'パーフェクトラーメン', '極にぼし', '魚介豚骨', 'オーション',
     '極太麺', '付け麺', 'どろスープ', '魚粉', '喜多方', '山塩', 'BUTA', 'IE-K',
     // Qoo10特有キーワード
-    'インスパイア系', 'チャーシュー付き', '備蓄食', '非常食', 'アウトドア', '常温発送'
+    'インスパイア系', 'チャーシュー付き', '備蓄食', '非常食', 'アウトドア', '常温発送',
+    // 味のキーワード（重要）
+    'ラーメン', 'セット', '醤油', '味噌', '塩', '豚骨', '鶏白湯', 'つけめん'
   ];
   
   // 数量・重量パターンを抽出（例: 800g, 1Kg, 200g×5個）
@@ -80,7 +82,7 @@ export function extractImportantKeywords(title: string): string[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. シンプル類似度マッチング（精度重視版・重複防止機能付き）         */
+/* 4. シンプル類似度マッチング（バランス版・重複防止機能付き）         */
 /* ------------------------------------------------------------------ */
 // 既にマッチ済みの商品IDを記録するSet（関数外で保持）
 const matchedProductIds = new Set<string>();
@@ -144,7 +146,7 @@ export function findBestMatchSimplified(
     return direct;
   }
 
-  // 4-3. 厳格版キーワードスコアリング
+  // 4-3. バランス版キーワードスコアリング
   const keywords = extractImportantKeywords(title);
   if (keywords.length === 0) return null;
   
@@ -164,18 +166,27 @@ export function findBestMatchSimplified(
     for (const targetTitle of targetTitles) {
       const targetKeywords = extractImportantKeywords(targetTitle);
       
-      // 双方向マッチング（厳格）
-      const matchedInTitle = keywords.filter(k => targetTitle.includes(k)).length;
-      const matchedInTarget = targetKeywords.filter(k => title.includes(k)).length;
+      // キーワードマッチング（単方向でOK、ただし重要キーワードを重視）
+      const matchedKeywords = keywords.filter(k => {
+        // 完全一致を優先
+        if (targetTitle.includes(k)) return true;
+        // 部分一致も許可（3文字以上のキーワードのみ）
+        if (k.length >= 3) {
+          return targetTitle.toLowerCase().includes(k.toLowerCase());
+        }
+        return false;
+      });
       
-      // マッチ率を計算（双方向）
-      const matchRatio = Math.min(
-        matchedInTitle / keywords.length,
-        matchedInTarget / targetKeywords.length
-      );
+      // マッチ率を計算
+      const matchRatio = matchedKeywords.length / keywords.length;
       
-      // スコア計算（マッチした数 × マッチ率）
-      const score = Math.min(matchedInTitle, matchedInTarget) * matchRatio;
+      // スコア計算（マッチした数 + 重要キーワードボーナス）
+      let score = matchedKeywords.length;
+      
+      // 重要キーワードにボーナス
+      if (matchedKeywords.some(k => ['チャーシュー', '激辛', 'つけ麺', 'パーフェクトラーメン'].includes(k))) {
+        score += 2;
+      }
       
       if (score > maxScore) {
         maxScore = score;
@@ -183,14 +194,14 @@ export function findBestMatchSimplified(
       }
     }
     
-    // より高いスコアとマッチ率を要求
+    // より高いスコアとマッチ率を記録
     if (maxScore > 0 && (!bestMatch || maxScore > bestMatch.score)) {
       bestMatch = { product: p, score: maxScore, matchRatio: bestMatchRatio };
     }
   }
   
-  // 厳格：最低限のマッチ率（50%以上）とスコア（3以上）を要求
-  if (bestMatch && bestMatch.matchRatio >= 0.5 && bestMatch.score >= 3) {
+  // バランス：最低限のマッチ率（35%）とスコア（2以上）を要求
+  if (bestMatch && bestMatch.matchRatio >= 0.35 && bestMatch.score >= 2) {
     matchedProductIds.add(bestMatch.product.id);
     return bestMatch.product;
   }
@@ -213,7 +224,7 @@ export function findBestMatchByChannel(
   );
   if (direct) return { product: direct, confidence: 100 };
 
-  // 5-2. 厳格版キーワードスコアリング
+  // 5-2. バランス版キーワードスコアリング
   const keywords = extractImportantKeywords(title);
   if (keywords.length === 0) return null;
   
@@ -226,17 +237,21 @@ export function findBestMatchByChannel(
     let bestMatchRatio = 0;
     
     for (const targetTitle of targetTitles) {
-      const targetKeywords = extractImportantKeywords(targetTitle);
+      const matchedKeywords = keywords.filter(k => {
+        if (targetTitle.includes(k)) return true;
+        if (k.length >= 3) {
+          return targetTitle.toLowerCase().includes(k.toLowerCase());
+        }
+        return false;
+      });
       
-      const matchedInTitle = keywords.filter(k => targetTitle.includes(k)).length;
-      const matchedInTarget = targetKeywords.filter(k => title.includes(k)).length;
+      const matchRatio = matchedKeywords.length / keywords.length;
+      let score = matchedKeywords.length;
       
-      const matchRatio = Math.min(
-        matchedInTitle / keywords.length,
-        matchedInTarget / targetKeywords.length
-      );
-      
-      const score = Math.min(matchedInTitle, matchedInTarget) * matchRatio;
+      // 重要キーワードボーナス
+      if (matchedKeywords.some(k => ['チャーシュー', '激辛', 'つけ麺', 'パーフェクトラーメン'].includes(k))) {
+        score += 2;
+      }
       
       if (score > maxScore) {
         maxScore = score;
@@ -249,9 +264,9 @@ export function findBestMatchByChannel(
     }
   }
   
-  // 信頼度計算（厳格版）
-  if (best && best.matchRatio >= 0.5 && best.score >= 3) {
-    const confidence = Math.min(95, Math.round(best.matchRatio * 80 + best.score * 5));
+  // 信頼度計算（バランス版）
+  if (best && best.matchRatio >= 0.35 && best.score >= 2) {
+    const confidence = Math.min(95, Math.round(best.matchRatio * 75 + best.score * 8));
     return { product: best.product, confidence };
   }
   
