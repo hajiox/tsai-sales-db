@@ -80,26 +80,44 @@ export function extractImportantKeywords(title: string): string[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. シンプル類似度マッチング（精度改善版）                           */
+/* 4. シンプル類似度マッチング（精度改善版・重複防止機能付き）         */
 /* ------------------------------------------------------------------ */
+// 既にマッチ済みの商品IDを記録するSet（関数外で保持）
+const matchedProductIds = new Set<string>();
+
 export function findBestMatchSimplified(
   title: string,
   products: Product[],
-  learning: LearningMap[]
+  learning: LearningMap[],
+  resetMatches?: boolean // バッチ処理の開始時にtrueを渡してリセット
 ): Product | null {
+  // マッチ済みIDをリセット（新しいCSV処理の開始時）
+  if (resetMatches) {
+    matchedProductIds.clear();
+  }
+
   // 4-1. 学習データ完全一致（最優先）
   const learned = learning.find((m) =>
     [m.amazon_title, m.rakuten_title, m.yahoo_title, m.mercari_title, m.base_title, m.qoo10_title].includes(title)
   );
   if (learned) {
-    return products.find((p) => p.id === learned.product_id) || null;
+    const product = products.find((p) => p.id === learned.product_id);
+    // 既にマッチ済みの商品は除外
+    if (product && !matchedProductIds.has(product.id)) {
+      matchedProductIds.add(product.id);
+      return product;
+    }
   }
 
   // 4-2. 商品名の完全一致
   const direct = products.find((p) =>
+    !matchedProductIds.has(p.id) && // 既にマッチ済みは除外
     [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name].includes(title)
   );
-  if (direct) return direct;
+  if (direct) {
+    matchedProductIds.add(direct.id);
+    return direct;
+  }
 
   // 4-3. 改善版キーワードスコアリング
   const keywords = extractImportantKeywords(title);
@@ -108,6 +126,9 @@ export function findBestMatchSimplified(
   let bestMatch: { product: Product; score: number; matchRatio: number } | null = null;
   
   for (const p of products) {
+    // 既にマッチ済みの商品はスキップ
+    if (matchedProductIds.has(p.id)) continue;
+    
     const targetTitles = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name]
       .filter(Boolean);
     
@@ -145,6 +166,7 @@ export function findBestMatchSimplified(
   
   // 最低限のマッチ率（30%以上）を要求
   if (bestMatch && bestMatch.matchRatio >= 0.3 && bestMatch.score >= 2) {
+    matchedProductIds.add(bestMatch.product.id);
     return bestMatch.product;
   }
   
