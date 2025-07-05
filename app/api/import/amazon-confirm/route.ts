@@ -1,4 +1,4 @@
-// /app/api/import/amazon-confirm/route.ts ver.15 (詳細ログ版)
+// /app/api/import/amazon-confirm/route.ts ver.16 (PRIMARY KEY対応版)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -25,14 +25,12 @@ interface AmazonConfirmRequest {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('Amazon確定API開始 - ver.15');
+  console.log('Amazon確定API開始 - ver.16');
   
   try {
     const body: AmazonConfirmRequest = await request.json();
     const { saleDate, matchedProducts, newMappings } = body;
     const month = saleDate.substring(0, 7);
-
-    console.log('受信したnewMappings:', JSON.stringify(newMappings));
 
     if (!month || !matchedProducts || !Array.isArray(matchedProducts)) {
       return NextResponse.json(
@@ -45,40 +43,32 @@ export async function POST(request: NextRequest) {
     let errorCount = 0;
     let learnedCount = 0;
 
-    // 1. 新しいマッピングを学習
+    // 1. 新しいマッピングを学習（upsertを使用）
     if (newMappings && newMappings.length > 0) {
-      console.log(`学習処理開始: ${newMappings.length}件のデータ`);
-      
-      // 1件ずつ処理
-      for (const mapping of newMappings) {
-        console.log('処理中のマッピング:', mapping);
-        
-        try {
-          const insertData = {
-            amazon_title: mapping.amazonTitle,
-            product_id: mapping.productId
-          };
-          console.log('挿入データ:', insertData);
-          
-          const { data, error } = await supabase
-            .from('amazon_product_mapping')
-            .insert(insertData)
-            .select();
-          
-          if (error) {
-            console.error('挿入エラー:', error);
-          } else {
-            console.log('挿入成功:', data);
-            learnedCount++;
-          }
-        } catch (e) {
-          console.error('例外エラー:', e);
+      try {
+        const mappingsToInsert = newMappings.map(mapping => ({
+          amazon_title: mapping.amazonTitle,
+          product_id: mapping.productId
+        }));
+
+        // upsertを使用（PRIMARY KEYがあるため動作する）
+        const { data, error: mappingError } = await supabase
+          .from('amazon_product_mapping')
+          .upsert(mappingsToInsert, { 
+            onConflict: 'amazon_title'  // PRIMARY KEYカラムを指定
+          })
+          .select();
+
+        if (mappingError) {
+          console.error('Amazonマッピング処理エラー:', mappingError);
+          throw mappingError;
         }
+        
+        learnedCount = data?.length || 0;
+        console.log(`✅ Amazon学習データ保存完了: ${learnedCount}件`);
+      } catch (mappingError) {
+        console.error('Amazonマッピング処理エラー:', mappingError);
       }
-      
-      console.log(`学習処理完了: ${learnedCount}件保存`);
-    } else {
-      console.log('newMappingsが空またはnull');
     }
 
     // 2. 売上データを商品IDごとに集計
@@ -131,17 +121,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const response = {
+    console.log(`Amazon確定処理完了: 成功${successCount}件, エラー${errorCount}件, 学習${learnedCount}件`);
+
+    return NextResponse.json({
       message: `Amazonデータの更新が完了しました (成功: ${successCount}件)`,
       success: successCount > 0 && errorCount === 0,
       successCount,
       errorCount,
       totalCount: aggregatedSales.size,
       learnedMappings: learnedCount,
-    };
-    
-    console.log('APIレスポンス:', response);
-    return NextResponse.json(response);
+    });
 
   } catch (error) {
     console.error('Amazon確定API エラー:', error);
