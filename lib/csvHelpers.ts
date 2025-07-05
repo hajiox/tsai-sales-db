@@ -85,6 +85,16 @@ export function extractImportantKeywords(title: string): string[] {
 // 既にマッチ済みの商品IDを記録するSet（関数外で保持）
 const matchedProductIds = new Set<string>();
 
+// 特定キーワードの組み合わせによる専用マッチングルール
+const specialMatchingRules = [
+  {
+    keywords: ['炊き込み', 'チャーシュー'],
+    productName: 'チャーシュー 炊き込みご飯の素',
+    priority: 100 // 最優先
+  },
+  // 今後、似た問題が発生したらここに追加
+];
+
 export function findBestMatchSimplified(
   title: string,
   products: Product[],
@@ -94,6 +104,21 @@ export function findBestMatchSimplified(
   // マッチ済みIDをリセット（新しいCSV処理の開始時）
   if (resetMatches) {
     matchedProductIds.clear();
+  }
+
+  // 0. 特定キーワードによる専用マッチング（最優先）
+  for (const rule of specialMatchingRules) {
+    const hasAllKeywords = rule.keywords.every(keyword => title.includes(keyword));
+    if (hasAllKeywords) {
+      const specialProduct = products.find(p => 
+        p.name.includes(rule.productName) && !matchedProductIds.has(p.id)
+      );
+      if (specialProduct) {
+        console.log(`🎯 特殊ルールでマッチ: "${title}" → "${specialProduct.name}"`);
+        matchedProductIds.add(specialProduct.id);
+        return specialProduct;
+      }
+    }
   }
 
   // 4-1. 学習データ完全一致（最優先）
