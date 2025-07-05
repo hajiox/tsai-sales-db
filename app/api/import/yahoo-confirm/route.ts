@@ -1,5 +1,5 @@
-// /app/api/import/yahoo-confirm/route.ts ver.5
-// 学習データ保存時の変数名不一致を修正した最終版
+// /app/api/import/yahoo-confirm/route.ts ver.6
+// 既存データを上書き方式に変更（Amazon/楽天と統一）
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -9,10 +9,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// ★★★ 修正ポイント1: 正しいプロパティ名 `yahooTitle` を使用する ★★★
 interface MatchedProduct {
   productInfo?: { id: string };
-  yahooTitle: string; // `productTitle` から `yahooTitle` に変更
+  yahooTitle: string;
   quantity: number;
   isLearned: boolean;
 }
@@ -25,7 +24,7 @@ interface NewMapping {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo CSV確定処理開始 ver.5 (最終修正版) ===');
+    console.log('=== Yahoo CSV確定処理開始 ver.6 (上書き方式) ===');
     
     const { matchedProducts, newMappings, targetMonth } = await request.json() as {
         matchedProducts: MatchedProduct[],
@@ -58,12 +57,13 @@ export async function POST(request: NextRequest) {
         }))
     ];
 
+    // 商品IDごとに数量を集計
     for (const item of allProducts) {
         if (!item.productInfo?.id) continue;
         const currentQuantity = productSummary.get(item.productInfo.id) || 0;
         productSummary.set(item.productInfo.id, currentQuantity + (item.quantity || 0));
         
-        // ★★★ 修正ポイント2: isLearnedフラグを尊重し、かつyahooTitleを正しく参照する ★★★
+        // 学習データの収集
         if (!item.isLearned) {
             const title = item.yahooTitle;
             const productId = item.productInfo.id;
@@ -78,50 +78,83 @@ export async function POST(request: NextRequest) {
         }
     }
 
-    // 売上サマリーの更新
+    let successCount = 0;
+    let errorCount = 0;
+
+    // 売上サマリーの更新（上書き方式）
     for (const [productId, totalQuantity] of productSummary) {
-      const { error: selectError, data: existing } = await supabase
-        .from('web_sales_summary')
-        .select('id, yahoo_count')
-        .eq('product_id', productId)
-        .eq('report_month', formattedMonth)
-        .limit(1);
-
-      if (selectError) throw selectError;
-
-      if (existing && existing.length > 0) {
-        const newCount = (existing[0].yahoo_count || 0) + totalQuantity;
-        const { error: updateError } = await supabase
+      try {
+        const { error: selectError, data: existing } = await supabase
           .from('web_sales_summary')
-          .update({ yahoo_count: newCount })
-          .eq('id', existing[0].id);
-        if (updateError) throw updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('web_sales_summary')
-          .insert({ product_id: productId, report_month: formattedMonth, yahoo_count: totalQuantity });
-        if (insertError) throw insertError;
+          .select('id')
+          .eq('product_id', productId)
+          .eq('report_month', formattedMonth)
+          .single();
+
+        if (selectError && selectError.code !== 'PGRST116') {
+          throw selectError;
+        }
+
+        if (existing) {
+          // 既存レコードを上書き（加算ではない）
+          console.log(`📝 既存レコード更新: product_id=${productId}, yahoo_count=${totalQuantity}`);
+          const { error: updateError } = await supabase
+            .from('web_sales_summary')
+            .update({ yahoo_count: totalQuantity })
+            .eq('id', existing.id);
+          
+          if (updateError) throw updateError;
+        } else {
+          // 新規挿入
+          console.log(`📝 新規レコード挿入: product_id=${productId}, yahoo_count=${totalQuantity}`);
+          const { error: insertError } = await supabase
+            .from('web_sales_summary')
+            .insert({ 
+              product_id: productId, 
+              report_month: formattedMonth, 
+              yahoo_count: totalQuantity 
+            });
+          
+          if (insertError) throw insertError;
+        }
+        successCount++;
+      } catch (itemError) {
+        console.error(`❌ DB処理エラー (product_id: ${productId}):`, itemError);
+        errorCount++;
       }
     }
-    console.log(`DB更新成功: ${productSummary.size}件`);
+    
+    console.log(`DB更新完了: 成功${successCount}件, エラー${errorCount}件`);
 
     // 学習データの保存
     let learnedCount = 0;
     if (learningMappings.length > 0) {
-      console.log(`学習データを保存します: ${learningMappings.length}件`, learningMappings);
+      console.log(`📚 学習データを保存します: ${learningMappings.length}件`, learningMappings);
       const { count, error } = await supabase
         .from('yahoo_product_mapping')
         .upsert(learningMappings, { onConflict: 'yahoo_title', count: 'estimated' });
-      if (error) throw error; // ここでエラーが発生していた
-      learnedCount = count || 0;
+      
+      if (error) {
+        console.error('学習データ保存エラー:', error);
+        throw error;
+      }
+      learnedCount = count || learningMappings.length;
+      console.log(`✅ Yahoo学習データ保存完了: ${learnedCount}件`);
     }
 
-    console.log('=== Yahoo CSV確定処理完了 ver.5 ===');
+    const isSuccess = successCount > 0 && errorCount === 0;
+    console.log(`=== Yahoo CSV確定処理完了 ver.6: 成功${successCount}件, エラー${errorCount}件, 学習${learnedCount}件 ===`);
+    
     return NextResponse.json({
-      success: true,
-      message: 'Yahoo売上データを正常に登録しました。',
+      success: isSuccess,
+      message: isSuccess 
+        ? `Yahoo売上データを正常に登録しました (成功: ${successCount}件)` 
+        : `一部エラーが発生しました (成功: ${successCount}件, エラー: ${errorCount}件)`,
       totalCount: productSummary.size,
-      learnedCount: learnedCount,
+      successCount,
+      errorCount,
+      learnedCount,
+      learnedMappings: learnedCount,
     });
 
   } catch (error) {
