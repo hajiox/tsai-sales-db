@@ -1,8 +1,14 @@
-// /app/api/import/amazon-confirm/route.ts ver.10 (楽天ロジック移植版)
+// /app/api/import/amazon-confirm/route.ts ver.11 (完全修正版)
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
+
+// Supabaseクライアントの初期化
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 interface AmazonConfirmRequest {
   saleDate: string;
@@ -19,7 +25,7 @@ interface AmazonConfirmRequest {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🚨 Amazon確定API開始 - ver.10 (楽天ロジック移植版)');
+  console.log('🚨 Amazon確定API開始 - ver.11 (完全修正版)');
   
   try {
     const body: AmazonConfirmRequest = await request.json();
@@ -87,7 +93,7 @@ export async function POST(request: NextRequest) {
           // 更新
           const { error: updateError } = await supabase
             .from('web_sales_summary')
-            .update({ amazon_count: totalQuantity }) // amazon_count を更新
+            .update({ amazon_count: totalQuantity })
             .eq('id', existingData.id);
           if (updateError) throw updateError;
         } else {
@@ -97,7 +103,7 @@ export async function POST(request: NextRequest) {
             .insert({
               product_id: productId,
               report_month: reportMonth,
-              amazon_count: totalQuantity, // amazon_count を挿入
+              amazon_count: totalQuantity,
             });
           if (insertError) throw insertError;
         }
