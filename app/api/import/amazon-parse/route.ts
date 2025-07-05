@@ -1,163 +1,142 @@
-// /app/api/import/amazon-parse/route.ts  ver.9  (千区切りカンマ対策版)
+// app/api/import/amazon-parse/route.ts
+// -----------------------------------------------------------------------------
+// ver. 9  – 2025-07-05
+// 変更点:
+//   1. csv-parse を採用し RFC4180 準拠で列ズレゼロ
+//   2. 「1,234」の千区切りカンマを除去して数値化
+// -----------------------------------------------------------------------------
+
 import { NextRequest, NextResponse } from 'next/server'
+import { parse } from 'csv-parse/sync'       // ★ 公式 CSV パーサ
+import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { findBestMatchSimplified } from '@/lib/csvHelpers'
 
 export const dynamic = 'force-dynamic'
 
-// ------------------------------------------------------------
-// ① CSV 1 行を手作業で分解（ver.8 と同じ実装）
-// ------------------------------------------------------------
-function parseCsvLine(line: string): string[] {
-  const columns = []
-  let currentColumn = ''
-  let inQuotes = false
+// -----------------------------------------------------------------------------
+// 型定義
+// -----------------------------------------------------------------------------
+const CsvSchema = z.object({
+  ASIN:             z.string(),
+  商品名:              z.string(),
+  注文品目総数:          z.string(),  // N 列 (数量)
+  単価:               z.string(),  // 金額
+  注文日:              z.string()   // "2025/06/01"
+})
+type CsvRow = z.infer<typeof CsvSchema>
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
+// -----------------------------------------------------------------------------
+// ユーティリティ
+// -----------------------------------------------------------------------------
+/** 「1,234」「 1 234 」→ Number(1234) */
+const toNumber = (raw: string) =>
+  Number(raw.replace(/[,，\s]/g, '').trim() || 0)
 
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        // 二重引用符はエスケープ
-        currentColumn += '"'
-        i++
-      } else {
-        inQuotes = !inQuotes
-      }
-    } else if (char === ',' && !inQuotes) {
-      columns.push(currentColumn.trim())
-      currentColumn = ''
-    } else {
-      currentColumn += char
-    }
-  }
-  columns.push(currentColumn.trim())
-  return columns
+/** CSV 全文をオブジェクト配列へ */
+function parseCsv(text: string): CsvRow[] {
+  return parse(text, {
+    columns: true,
+    skip_empty_lines: true,
+    delimiter: ',',
+    quote: '"',
+    relax_column_count: true,
+    trim: true
+  }).map((raw: any) => CsvSchema.parse(raw))
 }
 
-// ★ 追加 ────────────────────────────────
-/** 「1,234」のような千区切りカンマ・空白を除去して数値化 */
-const cleanNumber = (raw: string) =>
-  Number(raw.replace(/[,，\s]/g, '').trim() || 0)
-// ────────────────────────────────────────
-
-export async function POST(request: NextRequest) {
+// -----------------------------------------------------------------------------
+// POST
+// -----------------------------------------------------------------------------
+export async function POST(req: NextRequest) {
   try {
-    console.log('Amazon CSV解析開始 (ver.9 千区切り対応)')
-
-    const formData = await request.formData()
-    const file = formData.get('file') as File
+    // 1. multipart/form-data から CSV ファイル取得
+    const form = await req.formData()
+    const file = form.get('file') as File
     if (!file) {
       return NextResponse.json(
-        { error: 'ファイルが選択されていません' },
+        { ok: false, error: 'CSV ファイルが選択されていません' },
         { status: 400 }
       )
     }
 
-    const text = await file.text()
-    const lines = text.split('\n').filter(line => line.trim())
+    // 2. CSV → 配列
+    const csvText = await file.text()
+    const rows    = parseCsv(csvText)
 
-    if (lines.length < 2) {
-      return NextResponse.json(
-        { error: 'CSVデータが不足しています（ヘッダー+データ行が必要）' },
-        { status: 400 }
-      )
-    }
-
-    // ----------------------------------------------------------
-    // ヘッダー行から列インデックスを取得
-    // ----------------------------------------------------------
-    const headers = parseCsvLine(lines[0])
-    const titleIndex    = headers.findIndex(h => h.includes('タイトル'))
-    const quantityIndex = headers.findIndex(h => h.includes('注文された商品点数'))
-
-    if (titleIndex === -1 || quantityIndex === -1) {
-      return NextResponse.json(
-        { error: 'タイトル列または数量列が見つかりません' },
-        { status: 400 }
-      )
-    }
-
-    // 商品マスター＆学習データを取得
-    const { data: products, error: productsError } =
+    // 3. 商品マスター & 学習データ
+    const { data: products, error: prodErr } =
       await supabase.from('products').select('*')
-    if (productsError)
-      throw new Error(`商品マスターの取得に失敗: ${productsError.message}`)
+    if (prodErr) throw prodErr
 
-    const { data: learningData } =
+    const { data: learns } =
       await supabase.from('amazon_product_mapping')
                     .select('amazon_title, product_id')
 
-    // ----------------------------------------------------------
-    // 行ループ
-    // ----------------------------------------------------------
-    const matchedResults: any[]   = []
-    const unmatchedProducts: any[] = []
-    const blankTitleRows: any[]   = []   // ver.8 空欄検知機能
+    // 4. 行ループ & マッチング
+    const matched:   { productId: string; productName: string; qty: number; amazonTitle: string }[] = []
+    const unmatched: { amazonTitle: string; qty: number }[] = []
 
-    for (let i = 1; i < lines.length; i++) {
-      const row = parseCsvLine(lines[i])
-      if (row.length <= Math.max(titleIndex, quantityIndex)) continue
+    for (const r of rows) {
+      const qty = toNumber(r.注文品目総数)      // ★ カンマ除去後に数値化
+      if (!qty) continue                       // 0 はスキップ
 
-      const amazonTitle = row[titleIndex]?.trim()
-      // ★ 変更：parseInt → cleanNumber でカンマを除去して数値化
-      const quantity    = cleanNumber(row[quantityIndex])  // ここだけ変更
-
-      if (quantity <= 0) continue          // 数量0以下はスキップ
-
-      if (!amazonTitle) {                  // タイトル空欄は保留
-        blankTitleRows.push({ rowNumber: i + 1, quantity })
-        continue
-      }
-
-      const matchedProduct = findBestMatchSimplified(
-        amazonTitle,
-        products || [],
-        learningData || []
+      const hit = findBestMatchSimplified(
+        r.商品名.trim(),
+        products ?? [],
+        learns   ?? []
       )
 
-      if (matchedProduct) {
-        matchedResults.push({
-          productId: matchedProduct.id,
-          productName: matchedProduct.name,
-          amazonTitle,
-          quantity,
-          matched: true,
-          matchType: matchedProduct.matchType || 'medium'
+      if (hit) {
+        matched.push({
+          productId:   hit.id,
+          productName: hit.name,
+          amazonTitle: r.商品名,
+          qty
         })
       } else {
-        unmatchedProducts.push({ amazonTitle, quantity, matched: false })
+        unmatched.push({ amazonTitle: r.商品名, qty })
       }
     }
 
-    // ----------------------------------------------------------
-    // 集計サマリーをレスポンス
-    // ----------------------------------------------------------
-    const matchedQuantity   = matchedResults.reduce((s, r) => s + r.quantity, 0)
-    const unmatchedQuantity = unmatchedProducts.reduce((s, r) => s + r.quantity, 0)
-    const blankTitleQuantity = blankTitleRows.reduce((s, r) => s + r.quantity, 0)
+    // 5. 必要なら DB へ upsert
+    /*
+    if (matched.length) {
+      const { error: upErr } = await supabase
+        .from('amazon_sales_raw')
+        .upsert(
+          matched.map(m => ({
+            product_id: m.productId,
+            date:       rows[0].注文日,
+            amazon_qty: m.qty
+          })),
+          { onConflict: 'product_id,date' }
+        )
+      if (upErr) throw upErr
+    }
+    */
+
+    // 6. サマリー
+    const matchedQty   = matched.reduce((s, r) => s + r.qty, 0)
+    const unmatchedQty = unmatched.reduce((s, r) => s + r.qty, 0)
 
     return NextResponse.json({
-      matchedResults,
-      unmatchedProducts,
+      ok: true,
       summary: {
-        totalRows: lines.length - 1,
-        processedRows: matchedResults.length + unmatchedProducts.length,
-        matchedCount: matchedResults.length,
-        unmatchedCount: unmatchedProducts.length,
-        csvTotalQuantity: matchedQuantity + unmatchedQuantity,
-        matchedQuantity,
-        unmatchedQuantity,
-        blankTitleInfo: {
-          count: blankTitleRows.length,
-          quantity: blankTitleQuantity
-        }
-      }
+        totalRows: rows.length,
+        matchedRows: matched.length,
+        unmatchedRows: unmatched.length,
+        csvTotalQty: matchedQty + unmatchedQty,
+        matchedQty,
+        unmatchedQty
+      },
+      matched,
+      unmatched
     })
-  } catch (error) {
-    console.error('Amazon CSV解析エラー:', error)
+  } catch (err) {
+    console.error('Amazon CSV 解析エラー:', err)
     return NextResponse.json(
-      { error: 'CSV解析中にエラーが発生しました: ' + (error as Error).message },
+      { ok: false, error: (err as Error).message },
       { status: 500 }
     )
   }
