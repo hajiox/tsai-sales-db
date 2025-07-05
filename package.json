@@ -70,7 +70,7 @@
     "react-dom": "^19",
     "react-hook-form": "^7.51.3",
     "react-is": "^18.2.0",
-    "react-lazy-load-image-component": "^2.0.8",
+    "react-lazyload": "^3.2.1",
     "tailwind-merge": "latest",
     "tailwindcss-animate": "latest",
     "use-debounce": "^10.1.0",
