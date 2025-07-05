@@ -1,274 +1,463 @@
-// /lib/csvHelpers.ts  ver.12
-// ------------------------------------------------------------
-// 共通ユーティリティと簡易マッチングヘルパー（バランス調整版）
-// ------------------------------------------------------------
-import iconv from 'iconv-lite';
+// /components/AmazonCsvImportModal.tsx ver.16 (UI統合・マッチング修正版)
+'use client';
 
-/* ------------------------------------------------------------------ */
-/* 1. バイナリ → UTF-8 自動判定デコード                               */
-/* ------------------------------------------------------------------ */
-export function detectAndDecode(buf: Buffer): string {
-  const utf8 = buf.toString('utf8');
-  const bad  = (utf8.match(/\uFFFD/g) || []).length;
-  if (bad / utf8.length > 0.03) {
-    return iconv.decode(buf, 'shift_jis');
-  }
-  return utf8;
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle, Edit2, Check, Save } from 'lucide-react';
+
+interface Product {
+ id: string;
+ name: string;
+ series: string;
+ series_code: number;
+ product_code: number;
 }
 
-/* ------------------------------------------------------------------ */
-/* 2. 商品データ型（Qoo10対応追加）                                     */
-/* ------------------------------------------------------------------ */
-export interface Product {
-  id: string;
-  name: string;
-  series?: string;
-  amazon_title?: string;
-  rakuten_title?: string;
-  yahoo_title?: string;
-  mercari_title?: string;
-  base_title?: string;        // 🏪 BASE対応
-  qoo10_title?: string;       // 🟣 Qoo10対応追加
+interface MatchedProduct {
+  amazonTitle: string;
+  productId: string;
+  productName: string;
+  quantity: number;
 }
 
-interface LearningMap {
-  amazon_title?: string;
-  rakuten_title?: string;
-  yahoo_title?: string;
-  mercari_title?: string;
-  base_title?: string;        // 🏪 BASE対応
-  qoo10_title?: string;       // 🟣 Qoo10対応追加
-  product_id: string;
+interface AmazonCsvImportModalProps {
+ isOpen: boolean;
+ onClose: () => void;
+ onSuccess: () => void;
+ products: Product[];
 }
 
-/* ------------------------------------------------------------------ */
-/* 3. タイトルから重要キーワード抽出（バランス版）                     */
-/* ------------------------------------------------------------------ */
-export function extractImportantKeywords(title: string): string[] {
-  // 一般的すぎるキーワードを除外（ただし「ラーメン」「セット」は重要）
-  const commonWords = ['送料無料', '個', '食'];
-  
-  // ブランド・商品特有のキーワード（重要度高）
-  const importantBrands = [
-    '激辛', 'チャーシュー', '訳あり', 'レトルト', '極厚', 'カット', '650g',
-    '個包装', '冷凍発送', '焼豚', '炒飯', 'トッピング',
-    '会津ブランド館', 'プロ仕様', '二郎インスパイア系',
-    // BASE特有キーワード
-    'つけ麺', 'パーフェクトラーメン', '極にぼし', '魚介豚骨', 'オーション',
-    '極太麺', '付け麺', 'どろスープ', '魚粉', '喜多方', '山塩', 'BUTA', 'IE-K',
-    // Qoo10特有キーワード
-    'インスパイア系', 'チャーシュー付き', '備蓄食', '非常食', 'アウトドア', '常温発送',
-    // 味のキーワード（重要）
-    'ラーメン', 'セット', '醤油', '味噌', '塩', '豚骨', '鶏白湯', 'つけめん'
-  ];
-  
-  // 数量・重量パターンを抽出（例: 800g, 1Kg, 200g×5個）
-  const quantityPattern = /\d+[gkgKG個枚袋本]|[\d]+×[\d]+/g;
-  const quantities = title.match(quantityPattern) || [];
-  
-  const words = title
-    .replace(/[「」【】［］\[\]\(\)、。,.]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  
-  // 重要キーワードと数量を組み合わせ
-  const keywords = Array.from(new Set([
-    ...words.filter(w => !commonWords.includes(w)),
-    ...importantBrands.filter(b => title.includes(b)),
-    ...quantities
-  ]));
-  
-  return keywords;
-}
+export default function AmazonCsvImportModal({ 
+ isOpen, 
+ onClose, 
+ onSuccess,
+ products
+}: AmazonCsvImportModalProps) {
+ const [step, setStep] = useState(1);
+ const [csvFile, setCsvFile] = useState<File | null>(null);
+ const [parseResult, setParseResult] = useState<any>(null);
+ const [isLoading, setIsLoading] = useState(false);
+ const [error, setError] = useState<string>('');
+ const [saleMonth, setSaleMonth] = useState<string>(() => {
+   const now = new Date();
+   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+ });
+ 
+ // マッチング修正用の状態
+ const [allMappings, setAllMappings] = useState<Array<{
+   amazonTitle: string;
+   productId: string;
+   productName: string;
+   quantity: number;
+   isLearned?: boolean;
+ }>>([]);
+ const [savingMapping, setSavingMapping] = useState<string | null>(null);
 
-/* ------------------------------------------------------------------ */
-/* 4. シンプル類似度マッチング（バランス版・重複防止機能付き）         */
-/* ------------------------------------------------------------------ */
-// 既にマッチ済みの商品IDを記録するSet（関数外で保持）
-const matchedProductIds = new Set<string>();
+ useEffect(() => {
+   if (!isOpen) {
+     setStep(1);
+     setCsvFile(null);
+     setParseResult(null);
+     setError('');
+     setAllMappings([]);
+     setSavingMapping(null);
+   }
+ }, [isOpen]);
 
-// 特定キーワードの組み合わせによる専用マッチングルール
-const specialMatchingRules = [
-  {
-    keywords: ['炊き込み', 'チャーシュー'],
-    productName: 'チャーシュー 炊き込みご飯の素',
-    priority: 100 // 最優先
-  },
-  // 今後、似た問題が発生したらここに追加
-];
+ useEffect(() => {
+   if (parseResult && step === 3) {
+     // Step 3に移行時、全マッピングを統合
+     const matched = parseResult.matchedProducts || [];
+     const unmatched = parseResult.unmatchedProducts || [];
+     
+     const mappings = [
+       ...matched.map((m: MatchedProduct) => ({ ...m, isLearned: false })),
+       ...unmatched.map((u: any) => ({
+         amazonTitle: u.amazonTitle,
+         productId: '',
+         productName: '',
+         quantity: u.quantity,
+         isLearned: false
+       }))
+     ];
+     
+     setAllMappings(mappings);
+   }
+ }, [parseResult, step]);
 
-export function findBestMatchSimplified(
-  title: string,
-  products: Product[],
-  learning: LearningMap[],
-  resetMatches?: boolean // バッチ処理の開始時にtrueを渡してリセット
-): Product | null {
-  // マッチ済みIDをリセット（新しいCSV処理の開始時）
-  if (resetMatches) {
-    matchedProductIds.clear();
-  }
+ if (!isOpen) return null;
 
-  // 0. 特定キーワードによる専用マッチング（最優先）
-  for (const rule of specialMatchingRules) {
-    const hasAllKeywords = rule.keywords.every(keyword => title.includes(keyword));
-    if (hasAllKeywords) {
-      const specialProduct = products.find(p => 
-        p.name.includes(rule.productName) && !matchedProductIds.has(p.id)
-      );
-      if (specialProduct) {
-        console.log(`🎯 特殊ルールでマッチ: "${title}" → "${specialProduct.name}"`);
-        matchedProductIds.add(specialProduct.id);
-        return specialProduct;
-      }
+ const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        setCsvFile(file);
+        setParseResult(null);
+        setError('');
+        setAllMappings([]);
     }
-  }
+ };
 
-  // 4-1. 学習データ完全一致（最優先）
-  const learned = learning.find((m) =>
-    [m.amazon_title, m.rakuten_title, m.yahoo_title, m.mercari_title, m.base_title, m.qoo10_title].includes(title)
-  );
-  if (learned) {
-    const product = products.find((p) => p.id === learned.product_id);
-    // 既にマッチ済みの商品は除外
-    if (product && !matchedProductIds.has(product.id)) {
-      matchedProductIds.add(product.id);
-      return product;
-    }
-  }
+ const handleParse = async () => {
+   if (!csvFile) {
+     setError('CSVファイルを選択してください');
+     return;
+   }
+   setIsLoading(true);
+   setError('');
+   try {
+     const formData = new FormData();
+     formData.append('file', csvFile);
 
-  // 4-2. 商品名の完全一致
-  const direct = products.find((p) =>
-    !matchedProductIds.has(p.id) && // 既にマッチ済みは除外
-    [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name].includes(title)
-  );
-  if (direct) {
-    matchedProductIds.add(direct.id);
-    return direct;
-  }
+     const response = await fetch('/api/import/amazon-parse', {
+       method: 'POST',
+       body: formData,
+     });
 
-  // 4-3. バランス版キーワードスコアリング
-  const keywords = extractImportantKeywords(title);
-  if (keywords.length === 0) return null;
-  
-  let bestMatch: { product: Product; score: number; matchRatio: number } | null = null;
-  
-  for (const p of products) {
-    // 既にマッチ済みの商品はスキップ
-    if (matchedProductIds.has(p.id)) continue;
-    
-    const targetTitles = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name]
-      .filter(Boolean);
-    
-    let maxScore = 0;
-    let bestMatchRatio = 0;
-    
-    // 各タイトルと比較
-    for (const targetTitle of targetTitles) {
-      const targetKeywords = extractImportantKeywords(targetTitle);
-      
-      // キーワードマッチング（単方向でOK、ただし重要キーワードを重視）
-      const matchedKeywords = keywords.filter(k => {
-        // 完全一致を優先
-        if (targetTitle.includes(k)) return true;
-        // 部分一致も許可（3文字以上のキーワードのみ）
-        if (k.length >= 3) {
-          return targetTitle.toLowerCase().includes(k.toLowerCase());
+     const result = await response.json();
+
+     if (!response.ok || !result.ok) {
+       throw new Error(result.error || 'Amazon CSVの解析に失敗しました');
+     }
+     
+     setParseResult({
+        matchedProducts: result.matched?.map((item: any) => ({
+          amazonTitle: item.amazonTitle,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.qty
+        })) || [],
+        unmatchedProducts: result.unmatched?.map((item: any) => ({
+          amazonTitle: item.amazonTitle,
+          quantity: item.qty
+        })) || [],
+        summary: {
+          ...result.summary,
+          csvTotalQuantity: result.summary.csvTotalQty,
+          matchedQuantity: result.summary.matchedQty,
+          blankTitleInfo: result.summary.blankTitleInfo,
+          duplicateMatches: result.summary.duplicateMatches
         }
-        return false;
-      });
-      
-      // マッチ率を計算
-      const matchRatio = matchedKeywords.length / keywords.length;
-      
-      // スコア計算（マッチした数 + 重要キーワードボーナス）
-      let score = matchedKeywords.length;
-      
-      // 重要キーワードにボーナス
-      if (matchedKeywords.some(k => ['チャーシュー', '激辛', 'つけ麺', 'パーフェクトラーメン'].includes(k))) {
-        score += 2;
-      }
-      
-      if (score > maxScore) {
-        maxScore = score;
-        bestMatchRatio = matchRatio;
-      }
-    }
-    
-    // より高いスコアとマッチ率を記録
-    if (maxScore > 0 && (!bestMatch || maxScore > bestMatch.score)) {
-      bestMatch = { product: p, score: maxScore, matchRatio: bestMatchRatio };
-    }
-  }
-  
-  // バランス：最低限のマッチ率（35%）とスコア（2以上）を要求
-  if (bestMatch && bestMatch.matchRatio >= 0.35 && bestMatch.score >= 2) {
-    matchedProductIds.add(bestMatch.product.id);
-    return bestMatch.product;
-  }
-  
-  return null;
-}
+     });
 
-/* ------------------------------------------------------------------ */
-/* 5. チャネル別シンプルマッチング（メルカリ・BASE用）                 */
-/* ------------------------------------------------------------------ */
-export function findBestMatchByChannel(
-  title: string,
-  products: Product[],
-  channel: string
-): { product: Product; confidence: number } | null {
-  // 5-1. 商品名の完全一致
-  const channelKey = `${channel}_title` as keyof Product;
-  const direct = products.find((p) =>
-    [p[channelKey], p.name].includes(title)
-  );
-  if (direct) return { product: direct, confidence: 100 };
+     setStep(2);
+   } catch (error) {
+     console.error('Amazon CSV解析エラー:', error);
+     setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
+   } finally {
+     setIsLoading(false);
+   }
+ };
 
-  // 5-2. バランス版キーワードスコアリング
-  const keywords = extractImportantKeywords(title);
-  if (keywords.length === 0) return null;
-  
-  let best: { product: Product; score: number; matchRatio: number } | null = null;
-  
-  for (const p of products) {
-    const targetTitles = [p[channelKey], p.name].filter(Boolean);
-    
-    let maxScore = 0;
-    let bestMatchRatio = 0;
-    
-    for (const targetTitle of targetTitles) {
-      const matchedKeywords = keywords.filter(k => {
-        if (targetTitle.includes(k)) return true;
-        if (k.length >= 3) {
-          return targetTitle.toLowerCase().includes(k.toLowerCase());
-        }
-        return false;
-      });
-      
-      const matchRatio = matchedKeywords.length / keywords.length;
-      let score = matchedKeywords.length;
-      
-      // 重要キーワードボーナス
-      if (matchedKeywords.some(k => ['チャーシュー', '激辛', 'つけ麺', 'パーフェクトラーメン'].includes(k))) {
-        score += 2;
-      }
-      
-      if (score > maxScore) {
-        maxScore = score;
-        bestMatchRatio = matchRatio;
-      }
-    }
-    
-    if (maxScore > 0 && (!best || maxScore > best.score)) {
-      best = { product: p, score: maxScore, matchRatio: bestMatchRatio };
-    }
-  }
-  
-  // 信頼度計算（バランス版）
-  if (best && best.matchRatio >= 0.35 && best.score >= 2) {
-    const confidence = Math.min(95, Math.round(best.matchRatio * 75 + best.score * 8));
-    return { product: best.product, confidence };
-  }
-  
-  return null;
+ // 個別学習機能
+ const handleLearnMapping = async (index: number) => {
+   const mapping = allMappings[index];
+   if (!mapping.productId || mapping.isLearned) return;
+
+   setSavingMapping(mapping.amazonTitle);
+   
+   try {
+     const response = await fetch('/api/import/amazon-learn', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({
+         amazonTitle: mapping.amazonTitle,
+         productId: mapping.productId
+       }),
+     });
+
+     const result = await response.json();
+     if (result.success) {
+       setAllMappings(prev => prev.map((m, i) => 
+         i === index ? { ...m, isLearned: true } : m
+       ));
+     } else {
+       throw new Error(result.error || '学習に失敗しました');
+     }
+   } catch (error) {
+     console.error('学習エラー:', error);
+     alert('学習に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'));
+   } finally {
+     setSavingMapping(null);
+   }
+ };
+
+ // マッピング変更
+ const handleMappingChange = (index: number, productId: string) => {
+   const product = products.find(p => p.id === productId);
+   setAllMappings(prev => prev.map((m, i) => 
+     i === index ? { 
+       ...m, 
+       productId, 
+       productName: product?.name || '',
+       isLearned: false 
+     } : m
+   ));
+ };
+
+ const handleConfirm = async () => {
+   setIsLoading(true);
+   setError('');
+   try {
+     // 有効なマッピングのみ抽出
+     const validMappings = allMappings.filter(m => m.productId);
+     
+     const requestData = {
+       saleDate: `${saleMonth}-01`,
+       matchedProducts: validMappings,
+       newMappings: [],
+     };
+
+     const response = await fetch('/api/import/amazon-confirm', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(requestData),
+     });
+
+     const result = await response.json();
+     if (!result.success) {
+       throw new Error(result.error || '確定処理に失敗しました');
+     }
+
+     alert(`Amazon CSVデータが正常に登録されました\n登録件数: ${result.totalCount}件`);
+     onSuccess();
+   } catch (error) {
+     console.error('Amazon CSV確定エラー:', error);
+     setError(error instanceof Error ? error.message : '確定処理中にエラーが発生しました');
+   } finally {
+     setIsLoading(false);
+   }
+ };
+
+ // 統計情報の計算
+ const getStats = () => {
+   if (step === 3 && allMappings.length > 0) {
+     const matched = allMappings.filter(m => m.productId).length;
+     const unmatched = allMappings.filter(m => !m.productId).length;
+     const totalQuantity = allMappings.filter(m => m.productId).reduce((sum, m) => sum + m.quantity, 0);
+     return { matched, unmatched, totalQuantity };
+   } else if (parseResult) {
+     const matched = parseResult.matchedProducts?.length || 0;
+     const unmatched = parseResult.unmatchedProducts?.length || 0;
+     const totalQuantity = parseResult.summary.matchedQuantity || 0;
+     return { matched, unmatched, totalQuantity };
+   }
+   return { matched: 0, unmatched: 0, totalQuantity: 0 };
+ };
+
+ const stats = getStats();
+
+ return (
+   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+     <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
+       <div className="flex justify-between items-center p-6 border-b">
+         <h2 className="text-xl font-bold">Amazon CSV インポート</h2>
+         <Button variant="ghost" size="sm" onClick={onClose}><X className="h-4 w-4" /></Button>
+       </div>
+
+       <div className="p-6">
+         {step === 1 && (
+           <>
+             <p className="text-gray-600 mb-4">Amazonの注文レポートCSVをアップロードしてください。</p>
+             {error && (
+               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                 <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                 <span className="text-red-600 text-sm">{error}</span>
+               </div>
+             )}
+             <div className="mb-6">
+               <label className="block text-sm font-medium mb-2">Amazon CSV ファイル:</label>
+               <div className="flex items-center gap-4 p-4 border-2 border-dashed rounded-lg">
+                 <label htmlFor="amazon-csv-upload" className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition-colors">ファイルを選択</label>
+                 <Input id="amazon-csv-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+                 <div className="flex items-center gap-2 text-gray-600">
+                   <FileText className="h-5 w-5 text-gray-400" />
+                   <span>{csvFile ? csvFile.name : '選択されていません'}</span>
+                 </div>
+               </div>
+               <Button onClick={handleParse} disabled={!csvFile || isLoading} className="w-full mt-4">
+                 <Upload className="h-4 w-4 mr-2" />
+                 {isLoading ? '解析中...' : '次へ（確認画面）'}
+               </Button>
+             </div>
+           </>
+         )}
+
+         {step === 2 && parseResult && (
+           <>
+             {parseResult.summary.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
+                <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="h-5 w-5 text-orange-400" aria-hidden="true" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-bold text-orange-700">
+                        警告: 商品名が空欄の行が {parseResult.summary.blankTitleInfo.count} 件見つかりました
+                      </p>
+                       <p className="text-xs text-orange-600 mt-1">
+                          合計 {parseResult.summary.blankTitleInfo.quantity} 個分が処理から除外されます。CSVを修正し再実行してください。
+                        </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+             <div className="mb-4">
+               <label className="block text-sm font-medium mb-2">売上月:</label>
+               <input type="month" value={saleMonth} onChange={(e) => setSaleMonth(e.target.value)} className="border rounded-md p-2 w-full" />
+             </div>
+             <Card>
+               <CardHeader><CardTitle className="flex items-center gap-2">📊 数量チェック</CardTitle></CardHeader>
+               <CardContent className="grid grid-cols-3 gap-4">
+                 <div className="text-center">
+                   <div className="text-sm text-gray-600">CSV総行数</div>
+                   <div className="text-2xl font-bold text-blue-600">{parseResult.summary.totalRows}件</div>
+                 </div>
+                 <div className="text-center">
+                   <div className="text-sm text-gray-600">CSV総販売数量</div>
+                   <div className="text-2xl font-bold text-blue-600">{parseResult.summary.csvTotalQuantity}個</div>
+                 </div>
+                 <div className="text-center">
+                   <div className="text-sm text-gray-600">登録可能数量</div>
+                   <div className="text-2xl font-bold text-green-600">{stats.totalQuantity}個</div>
+                 </div>
+               </CardContent>
+             </Card>
+             
+             <div className="grid grid-cols-2 gap-4 my-4">
+               <Card className="bg-green-50">
+                 <CardHeader><CardTitle className="text-green-700">マッチ済み</CardTitle></CardHeader>
+                 <CardContent><div className="text-2xl font-bold text-green-600">{stats.matched}件</div></CardContent>
+               </Card>
+               <Card className="bg-yellow-50">
+                 <CardHeader><CardTitle className="text-yellow-700">未マッチ</CardTitle></CardHeader>
+                 <CardContent><div className="text-2xl font-bold text-yellow-600">{stats.unmatched}件</div></CardContent>
+               </Card>
+             </div>
+             
+             <div className="flex gap-2">
+               <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                 <ArrowLeft className="h-4 w-4 mr-2" />戻る
+               </Button>
+               <Button onClick={() => setStep(3)} className="flex-1">
+                 <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
+               </Button>
+             </div>
+           </>
+         )}
+
+         {step === 3 && (
+           <>
+             <h3 className="text-lg font-bold mb-4">マッチング結果の修正</h3>
+             <Card className="mb-4">
+               <CardHeader>
+                 <CardTitle>📊 現在の状況</CardTitle>
+               </CardHeader>
+               <CardContent>
+                 <div className="grid grid-cols-3 gap-4 text-center">
+                   <div>
+                     <div className="text-sm text-gray-600">合計</div>
+                     <div className="text-2xl font-bold">{allMappings.length}件</div>
+                   </div>
+                   <div>
+                     <div className="text-sm text-gray-600">マッチ済み</div>
+                     <div className="text-2xl font-bold text-green-600">{stats.matched}件</div>
+                   </div>
+                   <div>
+                     <div className="text-sm text-gray-600">未マッチ</div>
+                     <div className="text-2xl font-bold text-yellow-600">{stats.unmatched}件</div>
+                   </div>
+                 </div>
+               </CardContent>
+             </Card>
+             
+             <Card>
+               <CardHeader>
+                 <CardTitle>📋 商品マッピング一覧</CardTitle>
+                 <p className="text-sm text-gray-600">
+                   Amazon商品名とマスタ商品を紐付けてください。未マッチの商品は空欄のまま保存されません。
+                 </p>
+               </CardHeader>
+               <CardContent>
+                 <div className="space-y-3 max-h-96 overflow-y-auto">
+                   {allMappings.map((mapping, index) => (
+                     <div key={index} className={`p-4 border rounded-lg ${mapping.productId ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                         <div>
+                           <label className="text-sm font-medium text-gray-700">Amazon商品名</label>
+                           <div className="mt-1 p-2 bg-white rounded border text-sm break-words">
+                             {mapping.amazonTitle}
+                           </div>
+                           <div className="text-xs text-gray-500 mt-1">数量: {mapping.quantity}個</div>
+                         </div>
+                         <div>
+                           <label className="text-sm font-medium text-gray-700">マスタ商品</label>
+                           <select
+                             value={mapping.productId}
+                             onChange={(e) => handleMappingChange(index, e.target.value)}
+                             className="mt-1 w-full p-2 border rounded text-sm"
+                           >
+                             <option value="">-- 未選択（この商品はスキップ） --</option>
+                             {products.map(p => (
+                               <option key={p.id} value={p.id}>{p.name}</option>
+                             ))}
+                           </select>
+                           {mapping.productId && (
+                             <div className="mt-2 flex items-center gap-2">
+                               <Button
+                                 size="sm"
+                                 variant={mapping.isLearned ? "secondary" : "default"}
+                                 disabled={mapping.isLearned || savingMapping === mapping.amazonTitle}
+                                 onClick={() => handleLearnMapping(index)}
+                               >
+                                 {savingMapping === mapping.amazonTitle ? (
+                                   <>学習中...</>
+                                 ) : mapping.isLearned ? (
+                                   <>
+                                     <Check className="h-3 w-3 mr-1" />
+                                     学習済み
+                                   </>
+                                 ) : (
+                                   <>
+                                     <Save className="h-3 w-3 mr-1" />
+                                     この組み合わせを学習
+                                   </>
+                                 )}
+                               </Button>
+                             </div>
+                           )}
+                         </div>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               </CardContent>
+             </Card>
+             
+             {error && (
+               <div className="my-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                 <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                 <span className="text-red-600 text-sm">{error}</span>
+               </div>
+             )}
+             
+             <div className="flex gap-2 mt-4">
+               <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+                 <ArrowLeft className="h-4 w-4 mr-2" />確認画面に戻る
+               </Button>
+               <Button 
+                 onClick={handleConfirm} 
+                 disabled={isLoading || stats.matched === 0} 
+                 className="flex-1"
+               >
+                 {isLoading ? '処理中...' : `インポート実行（${stats.matched}件）`}
+               </Button>
+             </div>
+           </>
+         )}
+       </div>
+     </div>
+   </div>
+ );
 }
