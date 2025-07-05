@@ -42,16 +42,15 @@
     "@radix-ui/react-tabs": "latest",
     "@radix-ui/react-toast": "latest",
     "@radix-ui/react-toggle": "latest",
-    "@radix-ui/react-tooltip": "latest",
     "@radix-ui/react-toolbar": "latest",
     "@radix-ui/react-tooltip": "latest",
     "@radix-ui/themes": "latest",
-    "@upstash/ratelimit": "^0.5.5",
+    "@upstash/ratelimit": "^2.0.5",
     "ai": "latest",
     "chart.js": "^4.4.3",
     "class-variance-authority": "latest",
     "clsx": "^2.1.1",
-    "csv-parse": "^5.6.0",          
+    "csv-parse": "^5.6.0",
     "dotenv": "^16.4.5",
     "flowbite-react": "^0.4.16",
     "framer-motion": "^11.0.0",
@@ -84,8 +83,8 @@
     "@types/react-calendar": "^4.1.0",
     "@types/react-dom": "^19",
     "@types/papaparse": "^5.3.14",
-    "postcss": "^8.5",
+    "postcss": "^8.5.0",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "typescript": "^5.4.0"
   }
 }
