@@ -1,11 +1,11 @@
-// /components/AmazonCsvImportModal.tsx ver.13 (amazon-parse ver.9対応版)
+// /components/AmazonCsvImportModal.tsx ver.14 (AIマッチング修正機能追加版)
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle } from 'lucide-react';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle, Edit2, Check } from 'lucide-react';
 
 interface Product {
  id: string;
@@ -13,6 +13,13 @@ interface Product {
  series: string;
  series_code: number;
  product_code: number;
+}
+
+interface MatchedProduct {
+  amazonTitle: string;
+  productId: string;
+  productName: string;
+  quantity: number;
 }
 
 interface AmazonCsvImportModalProps {
@@ -40,6 +47,10 @@ export default function AmazonCsvImportModal({
    const now = new Date();
    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
  });
+ 
+ // AIマッチング修正機能用の状態
+ const [editingMatchIndex, setEditingMatchIndex] = useState<number | null>(null);
+ const [modifiedMatches, setModifiedMatches] = useState<Map<number, string>>(new Map());
 
  useEffect(() => {
    if (!isOpen) {
@@ -49,6 +60,8 @@ export default function AmazonCsvImportModal({
      setNewMappings([]);
      setCurrentUnmatchIndex(0);
      setError('');
+     setEditingMatchIndex(null);
+     setModifiedMatches(new Map());
    }
  }, [isOpen]);
 
@@ -61,6 +74,7 @@ export default function AmazonCsvImportModal({
         setParseResult(null);
         setNewMappings([]);
         setError('');
+        setModifiedMatches(new Map());
     }
  };
 
@@ -86,24 +100,23 @@ export default function AmazonCsvImportModal({
        throw new Error(result.error || 'Amazon CSVの解析に失敗しました');
      }
      
-     // amazon-parse ver.11の新形式に対応（重複マッチ情報含む）
      setParseResult({
         matchedProducts: result.matched?.map((item: any) => ({
           amazonTitle: item.amazonTitle,
           productId: item.productId,
           productName: item.productName,
-          quantity: item.qty  // qty -> quantity に変換
+          quantity: item.qty
         })) || [],
         unmatchedProducts: result.unmatched?.map((item: any) => ({
           amazonTitle: item.amazonTitle,
-          quantity: item.qty  // qty -> quantity に変換
+          quantity: item.qty
         })) || [],
         summary: {
           ...result.summary,
-          csvTotalQuantity: result.summary.csvTotalQty,  // csvTotalQty -> csvTotalQuantity
-          matchedQuantity: result.summary.matchedQty,     // matchedQty -> matchedQuantity
-          blankTitleInfo: result.summary.blankTitleInfo,   // そのまま（あれば）
-          duplicateMatches: result.summary.duplicateMatches // 重複マッチ情報
+          csvTotalQuantity: result.summary.csvTotalQty,
+          matchedQuantity: result.summary.matchedQty,
+          blankTitleInfo: result.summary.blankTitleInfo,
+          duplicateMatches: result.summary.duplicateMatches
         }
      });
 
@@ -125,12 +138,10 @@ export default function AmazonCsvImportModal({
    const currentUnmatch = parseResult.unmatchedProducts[currentUnmatchIndex];
    
    if (productId !== 'skip') {
-     // 重複チェック：既にマッチ済みまたは新規マッピングに同じ商品IDがないか確認
      const alreadyMatched = parseResult.matchedProducts?.find((m: any) => m.productId === productId);
      const alreadyInNewMappings = newMappings.find(m => m.productId === productId);
      
      if (alreadyMatched || alreadyInNewMappings) {
-       // 重複警告を表示
        const productName = alreadyMatched?.productName || 
          products.find(p => p.id === productId)?.name || '';
        const existingCount = alreadyMatched?.quantity || 0;
@@ -139,12 +150,6 @@ export default function AmazonCsvImportModal({
          .reduce((sum, m) => sum + m.quantity, 0);
        const totalCount = existingCount + newMappingCount + currentUnmatch.quantity;
        
-       setDuplicateWarning(
-         `⚠️ 警告: "${productName}" には既に${existingCount + newMappingCount}個が紐付けられています。` +
-         `追加すると合計${totalCount}個になります。本当に追加しますか？`
-       );
-       
-       // 確認ダイアログを表示（簡易版：本来はモーダルが望ましい）
        const confirmed = window.confirm(
          `警告: "${productName}" には既に他のAmazon商品が紐付けられています。\n` +
          `現在: ${existingCount + newMappingCount}個\n` +
@@ -152,9 +157,7 @@ export default function AmazonCsvImportModal({
          `本当にこの商品に紐付けますか？`
        );
        
-       if (!confirmed) {
-         return; // キャンセルされた場合は何もしない
-       }
+       if (!confirmed) return;
      }
      
      const mapping = {
@@ -165,7 +168,6 @@ export default function AmazonCsvImportModal({
      setNewMappings(prev => [...prev, mapping]);
    }
 
-   // 警告をクリア
    setDuplicateWarning('');
 
    if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
@@ -175,14 +177,44 @@ export default function AmazonCsvImportModal({
    }
  };
 
+ // AIマッチングの修正を開始
+ const handleStartEditMatch = (index: number) => {
+   setEditingMatchIndex(index);
+ };
+
+ // AIマッチングの修正を保存
+ const handleSaveMatchEdit = (index: number, newProductId: string) => {
+   setModifiedMatches(prev => new Map(prev).set(index, newProductId));
+   setEditingMatchIndex(null);
+ };
+
+ // AIマッチングの修正をキャンセル
+ const handleCancelMatchEdit = () => {
+   setEditingMatchIndex(null);
+ };
+
  const handleConfirm = async () => {
    if (!parseResult) return;
    setIsLoading(true);
    setError('');
    try {
+     // 修正されたマッチングを反映
+     const finalMatchedProducts = parseResult.matchedProducts.map((match: MatchedProduct, index: number) => {
+       const modifiedProductId = modifiedMatches.get(index);
+       if (modifiedProductId) {
+         const modifiedProduct = products.find(p => p.id === modifiedProductId);
+         return {
+           ...match,
+           productId: modifiedProductId,
+           productName: modifiedProduct?.name || match.productName
+         };
+       }
+       return match;
+     });
+
      const requestData = {
        saleDate: `${saleMonth}-01`,
-       matchedProducts: parseResult.matchedProducts || [],
+       matchedProducts: finalMatchedProducts,
        newMappings: newMappings,
      };
 
@@ -317,6 +349,81 @@ export default function AmazonCsvImportModal({
                  </div>
                </CardContent>
              </Card>
+             
+             {/* AIマッチング済み商品の一覧（修正可能） */}
+             {parseResult.matchedProducts && parseResult.matchedProducts.length > 0 && (
+               <Card className="my-4">
+                 <CardHeader>
+                   <CardTitle className="text-green-700 flex items-center justify-between">
+                     <span>✅ AIマッチング済み商品</span>
+                     <span className="text-sm font-normal text-gray-600">
+                       {parseResult.matchedProducts.length}件 / 合計{parseResult.summary.matchedQuantity}個
+                     </span>
+                   </CardTitle>
+                 </CardHeader>
+                 <CardContent>
+                   <div className="space-y-2 max-h-60 overflow-y-auto">
+                     {parseResult.matchedProducts.map((match: MatchedProduct, index: number) => {
+                       const isEditing = editingMatchIndex === index;
+                       const isModified = modifiedMatches.has(index);
+                       const currentProductId = modifiedMatches.get(index) || match.productId;
+                       const currentProduct = products.find(p => p.id === currentProductId);
+                       
+                       return (
+                         <div key={index} className={`p-3 border rounded-lg ${isModified ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
+                           <div className="flex items-start justify-between gap-2">
+                             <div className="flex-1">
+                               <div className="text-sm text-gray-600">Amazon商品: {match.amazonTitle}</div>
+                               <div className="flex items-center gap-2 mt-1">
+                                 {isEditing ? (
+                                   <select
+                                     className="flex-1 p-1 border rounded text-sm"
+                                     value={currentProductId}
+                                     onChange={(e) => handleSaveMatchEdit(index, e.target.value)}
+                                   >
+                                     {products.map(p => (
+                                       <option key={p.id} value={p.id}>{p.name}</option>
+                                     ))}
+                                   </select>
+                                 ) : (
+                                   <div className="flex-1">
+                                     <div className="font-medium">{currentProduct?.name || match.productName}</div>
+                                     {isModified && <span className="text-xs text-blue-600">（修正済み）</span>}
+                                   </div>
+                                 )}
+                                 <span className="text-sm font-medium bg-gray-100 px-2 py-1 rounded">{match.quantity}個</span>
+                               </div>
+                             </div>
+                             <div className="flex items-center gap-1">
+                               {isEditing ? (
+                                 <>
+                                   <Button
+                                     size="sm"
+                                     variant="ghost"
+                                     onClick={() => handleCancelMatchEdit()}
+                                   >
+                                     <X className="h-4 w-4" />
+                                   </Button>
+                                 </>
+                               ) : (
+                                 <Button
+                                   size="sm"
+                                   variant="ghost"
+                                   onClick={() => handleStartEditMatch(index)}
+                                 >
+                                   <Edit2 className="h-4 w-4" />
+                                 </Button>
+                               )}
+                             </div>
+                           </div>
+                         </div>
+                       );
+                     })}
+                   </div>
+                 </CardContent>
+               </Card>
+             )}
+
              <div className="grid grid-cols-2 gap-4 my-4">
                <Card className="bg-green-50">
                  <CardHeader><CardTitle className="text-green-700">マッチ済み</CardTitle></CardHeader>
