@@ -1,4 +1,4 @@
-// /components/AmazonCsvImportModal.tsx ver.12 (構文エラー修正・完全版)
+// /components/AmazonCsvImportModal.tsx ver.13 (amazon-parse ver.9対応版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -81,14 +81,28 @@ export default function AmazonCsvImportModal({
 
      const result = await response.json();
 
-     if (!response.ok) {
+     if (!response.ok || !result.ok) {
        throw new Error(result.error || 'Amazon CSVの解析に失敗しました');
      }
      
+     // amazon-parse ver.9の新形式に対応
      setParseResult({
-        matchedProducts: result.matchedResults,
-        unmatchedProducts: result.unmatchedProducts,
-        summary: result.summary
+        matchedProducts: result.matched?.map((item: any) => ({
+          amazonTitle: item.amazonTitle,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.qty  // qty -> quantity に変換
+        })) || [],
+        unmatchedProducts: result.unmatched?.map((item: any) => ({
+          amazonTitle: item.amazonTitle,
+          quantity: item.qty  // qty -> quantity に変換
+        })) || [],
+        summary: {
+          ...result.summary,
+          csvTotalQuantity: result.summary.csvTotalQty,  // csvTotalQty -> csvTotalQuantity
+          matchedQuantity: result.summary.matchedQty,     // matchedQty -> matchedQuantity
+          blankTitleInfo: result.summary.blankTitleInfo   // そのまま（あれば）
+        }
      });
 
      setStep(2);
