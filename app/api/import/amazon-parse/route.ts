@@ -1,5 +1,5 @@
 // app/api/import/amazon-parse/route.ts
-// ver.11 - 重複マッチ防止機能付き
+// ver.10 - CSV解析改善版（ヘッダー自動検出・カンマ対応）
 
 import { NextRequest, NextResponse } from 'next/server';
 import { parse } from 'csv-parse/sync';
@@ -28,7 +28,7 @@ function parseCsvWithHeader(text: string): any[] {
 
 export async function POST(req: NextRequest) {
   try {
-    console.log('🔍 Amazon CSV解析開始 - ver.11（重複マッチ防止機能付き）');
+    console.log('🔍 Amazon CSV解析開始 - ver.10');
     
     // 1. ファイル取得
     const form = await req.formData();
@@ -42,6 +42,9 @@ export async function POST(req: NextRequest) {
     const records = parseCsvWithHeader(csvText);
     
     console.log(`📊 CSV行数: ${records.length}行`);
+    if (records.length > 0) {
+      console.log('📋 ヘッダー:', Object.keys(records[0]));
+    }
 
     // 3. 商品マスター & 学習データ
     const { data: products, error: prodErr } =
@@ -52,14 +55,10 @@ export async function POST(req: NextRequest) {
       await supabase.from('amazon_product_mapping')
                     .select('amazon_title, product_id');
 
-    // 4. 重複マッチ防止用のマップ（商品IDごとに数量を集計）
-    const productQuantityMap = new Map<string, {
-      productName: string;
-      amazonTitles: Array<{ title: string; qty: number }>;
-      totalQty: number;
-    }>();
+    // 🔄 マッチング開始前にリセット（重複防止のため）
+    findBestMatchSimplified('', [], [], true);
 
-    // 5. 行ループ
+    // 4. 行ループ
     const matched: { productId: string; productName: string; qty: number; amazonTitle: string }[] = [];
     const unmatched: { amazonTitle: string; qty: number }[] = [];
     let totalRows = 0;
@@ -92,20 +91,6 @@ export async function POST(req: NextRequest) {
       const hit = findBestMatchSimplified(title, products ?? [], learns ?? []);
 
       if (hit) {
-        // 重複マッチの集計
-        if (!productQuantityMap.has(hit.id)) {
-          productQuantityMap.set(hit.id, {
-            productName: hit.name,
-            amazonTitles: [],
-            totalQty: 0
-          });
-        }
-        
-        const mapEntry = productQuantityMap.get(hit.id)!;
-        mapEntry.amazonTitles.push({ title, qty });
-        mapEntry.totalQty += qty;
-        
-        // 個別のマッチ結果も保持（分析用）
         matched.push({
           productId: hit.id,
           productName: hit.name,
@@ -117,28 +102,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. 重複マッチの警告
-    const duplicateMatches: any[] = [];
-    productQuantityMap.forEach((value, productId) => {
-      if (value.amazonTitles.length > 1) {
-        duplicateMatches.push({
-          productId,
-          productName: value.productName,
-          matchCount: value.amazonTitles.length,
-          totalQty: value.totalQty,
-          amazonTitles: value.amazonTitles
-        });
-        
-        console.warn(`⚠️ 重複マッチ検出: ${value.productName}`);
-        console.warn(`  マッチ数: ${value.amazonTitles.length}件`);
-        console.warn(`  合計数量: ${value.totalQty}個`);
-        value.amazonTitles.forEach(item => {
-          console.warn(`    - ${item.title} (${item.qty}個)`);
-        });
-      }
-    });
-
-    // 7. サマリー
+    // 5. サマリー
     const matchedQty = matched.reduce((s, r) => s + r.qty, 0);
     const unmatchedQty = unmatched.reduce((s, r) => s + r.qty, 0);
 
@@ -146,9 +110,6 @@ export async function POST(req: NextRequest) {
     console.log(`❌ 未マッチ: ${unmatched.length}件 (${unmatchedQty}個)`);
     if (blankTitleCount > 0) {
       console.log(`⚠️ タイトル空欄: ${blankTitleCount}件 (${blankTitleQty}個)`);
-    }
-    if (duplicateMatches.length > 0) {
-      console.log(`🔔 重複マッチ: ${duplicateMatches.length}商品`);
     }
 
     return NextResponse.json({
@@ -163,8 +124,7 @@ export async function POST(req: NextRequest) {
         blankTitleInfo: blankTitleCount > 0 ? {
           count: blankTitleCount,
           quantity: blankTitleQty
-        } : null,
-        duplicateMatches: duplicateMatches.length > 0 ? duplicateMatches : null
+        } : null
       },
       matched,
       unmatched,
