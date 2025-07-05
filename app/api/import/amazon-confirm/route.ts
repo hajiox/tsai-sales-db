@@ -1,4 +1,4 @@
-// /app/api/import/amazon-confirm/route.ts ver.16 (PRIMARY KEY対応版)
+// /app/api/import/amazon-confirm/route.ts ver.17 (既存チェック版)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -25,7 +25,7 @@ interface AmazonConfirmRequest {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('Amazon確定API開始 - ver.16');
+  console.log('Amazon確定API開始 - ver.17');
   
   try {
     const body: AmazonConfirmRequest = await request.json();
@@ -43,32 +43,48 @@ export async function POST(request: NextRequest) {
     let errorCount = 0;
     let learnedCount = 0;
 
-    // 1. 新しいマッピングを学習（upsertを使用）
+    // 1. 新しいマッピングを学習（既存チェック後に挿入）
     if (newMappings && newMappings.length > 0) {
-      try {
-        const mappingsToInsert = newMappings.map(mapping => ({
-          amazon_title: mapping.amazonTitle,
-          product_id: mapping.productId
-        }));
+      for (const mapping of newMappings) {
+        try {
+          // 既存データをチェック
+          const { data: existing } = await supabase
+            .from('amazon_product_mapping')
+            .select('id')
+            .eq('amazon_title', mapping.amazonTitle)
+            .single();
 
-        // upsertを使用（PRIMARY KEYがあるため動作する）
-        const { data, error: mappingError } = await supabase
-          .from('amazon_product_mapping')
-          .upsert(mappingsToInsert, { 
-            onConflict: 'amazon_title'  // PRIMARY KEYカラムを指定
-          })
-          .select();
-
-        if (mappingError) {
-          console.error('Amazonマッピング処理エラー:', mappingError);
-          throw mappingError;
+          if (existing) {
+            // 既存データがある場合は更新
+            const { error: updateError } = await supabase
+              .from('amazon_product_mapping')
+              .update({ product_id: mapping.productId })
+              .eq('amazon_title', mapping.amazonTitle);
+              
+            if (!updateError) {
+              learnedCount++;
+              console.log(`更新: ${mapping.amazonTitle}`);
+            }
+          } else {
+            // 新規挿入
+            const { error: insertError } = await supabase
+              .from('amazon_product_mapping')
+              .insert({
+                amazon_title: mapping.amazonTitle,
+                product_id: mapping.productId
+              });
+              
+            if (!insertError) {
+              learnedCount++;
+              console.log(`新規: ${mapping.amazonTitle}`);
+            }
+          }
+        } catch (error) {
+          console.error(`マッピングエラー (${mapping.amazonTitle}):`, error);
         }
-        
-        learnedCount = data?.length || 0;
-        console.log(`✅ Amazon学習データ保存完了: ${learnedCount}件`);
-      } catch (mappingError) {
-        console.error('Amazonマッピング処理エラー:', mappingError);
       }
+      
+      console.log(`✅ Amazon学習データ保存完了: ${learnedCount}件`);
     }
 
     // 2. 売上データを商品IDごとに集計
