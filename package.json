@@ -51,7 +51,7 @@
     "chart.js": "^4.4.3",
     "class-variance-authority": "latest",
     "clsx": "^2.1.1",
-    "csv-parse": "^5.6.0",          // ← ★ 追加依存
+    "csv-parse": "^5.6.0",          
     "dotenv": "^16.4.5",
     "flowbite-react": "^0.4.16",
     "framer-motion": "^11.0.0",
