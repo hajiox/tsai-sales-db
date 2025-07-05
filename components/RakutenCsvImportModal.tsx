@@ -1,11 +1,11 @@
-// /components/RakutenCsvImportModal.tsx ver.15 (参照方式統一版)
+// /components/RakutenCsvImportModal.tsx ver.16 (修正UI実装版)
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle } from 'lucide-react';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle, Edit3, Check } from 'lucide-react';
 
 interface Product {
  id: string;
@@ -22,6 +22,13 @@ interface RakutenCsvImportModalProps {
  products: Product[];
 }
 
+interface Mapping {
+  rakutenTitle: string;
+  productId: string | null;
+  quantity: number;
+  isLearned?: boolean;
+}
+
 export default function RakutenCsvImportModal({ 
  isOpen, 
  onClose, 
@@ -31,8 +38,8 @@ export default function RakutenCsvImportModal({
  const [step, setStep] = useState(1);
  const [csvFile, setCsvFile] = useState<File | null>(null);
  const [parseResult, setParseResult] = useState<any>(null);
- const [newMappings, setNewMappings] = useState<Array<{rakutenTitle: string; productId: string; quantity: number}>>([]);
- const [currentUnmatchIndex, setCurrentUnmatchIndex] = useState(0);
+ const [allMappings, setAllMappings] = useState<Mapping[]>([]);
+ const [learnedMappings, setLearnedMappings] = useState<Set<string>>(new Set());
  const [isLoading, setIsLoading] = useState(false);
  const [error, setError] = useState<string>('');
  const [saleMonth, setSaleMonth] = useState<string>(() => {
@@ -45,11 +52,44 @@ export default function RakutenCsvImportModal({
      setStep(1);
      setCsvFile(null);
      setParseResult(null);
-     setNewMappings([]);
-     setCurrentUnmatchIndex(0);
+     setAllMappings([]);
+     setLearnedMappings(new Set());
      setError('');
    }
  }, [isOpen]);
+
+ // parseResultが更新されたら、allMappingsを初期化
+ useEffect(() => {
+   if (parseResult) {
+     const mappings: Mapping[] = [];
+     
+     // マッチ済み商品を追加
+     if (parseResult.matchedProducts) {
+       parseResult.matchedProducts.forEach((item: any) => {
+         mappings.push({
+           rakutenTitle: item.rakutenTitle,
+           productId: item.productId,
+           quantity: item.quantity,
+           isLearned: true
+         });
+       });
+     }
+     
+     // 未マッチ商品を追加
+     if (parseResult.unmatchedProducts) {
+       parseResult.unmatchedProducts.forEach((item: any) => {
+         mappings.push({
+           rakutenTitle: item.rakutenTitle,
+           productId: null,
+           quantity: item.quantity,
+           isLearned: false
+         });
+       });
+     }
+     
+     setAllMappings(mappings);
+   }
+ }, [parseResult]);
 
  if (!isOpen) return null;
 
@@ -58,7 +98,7 @@ export default function RakutenCsvImportModal({
    if (file) {
      setCsvFile(file);
      setParseResult(null);
-     setNewMappings([]);
+     setAllMappings([]);
      setError('');
    }
  };
@@ -99,28 +139,62 @@ export default function RakutenCsvImportModal({
    }
  };
 
- const handleStartUnmatchFix = () => {
+ const handleStartFix = () => {
    setStep(3);
-   setCurrentUnmatchIndex(0);
  };
 
- const handleProductSelect = (productId: string) => {
-   const currentUnmatch = parseResult.unmatchedProducts[currentUnmatchIndex];
-   
-   if (productId !== 'skip') {
-     const mapping = {
-       rakutenTitle: currentUnmatch.rakutenTitle,
-       productId: productId,
-       quantity: currentUnmatch.quantity
+ const handleMappingChange = (index: number, productId: string | null) => {
+   setAllMappings(prev => {
+     const newMappings = [...prev];
+     newMappings[index] = {
+       ...newMappings[index],
+       productId: productId === 'skip' ? null : productId,
+       isLearned: false
      };
-     setNewMappings(prev => [...prev, mapping]);
-   }
+     return newMappings;
+   });
+ };
 
-   if (currentUnmatchIndex < parseResult.unmatchedProducts.length - 1) {
-     setCurrentUnmatchIndex(currentUnmatchIndex + 1);
-   } else {
-     setStep(2);
+ const handleLearnMapping = async (index: number) => {
+   const mapping = allMappings[index];
+   if (!mapping.productId || mapping.productId === 'skip') return;
+
+   setIsLoading(true);
+   try {
+     const response = await fetch('/api/import/rakuten-learn', {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+       },
+       body: JSON.stringify({
+         rakutenTitle: mapping.rakutenTitle,
+         productId: mapping.productId
+       }),
+     });
+
+     const result = await response.json();
+     if (result.success) {
+       setLearnedMappings(prev => new Set(prev).add(`${mapping.rakutenTitle}-${mapping.productId}`));
+       setAllMappings(prev => {
+         const newMappings = [...prev];
+         newMappings[index] = { ...newMappings[index], isLearned: true };
+         return newMappings;
+       });
+     }
+   } catch (error) {
+     console.error('学習エラー:', error);
+   } finally {
+     setIsLoading(false);
    }
+ };
+
+ const getStats = () => {
+   const matched = allMappings.filter(m => m.productId !== null).length;
+   const unmatched = allMappings.filter(m => m.productId === null).length;
+   const totalQuantity = allMappings.reduce((sum, m) => sum + m.quantity, 0);
+   const matchedQuantity = allMappings.filter(m => m.productId !== null).reduce((sum, m) => sum + m.quantity, 0);
+   
+   return { matched, unmatched, totalQuantity, matchedQuantity };
  };
 
  const handleConfirm = async () => {
@@ -130,9 +204,26 @@ export default function RakutenCsvImportModal({
    setError('');
 
    try {
+     // allMappingsから確定用データを生成
+     const matchedProducts = allMappings
+       .filter(m => m.productId !== null)
+       .map(m => ({
+         rakutenTitle: m.rakutenTitle,
+         productId: m.productId,
+         quantity: m.quantity
+       }));
+
+     const newMappings = allMappings
+       .filter(m => m.productId !== null && !m.isLearned)
+       .map(m => ({
+         rakutenTitle: m.rakutenTitle,
+         productId: m.productId!,
+         quantity: m.quantity
+       }));
+
      const requestData = {
        saleDate: `${saleMonth}-01`,
-       matchedProducts: parseResult.matchedProducts || [],
+       matchedProducts: matchedProducts,
        newMappings: newMappings,
      };
 
@@ -159,11 +250,7 @@ export default function RakutenCsvImportModal({
    }
  };
 
- const currentUnmatch = parseResult?.unmatchedProducts?.[currentUnmatchIndex];
- const rakutenCore = currentUnmatch?.rakutenTitle?.substring(0, 40).trim();
- const progress = parseResult?.unmatchedProducts?.length > 0 
-   ? ((currentUnmatchIndex + 1) / parseResult.unmatchedProducts.length) * 100 
-   : 0;
+ const stats = getStats();
 
  return (
    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -271,7 +358,7 @@ export default function RakutenCsvImportModal({
                  <div className="text-center">
                    <div className="text-sm text-gray-600">処理可能数量</div>
                    <div className="text-2xl font-bold text-green-600">
-                     {parseResult.summary.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
+                     {stats.matchedQuantity}個
                    </div>
                  </div>
                </CardContent>
@@ -284,7 +371,7 @@ export default function RakutenCsvImportModal({
                  </CardHeader>
                  <CardContent>
                    <div className="text-2xl font-bold text-green-600">
-                     {(parseResult.matchedProducts?.length || 0) + newMappings.length}件
+                     {stats.matched}件
                    </div>
                  </CardContent>
                </Card>
@@ -295,7 +382,7 @@ export default function RakutenCsvImportModal({
                  </CardHeader>
                  <CardContent>
                    <div className="text-2xl font-bold text-yellow-600">
-                     {(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件
+                     {stats.unmatched}件
                    </div>
                  </CardContent>
                </Card>
@@ -307,104 +394,125 @@ export default function RakutenCsvImportModal({
                  戻る
                </Button>
                
-               {(parseResult.unmatchedProducts?.length || 0) > newMappings.length ? (
-                 <Button onClick={handleStartUnmatchFix} className="flex-1">
-                   <ArrowRight className="h-4 w-4 mr-2" />
-                   未マッチ商品を修正
-                 </Button>
-               ) : (
-                 <Button 
-                   onClick={handleConfirm}
-                   disabled={isLoading}
-                   className="flex-1"
-                 >
-                   {isLoading ? '処理中...' : 'インポート実行'}
-                 </Button>
-               )}
+               <Button 
+                 onClick={handleStartFix}
+                 variant="outline"
+                 className="flex-1"
+               >
+                 <Edit3 className="h-4 w-4 mr-2" />
+                 マッチング結果を修正
+               </Button>
+
+               <Button 
+                 onClick={handleConfirm}
+                 disabled={isLoading || stats.matched === 0}
+                 className="flex-1"
+               >
+                 {isLoading ? '処理中...' : 'インポート実行'}
+               </Button>
              </div>
            </>
          )}
 
-         {step === 3 && currentUnmatch && (
+         {step === 3 && (
            <>
              <div className="space-y-2 mb-4">
-               <div className="flex justify-between text-sm">
-                 <span>未マッチ商品修正</span>
-                 <span>{currentUnmatchIndex + 1} / {parseResult.unmatchedProducts.length}</span>
-               </div>
-               <div className="w-full bg-gray-200 rounded-full h-2">
-                 <div 
-                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                   style={{ width: `${progress}%` }}
-                 ></div>
-               </div>
+               <h3 className="text-lg font-semibold">マッチング結果の修正</h3>
+               <p className="text-sm text-gray-600">
+                 全{allMappings.length}件の商品マッピングを確認・修正できます
+               </p>
              </div>
 
-             <Card className="border-orange-200 mb-4">
-               <CardHeader className="pb-3">
-                 <CardTitle className="text-orange-700 flex items-center gap-2">
-                   🛍️ 楽天商品
-                   <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">{currentUnmatch.quantity}個</span>
-                 </CardTitle>
-               </CardHeader>
-               <CardContent>
-                 <div className="p-3 bg-orange-50 rounded-md">
-                   <div className="font-medium text-orange-900">
-                     {rakutenCore}
+             <div className="grid grid-cols-3 gap-4 mb-4">
+               <Card>
+                 <CardContent className="pt-4">
+                   <div className="text-sm text-gray-600">マッチ済み</div>
+                   <div className="text-xl font-bold text-green-600">{stats.matched}件</div>
+                 </CardContent>
+               </Card>
+               <Card>
+                 <CardContent className="pt-4">
+                   <div className="text-sm text-gray-600">未マッチ</div>
+                   <div className="text-xl font-bold text-yellow-600">{stats.unmatched}件</div>
+                 </CardContent>
+               </Card>
+               <Card>
+                 <CardContent className="pt-4">
+                   <div className="text-sm text-gray-600">処理可能数量</div>
+                   <div className="text-xl font-bold text-blue-600">{stats.matchedQuantity}個</div>
+                 </CardContent>
+               </Card>
+             </div>
+
+             <div className="space-y-3 max-h-96 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+               {allMappings.map((mapping, index) => (
+                 <div key={index} className="bg-white p-4 rounded-lg border border-gray-200">
+                   <div className="grid grid-cols-12 gap-4 items-start">
+                     <div className="col-span-5">
+                       <div className="text-xs text-gray-500 mb-1">楽天商品名</div>
+                       <div className="text-sm font-medium" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                         {mapping.rakutenTitle}
+                       </div>
+                       <div className="text-xs text-gray-500 mt-1">数量: {mapping.quantity}個</div>
+                     </div>
+                     
+                     <div className="col-span-1 flex items-center justify-center">
+                       <ArrowRight className="h-4 w-4 text-gray-400" />
+                     </div>
+                     
+                     <div className="col-span-6">
+                       <div className="text-xs text-gray-500 mb-1">マスタ商品</div>
+                       <select
+                         value={mapping.productId || 'skip'}
+                         onChange={(e) => handleMappingChange(index, e.target.value)}
+                         className="w-full p-2 border border-gray-200 rounded-md text-sm"
+                       >
+                         <option value="skip">-- 未選択（この商品はスキップ） --</option>
+                         {products.map((product) => (
+                           <option key={product.id} value={product.id}>
+                             {product.name} ({product.series})
+                           </option>
+                         ))}
+                       </select>
+                       
+                       {mapping.productId && mapping.productId !== 'skip' && (
+                         <button
+                           onClick={() => handleLearnMapping(index)}
+                           disabled={mapping.isLearned || isLoading}
+                           className={`mt-2 text-xs px-3 py-1 rounded-full transition-colors ${
+                             mapping.isLearned 
+                               ? 'bg-green-100 text-green-700 cursor-default'
+                               : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                           }`}
+                         >
+                           {mapping.isLearned ? (
+                             <>
+                               <Check className="h-3 w-3 inline mr-1" />
+                               学習済み
+                             </>
+                           ) : (
+                             '📝 この組み合わせを学習'
+                           )}
+                         </button>
+                       )}
+                     </div>
                    </div>
                  </div>
-               </CardContent>
-             </Card>
+               ))}
+             </div>
 
-             <Card className="mb-4">
-               <CardHeader>
-                 <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
-                 <p className="text-sm text-gray-600">
-                   {products?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
-                 </p>
-               </CardHeader>
-               <CardContent>
-                 <div className="space-y-3 max-h-72 overflow-y-auto border rounded-lg p-3 bg-gray-50">
-                   {products && products.length > 0 ? (
-                     products.map((product) => (
-                       <button
-                         key={product.id}
-                         onClick={() => handleProductSelect(product.id)}
-                         className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors bg-white shadow-sm"
-                       >
-                         <div className="font-medium text-blue-900 mb-1">
-                           {product.name}
-                         </div>
-                         <div className="text-sm text-gray-600">
-                           シリーズ: {product.series} | コード: {product.series_code}-{product.product_code}
-                         </div>
-                       </button>
-                     ))
-                   ) : (
-                     <div className="text-center py-8 text-gray-500">
-                       商品データが見つかりません
-                     </div>
-                   )}
-                 </div>
-                 
-                 <div className="mt-4 pt-4 border-t">
-                   <button
-                     onClick={() => handleProductSelect('skip')}
-                     className="w-full p-4 text-left border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                   >
-                     <div className="font-medium text-gray-600 flex items-center gap-2 justify-center">
-                       <X className="h-5 w-5" />
-                       この商品をスキップ
-                     </div>
-                   </button>
-                 </div>
-               </CardContent>
-             </Card>
-
-             <div className="flex gap-2">
+             <div className="flex gap-2 mt-4">
                <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
                  <ArrowLeft className="h-4 w-4 mr-2" />
                  確認画面に戻る
+               </Button>
+               
+               <Button 
+                 onClick={handleConfirm}
+                 disabled={isLoading || stats.matched === 0}
+                 className="flex-1"
+               >
+                 {isLoading ? '処理中...' : `${stats.matched}件をインポート`}
                </Button>
              </div>
            </>
