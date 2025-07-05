@@ -3,10 +3,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { parse } from 'csv-parse/sync';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
 export const dynamic = 'force-dynamic';
+
+// Supabaseクライアントの初期化
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 /** 「1,234」「 1 234 」→ 1234 */
 const toNumber = (raw: string | number): number => {
@@ -54,6 +60,11 @@ export async function POST(req: NextRequest) {
     const { data: learns } =
       await supabase.from('amazon_product_mapping')
                     .select('amazon_title, product_id');
+
+    console.log('📚 学習データ数:', learns?.length);
+    if (learns && learns.length > 0) {
+      console.log('学習データサンプル:', learns.slice(0, 3));
+    }
 
     // 🔄 マッチング開始前にリセット（重複防止のため）
     findBestMatchSimplified('', [], [], true);
