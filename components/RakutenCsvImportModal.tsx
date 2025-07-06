@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.17 (修正UI実装版 - productInfo修正)
+// /components/RakutenCsvImportModal.tsx ver.18 (修正UI実装版 - 両パターン対応)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -61,16 +61,15 @@ export default function RakutenCsvImportModal({
 
   useEffect(() => {
     if (parseResult && step === 3) {
-      // Step 3に移行時、全マッピングを統合
       const matched = parseResult.matchedProducts || [];
       const unmatched = parseResult.unmatchedProducts || [];
       
       const mappings = [
-        // productInfo.idをproductIdに変換する修正
+        // productInfoがある場合とない場合の両方に対応
         ...matched.map((m: any) => ({
           rakutenTitle: m.rakutenTitle,
-          productId: m.productInfo.id,
-          productName: m.productInfo.name,
+          productId: m.productId || m.productInfo?.id || '',
+          productName: m.productName || m.productInfo?.name || '',
           quantity: m.quantity,
           isLearned: false
         })),
@@ -242,7 +241,7 @@ export default function RakutenCsvImportModal({
     } else if (parseResult) {
       const matched = parseResult.matchedProducts?.length || 0;
       const unmatched = parseResult.unmatchedProducts?.length || 0;
-      const totalQuantity = parseResult.summary.processableQuantity || 0;
+      const totalQuantity = parseResult.summary?.processableQuantity || 0;
       return { matched, unmatched, totalQuantity };
     }
     return { matched: 0, unmatched: 0, totalQuantity: 0 };
@@ -288,7 +287,7 @@ export default function RakutenCsvImportModal({
 
           {step === 2 && parseResult && (
             <>
-              {parseResult.summary.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
+              {parseResult.summary?.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
                 <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">
                   <div className="flex">
                     <div className="flex-shrink-0">
@@ -314,11 +313,11 @@ export default function RakutenCsvImportModal({
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-sm text-gray-600">CSV総商品数</div>
-                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary.totalProducts}件</div>
+                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary?.totalProducts || 0}件</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">総販売数量</div>
-                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary.totalQuantity}個</div>
+                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary?.totalQuantity || 0}個</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">登録可能数量</div>
