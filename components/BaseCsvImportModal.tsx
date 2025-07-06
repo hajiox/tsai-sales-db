@@ -1,4 +1,4 @@
-// /components/BaseCsvImportModal.tsx ver.2 (修正UI実装版)
+// /components/BaseCsvImportModal.tsx ver.3 (修正UI実装版 - 両パターン対応)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,13 +13,6 @@ interface Product {
   series: string;
   series_code: number;
   product_code: number;
-}
-
-interface MatchedProduct {
-  baseTitle: string;
-  productId: string;
-  productName: string;
-  quantity: number;
 }
 
 interface BaseCsvImportModalProps {
@@ -68,15 +61,15 @@ export default function BaseCsvImportModal({
 
   useEffect(() => {
     if (parseResult && step === 3) {
-      // Step 3に移行時、全マッピングを統合
       const matched = parseResult.matchedProducts || [];
       const unmatched = parseResult.unmatchedProducts || [];
       
       const mappings = [
+        // productInfoがある場合とない場合の両方に対応
         ...matched.map((m: any) => ({ 
           baseTitle: m.baseTitle,
-          productId: m.productInfo?.id || '',
-          productName: m.productInfo?.name || '',
+          productId: m.productId || m.productInfo?.id || '',
+          productName: m.productName || m.productInfo?.name || '',
           quantity: m.quantity,
           isLearned: false 
         })),
@@ -190,20 +183,30 @@ export default function BaseCsvImportModal({
     setError('');
     
     try {
-      // 有効なマッピングのみ抽出
-      const validMappings = allMappings.filter(m => m.productId);
+      let requestData;
       
-      const requestData = {
-        saleDate: `${saleMonth}-01`,
-        matchedProducts: validMappings.map(item => ({
-          baseTitle: item.baseTitle,
-          productInfo: {
-            id: item.productId
-          },
-          quantity: item.quantity
-        })),
-        newMappings: [],
-      };
+      if (step === 3) {
+        // Step 3からの場合は修正されたデータを使用
+        const validMappings = allMappings.filter(m => m.productId);
+        requestData = {
+          saleDate: `${saleMonth}-01`,
+          matchedProducts: validMappings.map(item => ({
+            baseTitle: item.baseTitle,
+            productInfo: {
+              id: item.productId
+            },
+            quantity: item.quantity
+          })),
+          newMappings: [],
+        };
+      } else {
+        // Step 2からの場合は元のデータを使用
+        requestData = {
+          saleDate: `${saleMonth}-01`,
+          matchedProducts: parseResult.matchedProducts,
+          newMappings: [],
+        };
+      }
 
       const response = await fetch('/api/import/base-confirm', {
         method: 'POST',
@@ -236,7 +239,7 @@ export default function BaseCsvImportModal({
     } else if (parseResult) {
       const matched = parseResult.matchedProducts?.length || 0;
       const unmatched = parseResult.unmatchedProducts?.length || 0;
-      const totalQuantity = parseResult.summary.processableQuantity || 0;
+      const totalQuantity = parseResult.summary?.processableQuantity || 0;
       return { matched, unmatched, totalQuantity };
     }
     return { matched: 0, unmatched: 0, totalQuantity: 0 };
@@ -282,6 +285,23 @@ export default function BaseCsvImportModal({
 
           {step === 2 && parseResult && (
             <>
+              {parseResult.summary?.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
+                <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="h-5 w-5 text-orange-400" aria-hidden="true" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-bold text-orange-700">
+                        警告: 商品名が空欄の行が {parseResult.summary.blankTitleInfo.count} 件見つかりました
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        合計 {parseResult.summary.blankTitleInfo.quantity} 個分が処理から除外されます。CSVを修正し再実行してください。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">売上月:</label>
                 <input type="month" value={saleMonth} onChange={(e) => setSaleMonth(e.target.value)} className="border rounded-md p-2 w-full" />
@@ -291,11 +311,11 @@ export default function BaseCsvImportModal({
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-sm text-gray-600">CSV総商品数</div>
-                    <div className="text-2xl font-bold text-green-600">{parseResult.summary.totalProducts}件</div>
+                    <div className="text-2xl font-bold text-green-600">{parseResult.summary?.totalProducts || 0}件</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">総販売数量</div>
-                    <div className="text-2xl font-bold text-green-600">{parseResult.summary.totalQuantity}個</div>
+                    <div className="text-2xl font-bold text-green-600">{parseResult.summary?.totalQuantity || 0}個</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">登録可能数量</div>
@@ -321,6 +341,13 @@ export default function BaseCsvImportModal({
                 </Button>
                 <Button onClick={() => setStep(3)} className="flex-1">
                   <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
+                </Button>
+                <Button 
+                  onClick={handleConfirm}
+                  disabled={isLoading || stats.matched === 0}
+                  className="flex-1"
+                >
+                  {isLoading ? '処理中...' : 'インポート実行'}
                 </Button>
               </div>
             </>
