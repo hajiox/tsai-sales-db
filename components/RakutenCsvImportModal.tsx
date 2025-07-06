@@ -1,4 +1,4 @@
-// /components/RakutenCsvImportModal.tsx ver.16 (修正UI実装版)
+// /components/RakutenCsvImportModal.tsx ver.17 (修正UI実装版 - productInfo修正)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,13 +13,6 @@ interface Product {
   series: string;
   series_code: number;
   product_code: number;
-}
-
-interface MatchedProduct {
-  rakutenTitle: string;
-  productId: string;
-  productName: string;
-  quantity: number;
 }
 
 interface RakutenCsvImportModalProps {
@@ -73,7 +66,14 @@ export default function RakutenCsvImportModal({
       const unmatched = parseResult.unmatchedProducts || [];
       
       const mappings = [
-        ...matched.map((m: MatchedProduct) => ({ ...m, isLearned: false })),
+        // productInfo.idをproductIdに変換する修正
+        ...matched.map((m: any) => ({
+          rakutenTitle: m.rakutenTitle,
+          productId: m.productInfo.id,
+          productName: m.productInfo.name,
+          quantity: m.quantity,
+          isLearned: false
+        })),
         ...unmatched.map((u: any) => ({
           rakutenTitle: u.rakutenTitle,
           productId: '',
@@ -186,14 +186,30 @@ export default function RakutenCsvImportModal({
     setError('');
     
     try {
-      // 有効なマッピングのみ抽出
-      const validMappings = allMappings.filter(m => m.productId);
+      let requestData;
       
-      const requestData = {
-        saleDate: `${saleMonth}-01`,
-        matchedProducts: validMappings,
-        newMappings: [],
-      };
+      if (step === 3) {
+        // Step 3からの場合は修正されたデータを使用
+        const validMappings = allMappings.filter(m => m.productId);
+        requestData = {
+          saleDate: `${saleMonth}-01`,
+          matchedProducts: validMappings.map(m => ({
+            rakutenTitle: m.rakutenTitle,
+            productInfo: {
+              id: m.productId
+            },
+            quantity: m.quantity
+          })),
+          newMappings: [],
+        };
+      } else {
+        // Step 2からの場合は元のデータを使用
+        requestData = {
+          saleDate: `${saleMonth}-01`,
+          matchedProducts: parseResult.matchedProducts,
+          newMappings: [],
+        };
+      }
 
       const response = await fetch('/api/import/rakuten-confirm', {
         method: 'POST',
@@ -328,6 +344,13 @@ export default function RakutenCsvImportModal({
                 </Button>
                 <Button onClick={() => setStep(3)} className="flex-1">
                   <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
+                </Button>
+                <Button 
+                  onClick={handleConfirm}
+                  disabled={isLoading || stats.matched === 0}
+                  className="flex-1"
+                >
+                  {isLoading ? '処理中...' : 'インポート実行'}
                 </Button>
               </div>
             </>
