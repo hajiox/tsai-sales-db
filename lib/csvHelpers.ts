@@ -1,6 +1,6 @@
-// /lib/csvHelpers.ts  ver.12
+// /lib/csvHelpers.ts ver.13
 // ------------------------------------------------------------
-// 共通ユーティリティと簡易マッチングヘルパー（バランス調整版）
+// 共通ユーティリティ（ステートレス化・安定性向上版）
 // ------------------------------------------------------------
 import iconv from 'iconv-lite';
 
@@ -17,7 +17,7 @@ export function detectAndDecode(buf: Buffer): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* 2. 商品データ型（Qoo10対応追加）                                     */
+/* 2. 商品データ型（変更なし）                                        */
 /* ------------------------------------------------------------------ */
 export interface Product {
   id: string;
@@ -27,8 +27,8 @@ export interface Product {
   rakuten_title?: string;
   yahoo_title?: string;
   mercari_title?: string;
-  base_title?: string;        // 🏪 BASE対応
-  qoo10_title?: string;       // 🟣 Qoo10対応追加
+  base_title?: string;
+  qoo10_title?: string;
 }
 
 interface LearningMap {
@@ -36,13 +36,13 @@ interface LearningMap {
   rakuten_title?: string;
   yahoo_title?: string;
   mercari_title?: string;
-  base_title?: string;        // 🏪 BASE対応
-  qoo10_title?: string;       // 🟣 Qoo10対応追加
+  base_title?: string;
+  qoo10_title?: string;
   product_id: string;
 }
 
 /* ------------------------------------------------------------------ */
-/* 3. タイトルから重要キーワード抽出（バランス版）                     */
+/* 3. タイトルから重要キーワード抽出（変更なし）                     */
 /* ------------------------------------------------------------------ */
 export function extractImportantKeywords(title: string): string[] {
   // 一般的すぎるキーワードを除外（ただし「ラーメン」「セット」は重要）
@@ -82,111 +82,80 @@ export function extractImportantKeywords(title: string): string[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. シンプル類似度マッチング（バランス版・重複防止機能付き）         */
+/* 4. ★★★【重要修正】シンプル類似度マッチング（ステートレス化）★★★ */
 /* ------------------------------------------------------------------ */
-// 既にマッチ済みの商品IDを記録するSet（関数外で保持）
-const matchedProductIds = new Set<string>();
-
-// 特定キーワードの組み合わせによる専用マッチングルール
 const specialMatchingRules = [
-  {
-    keywords: ['炊き込み', 'チャーシュー'],
-    productName: 'チャーシュー 炊き込みご飯の素',
-    priority: 100 // 最優先
-  },
-  // 今後、似た問題が発生したらここに追加
+  { keywords: ['炊き込み', 'チャーシュー'], productName: 'チャーシュー 炊き込みご飯の素', priority: 100 },
 ];
 
 export function findBestMatchSimplified(
   title: string,
   products: Product[],
   learning: LearningMap[],
-  resetMatches?: boolean // バッチ処理の開始時にtrueを渡してリセット
-): Product | null {
-  // マッチ済みIDをリセット（新しいCSV処理の開始時）
-  if (resetMatches) {
-    matchedProductIds.clear();
-  }
-
-  // 0. 特定キーワードによる専用マッチング（最優先）
+  // ★修正点1: `resetMatches`を廃止し、代わりにマッチ済みIDのSetを引数で受け取る
+  matchedIds: Set<string> 
+): { product: Product, matchType: 'special' | 'learned' | 'direct' | 'keyword' } | null {
+  
+  // 0. 特定キーワードによる専用マッチング
   for (const rule of specialMatchingRules) {
     const hasAllKeywords = rule.keywords.every(keyword => title.includes(keyword));
     if (hasAllKeywords) {
       const specialProduct = products.find(p => 
-        p.name.includes(rule.productName) && !matchedProductIds.has(p.id)
+        p.name.includes(rule.productName) && !matchedIds.has(p.id)
       );
       if (specialProduct) {
-        console.log(`🎯 特殊ルールでマッチ: "${title}" → "${specialProduct.name}"`);
-        matchedProductIds.add(specialProduct.id);
-        return specialProduct;
+        // ★修正点2: 受け取ったSetにIDを追加して、呼び出し元に返す
+        matchedIds.add(specialProduct.id);
+        return { product: specialProduct, matchType: 'special' };
       }
     }
   }
 
-  // 4-1. 学習データ完全一致（最優先）
-  const learned = learning.find((m) =>
-    [m.amazon_title, m.rakuten_title, m.yahoo_title, m.mercari_title, m.base_title, m.qoo10_title].includes(title)
-  );
-  if (learned) {
-    const product = products.find((p) => p.id === learned.product_id);
-    // 既にマッチ済みの商品は除外
-    if (product && !matchedProductIds.has(product.id)) {
-      matchedProductIds.add(product.id);
-      return product;
+  // 4-1. 学習データ完全一致
+  const learnedMatch = learning.find(m => m.product_id && (m.yahoo_title === title));
+  if (learnedMatch) {
+    const product = products.find(p => p.id === learnedMatch.product_id);
+    if (product && !matchedIds.has(product.id)) {
+      matchedIds.add(product.id);
+      return { product, matchType: 'learned' };
     }
   }
 
   // 4-2. 商品名の完全一致
   const direct = products.find((p) =>
-    !matchedProductIds.has(p.id) && // 既にマッチ済みは除外
+    !matchedIds.has(p.id) &&
     [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name].includes(title)
   );
   if (direct) {
-    matchedProductIds.add(direct.id);
-    return direct;
+    matchedIds.add(direct.id);
+    return { product: direct, matchType: 'direct' };
   }
 
-  // 4-3. バランス版キーワードスコアリング
+  // 4-3. キーワードスコアリング
   const keywords = extractImportantKeywords(title);
   if (keywords.length === 0) return null;
   
   let bestMatch: { product: Product; score: number; matchRatio: number } | null = null;
   
   for (const p of products) {
-    // 既にマッチ済みの商品はスキップ
-    if (matchedProductIds.has(p.id)) continue;
+    if (matchedIds.has(p.id)) continue;
     
-    const targetTitles = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name]
-      .filter(Boolean);
-    
+    const targetTitles = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name].filter(Boolean);
     let maxScore = 0;
     let bestMatchRatio = 0;
     
-    // 各タイトルと比較
     for (const targetTitle of targetTitles) {
       const targetKeywords = extractImportantKeywords(targetTitle);
-      
-      // キーワードマッチング（単方向でOK、ただし重要キーワードを重視）
       const matchedKeywords = keywords.filter(k => {
-        // 完全一致を優先
         if (targetTitle.includes(k)) return true;
-        // 部分一致も許可（3文字以上のキーワードのみ）
-        if (k.length >= 3) {
-          return targetTitle.toLowerCase().includes(k.toLowerCase());
-        }
+        if (k.length >= 3) return targetTitle.toLowerCase().includes(k.toLowerCase());
         return false;
       });
       
-      // マッチ率を計算
       const matchRatio = matchedKeywords.length / keywords.length;
-      
-      // スコア計算（マッチした数 + 重要キーワードボーナス）
       let score = matchedKeywords.length;
       
-      // 重要キーワードにボーナス
-      if (matchedKeywords.some(k => ['チャーシュー', '激辛', 'つけ麺', 'パーフェクトラーメン'].includes(k))) {
-        score += 2;
-      }
+      if (matchedKeywords.some(k => ['チャーシュー', '激辛', 'つけ麺', 'パーフェクトラーメン'].includes(k))) score += 2;
       
       if (score > maxScore) {
         maxScore = score;
@@ -194,16 +163,14 @@ export function findBestMatchSimplified(
       }
     }
     
-    // より高いスコアとマッチ率を記録
     if (maxScore > 0 && (!bestMatch || maxScore > bestMatch.score)) {
       bestMatch = { product: p, score: maxScore, matchRatio: bestMatchRatio };
     }
   }
   
-  // バランス：最低限のマッチ率（35%）とスコア（2以上）を要求
   if (bestMatch && bestMatch.matchRatio >= 0.35 && bestMatch.score >= 2) {
-    matchedProductIds.add(bestMatch.product.id);
-    return bestMatch.product;
+    matchedIds.add(bestMatch.product.id);
+    return { product: bestMatch.product, matchType: 'keyword' };
   }
   
   return null;
