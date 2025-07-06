@@ -1,4 +1,4 @@
-// /components/MercariCsvImportModal.tsx ver.3 (修正UI実装版)
+// /components/MercariCsvImportModal.tsx ver.4 (修正UI実装版 - 両パターン対応)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,13 +13,6 @@ interface Product {
   series: string;
   series_code: number;
   product_code: number;
-}
-
-interface MatchedProduct {
-  mercariTitle: string;
-  productId: string;
-  productName: string;
-  quantity: number;
 }
 
 interface MercariCsvImportModalProps {
@@ -70,12 +63,18 @@ export default function MercariCsvImportModal({
 
   useEffect(() => {
     if (parseResult && step === 4) {
-      // Step 4に移行時、全マッピングを統合
       const matched = parseResult.matchedProducts || [];
       const unmatched = parseResult.unmatchedProducts || [];
       
       const mappings = [
-        ...matched.map((m: MatchedProduct) => ({ ...m, isLearned: false })),
+        // productInfoがある場合とない場合の両方に対応
+        ...matched.map((m: any) => ({
+          mercariTitle: m.mercariTitle,
+          productId: m.productId || m.productInfo?.id || '',
+          productName: m.productName || m.productInfo?.name || '',
+          quantity: m.quantity,
+          isLearned: false
+        })),
         ...unmatched.map((u: any) => ({
           mercariTitle: u.mercariTitle,
           productId: '',
@@ -229,14 +228,30 @@ export default function MercariCsvImportModal({
     setError('');
     
     try {
-      // 有効なマッピングのみ抽出
-      const validMappings = allMappings.filter(m => m.productId);
+      let requestData;
       
-      const requestData = {
-        saleDate: `${saleMonth}-01`,
-        matchedProducts: validMappings,
-        newMappings: [],
-      };
+      if (step === 4) {
+        // Step 4からの場合は修正されたデータを使用
+        const validMappings = allMappings.filter(m => m.productId);
+        requestData = {
+          saleDate: `${saleMonth}-01`,
+          matchedProducts: validMappings.map(m => ({
+            mercariTitle: m.mercariTitle,
+            productInfo: {
+              id: m.productId
+            },
+            quantity: m.quantity
+          })),
+          newMappings: [],
+        };
+      } else {
+        // Step 3からの場合は元のデータを使用
+        requestData = {
+          saleDate: `${saleMonth}-01`,
+          matchedProducts: parseResult.matchedProducts,
+          newMappings: [],
+        };
+      }
 
       const response = await fetch('/api/import/mercari-confirm', {
         method: 'POST',
@@ -269,7 +284,7 @@ export default function MercariCsvImportModal({
     } else if (parseResult) {
       const matched = parseResult.matchedProducts?.length || 0;
       const unmatched = parseResult.unmatchedProducts?.length || 0;
-      const totalQuantity = parseResult.summary.processableQuantity || 0;
+      const totalQuantity = parseResult.summary?.processableQuantity || 0;
       return { matched, unmatched, totalQuantity };
     }
     return { matched: 0, unmatched: 0, totalQuantity: 0 };
@@ -322,15 +337,15 @@ export default function MercariCsvImportModal({
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-sm text-gray-600">集計商品数</div>
-                    <div className="text-2xl font-bold text-blue-600">{aggregatedData.summary.totalProducts}件</div>
+                    <div className="text-2xl font-bold text-blue-600">{aggregatedData.summary?.totalProducts || 0}件</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">総販売数量</div>
-                    <div className="text-2xl font-bold text-blue-600">{aggregatedData.summary.totalQuantity}個</div>
+                    <div className="text-2xl font-bold text-blue-600">{aggregatedData.summary?.totalQuantity || 0}個</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">処理した行数</div>
-                    <div className="text-2xl font-bold text-green-600">{aggregatedData.summary.processedRows}行</div>
+                    <div className="text-2xl font-bold text-green-600">{aggregatedData.summary?.processedRows || 0}行</div>
                   </div>
                 </CardContent>
               </Card>
@@ -358,11 +373,11 @@ export default function MercariCsvImportModal({
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-sm text-gray-600">総商品数</div>
-                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary.totalProducts}件</div>
+                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary?.totalProducts || 0}件</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">総販売数量</div>
-                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary.totalQuantity}個</div>
+                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary?.totalQuantity || 0}個</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">登録可能数量</div>
@@ -388,6 +403,13 @@ export default function MercariCsvImportModal({
                 </Button>
                 <Button onClick={() => setStep(4)} className="flex-1">
                   <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
+                </Button>
+                <Button 
+                  onClick={handleConfirm}
+                  disabled={isLoading || stats.matched === 0}
+                  className="flex-1"
+                >
+                  {isLoading ? '処理中...' : 'インポート実行'}
                 </Button>
               </div>
             </>
