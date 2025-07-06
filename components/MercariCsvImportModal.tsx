@@ -1,4 +1,4 @@
-// /components/MercariCsvImportModal.tsx ver.4 (修正UI実装版 - 両パターン対応)
+// /components/MercariCsvImportModal.tsx ver.5 (Step3修正版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -361,7 +361,7 @@ export default function MercariCsvImportModal({
             </>
           )}
 
-          {/* Step 3: マッチング結果確認 */}
+          {/* Step 3: マッチング結果確認（修正版） */}
           {step === 3 && parseResult && (
             <>
               <div className="mb-4">
