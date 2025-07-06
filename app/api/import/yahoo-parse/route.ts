@@ -1,6 +1,7 @@
-// /app/api/import/yahoo-parse/route.ts ver.6
+// /app/api/import/yahoo-parse/route.ts ver.7
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+// ★修正後のヘルパー関数をインポート
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
 const supabase = createClient(
@@ -8,14 +9,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// 安全な文字列検証関数
 function isValidString(value: any): value is string {
   return value && typeof value === 'string' && value.trim().length > 0;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo CSV解析API開始 ver.6 (学習データ形式修正版) ===');
+    console.log('=== Yahoo CSV解析API開始 ver.7 (ステートレス対応版) ===');
     
     const { csvData } = await request.json();
     if (!csvData) {
@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
     }
     console.log('解析対象の行数:', lines.length);
 
-    // 商品マスターと学習データを並行して取得
     const [productsResponse, learningDataResponse] = await Promise.all([
       supabase.from('products').select('*'),
       supabase.from('yahoo_product_mapping').select('yahoo_title, product_id')
@@ -36,26 +35,19 @@ export async function POST(request: NextRequest) {
     
     if (productsResponse.error) throw new Error(`商品マスターの取得に失敗: ${productsResponse.error.message}`);
     const validProducts = (productsResponse.data || []).filter(p => p && isValidString(p.name));
-    console.log('有効な商品数:', validProducts.length);
-
-    if (learningDataResponse.error) throw new Error(`学習データの取得に失敗: ${learningDataResponse.error.message}`);
     
-    // ★★★★★★★★★★★★★★★★★★★★★★
-    //           ★最重要修正ポイント★
-    // ★★★★★★★★★★★★★★★★★★★★★★
-    // 学習データを共通ヘルパー関数が扱える汎用的な形式 { ecTitle, productId } に変換します。
-    // これにより、学習データが正しくマッチング処理で利用されるようになります。
-    const mappedLearningData = (learningDataResponse.data || [])
-      .filter(l => l && isValidString(l.yahoo_title) && isValidString(l.product_id))
-      .map(item => ({
-        ecTitle: item.yahoo_title,   // `yahoo_title` を `ecTitle` に変換
-        productId: item.product_id,  // `product_id` を `productId` に変換
-      }));
-    console.log('有効な学習データ数:', mappedLearningData.length);
+    if (learningDataResponse.error) throw new Error(`学習データの取得に失敗: ${learningDataResponse.error.message}`);
+    // ★★★【重要修正】私の前回の誤った修正を元に戻します。`.map()`は不要でした。
+    const validLearningData = (learningDataResponse.data || []).filter(l => l && isValidString(l.yahoo_title));
+    console.log('有効な商品数:', validProducts.length);
+    console.log('有効な学習データ数:', validLearningData.length);
     
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
     let blankTitleRows: any[] = [];
+
+    // ★★★【重要修正】このCSV解析処理専用の「マッチ済みID記憶セット」をここで作成します。
+    const matchedProductIdsThisTime = new Set<string>();
 
     for (let i = 0; i < lines.length; i++) {
         const columns = lines[i].split(',').map((col: string) => col.trim().replace(/"/g, ''));
@@ -72,15 +64,15 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-            // マッチング関数には、変換後の `mappedLearningData` を渡します。
-            const productInfo = findBestMatchSimplified(productTitle, validProducts, mappedLearningData);
+            // ★★★【重要修正】ヘルパー関数に「今回の記憶セット」を渡します。
+            const result = findBestMatchSimplified(productTitle, validProducts, validLearningData, matchedProductIdsThisTime);
 
-            if (productInfo) {
+            if (result) {
                 matchedProducts.push({ 
                   yahooTitle: productTitle, 
                   quantity, 
-                  productInfo, 
-                  isLearned: productInfo.matchType === 'learned' 
+                  productInfo: result.product, // `result.product`に商品情報が入る
+                  isLearned: result.matchType === 'learned' 
                 });
             } else {
                 unmatchedProducts.push({ yahooTitle: productTitle, quantity });
