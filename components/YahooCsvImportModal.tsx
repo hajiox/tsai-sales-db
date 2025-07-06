@@ -1,4 +1,4 @@
-// /components/YahooCsvImportModal.tsx ver.5 (修正UI実装版)
+// /components/YahooCsvImportModal.tsx ver.6 (修正UI実装版 - 両パターン対応)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,13 +13,6 @@ interface Product {
   series: string;
   series_code: number;
   product_code: number;
-}
-
-interface MatchedProduct {
-  yahooTitle: string;
-  productId: string;
-  productName: string;
-  quantity: number;
 }
 
 interface YahooCsvImportModalProps {
@@ -68,12 +61,18 @@ export default function YahooCsvImportModal({
 
   useEffect(() => {
     if (parseResult && step === 3) {
-      // Step 3に移行時、全マッピングを統合
       const matched = parseResult.matchedProducts || [];
       const unmatched = parseResult.unmatchedProducts || [];
       
       const mappings = [
-        ...matched.map((m: MatchedProduct) => ({ ...m, isLearned: false })),
+        // productInfoがある場合とない場合の両方に対応
+        ...matched.map((m: any) => ({
+          yahooTitle: m.yahooTitle,
+          productId: m.productId || m.productInfo?.id || '',
+          productName: m.productName || m.productInfo?.name || '',
+          quantity: m.quantity,
+          isLearned: false
+        })),
         ...unmatched.map((u: any) => ({
           yahooTitle: u.yahooTitle,
           productId: '',
@@ -195,14 +194,30 @@ export default function YahooCsvImportModal({
     setError('');
     
     try {
-      // 有効なマッピングのみ抽出
-      const validMappings = allMappings.filter(m => m.productId);
+      let requestData;
       
-      const requestData = {
-        targetMonth: `${saleMonth}-01`,
-        matchedProducts: validMappings,
-        newMappings: [],
-      };
+      if (step === 3) {
+        // Step 3からの場合は修正されたデータを使用
+        const validMappings = allMappings.filter(m => m.productId);
+        requestData = {
+          targetMonth: `${saleMonth}-01`,
+          matchedProducts: validMappings.map(m => ({
+            yahooTitle: m.yahooTitle,
+            productInfo: {
+              id: m.productId
+            },
+            quantity: m.quantity
+          })),
+          newMappings: [],
+        };
+      } else {
+        // Step 2からの場合は元のデータを使用
+        requestData = {
+          targetMonth: `${saleMonth}-01`,
+          matchedProducts: parseResult.matchedProducts,
+          newMappings: [],
+        };
+      }
 
       const response = await fetch('/api/import/yahoo-confirm', {
         method: 'POST',
@@ -235,7 +250,7 @@ export default function YahooCsvImportModal({
     } else if (parseResult) {
       const matched = parseResult.matchedProducts?.length || 0;
       const unmatched = parseResult.unmatchedProducts?.length || 0;
-      const totalQuantity = parseResult.summary.processableQuantity || 0;
+      const totalQuantity = parseResult.summary?.processableQuantity || 0;
       return { matched, unmatched, totalQuantity };
     }
     return { matched: 0, unmatched: 0, totalQuantity: 0 };
@@ -282,7 +297,7 @@ export default function YahooCsvImportModal({
 
           {step === 2 && parseResult && (
             <>
-              {parseResult.summary.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
+              {parseResult.summary?.blankTitleInfo && parseResult.summary.blankTitleInfo.count > 0 && (
                 <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">
                   <div className="flex">
                     <div className="flex-shrink-0">
@@ -308,11 +323,11 @@ export default function YahooCsvImportModal({
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-sm text-gray-600">CSV総商品数</div>
-                    <div className="text-2xl font-bold text-purple-600">{displayQuantity(parseResult.summary.totalProducts)}件</div>
+                    <div className="text-2xl font-bold text-purple-600">{displayQuantity(parseResult.summary?.totalProducts)}件</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">総販売数量</div>
-                    <div className="text-2xl font-bold text-purple-600">{displayQuantity(parseResult.summary.totalQuantity)}個</div>
+                    <div className="text-2xl font-bold text-purple-600">{displayQuantity(parseResult.summary?.totalQuantity)}個</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">登録可能数量</div>
@@ -338,6 +353,13 @@ export default function YahooCsvImportModal({
                 </Button>
                 <Button onClick={() => setStep(3)} className="flex-1">
                   <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
+                </Button>
+                <Button 
+                  onClick={handleConfirm}
+                  disabled={isLoading || stats.matched === 0}
+                  className="flex-1"
+                >
+                  {isLoading ? '処理中...' : 'インポート実行'}
                 </Button>
               </div>
             </>
