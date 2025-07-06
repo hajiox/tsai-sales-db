@@ -1,5 +1,5 @@
 // /components/Qoo10CsvImportModal.tsx
-// ver.1 (BASE完全移植版 - Qoo10対応)
+// ver.2 (修正UI実装版 - Qoo10対応)
 
 'use client';
 
@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle } from 'lucide-react';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle, Edit2, Check, Save } from 'lucide-react';
 
 interface Product {
  id: string;
@@ -42,6 +42,16 @@ export default function Qoo10CsvImportModal({
    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
  });
 
+ // 修正UI用の状態
+ const [allMappings, setAllMappings] = useState<Array<{
+   qoo10Title: string;
+   productId: string;
+   productName: string;
+   quantity: number;
+   isLearned?: boolean;
+ }>>([]);
+ const [savingMapping, setSavingMapping] = useState<string | null>(null);
+
  useEffect(() => {
    if (!isOpen) {
      setStep(1);
@@ -50,8 +60,36 @@ export default function Qoo10CsvImportModal({
      setNewMappings([]);
      setCurrentUnmatchIndex(0);
      setError('');
+     setAllMappings([]);
    }
  }, [isOpen]);
+
+ // parseResultからallMappingsへの変換
+ useEffect(() => {
+   if (parseResult && step === 3) {
+     const matched = parseResult.matchedProducts || [];
+     const unmatched = parseResult.unmatchedProducts || [];
+     
+     const mappings = [
+       ...matched.map((m: any) => ({
+         qoo10Title: m.qoo10Title,
+         productId: m.productInfo.id,
+         productName: m.productInfo.name,
+         quantity: m.quantity,
+         isLearned: false
+       })),
+       ...unmatched.map((u: any) => ({
+         qoo10Title: u.qoo10Title,
+         productId: '',
+         productName: '',
+         quantity: u.quantity,
+         isLearned: false
+       }))
+     ];
+     
+     setAllMappings(mappings);
+   }
+ }, [parseResult, step]);
 
  if (!isOpen) return null;
 
@@ -123,6 +161,73 @@ export default function Qoo10CsvImportModal({
    }
  };
 
+ // 修正UI: マッピング変更ハンドラ
+ const handleMappingChange = (index: number, newProductId: string) => {
+   setAllMappings(prev => prev.map((mapping, i) => {
+     if (i === index) {
+       const product = products.find(p => p.id === newProductId);
+       return {
+         ...mapping,
+         productId: newProductId,
+         productName: product?.name || '',
+         isLearned: false
+       };
+     }
+     return mapping;
+   }));
+ };
+
+ // 修正UI: 個別学習機能
+ const handleLearnMapping = async (index: number) => {
+   const mapping = allMappings[index];
+   if (!mapping.productId || mapping.isLearned) return;
+
+   setSavingMapping(mapping.qoo10Title);
+   
+   try {
+     const response = await fetch('/api/import/qoo10-learn', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({
+         qoo10Title: mapping.qoo10Title,
+         productId: mapping.productId
+       }),
+     });
+
+     const result = await response.json();
+     if (result.success) {
+       setAllMappings(prev => prev.map((m, i) => 
+         i === index ? { ...m, isLearned: true } : m
+       ));
+     } else {
+       throw new Error(result.error || '学習に失敗しました');
+     }
+   } catch (error) {
+     console.error('学習エラー:', error);
+     alert('学習に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'));
+   } finally {
+     setSavingMapping(null);
+   }
+ };
+
+ // 統計情報の計算
+ const getStats = () => {
+   if (step === 3 && allMappings.length > 0) {
+     const matched = allMappings.filter(m => m.productId).length;
+     const unmatched = allMappings.filter(m => !m.productId).length;
+     const totalQuantity = allMappings.filter(m => m.productId)
+       .reduce((sum, m) => sum + m.quantity, 0);
+     return { matched, unmatched, totalQuantity };
+   }
+   else if (parseResult) {
+     const matched = parseResult.matchedProducts?.length || 0;
+     const unmatched = parseResult.unmatchedProducts?.length || 0;
+     const totalQuantity = parseResult.summary.processableQuantity || 0;
+     return { matched, unmatched, totalQuantity };
+   }
+   return { matched: 0, unmatched: 0, totalQuantity: 0 };
+ };
+
  const handleConfirm = async () => {
    if (!parseResult) return;
    
@@ -130,16 +235,23 @@ export default function Qoo10CsvImportModal({
    setError('');
 
    try {
+     // Step 3の場合は修正されたデータを使用
+     const matchedProducts = step === 3 
+       ? allMappings.filter(m => m.productId).map(m => ({
+           qoo10Title: m.qoo10Title,
+           productInfo: { id: m.productId },
+           quantity: m.quantity
+         }))
+       : parseResult.matchedProducts.map((item: any) => ({
+           qoo10Title: item.qoo10Title,
+           productInfo: { id: item.productInfo.id },
+           quantity: item.quantity
+         }));
+
      const requestData = {
        saleDate: `${saleMonth}-01`,
-       matchedProducts: parseResult.matchedProducts.map((item: any) => ({
-         qoo10Title: item.qoo10Title,
-         productInfo: {
-           id: item.productInfo.id
-         },
-         quantity: item.quantity
-       })),
-       newMappings: newMappings,
+       matchedProducts,
+       newMappings: step === 3 ? [] : newMappings,
      };
 
      const response = await fetch('/api/import/qoo10-confirm', {
@@ -170,6 +282,8 @@ export default function Qoo10CsvImportModal({
  const progress = parseResult?.unmatchedProducts?.length > 0 
    ? ((currentUnmatchIndex + 1) / parseResult.unmatchedProducts.length) * 100 
    : 0;
+
+ const stats = getStats();
 
  return (
    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -260,7 +374,7 @@ export default function Qoo10CsvImportModal({
                  <div className="text-center">
                    <div className="text-sm text-gray-600">処理可能数量</div>
                    <div className="text-2xl font-bold text-pink-600">
-                     {parseResult.summary.processableQuantity + newMappings.reduce((sum, m) => sum + m.quantity, 0)}個
+                     {stats.totalQuantity}個
                    </div>
                  </div>
                </CardContent>
@@ -273,7 +387,7 @@ export default function Qoo10CsvImportModal({
                  </CardHeader>
                  <CardContent>
                    <div className="text-2xl font-bold text-pink-600">
-                     {(parseResult.matchedProducts?.length || 0) + newMappings.length}件
+                     {stats.matched}件
                    </div>
                  </CardContent>
                </Card>
@@ -284,7 +398,7 @@ export default function Qoo10CsvImportModal({
                  </CardHeader>
                  <CardContent>
                    <div className="text-2xl font-bold text-yellow-600">
-                     {(parseResult.unmatchedProducts?.length || 0) - newMappings.length}件
+                     {stats.unmatched}件
                    </div>
                  </CardContent>
                </Card>
@@ -296,104 +410,117 @@ export default function Qoo10CsvImportModal({
                  戻る
                </Button>
                
-               {(parseResult.unmatchedProducts?.length || 0) > newMappings.length ? (
-                 <Button onClick={handleStartUnmatchFix} className="flex-1 bg-pink-600 hover:bg-pink-700">
-                   <ArrowRight className="h-4 w-4 mr-2" />
-                   未マッチ商品を修正
-                 </Button>
-               ) : (
-                 <Button 
-                   onClick={handleConfirm}
-                   disabled={isLoading}
-                   className="flex-1 bg-pink-600 hover:bg-pink-700"
-                 >
-                   {isLoading ? '処理中...' : 'インポート実行'}
-                 </Button>
-               )}
+               <Button 
+                 onClick={() => setStep(3)}
+                 className="flex-1 bg-purple-600 hover:bg-purple-700"
+               >
+                 <Edit2 className="h-4 w-4 mr-2" />
+                 マッチング結果を修正
+               </Button>
+               
+               <Button 
+                 onClick={handleConfirm}
+                 disabled={isLoading || stats.matched === 0}
+                 className="flex-1 bg-pink-600 hover:bg-pink-700"
+               >
+                 {isLoading ? '処理中...' : 'インポート実行'}
+               </Button>
              </div>
            </>
          )}
 
-         {step === 3 && currentUnmatch && (
+         {step === 3 && (
            <>
-             <div className="space-y-2 mb-4">
-               <div className="flex justify-between text-sm">
-                 <span>未マッチ商品修正</span>
-                 <span>{currentUnmatchIndex + 1} / {parseResult.unmatchedProducts.length}</span>
-               </div>
-               <div className="w-full bg-gray-200 rounded-full h-2">
-                 <div 
-                   className="bg-pink-600 h-2 rounded-full transition-all duration-300"
-                   style={{ width: `${progress}%` }}
-                 ></div>
+             <div className="mb-4">
+               <div className="flex justify-between items-center">
+                 <h3 className="text-lg font-semibold">マッチング結果の修正</h3>
+                 <div className="text-sm text-gray-600">
+                   マッチ済み: {stats.matched}件 / 未マッチ: {stats.unmatched}件
+                 </div>
                </div>
              </div>
 
-             <Card className="border-pink-200 mb-4">
-               <CardHeader className="pb-3">
-                 <CardTitle className="text-pink-700 flex items-center gap-2">
-                   🟣 Qoo10商品
-                   <span className="px-2 py-1 text-xs bg-pink-100 text-pink-800 rounded-full">{currentUnmatch.quantity}個</span>
-                 </CardTitle>
-               </CardHeader>
-               <CardContent>
-                 <div className="p-3 bg-pink-50 rounded-md">
-                   <div className="font-medium text-pink-900">
-                     {qoo10Core}
+             <div className="space-y-3 max-h-[60vh] overflow-y-auto border rounded-lg p-4">
+               {allMappings.map((mapping, index) => (
+                 <div 
+                   key={index} 
+                   className={`p-4 rounded-lg border ${
+                     mapping.productId 
+                       ? 'bg-pink-50 border-pink-200' 
+                       : 'bg-yellow-50 border-yellow-200'
+                   }`}
+                 >
+                   <div className="grid grid-cols-12 gap-4 items-center">
+                     <div className="col-span-5">
+                       <div className="text-sm text-gray-600 mb-1">Qoo10商品</div>
+                       <div className="font-medium">{mapping.qoo10Title}</div>
+                       <div className="text-sm text-gray-500">数量: {mapping.quantity}個</div>
+                     </div>
+                     
+                     <div className="col-span-1 flex justify-center">
+                       <ArrowRight className="h-5 w-5 text-gray-400" />
+                     </div>
+                     
+                     <div className="col-span-4">
+                       <select
+                         value={mapping.productId}
+                         onChange={(e) => handleMappingChange(index, e.target.value)}
+                         className="w-full p-2 border rounded-md"
+                       >
+                         <option value="">-- 未選択（この商品はスキップ） --</option>
+                         {products.map((product) => (
+                           <option key={product.id} value={product.id}>
+                             {product.name} ({product.series_code}-{product.product_code})
+                           </option>
+                         ))}
+                       </select>
+                     </div>
+                     
+                     <div className="col-span-2 text-right">
+                       {mapping.productId && (
+                         <Button
+                           size="sm"
+                           variant={mapping.isLearned ? "outline" : "default"}
+                           onClick={() => handleLearnMapping(index)}
+                           disabled={mapping.isLearned || savingMapping === mapping.qoo10Title}
+                           className={mapping.isLearned ? "text-green-600" : ""}
+                         >
+                           {savingMapping === mapping.qoo10Title ? (
+                             <>
+                               <Save className="h-3 w-3 mr-1 animate-pulse" />
+                               保存中...
+                             </>
+                           ) : mapping.isLearned ? (
+                             <>
+                               <Check className="h-3 w-3 mr-1" />
+                               学習済み
+                             </>
+                           ) : (
+                             <>
+                               <Save className="h-3 w-3 mr-1" />
+                               この組み合わせを学習
+                             </>
+                           )}
+                         </Button>
+                       )}
+                     </div>
                    </div>
                  </div>
-               </CardContent>
-             </Card>
+               ))}
+             </div>
 
-             <Card className="mb-4">
-               <CardHeader>
-                 <CardTitle>🎯 マッチする商品を選択してください</CardTitle>
-                 <p className="text-sm text-gray-600">
-                   {products?.length || 0}件の商品から選択するか、該当なしの場合はスキップしてください
-                 </p>
-               </CardHeader>
-               <CardContent>
-                 <div className="space-y-3 max-h-72 overflow-y-auto border rounded-lg p-3 bg-gray-50">
-                   {products && products.length > 0 ? (
-                     products.map((product) => (
-                       <button
-                         key={product.id}
-                         onClick={() => handleProductSelect(product.id)}
-                         className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-pink-50 hover:border-pink-300 transition-colors bg-white shadow-sm"
-                       >
-                         <div className="font-medium text-pink-900 mb-1">
-                           {product.name}
-                         </div>
-                         <div className="text-sm text-gray-600">
-                           シリーズ: {product.series} | コード: {product.series_code}-{product.product_code}
-                         </div>
-                       </button>
-                     ))
-                   ) : (
-                     <div className="text-center py-8 text-gray-500">
-                       商品データが見つかりません
-                     </div>
-                   )}
-                 </div>
-                 
-                 <div className="mt-4 pt-4 border-t">
-                   <button
-                     onClick={() => handleProductSelect('skip')}
-                     className="w-full p-4 text-left border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                   >
-                     <div className="font-medium text-gray-600 flex items-center gap-2 justify-center">
-                       <X className="h-5 w-5" />
-                       この商品をスキップ
-                     </div>
-                   </button>
-                 </div>
-               </CardContent>
-             </Card>
-
-             <div className="flex gap-2">
+             <div className="flex gap-2 mt-4">
                <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
                  <ArrowLeft className="h-4 w-4 mr-2" />
                  確認画面に戻る
+               </Button>
+               
+               <Button 
+                 onClick={handleConfirm}
+                 disabled={isLoading || stats.matched === 0}
+                 className="flex-1 bg-pink-600 hover:bg-pink-700"
+               >
+                 {isLoading ? '処理中...' : `${stats.matched}件をインポート実行`}
                </Button>
              </div>
            </>
