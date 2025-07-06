@@ -1,5 +1,5 @@
 // /app/api/import/base-parse/route.ts
-// ver.2 (楽天APIからの完全移植版 - BASE CSV構造対応)
+// ver.3 (集計処理追加版 - 1行1注文形式対応)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -45,7 +45,7 @@ function isValidString(value: any): value is string {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== BASE API開始 ver.2 ===');
+    console.log('=== BASE API開始 ver.3 ===');
     
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -72,10 +72,44 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('BASE CSVファイル解析開始');
-    // BASE CSVはヘッダー1行のみスキップ（楽天の.slice(7)と違い.slice(1)）
+    // BASE CSVはヘッダー1行のみスキップ
     const lines = csvContent.split('\n').slice(1).filter((line: string) => line.trim() !== '');
     console.log('解析された行数:', lines.length);
 
+    // ========== 集計処理開始 ==========
+    const aggregatedData = new Map<string, number>();
+    let blankTitleRows: any[] = [];
+    let totalRowQuantity = 0;
+
+    // 1. まず商品名ごとに数量を集計
+    for (let i = 0; i < lines.length; i++) {
+        const columns = parseCsvLine(lines[i]);
+        // BASE CSVは38列、最低でも商品名(18)と数量(22)が必要
+        if (columns.length < 23) continue;
+
+        // BASE CSVの構造：商品名=18列目（0ベース18）、数量=22列目（0ベース22）
+        const baseTitle = columns[18]?.trim() || '';
+        const quantity = parseInt(columns[22], 10) || 0;
+
+        if (quantity <= 0) continue;
+        totalRowQuantity += quantity;
+
+        // 厳密な文字列検証
+        if (!isValidString(baseTitle)) {
+            blankTitleRows.push({ rowNumber: i + 2, quantity }); // ヘッダー1行分調整
+            console.log(`空欄タイトル検出: 行${i + 2}, 数量${quantity}`);
+            continue;
+        }
+
+        // 同じ商品名の数量を合計
+        const currentQuantity = aggregatedData.get(baseTitle) || 0;
+        aggregatedData.set(baseTitle, currentQuantity + quantity);
+    }
+
+    console.log(`集計完了: ${aggregatedData.size}種類の商品`);
+    console.log('総注文数量:', totalRowQuantity);
+
+    // ========== マッチング処理開始 ==========
     const { data: products, error: productsError } = await supabase.from('products').select('*');
     if (productsError) throw new Error(`商品マスターの取得に失敗: ${productsError.message}`);
 
@@ -103,26 +137,9 @@ export async function POST(request: NextRequest) {
 
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
-    let blankTitleRows: any[] = [];
 
-    for (let i = 0; i < lines.length; i++) {
-        const columns = parseCsvLine(lines[i]);
-        // BASE CSVは38列、最低でも商品名(18)と数量(22)が必要
-        if (columns.length < 23) continue;
-
-        // BASE CSVの構造：商品名=18列目（0ベース18）、数量=22列目（0ベース22）
-        const baseTitle = columns[18]?.trim() || '';
-        const quantity = parseInt(columns[22], 10) || 0;
-
-        if (quantity <= 0) continue;
-
-        // 厳密な文字列検証
-        if (!isValidString(baseTitle)) {
-            blankTitleRows.push({ rowNumber: i + 2, quantity }); // ヘッダー1行分調整
-            console.log(`空欄タイトル検出: 行${i + 2}, 数量${quantity}`);
-            continue;
-        }
-
+    // 2. 集計されたデータに対してマッチング処理
+    for (const [baseTitle, quantity] of aggregatedData) {
         console.log(`処理中: "${baseTitle}" (${quantity}個)`);
 
         try {
@@ -165,6 +182,8 @@ export async function POST(request: NextRequest) {
     console.log('マッチ商品数:', matchedProducts.length);
     console.log('未マッチ商品数:', unmatchedProducts.length);
     console.log('空欄行数:', blankTitleRows.length);
+    console.log('集計前の総行数:', lines.length);
+    console.log('集計後の商品種類数:', aggregatedData.size);
 
     return NextResponse.json({
         success: true,
@@ -178,7 +197,10 @@ export async function POST(request: NextRequest) {
             blankTitleInfo: {
                 count: blankTitleRows.length,
                 quantity: blankTitleQuantity
-            }
+            },
+            // デバッグ用の追加情報
+            originalRows: lines.length,
+            aggregatedProducts: aggregatedData.size
         }
     });
   } catch (error) {
