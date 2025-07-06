@@ -1,6 +1,4 @@
-// /app/api/import/yahoo-parse/route.ts ver.5
-// 正常動作する楽天のロジックを完全に移植した最終版
-
+// /app/api/import/yahoo-parse/route.ts ver.6
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -17,7 +15,7 @@ function isValidString(value: any): value is string {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo CSV解析API開始 ver.5 (楽天ロジック移植版) ===');
+    console.log('=== Yahoo CSV解析API開始 ver.6 (学習データ形式修正版) ===');
     
     const { csvData } = await request.json();
     if (!csvData) {
@@ -41,8 +39,19 @@ export async function POST(request: NextRequest) {
     console.log('有効な商品数:', validProducts.length);
 
     if (learningDataResponse.error) throw new Error(`学習データの取得に失敗: ${learningDataResponse.error.message}`);
-    const validLearningData = (learningDataResponse.data || []).filter(l => l && isValidString(l.yahoo_title));
-    console.log('有効な学習データ数:', validLearningData.length);
+    
+    // ★★★★★★★★★★★★★★★★★★★★★★
+    //           ★最重要修正ポイント★
+    // ★★★★★★★★★★★★★★★★★★★★★★
+    // 学習データを共通ヘルパー関数が扱える汎用的な形式 { ecTitle, productId } に変換します。
+    // これにより、学習データが正しくマッチング処理で利用されるようになります。
+    const mappedLearningData = (learningDataResponse.data || [])
+      .filter(l => l && isValidString(l.yahoo_title) && isValidString(l.product_id))
+      .map(item => ({
+        ecTitle: item.yahoo_title,   // `yahoo_title` を `ecTitle` に変換
+        productId: item.product_id,  // `product_id` を `productId` に変換
+      }));
+    console.log('有効な学習データ数:', mappedLearningData.length);
     
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
@@ -63,7 +72,8 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-            const productInfo = findBestMatchSimplified(productTitle, validProducts, validLearningData);
+            // マッチング関数には、変換後の `mappedLearningData` を渡します。
+            const productInfo = findBestMatchSimplified(productTitle, validProducts, mappedLearningData);
 
             if (productInfo) {
                 matchedProducts.push({ 
