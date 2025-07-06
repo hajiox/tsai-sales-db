@@ -1,4 +1,4 @@
-// /components/MercariCsvImportModal.tsx ver.5 (Step3修正版)
+// /components/MercariCsvImportModal.tsx ver.6 (集計画面削除・統合版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -30,7 +30,6 @@ export default function MercariCsvImportModal({
 }: MercariCsvImportModalProps) {
   const [step, setStep] = useState(1);
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [aggregatedData, setAggregatedData] = useState<any>(null);
   const [parseResult, setParseResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -53,7 +52,6 @@ export default function MercariCsvImportModal({
     if (!isOpen) {
       setStep(1);
       setCsvFile(null);
-      setAggregatedData(null);
       setParseResult(null);
       setError('');
       setAllMappings([]);
@@ -62,7 +60,7 @@ export default function MercariCsvImportModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (parseResult && step === 4) {
+    if (parseResult && step === 3) {
       const matched = parseResult.matchedProducts || [];
       const unmatched = parseResult.unmatchedProducts || [];
       
@@ -94,15 +92,14 @@ export default function MercariCsvImportModal({
     const file = e.target.files?.[0];
     if (file) {
       setCsvFile(file);
-      setAggregatedData(null);
       setParseResult(null);
       setError('');
       setAllMappings([]);
     }
   };
   
-  // Phase 1: CSV集計処理
-  const handleAggregate = async () => {
+  // 集計とマッチングを統合
+  const handleParse = async () => {
     if (!csvFile) {
       setError('CSVファイルを選択してください');
       return;
@@ -114,6 +111,7 @@ export default function MercariCsvImportModal({
     try {
       const csvContent = await csvFile.text();
       
+      // Phase 1: CSV集計処理
       console.log('Phase 1: CSV集計処理開始');
       const aggregateResponse = await fetch('/api/aggregate/mercari-csv', {
         method: 'POST',
@@ -129,35 +127,14 @@ export default function MercariCsvImportModal({
         throw new Error(aggregateResult.error || 'メルカリCSVの集計に失敗しました');
       }
 
-      console.log('集計結果:', aggregateResult);
-      setAggregatedData(aggregateResult);
-      setStep(2);
-    } catch (error) {
-      console.error('メルカリCSV集計エラー:', error);
-      setError(error instanceof Error ? error.message : '集計処理中にエラーが発生しました');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Phase 2: マッチング処理
-  const handleMatching = async () => {
-    if (!aggregatedData) {
-      setError('集計データがありません');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
+      // Phase 2: マッチング処理
       console.log('Phase 2: マッチング処理開始');
       const matchingResponse = await fetch('/api/import/mercari-parse', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ aggregatedProducts: aggregatedData.aggregatedProducts }),
+        body: JSON.stringify({ aggregatedProducts: aggregateResult.aggregatedProducts }),
       });
 
       const matchingResult = await matchingResponse.json();
@@ -168,10 +145,10 @@ export default function MercariCsvImportModal({
 
       console.log('マッチング結果:', matchingResult);
       setParseResult(matchingResult);
-      setStep(3);
+      setStep(2);
     } catch (error) {
-      console.error('メルカリマッチング処理エラー:', error);
-      setError(error instanceof Error ? error.message : 'マッチング処理中にエラーが発生しました');
+      console.error('メルカリCSV処理エラー:', error);
+      setError(error instanceof Error ? error.message : '処理中にエラーが発生しました');
     } finally {
       setIsLoading(false);
     }
@@ -230,8 +207,8 @@ export default function MercariCsvImportModal({
     try {
       let requestData;
       
-      if (step === 4) {
-        // Step 4からの場合は修正されたデータを使用
+      if (step === 3) {
+        // Step 3からの場合は修正されたデータを使用
         const validMappings = allMappings.filter(m => m.productId);
         requestData = {
           saleDate: `${saleMonth}-01`,
@@ -245,7 +222,7 @@ export default function MercariCsvImportModal({
           newMappings: [],
         };
       } else {
-        // Step 3からの場合は元のデータを使用
+        // Step 2からの場合は元のデータを使用
         requestData = {
           saleDate: `${saleMonth}-01`,
           matchedProducts: parseResult.matchedProducts,
@@ -276,7 +253,7 @@ export default function MercariCsvImportModal({
 
   // 統計情報の計算
   const getStats = () => {
-    if (step === 4 && allMappings.length > 0) {
+    if (step === 3 && allMappings.length > 0) {
       const matched = allMappings.filter(m => m.productId).length;
       const unmatched = allMappings.filter(m => !m.productId).length;
       const totalQuantity = allMappings.filter(m => m.productId).reduce((sum, m) => sum + m.quantity, 0);
@@ -321,67 +298,35 @@ export default function MercariCsvImportModal({
                     <span>{csvFile ? csvFile.name : '選択されていません'}</span>
                   </div>
                 </div>
-                <Button onClick={handleAggregate} disabled={!csvFile || isLoading} className="w-full mt-4">
+                <Button onClick={handleParse} disabled={!csvFile || isLoading} className="w-full mt-4">
                   <Upload className="h-4 w-4 mr-2" />
-                  {isLoading ? '集計中...' : '次へ（集計処理）'}
+                  {isLoading ? '解析中...' : '次へ（確認画面）'}
                 </Button>
               </div>
             </>
           )}
 
-          {/* Step 2: 集計結果確認 */}
-          {step === 2 && aggregatedData && (
-            <>
-              <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2">📊 集計結果</CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <div className="text-sm text-gray-600">集計商品数</div>
-                    <div className="text-2xl font-bold text-blue-600">{aggregatedData.summary?.totalProducts || 0}件</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-gray-600">総販売数量</div>
-                    <div className="text-2xl font-bold text-blue-600">{aggregatedData.summary?.totalQuantity || 0}個</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-gray-600">処理した行数</div>
-                    <div className="text-2xl font-bold text-green-600">{aggregatedData.summary?.processedRows || 0}行</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <div className="flex gap-2 mt-4">
-                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
-                  <ArrowLeft className="h-4 w-4 mr-2" />戻る
-                </Button>
-                <Button onClick={handleMatching} disabled={isLoading} className="flex-1">
-                  <ArrowRight className="h-4 w-4 mr-2" />
-                  {isLoading ? 'マッチング中...' : '次へ（マッチング処理）'}
-                </Button>
-              </div>
-            </>
-          )}
-
-          {/* Step 3: マッチング結果確認（修正版） */}
-          {step === 3 && parseResult && (
+          {/* Step 2: マッチング結果確認 */}
+          {step === 2 && parseResult && (
             <>
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">売上月:</label>
                 <input type="month" value={saleMonth} onChange={(e) => setSaleMonth(e.target.value)} className="border rounded-md p-2 w-full" />
               </div>
               <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2">🎯 マッチング結果</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2">📊 集計結果</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div className="text-center">
-                    <div className="text-sm text-gray-600">総商品数</div>
-                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary?.totalProducts || 0}件</div>
+                    <div className="text-sm text-gray-600">集計商品数</div>
+                    <div className="text-2xl font-bold text-green-600">{parseResult.summary?.totalProducts || 0}件</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">総販売数量</div>
-                    <div className="text-2xl font-bold text-blue-600">{parseResult.summary?.totalQuantity || 0}個</div>
+                    <div className="text-2xl font-bold text-green-600">{parseResult.summary?.totalQuantity || 0}個</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-sm text-gray-600">登録可能数量</div>
-                    <div className="text-2xl font-bold text-green-600">{stats.totalQuantity}個</div>
+                    <div className="text-sm text-gray-600">処理した行数</div>
+                    <div className="text-2xl font-bold text-green-600">{parseResult.summary?.processedRows || 0}行</div>
                   </div>
                 </CardContent>
               </Card>
@@ -398,10 +343,10 @@ export default function MercariCsvImportModal({
               </div>
               
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />戻る
                 </Button>
-                <Button onClick={() => setStep(4)} className="flex-1">
+                <Button onClick={() => setStep(3)} className="flex-1">
                   <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
                 </Button>
                 <Button 
@@ -415,8 +360,8 @@ export default function MercariCsvImportModal({
             </>
           )}
 
-          {/* Step 4: マッチング修正 */}
-          {step === 4 && (
+          {/* Step 3: マッチング修正 */}
+          {step === 3 && (
             <>
               <h3 className="text-lg font-bold mb-4">マッチング結果の修正</h3>
               <Card className="mb-4">
@@ -512,7 +457,7 @@ export default function MercariCsvImportModal({
               )}
               
               <div className="flex gap-2 mt-4">
-                <Button variant="outline" onClick={() => setStep(3)} className="flex-1">
+                <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />確認画面に戻る
                 </Button>
                 <Button 
