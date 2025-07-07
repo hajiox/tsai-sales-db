@@ -1,5 +1,5 @@
 // /app/api/import/qoo10-confirm/route.ts
-// ver.2 (saleDate エラーハンドリング強化版)
+// ver.3 (データ形式対応強化版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -11,35 +11,18 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-interface ConfirmRequest {
-  saleDate?: string;
-  matchedProducts: Array<{
-    qoo10Title: string;
-    productInfo: {
-      id: string;
-    };
-    quantity: number;
-  }>;
-  newMappings?: Array<{
-    qoo10Title: string;
-    productId: string;
-    quantity: number;
-  }>;
-}
-
 export async function POST(request: NextRequest) {
-  console.log('🟣 Qoo10確定API開始 - ver.2');
+  console.log('🟣 Qoo10確定API開始 - ver.3');
   
   try {
-    const body: ConfirmRequest = await request.json();
-    console.log('受信データ:', JSON.stringify(body, null, 2));
+    const body = await request.json();
+    console.log('受信データ（全体）:', JSON.stringify(body, null, 2));
     
     const { saleDate, matchedProducts, newMappings } = body;
     
     // 【修正】saleDateのエラーハンドリング強化
     let month: string;
     if (!saleDate || typeof saleDate !== 'string' || saleDate.length < 7) {
-      // デフォルトで現在の年月を使用
       const now = new Date();
       month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       console.warn('saleDateが不正なため、現在の年月を使用:', month);
@@ -47,10 +30,23 @@ export async function POST(request: NextRequest) {
       month = saleDate.substring(0, 7);
     }
 
-    if (!matchedProducts || !Array.isArray(matchedProducts)) {
-      console.error('マッチ商品データが不正:', matchedProducts);
+    // 【修正】より詳細なデータ検証
+    console.log('matchedProducts の型:', typeof matchedProducts);
+    console.log('matchedProducts の配列チェック:', Array.isArray(matchedProducts));
+    console.log('matchedProducts の中身:', matchedProducts);
+
+    if (!matchedProducts) {
+      console.error('matchedProducts が undefined/null です');
       return NextResponse.json(
-        { success: false, error: 'マッチ商品データが不正です' },
+        { success: false, error: 'マッチ商品データがありません' },
+        { status: 400 }
+      );
+    }
+
+    if (!Array.isArray(matchedProducts)) {
+      console.error('matchedProducts が配列ではありません:', typeof matchedProducts);
+      return NextResponse.json(
+        { success: false, error: 'マッチ商品データの形式が正しくありません' },
         { status: 400 }
       );
     }
@@ -92,13 +88,39 @@ export async function POST(request: NextRequest) {
     // 2. 売上データを商品IDごとに【集計】する
     const allSalesData: Array<{productId: string; quantity: number}> = [];
     
+    console.log('📊 マッチ商品データの処理開始:', matchedProducts.length, '件');
+    
     // マッチ済み商品を追加
-    for (const item of matchedProducts) {
+    for (let i = 0; i < matchedProducts.length; i++) {
+      const item = matchedProducts[i];
+      console.log(`項目 ${i}:`, JSON.stringify(item, null, 2));
+      
+      // 【修正】より柔軟なデータ構造対応
+      let productId: string | undefined;
+      let quantity: number = 0;
+      
+      // productInfo.id の取得（複数パターンに対応）
       if (item.productInfo && item.productInfo.id) {
+        productId = item.productInfo.id;
+      } else if (item.productId) {
+        productId = item.productId;
+      }
+      
+      // quantity の取得
+      if (typeof item.quantity === 'number') {
+        quantity = item.quantity;
+      } else if (typeof item.count === 'number') {
+        quantity = item.count;
+      }
+      
+      if (productId && quantity > 0) {
         allSalesData.push({
-          productId: item.productInfo.id,
-          quantity: item.quantity || 0
+          productId: productId,
+          quantity: quantity
         });
+        console.log(`✅ 処理対象に追加: productId=${productId}, quantity=${quantity}`);
+      } else {
+        console.warn(`⚠️ スキップ: productId=${productId}, quantity=${quantity}`);
       }
     }
     
@@ -114,7 +136,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    console.log('📊 処理対象データ:', allSalesData.length, '件');
+    console.log('📊 最終処理対象データ:', allSalesData.length, '件');
     
     if (allSalesData.length === 0) {
       return NextResponse.json({
