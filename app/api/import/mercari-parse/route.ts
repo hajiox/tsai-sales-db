@@ -1,4 +1,4 @@
-// /app/api/import/mercari-parse/route.ts ver.5
+// /app/api/import/mercari-parse/route.ts ver.6
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -21,7 +21,7 @@ interface AggregatedProduct {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== メルカリマッチングAPI開始 ver.5 ===');
+    console.log('=== メルカリマッチングAPI開始 ver.6 ===');
     
     const { aggregatedProducts } = await request.json();
     
@@ -35,13 +35,14 @@ export async function POST(request: NextRequest) {
 
     const validProducts = (products || []).filter(p => isValidString(p.name));
     
+    // 【修正】学習データの取得方法をAmazonと同じ形式に変更
     const { data: learningData, error: learningDataError } = await supabase
         .from('mercari_product_mapping')
-        .select('title:mercari_title, product_id');
+        .select('mercari_title, product_id');
 
     if (learningDataError) throw new Error(`学習データの取得に失敗: ${learningDataError.message}`);
 
-    const validLearningData = (learningData || []).filter(l => isValidString(l.title));
+    console.log('📚 メルカリ学習データ数:', learningData?.length);
     
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
@@ -55,13 +56,12 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-            // [修正点] 最後の2つの引数の順番を入れ替える
             const productInfo = findBestMatchSimplified(
                 productName,
                 validProducts,
-                validLearningData,
-                matchedMercariTitles, // 先に記憶セット
-                'mercari'             // 次にチャンネル名
+                learningData || [],
+                matchedMercariTitles,
+                'mercari'
             );
 
             if (productInfo) {
