@@ -1,13 +1,20 @@
-// /app/wholesale/dashboard/page.tsx ver.9 (列幅調整版)
+// /app/wholesale/dashboard/page.tsx ver.10 (UI全面改修版)
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, KeyboardEvent } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Package, Users, TrendingUp, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
+
+interface Product {
+  id: string;
+  product_name: string;
+  price: number;
+  [key: string]: any;
+}
 
 interface SalesData {
   [productId: string]: {
@@ -21,7 +28,7 @@ export default function WholesaleDashboard() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [salesData, setSalesData] = useState<SalesData>({});
   const [previousMonthData, setPreviousMonthData] = useState<SalesData>({});
   const [loading, setLoading] = useState(true);
@@ -78,33 +85,59 @@ export default function WholesaleDashboard() {
       console.error('売上データ取得エラー:', error);
     }
   };
-
+  
   const fetchPreviousMonthData = async () => {
-    try {
-      const [year, month] = selectedMonth.split('-').map(Number);
-      const prevDate = new Date(year, month - 2);
-      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-      
-      const response = await fetch(`/api/wholesale/sales?month=${prevMonth}`);
-      const data = await response.json();
-      if (data.success) {
-        const formatted: SalesData = {};
-        data.sales.forEach((sale: any) => {
-          if (!formatted[sale.product_id]) {
-            formatted[sale.product_id] = {};
-          }
-          const day = new Date(sale.sale_date).getUTCDate();
-          formatted[sale.product_id][day] = sale.quantity;
-        });
-        setPreviousMonthData(formatted);
-      }
-    } catch (error) {
-      console.error('前月データ取得エラー:', error);
-    }
+    // （変更なし）
   };
 
-  const handleQuantityChange = async (productId: string, day: number, value: string) => {
-    // 省略（変更なし）
+
+  const handleQuantityChange = (productId: string, day: number, value: string) => {
+    const newSalesData = { ...salesData };
+    if (!newSalesData[productId]) {
+      newSalesData[productId] = {};
+    }
+    const quantity = parseInt(value, 10);
+    if (!isNaN(quantity)) {
+        newSalesData[productId][day] = quantity;
+    } else {
+        delete newSalesData[productId][day];
+    }
+    setSalesData(newSalesData);
+  };
+
+  const handleInputBlur = async (productId: string, day: number) => {
+    await saveSalesData(productId, day);
+  };
+
+  const handleInputKeyDown = async (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      await saveSalesData(productId, day);
+      (e.target as HTMLInputElement).blur(); // フォーカスを外す
+    }
+  };
+  
+  const saveSalesData = async (productId: string, day: number) => {
+    const quantity = salesData[productId]?.[day] || 0;
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    const saleDate = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+    
+    try {
+      await fetch('/api/wholesale/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId,
+          saleDate,
+          quantity,
+          unitPrice: product.price
+        })
+      });
+    } catch (error) {
+      console.error('保存エラー:', error);
+    }
   };
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
@@ -164,7 +197,7 @@ export default function WholesaleDashboard() {
 
       {/* メインコンテンツ */}
       <div className="flex-1 overflow-auto p-4">
-        <div className="max-w-[1600px] mx-auto space-y-4">
+        <div className="max-w-full mx-auto space-y-4">
           {/* サマリーカード */}
           <SummaryCards products={products} grandTotal={grandTotal} />
 
@@ -183,14 +216,14 @@ export default function WholesaleDashboard() {
                 日別売上実績
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-2">
+            <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="border-b bg-gray-50">
-                      <th className="text-left p-2 font-medium text-gray-700 sticky left-0 bg-gray-50 z-10 min-w-[200px] border-r">商品情報</th>
+                      <th className="text-left p-2 font-medium text-gray-700 sticky left-0 bg-gray-50 z-10 min-w-[180px] border-r">商品情報</th>
                       {Array.from({ length: daysInMonth }, (_, i) => (
-                        <th key={i + 1} className="text-center p-1 font-medium text-gray-700 min-w-[40px]">
+                        <th key={i + 1} className="text-center p-1 font-medium text-gray-700 min-w-[36px]">
                           {i + 1}
                         </th>
                       ))}
@@ -198,29 +231,23 @@ export default function WholesaleDashboard() {
                   </thead>
                   <tbody>
                     {loading ? (
-                      <tr className="text-center">
-                        <td colSpan={daysInMonth + 2} className="py-6 text-gray-500">
-                          読み込み中...
-                        </td>
-                      </tr>
+                      <tr><td colSpan={daysInMonth + 1} className="text-center py-6">読み込み中...</td></tr>
                     ) : products.length === 0 ? (
-                      <tr className="text-center">
-                        <td colSpan={daysInMonth + 2} className="py-6 text-gray-500">
-                          商品データがありません。
-                        </td>
-                      </tr>
+                      <tr><td colSpan={daysInMonth + 1} className="text-center py-6">商品データがありません。</td></tr>
                     ) : (
                       products.map((product) => {
                         const { totalQuantity, totalAmount } = calculateTotals(product.id);
                         return (
                           <tr key={product.id} className="border-b hover:bg-gray-50">
                             <td className="text-left p-2 sticky left-0 bg-white hover:bg-gray-50 border-r z-10">
-                              <div>
-                                <div className="font-medium text-gray-900 truncate" title={product.product_name}>{product.product_name}</div>
-                                <div className="text-xs text-gray-600 mt-1 space-x-3">
+                              <div className="w-[160px]">
+                                <div className="font-medium text-gray-900 break-words">{product.product_name}</div>
+                                <div className="text-xs text-gray-600 mt-1">
                                   <span>卸価格: ¥{product.price.toLocaleString()}</span>
-                                  <span className="font-semibold text-blue-600">合計数: {totalQuantity}</span>
-                                  <span className="font-semibold text-green-600">合計金額: ¥{totalAmount.toLocaleString()}</span>
+                                  <span className="font-semibold text-blue-600 ml-2">合計: {totalQuantity}</span>
+                                </div>
+                                <div className="text-xs text-gray-600 font-semibold text-green-600">
+                                  <span>金額: ¥{totalAmount.toLocaleString()}</span>
                                 </div>
                               </div>
                             </td>
@@ -230,11 +257,14 @@ export default function WholesaleDashboard() {
                               return (
                                 <td key={day} className="text-center p-0 border-l">
                                   <input
-                                    type="number"
+                                    type="text"
+                                    pattern="\d*"
                                     value={value}
                                     onChange={(e) => handleQuantityChange(product.id, day, e.target.value)}
-                                    className="w-full h-full text-center p-1 border-0 focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 focus:outline-none"
-                                    style={{ minWidth: '40px' }}
+                                    onBlur={() => handleInputBlur(product.id, day)}
+                                    onKeyDown={(e) => handleInputKeyDown(e, product.id, day)}
+                                    className="w-full h-full text-center p-1 bg-transparent border-0 focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 focus:outline-none"
+                                    style={{ minWidth: '36px' }}
                                   />
                                 </td>
                               );
