@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.11 (ECサイト別トレンド表示対応版)
+// /components/websales-summary-cards.tsx ver.11 (ECサイト別売上トレンド表示対応版)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
@@ -16,8 +16,7 @@ const SITES = [
 
 type Totals = Record<string, { count: number; amount: number }>
 type SeriesSummary = { seriesName: string; count: number; sales: number; }
-type SeriesTrendData = { month: string; sales: number; }
-type SiteTrendData = { month: string; count: number; amount: number; }
+type TrendData = { month: string; sales: number; }
 
 type WebSalesSummaryCardsProps = {
   month: string;
@@ -38,9 +37,9 @@ export default function WebSalesSummaryCards({
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
   const [hoveredSite, setHoveredSite] = useState<string | null>(null);
   const [hoveredTotal, setHoveredTotal] = useState<boolean>(false);
-  const [seriesTrendData, setSeriesTrendData] = useState<Record<string, SeriesTrendData[]>>({});
-  const [siteTrendData, setSiteTrendData] = useState<Record<string, SiteTrendData[]>>({});
-  const [totalTrendData, setTotalTrendData] = useState<SiteTrendData[]>([]);
+  const [seriesTrendData, setSeriesTrendData] = useState<Record<string, TrendData[]>>({});
+  const [siteTrendData, setSiteTrendData] = useState<Record<string, TrendData[]>>({});
+  const [totalTrendData, setTotalTrendData] = useState<TrendData[]>([]);
   const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({});
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number; right?: number }>({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,7 +77,7 @@ export default function WebSalesSummaryCards({
     }
   };
 
-  // ECサイト別トレンドデータを取得（新規）
+  // ECサイト別トレンドデータを取得（修正版）
   const fetchSiteTrendData = async (siteKey: string) => {
     if (siteTrendData[siteKey] || trendLoading[`site_${siteKey}`]) return;
     
@@ -94,8 +93,7 @@ export default function WebSalesSummaryCards({
       if (!error && trendData) {
         const formattedTrendData = trendData.map((item: any) => ({
           month: item.month_label,
-          count: item.site_count || 0,
-          amount: item.site_amount || 0
+          sales: item.site_amount || 0
         }));
         
         setSiteTrendData(prev => ({ ...prev, [siteKey]: formattedTrendData }));
@@ -111,7 +109,7 @@ export default function WebSalesSummaryCards({
     }
   };
 
-  // 総合計トレンドデータを取得（新規）
+  // 総合計トレンドデータを取得（修正版）
   const fetchTotalTrendData = async () => {
     if (totalTrendData.length > 0 || trendLoading['total']) return;
     
@@ -126,8 +124,7 @@ export default function WebSalesSummaryCards({
       if (!error && trendData) {
         const formattedTrendData = trendData.map((item: any) => ({
           month: item.month_label,
-          count: item.total_count || 0,
-          amount: item.total_amount || 0
+          sales: item.total_amount || 0
         }));
         
         setTotalTrendData(formattedTrendData);
@@ -333,6 +330,38 @@ export default function WebSalesSummaryCards({
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
 
+  // トレンドデータ表示用の共通コンポーネント
+  const renderTrendBars = (trendData: TrendData[]) => {
+    if (!trendData || trendData.length === 0) {
+      return <div className="text-xs text-gray-500 text-center">データがありません</div>;
+    }
+
+    const maxSales = Math.max(...trendData.map(t => t.sales));
+    
+    return (
+      <div className="space-y-1">
+        {trendData.map((trend, index) => {
+          const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
+          
+          return (
+            <div key={index} className="flex items-center justify-between text-xs">
+              <span className="w-12 text-gray-600 text-left">{trend.month}</span>
+              <div className="flex-1 mx-2 h-3 bg-gray-100 rounded-sm overflow-hidden">
+                <div 
+                  className="h-full bg-blue-400 transition-all duration-300"
+                  style={{ width: `${barWidth}%` }}
+                ></div>
+              </div>
+              <span className="w-16 text-right text-gray-700 font-mono text-xs">
+                ¥{formatNumber(trend.sales)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div ref={siteCardsRef} className="grid grid-cols-4 md:grid-cols-7 gap-4 relative">
@@ -382,28 +411,7 @@ export default function WebSalesSummaryCards({
                 <span className="ml-2 text-xs text-gray-500">読込中...</span>
               </div>
             ) : (
-              <div className="space-y-1">
-                {(hoveredTotal ? totalTrendData : hoveredSite ? siteTrendData[hoveredSite] : [])?.map((trend, index) => {
-                  const data = hoveredTotal ? totalTrendData : siteTrendData[hoveredSite!] || [];
-                  const maxAmount = Math.max(...data.map(t => t.amount));
-                  const barWidth = maxAmount > 0 ? (trend.amount / maxAmount) * 100 : 0;
-                  
-                  return (
-                    <div key={index} className="flex items-center justify-between text-xs">
-                      <span className="w-12 text-gray-600 text-left">{trend.month}</span>
-                      <div className="flex-1 mx-2 h-3 bg-gray-100 rounded-sm overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-400 transition-all duration-300"
-                          style={{ width: `${barWidth}%` }}
-                        ></div>
-                      </div>
-                      <span className="w-16 text-right text-gray-700 font-mono text-xs">
-                        ¥{formatNumber(trend.amount)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              renderTrendBars(hoveredTotal ? totalTrendData : siteTrendData[hoveredSite!] || [])
             )}
           </div>
         )}
@@ -445,30 +453,8 @@ export default function WebSalesSummaryCards({
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
                   <span className="ml-2 text-xs text-gray-500">読込中...</span>
                 </div>
-              ) : seriesTrendData[hoveredSeries] && seriesTrendData[hoveredSeries].length > 0 ? (
-                <div className="space-y-1">
-                  {seriesTrendData[hoveredSeries].map((trend, index) => {
-                    const maxSales = Math.max(...seriesTrendData[hoveredSeries].map(t => t.sales));
-                    const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
-                    
-                    return (
-                      <div key={index} className="flex items-center justify-between text-xs">
-                        <span className="w-12 text-gray-600 text-left">{trend.month}</span>
-                        <div className="flex-1 mx-2 h-3 bg-gray-100 rounded-sm overflow-hidden">
-                          <div 
-                            className="h-full bg-blue-400 transition-all duration-300"
-                            style={{ width: `${barWidth}%` }}
-                          ></div>
-                        </div>
-                        <span className="w-16 text-right text-gray-700 font-mono text-xs">
-                          ¥{formatNumber(trend.sales)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
               ) : (
-                <div className="text-xs text-gray-500 text-center">データがありません</div>
+                renderTrendBars(seriesTrendData[hoveredSeries] || [])
               )}
             </div>
           )}
