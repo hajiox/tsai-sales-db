@@ -2,10 +2,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// 書き込み権限のあるSERVICE_ROLE_KEYを使用
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function POST(request: NextRequest) {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
   try {
     const body = await request.json();
     const { qoo10Title, productId } = body;
@@ -13,41 +16,44 @@ export async function POST(request: NextRequest) {
     // バリデーション
     if (!qoo10Title || !productId) {
       return NextResponse.json(
-        { success: false, error: '必須パラメータが不足しています' },
+        { success: false, error: '必須パラメータ(qoo10Title, productId)が不足しています。' },
         { status: 400 }
       );
     }
+    
+    console.log(`📚 Qoo10個別学習開始: 「${qoo10Title}」->「${productId}」`);
 
-    // Supabaseクライアントの初期化
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-    // 学習データの保存（upsert）
-    // Qoo10はPRIMARY KEY方式なので、onConflictは不要
+    // qoo10_product_mappingテーブルの主キーはqoo10_titleなので、
+    // upsertは自動的に「存在すれば更新、なければ挿入」を実行します。
     const { data, error } = await supabase
       .from('qoo10_product_mapping')
       .upsert({
         qoo10_title: qoo10Title,
         product_id: productId,
-        created_at: new Date().toISOString()
-      });
+      })
+      .select()
+      .single();
 
     if (error) {
-      console.error('Qoo10学習データ保存エラー:', error);
+      console.error('❌ Qoo10学習データ保存エラー:', error);
       return NextResponse.json(
-        { success: false, error: '学習データの保存に失敗しました' },
+        { success: false, error: `DBエラー: ${error.message}` },
         { status: 500 }
       );
     }
 
+    console.log('✅ Qoo10個別学習成功:', data);
     return NextResponse.json({
       success: true,
-      message: '学習データを保存しました'
+      message: '学習データを保存しました。',
+      data: data,
     });
 
-  } catch (error) {
-    console.error('Qoo10個別学習APIエラー:', error);
+  } catch (err) {
+    const error = err as Error;
+    console.error('❌ Qoo10個別学習APIで予期せぬエラー:', error);
     return NextResponse.json(
-      { success: false, error: 'サーバーエラーが発生しました' },
+      { success: false, error: `サーバーエラー: ${error.message}` },
       { status: 500 }
     );
   }
