@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.10 (ツールチップ位置調整対応版)
+// /components/websales-summary-cards.tsx ver.11 (ECサイト別トレンド表示対応版)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
@@ -17,6 +17,7 @@ const SITES = [
 type Totals = Record<string, { count: number; amount: number }>
 type SeriesSummary = { seriesName: string; count: number; sales: number; }
 type SeriesTrendData = { month: string; sales: number; }
+type SiteTrendData = { month: string; count: number; amount: number; }
 
 type WebSalesSummaryCardsProps = {
   month: string;
@@ -35,12 +36,17 @@ export default function WebSalesSummaryCards({
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
+  const [hoveredSite, setHoveredSite] = useState<string | null>(null);
+  const [hoveredTotal, setHoveredTotal] = useState<boolean>(false);
   const [seriesTrendData, setSeriesTrendData] = useState<Record<string, SeriesTrendData[]>>({});
+  const [siteTrendData, setSiteTrendData] = useState<Record<string, SiteTrendData[]>>({});
+  const [totalTrendData, setTotalTrendData] = useState<SiteTrendData[]>([]);
   const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({});
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number; right?: number }>({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const siteCardsRef = useRef<HTMLDivElement>(null);
 
-  // シリーズ別トレンドデータを取得（新しいDB関数使用）
+  // シリーズ別トレンドデータを取得（既存）
   const fetchSeriesTrendData = async (seriesName: string) => {
     if (seriesTrendData[seriesName] || trendLoading[seriesName]) return;
     
@@ -62,7 +68,6 @@ export default function WebSalesSummaryCards({
         setSeriesTrendData(prev => ({ ...prev, [seriesName]: formattedTrendData }));
       } else {
         console.error('トレンドデータ取得エラー:', error);
-        // エラー時は空配列をセット
         setSeriesTrendData(prev => ({ ...prev, [seriesName]: [] }));
       }
     } catch (error) {
@@ -70,6 +75,71 @@ export default function WebSalesSummaryCards({
       setSeriesTrendData(prev => ({ ...prev, [seriesName]: [] }));
     } finally {
       setTrendLoading(prev => ({ ...prev, [seriesName]: false }));
+    }
+  };
+
+  // ECサイト別トレンドデータを取得（新規）
+  const fetchSiteTrendData = async (siteKey: string) => {
+    if (siteTrendData[siteKey] || trendLoading[`site_${siteKey}`]) return;
+    
+    setTrendLoading(prev => ({ ...prev, [`site_${siteKey}`]: true }));
+    
+    try {
+      const { data: trendData, error } = await supabase
+        .rpc('get_site_trend_data', { 
+          target_month: month, 
+          target_site: siteKey 
+        });
+      
+      if (!error && trendData) {
+        const formattedTrendData = trendData.map((item: any) => ({
+          month: item.month_label,
+          count: item.site_count || 0,
+          amount: item.site_amount || 0
+        }));
+        
+        setSiteTrendData(prev => ({ ...prev, [siteKey]: formattedTrendData }));
+      } else {
+        console.error('サイトトレンドデータ取得エラー:', error);
+        setSiteTrendData(prev => ({ ...prev, [siteKey]: [] }));
+      }
+    } catch (error) {
+      console.error('サイトトレンドデータ取得エラー:', error);
+      setSiteTrendData(prev => ({ ...prev, [siteKey]: [] }));
+    } finally {
+      setTrendLoading(prev => ({ ...prev, [`site_${siteKey}`]: false }));
+    }
+  };
+
+  // 総合計トレンドデータを取得（新規）
+  const fetchTotalTrendData = async () => {
+    if (totalTrendData.length > 0 || trendLoading['total']) return;
+    
+    setTrendLoading(prev => ({ ...prev, total: true }));
+    
+    try {
+      const { data: trendData, error } = await supabase
+        .rpc('get_total_trend_data', { 
+          target_month: month
+        });
+      
+      if (!error && trendData) {
+        const formattedTrendData = trendData.map((item: any) => ({
+          month: item.month_label,
+          count: item.total_count || 0,
+          amount: item.total_amount || 0
+        }));
+        
+        setTotalTrendData(formattedTrendData);
+      } else {
+        console.error('総合計トレンドデータ取得エラー:', error);
+        setTotalTrendData([]);
+      }
+    } catch (error) {
+      console.error('総合計トレンドデータ取得エラー:', error);
+      setTotalTrendData([]);
+    } finally {
+      setTrendLoading(prev => ({ ...prev, total: false }));
     }
   };
 
@@ -89,11 +159,10 @@ export default function WebSalesSummaryCards({
           setTotals(data.totals);
           setSeriesSummary(data.seriesSummary);
         } else {
-          // 月別表示モード - 新しいデータベース関数を使用
+          // 月別表示モード
           console.log('=== 新関数使用開始 ===');
           console.log('月:', month);
           
-          // 金額計算関数を呼び出し
           const { data: financialData, error: financialError } = await supabase
             .rpc('get_monthly_financial_summary', { target_month: month });
           
@@ -102,9 +171,6 @@ export default function WebSalesSummaryCards({
             throw financialError;
           }
           
-          console.log('Financial data:', financialData);
-          
-          // シリーズ別集計関数を呼び出し
           const { data: seriesData, error: seriesError } = await supabase
             .rpc('get_monthly_series_summary', { target_month: month });
           
@@ -113,13 +179,9 @@ export default function WebSalesSummaryCards({
             throw seriesError;
           }
           
-          console.log('Series data:', seriesData);
-          
-          // 金額データがある場合の処理
           if (financialData && financialData.length > 0) {
             const financial = financialData[0];
             
-            // ECサイト別集計を新しい構造に変換
             const siteTotals: Totals = {
               amazon: { 
                 count: financial.amazon_count || 0, 
@@ -147,16 +209,13 @@ export default function WebSalesSummaryCards({
               }
             };
             
-            console.log('Site totals:', siteTotals);
             setTotals(siteTotals);
           } else {
-            // データがない場合はゼロで初期化
             const siteTotals: Totals = {};
             SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0 }; });
             setTotals(siteTotals);
           }
           
-          // シリーズ別集計を新しい構造に変換（売上順ソート）
           if (seriesData && seriesData.length > 0) {
             const seriesSummaryData = seriesData
               .map((series: any) => ({
@@ -164,9 +223,8 @@ export default function WebSalesSummaryCards({
                 count: series.series_count || 0,
                 sales: series.series_amount || 0
               }))
-              .sort((a, b) => b.sales - a.sales); // 売上金額順でソート
+              .sort((a, b) => b.sales - a.sales);
             
-            console.log('Series summary (sorted by sales):', seriesSummaryData);
             setSeriesSummary(seriesSummaryData);
           } else {
             setSeriesSummary([]);
@@ -176,7 +234,6 @@ export default function WebSalesSummaryCards({
         }
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
-        // エラー時はゼロで初期化
         const siteTotals: Totals = {};
         SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0 }; });
         setTotals(siteTotals);
@@ -195,25 +252,21 @@ export default function WebSalesSummaryCards({
     setHoveredSeries(seriesName);
     fetchSeriesTrendData(seriesName);
 
-    // ツールチップの位置を計算
     const element = event.currentTarget;
     const rect = element.getBoundingClientRect();
     const containerRect = containerRef.current?.getBoundingClientRect();
     
     if (containerRect) {
-      const tooltipWidth = 200; // ツールチップの想定幅
+      const tooltipWidth = 200;
       const elementCenterX = rect.left + rect.width / 2 - containerRect.left;
       const containerWidth = containerRect.width;
       
-      // 右端からはみ出る場合は上に表示、そうでなければ右に表示
       if (elementCenterX + tooltipWidth > containerWidth) {
-        // 上に表示
         setTooltipPosition({
-          top: rect.top - containerRect.top - 10, // 要素の上に配置
-          left: elementCenterX - tooltipWidth / 2, // 中央揃え
+          top: rect.top - containerRect.top - 10,
+          left: elementCenterX - tooltipWidth / 2,
         });
       } else {
-        // 右に表示（従来通り）
         setTooltipPosition({
           top: rect.top - containerRect.top,
           left: rect.right - containerRect.left + 8,
@@ -226,6 +279,48 @@ export default function WebSalesSummaryCards({
     setHoveredSeries(null);
   };
 
+  const handleSiteHover = (siteKey: string, event: React.MouseEvent<HTMLDivElement>) => {
+    setHoveredSite(siteKey);
+    fetchSiteTrendData(siteKey);
+
+    const element = event.currentTarget;
+    const rect = element.getBoundingClientRect();
+    const containerRect = siteCardsRef.current?.getBoundingClientRect();
+    
+    if (containerRect) {
+      const tooltipWidth = 200;
+      setTooltipPosition({
+        top: rect.bottom - containerRect.top + 8,
+        left: rect.left + rect.width / 2 - containerRect.left - tooltipWidth / 2,
+      });
+    }
+  };
+
+  const handleSiteLeave = () => {
+    setHoveredSite(null);
+  };
+
+  const handleTotalHover = (event: React.MouseEvent<HTMLDivElement>) => {
+    setHoveredTotal(true);
+    fetchTotalTrendData();
+
+    const element = event.currentTarget;
+    const rect = element.getBoundingClientRect();
+    const containerRect = siteCardsRef.current?.getBoundingClientRect();
+    
+    if (containerRect) {
+      const tooltipWidth = 200;
+      setTooltipPosition({
+        top: rect.bottom - containerRect.top + 8,
+        left: rect.left + rect.width / 2 - containerRect.left - tooltipWidth / 2,
+      });
+    }
+  };
+
+  const handleTotalLeave = () => {
+    setHoveredTotal(false);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-40">
@@ -235,14 +330,17 @@ export default function WebSalesSummaryCards({
     );
   }
 
-  // ECサイト別集計から総合計を計算
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-4 md:grid-cols-7 gap-4">
-        <Card className="text-center bg-gray-50 border-gray-200">
+      <div ref={siteCardsRef} className="grid grid-cols-4 md:grid-cols-7 gap-4 relative">
+        <Card 
+          className="text-center bg-gray-50 border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+          onMouseEnter={handleTotalHover}
+          onMouseLeave={handleTotalLeave}
+        >
           <CardHeader><CardTitle className="text-sm">総合計</CardTitle></CardHeader>
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
@@ -250,7 +348,12 @@ export default function WebSalesSummaryCards({
           </CardContent>
         </Card>
         {SITES.map((s) => (
-          <Card key={s.key} className={`text-center ${s.bgColor} ${s.borderColor}`}>
+          <Card 
+            key={s.key} 
+            className={`text-center ${s.bgColor} ${s.borderColor} cursor-pointer hover:shadow-md transition-shadow`}
+            onMouseEnter={(e) => handleSiteHover(s.key, e)}
+            onMouseLeave={handleSiteLeave}
+          >
             <CardHeader><CardTitle className="text-sm">{s.name}</CardTitle></CardHeader>
             <CardContent className="space-y-1">
               <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
@@ -258,6 +361,52 @@ export default function WebSalesSummaryCards({
             </CardContent>
           </Card>
         ))}
+
+        {/* ECサイト・総合計用ツールチップ */}
+        {(hoveredSite || hoveredTotal) && (
+          <div 
+            className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3"
+            style={{
+              top: `${tooltipPosition.top}px`,
+              left: `${tooltipPosition.left}px`,
+              width: '200px'
+            }}
+          >
+            <div className="text-xs font-semibold mb-2 text-gray-700">
+              {hoveredTotal ? '総合計' : hoveredSite ? SITES.find(s => s.key === hoveredSite)?.name : ''} - 過去6ヶ月トレンド
+            </div>
+            
+            {(hoveredTotal && trendLoading['total']) || (hoveredSite && trendLoading[`site_${hoveredSite}`]) ? (
+              <div className="flex items-center justify-center h-16">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                <span className="ml-2 text-xs text-gray-500">読込中...</span>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {(hoveredTotal ? totalTrendData : hoveredSite ? siteTrendData[hoveredSite] : [])?.map((trend, index) => {
+                  const data = hoveredTotal ? totalTrendData : siteTrendData[hoveredSite!] || [];
+                  const maxAmount = Math.max(...data.map(t => t.amount));
+                  const barWidth = maxAmount > 0 ? (trend.amount / maxAmount) * 100 : 0;
+                  
+                  return (
+                    <div key={index} className="flex items-center justify-between text-xs">
+                      <span className="w-12 text-gray-600 text-left">{trend.month}</span>
+                      <div className="flex-1 mx-2 h-3 bg-gray-100 rounded-sm overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-400 transition-all duration-300"
+                          style={{ width: `${barWidth}%` }}
+                        ></div>
+                      </div>
+                      <span className="w-16 text-right text-gray-700 font-mono text-xs">
+                        ¥{formatNumber(trend.amount)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <Card>
@@ -276,7 +425,7 @@ export default function WebSalesSummaryCards({
             </div>
           ))}
           
-          {/* ツールチップ（位置調整対応） */}
+          {/* シリーズ用ツールチップ（既存） */}
           {hoveredSeries && (
             <div 
               className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3"
@@ -284,7 +433,7 @@ export default function WebSalesSummaryCards({
                 top: `${tooltipPosition.top}px`,
                 left: `${tooltipPosition.left}px`,
                 width: '200px',
-                transform: tooltipPosition.top < 100 ? 'translateY(-100%)' : 'none' // 上に表示する場合は上向きに調整
+                transform: tooltipPosition.top < 100 ? 'translateY(-100%)' : 'none'
               }}
             >
               <div className="text-xs font-semibold mb-2 text-gray-700">
