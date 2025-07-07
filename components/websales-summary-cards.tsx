@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.11 (ECサイト別売上トレンド表示対応版)
+// /components/websales-summary-cards.tsx ver.11 (ECサイト別売上トレンド表示対応版・デバッグログ追加)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
@@ -77,25 +77,31 @@ export default function WebSalesSummaryCards({
     }
   };
 
-  // ECサイト別トレンドデータを取得（修正版）
+  // ECサイト別トレンドデータを取得（デバッグログ追加版）
   const fetchSiteTrendData = async (siteKey: string) => {
     if (siteTrendData[siteKey] || trendLoading[`site_${siteKey}`]) return;
     
     setTrendLoading(prev => ({ ...prev, [`site_${siteKey}`]: true }));
     
     try {
+      console.log(`Fetching site trend data for ${siteKey}, month: ${month}`);
+      
       const { data: trendData, error } = await supabase
         .rpc('get_site_trend_data', { 
           target_month: month, 
           target_site: siteKey 
         });
       
-      if (!error && trendData) {
+      console.log(`Site trend data for ${siteKey}:`, trendData);
+      console.log(`Site trend error for ${siteKey}:`, error);
+      
+      if (!error && trendData && trendData.length > 0) {
         const formattedTrendData = trendData.map((item: any) => ({
           month: item.month_label,
           sales: item.site_amount || 0
         }));
         
+        console.log(`Formatted trend data for ${siteKey}:`, formattedTrendData);
         setSiteTrendData(prev => ({ ...prev, [siteKey]: formattedTrendData }));
       } else {
         console.error('サイトトレンドデータ取得エラー:', error);
@@ -109,24 +115,30 @@ export default function WebSalesSummaryCards({
     }
   };
 
-  // 総合計トレンドデータを取得（修正版）
+  // 総合計トレンドデータを取得（デバッグログ追加版）
   const fetchTotalTrendData = async () => {
     if (totalTrendData.length > 0 || trendLoading['total']) return;
     
     setTrendLoading(prev => ({ ...prev, total: true }));
     
     try {
+      console.log(`Fetching total trend data, month: ${month}`);
+      
       const { data: trendData, error } = await supabase
         .rpc('get_total_trend_data', { 
           target_month: month
         });
       
-      if (!error && trendData) {
+      console.log('Total trend data:', trendData);
+      console.log('Total trend error:', error);
+      
+      if (!error && trendData && trendData.length > 0) {
         const formattedTrendData = trendData.map((item: any) => ({
           month: item.month_label,
           sales: item.total_amount || 0
         }));
         
+        console.log('Formatted total trend data:', formattedTrendData);
         setTotalTrendData(formattedTrendData);
       } else {
         console.error('総合計トレンドデータ取得エラー:', error);
@@ -242,6 +254,13 @@ export default function WebSalesSummaryCards({
 
     fetchData();
   }, [month, refreshTrigger, viewMode, periodMonths]);
+
+  // 月変更時にトレンドデータをリセット
+  useEffect(() => {
+    setSeriesTrendData({});
+    setSiteTrendData({});
+    setTotalTrendData([]);
+  }, [month]);
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
