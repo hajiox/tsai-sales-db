@@ -1,4 +1,4 @@
-// /app/api/import/mercari-parse/route.ts ver.3
+// /app/api/import/mercari-parse/route.ts ver.4
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -10,7 +10,6 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-// 安全な文字列検証関数
 function isValidString(value: any): value is string {
   return value && typeof value === 'string' && value.trim().length > 0;
 }
@@ -22,7 +21,7 @@ interface AggregatedProduct {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== メルカリマッチングAPI開始 ver.3 ===');
+    console.log('=== メルカリマッチングAPI開始 ver.4 ===');
     
     const { aggregatedProducts } = await request.json();
     
@@ -39,17 +38,21 @@ export async function POST(request: NextRequest) {
     const validProducts = (products || []).filter(p => isValidString(p.name));
     console.log('有効な商品マスター数:', validProducts.length);
 
+    // [修正点] select句でmercari_titleに'title'というエイリアス（別名）を付ける
     const { data: learningData, error: learningDataError } = await supabase
         .from('mercari_product_mapping')
-        .select('mercari_title, product_id');
+        .select('title:mercari_title, product_id');
+
     if (learningDataError) throw new Error(`学習データの取得に失敗: ${learningDataError.message}`);
 
-    const validLearningData = (learningData || []).filter(l => isValidString(l.mercari_title));
+    const validLearningData = (learningData || []).filter(l => isValidString(l.title));
     console.log('有効な学習データ数:', validLearningData.length);
+    if(validLearningData.length > 0) {
+      console.log('学習データのサンプル:', validLearningData[0]);
+    }
 
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
-    // ステートレス対応：このリクエスト内でのみ使用する一時的な記憶セットを作成
     const matchedMercariTitles = new Set<string>();
 
     for (const aggregatedProduct of aggregatedProducts) {
@@ -60,20 +63,16 @@ export async function POST(request: NextRequest) {
             continue;
         }
 
-        console.log(`マッチング処理中: "${productName}"`);
-
         try {
-            // 新しいヘルパー関数を呼び出す
             const productInfo = findBestMatchSimplified(
                 productName,
                 validProducts,
                 validLearningData,
-                'mercari', // [修正点1] channel引数を追加
-                matchedMercariTitles // [修正点2] 一時的な記憶セットを渡す
+                'mercari', 
+                matchedMercariTitles
             );
 
             if (productInfo) {
-                // [修正点3] マッチした商品を記憶セットに追加
                 matchedMercariTitles.add(productName);
                 matchedProducts.push({ 
                     mercariTitle: productName, 
@@ -81,10 +80,8 @@ export async function POST(request: NextRequest) {
                     productInfo, 
                     matchType: productInfo.matchType 
                 });
-                console.log(`マッチ成功: "${productName}" -> ${productInfo.name}`);
             } else {
                 unmatchedProducts.push({ mercariTitle: productName, quantity: count });
-                console.log(`マッチ失敗: "${productName}"`);
             }
         } catch (error) {
             console.error(`マッチング処理エラー (${productName}):`, error);
