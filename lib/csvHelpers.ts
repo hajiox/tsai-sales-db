@@ -1,8 +1,26 @@
-// /lib/csvHelpers.ts ver.14
+// /lib/csvHelpers.ts ver.15
 // ------------------------------------------------------------
-// 共通ユーティリティ（チャネル対応・超汎用版）
+// 共通ユーティリティ（文字列正規化機能を追加）
 // ------------------------------------------------------------
 import iconv from 'iconv-lite';
+
+/**
+ * 文字列を正規化（クリーニング）する。
+ * - 前後の空白を削除
+ * - 連続する空白を1つにまとめる
+ * - 目に見えない制御文字や特殊文字を削除
+ * @param str - 対象の文字列
+ * @returns 正規化された文字列
+ */
+function normalizeTitle(str: string | null | undefined): string {
+  if (!str) return '';
+  // 全角スペースを半角に統一し、前後の空白を削除、連続する空白を1つにまとめる
+  return str
+    .trim()
+    .replace(/　/g, ' ') // 全角スペースを半角に
+    .replace(/\s+/g, ' '); // 連続する空白を1つに
+}
+
 
 /* ------------------------------------------------------------------ */
 /* 1. バイナリ → UTF-8 自動判定デコード                               */
@@ -55,7 +73,7 @@ export function extractImportantKeywords(title: string): string[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. ★★★【重要修正】シンプル類似度マッチング（チャネル対応）★★★   */
+/* 4. ★★★【重要修正】シンプル類似度マッチング（正規化対応）★★★   */
 /* ------------------------------------------------------------------ */
 const specialMatchingRules = [ { keywords: ['炊き込み', 'チャーシュー'], productName: 'チャーシュー 炊き込みご飯の素', priority: 100 }, ];
 
@@ -66,13 +84,14 @@ export function findBestMatchSimplified(
   products: Product[],
   learning: LearningMap[],
   matchedIds: Set<string>,
-  // ★修正点1: どのECサイトからの呼び出しかを明確にする引数を追加
   channel: Channel
 ): { product: Product, matchType: 'special' | 'learned' | 'direct' | 'keyword' } | null {
   
+  const normalizedTitle = normalizeTitle(title);
+
   // 0. 特定キーワードによる専用マッチング
   for (const rule of specialMatchingRules) {
-    const hasAllKeywords = rule.keywords.every(keyword => title.includes(keyword));
+    const hasAllKeywords = rule.keywords.every(keyword => normalizedTitle.includes(keyword));
     if (hasAllKeywords) {
       const specialProduct = products.find(p => p.name.includes(rule.productName) && !matchedIds.has(p.id));
       if (specialProduct) {
@@ -83,9 +102,15 @@ export function findBestMatchSimplified(
   }
 
   // 4-1. 学習データ完全一致
-  // ★修正点2: channel引数を使って、正しい学習データの列を参照する
   const learningKey = `${channel}_title` as keyof LearningMap;
-  const learnedMatch = learning.find(m => m.product_id && m[learningKey] === title);
+  // ★★★【最重要修正】★★★
+  // 比較前に両方の文字列を正規化する
+  const learnedMatch = learning.find(m => {
+    if (!m.product_id) return false;
+    const normalizedLearnedTitle = normalizeTitle(m[learningKey]);
+    return normalizedLearnedTitle === normalizedTitle && normalizedLearnedTitle !== '';
+  });
+
   if (learnedMatch) {
     const product = products.find(p => p.id === learnedMatch.product_id);
     if (product && !matchedIds.has(product.id)) {
@@ -94,15 +119,22 @@ export function findBestMatchSimplified(
     }
   }
 
-  // 4-2. 商品名の完全一致（ここは元々汎用的だったので変更なし）
-  const direct = products.find((p) => !matchedIds.has(p.id) && [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name].includes(title));
+  // 4-2. 商品名の完全一致
+  const direct = products.find((p) => {
+    if (matchedIds.has(p.id)) return false;
+    const titlesToCompare = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name]
+        .filter(Boolean)
+        .map(t => normalizeTitle(t));
+    return titlesToCompare.includes(normalizedTitle);
+  });
+
   if (direct) {
     matchedIds.add(direct.id);
     return { product: direct, matchType: 'direct' };
   }
 
-  // 4-3. キーワードスコアリング（変更なし）
-  const keywords = extractImportantKeywords(title);
+  // 4-3. キーワードスコアリング
+  const keywords = extractImportantKeywords(normalizedTitle);
   if (keywords.length === 0) return null;
   
   let bestMatch: { product: Product; score: number; matchRatio: number } | null = null;
@@ -132,13 +164,20 @@ export function findBestMatchSimplified(
 }
 
 /* ------------------------------------------------------------------ */
-/* 5. チャネル別シンプルマッチング（変更なし）                        */
+/* 5. チャネル別シンプルマッチング（正規化対応）                       */
 /* ------------------------------------------------------------------ */
 export function findBestMatchByChannel( title: string, products: Product[], channel: string ): { product: Product; confidence: number } | null {
+  const normalizedTitle = normalizeTitle(title);
   const channelKey = `${channel}_title` as keyof Product;
-  const direct = products.find((p) => [p[channelKey], p.name].includes(title));
+  
+  const direct = products.find((p) => {
+    const titlesToCompare = [p[channelKey], p.name].filter(Boolean).map(t => normalizeTitle(t));
+    return titlesToCompare.includes(normalizedTitle);
+  });
+
   if (direct) return { product: direct, confidence: 100 };
-  const keywords = extractImportantKeywords(title);
+  
+  const keywords = extractImportantKeywords(normalizedTitle);
   if (keywords.length === 0) return null;
   let best: { product: Product; score: number; matchRatio: number } | null = null;
   for (const p of products) {
