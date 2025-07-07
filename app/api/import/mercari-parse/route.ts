@@ -1,4 +1,4 @@
-// /app/api/import/mercari-parse/route.ts ver.4
+// /app/api/import/mercari-parse/route.ts ver.5
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -21,7 +21,7 @@ interface AggregatedProduct {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== メルカリマッチングAPI開始 ver.4 ===');
+    console.log('=== メルカリマッチングAPI開始 ver.5 ===');
     
     const { aggregatedProducts } = await request.json();
     
@@ -30,15 +30,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '集計済みデータがありません' }, { status: 400 });
     }
 
-    console.log('受信した集計データ:', aggregatedProducts.length, '商品');
-
     const { data: products, error: productsError } = await supabase.from('products').select('*');
     if (productsError) throw new Error(`商品マスターの取得に失敗: ${productsError.message}`);
 
     const validProducts = (products || []).filter(p => isValidString(p.name));
-    console.log('有効な商品マスター数:', validProducts.length);
-
-    // [修正点] select句でmercari_titleに'title'というエイリアス（別名）を付ける
+    
     const { data: learningData, error: learningDataError } = await supabase
         .from('mercari_product_mapping')
         .select('title:mercari_title, product_id');
@@ -46,11 +42,7 @@ export async function POST(request: NextRequest) {
     if (learningDataError) throw new Error(`学習データの取得に失敗: ${learningDataError.message}`);
 
     const validLearningData = (learningData || []).filter(l => isValidString(l.title));
-    console.log('有効な学習データ数:', validLearningData.length);
-    if(validLearningData.length > 0) {
-      console.log('学習データのサンプル:', validLearningData[0]);
-    }
-
+    
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
     const matchedMercariTitles = new Set<string>();
@@ -59,17 +51,17 @@ export async function POST(request: NextRequest) {
         const { productName, count } = aggregatedProduct;
 
         if (!isValidString(productName)) {
-            console.log('無効な商品名をスキップ:', productName);
             continue;
         }
 
         try {
+            // [修正点] 最後の2つの引数の順番を入れ替える
             const productInfo = findBestMatchSimplified(
                 productName,
                 validProducts,
                 validLearningData,
-                'mercari', 
-                matchedMercariTitles
+                matchedMercariTitles, // 先に記憶セット
+                'mercari'             // 次にチャンネル名
             );
 
             if (productInfo) {
