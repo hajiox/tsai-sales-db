@@ -1,5 +1,5 @@
 // /app/api/import/qoo10-confirm/route.ts
-// ver.1 (BASEからの完全移植版 - Qoo10対応)
+// ver.2 (saleDate エラーハンドリング強化版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -12,7 +12,7 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic';
 
 interface ConfirmRequest {
-  saleDate: string;
+  saleDate?: string;
   matchedProducts: Array<{
     qoo10Title: string;
     productInfo: {
@@ -20,7 +20,7 @@ interface ConfirmRequest {
     };
     quantity: number;
   }>;
-  newMappings: Array<{
+  newMappings?: Array<{
     qoo10Title: string;
     productId: string;
     quantity: number;
@@ -28,21 +28,23 @@ interface ConfirmRequest {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🟣 Qoo10確定API開始 - ver.1');
+  console.log('🟣 Qoo10確定API開始 - ver.2');
   
   try {
     const body: ConfirmRequest = await request.json();
     console.log('受信データ:', JSON.stringify(body, null, 2));
     
     const { saleDate, matchedProducts, newMappings } = body;
-    const month = saleDate.substring(0, 7);
-
-    if (!month) {
-      console.error('月情報が不正:', saleDate);
-      return NextResponse.json(
-        { success: false, error: '売上月が不正です' },
-        { status: 400 }
-      );
+    
+    // 【修正】saleDateのエラーハンドリング強化
+    let month: string;
+    if (!saleDate || typeof saleDate !== 'string' || saleDate.length < 7) {
+      // デフォルトで現在の年月を使用
+      const now = new Date();
+      month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      console.warn('saleDateが不正なため、現在の年月を使用:', month);
+    } else {
+      month = saleDate.substring(0, 7);
     }
 
     if (!matchedProducts || !Array.isArray(matchedProducts)) {
