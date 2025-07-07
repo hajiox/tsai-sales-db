@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
 
     const validProducts = (products || []).filter(p => isValidString(p.name));
     
-    // 【修正】学習データの取得方法をAmazonと同じ形式に変更
     const { data: learningData, error: learningDataError } = await supabase
         .from('mercari_product_mapping')
         .select('mercari_title, product_id');
@@ -56,7 +55,7 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-            const productInfo = findBestMatchSimplified(
+            const result = findBestMatchSimplified(
                 productName,
                 validProducts,
                 learningData || [],
@@ -64,13 +63,14 @@ export async function POST(request: NextRequest) {
                 'mercari'
             );
 
-            if (productInfo) {
+            if (result) {
                 matchedMercariTitles.add(productName);
+                // 【修正】BASEと同じ形式に変更
                 matchedProducts.push({ 
                     mercariTitle: productName, 
                     quantity: count, 
-                    productInfo, 
-                    matchType: productInfo.matchType 
+                    productInfo: result.product,  // ← product オブジェクト全体
+                    isLearned: result.matchType === 'learned'
                 });
             } else {
                 unmatchedProducts.push({ mercariTitle: productName, quantity: count });
