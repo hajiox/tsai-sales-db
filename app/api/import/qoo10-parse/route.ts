@@ -1,6 +1,4 @@
-// /app/api/import/qoo10-parse/route.ts
-// ver.2 (ステートレス/チャネル対応版)
-
+// /app/api/import/qoo10-parse/route.ts ver.3 (集計処理対応版)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
@@ -42,7 +40,7 @@ function isValidString(value: any): value is string {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Qoo10 API開始 ver.2 (ステートレス/チャネル対応版) ===');
+    console.log('=== Qoo10 API開始 ver.3 (集計処理対応版) ===');
     
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -58,6 +56,30 @@ export async function POST(request: NextRequest) {
 
     const lines = csvContent.split('\n').slice(1).filter((line: string) => line.trim() !== '');
     
+    // ========== 【NEW】集計処理 ==========
+    const aggregatedData = new Map<string, number>();
+    let blankTitleRows: any[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const columns = parseCsvLine(lines[i]);
+        if (columns.length < 15) continue;
+
+        const qoo10Title = columns[13]?.trim() || '';
+        const quantity = parseInt(columns[14], 10) || 0;
+
+        if (quantity <= 0) continue;
+
+        if (!isValidString(qoo10Title)) {
+            blankTitleRows.push({ rowNumber: i + 2, quantity });
+            continue;
+        }
+
+        // 【集計処理】同じ商品名の数量を合計
+        const currentQuantity = aggregatedData.get(qoo10Title) || 0;
+        aggregatedData.set(qoo10Title, currentQuantity + quantity);
+    }
+    console.log(`[Qoo10 Parse] 集計完了: ${aggregatedData.size}種類の商品`);
+
     // ========== マッチング処理 ==========
     const [productsResponse, learningDataResponse] = await Promise.all([
       supabase.from('products').select('*'),
@@ -75,34 +97,19 @@ export async function POST(request: NextRequest) {
     
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
-    let blankTitleRows: any[] = [];
     
     // この処理専用の「マッチ済みID記憶セット」を作成（ステートレス化）
     const matchedProductIdsThisTime = new Set<string>();
 
-    for (let i = 0; i < lines.length; i++) {
-        const columns = parseCsvLine(lines[i]);
-        if (columns.length < 15) continue;
-
-        const qoo10Title = columns[13]?.trim() || '';
-        const quantity = parseInt(columns[14], 10) || 0;
-
-        if (quantity <= 0) continue;
-
-        if (!isValidString(qoo10Title)) {
-            blankTitleRows.push({ rowNumber: i + 2, quantity });
-            continue;
-        }
-
+    // 【修正】集計済みデータでマッチング処理
+    for (const [qoo10Title, quantity] of aggregatedData) {
         try {
-            // ★★★【最重要修正】★★★
-            // 汎用ヘルパー関数に 'qoo10' という channel と記憶用Setを渡す
             const result = findBestMatchSimplified(
               qoo10Title,
               validProducts,
               validLearningData,
               matchedProductIdsThisTime,
-              'qoo10' // <--- どのECサイトかを伝える
+              'qoo10'
             );
 
             if (result) {
@@ -128,8 +135,8 @@ export async function POST(request: NextRequest) {
         matchedProducts,
         unmatchedProducts,
         summary: {
-            totalProducts: matchedProducts.length + unmatchedProducts.length,
-            totalQuantity: lines.reduce((sum, line) => sum + (parseInt(parseCsvLine(line)[14], 10) || 0), 0),
+            totalProducts: aggregatedData.size,
+            totalQuantity: [...aggregatedData.values()].reduce((sum, q) => sum + q, 0),
             processableQuantity,
             matchedCount: matchedProducts.length,
             unmatchedCount: unmatchedProducts.length,
