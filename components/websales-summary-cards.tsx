@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.11 (ECサイト別売上トレンド表示対応版・デバッグログ追加)
+// /components/websales-summary-cards.tsx ver.12 (日付形式修正版)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
@@ -45,6 +45,15 @@ export default function WebSalesSummaryCards({
   const containerRef = useRef<HTMLDivElement>(null);
   const siteCardsRef = useRef<HTMLDivElement>(null);
 
+  // 月の形式を修正する関数
+  const formatMonthForDB = (monthStr: string): string => {
+    // "2025-06" -> "2025-06-01" に変換
+    if (monthStr && monthStr.match(/^\d{4}-\d{2}$/)) {
+      return `${monthStr}-01`;
+    }
+    return monthStr;
+  };
+
   // シリーズ別トレンドデータを取得（既存）
   const fetchSeriesTrendData = async (seriesName: string) => {
     if (seriesTrendData[seriesName] || trendLoading[seriesName]) return;
@@ -52,9 +61,10 @@ export default function WebSalesSummaryCards({
     setTrendLoading(prev => ({ ...prev, [seriesName]: true }));
     
     try {
+      const formattedMonth = formatMonthForDB(month);
       const { data: trendData, error } = await supabase
         .rpc('get_series_trend_data', { 
-          target_month: month, 
+          target_month: formattedMonth, 
           target_series: seriesName 
         });
       
@@ -77,23 +87,21 @@ export default function WebSalesSummaryCards({
     }
   };
 
-  // ECサイト別トレンドデータを取得（デバッグログ追加版）
+  // ECサイト別トレンドデータを取得（修正版）
   const fetchSiteTrendData = async (siteKey: string) => {
     if (siteTrendData[siteKey] || trendLoading[`site_${siteKey}`]) return;
     
     setTrendLoading(prev => ({ ...prev, [`site_${siteKey}`]: true }));
     
     try {
-      console.log(`Fetching site trend data for ${siteKey}, month: ${month}`);
+      const formattedMonth = formatMonthForDB(month);
+      console.log(`Fetching site trend data for ${siteKey}, month: ${formattedMonth}`);
       
       const { data: trendData, error } = await supabase
         .rpc('get_site_trend_data', { 
-          target_month: month, 
+          target_month: formattedMonth, 
           target_site: siteKey 
         });
-      
-      console.log(`Site trend data for ${siteKey}:`, trendData);
-      console.log(`Site trend error for ${siteKey}:`, error);
       
       if (!error && trendData && trendData.length > 0) {
         const formattedTrendData = trendData.map((item: any) => ({
@@ -101,7 +109,6 @@ export default function WebSalesSummaryCards({
           sales: item.site_amount || 0
         }));
         
-        console.log(`Formatted trend data for ${siteKey}:`, formattedTrendData);
         setSiteTrendData(prev => ({ ...prev, [siteKey]: formattedTrendData }));
       } else {
         console.error('サイトトレンドデータ取得エラー:', error);
@@ -115,22 +122,20 @@ export default function WebSalesSummaryCards({
     }
   };
 
-  // 総合計トレンドデータを取得（デバッグログ追加版）
+  // 総合計トレンドデータを取得（修正版）
   const fetchTotalTrendData = async () => {
     if (totalTrendData.length > 0 || trendLoading['total']) return;
     
     setTrendLoading(prev => ({ ...prev, total: true }));
     
     try {
-      console.log(`Fetching total trend data, month: ${month}`);
+      const formattedMonth = formatMonthForDB(month);
+      console.log(`Fetching total trend data, month: ${formattedMonth}`);
       
       const { data: trendData, error } = await supabase
         .rpc('get_total_trend_data', { 
-          target_month: month
+          target_month: formattedMonth
         });
-      
-      console.log('Total trend data:', trendData);
-      console.log('Total trend error:', error);
       
       if (!error && trendData && trendData.length > 0) {
         const formattedTrendData = trendData.map((item: any) => ({
@@ -138,7 +143,6 @@ export default function WebSalesSummaryCards({
           sales: item.total_amount || 0
         }));
         
-        console.log('Formatted total trend data:', formattedTrendData);
         setTotalTrendData(formattedTrendData);
       } else {
         console.error('総合計トレンドデータ取得エラー:', error);
@@ -169,11 +173,10 @@ export default function WebSalesSummaryCards({
           setSeriesSummary(data.seriesSummary);
         } else {
           // 月別表示モード
-          console.log('=== 新関数使用開始 ===');
-          console.log('月:', month);
+          const formattedMonth = formatMonthForDB(month);
           
           const { data: financialData, error: financialError } = await supabase
-            .rpc('get_monthly_financial_summary', { target_month: month });
+            .rpc('get_monthly_financial_summary', { target_month: formattedMonth });
           
           if (financialError) {
             console.error('Financial data error:', financialError);
@@ -181,7 +184,7 @@ export default function WebSalesSummaryCards({
           }
           
           const { data: seriesData, error: seriesError } = await supabase
-            .rpc('get_monthly_series_summary', { target_month: month });
+            .rpc('get_monthly_series_summary', { target_month: formattedMonth });
           
           if (seriesError) {
             console.error('Series data error:', seriesError);
@@ -238,8 +241,6 @@ export default function WebSalesSummaryCards({
           } else {
             setSeriesSummary([]);
           }
-          
-          console.log('=== 新関数使用終了 ===');
         }
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
