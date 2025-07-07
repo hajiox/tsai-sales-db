@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.12 (日付形式修正版)
+// /components/websales-summary-cards.tsx ver.13 (トレンド機能拡張 総合対応版)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
@@ -14,234 +14,128 @@ const SITES = [
   { key: "qoo10", name: "Qoo10", bgColor: "bg-pink-50", borderColor: "border-pink-200" },
 ]
 
+// 型定義
 type Totals = Record<string, { count: number; amount: number }>
 type SeriesSummary = { seriesName: string; count: number; sales: number; }
-type TrendData = { month: string; sales: number; }
+type TrendData = { month_label: string; sales: number; }
+type HoveredItem = { type: 'total' | 'site' | 'series'; key: string; name: string; }
 
 type WebSalesSummaryCardsProps = {
-  month: string;
+  month: string; // "YYYY-MM"
   refreshTrigger?: number;
-  viewMode: 'month' | 'period';
-  periodMonths: 6 | 12;
 };
 
-export default function WebSalesSummaryCards({ 
-  month, 
-  refreshTrigger,
-  viewMode,
-  periodMonths
-}: WebSalesSummaryCardsProps) {
+export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSalesSummaryCardsProps) {
   const [totals, setTotals] = useState<Totals | null>(null);
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
-  const [hoveredSite, setHoveredSite] = useState<string | null>(null);
-  const [hoveredTotal, setHoveredTotal] = useState<boolean>(false);
-  const [seriesTrendData, setSeriesTrendData] = useState<Record<string, TrendData[]>>({});
-  const [siteTrendData, setSiteTrendData] = useState<Record<string, TrendData[]>>({});
-  const [totalTrendData, setTotalTrendData] = useState<TrendData[]>([]);
+  
+  // トレンド表示関連のState
+  const [hoveredItem, setHoveredItem] = useState<HoveredItem | null>(null);
+  const [trendData, setTrendData] = useState<Record<string, TrendData[]>>({});
   const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({});
-  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number; right?: number }>({ top: 0, left: 0 });
+  
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const siteCardsRef = useRef<HTMLDivElement>(null);
 
-  // 月の形式を修正する関数
-  const formatMonthForDB = (monthStr: string): string => {
-    // "2025-06" -> "2025-06-01" に変換
-    if (monthStr && monthStr.match(/^\d{4}-\d{2}$/)) {
-      return `${monthStr}-01`;
-    }
-    return monthStr;
-  };
+  // トレンドデータを取得する汎用関数
+  const fetchTrendData = async (item: HoveredItem) => {
+    const trendKey = `${item.type}-${item.key}`;
+    if (trendData[trendKey] || trendLoading[trendKey]) return;
 
-  // シリーズ別トレンドデータを取得（既存）
-  const fetchSeriesTrendData = async (seriesName: string) => {
-    if (seriesTrendData[seriesName] || trendLoading[seriesName]) return;
-    
-    setTrendLoading(prev => ({ ...prev, [seriesName]: true }));
-    
+    setTrendLoading(prev => ({ ...prev, [trendKey]: true }));
+
     try {
-      const formattedMonth = formatMonthForDB(month);
-      const { data: trendData, error } = await supabase
-        .rpc('get_series_trend_data', { 
-          target_month: formattedMonth, 
-          target_series: seriesName 
-        });
-      
-      if (!error && trendData) {
-        const formattedTrendData = trendData.map((item: any) => ({
-          month: item.month_label,
-          sales: item.series_amount || 0
-        }));
-        
-        setSeriesTrendData(prev => ({ ...prev, [seriesName]: formattedTrendData }));
-      } else {
-        console.error('トレンドデータ取得エラー:', error);
-        setSeriesTrendData(prev => ({ ...prev, [seriesName]: [] }));
+      const dateParam = `${month}-01`; // "YYYY-MM-DD"形式に
+      let rpcName = '';
+      let rpcParams: any = {};
+
+      switch (item.type) {
+        case 'total':
+          rpcName = 'get_total_trend_data';
+          rpcParams = { target_month: dateParam };
+          break;
+        case 'site':
+          rpcName = 'get_site_trend_data';
+          rpcParams = { target_month: dateParam, target_site: item.key };
+          break;
+        case 'series':
+          rpcName = 'get_series_trend_data';
+          rpcParams = { target_month: dateParam, target_series: item.key };
+          break;
       }
+
+      if (!rpcName) return;
+
+      const { data, error } = await supabase.rpc(rpcName, rpcParams);
+
+      if (error) {
+        throw error;
+      }
+      
+      // データ構造の差異を吸収 (seriesはseries_amount、他はsales)
+      const formattedData = data.map((d: any) => ({
+        month_label: d.month_label,
+        sales: d.sales ?? d.series_amount ?? 0
+      }));
+
+      setTrendData(prev => ({ ...prev, [trendKey]: formattedData }));
+
     } catch (error) {
-      console.error('トレンドデータ取得エラー:', error);
-      setSeriesTrendData(prev => ({ ...prev, [seriesName]: [] }));
+      console.error(`トレンドデータの取得に失敗しました (${trendKey}):`, error);
+      setTrendData(prev => ({ ...prev, [trendKey]: [] })); // エラー時は空データをセット
     } finally {
-      setTrendLoading(prev => ({ ...prev, [seriesName]: false }));
+      setTrendLoading(prev => ({ ...prev, [trendKey]: false }));
     }
   };
 
-  // ECサイト別トレンドデータを取得（修正版）
-  const fetchSiteTrendData = async (siteKey: string) => {
-    if (siteTrendData[siteKey] || trendLoading[`site_${siteKey}`]) return;
-    
-    setTrendLoading(prev => ({ ...prev, [`site_${siteKey}`]: true }));
-    
-    try {
-      const formattedMonth = formatMonthForDB(month);
-      console.log(`Fetching site trend data for ${siteKey}, month: ${formattedMonth}`);
-      
-      const { data: trendData, error } = await supabase
-        .rpc('get_site_trend_data', { 
-          target_month: formattedMonth, 
-          target_site: siteKey 
-        });
-      
-      if (!error && trendData && trendData.length > 0) {
-        const formattedTrendData = trendData.map((item: any) => ({
-          month: item.month_label,
-          sales: item.site_amount || 0
-        }));
-        
-        setSiteTrendData(prev => ({ ...prev, [siteKey]: formattedTrendData }));
-      } else {
-        console.error('サイトトレンドデータ取得エラー:', error);
-        setSiteTrendData(prev => ({ ...prev, [siteKey]: [] }));
-      }
-    } catch (error) {
-      console.error('サイトトレンドデータ取得エラー:', error);
-      setSiteTrendData(prev => ({ ...prev, [siteKey]: [] }));
-    } finally {
-      setTrendLoading(prev => ({ ...prev, [`site_${siteKey}`]: false }));
-    }
-  };
-
-  // 総合計トレンドデータを取得（修正版）
-  const fetchTotalTrendData = async () => {
-    if (totalTrendData.length > 0 || trendLoading['total']) return;
-    
-    setTrendLoading(prev => ({ ...prev, total: true }));
-    
-    try {
-      const formattedMonth = formatMonthForDB(month);
-      console.log(`Fetching total trend data, month: ${formattedMonth}`);
-      
-      const { data: trendData, error } = await supabase
-        .rpc('get_total_trend_data', { 
-          target_month: formattedMonth
-        });
-      
-      if (!error && trendData && trendData.length > 0) {
-        const formattedTrendData = trendData.map((item: any) => ({
-          month: item.month_label,
-          sales: item.total_amount || 0
-        }));
-        
-        setTotalTrendData(formattedTrendData);
-      } else {
-        console.error('総合計トレンドデータ取得エラー:', error);
-        setTotalTrendData([]);
-      }
-    } catch (error) {
-      console.error('総合計トレンドデータ取得エラー:', error);
-      setTotalTrendData([]);
-    } finally {
-      setTrendLoading(prev => ({ ...prev, total: false }));
-    }
-  };
-
+  // メインのサマリーデータを取得
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        if (viewMode === 'period') {
-          // 期間集計モード（既存ロジック）
-          const res = await fetch('/api/web-sales-period', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ base_month: month, period_months: periodMonths }),
-          });
-          if (!res.ok) throw new Error(`API Error: ${res.status}`);
-          const data = await res.json();
-          setTotals(data.totals);
-          setSeriesSummary(data.seriesSummary);
-        } else {
-          // 月別表示モード
-          const formattedMonth = formatMonthForDB(month);
-          
-          const { data: financialData, error: financialError } = await supabase
-            .rpc('get_monthly_financial_summary', { target_month: formattedMonth });
-          
-          if (financialError) {
-            console.error('Financial data error:', financialError);
-            throw financialError;
-          }
-          
-          const { data: seriesData, error: seriesError } = await supabase
-            .rpc('get_monthly_series_summary', { target_month: formattedMonth });
-          
-          if (seriesError) {
-            console.error('Series data error:', seriesError);
-            throw seriesError;
-          }
-          
-          if (financialData && financialData.length > 0) {
+        // DB関数を並列で呼び出し
+        const [financialRes, seriesRes] = await Promise.all([
+          supabase.rpc('get_monthly_financial_summary', { target_month: month }),
+          supabase.rpc('get_monthly_series_summary', { target_month: month })
+        ]);
+
+        if (financialRes.error) throw financialRes.error;
+        if (seriesRes.error) throw seriesRes.error;
+
+        // 金額サマリーの処理
+        const financialData = financialRes.data;
+        if (financialData && financialData.length > 0) {
             const financial = financialData[0];
-            
-            const siteTotals: Totals = {
-              amazon: { 
-                count: financial.amazon_count || 0, 
-                amount: financial.amazon_amount || 0 
-              },
-              rakuten: { 
-                count: financial.rakuten_count || 0, 
-                amount: financial.rakuten_amount || 0 
-              },
-              yahoo: { 
-                count: financial.yahoo_count || 0, 
-                amount: financial.yahoo_amount || 0 
-              },
-              mercari: { 
-                count: financial.mercari_count || 0, 
-                amount: financial.mercari_amount || 0 
-              },
-              base: { 
-                count: financial.base_count || 0, 
-                amount: financial.base_amount || 0 
-              },
-              qoo10: { 
-                count: financial.qoo10_count || 0, 
-                amount: financial.qoo10_amount || 0 
-              }
-            };
-            
+            const siteTotals: Totals = {};
+            SITES.forEach(s => {
+                siteTotals[s.key] = {
+                    count: financial[`${s.key}_count`] ?? 0,
+                    amount: financial[`${s.key}_amount`] ?? 0
+                }
+            });
             setTotals(siteTotals);
-          } else {
+        } else {
             const siteTotals: Totals = {};
             SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0 }; });
             setTotals(siteTotals);
-          }
-          
-          if (seriesData && seriesData.length > 0) {
+        }
+
+        // シリーズサマリーの処理
+        const seriesData = seriesRes.data;
+        if (seriesData && seriesData.length > 0) {
             const seriesSummaryData = seriesData
-              .map((series: any) => ({
-                seriesName: series.series_name || '未分類',
-                count: series.series_count || 0,
-                sales: series.series_amount || 0
+              .map((s: any) => ({
+                seriesName: s.series_name || '未分類',
+                count: s.series_count || 0,
+                sales: s.series_amount || 0
               }))
               .sort((a, b) => b.sales - a.sales);
-            
             setSeriesSummary(seriesSummaryData);
-          } else {
+        } else {
             setSeriesSummary([]);
-          }
         }
+
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
         const siteTotals: Totals = {};
@@ -254,88 +148,27 @@ export default function WebSalesSummaryCards({
     };
 
     fetchData();
-  }, [month, refreshTrigger, viewMode, periodMonths]);
-
-  // 月変更時にトレンドデータをリセット
-  useEffect(() => {
-    setSeriesTrendData({});
-    setSiteTrendData({});
-    setTotalTrendData([]);
-  }, [month]);
+  }, [month, refreshTrigger]);
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
-  const handleSeriesHover = (seriesName: string, event: React.MouseEvent<HTMLDivElement>) => {
-    setHoveredSeries(seriesName);
-    fetchSeriesTrendData(seriesName);
-
-    const element = event.currentTarget;
-    const rect = element.getBoundingClientRect();
+  const handleMouseEnter = (item: HoveredItem, event: React.MouseEvent<HTMLDivElement>) => {
+    setHoveredItem(item);
+    fetchTrendData(item);
+    
+    // ツールチップの位置計算
+    const elementRect = event.currentTarget.getBoundingClientRect();
     const containerRect = containerRef.current?.getBoundingClientRect();
-    
-    if (containerRect) {
-      const tooltipWidth = 200;
-      const elementCenterX = rect.left + rect.width / 2 - containerRect.left;
-      const containerWidth = containerRect.width;
-      
-      if (elementCenterX + tooltipWidth > containerWidth) {
+    if(containerRect) {
         setTooltipPosition({
-          top: rect.top - containerRect.top - 10,
-          left: elementCenterX - tooltipWidth / 2,
+            top: elementRect.bottom - containerRect.top + 8,
+            left: elementRect.left - containerRect.left,
         });
-      } else {
-        setTooltipPosition({
-          top: rect.top - containerRect.top,
-          left: rect.right - containerRect.left + 8,
-        });
-      }
     }
   };
 
-  const handleSeriesLeave = () => {
-    setHoveredSeries(null);
-  };
-
-  const handleSiteHover = (siteKey: string, event: React.MouseEvent<HTMLDivElement>) => {
-    setHoveredSite(siteKey);
-    fetchSiteTrendData(siteKey);
-
-    const element = event.currentTarget;
-    const rect = element.getBoundingClientRect();
-    const containerRect = siteCardsRef.current?.getBoundingClientRect();
-    
-    if (containerRect) {
-      const tooltipWidth = 200;
-      setTooltipPosition({
-        top: rect.bottom - containerRect.top + 8,
-        left: rect.left + rect.width / 2 - containerRect.left - tooltipWidth / 2,
-      });
-    }
-  };
-
-  const handleSiteLeave = () => {
-    setHoveredSite(null);
-  };
-
-  const handleTotalHover = (event: React.MouseEvent<HTMLDivElement>) => {
-    setHoveredTotal(true);
-    fetchTotalTrendData();
-
-    const element = event.currentTarget;
-    const rect = element.getBoundingClientRect();
-    const containerRect = siteCardsRef.current?.getBoundingClientRect();
-    
-    if (containerRect) {
-      const tooltipWidth = 200;
-      setTooltipPosition({
-        top: rect.bottom - containerRect.top + 8,
-        left: rect.left + rect.width / 2 - containerRect.left - tooltipWidth / 2,
-      });
-    }
-  };
-
-  const handleTotalLeave = () => {
-    setHoveredTotal(false);
+  const handleMouseLeave = () => {
+    setHoveredItem(null);
   };
 
   if (loading) {
@@ -349,46 +182,17 @@ export default function WebSalesSummaryCards({
 
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
-
-  // トレンドデータ表示用の共通コンポーネント
-  const renderTrendBars = (trendData: TrendData[]) => {
-    if (!trendData || trendData.length === 0) {
-      return <div className="text-xs text-gray-500 text-center">データがありません</div>;
-    }
-
-    const maxSales = Math.max(...trendData.map(t => t.sales));
-    
-    return (
-      <div className="space-y-1">
-        {trendData.map((trend, index) => {
-          const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
-          
-          return (
-            <div key={index} className="flex items-center justify-between text-xs">
-              <span className="w-12 text-gray-600 text-left">{trend.month}</span>
-              <div className="flex-1 mx-2 h-3 bg-gray-100 rounded-sm overflow-hidden">
-                <div 
-                  className="h-full bg-blue-400 transition-all duration-300"
-                  style={{ width: `${barWidth}%` }}
-                ></div>
-              </div>
-              <span className="w-16 text-right text-gray-700 font-mono text-xs">
-                ¥{formatNumber(trend.sales)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+  
+  const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
 
   return (
-    <div className="space-y-6">
-      <div ref={siteCardsRef} className="grid grid-cols-4 md:grid-cols-7 gap-4 relative">
+    <div className="space-y-6" ref={containerRef}>
+      {/* --- ECサイト別カード --- */}
+      <div className="grid grid-cols-4 md:grid-cols-7 gap-4 relative">
         <Card 
-          className="text-center bg-gray-50 border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-          onMouseEnter={handleTotalHover}
-          onMouseLeave={handleTotalLeave}
+          className="text-center bg-gray-50 border-gray-200 cursor-pointer"
+          onMouseEnter={(e) => handleMouseEnter({ type: 'total', key: 'grandTotal', name: '総合計' }, e)}
+          onMouseLeave={handleMouseLeave}
         >
           <CardHeader><CardTitle className="text-sm">総合計</CardTitle></CardHeader>
           <CardContent className="space-y-1">
@@ -396,12 +200,13 @@ export default function WebSalesSummaryCards({
             <div className="text-sm text-gray-600">¥{formatNumber(grandTotalSales)}</div>
           </CardContent>
         </Card>
+
         {SITES.map((s) => (
           <Card 
             key={s.key} 
-            className={`text-center ${s.bgColor} ${s.borderColor} cursor-pointer hover:shadow-md transition-shadow`}
-            onMouseEnter={(e) => handleSiteHover(s.key, e)}
-            onMouseLeave={handleSiteLeave}
+            className={`text-center ${s.bgColor} ${s.borderColor} cursor-pointer`}
+            onMouseEnter={(e) => handleMouseEnter({ type: 'site', key: s.key, name: s.name }, e)}
+            onMouseLeave={handleMouseLeave}
           >
             <CardHeader><CardTitle className="text-sm">{s.name}</CardTitle></CardHeader>
             <CardContent className="space-y-1">
@@ -410,76 +215,75 @@ export default function WebSalesSummaryCards({
             </CardContent>
           </Card>
         ))}
-
-        {/* ECサイト・総合計用ツールチップ */}
-        {(hoveredSite || hoveredTotal) && (
-          <div 
-            className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3"
-            style={{
-              top: `${tooltipPosition.top}px`,
-              left: `${tooltipPosition.left}px`,
-              width: '200px'
-            }}
-          >
-            <div className="text-xs font-semibold mb-2 text-gray-700">
-              {hoveredTotal ? '総合計' : hoveredSite ? SITES.find(s => s.key === hoveredSite)?.name : ''} - 過去6ヶ月トレンド
-            </div>
-            
-            {(hoveredTotal && trendLoading['total']) || (hoveredSite && trendLoading[`site_${hoveredSite}`]) ? (
-              <div className="flex items-center justify-center h-16">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
-                <span className="ml-2 text-xs text-gray-500">読込中...</span>
-              </div>
-            ) : (
-              renderTrendBars(hoveredTotal ? totalTrendData : siteTrendData[hoveredSite!] || [])
-            )}
-          </div>
-        )}
       </div>
 
+      {/* --- シリーズ別サマリー --- */}
       <Card>
         <CardHeader><CardTitle>シリーズ別 売上サマリー</CardTitle></CardHeader>
-        <CardContent ref={containerRef} className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 relative">
+        <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 relative">
           {seriesSummary.map((series) => (
             <div 
               key={series.seriesName} 
               className="text-center p-2 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors relative"
-              onMouseEnter={(e) => handleSeriesHover(series.seriesName, e)}
-              onMouseLeave={handleSeriesLeave}
+              onMouseEnter={(e) => handleMouseEnter({ type: 'series', key: series.seriesName, name: series.seriesName }, e)}
+              onMouseLeave={handleMouseLeave}
             >
               <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
               <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
               <p className="text-xs text-gray-500">¥{formatNumber(series.sales)}</p>
             </div>
           ))}
-          
-          {/* シリーズ用ツールチップ（既存） */}
-          {hoveredSeries && (
-            <div 
-              className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-3"
-              style={{
-                top: `${tooltipPosition.top}px`,
-                left: `${tooltipPosition.left}px`,
-                width: '200px',
-                transform: tooltipPosition.top < 100 ? 'translateY(-100%)' : 'none'
-              }}
-            >
-              <div className="text-xs font-semibold mb-2 text-gray-700">
-                {hoveredSeries} - 過去6ヶ月トレンド
-              </div>
-              
-              {trendLoading[hoveredSeries] ? (
-                <div className="flex items-center justify-center h-16">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
-                  <span className="ml-2 text-xs text-gray-500">読込中...</span>
-                </div>
-              ) : (
-                renderTrendBars(seriesTrendData[hoveredSeries] || [])
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
+      
+      {/* --- 共通ツールチップ --- */}
+      {hoveredItem && currentTrendKey && (
+        <div 
+          className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
+          style={{
+            top: `${tooltipPosition.top}px`,
+            left: `${tooltipPosition.left}px`,
+            width: '280px',
+          }}
+        >
+          <div className="text-sm font-semibold mb-2 text-gray-800">
+            {hoveredItem.name} - 過去6ヶ月 売上トレンド
+          </div>
+          
+          {trendLoading[currentTrendKey] ? (
+            <div className="flex items-center justify-center h-24">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
+              <span className="ml-3 text-sm text-gray-500">トレンド読込中...</span>
+            </div>
+          ) : trendData[currentTrendKey] && trendData[currentTrendKey].length > 0 ? (
+            <div className="space-y-1.5">
+              {trendData[currentTrendKey].map((trend, index) => {
+                const maxSales = Math.max(...trendData[currentTrendKey].map(t => t.sales));
+                const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
+                
+                return (
+                  <div key={index} className="flex items-center justify-between text-xs">
+                    <span className="w-16 text-gray-600 text-left">{trend.month_label}</span>
+                    <div className="flex-1 mx-2 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
+                      <div 
+                        className="h-full bg-sky-400 transition-all duration-300"
+                        style={{ width: `${barWidth}%` }}
+                      ></div>
+                    </div>
+                    <span className="w-20 text-right text-gray-800 font-mono">
+                      ¥{formatNumber(trend.sales)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 text-center h-24 flex items-center justify-center">
+              トレンドデータがありません
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
