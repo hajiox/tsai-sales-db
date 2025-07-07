@@ -1,264 +1,125 @@
-// /components/MercariCsvImportModal.tsx ver.7 (単一API呼び出し版)
-'use client';
+// /app/api/import/mercari-parse/route.ts ver.2
+// 中間データ処理専用API - 集計済みデータ → マッチング
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Upload, AlertCircle, ArrowLeft, FileText, Edit2, Check, Save } from 'lucide-react';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
-interface Product {
-  id: string;
-  name: string;
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export const dynamic = 'force-dynamic';
+
+// 安全な文字列検証関数
+function isValidString(value: any): value is string {
+  return value && typeof value === 'string' && value.trim().length > 0;
 }
 
-interface MercariCsvImportModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-  products: Product[];
+interface AggregatedProduct {
+  productName: string;
+  count: number;
 }
 
-export default function MercariCsvImportModal({ 
-  isOpen, 
-  onClose, 
-  onSuccess,
-  products
-}: MercariCsvImportModalProps) {
-  const [step, setStep] = useState(1);
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [parseResult, setParseResult] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [saleMonth, setSaleMonth] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
-
-  const [allMappings, setAllMappings] = useState<Array<{
-    mercariTitle: string;
-    productId: string;
-    productName: string;
-    quantity: number;
-    isLearned?: boolean;
-  }>>([]);
-  const [savingMapping, setSavingMapping] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setStep(1);
-      setCsvFile(null);
-      setParseResult(null);
-      setError('');
-      setAllMappings([]);
-      setSavingMapping(null);
+export async function POST(request: NextRequest) {
+  try {
+    console.log('=== メルカリマッチングAPI開始 ver.2 ===');
+    
+    const { aggregatedProducts } = await request.json();
+    console.log('集計済みデータ受信:', aggregatedProducts ? 'OK' : 'NG');
+    
+    if (!aggregatedProducts || !Array.isArray(aggregatedProducts)) {
+        return NextResponse.json({ success: false, error: '集計済みデータがありません' }, { status: 400 });
     }
-  }, [isOpen]);
 
-  useEffect(() => {
-    if (parseResult) {
-      const matched = parseResult.matchedProducts || [];
-      const unmatched = parseResult.unmatchedProducts || [];
-      const mappings = [
-        ...matched.map((m: any) => ({
-          mercariTitle: m.mercariTitle,
-          productId: m.productInfo?.id || '',
-          productName: m.productInfo?.name || '',
-          quantity: m.quantity,
-          isLearned: m.isLearned || false
-        })),
-        ...unmatched.map((u: any) => ({
-          mercariTitle: u.mercariTitle,
-          productId: '',
-          productName: '',
-          quantity: u.quantity,
-          isLearned: false
-        }))
-      ];
-      setAllMappings(mappings);
-    }
-  }, [parseResult]);
+    console.log('受信した集計データ:', aggregatedProducts.length, '商品');
 
-  if (!isOpen) return null;
+    const { data: products, error: productsError } = await supabase.from('products').select('*');
+    if (productsError) throw new Error(`商品マスターの取得に失敗: ${productsError.message}`);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setCsvFile(e.target.files[0]);
-      setError('');
-    }
-  };
-  
-  // ★★★【最重要修正】★★★
-  // API呼び出しを1回に統合
-  const handleParse = async () => {
-    if (!csvFile) {
-      setError('CSVファイルを選択してください');
-      return;
-    }
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const csvContent = await csvFile.text();
-      
-      const response = await fetch('/api/import/mercari-parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csvContent }),
-      });
-
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.error || 'メルカリCSVの処理に失敗しました');
+    // 商品データの厳密な検証
+    const validProducts = (products || []).filter(p => {
+      if (!p || !isValidString(p.name)) {
+        console.log('無効な商品データを除外:', p);
+        return false;
       }
+      return true;
+    });
+    console.log('有効な商品数:', validProducts.length);
 
-      setParseResult(result);
-      setStep(2);
-    } catch (error) {
-      console.error('メルカリCSV処理エラー:', error);
-      setError(error instanceof Error ? error.message : '処理中にエラーが発生しました');
-    } finally {
-      setIsLoading(false);
+    const { data: learningData } = await supabase.from('mercari_product_mapping').select('mercari_title, product_id');
+
+    // 学習データの厳密な検証
+    const validLearningData = (learningData || []).filter(l => {
+      if (!l || !isValidString(l.mercari_title)) {
+        console.log('無効な学習データを除外:', l);
+        return false;
+      }
+      return true;
+    });
+    console.log('有効な学習データ数:', validLearningData.length);
+
+    let matchedProducts: any[] = [];
+    let unmatchedProducts: any[] = [];
+
+    // 集計済みデータでマッチング処理
+    for (const aggregatedProduct of aggregatedProducts) {
+        const { productName, count } = aggregatedProduct;
+
+        if (!isValidString(productName)) {
+            console.log('無効な商品名をスキップ:', productName);
+            continue;
+        }
+
+        console.log(`マッチング処理中: "${productName}" (${count}個)`);
+
+        try {
+            const productInfo = findBestMatchSimplified(productName, validProducts, validLearningData);
+
+            if (productInfo) {
+                matchedProducts.push({ 
+                    mercariTitle: productName, 
+                    quantity: count, 
+                    productInfo, 
+                    matchType: productInfo.matchType 
+                });
+                console.log(`マッチ成功: "${productName}" -> ${productInfo.name} (${count}個)`);
+            } else {
+                unmatchedProducts.push({ mercariTitle: productName, quantity: count });
+                console.log(`マッチ失敗: "${productName}" (${count}個)`);
+            }
+        } catch (error) {
+            console.error(`マッチング処理エラー (${productName}):`, error);
+            unmatchedProducts.push({ mercariTitle: productName, quantity: count });
+        }
     }
-  };
 
-  const handleLearnMapping = async (index: number) => {
-    const mapping = allMappings[index];
-    if (!mapping.productId || mapping.isLearned) return;
-    setSavingMapping(mapping.mercariTitle);
-    
-    try {
-      const response = await fetch('/api/import/mercari-learn', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mercariTitle: mapping.mercariTitle, productId: mapping.productId }),
-      });
-      const result = await response.json();
-      if (!result.success) throw new Error(result.error || '学習に失敗しました');
-      setAllMappings(prev => prev.map((m, i) => i === index ? { ...m, isLearned: true } : m));
-    } catch (error) {
-      alert('学習エラー: ' + (error instanceof Error ? error.message : '不明なエラー'));
-    } finally {
-      setSavingMapping(null);
-    }
-  };
+    const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
+    const unmatchQuantity = unmatchedProducts.reduce((sum, p) => sum + p.quantity, 0);
 
-  const handleMappingChange = (index: number, productId: string) => {
-    const product = products.find(p => p.id === productId);
-    setAllMappings(prev => prev.map((m, i) => 
-      i === index ? { ...m, productId, productName: product?.name || '', isLearned: false } : m
-    ));
-  };
+    console.log('=== メルカリマッチングAPI完了 ===');
+    console.log('マッチ商品数:', matchedProducts.length);
+    console.log('未マッチ商品数:', unmatchedProducts.length);
+    console.log('処理可能数量:', processableQuantity);
+    console.log('未マッチ数量:', unmatchQuantity);
 
-  const handleConfirm = async () => {
-    setIsLoading(true);
-    setError('');
-    
-    const mappingsToConfirm = step === 3 ? allMappings : parseResult.matchedProducts;
-    const validMappings = mappingsToConfirm
-      .filter((m: any) => m.productId || m.productInfo?.id)
-      .map((m: any) => ({
-          mercariTitle: m.mercariTitle,
-          quantity: m.quantity,
-          productId: m.productId || m.productInfo.id
-      }));
-
-    try {
-      const response = await fetch('/api/import/mercari-confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ saleDate: `${saleMonth}-01`, salesData: validMappings }),
-      });
-      const result = await response.json();
-      if (!result.success) throw new Error(result.error || '確定処理に失敗しました');
-      alert(`メルカリの売上データが登録されました\n登録件数: ${result.importedCount}件`);
-      onSuccess();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '確定処理中にエラーが発生しました');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getStats = () => {
-    const source = step === 3 ? allMappings : (parseResult ? [...parseResult.matchedProducts, ...parseResult.unmatchedProducts] : []);
-    const matched = source.filter(m => m.productId || m.productInfo?.id).length;
-    const unmatched = source.length - matched;
-    return { matched, unmatched, total: source.length };
-  };
-
-  const stats = getStats();
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>メルカリCSV インポート</CardTitle>
-          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5"/></Button>
-        </CardHeader>
-        <div className="p-6 overflow-y-auto">
-          {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md border border-red-200">{error}</div>}
-          
-          {step === 1 && (
-            <div className="flex flex-col gap-4">
-              <p className="text-gray-600">メルカリShopsの売上CSVをアップロードしてください。</p>
-              <Input id="mercari-csv-upload" type="file" accept=".csv" onChange={handleFileChange} />
-              <Button onClick={handleParse} disabled={!csvFile || isLoading} className="w-full">
-                <Upload className="h-4 w-4 mr-2" />{isLoading ? '解析中...' : '解析を実行'}
-              </Button>
-            </div>
-          )}
-
-          {step === 2 && parseResult && (
-             <div>
-                <Card className="mb-4">
-                  <CardHeader><CardTitle>解析結果</CardTitle></CardHeader>
-                  <CardContent className="grid grid-cols-3 gap-4 text-center">
-                    <div><p className="text-sm text-gray-500">総商品種類</p><p className="text-2xl font-bold">{stats.total}</p></div>
-                    <div className="text-green-600"><p className="text-sm">マッチ済み</p><p className="text-2xl font-bold">{stats.matched}</p></div>
-                    <div className="text-yellow-600"><p className="text-sm">未マッチ</p><p className="text-2xl font-bold">{stats.unmatched}</p></div>
-                  </CardContent>
-                </Card>
-                <div className="flex gap-4">
-                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">戻る</Button>
-                   <Button onClick={() => setStep(3)} className="flex-1"><Edit2 className="mr-2 h-4 w-4"/>マッチングを修正</Button>
-                   <Button onClick={handleConfirm} disabled={isLoading || stats.matched === 0} className="flex-1">インポート実行</Button>
-                </div>
-             </div>
-          )}
-          
-          {step === 3 && (
-            <div>
-              <div className="space-y-3 max-h-96 overflow-y-auto mb-4 p-2 border rounded-md">
-                {allMappings.map((m, i) => (
-                  <div key={i} className={`p-3 rounded-lg ${m.productId ? 'bg-green-50' : 'bg-yellow-50'}`}>
-                    <p className="font-semibold text-sm">{m.mercariTitle} <span className="text-xs">({m.quantity}個)</span></p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <select 
-                        value={m.productId} 
-                        onChange={(e) => handleMappingChange(i, e.target.value)}
-                        className="flex-grow p-2 border rounded-md text-sm"
-                      >
-                        <option value="">-- 商品を選択 --</option>
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      {m.productId && (
-                        <Button size="sm" disabled={m.isLearned || savingMapping === m.mercariTitle} onClick={() => handleLearnMapping(i)}>
-                          {savingMapping === m.mercariTitle ? '学習中...' : (m.isLearned ? <><Check className="h-4 w-4 mr-1"/>学習済</> : <><Save className="h-4 w-4 mr-1"/>学習</>)}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-4">
-                <Button variant="outline" onClick={() => setStep(2)} className="flex-1"><ArrowLeft className="mr-2 h-4 w-4"/>戻る</Button>
-                <Button onClick={handleConfirm} disabled={isLoading || stats.matched === 0} className="flex-1">インポート実行</Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
-    </div>
-  );
+    return NextResponse.json({
+        success: true,
+        matchedProducts,
+        unmatchedProducts,
+        summary: {
+            totalProducts: matchedProducts.length + unmatchedProducts.length,
+            totalQuantity: processableQuantity + unmatchQuantity,
+            processableQuantity,
+            blankTitleInfo: {
+                count: 0, // 集計段階で処理済み
+                quantity: 0
+            }
+        }
+    });
+  } catch (error) {
+      console.error('メルカリマッチング処理エラー:', error);
+      return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
+  }
 }
