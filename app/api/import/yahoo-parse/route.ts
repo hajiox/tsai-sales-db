@@ -1,33 +1,36 @@
-// /app/api/import/yahoo-parse/route.ts ver.7
+// /app/api/import/yahoo-parse/route.ts ver.8
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-// ★修正後のヘルパー関数をインポート
+// 汎用化されたヘルパー関数をインポート
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
+// SERVICE_ROLE_KEY を使用して、RLSをバイパスし全データにアクセス
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// 文字列が有効かチェックするユーティリティ
 function isValidString(value: any): value is string {
-  return value && typeof value === 'string' && value.trim().length > 0;
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== Yahoo CSV解析API開始 ver.7 (ステートレス対応版) ===');
+    console.log('=== Yahoo CSV解析API開始 ver.8 (チャネル対応版) ===');
     
     const { csvData } = await request.json();
     if (!csvData) {
-      return NextResponse.json({ success: false, error: 'CSVデータが必要です' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'CSVデータが見つかりません' }, { status: 400 });
     }
 
     const lines = csvData.split('\n').slice(1).filter((line: string) => line.trim() !== '');
     if (lines.length === 0) {
-      return NextResponse.json({ success: false, error: 'CSVにデータ行がありません' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'CSVに有効なデータ行がありません' }, { status: 400 });
     }
-    console.log('解析対象の行数:', lines.length);
+    console.log(`[Yahoo Parse] 解析対象の行数: ${lines.length}行`);
 
+    // 商品マスターとYahoo専用の学習データを並行して取得
     const [productsResponse, learningDataResponse] = await Promise.all([
       supabase.from('products').select('*'),
       supabase.from('yahoo_product_mapping').select('yahoo_title, product_id')
@@ -36,21 +39,21 @@ export async function POST(request: NextRequest) {
     if (productsResponse.error) throw new Error(`商品マスターの取得に失敗: ${productsResponse.error.message}`);
     const validProducts = (productsResponse.data || []).filter(p => p && isValidString(p.name));
     
-    if (learningDataResponse.error) throw new Error(`学習データの取得に失敗: ${learningDataResponse.error.message}`);
-    // ★★★【重要修正】私の前回の誤った修正を元に戻します。`.map()`は不要でした。
+    if (learningDataResponse.error) throw new Error(`Yahoo学習データの取得に失敗: ${learningDataResponse.error.message}`);
     const validLearningData = (learningDataResponse.data || []).filter(l => l && isValidString(l.yahoo_title));
-    console.log('有効な商品数:', validProducts.length);
-    console.log('有効な学習データ数:', validLearningData.length);
+    
+    console.log(`[Yahoo Parse] 有効な商品マスター: ${validProducts.length}件`);
+    console.log(`[Yahoo Parse] 有効なYahoo学習データ: ${validLearningData.length}件`);
     
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
     let blankTitleRows: any[] = [];
 
-    // ★★★【重要修正】このCSV解析処理専用の「マッチ済みID記憶セット」をここで作成します。
+    // この処理専用の「マッチ済みID記憶セット」を作成（ステートレス化）
     const matchedProductIdsThisTime = new Set<string>();
 
-    for (let i = 0; i < lines.length; i++) {
-        const columns = lines[i].split(',').map((col: string) => col.trim().replace(/"/g, ''));
+    for (const line of lines) {
+        const columns = line.split(',').map((col: string) => col.trim().replace(/"/g, ''));
         if (columns.length < 6) continue;
 
         const productTitle = columns[0];
@@ -59,33 +62,38 @@ export async function POST(request: NextRequest) {
         if (quantity <= 0) continue;
 
         if (!isValidString(productTitle)) {
-            blankTitleRows.push({ rowNumber: i + 2, quantity });
+            blankTitleRows.push({ rowNumber: lines.indexOf(line) + 2, quantity });
             continue;
         }
 
         try {
-            // ★★★【重要修正】ヘルパー関数に「今回の記憶セット」を渡します。
-            const result = findBestMatchSimplified(productTitle, validProducts, validLearningData, matchedProductIdsThisTime);
+            // ★★★【最重要修正】★★★
+            // 汎用ヘルパー関数に 'yahoo' という channel を渡す
+            const result = findBestMatchSimplified(
+              productTitle, 
+              validProducts, 
+              validLearningData, 
+              matchedProductIdsThisTime,
+              'yahoo' // <--- この引数が決定的に重要でした
+            );
 
             if (result) {
                 matchedProducts.push({ 
                   yahooTitle: productTitle, 
                   quantity, 
-                  productInfo: result.product, // `result.product`に商品情報が入る
+                  productInfo: result.product,
                   isLearned: result.matchType === 'learned' 
                 });
             } else {
                 unmatchedProducts.push({ yahooTitle: productTitle, quantity });
             }
         } catch (error) {
-            console.error(`マッチング処理エラー (${productTitle}):`, error);
+            console.error(`[Yahoo Parse] マッチング処理エラー (${productTitle}):`, error);
             unmatchedProducts.push({ yahooTitle: productTitle, quantity });
         }
     }
 
     const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
-    const unmatchQuantity = unmatchedProducts.reduce((sum, p) => sum + p.quantity, 0);
-    const blankTitleQuantity = blankTitleRows.reduce((sum, r) => sum + r.quantity, 0);
 
     return NextResponse.json({
         success: true,
@@ -93,19 +101,19 @@ export async function POST(request: NextRequest) {
         unmatchedProducts,
         summary: {
             totalProducts: matchedProducts.length + unmatchedProducts.length,
-            totalQuantity: processableQuantity + unmatchQuantity + blankTitleQuantity,
+            totalQuantity: lines.reduce((sum, line) => sum + (parseInt(line.split(',')[5], 10) || 0), 0),
             processableQuantity,
-            matchedProducts: matchedProducts.length,
-            unmatchedProducts: unmatchedProducts.length,
-            learnedMatches: matchedProducts.filter(p => p.isLearned).length,
+            matchedCount: matchedProducts.length,
+            unmatchedCount: unmatchedProducts.length,
+            learnedMatchCount: matchedProducts.filter(p => p.isLearned).length,
             blankTitleInfo: {
                 count: blankTitleRows.length,
-                quantity: blankTitleQuantity
+                quantity: blankTitleRows.reduce((sum, r) => sum + r.quantity, 0)
             }
         }
     });
   } catch (error) {
-      console.error('Yahoo CSV解析エラー:', error);
+      console.error('❌ Yahoo CSV解析APIで予期せぬエラー:', error);
       return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
   }
 }
