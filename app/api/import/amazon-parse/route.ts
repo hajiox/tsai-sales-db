@@ -1,4 +1,4 @@
-// /app/api/import/amazon-parse/route.ts ver.11 (ステートレス・チャネル対応版)
+// /app/api/import/amazon-parse/route.ts ver.12 (件数表示修正版)
 import { NextRequest, NextResponse } from 'next/server';
 import { parse } from 'csv-parse/sync';
 import { createClient } from '@supabase/supabase-js';
@@ -16,7 +16,7 @@ function parseCsvWithHeader(text: string): any[] {
 
 export async function POST(req: NextRequest) {
   try {
-    console.log('🔍 Amazon CSV解析開始 - ver.11');
+    console.log('🔍 Amazon CSV解析開始 - ver.12');
     
     const form = await req.formData();
     const file = form.get('file') as File;
@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
 
     console.log('📚 学習データ数:', learns?.length);
 
-    // ★修正点1: このCSV解析専用のマッチ済みID記憶セットを作成
     const matchedProductIdsThisTime = new Set<string>();
 
     const matched: { productId: string; productName: string; qty: number; amazonTitle: string, matchType: string }[] = [];
@@ -48,13 +47,12 @@ export async function POST(req: NextRequest) {
       if (!title) { blankTitleCount++; blankTitleQty += qty; continue; }
       if (!qty) continue;
 
-      // ★修正点2: 新しい引数でヘルパー関数を呼び出す
       const result = findBestMatchSimplified(
         title, 
         products ?? [], 
         learns ?? [],
-        matchedProductIdsThisTime, // 記憶セットを渡す
-        'amazon'                  // 'amazon'チャネルだと伝える
+        matchedProductIdsThisTime,
+        'amazon'
       );
 
       if (result) {
@@ -71,12 +69,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       summary: {
-        matchedRows: matched.length, unmatchedRows: unmatched.length,
+        // ★★★★★★★【重要修正】この1行を追加しました ★★★★★★★
+        totalProducts: matched.length + unmatched.length,
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        matchedRows: matched.length, 
+        unmatchedRows: unmatched.length,
         csvTotalQty: matchedQty + unmatchedQty + blankTitleQty,
-        matchedQty, unmatchedQty,
+        matchedQty, 
+        unmatchedQty,
         blankTitleInfo: blankTitleCount > 0 ? { count: blankTitleCount, quantity: blankTitleQty } : null
       },
-      matched, unmatched,
+      matched, 
+      unmatched,
     });
   } catch (err) {
     console.error('❌ Amazon CSV 解析エラー:', err);
