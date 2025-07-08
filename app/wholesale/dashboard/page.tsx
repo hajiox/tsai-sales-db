@@ -64,11 +64,34 @@ export default function WholesaleDashboard() {
     const fetchAllData = async () => {
       setLoading(true);
       try {
-        await Promise.all([
-          fetchProducts(),
-          fetchSalesData(selectedMonth),
-          fetchPreviousMonthData(selectedMonth)
-        ]);
+        // APIの応答を正しく処理するように修正
+        const productResponse = await fetch('/api/wholesale/products');
+        if (productResponse.ok) {
+            const productData = await productResponse.json();
+            if (productData.success && Array.isArray(productData.products)) {
+                setProducts(productData.products);
+            }
+        }
+
+        const salesResponse = await fetch(`/api/wholesale/sales?month=${selectedMonth}`);
+         if (salesResponse.ok) {
+            const salesData = await salesResponse.json();
+            if (salesData.success && typeof salesData.sales === 'object') {
+                setSalesData(salesData.sales);
+            }
+        }
+
+        const [year, monthNum] = selectedMonth.split('-').map(Number);
+        const prevDate = new Date(year, monthNum - 2, 1);
+        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+        const prevSalesResponse = await fetch(`/api/wholesale/sales?month=${prevMonth}`);
+        if (prevSalesResponse.ok) {
+            const prevSalesData = await prevSalesResponse.json();
+            if (prevSalesData.success && typeof prevSalesData.sales === 'object') {
+                setPreviousMonthData(prevSalesData.sales);
+            }
+        }
+
       } catch (error) {
         console.error('データ取得エラー:', error);
       } finally {
@@ -78,52 +101,6 @@ export default function WholesaleDashboard() {
 
     fetchAllData();
   }, [selectedMonth, mounted]);
-
-  const fetchProducts = async () => {
-    try {
-      const response = await fetch('/api/wholesale/products');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && Array.isArray(data.products)) {
-          setProducts(data.products);
-        }
-      }
-    } catch (error) {
-      console.error('商品データ取得エラー:', error);
-    }
-  };
-
-  const fetchSalesData = async (month: string) => {
-    try {
-      const response = await fetch(`/api/wholesale/sales?month=${month}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && typeof data.sales === 'object') {
-            setSalesData(data.sales);
-        }
-      }
-    } catch (error) {
-      console.error('売上データ取得エラー:', error);
-    }
-  };
-
-  const fetchPreviousMonthData = async (month: string) => {
-    try {
-      const [year, monthNum] = month.split('-').map(Number);
-      const prevDate = new Date(year, monthNum - 2, 1);
-      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-      
-      const response = await fetch(`/api/wholesale/sales?month=${prevMonth}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && typeof data.sales === 'object') {
-            setPreviousMonthData(data.sales);
-        }
-      }
-    } catch (error) {
-      console.error('前月データ取得エラー:', error);
-    }
-  };
 
   const handleQuantityChange = (productId: string, day: number, value: string) => {
     const quantity = parseInt(value, 10);
@@ -166,17 +143,15 @@ export default function WholesaleDashboard() {
   };
 
   const getDaysInMonth = () => {
-    if (!selectedMonth) return new Date().getDate();
+    if (!selectedMonth) return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     const [year, month] = selectedMonth.split('-').map(Number);
     return new Date(year, month, 0).getDate();
   };
-
-  const daysInMonth = getDaysInMonth();
   
   if (!mounted) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div>読み込み中...</div>
+      <div className="flex justify-center items-center h-screen bg-gray-50">
+        <p className="text-gray-500">読み込み中...</p>
       </div>
     );
   }
@@ -209,13 +184,15 @@ export default function WholesaleDashboard() {
 
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
-          <div className="flex justify-center items-center h-full"><div>データを読み込んでいます...</div></div>
+          <div className="flex justify-center items-center h-full">
+            <p className="text-gray-500">データを読み込んでいます...</p>
+          </div>
         ) : (
           <div className="max-w-full mx-auto space-y-4">
             <SummaryCards products={products} salesData={salesData} />
             <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
 
-            <Card className="flex-1 flex flex-col" style={{height: 'calc(100vh - 350px)'}}>
+            <Card className="flex-1 flex flex-col" style={{minHeight: '400px'}}>
               <CardHeader className="py-2 px-4 border-b">
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
                   <TrendingUp className="w-4 h-4" />
@@ -224,11 +201,11 @@ export default function WholesaleDashboard() {
               </CardHeader>
               <CardContent className="p-0 overflow-auto flex-1">
                 <table className="w-full text-xs border-collapse">
-                  <thead className="sticky top-0 z-20 bg-gray-50">
+                  <thead className="sticky top-0 z-20 bg-gray-100">
                     <tr className="border-b">
-                      <th className="text-left p-2 font-medium text-gray-700 sticky left-0 bg-gray-50 z-30 min-w-[180px] border-r">商品情報</th>
-                      {Array.from({ length: daysInMonth }, (_, i) => (
-                        <th key={i + 1} className="text-center p-1 font-medium text-gray-700 min-w-[36px] border-l">
+                      <th className="text-left p-2 font-semibold text-gray-700 sticky left-0 bg-gray-100 z-30 min-w-[180px] border-r">商品情報</th>
+                      {Array.from({ length: getDaysInMonth() }, (_, i) => (
+                        <th key={i + 1} className="text-center p-1 font-semibold text-gray-600 min-w-[38px] border-l">
                           {i + 1}
                         </th>
                       ))}
@@ -238,9 +215,11 @@ export default function WholesaleDashboard() {
                     {products.map((product) => (
                       <tr key={product.id} className="border-b hover:bg-gray-50">
                         <td className="text-left p-2 sticky left-0 bg-white hover:bg-gray-50 border-r z-10">
-                            {/* ... 商品情報セルの内容は省略 ... */}
+                          <div className="w-[160px]">
+                            <div className="font-medium text-gray-900 break-words">{product.product_name}</div>
+                          </div>
                         </td>
-                        {Array.from({ length: daysInMonth }, (_, i) => {
+                        {Array.from({ length: getDaysInMonth() }, (_, i) => {
                           const day = i + 1;
                           const value = salesData[product.id]?.[day] || '';
                           return (
@@ -253,7 +232,7 @@ export default function WholesaleDashboard() {
                                 onBlur={() => saveSalesData(product.id, day)}
                                 onKeyDown={(e) => handleInputKeyDown(e, product.id, day)}
                                 className="w-full h-full text-center p-1 bg-transparent border-0 focus:bg-blue-100 focus:ring-1 focus:ring-blue-400 focus:outline-none"
-                                style={{ minWidth: '36px' }}
+                                style={{ minWidth: '38px' }}
                               />
                             </td>
                           );
