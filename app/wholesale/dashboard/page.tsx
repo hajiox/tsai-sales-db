@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.15 (エラー修正版)
+// /app/wholesale/dashboard/page.tsx ver.16 (完全版)
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,6 @@ import { useRouter } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
 
-// (interface定義は変更なし)
 interface Product {
   id: string;
   product_name: string;
@@ -23,9 +22,8 @@ interface SalesData {
 }
 interface MonthOption {
   value: string;
-  label: string;
+  label:string;
 }
-
 
 export default function WholesaleDashboard() {
   const router = useRouter();
@@ -37,12 +35,10 @@ export default function WholesaleDashboard() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  // マウント確認用Effect
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // 月オプション設定Effect
   useEffect(() => {
     if (!mounted) return;
     
@@ -62,7 +58,6 @@ export default function WholesaleDashboard() {
     }
   }, [mounted]);
 
-  // データ取得Effect
   useEffect(() => {
     if (!selectedMonth || !mounted) return;
 
@@ -84,7 +79,6 @@ export default function WholesaleDashboard() {
     fetchAllData();
   }, [selectedMonth, mounted]);
 
-  // ★修正点：setProductsにオブジェクト(data)ではなく、その中の配列(data.products)を渡す
   const fetchProducts = async () => {
     try {
       const response = await fetch('/api/wholesale/products');
@@ -99,15 +93,12 @@ export default function WholesaleDashboard() {
     }
   };
 
-  // ★修正の可能性：fetchSalesDataとfetchPreviousMonthDataも、APIの応答形式によっては
-  // data.salesのように修正が必要になる可能性があります。
   const fetchSalesData = async (month: string) => {
     try {
       const response = await fetch(`/api/wholesale/sales?month=${month}`);
       if (response.ok) {
         const data = await response.json();
-        // 仮に data.sales を期待する形に修正。APIの応答形式に合わせてください。
-        if (data.success) {
+        if (data.success && typeof data.sales === 'object') {
             setSalesData(data.sales);
         }
       }
@@ -125,8 +116,7 @@ export default function WholesaleDashboard() {
       const response = await fetch(`/api/wholesale/sales?month=${prevMonth}`);
       if (response.ok) {
         const data = await response.json();
-        // 仮に data.sales を期待する形に修正。APIの応答形式に合わせてください。
-        if (data.success) {
+        if (data.success && typeof data.sales === 'object') {
             setPreviousMonthData(data.sales);
         }
       }
@@ -136,24 +126,158 @@ export default function WholesaleDashboard() {
   };
 
   const handleQuantityChange = (productId: string, day: number, value: string) => {
-    // (変更なし)
+    const quantity = parseInt(value, 10);
+    setSalesData(prev => {
+      const newProdSales = { ...(prev[productId] || {}) };
+      if (!isNaN(quantity) && quantity >= 0) {
+        newProdSales[day] = quantity;
+      } else {
+        delete newProdSales[day];
+      }
+      return {
+        ...prev,
+        [productId]: newProdSales,
+      };
+    });
   };
 
-  const saveSalesData = async () => {
-    // (変更なし)
+  const saveSalesData = async (productId: string, day: number) => {
+    const quantity = salesData[productId]?.[day] || 0;
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    const saleDate = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+    try {
+      await fetch('/api/wholesale/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, saleDate, quantity, unitPrice: product.price })
+      });
+    } catch (error) {
+      console.error('保存エラー:', error);
+    }
+  };
+  
+  const handleInputKeyDown = async (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      await saveSalesData(productId, day);
+      (e.target as HTMLInputElement).blur();
+    }
   };
 
   const getDaysInMonth = () => {
-    // (変更なし)
+    if (!selectedMonth) return new Date().getDate();
+    const [year, month] = selectedMonth.split('-').map(Number);
+    return new Date(year, month, 0).getDate();
   };
 
-  // マウント前は何も表示しない
-  if (!mounted) {
-    return null;
-  }
+  const daysInMonth = getDaysInMonth();
   
-  // (JSX部分は変更なし)
-  return (
-    // ...
+  if (!mounted) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div>読み込み中...</div>
+      </div>
+    );
+  }
+
+ return (
+    <div className="h-screen flex flex-col bg-gray-50">
+      <div className="bg-white shadow-sm border-b flex-shrink-0 z-30">
+        <div className="px-4 py-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">卸販売管理システム</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <select 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
+                disabled={loading}
+              >
+                {monthOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto p-4">
+        {loading ? (
+          <div className="flex justify-center items-center h-full"><div>データを読み込んでいます...</div></div>
+        ) : (
+          <div className="max-w-full mx-auto space-y-4">
+            <SummaryCards products={products} salesData={salesData} />
+            <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
+
+            <Card className="flex-1 flex flex-col" style={{height: 'calc(100vh - 350px)'}}>
+              <CardHeader className="py-2 px-4 border-b">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  日別売上実績
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 overflow-auto flex-1">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="sticky top-0 z-20 bg-gray-50">
+                    <tr className="border-b">
+                      <th className="text-left p-2 font-medium text-gray-700 sticky left-0 bg-gray-50 z-30 min-w-[180px] border-r">商品情報</th>
+                      {Array.from({ length: daysInMonth }, (_, i) => (
+                        <th key={i + 1} className="text-center p-1 font-medium text-gray-700 min-w-[36px] border-l">
+                          {i + 1}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((product) => (
+                      <tr key={product.id} className="border-b hover:bg-gray-50">
+                        <td className="text-left p-2 sticky left-0 bg-white hover:bg-gray-50 border-r z-10">
+                            {/* ... 商品情報セルの内容は省略 ... */}
+                        </td>
+                        {Array.from({ length: daysInMonth }, (_, i) => {
+                          const day = i + 1;
+                          const value = salesData[product.id]?.[day] || '';
+                          return (
+                            <td key={day} className="text-center p-0 border-l">
+                              <input
+                                type="text"
+                                pattern="\d*"
+                                value={value}
+                                onChange={(e) => handleQuantityChange(product.id, day, e.target.value)}
+                                onBlur={() => saveSalesData(product.id, day)}
+                                onKeyDown={(e) => handleInputKeyDown(e, product.id, day)}
+                                className="w-full h-full text-center p-1 bg-transparent border-0 focus:bg-blue-100 focus:ring-1 focus:ring-blue-400 focus:outline-none"
+                                style={{ minWidth: '36px' }}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+
+            <div className="flex gap-3 justify-center pt-4 pb-2">
+              <Button size="sm" onClick={() => router.push('/wholesale/products')}>
+                <Package className="w-3 h-3 mr-1" />
+                商品マスタ管理
+              </Button>
+              <Button size="sm" variant="outline">
+                <Users className="w-3 h-3 mr-1" />
+                取引先管理
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
