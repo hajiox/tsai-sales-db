@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.18 (UI修正版)
+// /app/wholesale/dashboard/page.tsx ver.19 (最終修正版)
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ interface Product {
   [key: string]: any;
 }
 interface SalesData {
-  [productId: string]: { [date: string]: number | undefined; }; // undefinedを許容
+  [productId: string]: { [date: string]: number | undefined; };
 }
 interface MonthOption {
   value: string;
@@ -61,14 +61,13 @@ export default function WholesaleDashboard() {
     const fetchAllData = async () => {
       setLoading(true);
       try {
-        // データ取得ロジックは変更なし
         await Promise.all([
             fetchProducts(),
             fetchSalesData(selectedMonth),
             fetchPreviousMonthData(selectedMonth)
         ]);
       } catch (error) {
-        console.error('データ取得エラー:', error);
+        console.error('一括データ取得エラー:', error);
       } finally {
         setLoading(false);
       }
@@ -76,37 +75,124 @@ export default function WholesaleDashboard() {
     fetchAllData();
   }, [selectedMonth, mounted]);
 
-  const fetchProducts = async () => { /* 変更なし */ };
-  const fetchSalesData = async (month: string) => { /* 変更なし */ };
-  const fetchPreviousMonthData = async (month: string) => { /* 変更なし */ };
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch('/api/wholesale/products');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.products)) {
+          setProducts(data.products);
+        }
+      }
+    } catch (error) {
+      console.error('商品データ取得エラー:', error);
+    }
+  };
 
-  // ★修正点１：数字入力のロジックをよりシンプルで確実なものに変更
+  const fetchSalesData = async (month: string) => {
+    try {
+      const response = await fetch(`/api/wholesale/sales?month=${month}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.sales)) {
+          const formatted: SalesData = {};
+          data.sales.forEach((sale: any) => {
+            if (!formatted[sale.product_id]) {
+              formatted[sale.product_id] = {};
+            }
+            const day = new Date(sale.sale_date).getUTCDate();
+            formatted[sale.product_id][day] = sale.quantity;
+          });
+          setSalesData(formatted);
+        }
+      }
+    } catch (error) {
+      console.error('売上データ取得エラー:', error);
+    }
+  };
+  
+  const fetchPreviousMonthData = async (month: string) => {
+    try {
+      const [year, monthNum] = month.split('-').map(Number);
+      const prevDate = new Date(year, monthNum - 2, 1);
+      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+      const response = await fetch(`/api/wholesale/sales?month=${prevMonth}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.sales)) {
+           const formatted: SalesData = {};
+            data.sales.forEach((sale: any) => {
+                if (!formatted[sale.product_id]) {
+                    formatted[sale.product_id] = {};
+                }
+                const day = new Date(sale.sale_date).getUTCDate();
+                formatted[sale.product_id][day] = sale.quantity;
+            });
+          setPreviousMonthData(formatted);
+        }
+      }
+    } catch (error) {
+      console.error('前月データ取得エラー:', error);
+    }
+  };
+
   const handleQuantityChange = (productId: string, day: number, value: string) => {
-    // 数字と空文字列以外は無視する
     if (!/^\d*$/.test(value)) {
       return;
     }
-    
     setSalesData(prev => {
       const newProdSales = { ...(prev[productId] || {}) };
-      
       if (value === '') {
-        // 入力が空なら、その日のデータを削除
         delete newProdSales[day];
       } else {
-        // 数字が入力されたら、数値に変換して設定
         newProdSales[day] = parseInt(value, 10);
       }
-      
       return { ...prev, [productId]: newProdSales };
     });
   };
 
-  const saveSalesData = async (productId: string, day: number) => { /* 変更なし */ };
-  const handleInputKeyDown = async (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => { /* 変更なし */ };
-  const getDaysInMonth = () => { /* 変更なし */ };
-  const calculateTotals = (productId: string) => { /* 変更なし */ };
-  const grandTotal = products.reduce((sum, product) => { /* 変更なし */ }, 0);
+  const saveSalesData = async (productId: string, day: number) => {
+    const quantity = salesData[productId]?.[day] || 0;
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    const saleDate = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+    try {
+      await fetch('/api/wholesale/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, saleDate, quantity, unitPrice: product.price })
+      });
+    } catch (error) {
+      console.error('保存エラー:', error);
+    }
+  };
+  
+  const handleInputKeyDown = async (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      await saveSalesData(productId, day);
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+  
+  const getDaysInMonth = () => {
+    if (!selectedMonth) return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const [year, month] = selectedMonth.split('-').map(Number);
+    return new Date(year, month, 0).getDate();
+  };
+  
+  const calculateTotals = (productId: string) => {
+    const sales = salesData[productId] || {};
+    const totalQuantity = Object.values(sales).reduce((sum, qty) => sum + (qty || 0), 0);
+    const product = products.find(p => p.id === productId);
+    const totalAmount = totalQuantity * (product?.price || 0);
+    return { totalQuantity, totalAmount };
+  };
+
+  const grandTotal = products.reduce((sum, product) => {
+    const { totalAmount } = calculateTotals(product.id);
+    return sum + totalAmount;
+  }, 0);
   
   if (!mounted) {
     return (
@@ -119,7 +205,27 @@ export default function WholesaleDashboard() {
  return (
     <div className="h-screen flex flex-col bg-gray-50">
       <div className="bg-white shadow-sm border-b flex-shrink-0 z-30">
-        { /* ヘッダー部分は変更なし */ }
+        <div className="px-4 py-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">卸販売管理システム</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <select 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
+                disabled={loading}
+              >
+                {monthOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto p-4">
@@ -132,7 +238,6 @@ export default function WholesaleDashboard() {
             <SummaryCards products={products} grandTotal={grandTotal} />
             <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
 
-            {/* ★修正点２：カードのflexとoverflowの指定を修正し、ヘッダー固定を確実にする */}
             <Card className="flex-1 flex flex-col overflow-hidden">
               <CardHeader className="py-2 px-4 border-b">
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -177,7 +282,6 @@ export default function WholesaleDashboard() {
                                 <input
                                   type="text"
                                   pattern="\d*"
-                                  // valueが0の場合も表示されるように修正
                                   value={value === undefined ? '' : String(value)}
                                   onChange={(e) => handleQuantityChange(product.id, day, e.target.value)}
                                   onBlur={() => saveSalesData(product.id, day)}
@@ -197,7 +301,14 @@ export default function WholesaleDashboard() {
             </Card>
 
             <div className="flex gap-3 justify-center pt-4 pb-2">
-              { /* 操作ボタン部分は変更なし */ }
+              <Button size="sm" onClick={() => router.push('/wholesale/products')}>
+                <Package className="w-3 h-3 mr-1" />
+                商品マスタ管理
+              </Button>
+              <Button size="sm" variant="outline">
+                <Users className="w-3 h-3 mr-1" />
+                取引先管理
+              </Button>
             </div>
           </div>
         )}
