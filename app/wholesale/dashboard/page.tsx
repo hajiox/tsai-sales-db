@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.20 (根本対策版)
+// /app/wholesale/dashboard/page.tsx ver.21 (完全最終版)
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -11,10 +11,19 @@ import { useRouter } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
 
-// Interfaces (変更なし)
-interface Product { id: string; product_name: string; price: number; [key: string]: any; }
-interface SalesData { [productId: string]: { [date: string]: number | undefined; }; }
-interface MonthOption { value: string; label: string; }
+interface Product {
+  id: string;
+  product_name: string;
+  price: number;
+  [key: string]: any;
+}
+interface SalesData {
+  [productId: string]: { [date: string]: number | undefined; };
+}
+interface MonthOption {
+  value: string;
+  label: string;
+}
 
 export default function WholesaleDashboard() {
   const router = useRouter();
@@ -26,7 +35,9 @@ export default function WholesaleDashboard() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!mounted) return;
@@ -50,16 +61,86 @@ export default function WholesaleDashboard() {
     const fetchAllData = async () => {
       setLoading(true);
       try {
-        await Promise.all([ fetchProducts(), fetchSalesData(selectedMonth), fetchPreviousMonthData(selectedMonth) ]);
-      } catch (error) { console.error('一括データ取得エラー:', error); } 
-      finally { setLoading(false); }
+        await Promise.all([
+          fetchProducts(),
+          fetchSalesData(selectedMonth),
+          fetchPreviousMonthData(selectedMonth)
+        ]);
+      } catch (error) {
+        console.error('一括データ取得エラー:', error);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchAllData();
   }, [selectedMonth, mounted]);
 
-  const fetchProducts = async () => { /* データ取得関数は変更なしのため省略 */ };
-  const fetchSalesData = async (month: string) => { /* データ取得関数は変更なしのため省略 */ };
-  const fetchPreviousMonthData = async (month: string) => { /* データ取得関数は変更なしのため省略 */ };
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch('/api/wholesale/products');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.products)) {
+          setProducts(data.products);
+        }
+      }
+    } catch (error) {
+      console.error('商品データ取得エラー:', error);
+    }
+  };
+
+  const fetchSalesData = async (month: string) => {
+    try {
+      const response = await fetch(`/api/wholesale/sales?month=${month}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.sales)) {
+          const formatted: SalesData = {};
+          data.sales.forEach((sale: any) => {
+            if (!formatted[sale.product_id]) {
+              formatted[sale.product_id] = {};
+            }
+            const day = new Date(sale.sale_date).getUTCDate();
+            formatted[sale.product_id][day] = sale.quantity;
+          });
+          setSalesData(formatted);
+        } else {
+          setSalesData({});
+        }
+      }
+    } catch (error) {
+      console.error('売上データ取得エラー:', error);
+      setSalesData({});
+    }
+  };
+
+  const fetchPreviousMonthData = async (month: string) => {
+    try {
+      const [year, monthNum] = month.split('-').map(Number);
+      const prevDate = new Date(year, monthNum - 2, 1);
+      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+      const response = await fetch(`/api/wholesale/sales?month=${prevMonth}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.sales)) {
+          const formatted: SalesData = {};
+          data.sales.forEach((sale: any) => {
+            if (!formatted[sale.product_id]) {
+              formatted[sale.product_id] = {};
+            }
+            const day = new Date(sale.sale_date).getUTCDate();
+            formatted[sale.product_id][day] = sale.quantity;
+          });
+          setPreviousMonthData(formatted);
+        } else {
+          setPreviousMonthData({});
+        }
+      }
+    } catch (error) {
+      console.error('前月データ取得エラー:', error);
+      setPreviousMonthData({});
+    }
+  };
 
   const handleQuantityChange = (productId: string, day: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
@@ -72,25 +153,61 @@ export default function WholesaleDashboard() {
     }));
   };
 
-  const saveSalesData = async (productId: string, day: number) => { /* 保存関数は変更なしのため省略 */ };
-  const handleInputKeyDown = async (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => { /* Enterキー処理は変更なしのため省略 */ };
-  const getDaysInMonth = () => { /* 日数計算関数は変更なしのため省略 */ };
-  const calculateTotals = (productId: string) => { /* 合計計算関数は変更なしのため省略 */ };
-  const grandTotal = products.reduce((sum, product) => { /* 総合計計算は変更なしのため省略 */ }, 0);
-  
+  const saveSalesData = async (productId: string, day: number) => {
+    const quantity = salesData[productId]?.[day] || 0;
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    const saleDate = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+    try {
+      await fetch('/api/wholesale/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, saleDate, quantity, unitPrice: product.price })
+      });
+    } catch (error) {
+      console.error('保存エラー:', error);
+    }
+  };
+
+  const handleInputKeyDown = async (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      await saveSalesData(productId, day);
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  const getDaysInMonth = () => {
+    if (!selectedMonth) return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const [year, month] = selectedMonth.split('-').map(Number);
+    return new Date(year, month, 0).getDate();
+  };
+
+  const calculateTotals = (productId: string) => {
+    const sales = salesData[productId] || {};
+    const totalQuantity = Object.values(sales).reduce((sum, qty) => sum + (qty || 0), 0);
+    const product = products.find(p => p.id === productId);
+    const totalAmount = totalQuantity * (product?.price || 0);
+    return { totalQuantity, totalAmount };
+  };
+
+  const grandTotal = products.reduce((sum, product) => {
+    const { totalAmount } = calculateTotals(product.id);
+    return sum + totalAmount;
+  }, 0);
+
   if (!mounted) {
-    return <div className="flex items-center justify-center h-screen"><p>読み込み中...</p></div>;
+    return <div className="flex items-center justify-center h-screen bg-gray-50"><p className="text-gray-500">ページを準備しています...</p></div>;
   }
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* 1. ページヘッダー */}
       <header className="flex-shrink-0 bg-white shadow-sm border-b z-30">
         <div className="px-4 py-2 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">卸販売管理システム</h1>
           <div className="flex items-center gap-3">
-            <select 
-              value={selectedMonth} 
+            <select
+              value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
               disabled={loading}
@@ -101,19 +218,16 @@ export default function WholesaleDashboard() {
         </div>
       </header>
 
-      {/* 2. メインコンテンツエリア */}
       <main className="flex-1 flex flex-col overflow-hidden p-4 space-y-4">
         {loading ? (
-          <div className="flex-1 flex items-center justify-center"><p>データを読み込んでいます...</p></div>
+          <div className="flex-1 flex items-center justify-center"><p className="text-gray-500">データを読み込んでいます...</p></div>
         ) : (
           <>
-            {/* 上段：サマリーとランキング（この部分はスクロールしない） */}
             <div className="flex-shrink-0 space-y-4">
               <SummaryCards products={products} grandTotal={grandTotal} />
               <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
             </div>
 
-            {/* 下段：日別実績テーブル（この部分だけがスクロールする） */}
             <Card className="flex-1 flex flex-col overflow-hidden">
               <CardHeader className="flex-shrink-0 py-2 px-4 border-b">
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -131,7 +245,11 @@ export default function WholesaleDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map(product => {
+                    {products.length === 0 ? (
+                      <tr>
+                        <td colSpan={getDaysInMonth() + 1} className="text-center py-10 text-gray-500">商品データがありません。</td>
+                      </tr>
+                    ) : products.map(product => {
                       const { totalQuantity, totalAmount } = calculateTotals(product.id);
                       return (
                         <tr key={product.id} className="border-b hover:bg-gray-50">
