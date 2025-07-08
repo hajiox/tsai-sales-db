@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.16 (完全版)
+// /app/wholesale/dashboard/page.tsx ver.17 (データ加工処理修正版)
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +41,6 @@ export default function WholesaleDashboard() {
 
   useEffect(() => {
     if (!mounted) return;
-    
     const options: MonthOption[] = [];
     const now = new Date();
     for (let i = 0; i < 12; i++) {
@@ -52,7 +51,6 @@ export default function WholesaleDashboard() {
       });
     }
     setMonthOptions(options);
-    
     if (options.length > 0) {
       setSelectedMonth(options[0].value);
     }
@@ -60,62 +58,95 @@ export default function WholesaleDashboard() {
 
   useEffect(() => {
     if (!selectedMonth || !mounted) return;
-
     const fetchAllData = async () => {
       setLoading(true);
       try {
-        // APIの応答を正しく処理するように修正
-        const productResponse = await fetch('/api/wholesale/products');
-        if (productResponse.ok) {
-            const productData = await productResponse.json();
-            if (productData.success && Array.isArray(productData.products)) {
-                setProducts(productData.products);
-            }
-        }
-
-        const salesResponse = await fetch(`/api/wholesale/sales?month=${selectedMonth}`);
-         if (salesResponse.ok) {
-            const salesData = await salesResponse.json();
-            if (salesData.success && typeof salesData.sales === 'object') {
-                setSalesData(salesData.sales);
-            }
-        }
-
-        const [year, monthNum] = selectedMonth.split('-').map(Number);
-        const prevDate = new Date(year, monthNum - 2, 1);
-        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-        const prevSalesResponse = await fetch(`/api/wholesale/sales?month=${prevMonth}`);
-        if (prevSalesResponse.ok) {
-            const prevSalesData = await prevSalesResponse.json();
-            if (prevSalesData.success && typeof prevSalesData.sales === 'object') {
-                setPreviousMonthData(prevSalesData.sales);
-            }
-        }
-
+        await Promise.all([
+          fetchProducts(),
+          fetchSalesData(selectedMonth),
+          fetchPreviousMonthData(selectedMonth)
+        ]);
       } catch (error) {
         console.error('データ取得エラー:', error);
       } finally {
         setLoading(false);
       }
     };
-
     fetchAllData();
   }, [selectedMonth, mounted]);
 
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch('/api/wholesale/products');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.products)) {
+          setProducts(data.products);
+        }
+      }
+    } catch (error) {
+      console.error('商品データ取得エラー:', error);
+    }
+  };
+
+  // ★修正点：APIから受け取った売上配列をオブジェクトに加工する処理を追加
+  const fetchSalesData = async (month: string) => {
+    try {
+      const response = await fetch(`/api/wholesale/sales?month=${month}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.sales)) {
+          const formatted: SalesData = {};
+          data.sales.forEach((sale: any) => {
+            if (!formatted[sale.product_id]) {
+              formatted[sale.product_id] = {};
+            }
+            const day = new Date(sale.sale_date).getUTCDate();
+            formatted[sale.product_id][day] = sale.quantity;
+          });
+          setSalesData(formatted);
+        }
+      }
+    } catch (error) {
+      console.error('売上データ取得エラー:', error);
+    }
+  };
+  
+  // ★修正点：前月データも同様に加工処理を追加
+  const fetchPreviousMonthData = async (month: string) => {
+    try {
+      const [year, monthNum] = month.split('-').map(Number);
+      const prevDate = new Date(year, monthNum - 2, 1);
+      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+      const response = await fetch(`/api/wholesale/sales?month=${prevMonth}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.sales)) {
+           const formatted: SalesData = {};
+            data.sales.forEach((sale: any) => {
+                if (!formatted[sale.product_id]) {
+                    formatted[sale.product_id] = {};
+                }
+                const day = new Date(sale.sale_date).getUTCDate();
+                formatted[sale.product_id][day] = sale.quantity;
+            });
+          setPreviousMonthData(formatted);
+        }
+      }
+    } catch (error) {
+      console.error('前月データ取得エラー:', error);
+    }
+  };
+
   const handleQuantityChange = (productId: string, day: number, value: string) => {
     const quantity = parseInt(value, 10);
-    setSalesData(prev => {
-      const newProdSales = { ...(prev[productId] || {}) };
-      if (!isNaN(quantity) && quantity >= 0) {
-        newProdSales[day] = quantity;
-      } else {
-        delete newProdSales[day];
+    setSalesData(prev => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        [day]: isNaN(quantity) ? undefined : quantity,
       }
-      return {
-        ...prev,
-        [productId]: newProdSales,
-      };
-    });
+    }));
   };
 
   const saveSalesData = async (productId: string, day: number) => {
@@ -141,12 +172,25 @@ export default function WholesaleDashboard() {
       (e.target as HTMLInputElement).blur();
     }
   };
-
+  
   const getDaysInMonth = () => {
     if (!selectedMonth) return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     const [year, month] = selectedMonth.split('-').map(Number);
     return new Date(year, month, 0).getDate();
   };
+  
+  const calculateTotals = (productId: string) => {
+    const sales = salesData[productId] || {};
+    const totalQuantity = Object.values(sales).reduce((sum, qty) => sum + (qty || 0), 0);
+    const product = products.find(p => p.id === productId);
+    const totalAmount = totalQuantity * (product?.price || 0);
+    return { totalQuantity, totalAmount };
+  };
+
+  const grandTotal = products.reduce((sum, product) => {
+    const { totalAmount } = calculateTotals(product.id);
+    return sum + totalAmount;
+  }, 0);
   
   if (!mounted) {
     return (
@@ -189,7 +233,7 @@ export default function WholesaleDashboard() {
           </div>
         ) : (
           <div className="max-w-full mx-auto space-y-4">
-            <SummaryCards products={products} salesData={salesData} />
+            <SummaryCards products={products} grandTotal={grandTotal} />
             <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
 
             <Card className="flex-1 flex flex-col" style={{minHeight: '400px'}}>
@@ -212,33 +256,43 @@ export default function WholesaleDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((product) => (
-                      <tr key={product.id} className="border-b hover:bg-gray-50">
-                        <td className="text-left p-2 sticky left-0 bg-white hover:bg-gray-50 border-r z-10">
-                          <div className="w-[160px]">
-                            <div className="font-medium text-gray-900 break-words">{product.product_name}</div>
-                          </div>
-                        </td>
-                        {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                          const day = i + 1;
-                          const value = salesData[product.id]?.[day] || '';
-                          return (
-                            <td key={day} className="text-center p-0 border-l">
-                              <input
-                                type="text"
-                                pattern="\d*"
-                                value={value}
-                                onChange={(e) => handleQuantityChange(product.id, day, e.target.value)}
-                                onBlur={() => saveSalesData(product.id, day)}
-                                onKeyDown={(e) => handleInputKeyDown(e, product.id, day)}
-                                className="w-full h-full text-center p-1 bg-transparent border-0 focus:bg-blue-100 focus:ring-1 focus:ring-blue-400 focus:outline-none"
-                                style={{ minWidth: '38px' }}
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                    {products.map((product) => {
+                      const { totalQuantity, totalAmount } = calculateTotals(product.id);
+                      return (
+                        <tr key={product.id} className="border-b hover:bg-gray-50">
+                          <td className="text-left p-2 sticky left-0 bg-white hover:bg-gray-50 border-r z-10">
+                            <div className="w-[160px]">
+                              <div className="font-medium text-gray-900 break-words">{product.product_name}</div>
+                               <div className="text-xs text-gray-600 mt-1">
+                                <span>卸価格: ¥{product.price.toLocaleString()}</span>
+                                <span className="font-semibold text-blue-600 ml-2">合計: {totalQuantity}</span>
+                              </div>
+                              <div className="text-xs text-gray-600 font-semibold text-green-600">
+                                <span>金額: ¥{totalAmount.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          </td>
+                          {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                            const day = i + 1;
+                            const value = salesData[product.id]?.[day] || '';
+                            return (
+                              <td key={day} className="text-center p-0 border-l">
+                                <input
+                                  type="text"
+                                  pattern="\d*"
+                                  value={value}
+                                  onChange={(e) => handleQuantityChange(product.id, day, e.target.value)}
+                                  onBlur={() => saveSalesData(product.id, day)}
+                                  onKeyDown={(e) => handleInputKeyDown(e, product.id, day)}
+                                  className="w-full h-full text-center p-1 bg-transparent border-0 focus:bg-blue-100 focus:ring-1 focus:ring-blue-400 focus:outline-none"
+                                  style={{ minWidth: '38px' }}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </CardContent>
