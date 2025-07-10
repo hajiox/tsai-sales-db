@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.25 OEM商品対応版
+// /app/wholesale/dashboard/page.tsx ver.27 OEM売上入力コンポーネント分離版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -10,6 +10,7 @@ import { Package, Users, TrendingUp, FileText, Upload, Trash2, Settings } from '
 import { useRouter } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
+import OEMSalesInput from '@/components/wholesale/oem-sales-input';
 
 interface Product {
   id: string;
@@ -25,13 +26,32 @@ interface OEMProduct {
   [key: string]: any;
 }
 
-interface SalesData {
-  [productId: string]: { [date: string]: number | undefined; };
+interface OEMCustomer {
+  id: string;
+  customer_name: string;
+  customer_code: string;
 }
 
-interface MonthOption {
-  value: string;
-  label: string;
+interface OEMSale {
+  id: string;
+  product_id: string;
+  customer_id: string;
+  sale_date: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+  oem_products?: {
+    product_name: string;
+    product_code: string;
+  };
+  oem_customers?: {
+    customer_name: string;
+    customer_code: string;
+  };
+}
+
+interface SalesData {
+  [productId: string]: { [date: string]: number | undefined; };
 }
 
 export default function WholesaleDashboard() {
@@ -42,6 +62,8 @@ export default function WholesaleDashboard() {
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [oemProducts, setOemProducts] = useState<OEMProduct[]>([]);
+  const [oemCustomers, setOemCustomers] = useState<OEMCustomer[]>([]);
+  const [oemSales, setOemSales] = useState<OEMSale[]>([]);
   const [salesData, setSalesData] = useState<SalesData>({});
   const [oemSalesData, setOemSalesData] = useState<SalesData>({});
   const [previousMonthData, setPreviousMonthData] = useState<SalesData>({});
@@ -84,6 +106,7 @@ export default function WholesaleDashboard() {
         await Promise.all([
           fetchProducts(),
           fetchOemProducts(),
+          fetchOemCustomers(),
           fetchSalesData(`${selectedYear}-${selectedMonth}`),
           fetchOemSalesData(`${selectedYear}-${selectedMonth}`),
           fetchPreviousMonthData(`${selectedYear}-${selectedMonth}`)
@@ -125,6 +148,20 @@ export default function WholesaleDashboard() {
     }
   };
 
+  const fetchOemCustomers = async () => {
+    try {
+      const response = await fetch('/api/wholesale/oem-customers');
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setOemCustomers(data);
+        }
+      }
+    } catch (error) {
+      console.error('OEM顧客データ取得エラー:', error);
+    }
+  };
+
   const fetchSalesData = async (month: string) => {
     try {
       const response = await fetch(`/api/wholesale/sales?month=${month}`);
@@ -156,21 +193,26 @@ export default function WholesaleDashboard() {
       if (response.ok) {
         const data = await response.json();
         if (data.success && Array.isArray(data.sales)) {
+          setOemSales(data.sales);
+          
+          // OEM用の集計データも作成
           const formatted: SalesData = {};
           data.sales.forEach((sale: any) => {
             if (!formatted[sale.product_id]) {
               formatted[sale.product_id] = {};
             }
             const day = new Date(sale.sale_date).getUTCDate();
-            formatted[sale.product_id][day] = sale.quantity;
+            formatted[sale.product_id][day] = (formatted[sale.product_id][day] || 0) + sale.quantity;
           });
           setOemSalesData(formatted);
         } else {
+          setOemSales([]);
           setOemSalesData({});
         }
       }
     } catch (error) {
       console.error('OEM売上データ取得エラー:', error);
+      setOemSales([]);
       setOemSalesData({});
     }
   };
@@ -216,7 +258,6 @@ export default function WholesaleDashboard() {
         const lines = text.split('\n');
         const headers = lines[0].split(',').map(h => h.trim());
         
-        // 商品名列のインデックスを探す
         const productNameIndex = headers.findIndex(h => h === '商品名');
         const priceIndex = headers.findIndex(h => h === '卸価格');
         
@@ -226,7 +267,6 @@ export default function WholesaleDashboard() {
           return;
         }
 
-        // 日付列のインデックスを収集（1日〜31日）
         const dayColumns: { [key: string]: number } = {};
         headers.forEach((header, index) => {
           const match = header.match(/^(\d+)日$/);
@@ -237,7 +277,6 @@ export default function WholesaleDashboard() {
 
         const importData: any[] = [];
         
-        // データ行を処理
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
@@ -248,7 +287,6 @@ export default function WholesaleDashboard() {
 
           const price = priceIndex !== -1 ? parseInt(values[priceIndex]) || 0 : 0;
           
-          // 各日付のデータを収集
           Object.entries(dayColumns).forEach(([day, index]) => {
             const quantity = parseInt(values[index]) || 0;
             if (quantity > 0) {
@@ -262,7 +300,6 @@ export default function WholesaleDashboard() {
           });
         }
 
-        // APIにデータを送信
         const response = await fetch('/api/wholesale/sales/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -273,7 +310,6 @@ export default function WholesaleDashboard() {
         
         if (result.success) {
           alert(`CSV読み込みが完了しました。\n処理件数: ${result.processed}件`);
-          // データを再読み込み
           await fetchProducts();
           await fetchSalesData(`${selectedYear}-${selectedMonth}`);
         } else {
@@ -301,7 +337,6 @@ export default function WholesaleDashboard() {
       return;
     }
 
-    // 二重確認
     const secondConfirm = prompt(`確認のため「削除」と入力してください。`);
     if (secondConfirm !== '削除') {
       return;
@@ -319,7 +354,6 @@ export default function WholesaleDashboard() {
       
       if (result.success) {
         alert(`${result.deleted}件のデータを削除しました。`);
-        // データを再読み込み
         await fetchSalesData(`${selectedYear}-${selectedMonth}`);
       } else {
         alert(`エラーが発生しました: ${result.error}`);
@@ -380,12 +414,8 @@ export default function WholesaleDashboard() {
     return { totalQuantity, totalAmount };
   };
 
-  const calculateOemTotals = (productId: string) => {
-    const sales = oemSalesData[productId] || {};
-    const totalQuantity = Object.values(sales).reduce((sum, qty) => sum + (qty || 0), 0);
-    const product = oemProducts.find(p => p.id === productId);
-    const totalAmount = totalQuantity * (product?.price || 0);
-    return { totalQuantity, totalAmount };
+  const handleOemDataUpdate = async () => {
+    await fetchOemSalesData(`${selectedYear}-${selectedMonth}`);
   };
 
   // 卸商品の合計金額
@@ -394,11 +424,8 @@ export default function WholesaleDashboard() {
     return sum + totalAmount;
   }, 0);
 
-  // OEM商品の合計金額
-  const oemTotal = oemProducts.reduce((sum, product) => {
-    const { totalAmount } = calculateOemTotals(product.id);
-    return sum + totalAmount;
-  }, 0);
+  // OEM商品の合計金額（売上データから直接計算）
+  const oemTotal = oemSales.reduce((sum, sale) => sum + sale.amount, 0);
 
   // 総合計金額
   const grandTotal = wholesaleTotal + oemTotal;
@@ -559,6 +586,16 @@ export default function WholesaleDashboard() {
                 </table>
               </CardContent>
             </Card>
+
+            {/* OEM商品入力セクション */}
+            <OEMSalesInput
+              oemProducts={oemProducts}
+              oemCustomers={oemCustomers}
+              oemSales={oemSales}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              onDataUpdate={handleOemDataUpdate}
+            />
           </>
         )}
       </main>
