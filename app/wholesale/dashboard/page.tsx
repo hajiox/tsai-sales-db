@@ -1,12 +1,12 @@
-// /app/wholesale/dashboard/page.tsx ver.21 (完全最終版)
+// /app/wholesale/dashboard/page.tsx ver.22 (CSV読み込み機能追加版)
 "use client"
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, KeyboardEvent } from 'react';
+import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Package, Users, TrendingUp, FileText } from 'lucide-react';
+import { Package, Users, TrendingUp, FileText, Upload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
@@ -27,13 +27,17 @@ interface MonthOption {
 
 export default function WholesaleDashboard() {
   const router = useRouter();
+  const [selectedYear, setSelectedYear] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
-  const [monthOptions, setMonthOptions] = useState<MonthOption[]>([]);
+  const [yearOptions, setYearOptions] = useState<string[]>([]);
+  const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [salesData, setSalesData] = useState<SalesData>({});
   const [previousMonthData, setPreviousMonthData] = useState<SalesData>({});
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -41,30 +45,34 @@ export default function WholesaleDashboard() {
 
   useEffect(() => {
     if (!mounted) return;
-    const options: MonthOption[] = [];
     const now = new Date();
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      options.push({
-        value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-        label: `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月`
-      });
+    
+    // 年のオプション（過去3年分）
+    const years: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      years.push(String(now.getFullYear() - i));
     }
-    setMonthOptions(options);
-    if (options.length > 0) {
-      setSelectedMonth(options[0].value);
+    setYearOptions(years);
+    setSelectedYear(String(now.getFullYear()));
+    
+    // 月のオプション
+    const months: string[] = [];
+    for (let i = 1; i <= 12; i++) {
+      months.push(String(i).padStart(2, '0'));
     }
+    setMonthOptions(months);
+    setSelectedMonth(String(now.getMonth() + 1).padStart(2, '0'));
   }, [mounted]);
 
   useEffect(() => {
-    if (!selectedMonth || !mounted) return;
+    if (!selectedYear || !selectedMonth || !mounted) return;
     const fetchAllData = async () => {
       setLoading(true);
       try {
         await Promise.all([
           fetchProducts(),
-          fetchSalesData(selectedMonth),
-          fetchPreviousMonthData(selectedMonth)
+          fetchSalesData(`${selectedYear}-${selectedMonth}`),
+          fetchPreviousMonthData(`${selectedYear}-${selectedMonth}`)
         ]);
       } catch (error) {
         console.error('一括データ取得エラー:', error);
@@ -73,7 +81,7 @@ export default function WholesaleDashboard() {
       }
     };
     fetchAllData();
-  }, [selectedMonth, mounted]);
+  }, [selectedYear, selectedMonth, mounted]);
 
   const fetchProducts = async () => {
     try {
@@ -142,6 +150,97 @@ export default function WholesaleDashboard() {
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+      try {
+        const text = e.target?.result as string;
+        const lines = text.split('\n');
+        const headers = lines[0].split(',').map(h => h.trim());
+        
+        // 商品名列のインデックスを探す
+        const productNameIndex = headers.findIndex(h => h === '商品名');
+        const priceIndex = headers.findIndex(h => h === '卸価格');
+        
+        if (productNameIndex === -1) {
+          alert('CSVファイルに「商品名」列が見つかりません。');
+          setIsImporting(false);
+          return;
+        }
+
+        // 日付列のインデックスを収集（1日〜31日）
+        const dayColumns: { [key: string]: number } = {};
+        headers.forEach((header, index) => {
+          const match = header.match(/^(\d+)日$/);
+          if (match) {
+            dayColumns[match[1]] = index;
+          }
+        });
+
+        const importData: any[] = [];
+        
+        // データ行を処理
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          const values = line.split(',').map(v => v.trim());
+          const productName = values[productNameIndex];
+          if (!productName) continue;
+
+          const price = priceIndex !== -1 ? parseInt(values[priceIndex]) || 0 : 0;
+          
+          // 各日付のデータを収集
+          Object.entries(dayColumns).forEach(([day, index]) => {
+            const quantity = parseInt(values[index]) || 0;
+            if (quantity > 0) {
+              importData.push({
+                productName,
+                price,
+                saleDate: `${selectedYear}-${selectedMonth}-${day.padStart(2, '0')}`,
+                quantity
+              });
+            }
+          });
+        }
+
+        // APIにデータを送信
+        const response = await fetch('/api/wholesale/sales/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: importData })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          alert(`CSV読み込みが完了しました。\n処理件数: ${result.processed}件`);
+          // データを再読み込み
+          await fetchProducts();
+          await fetchSalesData(`${selectedYear}-${selectedMonth}`);
+        } else {
+          alert(`エラーが発生しました: ${result.error}`);
+        }
+        
+      } catch (error) {
+        console.error('CSV読み込みエラー:', error);
+        alert('CSV読み込み中にエラーが発生しました。');
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+
+    reader.readAsText(file, 'UTF-8');
+  };
+
   const handleQuantityChange = (productId: string, day: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
     setSalesData(prev => ({
@@ -157,7 +256,7 @@ export default function WholesaleDashboard() {
     const quantity = salesData[productId]?.[day] || 0;
     const product = products.find(p => p.id === productId);
     if (!product) return;
-    const saleDate = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+    const saleDate = `${selectedYear}-${selectedMonth}-${String(day).padStart(2, '0')}`;
     try {
       await fetch('/api/wholesale/sales', {
         method: 'POST',
@@ -178,9 +277,8 @@ export default function WholesaleDashboard() {
   };
 
   const getDaysInMonth = () => {
-    if (!selectedMonth) return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const [year, month] = selectedMonth.split('-').map(Number);
-    return new Date(year, month, 0).getDate();
+    if (!selectedYear || !selectedMonth) return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    return new Date(parseInt(selectedYear), parseInt(selectedMonth), 0).getDate();
   };
 
   const calculateTotals = (productId: string) => {
@@ -207,13 +305,38 @@ export default function WholesaleDashboard() {
           <h1 className="text-xl font-bold text-gray-900">卸販売管理システム</h1>
           <div className="flex items-center gap-3">
             <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
+              disabled={loading}
+            >
+              {yearOptions.map(year => <option key={year} value={year}>{year}年</option>)}
+            </select>
+            <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
               disabled={loading}
             >
-              {monthOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {monthOptions.map(month => <option key={month} value={month}>{month}月</option>)}
             </select>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".csv"
+              className="hidden"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading || isImporting}
+              className="flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              {isImporting ? 'インポート中...' : 'CSV読込'}
+            </Button>
           </div>
         </div>
       </header>
