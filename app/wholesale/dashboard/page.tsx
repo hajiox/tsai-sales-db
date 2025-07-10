@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.23 (一括削除機能追加版)
+// /app/wholesale/dashboard/page.tsx ver.24 (商品マスター管理ボタン追加版)
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Package, Users, TrendingUp, FileText, Upload, Trash2 } from 'lucide-react';
+import { Package, Users, TrendingUp, FileText, Upload, Trash2, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
@@ -402,9 +402,20 @@ export default function WholesaleDashboard() {
 
             <Card className="flex-1 flex flex-col overflow-hidden">
               <CardHeader className="flex-shrink-0 py-2 px-4 border-b">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" /> 日別売上実績
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4" /> 日別売上実績
+                  </CardTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push('/wholesale/products')}
+                    className="flex items-center gap-2"
+                  >
+                    <Settings className="w-4 h-4" />
+                    商品マスター管理
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="flex-1 overflow-auto p-0">
                 <table className="w-full text-xs border-collapse">
