@@ -1,4 +1,4 @@
-// /app/api/wholesale/sales/delete-month/route.ts ver.1
+// /app/api/wholesale/sales/delete-month/route.ts ver.2 (customer_id条件を削除)
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -22,13 +22,12 @@ export async function DELETE(request: Request) {
     const [year, monthNum] = month.split('-').map(Number);
     const lastDay = new Date(year, monthNum, 0).getDate();
     
-    // 指定月のデータを削除
+    // 指定月のデータを削除（customer_idの条件を削除）
     const { data, error } = await supabase
       .from('wholesale_sales')
       .delete()
       .gte('sale_date', `${month}-01`)
       .lte('sale_date', `${month}-${lastDay}`)
-      .is('customer_id', null)
       .select();
 
     if (error) {
