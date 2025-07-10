@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.22 (CSV読み込み機能追加版)
+// /app/wholesale/dashboard/page.tsx ver.23 (一括削除機能追加版)
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Package, Users, TrendingUp, FileText, Upload } from 'lucide-react';
+import { Package, Users, TrendingUp, FileText, Upload, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
@@ -37,6 +37,7 @@ export default function WholesaleDashboard() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -241,6 +242,44 @@ export default function WholesaleDashboard() {
     reader.readAsText(file, 'UTF-8');
   };
 
+  const handleDeleteMonth = async () => {
+    const confirmMessage = `${selectedYear}年${selectedMonth}月のデータを全て削除します。\nこの操作は取り消せません。\n\n本当に削除しますか？`;
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // 二重確認
+    const secondConfirm = prompt(`確認のため「削除」と入力してください。`);
+    if (secondConfirm !== '削除') {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/wholesale/sales/delete-month`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: `${selectedYear}-${selectedMonth}` })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`${result.deleted}件のデータを削除しました。`);
+        // データを再読み込み
+        await fetchSalesData(`${selectedYear}-${selectedMonth}`);
+      } else {
+        alert(`エラーが発生しました: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('削除エラー:', error);
+      alert('削除中にエラーが発生しました。');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleQuantityChange = (productId: string, day: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
     setSalesData(prev => ({
@@ -336,6 +375,16 @@ export default function WholesaleDashboard() {
             >
               <Upload className="w-4 h-4" />
               {isImporting ? 'インポート中...' : 'CSV読込'}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDeleteMonth}
+              disabled={loading || isDeleting}
+              className="flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              {isDeleting ? '削除中...' : '月削除'}
             </Button>
           </div>
         </div>
