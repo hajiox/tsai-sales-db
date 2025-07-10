@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.24 (商品マスター管理ボタン追加版)
+// /app/wholesale/dashboard/page.tsx ver.25 OEM商品対応版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -17,9 +17,18 @@ interface Product {
   price: number;
   [key: string]: any;
 }
+
+interface OEMProduct {
+  id: string;
+  product_name: string;
+  price: number;
+  [key: string]: any;
+}
+
 interface SalesData {
   [productId: string]: { [date: string]: number | undefined; };
 }
+
 interface MonthOption {
   value: string;
   label: string;
@@ -32,7 +41,9 @@ export default function WholesaleDashboard() {
   const [yearOptions, setYearOptions] = useState<string[]>([]);
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [oemProducts, setOemProducts] = useState<OEMProduct[]>([]);
   const [salesData, setSalesData] = useState<SalesData>({});
+  const [oemSalesData, setOemSalesData] = useState<SalesData>({});
   const [previousMonthData, setPreviousMonthData] = useState<SalesData>({});
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -72,7 +83,9 @@ export default function WholesaleDashboard() {
       try {
         await Promise.all([
           fetchProducts(),
+          fetchOemProducts(),
           fetchSalesData(`${selectedYear}-${selectedMonth}`),
+          fetchOemSalesData(`${selectedYear}-${selectedMonth}`),
           fetchPreviousMonthData(`${selectedYear}-${selectedMonth}`)
         ]);
       } catch (error) {
@@ -98,6 +111,20 @@ export default function WholesaleDashboard() {
     }
   };
 
+  const fetchOemProducts = async () => {
+    try {
+      const response = await fetch('/api/wholesale/oem-products');
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setOemProducts(data);
+        }
+      }
+    } catch (error) {
+      console.error('OEM商品データ取得エラー:', error);
+    }
+  };
+
   const fetchSalesData = async (month: string) => {
     try {
       const response = await fetch(`/api/wholesale/sales?month=${month}`);
@@ -120,6 +147,31 @@ export default function WholesaleDashboard() {
     } catch (error) {
       console.error('売上データ取得エラー:', error);
       setSalesData({});
+    }
+  };
+
+  const fetchOemSalesData = async (month: string) => {
+    try {
+      const response = await fetch(`/api/wholesale/oem-sales?month=${month}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.sales)) {
+          const formatted: SalesData = {};
+          data.sales.forEach((sale: any) => {
+            if (!formatted[sale.product_id]) {
+              formatted[sale.product_id] = {};
+            }
+            const day = new Date(sale.sale_date).getUTCDate();
+            formatted[sale.product_id][day] = sale.quantity;
+          });
+          setOemSalesData(formatted);
+        } else {
+          setOemSalesData({});
+        }
+      }
+    } catch (error) {
+      console.error('OEM売上データ取得エラー:', error);
+      setOemSalesData({});
     }
   };
 
@@ -328,10 +380,28 @@ export default function WholesaleDashboard() {
     return { totalQuantity, totalAmount };
   };
 
-  const grandTotal = products.reduce((sum, product) => {
+  const calculateOemTotals = (productId: string) => {
+    const sales = oemSalesData[productId] || {};
+    const totalQuantity = Object.values(sales).reduce((sum, qty) => sum + (qty || 0), 0);
+    const product = oemProducts.find(p => p.id === productId);
+    const totalAmount = totalQuantity * (product?.price || 0);
+    return { totalQuantity, totalAmount };
+  };
+
+  // 卸商品の合計金額
+  const wholesaleTotal = products.reduce((sum, product) => {
     const { totalAmount } = calculateTotals(product.id);
     return sum + totalAmount;
   }, 0);
+
+  // OEM商品の合計金額
+  const oemTotal = oemProducts.reduce((sum, product) => {
+    const { totalAmount } = calculateOemTotals(product.id);
+    return sum + totalAmount;
+  }, 0);
+
+  // 総合計金額
+  const grandTotal = wholesaleTotal + oemTotal;
 
   if (!mounted) {
     return <div className="flex items-center justify-center h-screen bg-gray-50"><p className="text-gray-500">ページを準備しています...</p></div>;
@@ -396,7 +466,13 @@ export default function WholesaleDashboard() {
         ) : (
           <>
             <div className="flex-shrink-0 space-y-4">
-              <SummaryCards products={products} grandTotal={grandTotal} />
+              <SummaryCards 
+                products={products} 
+                oemProducts={oemProducts}
+                wholesaleTotal={wholesaleTotal}
+                oemTotal={oemTotal}
+                grandTotal={grandTotal} 
+              />
               <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
             </div>
 
@@ -406,15 +482,26 @@ export default function WholesaleDashboard() {
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
                     <TrendingUp className="w-4 h-4" /> 日別売上実績
                   </CardTitle>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push('/wholesale/products')}
-                    className="flex items-center gap-2"
-                  >
-                    <Settings className="w-4 h-4" />
-                    商品マスター管理
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push('/wholesale/products')}
+                      className="flex items-center gap-2"
+                    >
+                      <Settings className="w-4 h-4" />
+                      卸商品管理
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push('/wholesale/oem-products')}
+                      className="flex items-center gap-2"
+                    >
+                      <Settings className="w-4 h-4" />
+                      OEM商品管理
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="flex-1 overflow-auto p-0">
