@@ -1,4 +1,4 @@
-// /app/api/wholesale/sales/route.ts ver.3
+// /app/api/wholesale/sales/route.ts ver.4
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
+    const month = searchParams.get('month'); // monthパラメータを追加
     
     if (type === 'summary') {
       // 現在の月と前月を計算
@@ -138,6 +139,26 @@ export async function GET(request: NextRequest) {
       });
     }
     
+    // monthパラメータがある場合は特定の月のデータを返す
+    if (month) {
+      // 月の最終日を計算
+      const [year, monthNum] = month.split('-').map(Number);
+      const lastDay = new Date(year, monthNum, 0).getDate();
+      
+      const { data: sales, error } = await supabase
+        .from('wholesale_sales')
+        .select('*')
+        .gte('sale_date', `${month}-01`)
+        .lte('sale_date', `${month}-${lastDay}`)
+        .order('sale_date', { ascending: true });
+      
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      
+      return NextResponse.json({ success: true, sales: sales || [] });
+    }
+    
     // デフォルトは全売上データを返す
     const { data: sales, error } = await supabase
       .from('wholesale_sales')
@@ -148,10 +169,72 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     
-    return NextResponse.json({ sales });
+    return NextResponse.json({ success: true, sales: sales || [] });
   } catch (error) {
     return NextResponse.json(
       { error: '売上データの取得に失敗しました' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { productId, saleDate, quantity, unitPrice } = body;
+
+    // 金額を計算
+    const amount = quantity * unitPrice;
+
+    // 既存データを確認
+    const { data: existing } = await supabase
+      .from('wholesale_sales')
+      .select('id')
+      .eq('product_id', productId)
+      .eq('sale_date', saleDate)
+      .is('customer_id', null)
+      .single();
+
+    if (existing) {
+      // 更新
+      if (quantity === 0) {
+        // 数量が0の場合は削除
+        const { error } = await supabase
+          .from('wholesale_sales')
+          .delete()
+          .eq('id', existing.id);
+
+        if (error) throw error;
+      } else {
+        // 更新
+        const { error } = await supabase
+          .from('wholesale_sales')
+          .update({ quantity, unit_price: unitPrice, amount })
+          .eq('id', existing.id);
+
+        if (error) throw error;
+      }
+    } else if (quantity > 0) {
+      // 新規作成（数量が0より大きい場合のみ）
+      const { error } = await supabase
+        .from('wholesale_sales')
+        .insert({
+          product_id: productId,
+          customer_id: null,
+          sale_date: saleDate,
+          quantity,
+          unit_price: unitPrice,
+          amount
+        });
+
+      if (error) throw error;
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Save error:', error);
+    return NextResponse.json(
+      { error: '保存に失敗しました' },
       { status: 500 }
     );
   }
