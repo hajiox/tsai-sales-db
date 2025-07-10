@@ -1,10 +1,13 @@
-// /app/api/wholesale/oem-sales/route.ts ver.1
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+// /app/api/wholesale/oem-sales/route.ts ver.2
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const { searchParams } = new URL(request.url);
     const month = searchParams.get("month");
 
@@ -57,7 +60,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const body = await request.json();
     const { 
       productId, 
@@ -113,7 +116,7 @@ export async function POST(request: Request) {
 // 個別削除用
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
