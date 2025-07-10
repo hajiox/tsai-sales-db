@@ -1,4 +1,4 @@
-// /app/wholesale/oem-sales/page.tsx ver.1
+// /app/wholesale/oem-sales/page.tsx ver.2 OEM顧客管理リンク追加版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Package, Plus, X, ArrowLeft } from 'lucide-react';
+import { Package, Plus, X, ArrowLeft, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface OEMProduct {
@@ -279,6 +279,15 @@ export default function OEMSalesPage() {
             >
               {monthOptions.map(month => <option key={month} value={month}>{month}月</option>)}
             </select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => router.push('/wholesale/oem-customers')}
+              className="flex items-center gap-2"
+            >
+              <Settings className="w-4 h-4" />
+              顧客管理
+            </Button>
             <div className="text-sm font-semibold text-green-600">
               月合計: ¥{monthlyTotal.toLocaleString()}
             </div>
