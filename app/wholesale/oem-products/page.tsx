@@ -1,14 +1,14 @@
-// /app/wholesale/oem-products/page.tsx ver.1 OEM商品マスター管理
+// /app/wholesale/oem-products/page.tsx ver.2 デザイン修正版
 "use client"
 
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Trash2, Edit, Check, X, ChevronUp, ChevronDown } from "lucide-react"
+import { Trash2, Edit, Check, X, ChevronUp, ChevronDown, ArrowLeft, Plus } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
+import { useRouter } from 'next/navigation'
 
 interface OEMProduct {
   id: string
@@ -20,10 +20,12 @@ interface OEMProduct {
 }
 
 export default function OEMProductsPage() {
+  const router = useRouter()
   const [products, setProducts] = useState<OEMProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingProduct, setEditingProduct] = useState<Partial<OEMProduct>>({})
+  const [isAddingNew, setIsAddingNew] = useState(false)
   const [newProduct, setNewProduct] = useState({
     product_code: "",
     product_name: "",
@@ -68,6 +70,7 @@ export default function OEMProductsPage() {
 
       toast.success("商品を追加しました")
       setNewProduct({ product_code: "", product_name: "", price: "" })
+      setIsAddingNew(false)
       fetchProducts()
     } catch (error) {
       console.error("Error:", error)
@@ -174,150 +177,199 @@ export default function OEMProductsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>OEM商品マスター管理</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* 新規商品追加フォーム */}
-          <div className="border rounded-lg p-4 bg-gray-50">
-            <h3 className="font-semibold mb-3">新規商品追加</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Input
-                placeholder="商品コード"
-                value={newProduct.product_code}
-                onChange={(e) => setNewProduct({ ...newProduct, product_code: e.target.value })}
-              />
-              <Input
-                placeholder="商品名"
-                value={newProduct.product_name}
-                onChange={(e) => setNewProduct({ ...newProduct, product_name: e.target.value })}
-              />
-              <Input
-                type="number"
-                placeholder="価格"
-                value={newProduct.price}
-                onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-              />
-              <Button onClick={handleAddProduct}>追加</Button>
-            </div>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">OEM商品マスター管理</h1>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/wholesale/dashboard')}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              ダッシュボードに戻る
+            </Button>
+            <Button
+              onClick={() => setIsAddingNew(true)}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              新規追加
+            </Button>
           </div>
+        </div>
 
-          {/* 商品一覧テーブル */}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16">順序</TableHead>
-                <TableHead>商品コード</TableHead>
-                <TableHead>商品名</TableHead>
-                <TableHead className="text-right">価格</TableHead>
-                <TableHead className="text-center">有効</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map((product, index) => (
-                <TableRow key={product.id}>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={() => handleOrderChange(product.id, "up")}
-                        disabled={index === 0}
-                      >
-                        <ChevronUp className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={() => handleOrderChange(product.id, "down")}
-                        disabled={index === products.length - 1}
-                      >
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {editingId === product.id ? (
+        <Card>
+          <CardContent className="p-0">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left p-4 font-medium text-gray-700">NO.</th>
+                  <th className="text-left p-4 font-medium text-gray-700">商品コード</th>
+                  <th className="text-left p-4 font-medium text-gray-700">商品名</th>
+                  <th className="text-right p-4 font-medium text-gray-700">価格</th>
+                  <th className="text-center p-4 font-medium text-gray-700">状態</th>
+                  <th className="text-center p-4 font-medium text-gray-700">並び順</th>
+                  <th className="text-center p-4 font-medium text-gray-700">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isAddingNew && (
+                  <tr className="border-b bg-blue-50">
+                    <td className="p-4">新規</td>
+                    <td className="p-4">
                       <Input
-                        value={editingProduct.product_code || ""}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, product_code: e.target.value })}
-                        className="w-32"
+                        placeholder="商品コード"
+                        value={newProduct.product_code}
+                        onChange={(e) => setNewProduct({ ...newProduct, product_code: e.target.value })}
+                        className="w-full"
                       />
-                    ) : (
-                      product.product_code
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingId === product.id ? (
+                    </td>
+                    <td className="p-4">
                       <Input
-                        value={editingProduct.product_name || ""}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, product_name: e.target.value })}
+                        placeholder="商品名"
+                        value={newProduct.product_name}
+                        onChange={(e) => setNewProduct({ ...newProduct, product_name: e.target.value })}
+                        className="w-full"
                       />
-                    ) : (
-                      product.product_name
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {editingId === product.id ? (
+                    </td>
+                    <td className="p-4">
                       <Input
                         type="number"
-                        value={editingProduct.price || ""}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, price: parseInt(e.target.value) || 0 })}
-                        className="w-24 text-right"
+                        placeholder="価格"
+                        value={newProduct.price}
+                        onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                        className="w-full text-right"
                       />
-                    ) : (
-                      `¥${product.price.toLocaleString()}`
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch
-                      checked={product.is_active}
-                      onCheckedChange={() => handleToggleActive(product.id, product.is_active)}
-                      disabled={editingId === product.id}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {editingId === product.id ? (
-                      <div className="flex gap-2 justify-end">
-                        <Button size="icon" variant="ghost" onClick={handleSaveEdit}>
-                          <Check className="h-4 w-4" />
+                    </td>
+                    <td className="p-4 text-center">-</td>
+                    <td className="p-4 text-center">-</td>
+                    <td className="p-4">
+                      <div className="flex gap-2 justify-center">
+                        <Button size="sm" onClick={handleAddProduct}>
+                          保存
                         </Button>
-                        <Button size="icon" variant="ghost" onClick={handleCancelEdit}>
-                          <X className="h-4 w-4" />
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => {
+                            setIsAddingNew(false)
+                            setNewProduct({ product_code: "", product_name: "", price: "" })
+                          }}
+                        >
+                          キャンセル
                         </Button>
                       </div>
-                    ) : (
-                      <div className="flex gap-2 justify-end">
-                        <Button size="icon" variant="ghost" onClick={() => handleEdit(product)}>
-                          <Edit className="h-4 w-4" />
+                    </td>
+                  </tr>
+                )}
+                {products.map((product, index) => (
+                  <tr key={product.id} className="border-b hover:bg-gray-50">
+                    <td className="p-4">{index + 1}</td>
+                    <td className="p-4">
+                      {editingId === product.id ? (
+                        <Input
+                          value={editingProduct.product_code || ""}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, product_code: e.target.value })}
+                          className="w-full"
+                        />
+                      ) : (
+                        product.product_code
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {editingId === product.id ? (
+                        <Input
+                          value={editingProduct.product_name || ""}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, product_name: e.target.value })}
+                          className="w-full"
+                        />
+                      ) : (
+                        product.product_name
+                      )}
+                    </td>
+                    <td className="p-4 text-right">
+                      {editingId === product.id ? (
+                        <Input
+                          type="number"
+                          value={editingProduct.price || ""}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, price: parseInt(e.target.value) || 0 })}
+                          className="w-full text-right"
+                        />
+                      ) : (
+                        `¥${product.price.toLocaleString()}`
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        product.is_active 
+                          ? "bg-green-100 text-green-700" 
+                          : "bg-gray-100 text-gray-700"
+                      }`}>
+                        {product.is_active ? "有効" : "無効"}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex gap-1 justify-center">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => handleOrderChange(product.id, "up")}
+                          disabled={index === 0}
+                        >
+                          <ChevronUp className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => handleDelete(product.id, product.product_name)}
+                          className="h-8 w-8"
+                          onClick={() => handleOrderChange(product.id, "down")}
+                          disabled={index === products.length - 1}
                         >
-                          <Trash2 className="h-4 w-4 text-red-500" />
+                          <ChevronDown className="h-4 w-4" />
                         </Button>
                       </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    </td>
+                    <td className="p-4">
+                      {editingId === product.id ? (
+                        <div className="flex gap-2 justify-center">
+                          <Button size="icon" variant="ghost" onClick={handleSaveEdit}>
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" onClick={handleCancelEdit}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 justify-center">
+                          <Button size="icon" variant="ghost" onClick={() => handleEdit(product)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleDelete(product.id, product.product_name)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-          {products.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              商品が登録されていません
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {products.length === 0 && !isAddingNew && (
+              <div className="text-center py-12 text-gray-500">
+                商品が登録されていません
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
