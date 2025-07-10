@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.27 OEM売上入力コンポーネント分離版
+// /app/wholesale/dashboard/page.tsx ver.28 OEMサマリー表示版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,7 @@ import { Package, Users, TrendingUp, FileText, Upload, Trash2, Settings } from '
 import { useRouter } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
-import OEMSalesInput from '@/components/wholesale/oem-sales-input';
+import OEMSummary from '@/components/wholesale/oem-summary';
 
 interface Product {
   id: string;
@@ -24,12 +24,6 @@ interface OEMProduct {
   product_name: string;
   price: number;
   [key: string]: any;
-}
-
-interface OEMCustomer {
-  id: string;
-  customer_name: string;
-  customer_code: string;
 }
 
 interface OEMSale {
@@ -62,10 +56,8 @@ export default function WholesaleDashboard() {
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [oemProducts, setOemProducts] = useState<OEMProduct[]>([]);
-  const [oemCustomers, setOemCustomers] = useState<OEMCustomer[]>([]);
   const [oemSales, setOemSales] = useState<OEMSale[]>([]);
   const [salesData, setSalesData] = useState<SalesData>({});
-  const [oemSalesData, setOemSalesData] = useState<SalesData>({});
   const [previousMonthData, setPreviousMonthData] = useState<SalesData>({});
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -106,7 +98,6 @@ export default function WholesaleDashboard() {
         await Promise.all([
           fetchProducts(),
           fetchOemProducts(),
-          fetchOemCustomers(),
           fetchSalesData(`${selectedYear}-${selectedMonth}`),
           fetchOemSalesData(`${selectedYear}-${selectedMonth}`),
           fetchPreviousMonthData(`${selectedYear}-${selectedMonth}`)
@@ -148,20 +139,6 @@ export default function WholesaleDashboard() {
     }
   };
 
-  const fetchOemCustomers = async () => {
-    try {
-      const response = await fetch('/api/wholesale/oem-customers');
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          setOemCustomers(data);
-        }
-      }
-    } catch (error) {
-      console.error('OEM顧客データ取得エラー:', error);
-    }
-  };
-
   const fetchSalesData = async (month: string) => {
     try {
       const response = await fetch(`/api/wholesale/sales?month=${month}`);
@@ -194,26 +171,13 @@ export default function WholesaleDashboard() {
         const data = await response.json();
         if (data.success && Array.isArray(data.sales)) {
           setOemSales(data.sales);
-          
-          // OEM用の集計データも作成
-          const formatted: SalesData = {};
-          data.sales.forEach((sale: any) => {
-            if (!formatted[sale.product_id]) {
-              formatted[sale.product_id] = {};
-            }
-            const day = new Date(sale.sale_date).getUTCDate();
-            formatted[sale.product_id][day] = (formatted[sale.product_id][day] || 0) + sale.quantity;
-          });
-          setOemSalesData(formatted);
         } else {
           setOemSales([]);
-          setOemSalesData({});
         }
       }
     } catch (error) {
       console.error('OEM売上データ取得エラー:', error);
       setOemSales([]);
-      setOemSalesData({});
     }
   };
 
@@ -414,10 +378,6 @@ export default function WholesaleDashboard() {
     return { totalQuantity, totalAmount };
   };
 
-  const handleOemDataUpdate = async () => {
-    await fetchOemSalesData(`${selectedYear}-${selectedMonth}`);
-  };
-
   // 卸商品の合計金額
   const wholesaleTotal = products.reduce((sum, product) => {
     const { totalAmount } = calculateTotals(product.id);
@@ -500,7 +460,14 @@ export default function WholesaleDashboard() {
                 oemTotal={oemTotal}
                 grandTotal={grandTotal} 
               />
-              <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
+                </div>
+                <div className="col-span-1">
+                  <OEMSummary oemProducts={oemProducts} oemSales={oemSales} />
+                </div>
+              </div>
             </div>
 
             <Card className="flex-1 flex flex-col overflow-hidden">
@@ -586,16 +553,6 @@ export default function WholesaleDashboard() {
                 </table>
               </CardContent>
             </Card>
-
-            {/* OEM商品入力セクション */}
-            <OEMSalesInput
-              oemProducts={oemProducts}
-              oemCustomers={oemCustomers}
-              oemSales={oemSales}
-              selectedYear={selectedYear}
-              selectedMonth={selectedMonth}
-              onDataUpdate={handleOemDataUpdate}
-            />
           </>
         )}
       </main>
