@@ -1,4 +1,4 @@
-// /app/wholesale/oem-sales/page.tsx ver.3 API形式対応修正版
+// /app/wholesale/oem-sales/page.tsx ver.4 日付削除・年月引き継ぎ対応版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Package, Plus, X, ArrowLeft, Settings } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface OEMProduct {
   id: string;
@@ -41,6 +41,7 @@ interface OEMSale {
 
 export default function OEMSalesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [yearOptions, setYearOptions] = useState<string[]>([]);
@@ -53,7 +54,6 @@ export default function OEMSalesPage() {
   const [formData, setFormData] = useState({
     productId: '',
     customerId: '',
-    saleDate: new Date().toISOString().split('T')[0],
     quantity: '',
     unitPrice: ''
   });
@@ -67,13 +67,17 @@ export default function OEMSalesPage() {
     if (!mounted) return;
     const now = new Date();
     
+    // URLパラメータから年月を取得（ダッシュボードから引き継ぎ）
+    const yearParam = searchParams.get('year');
+    const monthParam = searchParams.get('month');
+    
     // 年のオプション（過去3年分）
     const years: string[] = [];
     for (let i = 0; i < 3; i++) {
       years.push(String(now.getFullYear() - i));
     }
     setYearOptions(years);
-    setSelectedYear(String(now.getFullYear()));
+    setSelectedYear(yearParam || String(now.getFullYear()));
     
     // 月のオプション
     const months: string[] = [];
@@ -81,8 +85,8 @@ export default function OEMSalesPage() {
       months.push(String(i).padStart(2, '0'));
     }
     setMonthOptions(months);
-    setSelectedMonth(String(now.getMonth() + 1).padStart(2, '0'));
-  }, [mounted]);
+    setSelectedMonth(monthParam || String(now.getMonth() + 1).padStart(2, '0'));
+  }, [mounted, searchParams]);
 
   useEffect(() => {
     if (!selectedYear || !selectedMonth || !mounted) return;
@@ -168,15 +172,18 @@ export default function OEMSalesPage() {
   };
 
   const handleSubmit = async () => {
-    const { productId, customerId, saleDate, quantity, unitPrice } = formData;
+    const { productId, customerId, quantity, unitPrice } = formData;
     
-    if (!productId || !customerId || !saleDate || !quantity || !unitPrice) {
+    if (!productId || !customerId || !quantity || !unitPrice) {
       alert('全ての項目を入力してください。');
       return;
     }
 
     setIsAdding(true);
     try {
+      // 現在選択されている年月の1日を売上日として設定
+      const saleDate = `${selectedYear}-${selectedMonth}-01`;
+      
       const response = await fetch('/api/wholesale/oem-sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -196,7 +203,6 @@ export default function OEMSalesPage() {
         setFormData({
           productId: '',
           customerId: '',
-          saleDate: formData.saleDate, // 日付は維持
           quantity: '',
           unitPrice: ''
         });
@@ -339,15 +345,6 @@ export default function OEMSalesPage() {
                     ))}
                   </select>
                 </div>
-                <div className="w-36">
-                  <label className="block text-sm font-medium mb-1">日付</label>
-                  <input
-                    type="date"
-                    value={formData.saleDate}
-                    onChange={(e) => handleFormChange('saleDate', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-md border border-input bg-background"
-                  />
-                </div>
                 <div className="w-28">
                   <label className="block text-sm font-medium mb-1">単価</label>
                   <input
@@ -389,7 +386,6 @@ export default function OEMSalesPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100">
                     <tr className="border-b">
-                      <th className="p-3 text-left font-semibold">日付</th>
                       <th className="p-3 text-left font-semibold">商品名</th>
                       <th className="p-3 text-left font-semibold">発注者</th>
                       <th className="p-3 text-right font-semibold">単価</th>
@@ -401,14 +397,13 @@ export default function OEMSalesPage() {
                   <tbody>
                     {oemSales.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-8 text-gray-500">
+                        <td colSpan={6} className="text-center py-8 text-gray-500">
                           データがありません
                         </td>
                       </tr>
                     ) : (
                       oemSales.map(sale => (
                         <tr key={sale.id} className="border-b hover:bg-gray-50">
-                          <td className="p-3">{sale.sale_date}</td>
                           <td className="p-3">{sale.oem_products?.product_name}</td>
                           <td className="p-3">{sale.oem_customers?.customer_name}</td>
                           <td className="p-3 text-right">¥{sale.unit_price.toLocaleString()}</td>
