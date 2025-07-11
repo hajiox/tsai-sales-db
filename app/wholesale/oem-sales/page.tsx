@@ -1,9 +1,9 @@
-// /app/wholesale/oem-sales/page.tsx ver.4 日付削除・年月引き継ぎ対応版
+// /app/wholesale/oem-sales/page.tsx ver.5 Suspense対応版
 "use client"
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Package, Plus, X, ArrowLeft, Settings } from 'lucide-react';
@@ -39,7 +39,7 @@ interface OEMSale {
   };
 }
 
-export default function OEMSalesPage() {
+function OEMSalesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selectedYear, setSelectedYear] = useState('');
@@ -430,5 +430,13 @@ export default function OEMSalesPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function OEMSalesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen bg-gray-50"><p className="text-gray-500">読み込み中...</p></div>}>
+      <OEMSalesContent />
+    </Suspense>
   );
 }
