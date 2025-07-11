@@ -1,67 +1,73 @@
-// /app/api/wholesale/oem-products/route.ts ver.1 OEM商品CRUD対応
-import { createClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+// /app/api/wholesale/oem-products/route.ts ver.2 自動採番対応版
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET() {
   try {
     const { data, error } = await supabase
       .from('oem_products')
       .select('*')
-      .order('display_order', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: true })
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Error fetching OEM products:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data || [])
+    return NextResponse.json(data || []);
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { product_code, product_name, price } = body
+    const body = await request.json();
+    const { product_name, price } = body;
 
-    // 最大のdisplay_orderを取得
-    const { data: maxOrderData } = await supabase
+    if (!product_name || price === undefined) {
+      return NextResponse.json({ error: 'Product name and price are required' }, { status: 400 });
+    }
+
+    // 最新の商品コードを取得して次の番号を決定
+    const { data: lastProduct } = await supabase
       .from('oem_products')
-      .select('display_order')
-      .order('display_order', { ascending: false })
+      .select('product_code')
+      .order('product_code', { ascending: false })
       .limit(1)
+      .single();
 
-    const nextOrder = maxOrderData && maxOrderData[0]?.display_order 
-      ? maxOrderData[0].display_order + 1 
-      : 1
+    let nextNumber = 1;
+    if (lastProduct && lastProduct.product_code) {
+      const numericCode = parseInt(lastProduct.product_code);
+      if (!isNaN(numericCode)) {
+        nextNumber = numericCode + 1;
+      }
+    }
+
+    const product_code = String(nextNumber).padStart(4, '0');
 
     const { data, error } = await supabase
       .from('oem_products')
-      .insert({
+      .insert([{
         product_code,
         product_name,
         price,
-        display_order: nextOrder
-      })
+        is_active: true
+      }])
       .select()
-      .single()
+      .single();
 
     if (error) {
-      console.error('Error creating OEM product:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({ success: true, product: data });
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
   }
 }
