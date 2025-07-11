@@ -1,4 +1,4 @@
-// /app/api/wholesale/sales/import/route.ts ver.1
+// /app/api/wholesale/sales/import/route.ts ver.2
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -41,6 +41,11 @@ export async function POST(request: Request) {
     for (const item of data) {
       const { productName, price, saleDate, quantity } = item;
       
+      // quantityが0の場合はスキップ
+      if (quantity === 0) {
+        continue;
+      }
+      
       let productInfo = productMap.get(productName);
       
       // 商品が存在しない場合は新規登録
@@ -68,6 +73,11 @@ export async function POST(request: Request) {
         productMap.set(productName, productInfo);
       }
 
+      // マイナス値も正しく処理するように修正
+      const actualQuantity = Number(quantity) || 0;
+      const unitPrice = productInfo.price;
+      const amount = actualQuantity * unitPrice;
+
       // 売上データを登録または更新
       const { error: upsertError } = await supabase
         .from('wholesale_sales')
@@ -75,9 +85,9 @@ export async function POST(request: Request) {
           product_id: productInfo.id,
           customer_id: null,
           sale_date: saleDate,
-          quantity: quantity,
-          unit_price: productInfo.price,
-          amount: quantity * productInfo.price
+          quantity: actualQuantity,
+          unit_price: unitPrice,
+          amount: amount
         }, {
           onConflict: 'product_id,customer_id,sale_date'
         });
@@ -99,17 +109,17 @@ export async function POST(request: Request) {
               product_id: productInfo.id,
               customer_id: null,
               sale_date: saleDate,
-              quantity: quantity,
-              unit_price: productInfo.price,
-              amount: quantity * productInfo.price
+              quantity: actualQuantity,
+              unit_price: unitPrice,
+              amount: amount
             });
 
           if (insertError) {
-            errors.push(`${productName} ${saleDate}のデータ登録に失敗しました`);
+            errors.push(`${productName} ${saleDate}のデータ登録に失敗しました: ${insertError.message}`);
             continue;
           }
         } else {
-          errors.push(`${productName} ${saleDate}のデータ更新に失敗しました`);
+          errors.push(`${productName} ${saleDate}のデータ更新に失敗しました: ${deleteError.message}`);
           continue;
         }
       }
