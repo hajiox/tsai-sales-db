@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-customers/route.ts ver.3 レスポンス形式修正版
+// /app/api/wholesale/oem-customers/route.ts ver.4 自動採番対応版
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -28,7 +28,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // customersプロパティを持つオブジェクトとして返す
     return NextResponse.json({ 
       success: true, 
       customers: data || [] 
@@ -41,24 +40,30 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { customer_code, customer_name, is_active = true } = body;
+    const { customer_name, is_active = true } = body;
 
-    if (!customer_code || !customer_name) {
-      return NextResponse.json({ error: '顧客コードと顧客名は必須です' }, { status: 400 });
+    if (!customer_name) {
+      return NextResponse.json({ error: '顧客名は必須です' }, { status: 400 });
     }
 
-    // 重複チェック
-    const { data: existing } = await supabase
+    // 最新の顧客コードを取得して次の番号を決定
+    const { data: lastCustomer } = await supabase
       .from('oem_customers')
-      .select('id')
-      .eq('customer_code', customer_code)
+      .select('customer_code')
+      .like('customer_code', 'OEM%')
+      .order('customer_code', { ascending: false })
+      .limit(1)
       .single();
 
-    if (existing) {
-      return NextResponse.json({ 
-        error: `顧客コード「${customer_code}」は既に使用されています` 
-      }, { status: 400 });
+    let nextNumber = 1;
+    if (lastCustomer && lastCustomer.customer_code) {
+      const match = lastCustomer.customer_code.match(/OEM(\d+)/);
+      if (match) {
+        nextNumber = parseInt(match[1]) + 1;
+      }
     }
+
+    const customer_code = `OEM${String(nextNumber).padStart(4, '0')}`;
 
     const { data, error } = await supabase
       .from('oem_customers')
@@ -71,11 +76,6 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      if (error.code === '23505') { // PostgreSQLのユニーク制約違反エラーコード
-        return NextResponse.json({ 
-          error: `顧客コード「${customer_code}」は既に使用されています` 
-        }, { status: 400 });
-      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
