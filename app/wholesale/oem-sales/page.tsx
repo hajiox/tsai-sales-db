@@ -1,4 +1,4 @@
-// /app/wholesale/oem-sales/page.tsx ver.2 OEM顧客管理リンク追加版
+// /app/wholesale/oem-sales/page.tsx ver.3 API形式対応修正版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -122,8 +122,9 @@ export default function OEMSalesPage() {
       const response = await fetch('/api/wholesale/oem-customers');
       if (response.ok) {
         const data = await response.json();
-        if (Array.isArray(data)) {
-          setOemCustomers(data);
+        // APIレスポンス形式に対応
+        if (data.success && Array.isArray(data.customers)) {
+          setOemCustomers(data.customers);
         }
       }
     } catch (error) {
