@@ -253,7 +253,7 @@ export default function WholesaleDashboard() {
          
          Object.entries(dayColumns).forEach(([day, index]) => {
            const quantity = parseInt(values[index]) || 0;
-           if (quantity > 0) {
+           if (quantity !== 0) {
              importData.push({
                productName,
                price,
