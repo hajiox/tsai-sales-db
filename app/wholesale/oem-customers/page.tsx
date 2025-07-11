@@ -1,4 +1,4 @@
-// /app/wholesale/oem-customers/page.tsx ver.3 ダッシュボード戻り対応版
+// /app/wholesale/oem-customers/page.tsx ver.4 自動採番対応版
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -31,7 +31,6 @@ export default function OEMCustomersPage() {
   const [customers, setCustomers] = useState<OEMCustomer[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [newCustomerCode, setNewCustomerCode] = useState('');
   const [newCustomerName, setNewCustomerName] = useState('');
   const [editingCustomer, setEditingCustomer] = useState<OEMCustomer | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,8 +55,8 @@ export default function OEMCustomersPage() {
   };
 
   const handleAddCustomer = async () => {
-    if (!newCustomerCode || !newCustomerName) {
-      setError('顧客コードと顧客名は必須です');
+    if (!newCustomerName) {
+      setError('顧客名は必須です');
       return;
     }
 
@@ -66,7 +65,6 @@ export default function OEMCustomersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer_code: newCustomerCode,
           customer_name: newCustomerName
         })
       });
@@ -74,17 +72,12 @@ export default function OEMCustomersPage() {
       const data = await response.json();
       
       if (!response.ok) {
-        if (data.error && data.error.includes('already exists')) {
-          setError(`顧客コード「${newCustomerCode}」は既に使用されています`);
-        } else {
-          setError(data.error || '顧客の追加に失敗しました');
-        }
+        setError(data.error || '顧客の追加に失敗しました');
         return;
       }
       
       await fetchCustomers();
       setIsAddModalOpen(false);
-      setNewCustomerCode('');
       setNewCustomerName('');
       setError('');
     } catch (error) {
@@ -110,11 +103,7 @@ export default function OEMCustomersPage() {
       const data = await response.json();
       
       if (!response.ok) {
-        if (data.error && data.error.includes('already exists')) {
-          setError(`顧客コード「${editingCustomer.customer_code}」は既に使用されています`);
-        } else {
-          setError(data.error || '顧客の更新に失敗しました');
-        }
+        setError(data.error || '顧客の更新に失敗しました');
         return;
       }
       
@@ -336,15 +325,6 @@ export default function OEMCustomersPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="customer-code">顧客コード</Label>
-                <Input
-                  id="customer-code"
-                  value={newCustomerCode}
-                  onChange={(e) => setNewCustomerCode(e.target.value)}
-                  placeholder="例: OEM001"
-                />
-              </div>
-              <div>
                 <Label htmlFor="customer-name">顧客名</Label>
                 <Input
                   id="customer-name"
@@ -352,13 +332,15 @@ export default function OEMCustomersPage() {
                   onChange={(e) => setNewCustomerName(e.target.value)}
                   placeholder="例: 株式会社〇〇"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  顧客コードは自動で採番されます
+                </p>
               </div>
               <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setIsAddModalOpen(false);
-                    setNewCustomerCode('');
                     setNewCustomerName('');
                     setError('');
                   }}
@@ -383,14 +365,11 @@ export default function OEMCustomersPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="edit-customer-code">顧客コード</Label>
+                <Label>顧客コード</Label>
                 <Input
-                  id="edit-customer-code"
                   value={editingCustomer.customer_code}
-                  onChange={(e) => setEditingCustomer({
-                    ...editingCustomer,
-                    customer_code: e.target.value
-                  })}
+                  disabled
+                  className="bg-gray-100"
                 />
               </div>
               <div>
