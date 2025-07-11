@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-customers/route.ts ver.2 全顧客取得対応版
+// /app/api/wholesale/oem-customers/route.ts ver.3 レスポンス形式修正版
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -28,7 +28,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data || []);
+    // customersプロパティを持つオブジェクトとして返す
+    return NextResponse.json({ 
+      success: true, 
+      customers: data || [] 
+    });
   } catch (error) {
     return NextResponse.json({ error: 'データ取得エラー' }, { status: 500 });
   }
@@ -43,6 +47,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '顧客コードと顧客名は必須です' }, { status: 400 });
     }
 
+    // 重複チェック
+    const { data: existing } = await supabase
+      .from('oem_customers')
+      .select('id')
+      .eq('customer_code', customer_code)
+      .single();
+
+    if (existing) {
+      return NextResponse.json({ 
+        error: `顧客コード「${customer_code}」は既に使用されています` 
+      }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('oem_customers')
       .insert([{
@@ -54,6 +71,11 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
+      if (error.code === '23505') { // PostgreSQLのユニーク制約違反エラーコード
+        return NextResponse.json({ 
+          error: `顧客コード「${customer_code}」は既に使用されています` 
+        }, { status: 400 });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
