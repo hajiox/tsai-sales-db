@@ -1,4 +1,4 @@
-// /components/wholesale/oem-area.tsx ver.1
+// /components/wholesale/oem-area.tsx ver.2 年月引き継ぎ対応版
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,9 +33,11 @@ interface OEMSale {
 interface OEMAreaProps {
   oemProducts: OEMProduct[];
   oemSales: OEMSale[];
+  selectedYear?: string;
+  selectedMonth?: string;
 }
 
-export default function OEMArea({ oemProducts, oemSales }: OEMAreaProps) {
+export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedMonth }: OEMAreaProps) {
   const router = useRouter();
 
   // 商品ごとの売上集計
@@ -51,6 +53,15 @@ export default function OEMArea({ oemProducts, oemSales }: OEMAreaProps) {
     };
   }).filter(item => item.totalAmount > 0)
     .sort((a, b) => b.totalAmount - a.totalAmount);
+
+  const handleOemSalesClick = () => {
+    // 年月パラメータを付けて遷移
+    const params = new URLSearchParams();
+    if (selectedYear) params.append('year', selectedYear);
+    if (selectedMonth) params.append('month', selectedMonth);
+    const queryString = params.toString();
+    router.push(`/wholesale/oem-sales${queryString ? `?${queryString}` : ''}`);
+  };
 
   return (
     <Card className="w-full bg-gradient-to-br from-green-50 to-green-100 border-green-200">
@@ -81,7 +92,7 @@ export default function OEMArea({ oemProducts, oemSales }: OEMAreaProps) {
             </Button>
             <Button
               size="sm"
-              onClick={() => router.push('/wholesale/oem-sales')}
+              onClick={handleOemSalesClick}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
             >
               <TrendingUp className="w-4 h-4" />
