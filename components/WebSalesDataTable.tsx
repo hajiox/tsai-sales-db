@@ -1,10 +1,10 @@
-// /components/WebSalesDataTable.tsx ver.7 (縞々表示・商品管理機能・商品名&ECサイト別トレンド表示・過去価格対応付き)
+// /components/WebSalesDataTable.tsx ver.8 (価格履歴表示機能追加版)
 "use client"
 
 import React, { useState, useRef } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, TrendingUp, TrendingDown } from "lucide-react"
+import { Plus, Trash2, TrendingUp, TrendingDown, History } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import { supabase } from "../lib/supabase"
 
@@ -27,6 +27,13 @@ interface WebSalesDataTableProps {
 
 type TrendData = { month_label: string; sales: number; }
 type SiteTrendData = { month_label: string; count: number; }
+type PriceHistoryData = { 
+  id: string;
+  price: number; 
+  valid_from: string; 
+  valid_to?: string;
+  note?: string;
+}
 
 export default function WebSalesDataTable({
   filteredItems,
@@ -46,6 +53,10 @@ export default function WebSalesDataTable({
 }: WebSalesDataTableProps) {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showPriceHistoryModal, setShowPriceHistoryModal] = useState(false)
+  const [selectedProductForHistory, setSelectedProductForHistory] = useState<string | null>(null)
+  const [priceHistories, setPriceHistories] = useState<Record<string, PriceHistoryData[]>>({})
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({})
   
   // 商品名トレンド表示関連のState
   const [hoveredProductId, setHoveredProductId] = useState<string | null>(null)
@@ -59,6 +70,37 @@ export default function WebSalesDataTable({
   
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // 価格履歴を取得する関数
+  const fetchPriceHistory = async (productId: string) => {
+    if (priceHistories[productId] || historyLoading[productId]) return
+
+    setHistoryLoading(prev => ({ ...prev, [productId]: true }))
+
+    try {
+      const { data, error } = await supabase
+        .from('product_price_history')
+        .select('*')
+        .eq('product_id', productId)
+        .order('valid_from', { ascending: false })
+        .limit(5)
+
+      if (error) throw error
+      
+      setPriceHistories(prev => ({ ...prev, [productId]: data || [] }))
+    } catch (error) {
+      console.error('価格履歴の取得に失敗しました:', error)
+      setPriceHistories(prev => ({ ...prev, [productId]: [] }))
+    } finally {
+      setHistoryLoading(prev => ({ ...prev, [productId]: false }))
+    }
+  }
+
+  // 価格履歴管理モーダルを開く
+  const openPriceHistoryModal = (productId: string) => {
+    setSelectedProductForHistory(productId)
+    setShowPriceHistoryModal(true)
+  }
 
   // 過去価格データから価格差情報を取得
   const getPriceDifferenceInfo = (productId: string) => {
@@ -144,6 +186,7 @@ export default function WebSalesDataTable({
     setHoveredProductId(productId)
     setHoveredSiteCell(null)
     fetchTrendData(productId)
+    fetchPriceHistory(productId)
     
     const elementRect = event.currentTarget.getBoundingClientRect()
     const containerRect = containerRef.current?.getBoundingClientRect()
@@ -237,6 +280,10 @@ export default function WebSalesDataTable({
   };
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
 
   const siteNames = {
     amazon: 'Amazon',
@@ -296,12 +343,15 @@ export default function WebSalesDataTable({
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                 削除
               </th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                価格履歴
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                   データがありません
                 </td>
               </tr>
@@ -309,6 +359,7 @@ export default function WebSalesDataTable({
               filteredItems.map((row, index) => {
                 const productPrice = getProductPrice(row.product_id)
                 const priceDiff = getPriceDifferenceInfo(row.product_id)
+                const history = priceHistories[row.product_id] || []
                 const totalCount = [
                   "amazon",
                   "rakuten", 
@@ -423,6 +474,26 @@ export default function WebSalesDataTable({
                         <Trash2 className="h-3 w-3" />
                         削除
                       </button>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="text-xs space-y-1">
+                        {history.slice(0, 5).map((hist, idx) => (
+                          <div key={hist.id} className="flex items-center gap-1 text-gray-600">
+                            <span>¥{formatNumber(hist.price)}</span>
+                            <span className="text-gray-400">({formatDate(hist.valid_from)})</span>
+                          </div>
+                        ))}
+                        {history.length > 5 && (
+                          <div className="text-gray-400">他{history.length - 5}件</div>
+                        )}
+                        <button
+                          onClick={() => openPriceHistoryModal(row.product_id)}
+                          className="text-blue-600 hover:text-blue-800 text-xs mt-1"
+                        >
+                          <History className="inline h-3 w-3 mr-1" />
+                          履歴の管理
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -546,6 +617,24 @@ export default function WebSalesDataTable({
             name: p.name,
             seriesName: p.series
           }))}
+        />
+      )}
+
+      {/* 価格履歴管理モーダル */}
+      {showPriceHistoryModal && selectedProductForHistory && (
+        <PriceHistoryModal
+          isOpen={showPriceHistoryModal}
+          onClose={() => {
+            setShowPriceHistoryModal(false)
+            setSelectedProductForHistory(null)
+          }}
+          productId={selectedProductForHistory}
+          productName={getProductName(selectedProductForHistory)}
+          onRefresh={() => {
+            // 履歴を再取得
+            delete priceHistories[selectedProductForHistory]
+            fetchPriceHistory(selectedProductForHistory)
+          }}
         />
       )}
     </div>
