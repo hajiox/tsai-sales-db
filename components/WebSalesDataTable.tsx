@@ -1,11 +1,12 @@
-// /components/WebSalesDataTable.tsx ver.9 (商品別価格履歴列を削除版)
+// /components/WebSalesDataTable.tsx ver.10 (商品変更機能追加版)
 "use client"
 
 import React, { useState, useRef } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, TrendingUp, TrendingDown } from "lucide-react"
+import { Plus, Trash2, TrendingUp, TrendingDown, Edit } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
+import ProductEditModal from "./ProductEditModal"
 import { supabase } from "../lib/supabase"
 
 interface WebSalesDataTableProps {
@@ -45,6 +46,8 @@ export default function WebSalesDataTable({
  historicalPriceData = [],
 }: WebSalesDataTableProps) {
  const [isAddingProduct, setIsAddingProduct] = useState(false)
+ const [isEditingProduct, setIsEditingProduct] = useState(false)
+ const [editingProductData, setEditingProductData] = useState<any>(null)
  const [isDeleting, setIsDeleting] = useState(false)
  
  // 商品名トレンド表示関連のState
@@ -208,6 +211,43 @@ export default function WebSalesDataTable({
    }
  };
 
+ // 🔥 商品編集ボタンクリック処理
+ const handleEditProduct = (productId: string) => {
+   const product = productMaster.find(p => p.id === productId);
+   if (product) {
+     setEditingProductData(product);
+     setIsEditingProduct(true);
+   }
+ };
+
+ // 🔥 商品更新処理
+ const handleUpdateProduct = async (productData: {
+   id: string;
+   name: string;
+   price: number;
+   series_code: number;
+   product_code: number;
+   series: string;
+ }) => {
+   try {
+     const response = await fetch('/api/products/update', {
+       method: 'PUT',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(productData),
+     });
+     
+     if (!response.ok) throw new Error('商品更新に失敗しました');
+     
+     setIsEditingProduct(false);
+     setEditingProductData(null);
+     onRefresh?.();
+     alert('商品情報を更新しました');
+   } catch (error) {
+     console.error('商品更新エラー:', error);
+     alert('商品更新に失敗しました');
+   }
+ };
+
  // 🔥 商品削除処理
  const handleDeleteProduct = async (productId: string, productName: string) => {
    if (!confirm(`商品「${productName}」を削除しますか？\nこの操作は取り消せません。`)) {
@@ -293,8 +333,8 @@ export default function WebSalesDataTable({
              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
                合計金額
              </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-               削除
+             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+               操作
              </th>
            </tr>
          </thead>
@@ -415,14 +455,23 @@ export default function WebSalesDataTable({
                      ¥{formatNumber(totalAmount)}
                    </td>
                    <td className="px-4 py-4 text-center">
-                     <button
-                       onClick={() => handleDeleteProduct(row.product_id, getProductName(row.product_id))}
-                       disabled={isDeleting}
-                       className="inline-flex items-center gap-1 px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 disabled:opacity-50"
-                     >
-                       <Trash2 className="h-3 w-3" />
-                       削除
-                     </button>
+                     <div className="flex gap-1 justify-center">
+                       <button
+                         onClick={() => handleEditProduct(row.product_id)}
+                         className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                       >
+                         <Edit className="h-3 w-3" />
+                         変更
+                       </button>
+                       <button
+                         onClick={() => handleDeleteProduct(row.product_id, getProductName(row.product_id))}
+                         disabled={isDeleting}
+                         className="inline-flex items-center gap-1 px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 disabled:opacity-50"
+                       >
+                         <Trash2 className="h-3 w-3" />
+                         削除
+                       </button>
+                     </div>
                    </td>
                  </tr>
                )
@@ -546,6 +595,19 @@ export default function WebSalesDataTable({
            name: p.name,
            seriesName: p.series
          }))}
+       />
+     )}
+
+     {/* 🔥 商品編集モーダル */}
+     {isEditingProduct && editingProductData && (
+       <ProductEditModal
+         isOpen={isEditingProduct}
+         onClose={() => {
+           setIsEditingProduct(false)
+           setEditingProductData(null)
+         }}
+         onUpdate={handleUpdateProduct}
+         product={editingProductData}
        />
      )}
    </div>
