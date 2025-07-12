@@ -357,7 +357,7 @@ export default function WebSalesDataTable({
                       ></div>
                     </div>
                     <span className="w-20 text-right text-gray-800 font-mono">
-                      {formatNumber(trend.sales)}個
+                      ¥{formatNumber(trend.sales)}
                     </span>
                   </div>
                 )
