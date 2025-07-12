@@ -6,6 +6,7 @@ import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
 import { Plus, Trash2, TrendingUp, TrendingDown, History } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
+import PriceHistoryModal from "./PriceHistoryModal"
 import { supabase } from "../lib/supabase"
 
 interface WebSalesDataTableProps {
