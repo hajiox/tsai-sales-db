@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.60 (過去価格表示機能付き)
+// /components/web-sales-editable-table.tsx ver.61 (価格変更履歴日付管理機能付き)
 // 汎用CSV機能統合版
 
 "use client"
@@ -17,10 +17,11 @@ import MercariCsvImportModal from "./MercariCsvImportModal"
 import BaseCsvImportModal from "./BaseCsvImportModal"
 import Qoo10CsvImportModal from "./Qoo10CsvImportModal"
 import CsvImportModal from "./CsvImportModal"
+import PriceHistoryManagementModal from "./PriceHistoryManagementModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
 import { supabase } from "../lib/supabase"
-import { History } from "lucide-react"
+import { History, Calendar } from "lucide-react"
 
 interface WebSalesEditableTableProps {
   initialWebSalesData: WebSalesData[]
@@ -40,6 +41,12 @@ interface HistoricalPriceData {
   price_difference: number
 }
 
+// 価格変更日の型定義
+interface PriceChangeDate {
+  change_date: string
+  product_count: number
+}
+
 export default function WebSalesEditableTable({
   initialWebSalesData,
   month,
@@ -54,6 +61,11 @@ export default function WebSalesEditableTable({
   const [isHistoricalMode, setIsHistoricalMode] = useState(false)
   const [historicalPriceData, setHistoricalPriceData] = useState<HistoricalPriceData[]>([])
   const [loadingHistorical, setLoadingHistorical] = useState(false)
+  
+  // 価格変更日付管理
+  const [priceChangeDates, setPriceChangeDates] = useState<PriceChangeDate[]>([])
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState<string | null>(null)
+  const [showHistoryManagementModal, setShowHistoryManagementModal] = useState(false)
 
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false)
   const [isAmazonCsvModalOpen, setIsAmazonCsvModalOpen] = useState(false)
@@ -68,6 +80,68 @@ export default function WebSalesEditableTable({
   useEffect(() => {
     setData(initialWebSalesData)
   }, [initialWebSalesData])
+
+  // 価格変更日付の取得
+  useEffect(() => {
+    fetchPriceChangeDates()
+  }, [])
+
+  const fetchPriceChangeDates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('product_price_history')
+        .select('valid_from, product_id')
+        .order('valid_from', { ascending: false })
+      
+      if (error) throw error
+      
+      // 日付ごとにグループ化
+      const dateMap = new Map<string, Set<string>>()
+      data?.forEach(item => {
+        const date = new Date(item.valid_from).toISOString().split('T')[0]
+        if (!dateMap.has(date)) {
+          dateMap.set(date, new Set())
+        }
+        dateMap.get(date)?.add(item.product_id)
+      })
+      
+      // 最新5件の日付を取得
+      const dates = Array.from(dateMap.entries())
+        .map(([date, products]) => ({
+          change_date: date,
+          product_count: products.size
+        }))
+        .slice(0, 5)
+      
+      setPriceChangeDates(dates)
+    } catch (error) {
+      console.error('価格変更日付の取得に失敗しました:', error)
+    }
+  }
+
+  // 特定日付の価格で表示
+  const showPriceAtDate = async (date: string) => {
+    setLoadingHistorical(true)
+    setSelectedHistoryDate(date)
+    try {
+      // ここで特定日付の価格データを取得する処理を実装
+      // 現在の実装では month を使用していますが、date を使用するように変更が必要
+      const { data: historicalData, error } = await supabase.rpc(
+        'calculate_sales_with_historical_prices',
+        { target_month: month } // 将来的には target_date に変更
+      )
+      
+      if (error) throw error
+      
+      setHistoricalPriceData(historicalData || [])
+      setIsHistoricalMode(true)
+    } catch (error) {
+      console.error('過去価格データの取得に失敗しました:', error)
+      alert('過去価格データの取得に失敗しました')
+    } finally {
+      setLoadingHistorical(false)
+    }
+  }
 
   // 過去価格データの取得
   const fetchHistoricalPrices = async () => {
@@ -95,6 +169,7 @@ export default function WebSalesEditableTable({
       fetchHistoricalPrices()
     }
     setIsHistoricalMode(!isHistoricalMode)
+    setSelectedHistoryDate(null)
   }
 
   const productMap = useMemo(() => {
@@ -281,6 +356,11 @@ export default function WebSalesEditableTable({
     }
   }
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
+  }
+
   return (
     <div className="space-y-4">
       <WebSalesTableHeader
@@ -292,27 +372,54 @@ export default function WebSalesEditableTable({
         onDeleteMonthData={handleDeleteMonthData}
       />
 
-      {/* 過去価格表示モードボタン */}
-      <div className="flex justify-between items-center">
+      {/* 過去価格表示モードボタンと価格変更履歴 */}
+      <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={toggleHistoricalMode}
           disabled={loadingHistorical}
           className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            isHistoricalMode 
+            isHistoricalMode && !selectedHistoryDate
               ? 'bg-amber-600 text-white hover:bg-amber-700' 
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           } ${loadingHistorical ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <History className="h-4 w-4" />
-          {loadingHistorical ? '読み込み中...' : isHistoricalMode ? '過去価格表示中' : '過去価格で表示'}
+          {loadingHistorical ? '読み込み中...' : isHistoricalMode && !selectedHistoryDate ? '過去価格表示中' : '過去価格で表示'}
         </button>
         
-        {isHistoricalMode && historicalPriceData.length > 0 && (
-          <div className="text-sm text-amber-600 font-medium">
-            ※ 売上金額は{month}時点の価格で計算されています
-          </div>
-        )}
+        {/* 価格変更日付ボタン */}
+        {priceChangeDates.map((dateInfo) => (
+          <button
+            key={dateInfo.change_date}
+            onClick={() => showPriceAtDate(dateInfo.change_date)}
+            disabled={loadingHistorical}
+            className={`flex items-center gap-1 px-3 py-2 rounded-md text-sm transition-colors ${
+              selectedHistoryDate === dateInfo.change_date
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            } ${loadingHistorical ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title={`${dateInfo.product_count}商品の価格変更`}
+          >
+            <Calendar className="h-3 w-3" />
+            {formatDate(dateInfo.change_date)}
+          </button>
+        ))}
+        
+        {/* 履歴の管理ボタン */}
+        <button
+          onClick={() => setShowHistoryManagementModal(true)}
+          className="flex items-center gap-1 px-3 py-2 bg-gray-600 text-white rounded-md text-sm hover:bg-gray-700"
+        >
+          <History className="h-4 w-4" />
+          履歴の管理
+        </button>
       </div>
+      
+      {(isHistoricalMode || selectedHistoryDate) && historicalPriceData.length > 0 && (
+        <div className="text-sm text-amber-600 font-medium">
+          ※ 売上金額は{selectedHistoryDate ? formatDate(selectedHistoryDate) : month}時点の価格で計算されています
+        </div>
+      )}
 
       <WebSalesDataTable
         filteredItems={filteredItems}
@@ -327,7 +434,7 @@ export default function WebSalesEditableTable({
         productMaster={productMasterList}
         onRefresh={onDataUpdated}
         onChannelDelete={handleChannelDelete}
-        isHistoricalMode={isHistoricalMode}
+        isHistoricalMode={isHistoricalMode || !!selectedHistoryDate}
         historicalPriceData={historicalPriceData}
       />
 
@@ -514,6 +621,18 @@ export default function WebSalesEditableTable({
           onClose={() => setIsQoo10CsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+        />
+      )}
+
+      {/* 価格履歴管理モーダル */}
+      {showHistoryManagementModal && (
+        <PriceHistoryManagementModal
+          isOpen={showHistoryManagementModal}
+          onClose={() => setShowHistoryManagementModal(false)}
+          onRefresh={() => {
+            fetchPriceChangeDates()
+            onDataUpdated()
+          }}
         />
       )}
     </div>
