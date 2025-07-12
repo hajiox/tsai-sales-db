@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.59
+// /components/web-sales-editable-table.tsx ver.60 (過去価格表示機能付き)
 // 汎用CSV機能統合版
 
 "use client"
@@ -16,14 +16,28 @@ import YahooCsvImportModal from "./YahooCsvImportModal"
 import MercariCsvImportModal from "./MercariCsvImportModal"
 import BaseCsvImportModal from "./BaseCsvImportModal"
 import Qoo10CsvImportModal from "./Qoo10CsvImportModal"
-import CsvImportModal from "./CsvImportModal"  // 🆕 汎用CSV追加
+import CsvImportModal from "./CsvImportModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
+import { supabase } from "../lib/supabase"
+import { History } from "lucide-react"
 
 interface WebSalesEditableTableProps {
   initialWebSalesData: WebSalesData[]
   month: string
   onDataUpdated: () => void
+}
+
+// 過去価格データの型定義
+interface HistoricalPriceData {
+  product_id: string
+  product_name: string
+  current_price: number
+  historical_price: number
+  total_count: number
+  current_amount: number
+  historical_amount: number
+  price_difference: number
 }
 
 export default function WebSalesEditableTable({
@@ -35,8 +49,13 @@ export default function WebSalesEditableTable({
   const [filterValue, setFilterValue] = useState("")
   const [editMode, setEditMode] = useState<{ [key: string]: boolean }>({})
   const [editedValue, setEditedValue] = useState<string>("")
+  
+  // 過去価格表示モード
+  const [isHistoricalMode, setIsHistoricalMode] = useState(false)
+  const [historicalPriceData, setHistoricalPriceData] = useState<HistoricalPriceData[]>([])
+  const [loadingHistorical, setLoadingHistorical] = useState(false)
 
-  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false)  // 🆕 汎用CSV追加
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false)
   const [isAmazonCsvModalOpen, setIsAmazonCsvModalOpen] = useState(false)
   const [isRakutenCsvModalOpen, setIsRakutenCsvModalOpen] = useState(false)
   const [isYahooCsvModalOpen, setIsYahooCsvModalOpen] = useState(false)
@@ -50,10 +69,53 @@ export default function WebSalesEditableTable({
     setData(initialWebSalesData)
   }, [initialWebSalesData])
 
+  // 過去価格データの取得
+  const fetchHistoricalPrices = async () => {
+    setLoadingHistorical(true)
+    try {
+      const { data: historicalData, error } = await supabase.rpc(
+        'calculate_sales_with_historical_prices',
+        { target_month: month }
+      )
+      
+      if (error) throw error
+      
+      setHistoricalPriceData(historicalData || [])
+    } catch (error) {
+      console.error('過去価格データの取得に失敗しました:', error)
+      alert('過去価格データの取得に失敗しました')
+    } finally {
+      setLoadingHistorical(false)
+    }
+  }
+
+  // 過去価格モードの切り替え
+  const toggleHistoricalMode = () => {
+    if (!isHistoricalMode && historicalPriceData.length === 0) {
+      fetchHistoricalPrices()
+    }
+    setIsHistoricalMode(!isHistoricalMode)
+  }
+
   const productMap = useMemo(() => {
     const map = new Map()
-    initialWebSalesData.forEach(item => {
-      if (item.product_id && item.product_name) {
+    
+    if (isHistoricalMode && historicalPriceData.length > 0) {
+      // 過去価格モードの場合
+      historicalPriceData.forEach(item => {
+        map.set(item.product_id, {
+          id: item.product_id,
+          name: item.product_name,
+          price: item.historical_price, // 過去価格を使用
+          currentPrice: item.current_price,
+          historicalPrice: item.historical_price,
+          priceDifference: item.price_difference
+        })
+      })
+    } else {
+      // 通常モードの場合
+      initialWebSalesData.forEach(item => {
+        if (item.product_id && item.product_name) {
           map.set(item.product_id, {
             id: item.product_id,
             name: item.product_name,
@@ -62,10 +124,12 @@ export default function WebSalesEditableTable({
             series_code: item.series_code,
             product_code: item.product_code,
           })
-      }
-    })
+        }
+      })
+    }
+    
     return map
-  }, [initialWebSalesData])
+  }, [initialWebSalesData, isHistoricalMode, historicalPriceData])
   
   const productMasterList = useMemo(() => {
     return Array.from(productMap.values());
@@ -97,11 +161,11 @@ export default function WebSalesEditableTable({
       sum += totalItemQuantity * productPrice
     })
     return sum
-  }, [filteredItems])
+  }, [filteredItems, isHistoricalMode])
 
   const handleImportSuccess = () => {
     console.log("Import successful. Notifying parent to refresh.");
-    setIsCsvModalOpen(false)  // 🆕 汎用CSV追加
+    setIsCsvModalOpen(false)
     setIsAmazonCsvModalOpen(false)
     setIsRakutenCsvModalOpen(false)
     setIsYahooCsvModalOpen(false)
@@ -142,7 +206,7 @@ export default function WebSalesEditableTable({
     }
   }
 
-  // ECチャネル別削除機能（CSV追加）
+  // ECチャネル別削除機能
   const handleChannelDelete = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10' | 'csv') => {
     const channelNames = {
       amazon: 'Amazon',
@@ -151,7 +215,7 @@ export default function WebSalesEditableTable({
       mercari: 'メルカリ',
       base: 'BASE',
       qoo10: 'Qoo10',
-      csv: '汎用CSV'  // 🆕 汎用CSV追加
+      csv: '汎用CSV'
     };
 
     if (!confirm(`${month}の${channelNames[channel]}データを削除しますか？この操作は取り消せません。`)) {
@@ -183,7 +247,7 @@ export default function WebSalesEditableTable({
     }
   }
 
-  // 学習データリセット機能（CSV追加）
+  // 学習データリセット機能
   const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10' | 'csv') => {
     const channelNames = {
       amazon: 'Amazon',
@@ -192,7 +256,7 @@ export default function WebSalesEditableTable({
       mercari: 'メルカリ',
       base: 'BASE',
       qoo10: 'Qoo10',
-      csv: '汎用CSV'  // 🆕 汎用CSV追加
+      csv: '汎用CSV'
     };
 
     if (!confirm(`${channelNames[channel]}の学習データをリセットしますか？`)) {
@@ -228,6 +292,28 @@ export default function WebSalesEditableTable({
         onDeleteMonthData={handleDeleteMonthData}
       />
 
+      {/* 過去価格表示モードボタン */}
+      <div className="flex justify-between items-center">
+        <button
+          onClick={toggleHistoricalMode}
+          disabled={loadingHistorical}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            isHistoricalMode 
+              ? 'bg-amber-600 text-white hover:bg-amber-700' 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          } ${loadingHistorical ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          <History className="h-4 w-4" />
+          {loadingHistorical ? '読み込み中...' : isHistoricalMode ? '過去価格表示中' : '過去価格で表示'}
+        </button>
+        
+        {isHistoricalMode && historicalPriceData.length > 0 && (
+          <div className="text-sm text-amber-600 font-medium">
+            ※ 売上金額は{month}時点の価格で計算されています
+          </div>
+        )}
+      </div>
+
       <WebSalesDataTable
         filteredItems={filteredItems}
         editMode={editMode}
@@ -241,11 +327,13 @@ export default function WebSalesEditableTable({
         productMaster={productMasterList}
         onRefresh={onDataUpdated}
         onChannelDelete={handleChannelDelete}
+        isHistoricalMode={isHistoricalMode}
+        historicalPriceData={historicalPriceData}
       />
 
       <WebSalesImportButtons
         isUploading={false}
-        onCsvClick={() => {  // 🆕 汎用CSV有効化
+        onCsvClick={() => {
           console.log('CSV button clicked!');
           setIsCsvModalOpen(true);
         }}
@@ -269,7 +357,7 @@ export default function WebSalesEditableTable({
         }}
       />
       
-      {/* 学習データ管理ボタン群（CSV追加） */}
+      {/* 学習データ管理ボタン群 */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
         <button 
@@ -316,7 +404,7 @@ export default function WebSalesEditableTable({
         </button>
       </div>
 
-      {/* ECチャネル別削除ボタン群（CSV追加） */}
+      {/* ECチャネル別削除ボタン群 */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">ECチャネル別データ削除:</span>
         <button 
@@ -365,7 +453,7 @@ export default function WebSalesEditableTable({
 
       <WebSalesSummary totalCount={totalCount} totalAmount={totalAmount} />
       
-      {/* 🆕 汎用CSV Modal追加 */}
+      {/* 汎用CSV Modal追加 */}
       {isCsvModalOpen && (
         <CsvImportModal
           isOpen={isCsvModalOpen}
