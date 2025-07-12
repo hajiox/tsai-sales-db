@@ -1,4 +1,4 @@
-// /components/WebSalesDataTable.tsx ver.5 (縞々表示・商品管理機能・トレンド表示付き)
+// /components/WebSalesDataTable.tsx ver.6 (縞々表示・商品管理機能・商品名&ECサイト別トレンド表示付き)
 "use client"
 
 import React, { useState, useRef } from "react"
@@ -24,6 +24,7 @@ interface WebSalesDataTableProps {
 }
 
 type TrendData = { month_label: string; sales: number; }
+type SiteTrendData = { month_label: string; count: number; }
 
 export default function WebSalesDataTable({
   filteredItems,
@@ -42,14 +43,20 @@ export default function WebSalesDataTable({
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   
-  // トレンド表示関連のState
+  // 商品名トレンド表示関連のState
   const [hoveredProductId, setHoveredProductId] = useState<string | null>(null)
   const [trendData, setTrendData] = useState<Record<string, TrendData[]>>({})
   const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({})
+  
+  // ECサイト別トレンド表示関連のState
+  const [hoveredSiteCell, setHoveredSiteCell] = useState<string | null>(null)
+  const [siteTrendData, setSiteTrendData] = useState<Record<string, SiteTrendData[]>>({})
+  const [siteTrendLoading, setSiteTrendLoading] = useState<Record<string, boolean>>({})
+  
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // 現在の月を取得（親コンポーネントから渡されるべきですが、一旦現在月を使用）
+  // 現在の月を取得
   const getCurrentMonth = () => {
     const now = new Date()
     const year = now.getFullYear()
@@ -57,7 +64,7 @@ export default function WebSalesDataTable({
     return `${year}-${month}-01`
   }
 
-  // トレンドデータを取得する関数
+  // 商品トレンドデータを取得する関数
   const fetchTrendData = async (productId: string) => {
     if (trendData[productId] || trendLoading[productId]) return
 
@@ -84,11 +91,56 @@ export default function WebSalesDataTable({
     }
   }
 
-  const handleMouseEnter = (productId: string, event: React.MouseEvent<HTMLDivElement>) => {
+  // ECサイト別トレンドデータを取得する関数
+  const fetchSiteTrendData = async (productId: string, site: string) => {
+    const key = `${productId}-${site}`
+    if (siteTrendData[key] || siteTrendLoading[key]) return
+
+    setSiteTrendLoading(prev => ({ ...prev, [key]: true }))
+
+    try {
+      const currentMonth = getCurrentMonth()
+      const { data, error } = await supabase.rpc('get_product_site_trend_data', {
+        target_month: currentMonth,
+        target_product_id: productId,
+        target_site: site
+      })
+
+      if (error) {
+        throw error
+      }
+      
+      setSiteTrendData(prev => ({ ...prev, [key]: data || [] }))
+
+    } catch (error) {
+      console.error(`ECサイト別トレンドデータの取得に失敗しました (${key}):`, error)
+      setSiteTrendData(prev => ({ ...prev, [key]: [] }))
+    } finally {
+      setSiteTrendLoading(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
+  const handleProductMouseEnter = (productId: string, event: React.MouseEvent<HTMLDivElement>) => {
     setHoveredProductId(productId)
+    setHoveredSiteCell(null)
     fetchTrendData(productId)
     
-    // ツールチップの位置計算
+    const elementRect = event.currentTarget.getBoundingClientRect()
+    const containerRect = containerRef.current?.getBoundingClientRect()
+    if(containerRect) {
+        setTooltipPosition({
+            top: elementRect.bottom - containerRect.top + 8,
+            left: elementRect.left - containerRect.left,
+        })
+    }
+  }
+
+  const handleSiteMouseEnter = (productId: string, site: string, event: React.MouseEvent<HTMLDivElement>) => {
+    const key = `${productId}-${site}`
+    setHoveredSiteCell(key)
+    setHoveredProductId(null)
+    fetchSiteTrendData(productId, site)
+    
     const elementRect = event.currentTarget.getBoundingClientRect()
     const containerRect = containerRef.current?.getBoundingClientRect()
     if(containerRect) {
@@ -101,6 +153,7 @@ export default function WebSalesDataTable({
 
   const handleMouseLeave = () => {
     setHoveredProductId(null)
+    setHoveredSiteCell(null)
   }
 
   // 🔥 商品追加処理
@@ -164,6 +217,15 @@ export default function WebSalesDataTable({
   };
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
+
+  const siteNames = {
+    amazon: 'Amazon',
+    rakuten: '楽天',
+    yahoo: 'Yahoo',
+    mercari: 'メルカリ',
+    base: 'BASE',
+    qoo10: 'Qoo10'
+  };
 
   return (
     <div className="rounded-lg border bg-white shadow-sm relative" ref={containerRef}>
@@ -244,7 +306,7 @@ export default function WebSalesDataTable({
                     <td className="px-4 py-4 text-left text-xs">
                       <div 
                         className="cursor-pointer hover:text-blue-600 transition-colors"
-                        onMouseEnter={(e) => handleMouseEnter(row.product_id, e)}
+                        onMouseEnter={(e) => handleProductMouseEnter(row.product_id, e)}
                         onMouseLeave={handleMouseLeave}
                       >
                         {getProductName(row.product_id)}
@@ -270,6 +332,8 @@ export default function WebSalesDataTable({
                         <td key={cellKey} className="px-4 py-4 text-center">
                           <div
                             onClick={() => onEdit(row.product_id, site)}
+                            onMouseEnter={(e) => handleSiteMouseEnter(row.product_id, site, e)}
+                            onMouseLeave={handleMouseLeave}
                             className={`cursor-pointer hover:bg-gray-100 p-1 rounded ${
                               editMode[cellKey] ? "bg-blue-50" : ""
                             }`}
@@ -322,7 +386,7 @@ export default function WebSalesDataTable({
         </table>
       </div>
 
-      {/* トレンドツールチップ */}
+      {/* 商品名トレンドツールチップ */}
       {hoveredProductId && trendData[hoveredProductId] && (
         <div 
           className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
@@ -358,6 +422,59 @@ export default function WebSalesDataTable({
                     </div>
                     <span className="w-20 text-right text-gray-800 font-mono">
                       ¥{formatNumber(trend.sales)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 text-center h-24 flex items-center justify-center">
+              トレンドデータがありません
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ECサイト別トレンドツールチップ */}
+      {hoveredSiteCell && siteTrendData[hoveredSiteCell] && (
+        <div 
+          className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
+          style={{
+            top: `${tooltipPosition.top}px`,
+            left: `${tooltipPosition.left}px`,
+            width: '280px',
+          }}
+        >
+          <div className="text-sm font-semibold mb-2 text-gray-800">
+            {(() => {
+              const [productId, site] = hoveredSiteCell.split('-')
+              const siteName = siteNames[site as keyof typeof siteNames]
+              return `${getProductName(productId)} - ${siteName} 過去6ヶ月 販売個数`
+            })()}
+          </div>
+          
+          {siteTrendLoading[hoveredSiteCell] ? (
+            <div className="flex items-center justify-center h-24">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
+              <span className="ml-3 text-sm text-gray-500">トレンド読込中...</span>
+            </div>
+          ) : siteTrendData[hoveredSiteCell] && siteTrendData[hoveredSiteCell].length > 0 ? (
+            <div className="space-y-1.5">
+              {siteTrendData[hoveredSiteCell].map((trend, index) => {
+                const maxCount = Math.max(...siteTrendData[hoveredSiteCell].map(t => t.count))
+                const barWidth = maxCount > 0 ? (trend.count / maxCount) * 100 : 0
+                
+                return (
+                  <div key={index} className="flex items-center justify-between text-xs">
+                    <span className="w-16 text-gray-600 text-left">{trend.month_label}</span>
+                    <div className="flex-1 mx-2 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
+                      <div 
+                        className="h-full bg-green-400 transition-all duration-300"
+                        style={{ width: `${barWidth}%` }}
+                      ></div>
+                    </div>
+                    <span className="w-20 text-right text-gray-800 font-mono">
+                      {formatNumber(trend.count)}個
                     </span>
                   </div>
                 )
