@@ -1,10 +1,10 @@
-// /components/WebSalesDataTable.tsx ver.6 (縞々表示・商品管理機能・商品名&ECサイト別トレンド表示付き)
+// /components/WebSalesDataTable.tsx ver.7 (縞々表示・商品管理機能・商品名&ECサイト別トレンド表示・過去価格対応付き)
 "use client"
 
 import React, { useState, useRef } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, TrendingUp, TrendingDown } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import { supabase } from "../lib/supabase"
 
@@ -21,6 +21,8 @@ interface WebSalesDataTableProps {
   productMaster?: any[]
   onRefresh?: () => void
   onChannelDelete?: (channel: string) => void
+  isHistoricalMode?: boolean
+  historicalPriceData?: any[]
 }
 
 type TrendData = { month_label: string; sales: number; }
@@ -39,6 +41,8 @@ export default function WebSalesDataTable({
   productMaster = [],
   onRefresh,
   onChannelDelete,
+  isHistoricalMode = false,
+  historicalPriceData = [],
 }: WebSalesDataTableProps) {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -55,6 +59,22 @@ export default function WebSalesDataTable({
   
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // 過去価格データから価格差情報を取得
+  const getPriceDifferenceInfo = (productId: string) => {
+    if (!isHistoricalMode || !historicalPriceData) return null
+    const data = historicalPriceData.find(item => item.product_id === productId)
+    if (!data) return null
+    
+    return {
+      currentPrice: data.current_price,
+      historicalPrice: data.historical_price,
+      difference: data.price_difference,
+      differencePercent: data.current_price > 0 
+        ? ((data.current_price - data.historical_price) / data.current_price * 100).toFixed(1)
+        : '0'
+    }
+  }
 
   // 現在の月を取得
   const getCurrentMonth = () => {
@@ -288,6 +308,7 @@ export default function WebSalesDataTable({
             ) : (
               filteredItems.map((row, index) => {
                 const productPrice = getProductPrice(row.product_id)
+                const priceDiff = getPriceDifferenceInfo(row.product_id)
                 const totalCount = [
                   "amazon",
                   "rakuten", 
@@ -313,7 +334,28 @@ export default function WebSalesDataTable({
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
                         単価: ¥{formatNumber(productPrice)}
+                        {isHistoricalMode && priceDiff && priceDiff.difference !== 0 && (
+                          <span className={`ml-2 font-semibold ${priceDiff.difference > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {priceDiff.difference > 0 ? (
+                              <>
+                                <TrendingUp className="inline h-3 w-3" />
+                                +¥{formatNumber(Math.abs(priceDiff.difference))}
+                              </>
+                            ) : (
+                              <>
+                                <TrendingDown className="inline h-3 w-3" />
+                                -¥{formatNumber(Math.abs(priceDiff.difference))}
+                              </>
+                            )}
+                            ({priceDiff.differencePercent}%)
+                          </span>
+                        )}
                       </div>
+                      {isHistoricalMode && priceDiff && priceDiff.currentPrice !== priceDiff.historicalPrice && (
+                        <div className="text-xs text-amber-600 mt-0.5">
+                          過去価格: ¥{formatNumber(priceDiff.historicalPrice)} → 現在: ¥{formatNumber(priceDiff.currentPrice)}
+                        </div>
+                      )}
                     </td>
                     {(
                       [
@@ -365,7 +407,11 @@ export default function WebSalesDataTable({
                     <td className="px-4 py-4 text-center font-bold">
                       {formatNumber(totalCount)}
                     </td>
-                    <td className="px-4 py-4 text-center font-bold">
+                    <td className={`px-4 py-4 text-center font-bold ${
+                      isHistoricalMode && priceDiff && priceDiff.difference !== 0 
+                        ? 'bg-amber-50' 
+                        : ''
+                    }`}>
                       ¥{formatNumber(totalAmount)}
                     </td>
                     <td className="px-4 py-4 text-center">
