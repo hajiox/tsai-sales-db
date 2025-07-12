@@ -1,25 +1,29 @@
-// /components/WebSalesDataTable.tsx ver.4 (縞々表示・商品管理機能付き)
+// /components/WebSalesDataTable.tsx ver.5 (縞々表示・商品管理機能・トレンド表示付き)
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useRef } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
 import { Plus, Trash2 } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
+import { supabase } from "../lib/supabase"
 
 interface WebSalesDataTableProps {
   filteredItems: WebSalesData[]
-  editMode: string | null
+  editMode: { [key: string]: boolean }
   editedValue: string
   getProductName: (productId: string) => string
   getProductPrice: (productId: string) => number
-  onEdit: (productId: string, ecSite: string, currentValue: number | null) => void
+  onEdit: (productId: string, ecSite: string) => void
   onSave: (productId: string, ecSite: string) => void
   onEditValueChange: (value: string) => void
   onCancel: () => void
   productMaster?: any[]
   onRefresh?: () => void
+  onChannelDelete?: (channel: string) => void
 }
+
+type TrendData = { month_label: string; sales: number; }
 
 export default function WebSalesDataTable({
   filteredItems,
@@ -33,9 +37,71 @@ export default function WebSalesDataTable({
   onCancel,
   productMaster = [],
   onRefresh,
+  onChannelDelete,
 }: WebSalesDataTableProps) {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  
+  // トレンド表示関連のState
+  const [hoveredProductId, setHoveredProductId] = useState<string | null>(null)
+  const [trendData, setTrendData] = useState<Record<string, TrendData[]>>({})
+  const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({})
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // 現在の月を取得（親コンポーネントから渡されるべきですが、一旦現在月を使用）
+  const getCurrentMonth = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    return `${year}-${month}-01`
+  }
+
+  // トレンドデータを取得する関数
+  const fetchTrendData = async (productId: string) => {
+    if (trendData[productId] || trendLoading[productId]) return
+
+    setTrendLoading(prev => ({ ...prev, [productId]: true }))
+
+    try {
+      const currentMonth = getCurrentMonth()
+      const { data, error } = await supabase.rpc('get_product_trend_data', {
+        target_month: currentMonth,
+        target_product_id: productId
+      })
+
+      if (error) {
+        throw error
+      }
+      
+      setTrendData(prev => ({ ...prev, [productId]: data || [] }))
+
+    } catch (error) {
+      console.error(`商品トレンドデータの取得に失敗しました (${productId}):`, error)
+      setTrendData(prev => ({ ...prev, [productId]: [] }))
+    } finally {
+      setTrendLoading(prev => ({ ...prev, [productId]: false }))
+    }
+  }
+
+  const handleMouseEnter = (productId: string, event: React.MouseEvent<HTMLDivElement>) => {
+    setHoveredProductId(productId)
+    fetchTrendData(productId)
+    
+    // ツールチップの位置計算
+    const elementRect = event.currentTarget.getBoundingClientRect()
+    const containerRect = containerRef.current?.getBoundingClientRect()
+    if(containerRect) {
+        setTooltipPosition({
+            top: elementRect.bottom - containerRect.top + 8,
+            left: elementRect.left - containerRect.left,
+        })
+    }
+  }
+
+  const handleMouseLeave = () => {
+    setHoveredProductId(null)
+  }
 
   // 🔥 商品追加処理
   const handleAddProduct = async (productData: { 
@@ -97,8 +163,10 @@ export default function WebSalesDataTable({
     }
   };
 
+  const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
+
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-white shadow-sm relative" ref={containerRef}>
       <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
         <h3 className="text-lg font-semibold">全商品一覧 ({filteredItems.length}商品)</h3>
         <div className="flex gap-2">
@@ -174,9 +242,15 @@ export default function WebSalesDataTable({
                     className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
                   >
                     <td className="px-4 py-4 text-left text-xs">
-                      <div>{getProductName(row.product_id)}</div>
+                      <div 
+                        className="cursor-pointer hover:text-blue-600 transition-colors"
+                        onMouseEnter={(e) => handleMouseEnter(row.product_id, e)}
+                        onMouseLeave={handleMouseLeave}
+                      >
+                        {getProductName(row.product_id)}
+                      </div>
                       <div className="text-xs text-gray-500 mt-1">
-                        単価: ¥{new Intl.NumberFormat("ja-JP").format(productPrice)}
+                        単価: ¥{formatNumber(productPrice)}
                       </div>
                     </td>
                     {(
@@ -195,12 +269,12 @@ export default function WebSalesDataTable({
                       return (
                         <td key={cellKey} className="px-4 py-4 text-center">
                           <div
-                            onClick={() => onEdit(row.product_id, site, count)}
+                            onClick={() => onEdit(row.product_id, site)}
                             className={`cursor-pointer hover:bg-gray-100 p-1 rounded ${
-                              editMode === cellKey ? "bg-blue-50" : ""
+                              editMode[cellKey] ? "bg-blue-50" : ""
                             }`}
                           >
-                            {editMode === cellKey ? (
+                            {editMode[cellKey] ? (
                               <Input
                                 autoFocus
                                 value={editedValue}
@@ -225,10 +299,10 @@ export default function WebSalesDataTable({
                       )
                     })}
                     <td className="px-4 py-4 text-center font-bold">
-                      {new Intl.NumberFormat("ja-JP").format(totalCount)}
+                      {formatNumber(totalCount)}
                     </td>
                     <td className="px-4 py-4 text-center font-bold">
-                      ¥{new Intl.NumberFormat("ja-JP").format(totalAmount)}
+                      ¥{formatNumber(totalAmount)}
                     </td>
                     <td className="px-4 py-4 text-center">
                       <button
@@ -247,6 +321,55 @@ export default function WebSalesDataTable({
           </tbody>
         </table>
       </div>
+
+      {/* トレンドツールチップ */}
+      {hoveredProductId && trendData[hoveredProductId] && (
+        <div 
+          className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
+          style={{
+            top: `${tooltipPosition.top}px`,
+            left: `${tooltipPosition.left}px`,
+            width: '280px',
+          }}
+        >
+          <div className="text-sm font-semibold mb-2 text-gray-800">
+            {getProductName(hoveredProductId)} - 過去6ヶ月 売上トレンド
+          </div>
+          
+          {trendLoading[hoveredProductId] ? (
+            <div className="flex items-center justify-center h-24">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
+              <span className="ml-3 text-sm text-gray-500">トレンド読込中...</span>
+            </div>
+          ) : trendData[hoveredProductId] && trendData[hoveredProductId].length > 0 ? (
+            <div className="space-y-1.5">
+              {trendData[hoveredProductId].map((trend, index) => {
+                const maxSales = Math.max(...trendData[hoveredProductId].map(t => t.sales))
+                const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0
+                
+                return (
+                  <div key={index} className="flex items-center justify-between text-xs">
+                    <span className="w-16 text-gray-600 text-left">{trend.month_label}</span>
+                    <div className="flex-1 mx-2 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
+                      <div 
+                        className="h-full bg-sky-400 transition-all duration-300"
+                        style={{ width: `${barWidth}%` }}
+                      ></div>
+                    </div>
+                    <span className="w-20 text-right text-gray-800 font-mono">
+                      {formatNumber(trend.sales)}個
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 text-center h-24 flex items-center justify-center">
+              トレンドデータがありません
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 🔥 商品追加モーダル */}
       {isAddingProduct && (
