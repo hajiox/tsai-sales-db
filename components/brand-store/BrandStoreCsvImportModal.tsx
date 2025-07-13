@@ -1,10 +1,11 @@
-// /app/components/brand-store/BrandStoreCsvImportModal.tsx ver.4 (自動登録結果表示版)
+// /app/components/brand-store/BrandStoreCsvImportModal.tsx ver.5 (解析結果詳細表示版)
 "use client"
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Upload, FileText, CheckCircle, AlertCircle } from "lucide-react"
+import { formatCurrency } from "@/lib/utils"
 import Papa from "papaparse"
 
 interface Props {
@@ -111,7 +112,7 @@ export function BrandStoreCsvImportModal({ isOpen, onClose, onImportComplete, se
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>商品別売上CSV読込</DialogTitle>
           <DialogDescription>
@@ -163,9 +164,39 @@ export function BrandStoreCsvImportModal({ isOpen, onClose, onImportComplete, se
               <h3 className="font-semibold mb-2">解析結果</h3>
               <div className="space-y-1 text-sm">
                 <p>総レコード数: {parsedData.summary.totalRows}</p>
-                <p>総売上金額: {parsedData.summary.totalSales.toLocaleString()}円</p>
+                <p>総売上金額: {formatCurrency(parsedData.summary.totalSales)}</p>
               </div>
             </div>
+            
+            {/* 商品一覧を表示 */}
+            <div className="overflow-y-auto max-h-96">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">商品名</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">カテゴリー</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">売上</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">販売数</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {parsedData.data.slice(0, 10).map((item: any, index: number) => (
+                    <tr key={index}>
+                      <td className="px-3 py-2 text-sm text-gray-900">{item.productName}</td>
+                      <td className="px-3 py-2 text-sm text-gray-500">{item.category || '未設定'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900 text-right">{formatCurrency(item.totalSales)}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900 text-right">{item.quantitySold}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {parsedData.data.length > 10 && (
+                <p className="text-sm text-gray-500 text-center py-2">
+                  他 {parsedData.data.length - 10} 件
+                </p>
+              )}
+            </div>
+
             {error && (
               <div className="text-red-600 text-sm flex items-center">
                 <AlertCircle className="h-4 w-4 mr-1" />
@@ -187,7 +218,7 @@ export function BrandStoreCsvImportModal({ isOpen, onClose, onImportComplete, se
               <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
               <h3 className="mt-2 text-lg font-semibold">インポート完了</h3>
               <p className="mt-1 text-sm text-gray-600">
-                {importResult.message}
+                データの保存が完了しました
               </p>
               {(importResult.newProductsCount > 0 || importResult.newCategoriesCount > 0) && (
                 <div className="mt-4 bg-blue-50 p-3 rounded-lg text-sm">
