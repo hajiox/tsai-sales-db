@@ -1,4 +1,4 @@
-// /app/components/brand-store/MasterDataModal.tsx ver.2
+// /app/components/brand-store/MasterDataModal.tsx ver.3
 "use client"
 
 import { useState } from "react"
@@ -77,6 +77,12 @@ export function MasterDataModal({ isOpen, onClose }: MasterDataModalProps) {
       setSuccess(message)
       setCategoryFile(null)
       setProductFile(null)
+      
+      // 成功メッセージを表示してから閉じる
+      setTimeout(() => {
+        handleClose()
+      }, 2000)
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : 'エラーが発生しました')
     } finally {
