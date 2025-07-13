@@ -1,112 +1,171 @@
-// /app/api/brand-store/parse/route.ts ver.2
+// /app/api/brand-store/parse/route.ts ver.4 (エラー修正版)
 import { NextRequest, NextResponse } from 'next/server'
 import Papa from 'papaparse'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+
+interface ParsedData {
+  productName: string
+  category: string | null
+  taxType: string | null
+  totalSales: number
+  salesRatio: number
+  grossProfit: number
+  grossProfitRatio: number
+  quantitySold: number
+  quantityRatio: number
+  returnedQuantity: number
+  returnRatio: number
+  productId: number | null
+  productCode: string | null
+  barcode: string | null
+}
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const selectedYear = formData.get('selectedYear') as string
-    const selectedMonth = formData.get('selectedMonth') as string
-
+    const selectedYear = formData.get('year')
+    const selectedMonth = formData.get('month')
+    
+    // デバッグ用ログ
+    console.log('Received year:', selectedYear, 'month:', selectedMonth)
+    
     if (!file) {
-      return NextResponse.json({ error: 'ファイルがありません' }, { status: 400 })
+      return NextResponse.json({ error: 'ファイルが選択されていません' }, { status: 400 })
+    }
+
+    if (!selectedYear || !selectedMonth) {
+      return NextResponse.json({ error: '年月が指定されていません' }, { status: 400 })
     }
 
     const text = await file.text()
-    
-    // CSVをパース
-    const parseResult = Papa.parse(text, {
+    const result = Papa.parse(text, {
       header: true,
-      skipEmptyLines: true,
-      dynamicTyping: true
+      skipEmptyLines: true
     })
 
-    if (parseResult.errors.length > 0) {
-      console.error('Parse errors:', parseResult.errors)
-      return NextResponse.json({ 
-        error: 'CSVの解析に失敗しました', 
-        details: parseResult.errors 
-      }, { status: 400 })
+    if (!result.data || result.data.length === 0) {
+      return NextResponse.json({ error: 'CSVファイルにデータがありません' }, { status: 400 })
     }
 
-    // 商品名でグループ化して集計
-    const productMap = new Map<string, any>()
+    const supabase = createRouteHandlerClient({ cookies })
+
+    // マスターデータを取得（商品名照合用）
+    const { data: productMaster, error: productError } = await supabase
+      .from('product_master')
+      .select('*')
     
-    parseResult.data.forEach((row: any) => {
-      const productName = row['商品名']
-      if (!productName) return
+    if (productError) {
+      console.error('Product master fetch error:', productError)
+    }
+
+    // product_name_aliases テーブルが存在する場合のみ取得
+    let productAliases = []
+    try {
+      const { data: aliases, error: aliasError } = await supabase
+        .from('product_name_aliases')
+        .select('*')
       
-      if (productMap.has(productName)) {
-        // 既存のデータに加算
-        const existing = productMap.get(productName)
-        existing.total_sales += parseInt(row['販売総売上']) || 0
-        existing.gross_profit += parseInt(row['粗利総額']) || 0
-        existing.quantity_sold += parseInt(row['販売商品数']) || 0
-        existing.returned_quantity += parseInt(row['返品商品数']) || 0
+      if (!aliasError) {
+        productAliases = aliases || []
+      }
+    } catch (e) {
+      console.log('product_name_aliases table might not exist yet')
+    }
+
+    // 商品ID、商品名、別名でのマッピングを作成
+    const productIdMap = new Map(productMaster?.map(p => [p.product_id, p]) || [])
+    const productNameMap = new Map(productMaster?.map(p => [p.product_name, p]) || [])
+    const aliasMap = new Map(productAliases?.map(a => [a.alias_name, a.product_id]) || [])
+
+    // 商品ごとに集計（重複データを合算）
+    const productMap = new Map<string, ParsedData>()
+
+    result.data.forEach((row: any) => {
+      const productName = row['商品名']
+      if (!productName || productName.trim() === '') return
+
+      const existingData = productMap.get(productName)
+      
+      // 商品IDまたは商品名で照合
+      let productIdFromRow = row['商品ID'] ? parseInt(row['商品ID']) : null
+      let matchedProduct = null
+
+      // 1. 商品IDで照合
+      if (productIdFromRow) {
+        matchedProduct = productIdMap.get(productIdFromRow)
+      }
+      
+      // 2. 商品名で照合
+      if (!matchedProduct) {
+        matchedProduct = productNameMap.get(productName)
+      }
+      
+      // 3. 別名で照合
+      if (!matchedProduct) {
+        const aliasProductId = aliasMap.get(productName)
+        if (aliasProductId) {
+          matchedProduct = productIdMap.get(aliasProductId)
+        }
+      }
+
+      // マスターから情報を取得
+      const finalProductId = matchedProduct?.product_id || productIdFromRow
+      const finalCategoryId = matchedProduct?.category_id || null
+
+      const newData: ParsedData = {
+        productName,
+        category: row['カテゴリー'] || null,
+        taxType: row['税区分'] || null,
+        totalSales: parseInt(row['販売総売上']?.replace(/[,円]/g, '') || '0'),
+        salesRatio: parseFloat(row['構成比%']?.replace('%', '') || '0'),
+        grossProfit: parseInt(row['粗利総額']?.replace(/[,円]/g, '') || '0'),
+        grossProfitRatio: parseFloat(row['粗利率%']?.replace('%', '') || '0'),
+        quantitySold: parseInt(row['販売商品数']?.replace(/,/g, '') || '0'),
+        quantityRatio: parseFloat(row['構成比% ']?.replace('%', '') || '0'),
+        returnedQuantity: parseInt(row['返品商品数']?.replace(/,/g, '') || '0'),
+        returnRatio: parseFloat(row['返品率%']?.replace('%', '') || '0'),
+        productId: finalProductId,
+        productCode: row['商品コード'] || null,
+        barcode: row['バーコード'] || null
+      }
+
+      if (existingData) {
+        // 既存データがある場合は加算
+        existingData.totalSales += newData.totalSales
+        existingData.grossProfit += newData.grossProfit
+        existingData.quantitySold += newData.quantitySold
+        existingData.returnedQuantity += newData.returnedQuantity
       } else {
-        // 新規データとして追加
-        productMap.set(productName, {
-          product_name: productName,
-          category: row['カテゴリー'] || '',
-          tax_type: row['税区分'] || '',
-          total_sales: parseInt(row['販売総売上']) || 0,
-          sales_ratio: parseFloat(row['構成比%']) || 0,
-          gross_profit: parseInt(row['粗利総額']) || 0,
-          gross_profit_ratio: parseFloat(row['構成比%_1']) || 0,
-          quantity_sold: parseInt(row['販売商品数']) || 0,
-          quantity_ratio: parseFloat(row['構成比%_2']) || 0,
-          returned_quantity: parseInt(row['返品商品数']) || 0,
-          return_ratio: parseFloat(row['構成比%_3']) || 0,
-          product_id: row['商品ID'] ? parseInt(row['商品ID']) : null,
-          product_code: row['商品コード'] || null,
-          barcode: row['バーコード'] || null,
-          report_month: `${selectedYear}-${selectedMonth.padStart(2, '0')}-01`
-        })
+        productMap.set(productName, newData)
       }
     })
 
-    // Mapから配列に変換
-    const parsedData = Array.from(productMap.values())
-
     // 構成比を再計算
-    const totalSales = parsedData.reduce((sum, item) => sum + item.total_sales, 0)
-    const totalGrossProfit = parsedData.reduce((sum, item) => sum + item.gross_profit, 0)
-    const totalQuantity = parsedData.reduce((sum, item) => sum + item.quantity_sold, 0)
-    const totalReturns = parsedData.reduce((sum, item) => sum + item.returned_quantity, 0)
+    const totalSalesSum = Array.from(productMap.values()).reduce((sum, item) => sum + item.totalSales, 0)
+    const totalQuantitySum = Array.from(productMap.values()).reduce((sum, item) => sum + item.quantitySold, 0)
 
-    parsedData.forEach(item => {
-      item.sales_ratio = totalSales > 0 ? (item.total_sales / totalSales * 100) : 0
-      item.gross_profit_ratio = totalGrossProfit > 0 ? (item.gross_profit / totalGrossProfit * 100) : 0
-      item.quantity_ratio = totalQuantity > 0 ? (item.quantity_sold / totalQuantity * 100) : 0
-      item.return_ratio = totalReturns > 0 ? (item.returned_quantity / totalReturns * 100) : 0
-    })
-
-    // サマリー情報を計算
-    const summary = {
-      totalProducts: parsedData.length,
-      totalSales: totalSales,
-      totalQuantity: totalQuantity,
-      categories: [...new Set(parsedData.map((item: any) => item.category))].length
-    }
-
-    // 重複があった場合はログに出力
-    const duplicateCount = parseResult.data.filter((row: any) => row['商品名']).length - parsedData.length
-    if (duplicateCount > 0) {
-      console.log(`${duplicateCount}件の重複商品がありました（集計済み）`)
-    }
+    const parsedData = Array.from(productMap.values()).map(item => ({
+      ...item,
+      salesRatio: totalSalesSum > 0 ? (item.totalSales / totalSalesSum * 100) : 0,
+      quantityRatio: totalQuantitySum > 0 ? (item.quantitySold / totalQuantitySum * 100) : 0,
+      grossProfitRatio: item.totalSales > 0 ? (item.grossProfit / item.totalSales * 100) : 0
+    }))
 
     return NextResponse.json({
-      success: true,
       data: parsedData,
-      summary,
-      reportMonth: `${selectedYear}年${selectedMonth}月`
+      summary: {
+        totalRows: parsedData.length,
+        totalSales: totalSalesSum,
+        selectedYear: parseInt(selectedYear.toString()),
+        selectedMonth: parseInt(selectedMonth.toString())
+      }
     })
   } catch (error) {
     console.error('Parse error:', error)
     return NextResponse.json({ 
-      error: 'サーバーエラーが発生しました',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : '解析に失敗しました' 
     }, { status: 500 })
   }
 }
