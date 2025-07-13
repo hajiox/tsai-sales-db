@@ -1,4 +1,4 @@
-// /app/brand-store-analysis/page.tsx ver.6 (年選択改善版)
+// /app/brand-store-analysis/page.tsx ver.5 (販売個数追加・グラフ追加版)
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -31,13 +31,7 @@ export default function BrandStoreAnalysisPage() {
   const [loading, setLoading] = useState(false)
   const supabase = createClientComponentClient()
 
-  // ★ 年の選択肢を固定範囲に変更（2020年から現在年+1年まで）
-  const currentYear = new Date().getFullYear()
-  const yearOptions = Array.from(
-    { length: currentYear - 2020 + 2 }, // 2020年から現在年+1年まで
-    (_, i) => 2020 + i
-  ).reverse() // 新しい年を上に表示
-
+  const yearOptions = Array.from({ length: 5 }, (_, i) => selectedYear - i)
   const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 
   // データ取得関数をマスター連携版に修正
