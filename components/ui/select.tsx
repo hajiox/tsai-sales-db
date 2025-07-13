@@ -1,4 +1,4 @@
-// /components/ui/select.tsx ver.1
+// /components/ui/select.tsx ver.2 (構文エラー修正版)
 "use client"
 
 import * as React from "react"
