@@ -1,4 +1,4 @@
-// /app/brand-store-analysis/page.tsx ver.3 (マスターデータ連携版)
+// /app/brand-store-analysis/page.tsx ver.4 (サマリーカード追加・TOP20対応版)
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -10,13 +10,13 @@ import { MasterDataModal } from "@/components/brand-store/MasterDataModal"
 import { CategoryRankingCard } from "@/components/brand-store/CategoryRankingCard"
 import { ProductRankingCard } from "@/components/brand-store/ProductRankingCard"
 import { ProductSalesTable } from "@/components/brand-store/ProductSalesTable"
+import { TotalSalesCard } from "@/components/brand-store/TotalSalesCard"
 import { Settings } from "lucide-react"
 
 // ★ 型定義を追加
 type SalesData = any;
 type ProductMaster = { product_id: number; category_id: number; };
 type CategoryMaster = { category_id: number; category_name: string; };
-
 
 export default function BrandStoreAnalysisPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
@@ -66,6 +66,28 @@ export default function BrandStoreAnalysisPage() {
           };
         });
 
+        // ★ 合計値の計算
+        const totals = enrichedSalesData.reduce((acc: any, item: SalesData) => {
+          acc.totalSales += item.total_sales || 0;
+          acc.totalQuantity += item.quantity_sold || 0;
+          acc.totalGrossProfit += item.gross_profit || 0;
+          acc.totalReturns += item.returned_quantity || 0;
+          acc.grossProfitSum += (item.gross_profit || 0);
+          acc.salesSum += (item.total_sales || 0);
+          return acc;
+        }, { 
+          totalSales: 0, 
+          totalQuantity: 0, 
+          totalGrossProfit: 0, 
+          totalReturns: 0,
+          grossProfitSum: 0,
+          salesSum: 0
+        });
+
+        // 平均粗利率の計算
+        totals.avgGrossProfitRatio = totals.salesSum > 0 ? (totals.grossProfitSum / totals.salesSum * 100) : 0;
+        totals.totalProducts = enrichedSalesData.length;
+
         // カテゴリー別集計 (マスター連携後のデータを使用)
         const categoryTotals = enrichedSalesData.reduce((acc: any, item: SalesData) => {
           const category = item.category; // ここは↑で上書きされた値
@@ -80,12 +102,13 @@ export default function BrandStoreAnalysisPage() {
 
         const categoryRanking = Object.values(categoryTotals)
           .sort((a: any, b: any) => b.total_sales - a.total_sales)
-          .slice(0, 5);
+          .slice(0, 20); // TOP20に変更
 
         setData({
           salesData: enrichedSalesData, // ★ 連携後のデータをセット
           categoryRanking,
-          productRanking: enrichedSalesData.slice(0, 10) // ★ 連携後のデータをセット
+          productRanking: enrichedSalesData.slice(0, 20), // TOP20に変更
+          totals // ★ 合計値を追加
         });
       } else {
         setData(null);
@@ -139,21 +162,31 @@ export default function BrandStoreAnalysisPage() {
         </Button>
       </div>
 
+      {/* ★ 合計売上サマリーカードを追加 */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">カテゴリーランキング TOP5</h2>
-        <div className="grid grid-cols-5 gap-4">
+        <h2 className="text-lg font-semibold mb-4">売上サマリー</h2>
+        <TotalSalesCard data={data?.totals || null} />
+      </div>
+
+      <div>
+        <h2 className="text-lg font-semibold mb-4">カテゴリーランキング TOP20</h2>
+        <div className="grid grid-cols-5 gap-2">
           {data?.categoryRanking?.map((category: any, index: number) => (
-            <CategoryRankingCard key={index} rank={index + 1} category={category} />
+            <div key={index} className="text-sm">
+              <CategoryRankingCard rank={index + 1} category={category} compact={true} />
+            </div>
           ))}
           {(!data || data.categoryRanking?.length === 0) && <div className="col-span-5 text-center text-gray-500">データがありません</div>}
         </div>
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold mb-4">商品ランキング TOP10</h2>
-        <div className="grid grid-cols-5 gap-4">
+        <h2 className="text-lg font-semibold mb-4">商品ランキング TOP20</h2>
+        <div className="grid grid-cols-5 gap-2">
           {data?.productRanking?.map((product: any, index: number) => (
-            <ProductRankingCard key={index} rank={index + 1} product={product} />
+            <div key={index} className="text-sm">
+              <ProductRankingCard rank={index + 1} product={product} compact={true} />
+            </div>
           ))}
           {(!data || data.productRanking?.length === 0) && <div className="col-span-5 text-center text-gray-500">データがありません</div>}
         </div>
