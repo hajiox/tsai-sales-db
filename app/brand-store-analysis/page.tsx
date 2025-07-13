@@ -1,4 +1,4 @@
-// /app/brand-store-analysis/page.tsx ver.1
+// /app/brand-store-analysis/page.tsx ver.2 (マスターデータ管理機能追加版)
 "use client"
 
 import { useState, useEffect } from "react"
@@ -7,14 +7,17 @@ import { Card } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { BrandStoreCsvImportModal } from "@/components/brand-store/BrandStoreCsvImportModal"
+import { MasterDataModal } from "@/components/brand-store/MasterDataModal"
 import { CategoryRankingCard } from "@/components/brand-store/CategoryRankingCard"
 import { ProductRankingCard } from "@/components/brand-store/ProductRankingCard"
 import { ProductSalesTable } from "@/components/brand-store/ProductSalesTable"
+import { Settings } from "lucide-react"
 
 export default function BrandStoreAnalysisPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showMasterModal, setShowMasterModal] = useState(false)
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const supabase = createClientComponentClient()
@@ -107,49 +110,60 @@ export default function BrandStoreAnalysisPage() {
   return (
     <div className="p-6 space-y-6">
       {/* ヘッダー部分 */}
-      <div className="flex items-center gap-4">
-        <Select
-          value={String(selectedYear)}
-          onValueChange={(value) => setSelectedYear(Number(value))}
-        >
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {yearOptions.map(year => (
-              <SelectItem key={year} value={String(year)}>
-                {year}年
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Select
+            value={String(selectedYear)}
+            onValueChange={(value) => setSelectedYear(Number(value))}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map(year => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}年
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <Select
-          value={String(selectedMonth)}
-          onValueChange={(value) => setSelectedMonth(Number(value))}
-        >
-          <SelectTrigger className="w-24">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {monthOptions.map(month => (
-              <SelectItem key={month} value={String(month)}>
-                {month}月
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <Select
+            value={String(selectedMonth)}
+            onValueChange={(value) => setSelectedMonth(Number(value))}
+          >
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map(month => (
+                <SelectItem key={month} value={String(month)}>
+                  {month}月
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <Button onClick={() => setShowImportModal(true)}>
-          CSV読込
-        </Button>
+          <Button onClick={() => setShowImportModal(true)}>
+            CSV読込
+          </Button>
 
-        <Button 
-          variant="destructive" 
-          onClick={handleDeleteMonth}
-          disabled={!data || loading}
+          <Button 
+            variant="destructive" 
+            onClick={handleDeleteMonth}
+            disabled={!data || loading}
+          >
+            月削除
+          </Button>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowMasterModal(true)}
         >
-          月削除
+          <Settings className="h-4 w-4 mr-2" />
+          マスターデータ管理
         </Button>
       </div>
 
@@ -208,6 +222,14 @@ export default function BrandStoreAnalysisPage() {
           }}
           selectedYear={selectedYear}
           selectedMonth={selectedMonth}
+        />
+      )}
+
+      {/* マスターデータ管理モーダル */}
+      {showMasterModal && (
+        <MasterDataModal
+          isOpen={showMasterModal}
+          onClose={() => setShowMasterModal(false)}
         />
       )}
     </div>
