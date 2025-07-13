@@ -1,11 +1,10 @@
-// /app/components/brand-store/BrandStoreCsvImportModal.tsx ver.2
+// /app/components/brand-store/BrandStoreCsvImportModal.tsx ver.3
 "use client"
 
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Upload, FileText, CheckCircle, AlertCircle } from "lucide-react"
 
 interface BrandStoreCsvImportModalProps {
@@ -139,14 +138,19 @@ export function BrandStoreCsvImportModal({
           <DialogTitle>
             CSV読込 - {selectedYear}年{selectedMonth}月
           </DialogTitle>
+          <DialogDescription>
+            商品別売上データのCSVファイルをインポートします
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
+              <div className="flex items-center">
+                <AlertCircle className="h-4 w-4 mr-2" />
+                <span>{error}</span>
+              </div>
+            </div>
           )}
 
           {step === 'upload' && (
