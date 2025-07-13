@@ -314,9 +314,14 @@ export default function BrandStoreAnalysisPage() {
               <CategoryRankingCard key={index} rank={index + 1} category={category} />
             ))
           ) : (
-            <div className="col-span-5 text-center text-gray-500">
-              {data?.hasData === false ? "データ未入力" : "データがありません"}
-            </div>
+            // データがない場合も5つのカード枠を表示
+            Array.from({ length: 5 }, (_, i) => (
+              <Card key={i} className="h-full">
+                <CardContent className="p-4 flex items-center justify-center h-32">
+                  <span className="text-gray-500">データ未入力</span>
+                </CardContent>
+              </Card>
+            ))
           )}
         </div>
       </div>
@@ -335,9 +340,14 @@ export default function BrandStoreAnalysisPage() {
               </div>
             ))
           ) : (
-            <div className="col-span-10 text-center text-gray-500">
-              {data?.hasData === false ? "データ未入力" : "データがありません"}
-            </div>
+            // データがない場合も20個のカード枠を表示
+            Array.from({ length: 20 }, (_, i) => (
+              <div key={i} className="h-24">
+                <Card className="h-full p-2 flex items-center justify-center">
+                  <span className="text-xs text-gray-500">データ未入力</span>
+                </Card>
+              </div>
+            ))
           )}
         </div>
       </div>
