@@ -45,21 +45,38 @@ export default function BrandStoreAnalysisPage() {
     setLoading(true)
     try {
       const reportMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
+      const lastYearMonth = `${selectedYear - 1}-${String(selectedMonth).padStart(2, '0')}-01`
+      const twoYearsAgoMonth = `${selectedYear - 2}-${String(selectedMonth).padStart(2, '0')}-01`
       
-      // ★ 売上データ、商品マスター、カテゴリーマスターを同時に取得
+      // 来月の計算（12月の場合は翌年1月）
+      const nextMonth = selectedMonth === 12 ? 1 : selectedMonth + 1
+      const nextMonthYear = selectedMonth === 12 ? selectedYear - 1 : selectedYear - 1
+      const lastYearNextMonth = `${nextMonthYear}-${String(nextMonth).padStart(2, '0')}-01`
+      
+      // ★ 売上データ、商品マスター、カテゴリーマスター、前年度データを同時に取得
       const [
         { data: salesData, error: salesError },
         { data: productMaster, error: productMasterError },
-        { data: categoryMaster, error: categoryMasterError }
+        { data: categoryMaster, error: categoryMasterError },
+        { data: lastYearData, error: lastYearError },
+        { data: twoYearsAgoData, error: twoYearsAgoError },
+        { data: nextMonthPredictionData, error: nextMonthError }
       ] = await Promise.all([
         supabase.from('brand_store_sales').select('*').eq('report_month', reportMonth).order('total_sales', { ascending: false }),
         supabase.from('product_master').select('product_id, category_id'),
-        supabase.from('category_master').select('category_id, category_name')
+        supabase.from('category_master').select('category_id, category_name'),
+        supabase.from('brand_store_sales').select('total_sales').eq('report_month', lastYearMonth),
+        supabase.from('brand_store_sales').select('total_sales').eq('report_month', twoYearsAgoMonth),
+        supabase.from('brand_store_sales').select('*').eq('report_month', lastYearNextMonth).order('total_sales', { ascending: false }).limit(10)
       ]);
 
       if (salesError) throw salesError;
       if (productMasterError) throw productMasterError;
       if (categoryMasterError) throw categoryMasterError;
+
+      // 前年度データの集計
+      const lastYearSales = lastYearData?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || null;
+      const twoYearsAgoSales = twoYearsAgoData?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || null;
 
       if (salesData && salesData.length > 0) {
         // ★ マスターデータからMapを作成
@@ -101,7 +118,10 @@ export default function BrandStoreAnalysisPage() {
           categoryRanking,
           productRanking: enrichedSalesData.slice(0, 20), // TOP20
           totalSales, // ★ 合計売上
-          totalQuantity // ★ 合計販売個数
+          totalQuantity, // ★ 合計販売個数
+          lastYearSales, // ★ 前年度売上
+          twoYearsAgoSales, // ★ 前々年度売上
+          nextMonthPrediction: nextMonthPredictionData || [] // ★ 来月予測
         });
       } else {
         setData(null);
@@ -201,27 +221,69 @@ export default function BrandStoreAnalysisPage() {
         </Button>
       </div>
 
-      {/* ★ 合計売上と販売個数のサマリーカード */}
-      <div className="grid grid-cols-2 gap-4 max-w-xl">
+      {/* ★ 売上サマリーカード（統合版＋前年比較） */}
+      <div className="grid grid-cols-2 gap-4 max-w-2xl">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">合計売上</CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-600" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">今月の実績</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data ? formatCurrency(data.totalSales) : "¥0"}</div>
+          <CardContent className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-blue-600" />
+                <span className="text-sm text-muted-foreground">合計売上</span>
+              </div>
+              <div className="text-xl font-bold">{data ? formatCurrency(data.totalSales) : "¥0"}</div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-green-600" />
+                <span className="text-sm text-muted-foreground">販売個数</span>
+              </div>
+              <div className="text-xl font-bold">{data ? data.totalQuantity.toLocaleString() + "個" : "0個"}</div>
+            </div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">販売個数</CardTitle>
-            <Package className="h-4 w-4 text-green-600" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">前年度比較</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data ? data.totalQuantity.toLocaleString() + "個" : "0個"}</div>
+          <CardContent className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{selectedYear - 1}年{selectedMonth}月</span>
+              <div className="text-lg font-semibold">{data?.lastYearSales ? formatCurrency(data.lastYearSales) : "データなし"}</div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{selectedYear - 2}年{selectedMonth}月</span>
+              <div className="text-lg font-semibold">{data?.twoYearsAgoSales ? formatCurrency(data.twoYearsAgoSales) : "データなし"}</div>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* ★ 来月予測サマリー */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">来月の販売予測</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {selectedYear - 1}年{selectedMonth === 12 ? 1 : selectedMonth + 1}月の実績を基に、来月はこんな商品が売れるようです
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-5 gap-4">
+            {data?.nextMonthPrediction?.map((product: any, index: number) => (
+              <div key={index} className="space-y-1">
+                <div className="text-xs font-semibold text-muted-foreground">#{index + 1}</div>
+                <div className="text-sm font-medium line-clamp-2">{product.product_name}</div>
+                <div className="text-xs text-muted-foreground">{formatCurrency(product.total_sales)}</div>
+              </div>
+            ))}
+            {(!data?.nextMonthPrediction || data.nextMonthPrediction.length === 0) && (
+              <div className="col-span-5 text-center text-muted-foreground">予測データがありません</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <div>
         <h2 className="text-lg font-semibold mb-4">カテゴリーランキング TOP5</h2>
