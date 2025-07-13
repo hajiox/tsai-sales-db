@@ -1,58 +1,82 @@
-// /app/components/brand-store/MasterDataModal.tsx ver.3
+// /app/components/brand-store/MasterDataModal.tsx ver.4 (マスター一覧表示機能追加版)
 "use client"
 
-import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Upload, FileText, CheckCircle, AlertCircle, Database } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Upload, FileText, AlertCircle, Search, Package, Tag } from "lucide-react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { formatCurrency } from "@/lib/utils"
 
-interface MasterDataModalProps {
+interface Props {
   isOpen: boolean
   onClose: () => void
 }
 
-export function MasterDataModal({ isOpen, onClose }: MasterDataModalProps) {
+export function MasterDataModal({ isOpen, onClose }: Props) {
   const [categoryFile, setCategoryFile] = useState<File | null>(null)
   const [productFile, setProductFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [categories, setCategories] = useState<any[]>([])
+  const [products, setProducts] = useState<any[]>([])
+  const [categorySearch, setCategorySearch] = useState("")
+  const [productSearch, setProductSearch] = useState("")
+  const supabase = createClientComponentClient()
+
+  // マスターデータを取得
+  const fetchMasterData = async () => {
+    try {
+      const [categoriesRes, productsRes] = await Promise.all([
+        supabase.from('category_master').select('*').order('category_id'),
+        supabase.from('product_master').select('*, category_master(category_name)').order('product_id')
+      ])
+
+      if (categoriesRes.data) setCategories(categoriesRes.data)
+      if (productsRes.data) setProducts(productsRes.data)
+    } catch (error) {
+      console.error('マスターデータ取得エラー:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchMasterData()
+    }
+  }, [isOpen])
 
   const handleCategoryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file && file.type === 'text/csv') {
+    if (file) {
       setCategoryFile(file)
       setError(null)
-    } else {
-      setError('カテゴリーマスターはCSVファイルを選択してください')
     }
   }
 
   const handleProductFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file && file.type === 'text/csv') {
+    if (file) {
       setProductFile(file)
       setError(null)
-    } else {
-      setError('商品マスターはCSVファイルを選択してください')
     }
   }
 
   const handleImport = async () => {
     if (!categoryFile && !productFile) {
-      setError('少なくとも1つのファイルを選択してください')
+      setError('ファイルを選択してください')
       return
     }
 
     setLoading(true)
     setError(null)
-    setSuccess(null)
+    setMessage(null)
 
     try {
       const formData = new FormData()
-      if (categoryFile) formData.append('categoryFile', categoryFile)
-      if (productFile) formData.append('productFile', productFile)
+      if (categoryFile) formData.append('categoryMaster', categoryFile)
+      if (productFile) formData.append('productMaster', productFile)
 
       const response = await fetch('/api/brand-store/import-masters', {
         method: 'POST',
@@ -65,133 +89,235 @@ export function MasterDataModal({ isOpen, onClose }: MasterDataModalProps) {
         throw new Error(result.error || 'インポートに失敗しました')
       }
 
-      let message = 'インポートが完了しました: '
-      if (result.categoryCount > 0) {
-        message += `カテゴリー ${result.categoryCount}件`
-      }
-      if (result.productCount > 0) {
-        if (result.categoryCount > 0) message += ', '
-        message += `商品 ${result.productCount}件`
-      }
-
-      setSuccess(message)
+      setMessage('マスターデータのインポートが完了しました')
       setCategoryFile(null)
       setProductFile(null)
       
-      // 成功メッセージを表示してから閉じる
-      setTimeout(() => {
-        handleClose()
-      }, 2000)
-      
+      // データを再取得
+      await fetchMasterData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'エラーが発生しました')
+      setError(err instanceof Error ? err.message : 'インポートに失敗しました')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleClose = () => {
-    setCategoryFile(null)
-    setProductFile(null)
-    setError(null)
-    setSuccess(null)
-    onClose()
-  }
+  // カテゴリー検索フィルター
+  const filteredCategories = categories.filter(cat => 
+    cat.category_name?.toLowerCase().includes(categorySearch.toLowerCase()) ||
+    cat.category_id?.toString().includes(categorySearch)
+  )
+
+  // 商品検索フィルター
+  const filteredProducts = products.filter(prod => 
+    prod.product_name?.toLowerCase().includes(productSearch.toLowerCase()) ||
+    prod.product_id?.toString().includes(productSearch) ||
+    prod.barcode?.includes(productSearch)
+  )
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-6xl max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            マスターデータ管理
-          </DialogTitle>
+          <DialogTitle>マスターデータ管理</DialogTitle>
           <DialogDescription>
-            カテゴリーマスターと商品マスターのデータをインポートします
+            カテゴリーマスターと商品マスターのデータをインポート・確認できます
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
-              <div className="flex items-center">
-                <AlertCircle className="h-4 w-4 mr-2" />
-                <span>{error}</span>
-              </div>
-            </div>
-          )}
+        <Tabs defaultValue="view" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="view">マスター一覧</TabsTrigger>
+            <TabsTrigger value="import">インポート</TabsTrigger>
+          </TabsList>
 
-          {success && (
-            <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded">
-              <div className="flex items-center">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                <span>{success}</span>
-              </div>
-            </div>
-          )}
+          <TabsContent value="view" className="space-y-4">
+            <Tabs defaultValue="categories" className="w-full">
+              <TabsList>
+                <TabsTrigger value="categories">
+                  <Tag className="h-4 w-4 mr-2" />
+                  カテゴリー ({categories.length})
+                </TabsTrigger>
+                <TabsTrigger value="products">
+                  <Package className="h-4 w-4 mr-2" />
+                  商品 ({products.length})
+                </TabsTrigger>
+              </TabsList>
 
-          <div className="space-y-4">
-            {/* カテゴリーマスター */}
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold mb-2">カテゴリーマスター</h3>
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600">
+              <TabsContent value="categories" className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Search className="h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="カテゴリー検索..."
+                    className="flex-1 px-3 py-2 border rounded-md"
+                    value={categorySearch}
+                    onChange={(e) => setCategorySearch(e.target.value)}
+                  />
+                </div>
+                <div className="overflow-y-auto max-h-96 border rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">ID</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">カテゴリー名</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">略称</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">表示</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredCategories.map((cat) => (
+                        <tr key={cat.category_id}>
+                          <td className="px-4 py-2 text-sm">{cat.category_id}</td>
+                          <td className="px-4 py-2 text-sm font-medium">{cat.category_name}</td>
+                          <td className="px-4 py-2 text-sm text-gray-500">{cat.category_short_name}</td>
+                          <td className="px-4 py-2 text-sm">{cat.is_visible === '1' ? '表示' : '非表示'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filteredCategories.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      カテゴリーが見つかりません
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="products" className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Search className="h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="商品名、ID、バーコードで検索..."
+                    className="flex-1 px-3 py-2 border rounded-md"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                  />
+                </div>
+                <div className="overflow-y-auto max-h-96 border rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">ID</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">商品名</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">カテゴリー</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">価格</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">バーコード</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredProducts.map((prod) => (
+                        <tr key={prod.id}>
+                          <td className="px-4 py-2 text-sm">{prod.product_id}</td>
+                          <td className="px-4 py-2 text-sm font-medium">{prod.product_name}</td>
+                          <td className="px-4 py-2 text-sm text-gray-500">
+                            {prod.category_master?.category_name || '未設定'}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-right">
+                            {prod.price ? formatCurrency(prod.price) : '-'}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-500">{prod.barcode || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filteredProducts.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      商品が見つかりません
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          <TabsContent value="import" className="space-y-4">
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold mb-2">カテゴリーマスター</h3>
+                <p className="text-sm text-gray-600 mb-2">
                   カテゴリーID、カテゴリー名、略称、表示/非表示の情報を含むCSVファイル
                 </p>
-                <Input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleCategoryFileChange}
-                  disabled={loading}
-                />
-                {categoryFile && (
-                  <div className="flex items-center text-sm text-gray-600">
-                    <FileText className="h-4 w-4 mr-2" />
-                    {categoryFile.name}
-                  </div>
-                )}
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <label htmlFor="category-upload" className="cursor-pointer text-center block">
+                    <Upload className="mx-auto h-8 w-8 text-gray-400" />
+                    <span className="mt-2 block text-sm text-gray-600">
+                      ファイルを選択　選択されていません
+                    </span>
+                    <input
+                      id="category-upload"
+                      type="file"
+                      className="sr-only"
+                      accept=".csv"
+                      onChange={handleCategoryFileChange}
+                    />
+                  </label>
+                  {categoryFile && (
+                    <div className="mt-2 text-sm text-gray-600 flex items-center justify-center">
+                      <FileText className="h-4 w-4 mr-1" />
+                      {categoryFile.name}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* 商品マスター */}
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold mb-2">商品マスター</h3>
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600">
+              <div>
+                <h3 className="font-semibold mb-2">商品マスター</h3>
+                <p className="text-sm text-gray-600 mb-2">
                   商品ID、商品名、カテゴリーID、価格、バーコードの情報を含むCSVファイル
                 </p>
-                <Input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleProductFileChange}
-                  disabled={loading}
-                />
-                {productFile && (
-                  <div className="flex items-center text-sm text-gray-600">
-                    <FileText className="h-4 w-4 mr-2" />
-                    {productFile.name}
-                  </div>
-                )}
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <label htmlFor="product-upload" className="cursor-pointer text-center block">
+                    <Upload className="mx-auto h-8 w-8 text-gray-400" />
+                    <span className="mt-2 block text-sm text-gray-600">
+                      ファイルを選択　選択されていません
+                    </span>
+                    <input
+                      id="product-upload"
+                      type="file"
+                      className="sr-only"
+                      accept=".csv"
+                      onChange={handleProductFileChange}
+                    />
+                  </label>
+                  {productFile && (
+                    <div className="mt-2 text-sm text-gray-600 flex items-center justify-center">
+                      <FileText className="h-4 w-4 mr-1" />
+                      {productFile.name}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-red-600 text-sm flex items-center bg-red-50 p-3 rounded">
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  {error}
+                </div>
+              )}
+
+              {message && (
+                <div className="text-green-600 text-sm bg-green-50 p-3 rounded">
+                  {message}
+                </div>
+              )}
+
+              <div className="bg-yellow-50 p-3 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  注意: インポートを実行すると、既存のマスターデータは削除され、新しいデータで置き換えられます。
+                </p>
               </div>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded">
-              <div className="flex items-center">
-                <AlertCircle className="h-4 w-4 mr-2" />
-                <span>注意: インポートを実行すると、既存のマスターデータは削除され、新しいデータで置き換えられます。</span>
-              </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={onClose}>キャンセル</Button>
+              <Button onClick={handleImport} disabled={loading || (!categoryFile && !productFile)}>
+                {loading ? 'インポート中...' : 'インポート実行'}
+              </Button>
             </div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={handleClose} disabled={loading}>
-              キャンセル
-            </Button>
-            <Button onClick={handleImport} disabled={loading || (!categoryFile && !productFile)}>
-              {loading ? 'インポート中...' : 'インポート実行'}
-            </Button>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )
