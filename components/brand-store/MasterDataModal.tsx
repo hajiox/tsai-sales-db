@@ -1,11 +1,10 @@
-// /app/components/brand-store/MasterDataModal.tsx ver.1
+// /app/components/brand-store/MasterDataModal.tsx ver.2
 "use client"
 
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Upload, FileText, CheckCircle, AlertCircle, Database } from "lucide-react"
 
 interface MasterDataModalProps {
@@ -101,21 +100,28 @@ export function MasterDataModal({ isOpen, onClose }: MasterDataModalProps) {
             <Database className="h-5 w-5" />
             マスターデータ管理
           </DialogTitle>
+          <DialogDescription>
+            カテゴリーマスターと商品マスターのデータをインポートします
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
+              <div className="flex items-center">
+                <AlertCircle className="h-4 w-4 mr-2" />
+                <span>{error}</span>
+              </div>
+            </div>
           )}
 
           {success && (
-            <Alert className="border-green-200 bg-green-50">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800">{success}</AlertDescription>
-            </Alert>
+            <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded">
+              <div className="flex items-center">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                <span>{success}</span>
+              </div>
+            </div>
           )}
 
           <div className="space-y-4">
@@ -163,12 +169,12 @@ export function MasterDataModal({ isOpen, onClose }: MasterDataModalProps) {
               </div>
             </div>
 
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                注意: インポートを実行すると、既存のマスターデータは削除され、新しいデータで置き換えられます。
-              </AlertDescription>
-            </Alert>
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded">
+              <div className="flex items-center">
+                <AlertCircle className="h-4 w-4 mr-2" />
+                <span>注意: インポートを実行すると、既存のマスターデータは削除され、新しいデータで置き換えられます。</span>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2">
