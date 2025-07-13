@@ -121,10 +121,22 @@ export default function BrandStoreAnalysisPage() {
           totalQuantity, // ★ 合計販売個数
           lastYearSales, // ★ 前年度売上
           twoYearsAgoSales, // ★ 前々年度売上
-          nextMonthPrediction: nextMonthPredictionData || [] // ★ 来月予測
+          nextMonthPrediction: nextMonthPredictionData || [], // ★ 来月予測
+          hasData: true // ★ データ有無フラグ
         });
       } else {
-        setData(null);
+        // ★ データがない場合でも前年度比較と来月予測は表示
+        setData({
+          salesData: [],
+          categoryRanking: [],
+          productRanking: [],
+          totalSales: 0,
+          totalQuantity: 0,
+          lastYearSales,
+          twoYearsAgoSales,
+          nextMonthPrediction: nextMonthPredictionData || [],
+          hasData: false // ★ データ有無フラグ
+        });
       }
 
       // ★ 過去12ヶ月のチャートデータを取得
@@ -228,20 +240,28 @@ export default function BrandStoreAnalysisPage() {
             <CardTitle className="text-sm font-medium">今月の実績</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-blue-600" />
-                <span className="text-sm text-muted-foreground">合計売上</span>
+            {data?.hasData ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm text-muted-foreground">合計売上</span>
+                  </div>
+                  <div className="text-xl font-bold">{formatCurrency(data.totalSales)}</div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-green-600" />
+                    <span className="text-sm text-muted-foreground">販売個数</span>
+                  </div>
+                  <div className="text-xl font-bold">{data.totalQuantity.toLocaleString()}個</div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground">
+                データ未入力
               </div>
-              <div className="text-xl font-bold">{data ? formatCurrency(data.totalSales) : "¥0"}</div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Package className="h-4 w-4 text-green-600" />
-                <span className="text-sm text-muted-foreground">販売個数</span>
-              </div>
-              <div className="text-xl font-bold">{data ? data.totalQuantity.toLocaleString() + "個" : "0個"}</div>
-            </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -271,14 +291,15 @@ export default function BrandStoreAnalysisPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-5 gap-4">
-            {data?.nextMonthPrediction?.map((product: any, index: number) => (
-              <div key={index} className="space-y-1">
-                <div className="text-xs font-semibold text-muted-foreground">#{index + 1}</div>
-                <div className="text-sm font-medium line-clamp-2">{product.product_name}</div>
-                <div className="text-xs text-muted-foreground">{formatCurrency(product.total_sales)}</div>
-              </div>
-            ))}
-            {(!data?.nextMonthPrediction || data.nextMonthPrediction.length === 0) && (
+            {data?.nextMonthPrediction && data.nextMonthPrediction.length > 0 ? (
+              data.nextMonthPrediction.map((product: any, index: number) => (
+                <div key={index} className="space-y-1">
+                  <div className="text-xs font-semibold text-muted-foreground">#{index + 1}</div>
+                  <div className="text-sm font-medium line-clamp-2">{product.product_name}</div>
+                  <div className="text-xs text-muted-foreground">{formatCurrency(product.total_sales)}</div>
+                </div>
+              ))
+            ) : (
               <div className="col-span-5 text-center text-muted-foreground">予測データがありません</div>
             )}
           </div>
@@ -288,26 +309,36 @@ export default function BrandStoreAnalysisPage() {
       <div>
         <h2 className="text-lg font-semibold mb-4">カテゴリーランキング TOP5</h2>
         <div className="grid grid-cols-5 gap-4">
-          {data?.categoryRanking?.map((category: any, index: number) => (
-            <CategoryRankingCard key={index} rank={index + 1} category={category} />
-          ))}
-          {(!data || data.categoryRanking?.length === 0) && <div className="col-span-5 text-center text-gray-500">データがありません</div>}
+          {data?.hasData && data.categoryRanking.length > 0 ? (
+            data.categoryRanking.map((category: any, index: number) => (
+              <CategoryRankingCard key={index} rank={index + 1} category={category} />
+            ))
+          ) : (
+            <div className="col-span-5 text-center text-gray-500">
+              {data?.hasData === false ? "データ未入力" : "データがありません"}
+            </div>
+          )}
         </div>
       </div>
 
       <div>
         <h2 className="text-lg font-semibold mb-4">商品ランキング TOP20</h2>
         <div className="grid grid-cols-10 gap-2">
-          {data?.productRanking?.map((product: any, index: number) => (
-            <div key={index} className="h-24">
-              <Card className="h-full p-2">
-                <div className="text-xs font-semibold text-gray-500 mb-1">#{index + 1}</div>
-                <div className="text-xs font-medium line-clamp-2 mb-1">{product.product_name}</div>
-                <div className="text-xs font-bold">{formatCurrency(product.total_sales)}</div>
-              </Card>
+          {data?.hasData && data.productRanking.length > 0 ? (
+            data.productRanking.map((product: any, index: number) => (
+              <div key={index} className="h-24">
+                <Card className="h-full p-2">
+                  <div className="text-xs font-semibold text-gray-500 mb-1">#{index + 1}</div>
+                  <div className="text-xs font-medium line-clamp-2 mb-1">{product.product_name}</div>
+                  <div className="text-xs font-bold">{formatCurrency(product.total_sales)}</div>
+                </Card>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-10 text-center text-gray-500">
+              {data?.hasData === false ? "データ未入力" : "データがありません"}
             </div>
-          ))}
-          {(!data || data.productRanking?.length === 0) && <div className="col-span-10 text-center text-gray-500">データがありません</div>}
+          )}
         </div>
       </div>
 
