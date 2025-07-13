@@ -1,4 +1,4 @@
-// /app/api/brand-store/import-masters/route.ts ver.3
+// /app/api/brand-store/import-masters/route.ts ver.4
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Papa from 'papaparse'
@@ -33,23 +33,44 @@ export async function POST(request: NextRequest) {
       // 既存データをクリア
       await supabase.from('category_master').delete().neq('category_id', 0)
 
-      const categories = categoryResult.data.map((row: any) => ({
-        category_id: row['カテゴリーID'],
-        category_name: row['カテゴリー名'],
-        category_short_name: row['カテゴリー名（略称）'],
-        is_visible: row['表示/非表示']
-      })).filter((cat: any) => cat.category_id != null);
+      // 重複を除外するためにMapを使用
+      const categoryMap = new Map<number, any>()
+      
+      categoryResult.data.forEach((row: any) => {
+        const categoryId = row['カテゴリーID']
+        if (categoryId != null) {
+          categoryMap.set(categoryId, {
+            category_id: categoryId,
+            category_name: row['カテゴリー名'],
+            category_short_name: row['カテゴリー名（略称）'],
+            is_visible: row['表示/非表示']
+          })
+        }
+      })
 
-      const { error: categoryError } = await supabase
-        .from('category_master')
-        .insert(categories)
+      const categories = Array.from(categoryMap.values())
 
-      if (categoryError) {
-        console.error('Supabase Category Insert Error:', categoryError);
-        throw new Error(`カテゴリーマスターの保存に失敗: ${categoryError.message || 'データベースエラーが発生しました。'}`)
+      if (categories.length > 0) {
+        const { error: categoryError } = await supabase
+          .from('category_master')
+          .insert(categories)
+
+        if (categoryError) {
+          console.error('Supabase Category Insert Error:', categoryError);
+          throw new Error(`カテゴリーマスターの保存に失敗: ${categoryError.message || 'データベースエラーが発生しました。'}`)
+        }
       }
 
       categoryCount = categories.length
+      
+      // 重複があった場合はログに出力
+      const categoryDuplicateCount = categoryResult.data.filter((row: any) => 
+        row['カテゴリーID'] != null
+      ).length - categories.length
+      
+      if (categoryDuplicateCount > 0) {
+        console.log(`${categoryDuplicateCount}件の重複したカテゴリーIDがありました（最後のものを保持）`)
+      }
     }
 
     // 商品マスターのインポート
@@ -110,13 +131,13 @@ export async function POST(request: NextRequest) {
 
       productCount = products.length
       
-      // 重複があった場合は警告メッセージを追加
-      const duplicateCount = productResult.data.filter((row: any) => 
+      // 重複があった場合はログに出力
+      const productDuplicateCount = productResult.data.filter((row: any) => 
         row['商品ID'] != null && String(row['商品ID']).trim() !== ''
       ).length - products.length
       
-      if (duplicateCount > 0) {
-        console.log(`${duplicateCount}件の重複した商品IDがありました（最後のものを保持）`)
+      if (productDuplicateCount > 0) {
+        console.log(`${productDuplicateCount}件の重複した商品IDがありました（最後のものを保持）`)
       }
     }
 
