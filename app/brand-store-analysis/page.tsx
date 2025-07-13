@@ -1,4 +1,4 @@
-// /app/brand-store-analysis/page.tsx ver.4 (シンプルサマリー・商品ランキング20位版)
+// /app/brand-store-analysis/page.tsx ver.5 (販売個数追加・グラフ追加版)
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -11,9 +11,10 @@ import { CategoryRankingCard } from "@/components/brand-store/CategoryRankingCar
 import { ProductRankingCard } from "@/components/brand-store/ProductRankingCard"
 import { ProductSalesTable } from "@/components/brand-store/ProductSalesTable"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp } from "lucide-react"
+import { TrendingUp, Package } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { Settings } from "lucide-react"
+import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // ★ 型定義を追加
 type SalesData = any;
@@ -26,6 +27,7 @@ export default function BrandStoreAnalysisPage() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [showMasterModal, setShowMasterModal] = useState(false)
   const [data, setData] = useState<any>(null)
+  const [chartData, setChartData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const supabase = createClientComponentClient()
 
@@ -68,8 +70,9 @@ export default function BrandStoreAnalysisPage() {
           };
         });
 
-        // ★ 合計売上の計算
+        // ★ 合計売上と販売個数の計算
         const totalSales = enrichedSalesData.reduce((sum: number, item: SalesData) => sum + (item.total_sales || 0), 0);
+        const totalQuantity = enrichedSalesData.reduce((sum: number, item: SalesData) => sum + (item.quantity_sold || 0), 0);
 
         // カテゴリー別集計 (マスター連携後のデータを使用)
         const categoryTotals = enrichedSalesData.reduce((acc: any, item: SalesData) => {
@@ -91,16 +94,63 @@ export default function BrandStoreAnalysisPage() {
           salesData: enrichedSalesData, // ★ 連携後のデータをセット
           categoryRanking,
           productRanking: enrichedSalesData.slice(0, 20), // TOP20
-          totalSales // ★ 合計売上のみ
+          totalSales, // ★ 合計売上
+          totalQuantity // ★ 合計販売個数
         });
       } else {
         setData(null);
       }
+
+      // ★ 過去12ヶ月のチャートデータを取得
+      await fetchChartData();
     } catch (error) {
       console.error('データ取得エラー:', error);
       alert('データの取得に失敗しました');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ★ 過去12ヶ月のチャートデータ取得関数
+  const fetchChartData = async () => {
+    try {
+      const months = [];
+      const currentDate = new Date(selectedYear, selectedMonth - 1);
+      
+      // 過去12ヶ月の年月を生成
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+        months.push({
+          year: date.getFullYear(),
+          month: date.getMonth() + 1,
+          label: `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}`
+        });
+      }
+
+      // 各月のデータを取得
+      const chartDataPromises = months.map(async ({ year, month, label }) => {
+        const reportMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+        const { data, error } = await supabase
+          .from('brand_store_sales')
+          .select('total_sales, quantity_sold')
+          .eq('report_month', reportMonth);
+
+        if (error) throw error;
+
+        const totalSales = data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || 0;
+        const totalQuantity = data?.reduce((sum, item) => sum + (item.quantity_sold || 0), 0) || 0;
+
+        return {
+          month: label,
+          売上: totalSales,
+          個数: totalQuantity
+        };
+      });
+
+      const chartData = await Promise.all(chartDataPromises);
+      setChartData(chartData);
+    } catch (error) {
+      console.error('チャートデータ取得エラー:', error);
     }
   }
 
@@ -145,8 +195,8 @@ export default function BrandStoreAnalysisPage() {
         </Button>
       </div>
 
-      {/* ★ 合計売上のみのシンプルなサマリーカード */}
-      <div className="w-64">
+      {/* ★ 合計売上と販売個数のサマリーカード */}
+      <div className="grid grid-cols-2 gap-4 max-w-xl">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">合計売上</CardTitle>
@@ -154,6 +204,15 @@ export default function BrandStoreAnalysisPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data ? formatCurrency(data.totalSales) : "¥0"}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">販売個数</CardTitle>
+            <Package className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data ? data.totalQuantity.toLocaleString() + "個" : "0個"}</div>
           </CardContent>
         </Card>
       </div>
@@ -182,6 +241,27 @@ export default function BrandStoreAnalysisPage() {
           ))}
           {(!data || data.productRanking?.length === 0) && <div className="col-span-10 text-center text-gray-500">データがありません</div>}
         </div>
+      </div>
+
+      {/* ★ 過去12ヶ月の売上・個数グラフ */}
+      <div>
+        <h2 className="text-lg font-semibold mb-4">売上・販売個数推移（過去12ヶ月）</h2>
+        <Card>
+          <CardContent className="pt-6">
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis yAxisId="left" />
+                <YAxis yAxisId="right" orientation="right" />
+                <Tooltip formatter={(value: number) => value.toLocaleString()} />
+                <Legend />
+                <Bar yAxisId="left" dataKey="売上" fill="#3b82f6" name="売上（円）" />
+                <Line yAxisId="right" type="monotone" dataKey="個数" stroke="#10b981" strokeWidth={2} name="販売個数" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
 
       <div>
