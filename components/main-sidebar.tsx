@@ -1,4 +1,4 @@
-// /components/main-sidebar.tsx ver.2 (卸販売管理追加版)
+// /components/main-sidebar.tsx ver.3 (ブランド館店舗分析追加版)
 "use client"
 
 import { useState, useEffect } from "react"
@@ -10,19 +10,21 @@ export default function MainSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
-  const [activeModule, setActiveModule] = useState<'sales' | 'web' | 'wholesale'>('sales')
+  const [activeModule, setActiveModule] = useState<'sales' | 'web' | 'wholesale' | 'brand-store'>('sales')
 
   useEffect(() => {
     if (pathname.startsWith('/web-sales')) {
       setActiveModule('web')
     } else if (pathname.startsWith('/wholesale')) {
       setActiveModule('wholesale')
+    } else if (pathname.startsWith('/brand-store-analysis')) {
+      setActiveModule('brand-store')
     } else {
       setActiveModule('sales')
     }
   }, [pathname])
 
-  const handleModuleChange = (module: 'sales' | 'web' | 'wholesale') => {
+  const handleModuleChange = (module: 'sales' | 'web' | 'wholesale' | 'brand-store') => {
     setActiveModule(module)
     if (module === 'sales') {
       router.push('/sales/dashboard')
@@ -30,6 +32,8 @@ export default function MainSidebar() {
       router.push('/web-sales/dashboard')
     } else if (module === 'wholesale') {
       router.push('/wholesale/dashboard')
+    } else if (module === 'brand-store') {
+      router.push('/brand-store-analysis')
     }
   }
 
@@ -62,6 +66,13 @@ export default function MainSidebar() {
           onClick={() => handleModuleChange('wholesale')}
         >
           卸販売管理システム
+        </Button>
+        <Button
+          variant={activeModule === 'brand-store' ? 'secondary' : 'ghost'}
+          className="w-full justify-start text-white hover:bg-slate-700"
+          onClick={() => handleModuleChange('brand-store')}
+        >
+          ブランド館店舗分析
         </Button>
       </nav>
 
