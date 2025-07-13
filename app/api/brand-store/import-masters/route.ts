@@ -1,4 +1,4 @@
-// /app/api/brand-store/import-masters/route.ts ver.2
+// /app/api/brand-store/import-masters/route.ts ver.3
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Papa from 'papaparse'
@@ -40,12 +40,10 @@ export async function POST(request: NextRequest) {
         is_visible: row['表示/非表示']
       })).filter((cat: any) => cat.category_id != null);
 
-
       const { error: categoryError } = await supabase
         .from('category_master')
         .insert(categories)
 
-      // ★ エラーハンドリングを強化
       if (categoryError) {
         console.error('Supabase Category Insert Error:', categoryError);
         throw new Error(`カテゴリーマスターの保存に失敗: ${categoryError.message || 'データベースエラーが発生しました。'}`)
@@ -66,7 +64,7 @@ export async function POST(request: NextRequest) {
         header: true,
         skipEmptyLines: true,
         dynamicTyping: true,
-        transformHeader: (header) => header.trim() // ヘッダーの空白をトリム
+        transformHeader: (header) => header.trim()
       })
 
       if (productResult.errors.length > 0) {
@@ -75,18 +73,25 @@ export async function POST(request: NextRequest) {
       }
 
       // 既存データをクリア
-      await supabase.from('product_master').delete().neq('id', '00000000-0000-0000-0000-000000000000') // ダミーUUIDなどで全削除を意図
+      await supabase.from('product_master').delete().neq('id', '00000000-0000-0000-0000-000000000000')
 
-      const products = productResult.data
-        .filter((row: any) => row['商品ID'] != null && String(row['商品ID']).trim() !== '')
-        .map((row: any) => ({
-          product_id: row['商品ID'],
-          product_name: row['【必須】商品名 ※49文字'] || row['商品名'],
-          category_id: row['カテゴリーID'],
-          price: row['【必須】価格 ※半角数字'] || row['価格'],
-          barcode: row['バーコード']
-        }));
+      // 重複を除外するためにMapを使用（最後に出現したものを保持）
+      const productMap = new Map<number, any>()
+      
+      productResult.data.forEach((row: any) => {
+        const productId = row['商品ID']
+        if (productId != null && String(productId).trim() !== '') {
+          productMap.set(productId, {
+            product_id: productId,
+            product_name: row['【必須】商品名 ※49文字'] || row['商品名'],
+            category_id: row['カテゴリーID'],
+            price: row['【必須】価格 ※半角数字'] || row['価格'],
+            barcode: row['バーコード']
+          })
+        }
+      })
 
+      const products = Array.from(productMap.values())
 
       if (products.length > 0) {
         const batchSize = 500
@@ -96,7 +101,6 @@ export async function POST(request: NextRequest) {
             .from('product_master')
             .insert(batch)
 
-          // ★ エラーハンドリングを強化
           if (productError) {
             console.error('Supabase Product Insert Error:', productError);
             throw new Error(`商品マスターの保存に失敗 (${i+1}件目~): ${productError.message || 'データベースエラーが発生しました。'}`)
@@ -105,6 +109,15 @@ export async function POST(request: NextRequest) {
       }
 
       productCount = products.length
+      
+      // 重複があった場合は警告メッセージを追加
+      const duplicateCount = productResult.data.filter((row: any) => 
+        row['商品ID'] != null && String(row['商品ID']).trim() !== ''
+      ).length - products.length
+      
+      if (duplicateCount > 0) {
+        console.log(`${duplicateCount}件の重複した商品IDがありました（最後のものを保持）`)
+      }
     }
 
     return NextResponse.json({
