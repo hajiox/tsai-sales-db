@@ -1,8 +1,9 @@
-// /app/wholesale/dashboard/page.tsx ver.32 URL保持版
+// /app/wholesale/dashboard/page.tsx ver.33 Suspense対応版
 "use client"
 
 export const dynamic = 'force-dynamic';
 
+import { Suspense } from 'react';
 import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
 import OEMArea from '@/components/wholesale/oem-area';
 
+// インターフェース定義は同じ
 interface Product {
  id: string;
  product_name: string;
@@ -48,7 +50,8 @@ interface SalesData {
  [productId: string]: { [date: string]: number | undefined; };
 }
 
-export default function WholesaleDashboard() {
+// メインコンポーネントを分離
+function WholesaleDashboardContent() {
  const router = useRouter();
  const searchParams = useSearchParams();
  const [selectedYear, setSelectedYear] = useState('');
@@ -597,4 +600,17 @@ export default function WholesaleDashboard() {
      </main>
    </div>
  );
+}
+
+// Suspenseでラップしたメインコンポーネント
+export default function WholesaleDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-gray-50">
+        <p className="text-gray-500">読み込み中...</p>
+      </div>
+    }>
+      <WholesaleDashboardContent />
+    </Suspense>
+  );
 }
