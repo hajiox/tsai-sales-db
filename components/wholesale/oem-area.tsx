@@ -1,4 +1,4 @@
-// /components/wholesale/oem-area.tsx ver.2 年月引き継ぎ対応版
+// /components/wholesale/oem-area.tsx ver.3 カードサイズ縮小・8枚並び版
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,7 +52,8 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
       totalAmount
     };
   }).filter(item => item.totalAmount > 0)
-    .sort((a, b) => b.totalAmount - a.totalAmount);
+    .sort((a, b) => b.totalAmount - a.totalAmount)
+    .slice(0, 8); // 上位8件に制限
 
   const handleOemSalesClick = () => {
     // 年月パラメータを付けて遷移
@@ -108,29 +109,37 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
             <p className="text-xs mt-2">「OEM売上入力」ボタンから売上データを登録してください</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-8 gap-2">
             {productSummary.map(({ product, totalQuantity, totalAmount }) => (
-              <div key={product.id} className="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
-                <h3 className="font-medium text-gray-900 text-sm truncate" title={product.product_name}>
+              <div key={product.id} className="bg-white rounded-lg p-2 shadow-sm hover:shadow-md transition-shadow">
+                <h3 className="font-medium text-gray-900 text-xs truncate" title={product.product_name}>
                   {product.product_name}
                 </h3>
-                <div className="mt-2 space-y-1">
+                <div className="mt-1 space-y-0.5">
                   <div className="flex justify-between items-center text-xs text-gray-600">
-                    <span>単価:</span>
-                    <span className="font-medium">¥{product.price.toLocaleString()}</span>
+                    <span className="text-xs">単価:</span>
+                    <span className="font-medium text-xs">¥{product.price.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs text-gray-600">
-                    <span>数量:</span>
-                    <span className="font-medium">{totalQuantity}</span>
+                    <span className="text-xs">数量:</span>
+                    <span className="font-medium text-xs">{totalQuantity}</span>
                   </div>
-                  <div className="pt-2 mt-2 border-t border-gray-100">
+                  <div className="pt-1 mt-1 border-t border-gray-100">
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-600">合計:</span>
-                      <span className="text-base font-bold text-green-700">
+                      <span className="text-xs font-bold text-green-700">
                         ¥{totalAmount.toLocaleString()}
                       </span>
                     </div>
                   </div>
+                </div>
+              </div>
+            ))}
+            {/* 8枚に満たない場合は空のカードで埋める */}
+            {Array.from({ length: Math.max(0, 8 - productSummary.length) }).map((_, index) => (
+              <div key={`empty-${index}`} className="bg-white/50 rounded-lg p-2 border border-dashed border-gray-300">
+                <div className="h-full flex items-center justify-center text-xs text-gray-400">
+                  -
                 </div>
               </div>
             ))}
@@ -143,7 +152,7 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
             <div className="flex justify-end items-center gap-4">
               <span className="text-sm text-gray-600">OEM売上合計:</span>
               <span className="text-xl font-bold text-green-800">
-                ¥{productSummary.reduce((sum, item) => sum + item.totalAmount, 0).toLocaleString()}
+                ¥{oemSales.reduce((sum, sale) => sum + sale.amount, 0).toLocaleString()}
               </span>
             </div>
           </div>
