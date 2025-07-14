@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.31 日別売上実績改善版
+// /app/wholesale/dashboard/page.tsx ver.32 URL保持版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Package, Users, TrendingUp, FileText, Upload, Trash2, Settings } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
 import OEMArea from '@/components/wholesale/oem-area';
@@ -50,6 +50,7 @@ interface SalesData {
 
 export default function WholesaleDashboard() {
  const router = useRouter();
+ const searchParams = useSearchParams();
  const [selectedYear, setSelectedYear] = useState('');
  const [selectedMonth, setSelectedMonth] = useState('');
  const [yearOptions, setYearOptions] = useState<string[]>([]);
@@ -79,7 +80,6 @@ export default function WholesaleDashboard() {
      years.push(String(now.getFullYear() - i));
    }
    setYearOptions(years);
-   setSelectedYear(String(now.getFullYear()));
    
    // 月のオプション
    const months: string[] = [];
@@ -87,8 +87,33 @@ export default function WholesaleDashboard() {
      months.push(String(i).padStart(2, '0'));
    }
    setMonthOptions(months);
-   setSelectedMonth(String(now.getMonth() + 1).padStart(2, '0'));
- }, [mounted]);
+   
+   // URLパラメータから年月を取得、なければ現在の年月を使用
+   const urlYear = searchParams.get('year') || String(now.getFullYear());
+   const urlMonth = searchParams.get('month') || String(now.getMonth() + 1).padStart(2, '0');
+   
+   setSelectedYear(urlYear);
+   setSelectedMonth(urlMonth);
+ }, [mounted, searchParams]);
+
+ // 年月が変更されたときにURLを更新
+ const updateURL = (year: string, month: string) => {
+   if (year && month) {
+     router.push(`/wholesale/dashboard?year=${year}&month=${month}`);
+   }
+ };
+
+ // 年の選択が変更されたとき
+ const handleYearChange = (year: string) => {
+   setSelectedYear(year);
+   updateURL(year, selectedMonth);
+ };
+
+ // 月の選択が変更されたとき
+ const handleMonthChange = (month: string) => {
+   setSelectedMonth(month);
+   updateURL(selectedYear, month);
+ };
 
  useEffect(() => {
    if (!selectedYear || !selectedMonth || !mounted) return;
@@ -402,7 +427,7 @@ export default function WholesaleDashboard() {
          <div className="flex items-center gap-3">
            <select
              value={selectedYear}
-             onChange={(e) => setSelectedYear(e.target.value)}
+             onChange={(e) => handleYearChange(e.target.value)}
              className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
              disabled={loading}
            >
@@ -410,7 +435,7 @@ export default function WholesaleDashboard() {
            </select>
            <select
              value={selectedMonth}
-             onChange={(e) => setSelectedMonth(e.target.value)}
+             onChange={(e) => handleMonthChange(e.target.value)}
              className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
              disabled={loading}
            >
@@ -455,6 +480,7 @@ export default function WholesaleDashboard() {
            <SummaryCards 
              products={products} 
              oemProducts={oemProducts}
+             oemSalesCount={oemSales.length}
              wholesaleTotal={wholesaleTotal}
              oemTotal={oemTotal}
              grandTotal={grandTotal} 
