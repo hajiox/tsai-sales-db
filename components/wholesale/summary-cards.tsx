@@ -1,4 +1,4 @@
-// /components/wholesale/summary-cards.tsx ver.2 OEM商品対応版・デザイン維持
+// /components/wholesale/summary-cards.tsx ver.3 OEM売上件数対応版
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Package, FileText, Users, DollarSign } from 'lucide-react';
 interface SummaryCardsProps {
   products: any[];
   oemProducts?: any[];
+  oemSalesCount?: number;  // OEM売上件数を追加
   wholesaleTotal?: number;
   oemTotal?: number;
   grandTotal: number;
@@ -15,6 +16,7 @@ interface SummaryCardsProps {
 export default function SummaryCards({ 
   products, 
   oemProducts = [], 
+  oemSalesCount = 0,  // OEM売上件数
   wholesaleTotal = 0,
   oemTotal = 0,
   grandTotal 
@@ -42,7 +44,7 @@ export default function SummaryCards({
           </CardTitle>
         </CardHeader>
         <CardContent className="py-1 px-3">
-          <div className="text-lg font-bold text-green-900">{oemProducts.length} 件</div>
+          <div className="text-lg font-bold text-green-900">{oemSalesCount} 件</div>
           <div className="text-xs text-green-700">¥{oemTotal.toLocaleString()}</div>
         </CardContent>
       </Card>
