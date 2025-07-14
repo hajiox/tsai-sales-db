@@ -1,4 +1,4 @@
-// /components/wholesale/oem-area.tsx ver.3 カードサイズ縮小・8枚並び版
+// /components/wholesale/oem-area.tsx ver.4 複数段対応・空枠非表示版
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,8 +52,7 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
       totalAmount
     };
   }).filter(item => item.totalAmount > 0)
-    .sort((a, b) => b.totalAmount - a.totalAmount)
-    .slice(0, 8); // 上位8件に制限
+    .sort((a, b) => b.totalAmount - a.totalAmount);
 
   const handleOemSalesClick = () => {
     // 年月パラメータを付けて遷移
@@ -132,14 +131,6 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
                       </span>
                     </div>
                   </div>
-                </div>
-              </div>
-            ))}
-            {/* 8枚に満たない場合は空のカードで埋める */}
-            {Array.from({ length: Math.max(0, 8 - productSummary.length) }).map((_, index) => (
-              <div key={`empty-${index}`} className="bg-white/50 rounded-lg p-2 border border-dashed border-gray-300">
-                <div className="h-full flex items-center justify-center text-xs text-gray-400">
-                  -
                 </div>
               </div>
             ))}
