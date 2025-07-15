@@ -1,4 +1,4 @@
-// /app/wholesale/oem-customers/page.tsx ver.4 自動採番対応版
+// /app/wholesale/oem-customers/page.tsx ver.5 URL保持対応版
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -16,7 +16,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Users, Plus, ChevronLeft, ChevronUp, ChevronDown, Edit2, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface OEMCustomer {
   id: string;
@@ -28,6 +28,7 @@ interface OEMCustomer {
 
 export default function OEMCustomersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [customers, setCustomers] = useState<OEMCustomer[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -35,6 +36,10 @@ export default function OEMCustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<OEMCustomer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // URLパラメータから年月を取得
+  const year = searchParams.get('year');
+  const month = searchParams.get('month');
 
   useEffect(() => {
     fetchCustomers();
@@ -194,6 +199,15 @@ export default function OEMCustomersPage() {
     }
   };
 
+  // ダッシュボードに戻る際に年月パラメータを保持
+  const handleBackToDashboard = () => {
+    if (year && month) {
+      router.push(`/wholesale/dashboard?year=${year}&month=${month}`);
+    } else {
+      router.push('/wholesale/dashboard');
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -209,7 +223,7 @@ export default function OEMCustomersPage() {
       <div className="mb-6">
         <Button
           variant="ghost"
-          onClick={() => router.push('/wholesale/dashboard')}
+          onClick={handleBackToDashboard}
           className="flex items-center gap-2 mb-4"
         >
           <ChevronLeft className="w-4 h-4" />
