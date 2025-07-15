@@ -1,4 +1,4 @@
-// /app/wholesale/oem-customers/page.tsx ver.6
+// /app/wholesale/oem-customers/page.tsx ver.7
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Switch } from "@/components/ui/switch"
 import { ArrowLeft, ChevronUp, ChevronDown, Plus, Pencil, Trash2 } from 'lucide-react'
-import { useToast } from "@/hooks/use-toast"
 
 interface Customer {
   id: string
@@ -25,7 +24,6 @@ interface Customer {
 function OEMCustomersContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { toast } = useToast()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -35,6 +33,7 @@ function OEMCustomersContent() {
   const [formData, setFormData] = useState({
     customer_name: ''
   })
+  const [error, setError] = useState<string | null>(null)
 
   // URLパラメータから年月を取得
   const currentYear = searchParams.get('year') || new Date().getFullYear().toString()
@@ -53,19 +52,11 @@ function OEMCustomersContent() {
         setCustomers(data.customers)
       } else {
         console.error('Unexpected API response format:', data)
-        toast({
-          title: "エラー",
-          description: "顧客データの形式が正しくありません",
-          variant: "destructive",
-        })
+        setError('顧客データの形式が正しくありません')
       }
     } catch (error) {
       console.error('Error fetching customers:', error)
-      toast({
-        title: "エラー",
-        description: "顧客データの取得に失敗しました",
-        variant: "destructive",
-      })
+      setError('顧客データの取得に失敗しました')
     } finally {
       setIsLoading(false)
     }
@@ -73,6 +64,7 @@ function OEMCustomersContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
     
     try {
       const url = editingCustomer 
@@ -88,10 +80,6 @@ function OEMCustomersContent() {
       })
 
       if (response.ok) {
-        toast({
-          title: "成功",
-          description: editingCustomer ? "顧客を更新しました" : "顧客を追加しました",
-        })
         fetchCustomers()
         handleCloseDialog()
       } else {
@@ -99,11 +87,7 @@ function OEMCustomersContent() {
       }
     } catch (error) {
       console.error('Error saving customer:', error)
-      toast({
-        title: "エラー",
-        description: "顧客の保存に失敗しました",
-        variant: "destructive",
-      })
+      setError('顧客の保存に失敗しました')
     }
   }
 
@@ -117,6 +101,7 @@ function OEMCustomersContent() {
 
   const handleDelete = async () => {
     if (!deleteCustomer) return
+    setError(null)
 
     try {
       const response = await fetch(`/api/wholesale/oem-customers/${deleteCustomer.id}`, {
@@ -124,26 +109,14 @@ function OEMCustomersContent() {
       })
 
       if (response.ok) {
-        toast({
-          title: "成功",
-          description: "顧客を削除しました",
-        })
         fetchCustomers()
       } else if (response.status === 400) {
         const data = await response.json()
-        toast({
-          title: "エラー",
-          description: data.error || "売上データが存在するため削除できません",
-          variant: "destructive",
-        })
+        setError(data.error || '売上データが存在するため削除できません')
       }
     } catch (error) {
       console.error('Error deleting customer:', error)
-      toast({
-        title: "エラー",
-        description: "顧客の削除に失敗しました",
-        variant: "destructive",
-      })
+      setError('顧客の削除に失敗しました')
     } finally {
       setIsDeleteDialogOpen(false)
       setDeleteCustomer(null)
@@ -166,11 +139,7 @@ function OEMCustomersContent() {
       }
     } catch (error) {
       console.error('Error toggling active status:', error)
-      toast({
-        title: "エラー",
-        description: "ステータスの更新に失敗しました",
-        variant: "destructive",
-      })
+      setError('ステータスの更新に失敗しました')
     }
   }
 
@@ -187,11 +156,7 @@ function OEMCustomersContent() {
       }
     } catch (error) {
       console.error('Error updating order:', error)
-      toast({
-        title: "エラー",
-        description: "並び順の更新に失敗しました",
-        variant: "destructive",
-      })
+      setError('並び順の更新に失敗しました')
     }
   }
 
@@ -228,6 +193,12 @@ function OEMCustomersContent() {
         </Button>
         <h1 className="text-2xl font-semibold">OEM顧客管理</h1>
       </div>
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded">
+          {error}
+        </div>
+      )}
 
       <div className="mb-4">
         <Button onClick={() => setIsDialogOpen(true)}>
