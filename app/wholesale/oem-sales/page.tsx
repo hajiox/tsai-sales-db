@@ -1,4 +1,4 @@
-// /app/wholesale/oem-sales/page.tsx ver.5 Suspense対応版
+// /app/wholesale/oem-sales/page.tsx ver.6 URL保持対応版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -249,6 +249,15 @@ function OEMSalesContent() {
   // 月合計の計算
   const monthlyTotal = oemSales.reduce((sum, sale) => sum + sale.amount, 0);
 
+  // ダッシュボードに戻る際に年月パラメータを保持
+  const handleBackToDashboard = () => {
+    if (selectedYear && selectedMonth) {
+      router.push(`/wholesale/dashboard?year=${selectedYear}&month=${selectedMonth}`);
+    } else {
+      router.push('/wholesale/dashboard');
+    }
+  };
+
   if (!mounted) {
     return <div className="flex items-center justify-center h-screen bg-gray-50"><p className="text-gray-500">ページを準備しています...</p></div>;
   }
@@ -261,7 +270,7 @@ function OEMSalesContent() {
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => router.push('/wholesale/dashboard')}
+              onClick={handleBackToDashboard}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -289,7 +298,7 @@ function OEMSalesContent() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => router.push('/wholesale/oem-customers')}
+              onClick={() => router.push(`/wholesale/oem-customers${selectedYear && selectedMonth ? `?year=${selectedYear}&month=${selectedMonth}` : ''}`)}
               className="flex items-center gap-2"
             >
               <Settings className="w-4 h-4" />
