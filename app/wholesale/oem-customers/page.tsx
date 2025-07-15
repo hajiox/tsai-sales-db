@@ -1,421 +1,382 @@
-// /app/wholesale/oem-customers/page.tsx ver.5 URL保持対応版
-"use client"
+// /app/wholesale/oem-customers/page.tsx ver.6
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import { Users, Plus, ChevronLeft, ChevronUp, ChevronDown, Edit2, Trash2 } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { Switch } from "@/components/ui/switch"
+import { ArrowLeft, ChevronUp, ChevronDown, Plus, Pencil, Trash2 } from 'lucide-react'
+import { useToast } from "@/hooks/use-toast"
 
-interface OEMCustomer {
-  id: string;
-  customer_code: string;
-  customer_name: string;
-  is_active: boolean;
-  display_order: number;
+interface Customer {
+  id: string
+  customer_code: string
+  customer_name: string
+  is_active: boolean
+  display_order: number | null
 }
 
-export default function OEMCustomersPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [customers, setCustomers] = useState<OEMCustomer[]>([]);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState('');
-  const [editingCustomer, setEditingCustomer] = useState<OEMCustomer | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+// メインコンポーネントを分離
+function OEMCustomersContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { toast } = useToast()
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null)
+  const [formData, setFormData] = useState({
+    customer_name: ''
+  })
 
   // URLパラメータから年月を取得
-  const year = searchParams.get('year');
-  const month = searchParams.get('month');
+  const currentYear = searchParams.get('year') || new Date().getFullYear().toString()
+  const currentMonth = searchParams.get('month') || String(new Date().getMonth() + 1).padStart(2, '0')
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    fetchCustomers()
+  }, [])
 
   const fetchCustomers = async () => {
     try {
-      const response = await fetch('/api/wholesale/oem-customers?all=true');
-      if (!response.ok) throw new Error('Failed to fetch customers');
-      const data = await response.json();
-      setCustomers(data.customers || []);
+      const response = await fetch('/api/wholesale/oem-customers?all=true')
+      const data = await response.json()
+      
+      if (data.success && Array.isArray(data.customers)) {
+        setCustomers(data.customers)
+      } else {
+        console.error('Unexpected API response format:', data)
+        toast({
+          title: "エラー",
+          description: "顧客データの形式が正しくありません",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
-      console.error('顧客データ取得エラー:', error);
-      setError('顧客データの取得に失敗しました');
+      console.error('Error fetching customers:', error)
+      toast({
+        title: "エラー",
+        description: "顧客データの取得に失敗しました",
+        variant: "destructive",
+      })
     } finally {
-      setLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
-  const handleAddCustomer = async () => {
-    if (!newCustomerName) {
-      setError('顧客名は必須です');
-      return;
-    }
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
     try {
-      const response = await fetch('/api/wholesale/oem-customers', {
-        method: 'POST',
+      const url = editingCustomer 
+        ? `/api/wholesale/oem-customers/${editingCustomer.id}`
+        : '/api/wholesale/oem-customers'
+      
+      const method = editingCustomer ? 'PUT' : 'POST'
+      
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_name: newCustomerName
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        setError(data.error || '顧客の追加に失敗しました');
-        return;
-      }
-      
-      await fetchCustomers();
-      setIsAddModalOpen(false);
-      setNewCustomerName('');
-      setError('');
-    } catch (error) {
-      console.error('顧客追加エラー:', error);
-      setError('顧客の追加に失敗しました');
-    }
-  };
+        body: JSON.stringify(formData),
+      })
 
-  const handleUpdateCustomer = async () => {
-    if (!editingCustomer) return;
+      if (response.ok) {
+        toast({
+          title: "成功",
+          description: editingCustomer ? "顧客を更新しました" : "顧客を追加しました",
+        })
+        fetchCustomers()
+        handleCloseDialog()
+      } else {
+        throw new Error('Failed to save customer')
+      }
+    } catch (error) {
+      console.error('Error saving customer:', error)
+      toast({
+        title: "エラー",
+        description: "顧客の保存に失敗しました",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleEdit = (customer: Customer) => {
+    setEditingCustomer(customer)
+    setFormData({
+      customer_name: customer.customer_name
+    })
+    setIsDialogOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!deleteCustomer) return
 
     try {
-      const response = await fetch(`/api/wholesale/oem-customers/${editingCustomer.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_code: editingCustomer.customer_code,
-          customer_name: editingCustomer.customer_name,
-          is_active: editingCustomer.is_active
+      const response = await fetch(`/api/wholesale/oem-customers/${deleteCustomer.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        toast({
+          title: "成功",
+          description: "顧客を削除しました",
         })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        setError(data.error || '顧客の更新に失敗しました');
-        return;
+        fetchCustomers()
+      } else if (response.status === 400) {
+        const data = await response.json()
+        toast({
+          title: "エラー",
+          description: data.error || "売上データが存在するため削除できません",
+          variant: "destructive",
+        })
       }
-      
-      await fetchCustomers();
-      setIsEditModalOpen(false);
-      setEditingCustomer(null);
-      setError('');
     } catch (error) {
-      console.error('顧客更新エラー:', error);
-      setError('顧客の更新に失敗しました');
+      console.error('Error deleting customer:', error)
+      toast({
+        title: "エラー",
+        description: "顧客の削除に失敗しました",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleteDialogOpen(false)
+      setDeleteCustomer(null)
     }
-  };
+  }
 
-  const handleDeleteCustomer = async (customer: OEMCustomer) => {
-    if (!confirm(`顧客「${customer.customer_name}」を削除しますか？\n\n売上データがある場合は削除できません。`)) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/wholesale/oem-customers/${customer.id}`, {
-        method: 'DELETE'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        if (data.error && data.error.includes('売上データが存在')) {
-          setError(`顧客「${customer.customer_name}」は売上データが存在するため削除できません`);
-        } else {
-          setError(data.error || '顧客の削除に失敗しました');
-        }
-        return;
-      }
-      
-      await fetchCustomers();
-      setError('');
-    } catch (error) {
-      console.error('顧客削除エラー:', error);
-      setError('顧客の削除に失敗しました');
-    }
-  };
-
-  const handleToggleActive = async (customer: OEMCustomer) => {
+  const handleToggleActive = async (customer: Customer) => {
     try {
       const response = await fetch(`/api/wholesale/oem-customers/${customer.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer_code: customer.customer_code,
           customer_name: customer.customer_name,
           is_active: !customer.is_active
-        })
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || '状態の更新に失敗しました');
-        return;
-      }
-      
-      await fetchCustomers();
-      setError('');
-    } catch (error) {
-      console.error('状態切替エラー:', error);
-      setError('状態の更新に失敗しました');
-    }
-  };
+        }),
+      })
 
-  const handleChangeOrder = async (customerId: string, direction: 'up' | 'down') => {
+      if (response.ok) {
+        fetchCustomers()
+      }
+    } catch (error) {
+      console.error('Error toggling active status:', error)
+      toast({
+        title: "エラー",
+        description: "ステータスの更新に失敗しました",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleUpdateOrder = async (customer: Customer, direction: 'up' | 'down') => {
     try {
-      const response = await fetch(`/api/wholesale/oem-customers/${customerId}/order`, {
+      const response = await fetch(`/api/wholesale/oem-customers/${customer.id}/order`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ direction })
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || '並び順の変更に失敗しました');
-        return;
+        body: JSON.stringify({ direction }),
+      })
+
+      if (response.ok) {
+        fetchCustomers()
       }
-      
-      await fetchCustomers();
-      setError('');
     } catch (error) {
-      console.error('並び順変更エラー:', error);
-      setError('並び順の変更に失敗しました');
+      console.error('Error updating order:', error)
+      toast({
+        title: "エラー",
+        description: "並び順の更新に失敗しました",
+        variant: "destructive",
+      })
     }
-  };
+  }
 
-  // ダッシュボードに戻る際に年月パラメータを保持
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false)
+    setEditingCustomer(null)
+    setFormData({ customer_name: '' })
+  }
+
+  const handleOpenDeleteDialog = (customer: Customer) => {
+    setDeleteCustomer(customer)
+    setIsDeleteDialogOpen(true)
+  }
+
   const handleBackToDashboard = () => {
-    if (year && month) {
-      router.push(`/wholesale/dashboard?year=${year}&month=${month}`);
-    } else {
-      router.push('/wholesale/dashboard');
-    }
-  };
+    // 年月パラメータを保持してダッシュボードに戻る
+    router.push(`/wholesale/dashboard?year=${currentYear}&month=${currentMonth}`)
+  }
 
-  if (loading) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <p className="text-gray-500">読み込み中...</p>
-        </div>
-      </div>
-    );
+  if (isLoading) {
+    return <div className="p-6">読み込み中...</div>
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <Button
-          variant="ghost"
+    <div className="p-6">
+      <div className="flex items-center gap-4 mb-6">
+        <Button 
+          variant="outline" 
+          size="sm"
           onClick={handleBackToDashboard}
-          className="flex items-center gap-2 mb-4"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ArrowLeft className="h-4 w-4 mr-2" />
           ダッシュボードに戻る
         </Button>
-        
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Users className="w-6 h-6" />
-          OEM顧客マスター管理
-        </h1>
+        <h1 className="text-2xl font-semibold">OEM顧客管理</h1>
       </div>
 
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
-          {error}
-        </div>
-      )}
+      <div className="mb-4">
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          新規顧客追加
+        </Button>
+      </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>OEM顧客一覧</CardTitle>
-          <Button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            新規追加
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-32">顧客コード</TableHead>
-                <TableHead>顧客名</TableHead>
-                <TableHead className="w-24 text-center">有効</TableHead>
-                <TableHead className="w-24 text-center">並び順</TableHead>
-                <TableHead className="w-32 text-center">操作</TableHead>
+      <div className="border rounded-lg">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[100px]">並び順</TableHead>
+              <TableHead className="w-[150px]">顧客コード</TableHead>
+              <TableHead>顧客名</TableHead>
+              <TableHead className="w-[100px]">有効</TableHead>
+              <TableHead className="w-[150px]">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {customers.map((customer, index) => (
+              <TableRow key={customer.id}>
+                <TableCell>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleUpdateOrder(customer, 'up')}
+                      disabled={index === 0}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleUpdateOrder(customer, 'down')}
+                      disabled={index === customers.length - 1}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+                <TableCell className="font-mono">{customer.customer_code}</TableCell>
+                <TableCell>{customer.customer_name}</TableCell>
+                <TableCell>
+                  <Switch
+                    checked={customer.is_active}
+                    onCheckedChange={() => handleToggleActive(customer)}
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(customer)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenDeleteDialog(customer)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {customers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-gray-500 py-8">
-                    顧客データがありません
-                  </TableCell>
-                </TableRow>
-              ) : (
-                customers.map((customer, index) => (
-                  <TableRow key={customer.id}>
-                    <TableCell className="font-mono">{customer.customer_code}</TableCell>
-                    <TableCell>{customer.customer_name}</TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        checked={customer.is_active}
-                        onCheckedChange={() => handleToggleActive(customer)}
-                      />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleChangeOrder(customer.id, 'up')}
-                          disabled={index === 0}
-                        >
-                          <ChevronUp className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleChangeOrder(customer.id, 'down')}
-                          disabled={index === customers.length - 1}
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setEditingCustomer(customer);
-                            setIsEditModalOpen(true);
-                            setError('');
-                          }}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-red-600 hover:bg-red-50"
-                          onClick={() => handleDeleteCustomer(customer)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingCustomer ? '顧客編集' : '新規顧客追加'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingCustomer 
+                ? '顧客名を編集できます。顧客コードは変更できません。'
+                : '顧客名を入力してください。顧客コードは自動で採番されます。'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit}>
+            <div className="grid gap-4 py-4">
+              {editingCustomer && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">顧客コード</Label>
+                  <div className="col-span-3 font-mono text-sm">
+                    {editingCustomer.customer_code}
+                  </div>
+                </div>
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="customer_name" className="text-right">
+                  顧客名
+                </Label>
+                <Input
+                  id="customer_name"
+                  value={formData.customer_name}
+                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                  className="col-span-3"
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleCloseDialog}>
+                キャンセル
+              </Button>
+              <Button type="submit">
+                {editingCustomer ? '更新' : '追加'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-      {/* 新規追加モーダル */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96">
-            <CardHeader>
-              <CardTitle>新規顧客追加</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="customer-name">顧客名</Label>
-                <Input
-                  id="customer-name"
-                  value={newCustomerName}
-                  onChange={(e) => setNewCustomerName(e.target.value)}
-                  placeholder="例: 株式会社〇〇"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  顧客コードは自動で採番されます
-                </p>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsAddModalOpen(false);
-                    setNewCustomerName('');
-                    setError('');
-                  }}
-                >
-                  キャンセル
-                </Button>
-                <Button onClick={handleAddCustomer}>
-                  追加
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* 編集モーダル */}
-      {isEditModalOpen && editingCustomer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96">
-            <CardHeader>
-              <CardTitle>顧客編集</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>顧客コード</Label>
-                <Input
-                  value={editingCustomer.customer_code}
-                  disabled
-                  className="bg-gray-100"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-customer-name">顧客名</Label>
-                <Input
-                  id="edit-customer-name"
-                  value={editingCustomer.customer_name}
-                  onChange={(e) => setEditingCustomer({
-                    ...editingCustomer,
-                    customer_name: e.target.value
-                  })}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsEditModalOpen(false);
-                    setEditingCustomer(null);
-                    setError('');
-                  }}
-                >
-                  キャンセル
-                </Button>
-                <Button onClick={handleUpdateCustomer}>
-                  更新
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>顧客の削除</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{deleteCustomer?.customer_name}」を削除してもよろしいですか？
+              売上データが存在する場合は削除できません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteCustomer(null)}>
+              キャンセル
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-  );
+  )
+}
+
+// Suspenseでラップしたメインコンポーネント
+export default function OEMCustomersPage() {
+  return (
+    <Suspense fallback={<div className="p-6">読み込み中...</div>}>
+      <OEMCustomersContent />
+    </Suspense>
+  )
 }
