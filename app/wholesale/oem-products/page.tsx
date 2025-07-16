@@ -1,7 +1,7 @@
-// /app/wholesale/oem-products/page.tsx ver.4 URL保持対応版
+// /app/wholesale/oem-products/page.tsx ver.5 Suspense対応版
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,8 @@ interface OEMProduct {
   display_order: number;
 }
 
-export default function OEMProductsPage() {
+// メインコンポーネントを分離
+function OEMProductsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<OEMProduct[]>([]);
@@ -370,5 +371,20 @@ export default function OEMProductsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Suspenseでラップしたメインコンポーネント
+export default function OEMProductsPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center h-64">
+          <p className="text-gray-500">読み込み中...</p>
+        </div>
+      </div>
+    }>
+      <OEMProductsContent />
+    </Suspense>
   );
 }
