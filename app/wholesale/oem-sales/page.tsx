@@ -206,9 +206,12 @@ function OEMSalesContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // 最初にエラーをクリア
     setError(null)
 
     // デバッグ用ログ
+    console.log('=== Form submission START ===')
     console.log('Form submission - formData:', formData)
     console.log('productId:', formData.productId, '- type:', typeof formData.productId)
     console.log('customerId:', formData.customerId, '- type:', typeof formData.customerId)
@@ -222,30 +225,41 @@ function OEMSalesContent() {
     console.log('Validation results:', { hasProduct, hasCustomer, hasQuantity })
 
     if (!hasProduct || !hasCustomer || !hasQuantity) {
+      console.log('Validation failed!')
       setError('すべての項目を入力してください')
       return
     }
 
+    // ここまで来たら、検証は通っているはず
+    console.log('Validation passed, submitting data...')
+
     try {
       const saleDate = `${selectedMonth}-01`
+      const requestBody = {
+        product_id: formData.productId,
+        customer_id: formData.customerId,
+        sale_date: saleDate,
+        quantity: parseInt(formData.quantity),
+        unit_price: parseInt(formData.unitPrice)
+      }
+      
+      console.log('Request body:', requestBody)
       
       const response = await fetch('/api/wholesale/oem-sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_id: formData.productId,
-          customer_id: formData.customerId,
-          sale_date: saleDate,
-          quantity: parseInt(formData.quantity),
-          unit_price: parseInt(formData.unitPrice)
-        })
+        body: JSON.stringify(requestBody)
       })
+
+      console.log('Response status:', response.status)
 
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.error || '登録に失敗しました')
       }
 
+      console.log('Submit success!')
+      
       // フォームをリセット
       setFormData({
         productId: '',
@@ -256,8 +270,11 @@ function OEMSalesContent() {
       })
       
       // 売上一覧を再取得
-      fetchInitialData(selectedMonth)
+      await fetchInitialData(selectedMonth)
+      
+      console.log('=== Form submission END ===')
     } catch (error) {
+      console.error('Submit error:', error)
       setError(error instanceof Error ? error.message : '登録に失敗しました')
     }
   }
