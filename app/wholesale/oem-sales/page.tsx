@@ -210,8 +210,18 @@ function OEMSalesContent() {
 
     // デバッグ用ログ
     console.log('Form submission - formData:', formData)
+    console.log('productId:', formData.productId, '- type:', typeof formData.productId)
+    console.log('customerId:', formData.customerId, '- type:', typeof formData.customerId)
+    console.log('quantity:', formData.quantity, '- type:', typeof formData.quantity)
 
-    if (!formData.productId || !formData.customerId || !formData.quantity || formData.quantity === '0') {
+    // より詳細な検証
+    const hasProduct = formData.productId && formData.productId.trim() !== ''
+    const hasCustomer = formData.customerId && formData.customerId.trim() !== ''
+    const hasQuantity = formData.quantity && formData.quantity.trim() !== '' && formData.quantity !== '0'
+
+    console.log('Validation results:', { hasProduct, hasCustomer, hasQuantity })
+
+    if (!hasProduct || !hasCustomer || !hasQuantity) {
       setError('すべての項目を入力してください')
       return
     }
@@ -315,6 +325,16 @@ function OEMSalesContent() {
         </div>
       )}
 
+      {/* デバッグ情報 */}
+      <div className="mb-4 p-4 bg-gray-100 border border-gray-300 rounded text-sm">
+        <p><strong>デバッグ情報:</strong></p>
+        <p>商品ID: {formData.productId || '未選択'}</p>
+        <p>顧客ID: {formData.customerId || '未選択'}</p>
+        <p>単価: {formData.unitPrice || '未入力'}</p>
+        <p>個数: {formData.quantity || '未入力'}</p>
+        <p>合計: {formData.amount}</p>
+      </div>
+
       {/* 入力フォーム */}
       <Card className="mb-6">
         <CardHeader>
@@ -328,7 +348,10 @@ function OEMSalesContent() {
                 <SearchableSelect
                   options={products}
                   value={formData.productId}
-                  onChange={(value) => setFormData(prev => ({ ...prev, productId: value }))}
+                  onChange={(value) => {
+                    console.log('Product selected:', value)
+                    setFormData(prev => ({ ...prev, productId: value }))
+                  }}
                   placeholder="商品を検索..."
                   displayKey="product_name"
                   valueKey="id"
@@ -342,7 +365,10 @@ function OEMSalesContent() {
                 <SearchableSelect
                   options={customers}
                   value={formData.customerId}
-                  onChange={(value) => setFormData(prev => ({ ...prev, customerId: value }))}
+                  onChange={(value) => {
+                    console.log('Customer selected:', value)
+                    setFormData(prev => ({ ...prev, customerId: value }))
+                  }}
                   placeholder="発注者を検索..."
                   displayKey="customer_name"
                   valueKey="id"
