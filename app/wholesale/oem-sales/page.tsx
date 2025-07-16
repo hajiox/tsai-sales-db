@@ -1,4 +1,4 @@
-// /app/wholesale/oem-sales/page.tsx ver.7 検索可能プルダウン対応版
+// /app/wholesale/oem-sales/page.tsx ver.8 新規登録機能付き
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Plus, Trash2, Search } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ArrowLeft, Plus, Trash2, Search, UserPlus, PackagePlus } from 'lucide-react'
 
 interface OEMProduct {
   id: string
@@ -37,14 +38,16 @@ interface OEMSale {
   customer_name?: string
 }
 
-// 検索可能なプルダウンコンポーネント
+// 検索可能なプルダウンコンポーネント（新規登録ボタン付き）
 function SearchableSelect({ 
   options, 
   value, 
   onChange, 
   placeholder,
   displayKey,
-  valueKey 
+  valueKey,
+  onAddNew,
+  addNewLabel
 }: {
   options: any[]
   value: string
@@ -52,6 +55,8 @@ function SearchableSelect({
   placeholder: string
   displayKey: string
   valueKey: string
+  onAddNew: () => void
+  addNewLabel: string
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -84,6 +89,18 @@ function SearchableSelect({
       
       {isOpen && (
         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+          <button
+            className="w-full text-left px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium border-b flex items-center gap-2"
+            onClick={() => {
+              setIsOpen(false)
+              setSearchTerm('')
+              onAddNew()
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            {addNewLabel}
+          </button>
+          
           {filteredOptions.length === 0 ? (
             <div className="px-3 py-2 text-sm text-gray-500">該当なし</div>
           ) : (
@@ -127,6 +144,13 @@ function OEMSalesContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState('')
   const [error, setError] = useState<string | null>(null)
+  
+  // 新規登録ダイアログの状態
+  const [showProductDialog, setShowProductDialog] = useState(false)
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false)
+  const [newProductName, setNewProductName] = useState('')
+  const [newProductPrice, setNewProductPrice] = useState('')
+  const [newCustomerName, setNewCustomerName] = useState('')
   
   // フォームの状態
   const [formData, setFormData] = useState({
@@ -198,6 +222,85 @@ function OEMSalesContent() {
       setError('データの取得に失敗しました')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleAddProduct = async () => {
+    if (!newProductName || !newProductPrice) {
+      setError('商品名と価格を入力してください')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/wholesale/oem-products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_name: newProductName,
+          price: parseInt(newProductPrice)
+        })
+      })
+
+      if (!response.ok) throw new Error('商品の登録に失敗しました')
+
+      const newProduct = await response.json()
+      
+      // 商品リストを再取得
+      const productsRes = await fetch('/api/wholesale/oem-products')
+      const productsData = await productsRes.json()
+      setProducts(productsData.filter((p: OEMProduct) => p.is_active))
+      
+      // 新規登録した商品を選択
+      setFormData(prev => ({
+        ...prev,
+        productId: newProduct.id,
+        unitPrice: newProduct.price.toString()
+      }))
+      
+      setShowProductDialog(false)
+      setNewProductName('')
+      setNewProductPrice('')
+      setError(null)
+    } catch (error) {
+      setError('商品の登録に失敗しました')
+    }
+  }
+
+  const handleAddCustomer = async () => {
+    if (!newCustomerName) {
+      setError('顧客名を入力してください')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/wholesale/oem-customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: newCustomerName
+        })
+      })
+
+      if (!response.ok) throw new Error('顧客の登録に失敗しました')
+
+      const newCustomer = await response.json()
+      
+      // 顧客リストを再取得
+      const customersRes = await fetch('/api/wholesale/oem-customers?all=true')
+      const customersData = await customersRes.json()
+      setCustomers(customersData.customers?.filter((c: OEMCustomer) => c.is_active) || [])
+      
+      // 新規登録した顧客を選択
+      setFormData(prev => ({
+        ...prev,
+        customerId: newCustomer.id
+      }))
+      
+      setShowCustomerDialog(false)
+      setNewCustomerName('')
+      setError(null)
+    } catch (error) {
+      setError('顧客の登録に失敗しました')
     }
   }
 
@@ -325,6 +428,8 @@ function OEMSalesContent() {
                   placeholder="商品を検索..."
                   displayKey="product_name"
                   valueKey="id"
+                  onAddNew={() => setShowProductDialog(true)}
+                  addNewLabel="新規商品を登録"
                 />
               </div>
               
@@ -337,6 +442,8 @@ function OEMSalesContent() {
                   placeholder="発注者を検索..."
                   displayKey="customer_name"
                   valueKey="id"
+                  onAddNew={() => setShowCustomerDialog(true)}
+                  addNewLabel="新規顧客を登録"
                 />
               </div>
             </div>
@@ -454,6 +561,93 @@ function OEMSalesContent() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* 商品登録ダイアログ */}
+      <Dialog open={showProductDialog} onOpenChange={setShowProductDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新規商品登録</DialogTitle>
+            <DialogDescription>
+              商品名と価格を入力してください。商品コードは自動で採番されます。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="new-product-name" className="text-right">
+                商品名
+              </Label>
+              <Input
+                id="new-product-name"
+                value={newProductName}
+                onChange={(e) => setNewProductName(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="new-product-price" className="text-right">
+                価格
+              </Label>
+              <Input
+                id="new-product-price"
+                type="number"
+                value={newProductPrice}
+                onChange={(e) => setNewProductPrice(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowProductDialog(false)
+              setNewProductName('')
+              setNewProductPrice('')
+            }}>
+              キャンセル
+            </Button>
+            <Button onClick={handleAddProduct}>
+              <PackagePlus className="h-4 w-4 mr-2" />
+              登録
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 顧客登録ダイアログ */}
+      <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新規顧客登録</DialogTitle>
+            <DialogDescription>
+              顧客名を入力してください。顧客コードは自動で採番されます。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="new-customer-name" className="text-right">
+                顧客名
+              </Label>
+              <Input
+                id="new-customer-name"
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowCustomerDialog(false)
+              setNewCustomerName('')
+            }}>
+              キャンセル
+            </Button>
+            <Button onClick={handleAddCustomer}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              登録
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
