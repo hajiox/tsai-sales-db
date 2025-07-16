@@ -1,451 +1,468 @@
-// /app/wholesale/oem-sales/page.tsx ver.6 URL保持対応版
-"use client"
+// /app/wholesale/oem-sales/page.tsx ver.7 検索可能プルダウン対応版
+'use client'
 
-export const dynamic = 'force-dynamic';
-
-import { useState, useEffect, Suspense } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Package, Plus, X, ArrowLeft, Settings } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ArrowLeft, Plus, Trash2, Search } from 'lucide-react'
 
 interface OEMProduct {
-  id: string;
-  product_name: string;
-  price: number;
+  id: string
+  product_code: string
+  product_name: string
+  price: number
+  is_active: boolean
 }
 
 interface OEMCustomer {
-  id: string;
-  customer_name: string;
-  customer_code: string;
+  id: string
+  customer_code: string
+  customer_name: string
+  is_active: boolean
 }
 
 interface OEMSale {
-  id: string;
-  product_id: string;
-  customer_id: string;
-  sale_date: string;
-  quantity: number;
-  unit_price: number;
-  amount: number;
-  oem_products?: {
-    product_name: string;
-    product_code: string;
-  };
-  oem_customers?: {
-    customer_name: string;
-    customer_code: string;
-  };
+  id: string
+  product_id: string
+  customer_id: string
+  sale_date: string
+  quantity: number
+  unit_price: number
+  amount: number
+  product_name?: string
+  customer_name?: string
 }
 
+// 検索可能なプルダウンコンポーネント
+function SearchableSelect({ 
+  options, 
+  value, 
+  onChange, 
+  placeholder,
+  displayKey,
+  valueKey 
+}: {
+  options: any[]
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  displayKey: string
+  valueKey: string
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  
+  const filteredOptions = options.filter(option => 
+    option[displayKey].toLowerCase().includes(searchTerm.toLowerCase())
+  )
+  
+  const selectedOption = options.find(opt => opt[valueKey] === value)
+  
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Input
+          type="text"
+          placeholder={placeholder}
+          value={searchTerm || (selectedOption ? selectedOption[displayKey] : '')}
+          onChange={(e) => {
+            setSearchTerm(e.target.value)
+            setIsOpen(true)
+          }}
+          onFocus={() => {
+            setIsOpen(true)
+            setSearchTerm('')
+          }}
+          className="pr-8"
+        />
+        <Search className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+      </div>
+      
+      {isOpen && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+          {filteredOptions.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">該当なし</div>
+          ) : (
+            filteredOptions.map((option) => (
+              <button
+                key={option[valueKey]}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                onClick={() => {
+                  onChange(option[valueKey])
+                  setSearchTerm('')
+                  setIsOpen(false)
+                }}
+              >
+                {option[displayKey]}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+      
+      {isOpen && (
+        <div 
+          className="fixed inset-0 z-0" 
+          onClick={() => {
+            setIsOpen(false)
+            setSearchTerm('')
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// メインコンポーネントを分離
 function OEMSalesContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [selectedYear, setSelectedYear] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('');
-  const [yearOptions, setYearOptions] = useState<string[]>([]);
-  const [monthOptions, setMonthOptions] = useState<string[]>([]);
-  const [oemProducts, setOemProducts] = useState<OEMProduct[]>([]);
-  const [oemCustomers, setOemCustomers] = useState<OEMCustomer[]>([]);
-  const [oemSales, setOemSales] = useState<OEMSale[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [mounted, setMounted] = useState(false);
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [products, setProducts] = useState<OEMProduct[]>([])
+  const [customers, setCustomers] = useState<OEMCustomer[]>([])
+  const [sales, setSales] = useState<OEMSale[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedMonth, setSelectedMonth] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  
+  // フォームの状態
   const [formData, setFormData] = useState({
     productId: '',
     customerId: '',
+    unitPrice: '',
     quantity: '',
-    unitPrice: ''
-  });
-  const [isAdding, setIsAdding] = useState(false);
+    amount: 0
+  })
+
+  // URLパラメータから年月を取得
+  const currentYear = searchParams.get('year') || new Date().getFullYear().toString()
+  const currentMonth = searchParams.get('month') || String(new Date().getMonth() + 1).padStart(2, '0')
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    const month = `${currentYear}-${currentMonth}`
+    setSelectedMonth(month)
+    fetchInitialData(month)
+  }, [currentYear, currentMonth])
 
+  // 商品選択時の処理
   useEffect(() => {
-    if (!mounted) return;
-    const now = new Date();
-    
-    // URLパラメータから年月を取得（ダッシュボードから引き継ぎ）
-    const yearParam = searchParams.get('year');
-    const monthParam = searchParams.get('month');
-    
-    // 年のオプション（過去3年分）
-    const years: string[] = [];
-    for (let i = 0; i < 3; i++) {
-      years.push(String(now.getFullYear() - i));
-    }
-    setYearOptions(years);
-    setSelectedYear(yearParam || String(now.getFullYear()));
-    
-    // 月のオプション
-    const months: string[] = [];
-    for (let i = 1; i <= 12; i++) {
-      months.push(String(i).padStart(2, '0'));
-    }
-    setMonthOptions(months);
-    setSelectedMonth(monthParam || String(now.getMonth() + 1).padStart(2, '0'));
-  }, [mounted, searchParams]);
-
-  useEffect(() => {
-    if (!selectedYear || !selectedMonth || !mounted) return;
-    const fetchAllData = async () => {
-      setLoading(true);
-      try {
-        await Promise.all([
-          fetchOemProducts(),
-          fetchOemCustomers(),
-          fetchOemSalesData(`${selectedYear}-${selectedMonth}`)
-        ]);
-      } catch (error) {
-        console.error('データ取得エラー:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAllData();
-  }, [selectedYear, selectedMonth, mounted]);
-
-  const fetchOemProducts = async () => {
-    try {
-      const response = await fetch('/api/wholesale/oem-products');
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          setOemProducts(data);
-        }
-      }
-    } catch (error) {
-      console.error('OEM商品データ取得エラー:', error);
-    }
-  };
-
-  const fetchOemCustomers = async () => {
-    try {
-      const response = await fetch('/api/wholesale/oem-customers');
-      if (response.ok) {
-        const data = await response.json();
-        // APIレスポンス形式に対応
-        if (data.success && Array.isArray(data.customers)) {
-          setOemCustomers(data.customers);
-        }
-      }
-    } catch (error) {
-      console.error('OEM顧客データ取得エラー:', error);
-    }
-  };
-
-  const fetchOemSalesData = async (month: string) => {
-    try {
-      const response = await fetch(`/api/wholesale/oem-sales?month=${month}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && Array.isArray(data.sales)) {
-          setOemSales(data.sales);
-        } else {
-          setOemSales([]);
-        }
-      }
-    } catch (error) {
-      console.error('OEM売上データ取得エラー:', error);
-      setOemSales([]);
-    }
-  };
-
-  const handleFormChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-
-    // 商品選択時に単価を自動設定
-    if (field === 'productId' && value) {
-      const product = oemProducts.find(p => p.id === value);
+    if (formData.productId) {
+      const product = products.find(p => p.id === formData.productId)
       if (product) {
         setFormData(prev => ({
           ...prev,
-          unitPrice: String(product.price)
-        }));
+          unitPrice: product.price.toString()
+        }))
       }
     }
-  };
+  }, [formData.productId, products])
 
-  const handleSubmit = async () => {
-    const { productId, customerId, quantity, unitPrice } = formData;
-    
-    if (!productId || !customerId || !quantity || !unitPrice) {
-      alert('全ての項目を入力してください。');
-      return;
+  // 金額自動計算
+  useEffect(() => {
+    const price = parseInt(formData.unitPrice) || 0
+    const qty = parseInt(formData.quantity) || 0
+    setFormData(prev => ({
+      ...prev,
+      amount: price * qty
+    }))
+  }, [formData.unitPrice, formData.quantity])
+
+  const fetchInitialData = async (month: string) => {
+    try {
+      setIsLoading(true)
+      
+      // 商品、顧客、売上データを並列で取得
+      const [productsRes, customersRes, salesRes] = await Promise.all([
+        fetch('/api/wholesale/oem-products'),
+        fetch('/api/wholesale/oem-customers?all=true'),
+        fetch(`/api/wholesale/oem-sales?month=${month}`)
+      ])
+
+      if (!productsRes.ok || !customersRes.ok || !salesRes.ok) {
+        throw new Error('データの取得に失敗しました')
+      }
+
+      const productsData = await productsRes.json()
+      const customersData = await customersRes.json()
+      const salesData = await salesRes.json()
+
+      // アクティブな商品・顧客のみフィルタリング
+      setProducts(productsData.filter((p: OEMProduct) => p.is_active))
+      setCustomers(customersData.customers?.filter((c: OEMCustomer) => c.is_active) || [])
+      setSales(salesData.sales || [])
+    } catch (error) {
+      console.error('Error fetching data:', error)
+      setError('データの取得に失敗しました')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!formData.productId || !formData.customerId || !formData.quantity) {
+      setError('すべての項目を入力してください')
+      return
     }
 
-    setIsAdding(true);
     try {
-      // 現在選択されている年月の1日を売上日として設定
-      const saleDate = `${selectedYear}-${selectedMonth}-01`;
+      const saleDate = `${selectedMonth}-01`
       
       const response = await fetch('/api/wholesale/oem-sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          productId,
-          customerId,
-          saleDate,
-          quantity: parseInt(quantity),
-          unitPrice: parseInt(unitPrice)
+          product_id: formData.productId,
+          customer_id: formData.customerId,
+          sale_date: saleDate,
+          quantity: parseInt(formData.quantity),
+          unit_price: parseInt(formData.unitPrice)
         })
-      });
+      })
 
-      const result = await response.json();
-      
-      if (result.success) {
-        // フォームをリセット
-        setFormData({
-          productId: '',
-          customerId: '',
-          quantity: '',
-          unitPrice: ''
-        });
-        // データ再取得
-        await fetchOemSalesData(`${selectedYear}-${selectedMonth}`);
-      } else {
-        alert(`エラーが発生しました: ${result.error}`);
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || '登録に失敗しました')
       }
-    } catch (error) {
-      console.error('OEM登録エラー:', error);
-      alert('登録中にエラーが発生しました。');
-    } finally {
-      setIsAdding(false);
-    }
-  };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('このデータを削除しますか？')) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/wholesale/oem-sales?id=${id}`, {
-        method: 'DELETE'
-      });
-
-      const result = await response.json();
+      // フォームをリセットして売上一覧を再取得
+      setFormData({
+        productId: '',
+        customerId: '',
+        unitPrice: '',
+        quantity: '',
+        amount: 0
+      })
       
-      if (result.success) {
-        await fetchOemSalesData(`${selectedYear}-${selectedMonth}`);
-      } else {
-        alert(`エラーが発生しました: ${result.error}`);
-      }
+      fetchInitialData(selectedMonth)
     } catch (error) {
-      console.error('OEM削除エラー:', error);
-      alert('削除中にエラーが発生しました。');
+      setError(error instanceof Error ? error.message : '登録に失敗しました')
     }
-  };
-
-  const calculateAmount = () => {
-    return (parseInt(formData.unitPrice) || 0) * (parseInt(formData.quantity) || 0);
-  };
-
-  // 月合計の計算
-  const monthlyTotal = oemSales.reduce((sum, sale) => sum + sale.amount, 0);
-
-  // ダッシュボードに戻る際に年月パラメータを保持
-  const handleBackToDashboard = () => {
-    if (selectedYear && selectedMonth) {
-      router.push(`/wholesale/dashboard?year=${selectedYear}&month=${selectedMonth}`);
-    } else {
-      router.push('/wholesale/dashboard');
-    }
-  };
-
-  if (!mounted) {
-    return <div className="flex items-center justify-center h-screen bg-gray-50"><p className="text-gray-500">ページを準備しています...</p></div>;
   }
 
+  const handleDelete = async (saleId: string) => {
+    if (!confirm('この売上データを削除しますか？')) return
+
+    try {
+      const response = await fetch(`/api/wholesale/oem-sales?id=${saleId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('削除に失敗しました')
+      }
+
+      fetchInitialData(selectedMonth)
+    } catch (error) {
+      setError('削除に失敗しました')
+    }
+  }
+
+  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newMonth = e.target.value
+    setSelectedMonth(newMonth)
+    fetchInitialData(newMonth)
+  }
+
+  const handleBackToDashboard = () => {
+    router.push(`/wholesale/dashboard?year=${currentYear}&month=${currentMonth}`)
+  }
+
+  const handleCustomerManagement = () => {
+    router.push(`/wholesale/oem-customers?year=${currentYear}&month=${currentMonth}`)
+  }
+
+  if (isLoading) {
+    return <div className="p-6">読み込み中...</div>
+  }
+
+  // 売上データに商品名と顧客名を結合
+  const salesWithDetails = sales.map(sale => ({
+    ...sale,
+    product_name: products.find(p => p.id === sale.product_id)?.product_name || '不明',
+    customer_name: customers.find(c => c.id === sale.customer_id)?.customer_name || '不明'
+  }))
+
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      <header className="flex-shrink-0 bg-white shadow-sm border-b z-30">
-        <div className="px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleBackToDashboard}
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              ダッシュボードに戻る
-            </Button>
-            <h1 className="text-xl font-bold text-gray-900">OEM商品売上入力</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
-              disabled={loading}
-            >
-              {yearOptions.map(year => <option key={year} value={year}>{year}年</option>)}
-            </select>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
-              disabled={loading}
-            >
-              {monthOptions.map(month => <option key={month} value={month}>{month}月</option>)}
-            </select>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => router.push(`/wholesale/oem-customers${selectedYear && selectedMonth ? `?year=${selectedYear}&month=${selectedMonth}` : ''}`)}
-              className="flex items-center gap-2"
-            >
-              <Settings className="w-4 h-4" />
-              顧客管理
-            </Button>
-            <div className="text-sm font-semibold text-green-600">
-              月合計: ¥{monthlyTotal.toLocaleString()}
-            </div>
-          </div>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center gap-4 mb-6">
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={handleBackToDashboard}
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          ダッシュボードに戻る
+        </Button>
+        <h1 className="text-2xl font-semibold">OEM売上入力</h1>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded">
+          {error}
         </div>
-      </header>
+      )}
 
-      <main className="flex-1 overflow-auto p-4">
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center"><p className="text-gray-500">データを読み込んでいます...</p></div>
-        ) : (
-          <Card>
-            <CardHeader className="py-3 px-4 border-b">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Package className="w-5 h-5" /> 売上データ入力
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              {/* 入力フォーム */}
-              <div className="flex items-end gap-3 mb-6">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1">商品名</label>
-                  <select
-                    value={formData.productId}
-                    onChange={(e) => handleFormChange('productId', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-md border border-input bg-background"
-                  >
-                    <option value="">選択してください</option>
-                    {oemProducts.map(product => (
-                      <option key={product.id} value={product.id}>
-                        {product.product_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1">発注者</label>
-                  <select
-                    value={formData.customerId}
-                    onChange={(e) => handleFormChange('customerId', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-md border border-input bg-background"
-                  >
-                    <option value="">選択してください</option>
-                    {oemCustomers.map(customer => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.customer_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="w-28">
-                  <label className="block text-sm font-medium mb-1">単価</label>
-                  <input
-                    type="number"
-                    value={formData.unitPrice}
-                    onChange={(e) => handleFormChange('unitPrice', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-md border border-input bg-background"
-                    placeholder="¥"
-                  />
-                </div>
-                <div className="w-24">
-                  <label className="block text-sm font-medium mb-1">個数</label>
-                  <input
-                    type="number"
-                    value={formData.quantity}
-                    onChange={(e) => handleFormChange('quantity', e.target.value)}
-                    className="w-full h-9 px-3 text-sm rounded-md border border-input bg-background"
-                    placeholder="0"
-                  />
-                </div>
-                <div className="w-32 text-right">
-                  <label className="block text-sm font-medium mb-1">合計金額</label>
-                  <div className="h-9 px-3 py-2 text-sm font-semibold text-green-600">
-                    ¥{calculateAmount().toLocaleString()}
-                  </div>
-                </div>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={isAdding}
-                  className="flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  {isAdding ? '登録中...' : '登録'}
-                </Button>
+      {/* 入力フォーム */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>売上データ入力</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="product">商品名</Label>
+                <SearchableSelect
+                  options={products}
+                  value={formData.productId}
+                  onChange={(value) => setFormData(prev => ({ ...prev, productId: value }))}
+                  placeholder="商品を検索..."
+                  displayKey="product_name"
+                  valueKey="id"
+                />
               </div>
+              
+              <div>
+                <Label htmlFor="customer">発注者</Label>
+                <SearchableSelect
+                  options={customers}
+                  value={formData.customerId}
+                  onChange={(value) => setFormData(prev => ({ ...prev, customerId: value }))}
+                  placeholder="発注者を検索..."
+                  displayKey="customer_name"
+                  valueKey="id"
+                />
+              </div>
+            </div>
 
-              {/* OEM売上一覧 */}
-              <div className="border rounded-md overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100">
-                    <tr className="border-b">
-                      <th className="p-3 text-left font-semibold">商品名</th>
-                      <th className="p-3 text-left font-semibold">発注者</th>
-                      <th className="p-3 text-right font-semibold">単価</th>
-                      <th className="p-3 text-right font-semibold">個数</th>
-                      <th className="p-3 text-right font-semibold">金額</th>
-                      <th className="p-3 text-center font-semibold">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {oemSales.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-8 text-gray-500">
-                          データがありません
-                        </td>
-                      </tr>
-                    ) : (
-                      oemSales.map(sale => (
-                        <tr key={sale.id} className="border-b hover:bg-gray-50">
-                          <td className="p-3">{sale.oem_products?.product_name}</td>
-                          <td className="p-3">{sale.oem_customers?.customer_name}</td>
-                          <td className="p-3 text-right">¥{sale.unit_price.toLocaleString()}</td>
-                          <td className="p-3 text-right">{sale.quantity}</td>
-                          <td className="p-3 text-right font-semibold text-green-600">
-                            ¥{sale.amount.toLocaleString()}
-                          </td>
-                          <td className="p-3 text-center">
-                            <button
-                              onClick={() => handleDelete(sale.id)}
-                              className="text-red-500 hover:text-red-700 p-1"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="unitPrice">単価</Label>
+                <Input
+                  id="unitPrice"
+                  type="number"
+                  value={formData.unitPrice}
+                  onChange={(e) => setFormData(prev => ({ ...prev, unitPrice: e.target.value }))}
+                  required
+                />
               </div>
-            </CardContent>
-          </Card>
-        )}
-      </main>
+              
+              <div>
+                <Label htmlFor="quantity">個数</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label>合計金額</Label>
+                <div className="h-10 px-3 py-2 bg-gray-50 border rounded-md flex items-center">
+                  ¥{formData.amount.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button type="submit">
+                <Plus className="h-4 w-4 mr-2" />
+                登録
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCustomerManagement}
+              >
+                顧客管理
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* 売上一覧 */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>登録済み売上データ</CardTitle>
+          <div>
+            <Label htmlFor="month-filter" className="sr-only">月選択</Label>
+            <select
+              id="month-filter"
+              value={selectedMonth}
+              onChange={handleMonthChange}
+              className="px-3 py-1 border rounded-md"
+            >
+              {Array.from({ length: 12 }, (_, i) => {
+                const date = new Date()
+                date.setMonth(date.getMonth() - i)
+                const value = date.toISOString().slice(0, 7)
+                const label = `${date.getFullYear()}年${date.getMonth() + 1}月`
+                return <option key={value} value={value}>{label}</option>
+              })}
+            </select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>商品名</TableHead>
+                <TableHead>発注者</TableHead>
+                <TableHead className="text-right">単価</TableHead>
+                <TableHead className="text-right">個数</TableHead>
+                <TableHead className="text-right">合計金額</TableHead>
+                <TableHead className="w-[100px]">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {salesWithDetails.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-gray-500">
+                    データがありません
+                  </TableCell>
+                </TableRow>
+              ) : (
+                salesWithDetails.map((sale) => (
+                  <TableRow key={sale.id}>
+                    <TableCell>{sale.product_name}</TableCell>
+                    <TableCell>{sale.customer_name}</TableCell>
+                    <TableCell className="text-right">¥{sale.unit_price.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{sale.quantity}</TableCell>
+                    <TableCell className="text-right">¥{sale.amount.toLocaleString()}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(sale.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
-  );
+  )
 }
 
+// Suspenseでラップしたメインコンポーネント
 export default function OEMSalesPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen bg-gray-50"><p className="text-gray-500">読み込み中...</p></div>}>
+    <Suspense fallback={<div className="p-6">読み込み中...</div>}>
       <OEMSalesContent />
     </Suspense>
-  );
+  )
 }
