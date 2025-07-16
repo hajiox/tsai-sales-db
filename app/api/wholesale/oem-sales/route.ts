@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-sales/route.ts ver.3 キー名修正版
+// /app/api/wholesale/oem-sales/route.ts ver.4 GET処理を元に戻した安定版
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -13,7 +13,6 @@ export async function GET(request: Request) {
 
     if (!month) {
       return NextResponse.json({ 
-        success: false, 
         error: "月の指定が必要です" 
       }, { status: 400 });
     }
@@ -23,18 +22,19 @@ export async function GET(request: Request) {
       .toISOString()
       .split('T')[0];
 
+    // ▼▼▼ 修正点 ▼▼▼
+    // 安定して動作していた元のデータ取得方法に戻します
     const { data: sales, error } = await supabase
-      .from("oem_sales_with_details") // パフォーマンス改善のためビューを使用
-      .select('*')
+      .from("oem_sales")
+      .select(`*`) // フロント側で商品名・顧客名を結合するため、ここでは売上データのみ取得
       .gte("sale_date", startDate)
       .lte("sale_date", endDate)
-      .order("sale_date", { ascending: false })
       .order("created_at", { ascending: false });
+    // ▲▲▲ 修正点 ▲▲▲
 
     if (error) {
       console.error("OEM売上データ取得エラー:", error);
       return NextResponse.json({ 
-        success: false, 
         error: "データ取得に失敗しました" 
       }, { status: 500 });
     }
@@ -46,7 +46,6 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("サーバーエラー:", error);
     return NextResponse.json({ 
-      success: false, 
       error: "サーバーエラーが発生しました" 
     }, { status: 500 });
   }
@@ -57,8 +56,6 @@ export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const body = await request.json();
     
-    // ▼▼▼ 修正点 ▼▼▼
-    // フロントエンドから送られてくるキー名（スネークケース）に合わせる
     const { 
       product_id, 
       customer_id, 
@@ -67,26 +64,20 @@ export async function POST(request: Request) {
       unit_price 
     } = body;
 
-    // 必須項目チェック（変数名もスネークケースに）
     if (!product_id || !customer_id || !sale_date || !quantity || !unit_price) {
       return NextResponse.json({ 
         error: "必須項目が不足しています" 
       }, { status: 400 });
     }
-    // ▲▲▲ 修正点 ▲▲▲
 
-    // データ挿入または更新
     const { data, error } = await supabase
       .from("oem_sales")
       .upsert({
-        // ▼▼▼ 修正点 ▼▼▼
-        // 変数名をスネークケースに統一
         product_id: product_id,
         customer_id: customer_id,
         sale_date: sale_date,
         quantity: quantity,
         unit_price: unit_price,
-        // ▲▲▲ 修正点 ▲▲▲
       }, {
         onConflict: "product_id,customer_id,sale_date",
         ignoreDuplicates: false,
@@ -96,8 +87,7 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error("OEM売上データ保存エラー:", error);
-      // DBからの詳細なエラーメッセージを返す
-      if (error.code === '23505') { // unique_violation
+      if (error.code === '23505') {
           return NextResponse.json({ error: "同じ商品・顧客・月で既にデータが存在します。" }, { status: 409 });
       }
       return NextResponse.json({ error: "データ保存に失敗しました" }, { status: 500 });
