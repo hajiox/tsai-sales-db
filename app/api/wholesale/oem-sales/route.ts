@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-sales/route.ts ver.5 amount自動計算対応版
+// /app/api/wholesale/oem-sales/route.ts ver.6 DB関数呼び出し版
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -67,30 +67,19 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-      .from("oem_sales")
-      .upsert({
-        // ▼▼▼ 修正点 ▼▼▼
-        // DBで自動計算される`amount`をオブジェクトから削除
-        product_id: product_id,
-        customer_id: customer_id,
-        sale_date: sale_date,
-        quantity: quantity,
-        unit_price: unit_price,
-        // ▲▲▲ 修正点 ▲▲▲
-      }, {
-        onConflict: "product_id,customer_id,sale_date",
-        ignoreDuplicates: false,
-      })
-      .select()
-      .single();
+    // ▼▼▼ 修正点 ▼▼▼
+    // Supabaseのupsertから、作成したDB関数(rpc)の呼び出しに変更
+    const { data, error } = await supabase.rpc('upsert_oem_sale', {
+      p_product_id: product_id,
+      p_customer_id: customer_id,
+      p_sale_date: sale_date,
+      p_quantity: quantity,
+      p_unit_price: unit_price
+    });
+    // ▲▲▲ 修正点 ▲▲▲
 
     if (error) {
-      console.error("OEM売上データ保存エラー:", error);
-      if (error.code === '23505') {
-          return NextResponse.json({ error: "同じ商品・顧客・月で既にデータが存在します。" }, { status: 409 });
-      }
-      // Vercelログで表示された詳細なエラーを返すように修正
+      console.error("OEM売上データ保存エラー(RPC):", error);
       return NextResponse.json({ error: error.message || "データ保存に失敗しました" }, { status: 500 });
     }
 
