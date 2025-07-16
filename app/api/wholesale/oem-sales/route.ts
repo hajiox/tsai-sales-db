@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-sales/route.ts ver.4 GET処理を元に戻した安定版
+// /app/api/wholesale/oem-sales/route.ts ver.5 amount自動計算対応版
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -22,15 +22,12 @@ export async function GET(request: Request) {
       .toISOString()
       .split('T')[0];
 
-    // ▼▼▼ 修正点 ▼▼▼
-    // 安定して動作していた元のデータ取得方法に戻します
     const { data: sales, error } = await supabase
       .from("oem_sales")
-      .select(`*`) // フロント側で商品名・顧客名を結合するため、ここでは売上データのみ取得
+      .select(`*`)
       .gte("sale_date", startDate)
       .lte("sale_date", endDate)
       .order("created_at", { ascending: false });
-    // ▲▲▲ 修正点 ▲▲▲
 
     if (error) {
       console.error("OEM売上データ取得エラー:", error);
@@ -73,11 +70,14 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("oem_sales")
       .upsert({
+        // ▼▼▼ 修正点 ▼▼▼
+        // DBで自動計算される`amount`をオブジェクトから削除
         product_id: product_id,
         customer_id: customer_id,
         sale_date: sale_date,
         quantity: quantity,
         unit_price: unit_price,
+        // ▲▲▲ 修正点 ▲▲▲
       }, {
         onConflict: "product_id,customer_id,sale_date",
         ignoreDuplicates: false,
@@ -90,7 +90,8 @@ export async function POST(request: Request) {
       if (error.code === '23505') {
           return NextResponse.json({ error: "同じ商品・顧客・月で既にデータが存在します。" }, { status: 409 });
       }
-      return NextResponse.json({ error: "データ保存に失敗しました" }, { status: 500 });
+      // Vercelログで表示された詳細なエラーを返すように修正
+      return NextResponse.json({ error: error.message || "データ保存に失敗しました" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, sale: data });
