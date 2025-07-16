@@ -206,32 +206,17 @@ function OEMSalesContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // 最初にエラーをクリア
     setError(null)
 
-    // デバッグ用ログ
-    console.log('=== Form submission START ===')
-    console.log('Form submission - formData:', formData)
-    console.log('productId:', formData.productId, '- type:', typeof formData.productId)
-    console.log('customerId:', formData.customerId, '- type:', typeof formData.customerId)
-    console.log('quantity:', formData.quantity, '- type:', typeof formData.quantity)
-
-    // より詳細な検証
+    // 検証
     const hasProduct = formData.productId && formData.productId.trim() !== ''
     const hasCustomer = formData.customerId && formData.customerId.trim() !== ''
     const hasQuantity = formData.quantity && formData.quantity.trim() !== '' && formData.quantity !== '0'
 
-    console.log('Validation results:', { hasProduct, hasCustomer, hasQuantity })
-
     if (!hasProduct || !hasCustomer || !hasQuantity) {
-      console.log('Validation failed!')
       setError('すべての項目を入力してください')
       return
     }
-
-    // ここまで来たら、検証は通っているはず
-    console.log('Validation passed, submitting data...')
 
     try {
       const saleDate = `${selectedMonth}-01`
@@ -243,22 +228,16 @@ function OEMSalesContent() {
         unit_price: parseInt(formData.unitPrice)
       }
       
-      console.log('Request body:', requestBody)
-      
       const response = await fetch('/api/wholesale/oem-sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
       })
 
-      console.log('Response status:', response.status)
-
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.error || '登録に失敗しました')
       }
-
-      console.log('Submit success!')
       
       // フォームをリセット
       setFormData({
@@ -271,8 +250,6 @@ function OEMSalesContent() {
       
       // 売上一覧を再取得
       await fetchInitialData(selectedMonth)
-      
-      console.log('=== Form submission END ===')
     } catch (error) {
       console.error('Submit error:', error)
       setError(error instanceof Error ? error.message : '登録に失敗しました')
@@ -342,16 +319,6 @@ function OEMSalesContent() {
         </div>
       )}
 
-      {/* デバッグ情報 */}
-      <div className="mb-4 p-4 bg-gray-100 border border-gray-300 rounded text-sm">
-        <p><strong>デバッグ情報:</strong></p>
-        <p>商品ID: {formData.productId || '未選択'}</p>
-        <p>顧客ID: {formData.customerId || '未選択'}</p>
-        <p>単価: {formData.unitPrice || '未入力'}</p>
-        <p>個数: {formData.quantity || '未入力'}</p>
-        <p>合計: {formData.amount}</p>
-      </div>
-
       {/* 入力フォーム */}
       <Card className="mb-6">
         <CardHeader>
@@ -365,10 +332,7 @@ function OEMSalesContent() {
                 <SearchableSelect
                   options={products}
                   value={formData.productId}
-                  onChange={(value) => {
-                    console.log('Product selected:', value)
-                    setFormData(prev => ({ ...prev, productId: value }))
-                  }}
+                  onChange={(value) => setFormData(prev => ({ ...prev, productId: value }))}
                   placeholder="商品を検索..."
                   displayKey="product_name"
                   valueKey="id"
@@ -382,10 +346,7 @@ function OEMSalesContent() {
                 <SearchableSelect
                   options={customers}
                   value={formData.customerId}
-                  onChange={(value) => {
-                    console.log('Customer selected:', value)
-                    setFormData(prev => ({ ...prev, customerId: value }))
-                  }}
+                  onChange={(value) => setFormData(prev => ({ ...prev, customerId: value }))}
                   placeholder="発注者を検索..."
                   displayKey="customer_name"
                   valueKey="id"
