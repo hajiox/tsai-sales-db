@@ -1,4 +1,4 @@
-// /components/dashboard-view.tsx ver.3 エラーハンドリング修正版
+// /components/dashboard-view.tsx ver.4 パラメータ修正およびローディング処理改善版
 
 "use client";
 
@@ -27,23 +27,18 @@ export default function DashboardView() {
 
     // 日次データを取得
     const getDailyData = useCallback(async (date: Date) => {
-        setDailyLoading(true);
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const dateString = `${year}-${month}-${day}`;
         
-        try {
-            const response = await fetch(`/api/sales/daily?date=${dateString}`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '日次データの取得に失敗しました');
-            }
-            const result = await response.json();
-            setDailyData(result.data || {});
-        } finally {
-            setDailyLoading(false);
+        const response = await fetch(`/api/sales/daily?date=${dateString}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '日次データの取得に失敗しました');
         }
+        const result = await response.json();
+        setDailyData(result.data || {});
     }, []);
 
     // 月累計データを取得
@@ -64,27 +59,22 @@ export default function DashboardView() {
     
     // 過去6ヶ月データを取得
     const getSixMonthData = useCallback(async (date: Date) => {
-        setGraphLoading(true);
         const dateString = date.toISOString().split('T')[0];
         
-        try {
-            const response = await fetch(`/api/sales/six-month?date=${dateString}`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'グラフデータの取得に失敗しました');
-            }
-            const result = await response.json();
-            setSixMonthData(result.data || []);
-        } finally {
-            setGraphLoading(false);
+        const response = await fetch(`/api/sales/six-month?date=${dateString}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'グラフデータの取得に失敗しました');
         }
+        const result = await response.json();
+        setSixMonthData(result.data || []);
     }, []);
 
-    // 全てのデータを並行して取得
+    // 全てのデータを並行して取得（ローディング処理も一元管理）
     const fetchData = useCallback(async (date: Date) => {
         if (!session) return;
+        
         setError(null);
-        // ローディング状態を初期化
         setDailyLoading(true);
         setGraphLoading(true);
 
@@ -97,14 +87,15 @@ export default function DashboardView() {
         } catch (err: any) {
             setError(err.message);
             console.error("データ取得エラー:", err);
-            // エラー時もローディング状態を解除
+        } finally {
+            // 成功・失敗に関わらずローディングを終了
             setDailyLoading(false);
             setGraphLoading(false);
         }
     }, [session, getDailyData, getMonthlyData, getSixMonthData]);
 
     useEffect(() => {
-        if (session) { // セッションが確立してからデータを取得
+        if (session) {
             fetchData(selectedDate);
         }
     }, [selectedDate, session, fetchData]);
@@ -133,7 +124,7 @@ export default function DashboardView() {
                             selectedDate={(() => {
                                 const year = selectedDate.getFullYear();
                                 const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-                                const day = String(date.getDate()).padStart(2, '0');
+                                const day = String(selectedDate.getDate()).padStart(2, '0');
                                 return `${year}-${month}-${day}`;
                             })()}
                             dailyData={dailyData}
