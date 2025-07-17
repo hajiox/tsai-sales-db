@@ -1,8 +1,8 @@
-// /app/api/sales/six-month/route.ts ver.1
+// /app/api/sales/six-month/route.ts ver.3 正しい認証パス版
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
