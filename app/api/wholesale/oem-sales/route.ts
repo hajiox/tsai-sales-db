@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-sales/route.ts ver.2 Supabaseインポート修正版
+// /app/api/wholesale/oem-sales/route.ts ver.2 正しいAPIルート
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -67,7 +67,6 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // DB関数(rpc)の呼び出し
     const { data, error } = await supabase.rpc('upsert_oem_sale', {
       p_product_id: product_id,
       p_customer_id: customer_id,
