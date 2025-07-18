@@ -1,120 +1,141 @@
-// /app/api/wholesale/products/route.ts ver.4
-import { NextRequest, NextResponse } from 'next/server';
+// /api/wholesale/products/route.ts ver.5 利益率対応版
+import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// GET: 商品一覧を取得
 export async function GET() {
   try {
     const { data: products, error } = await supabase
       .from('wholesale_products')
       .select('*')
-      .order('display_order', { ascending: true, nullsLast: true }); // NULL値を最後に表示するよう修正
+      .order('display_order', { ascending: true })
+      .order('product_code', { ascending: true });
 
     if (error) {
-      console.error('Supabase Error:', error);
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
-    
-    // ★修正点： success: true をレスポンスに追加
-    return NextResponse.json({ success: true, products });
-
-  } catch (error: any) {
-    console.error('Catch Error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || '商品の取得に失敗しました' },
-      { status: 500 }
-    );
-  }
-}
-
-// POST: 商品を新規作成
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    
-    const { data, error } = await supabase
-      .from('wholesale_products')
-      .insert([body])
-      .select()
-      .single();
-    
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-    
-    return NextResponse.json({ success: true, product: data });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || '商品の作成に失敗しました' },
-      { status: 500 }
-    );
-  }
-}
-
-// PUT: 商品を更新
-export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { id, ...updateData } = body;
-    
-    if (!id) {
+      console.error('商品データ取得エラー:', error);
       return NextResponse.json(
-        { success: false, error: '商品IDが必要です' },
+        { success: false, error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      products: products || []
+    });
+  } catch (error) {
+    console.error('API エラー:', error);
+    return NextResponse.json(
+      { success: false, error: 'データの取得に失敗しました' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { product_code, product_name, price, profit_rate = 20.00 } = body;
+
+    if (!product_code || !product_name || price === undefined) {
+      return NextResponse.json(
+        { success: false, error: '必須項目が入力されていません' },
         { status: 400 }
       );
     }
-    
+
+    // 既存商品の最大display_orderを取得
+    const { data: maxOrderData } = await supabase
+      .from('wholesale_products')
+      .select('display_order')
+      .order('display_order', { ascending: false })
+      .limit(1);
+
+    const nextOrder = maxOrderData && maxOrderData[0]?.display_order 
+      ? maxOrderData[0].display_order + 1 
+      : 1;
+
+    const { data, error } = await supabase
+      .from('wholesale_products')
+      .insert([
+        {
+          product_code,
+          product_name,
+          price: parseInt(price),
+          profit_rate: parseFloat(profit_rate),
+          display_order: nextOrder,
+          is_active: true
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('商品登録エラー:', error);
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      product: data
+    });
+  } catch (error) {
+    console.error('API エラー:', error);
+    return NextResponse.json(
+      { success: false, error: '商品の登録に失敗しました' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, product_code, product_name, price, profit_rate, is_active } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: '商品IDが指定されていません' },
+        { status: 400 }
+      );
+    }
+
+    const updateData: any = {};
+    if (product_code !== undefined) updateData.product_code = product_code;
+    if (product_name !== undefined) updateData.product_name = product_name;
+    if (price !== undefined) updateData.price = parseInt(price);
+    if (profit_rate !== undefined) updateData.profit_rate = parseFloat(profit_rate);
+    if (is_active !== undefined) updateData.is_active = is_active;
+
     const { data, error } = await supabase
       .from('wholesale_products')
       .update(updateData)
       .eq('id', id)
       .select()
       .single();
-    
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-    
-    return NextResponse.json({ success: true, product: data });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || '商品の更新に失敗しました' },
-      { status: 500 }
-    );
-  }
-}
 
-// DELETE: 商品を削除
-export async function DELETE(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { id } = body;
-    
-    if (!id) {
+    if (error) {
+      console.error('商品更新エラー:', error);
       return NextResponse.json(
-        { success: false, error: '商品IDが必要です' },
-        { status: 400 }
+        { success: false, error: error.message },
+        { status: 500 }
       );
     }
-    
-    const { error } = await supabase
-      .from('wholesale_products')
-      .delete()
-      .eq('id', id);
-    
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-    
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
+
+    return NextResponse.json({
+      success: true,
+      product: data
+    });
+  } catch (error) {
+    console.error('API エラー:', error);
     return NextResponse.json(
-      { success: false, error: error.message || '商品の削除に失敗しました' },
+      { success: false, error: '商品の更新に失敗しました' },
       { status: 500 }
     );
   }
