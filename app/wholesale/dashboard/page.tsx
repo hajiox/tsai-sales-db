@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.35 コンポーネント分割版
+// /app/wholesale/dashboard/page.tsx ver.36 商品統計追加版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +13,7 @@ import RankingCards from '@/components/wholesale/ranking-cards';
 import OEMArea from '@/components/wholesale/oem-area';
 import PriceHistoryControls from '@/components/wholesale/price-history-controls';
 import SalesDataTable from '@/components/wholesale/sales-data-table';
+import ProductStatistics from '@/components/wholesale/product-statistics';
 import { createClient } from '@supabase/supabase-js';
 
 // Supabaseクライアントの初期化
@@ -25,6 +26,7 @@ interface Product {
  id: string;
  product_name: string;
  price: number;
+ profit_rate: number;
  [key: string]: any;
 }
 
@@ -612,6 +614,8 @@ function WholesaleDashboardContent() {
            />
            
            <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
+           
+           <ProductStatistics selectedYear={selectedYear} selectedMonth={selectedMonth} />
            
            <PriceHistoryControls
              isHistoricalMode={isHistoricalMode}
