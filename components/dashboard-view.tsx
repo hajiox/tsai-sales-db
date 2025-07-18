@@ -1,20 +1,18 @@
-// /components/dashboard-view.tsx ver.5 動的インポート適用版
+// /components/dashboard-view.tsx ver.5 動的インポート適用版（タイプミス修正）
 
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from "next-auth/react";
-import dynamic from 'next/dynamic'; // 1. dynamic をインポート
+import dynamic from 'next/dynamic';
 
 import DashboardHeader from './dashboard-header';
 import DashboardStats from './dashboard-stats';
-// import SalesChartGrid from './sales-chart-grid'; // 2. 元の静的インポートを削除
 import DailySalesCrudForm from './daily-sales-crud-form';
 import AiDashboardSection from './ai-dashboard-section';
 
-// 3. SalesChartGridを動的にインポートし、サーバーサイドレンダリング(SSR)を無効化
+// SalesChartGridを動的にインポートし、サーバーサイドレンダリング(SSR)を無効化
 const SalesChartGrid = dynamic(() => import('./sales-chart-grid'), { ssr: false });
-
 
 export default function DashboardView() {
     const { data: session } = useSession();
@@ -129,7 +127,7 @@ export default function DashboardView() {
                             selectedDate={(() => {
                                 const year = selectedDate.getFullYear();
                                 const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-                                const day = String(date.getDate()).padStart(2, '0');
+                                const day = String(selectedDate.getDate()).padStart(2, '0');  // ← ここを修正
                                 return `${year}-${month}-${day}`;
                             })()}
                             dailyData={dailyData}
