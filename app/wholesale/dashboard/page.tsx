@@ -456,4 +456,211 @@ function WholesaleDashboardContent() {
      
      if (result.success) {
        alert(`${result.deleted}件のデータを削除しました。`);
-       await fetchSa
+       await fetchSalesData(`${selectedYear}-${selectedMonth}`);
+     } else {
+       alert(`エラーが発生しました: ${result.error}`);
+     }
+   } catch (error) {
+     console.error('削除エラー:', error);
+     alert('削除中にエラーが発生しました。');
+   } finally {
+     setIsDeleting(false);
+   }
+ };
+
+ // 売上データ操作関数
+ const handleQuantityChange = (productId: string, day: number, value: string) => {
+   if (!/^\d*$/.test(value)) return;
+   setSalesData(prev => ({
+     ...prev,
+     [productId]: {
+       ...prev[productId],
+       [day]: value === '' ? undefined : parseInt(value, 10),
+     }
+   }));
+ };
+
+ const saveSalesData = async (productId: string, day: number) => {
+   const quantity = salesData[productId]?.[day] || 0;
+   const product = products.find(p => p.id === productId);
+   if (!product) return;
+   const saleDate = `${selectedYear}-${selectedMonth}-${String(day).padStart(2, '0')}`;
+   try {
+     await fetch('/api/wholesale/sales', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ productId, saleDate, quantity, unitPrice: product.price })
+     });
+   } catch (error) {
+     console.error('保存エラー:', error);
+   }
+ };
+
+ const handleInputKeyDown = async (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => {
+   if (e.key === 'Enter') {
+     e.preventDefault();
+     await saveSalesData(productId, day);
+     (e.target as HTMLInputElement).blur();
+   }
+ };
+
+ const getDaysInMonth = () => {
+   if (!selectedYear || !selectedMonth) return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+   return new Date(parseInt(selectedYear), parseInt(selectedMonth), 0).getDate();
+ };
+
+ // 合計計算（価格履歴考慮）
+ const calculateTotals = (productId: string) => {
+   const sales = salesData[productId] || {};
+   const totalQuantity = Object.values(sales).reduce((sum, qty) => sum + (qty || 0), 0);
+   
+   let price = 0;
+   if (isHistoricalMode || selectedHistoryDate) {
+     const historicalProduct = historicalPriceData.find(p => p.product_id === productId);
+     price = historicalProduct?.historical_price || 0;
+   } else {
+     const product = products.find(p => p.id === productId);
+     price = product?.price || 0;
+   }
+   
+   const totalAmount = totalQuantity * price;
+   return { totalQuantity, totalAmount };
+ };
+
+ const wholesaleTotal = products.reduce((sum, product) => {
+   const { totalAmount } = calculateTotals(product.id);
+   return sum + totalAmount;
+ }, 0);
+
+ const oemTotal = oemSales.reduce((sum, sale) => sum + sale.amount, 0);
+ const grandTotal = wholesaleTotal + oemTotal;
+
+ const formatDate = (dateString: string) => {
+   const date = new Date(dateString);
+   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+ };
+
+ if (!mounted) {
+   return <div className="flex items-center justify-center h-screen bg-gray-50"><p className="text-gray-500">ページを準備しています...</p></div>;
+ }
+
+ return (
+   <div className="h-screen flex flex-col bg-gray-50">
+     <header className="flex-shrink-0 bg-white shadow-sm border-b z-30">
+       <div className="px-4 py-2 flex items-center justify-between">
+         <h1 className="text-xl font-bold text-gray-900">卸販売管理システム</h1>
+         <div className="flex items-center gap-3">
+           <select
+             value={selectedYear}
+             onChange={(e) => handleYearChange(e.target.value)}
+             className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
+             disabled={loading}
+           >
+             {yearOptions.map(year => <option key={year} value={year}>{year}年</option>)}
+           </select>
+           <select
+             value={selectedMonth}
+             onChange={(e) => handleMonthChange(e.target.value)}
+             className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
+             disabled={loading}
+           >
+             {monthOptions.map(month => <option key={month} value={month}>{month}月</option>)}
+           </select>
+           <input
+             type="file"
+             ref={fileInputRef}
+             onChange={handleFileUpload}
+             accept=".csv"
+             className="hidden"
+           />
+           <Button
+             size="sm"
+             variant="outline"
+             onClick={() => fileInputRef.current?.click()}
+             disabled={loading || isImporting}
+             className="flex items-center gap-2"
+           >
+             <Upload className="w-4 h-4" />
+             {isImporting ? 'インポート中...' : 'CSV読込'}
+           </Button>
+           <Button
+             size="sm"
+             variant="destructive"
+             onClick={handleDeleteMonth}
+             disabled={loading || isDeleting}
+             className="flex items-center gap-2"
+           >
+             <Trash2 className="w-4 h-4" />
+             {isDeleting ? '削除中...' : '月削除'}
+           </Button>
+         </div>
+       </div>
+     </header>
+
+     <main className="flex-1 overflow-auto p-4">
+       {loading ? (
+         <div className="flex-1 flex items-center justify-center"><p className="text-gray-500">データを読み込んでいます...</p></div>
+       ) : (
+         <div className="space-y-4">
+           <SummaryCards 
+             products={products} 
+             oemProducts={oemProducts}
+             oemSalesCount={oemSales.length}
+             wholesaleTotal={wholesaleTotal}
+             oemTotal={oemTotal}
+             grandTotal={grandTotal} 
+           />
+           
+           <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
+           
+           <PriceHistoryControls
+             isHistoricalMode={isHistoricalMode}
+             selectedHistoryDate={selectedHistoryDate}
+             loadingHistorical={loadingHistorical}
+             priceChangeDates={priceChangeDates}
+             onToggleHistoricalMode={toggleHistoricalMode}
+             onShowPriceAtDate={showPriceAtDate}
+           />
+           
+           {(isHistoricalMode || selectedHistoryDate) && historicalPriceData.length > 0 && (
+             <div className="text-sm text-amber-600 font-medium">
+               ※ 売上金額は{selectedHistoryDate ? formatDate(selectedHistoryDate) : `${selectedYear}年${selectedMonth}月1日`}時点の価格で計算されています
+             </div>
+           )}
+
+           <OEMArea 
+             oemProducts={oemProducts} 
+             oemSales={oemSales}
+             selectedYear={selectedYear}
+             selectedMonth={selectedMonth}
+           />
+
+           <SalesDataTable
+             products={products}
+             salesData={salesData}
+             isHistoricalMode={isHistoricalMode}
+             selectedHistoryDate={selectedHistoryDate}
+             historicalPriceData={historicalPriceData}
+             daysInMonth={getDaysInMonth()}
+             onQuantityChange={handleQuantityChange}
+             onSave={saveSalesData}
+             onInputKeyDown={handleInputKeyDown}
+           />
+         </div>
+       )}
+     </main>
+   </div>
+ );
+}
+
+export default function WholesaleDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-gray-50">
+        <p className="text-gray-500">読み込み中...</p>
+      </div>
+    }>
+      <WholesaleDashboardContent />
+    </Suspense>
+  );
+}
