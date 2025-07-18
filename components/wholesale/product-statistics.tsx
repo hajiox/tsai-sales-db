@@ -1,4 +1,4 @@
-// /components/wholesale/product-statistics.tsx ver.2 全商品表示版
+// /components/wholesale/product-statistics.tsx ver.3 売上順ソート版
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -45,7 +45,11 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
       const data = await response.json();
       
       if (data.success) {
-        setStatistics(data.statistics);
+        // 当月売上高でソート（降順）
+        const sortedStats = data.statistics.sort((a: ProductStatistics, b: ProductStatistics) => {
+          return b.current_month_amount - a.current_month_amount;
+        });
+        setStatistics(sortedStats);
       }
     } catch (error) {
       console.error('統計データ取得エラー:', error);
@@ -92,7 +96,7 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
   return (
     <div className="bg-white rounded-lg shadow-sm">
       <div className="border-b p-4">
-        <h3 className="text-lg font-semibold">商品販売統計</h3>
+        <h3 className="text-lg font-semibold">商品販売統計（売上ランキング）</h3>
         <p className="text-sm text-gray-600 mt-1">
           {selectedYear}年{selectedMonth}月の販売実績と過去データの比較
         </p>
@@ -102,6 +106,7 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
         <table className="w-full">
           <thead>
             <tr className="border-b bg-gray-50">
+              <th className="text-center p-3 text-sm font-medium text-gray-700 w-16">順位</th>
               <th className="text-left p-3 text-sm font-medium text-gray-700">商品名</th>
               <th className="text-center p-3 text-sm font-medium text-gray-700 whitespace-nowrap">卸価格</th>
               <th className="text-center p-3 text-sm font-medium text-gray-700 whitespace-nowrap">利益率</th>
@@ -129,12 +134,19 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
             </tr>
           </thead>
           <tbody>
-            {statistics.map((stat) => {
+            {statistics.map((stat, index) => {
               const currentProfit = calculateProfit(stat.current_month_amount, stat.profit_rate);
               const yearProfit = calculateProfit(stat.months_12_amount, stat.profit_rate);
               
               return (
                 <tr key={stat.product_id} className="border-b hover:bg-gray-50">
+                  <td className="text-center p-3">
+                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
+                      index < 3 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {index + 1}
+                    </span>
+                  </td>
                   <td className="p-3">
                     <div className="font-medium text-sm">{stat.product_name}</div>
                     <div className="text-xs text-gray-500">{stat.product_code}</div>
