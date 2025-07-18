@@ -1,4 +1,4 @@
-// /components/wholesale/product-statistics.tsx ver.1
+// /components/wholesale/product-statistics.tsx ver.2 全商品表示版
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -30,7 +30,6 @@ interface ProductStatisticsProps {
 export default function ProductStatistics({ selectedYear, selectedMonth }: ProductStatisticsProps) {
   const [statistics, setStatistics] = useState<ProductStatistics[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedView, setExpandedView] = useState(false);
 
   useEffect(() => {
     if (!selectedYear || !selectedMonth) return;
@@ -90,8 +89,6 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
     );
   }
 
-  const displayStats = expandedView ? statistics : statistics.slice(0, 5);
-
   return (
     <div className="bg-white rounded-lg shadow-sm">
       <div className="border-b p-4">
@@ -132,7 +129,7 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
             </tr>
           </thead>
           <tbody>
-            {displayStats.map((stat) => {
+            {statistics.map((stat) => {
               const currentProfit = calculateProfit(stat.current_month_amount, stat.profit_rate);
               const yearProfit = calculateProfit(stat.months_12_amount, stat.profit_rate);
               
@@ -204,17 +201,6 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
           </tbody>
         </table>
       </div>
-      
-      {statistics.length > 5 && (
-        <div className="p-4 border-t">
-          <button
-            onClick={() => setExpandedView(!expandedView)}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            {expandedView ? '表示を縮小' : `他 ${statistics.length - 5} 商品を表示`}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
