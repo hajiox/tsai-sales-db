@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.33 Suspense対応版
+// /app/wholesale/dashboard/page.tsx ver.34 価格履歴機能追加版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -7,11 +7,17 @@ import { Suspense } from 'react';
 import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Package, Users, TrendingUp, FileText, Upload, Trash2, Settings } from 'lucide-react';
+import { Package, Users, TrendingUp, FileText, Upload, Trash2, Settings, History, Calendar } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
 import OEMArea from '@/components/wholesale/oem-area';
+import { createClient } from '@supabase/supabase-js';
+
+// Supabaseクライアントの初期化
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // インターフェース定義は同じ
 interface Product {
@@ -50,6 +56,24 @@ interface SalesData {
  [productId: string]: { [date: string]: number | undefined; };
 }
 
+// 過去価格データの型定義
+interface HistoricalPriceData {
+  product_id: string;
+  product_name: string;
+  current_price: number;
+  historical_price: number;
+  total_quantity: number;
+  current_amount: number;
+  historical_amount: number;
+  price_difference: number;
+}
+
+// 価格変更日の型定義
+interface PriceChangeDate {
+  change_date: string;
+  product_count: number;
+}
+
 // メインコンポーネントを分離
 function WholesaleDashboardContent() {
  const router = useRouter();
@@ -68,6 +92,13 @@ function WholesaleDashboardContent() {
  const [isImporting, setIsImporting] = useState(false);
  const [isDeleting, setIsDeleting] = useState(false);
  const fileInputRef = useRef<HTMLInputElement>(null);
+
+ // 価格履歴関連の状態
+ const [isHistoricalMode, setIsHistoricalMode] = useState(false);
+ const [historicalPriceData, setHistoricalPriceData] = useState<HistoricalPriceData[]>([]);
+ const [loadingHistorical, setLoadingHistorical] = useState(false);
+ const [priceChangeDates, setPriceChangeDates] = useState<PriceChangeDate[]>([]);
+ const [selectedHistoryDate, setSelectedHistoryDate] = useState<string | null>(null);
 
  useEffect(() => {
    setMounted(true);
@@ -128,7 +159,8 @@ function WholesaleDashboardContent() {
          fetchOemProducts(),
          fetchSalesData(`${selectedYear}-${selectedMonth}`),
          fetchOemSalesData(`${selectedYear}-${selectedMonth}`),
-         fetchPreviousMonthData(`${selectedYear}-${selectedMonth}`)
+         fetchPreviousMonthData(`${selectedYear}-${selectedMonth}`),
+         fetchPriceChangeDates()
        ]);
      } catch (error) {
        console.error('一括データ取得エラー:', error);
@@ -138,6 +170,99 @@ function WholesaleDashboardContent() {
    };
    fetchAllData();
  }, [selectedYear, selectedMonth, mounted]);
+
+ // 価格変更日付の取得
+ const fetchPriceChangeDates = async () => {
+   try {
+     const { data, error } = await supabase
+       .from('wholesale_product_price_history')
+       .select('valid_from, product_id')
+       .order('valid_from', { ascending: false });
+     
+     if (error) throw error;
+     
+     // 日付ごとにグループ化
+     const dateMap = new Map<string, Set<string>>();
+     data?.forEach(item => {
+       const date = new Date(item.valid_from).toISOString().split('T')[0];
+       if (!dateMap.has(date)) {
+         dateMap.set(date, new Set());
+       }
+       dateMap.get(date)?.add(item.product_id);
+     });
+     
+     // 最新5件の日付を取得
+     const dates = Array.from(dateMap.entries())
+       .map(([date, products]) => ({
+         change_date: date,
+         product_count: products.size
+       }))
+       .slice(0, 5);
+     
+     setPriceChangeDates(dates);
+   } catch (error) {
+     console.error('価格変更日付の取得に失敗しました:', error);
+   }
+ };
+
+ // 特定日付の価格で表示
+ const showPriceAtDate = async (date: string) => {
+   setLoadingHistorical(true);
+   setSelectedHistoryDate(date);
+   try {
+     const { data: historicalData, error } = await supabase.rpc(
+       'calculate_wholesale_sales_with_historical_prices',
+       { 
+         target_month: `${selectedYear}-${selectedMonth}`,
+         target_date: date
+       }
+     );
+     
+     if (error) throw error;
+     
+     setHistoricalPriceData(historicalData || []);
+     setIsHistoricalMode(true);
+   } catch (error) {
+     console.error('過去価格データの取得に失敗しました:', error);
+     alert('過去価格データの取得に失敗しました');
+   } finally {
+     setLoadingHistorical(false);
+   }
+ };
+
+ // 過去価格データの取得
+ const fetchHistoricalPrices = async () => {
+   setLoadingHistorical(true);
+   try {
+     const { data: historicalData, error } = await supabase.rpc(
+       'calculate_wholesale_sales_with_historical_prices',
+       { target_month: `${selectedYear}-${selectedMonth}` }
+     );
+     
+     if (error) throw error;
+     
+     setHistoricalPriceData(historicalData || []);
+   } catch (error) {
+     console.error('過去価格データの取得に失敗しました:', error);
+     alert('過去価格データの取得に失敗しました');
+   } finally {
+     setLoadingHistorical(false);
+   }
+ };
+
+ // 過去価格モードの切り替え
+ const toggleHistoricalMode = () => {
+   if (!isHistoricalMode && historicalPriceData.length === 0) {
+     fetchHistoricalPrices();
+   }
+   setIsHistoricalMode(!isHistoricalMode);
+   setSelectedHistoryDate(null);
+ };
+
+ const formatDate = (dateString: string) => {
+   const date = new Date(dateString);
+   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+ };
 
  const fetchProducts = async () => {
    try {
@@ -401,9 +526,33 @@ function WholesaleDashboardContent() {
  const calculateTotals = (productId: string) => {
    const sales = salesData[productId] || {};
    const totalQuantity = Object.values(sales).reduce((sum, qty) => sum + (qty || 0), 0);
-   const product = products.find(p => p.id === productId);
-   const totalAmount = totalQuantity * (product?.price || 0);
+   
+   // 過去価格モードの場合は履歴価格を使用
+   let price = 0;
+   if (isHistoricalMode || selectedHistoryDate) {
+     const historicalProduct = historicalPriceData.find(p => p.product_id === productId);
+     price = historicalProduct?.historical_price || 0;
+   } else {
+     const product = products.find(p => p.id === productId);
+     price = product?.price || 0;
+   }
+   
+   const totalAmount = totalQuantity * price;
    return { totalQuantity, totalAmount };
+ };
+
+ // 価格差分の表示用関数
+ const getPriceDifference = (productId: string) => {
+   if (!isHistoricalMode && !selectedHistoryDate) return null;
+   const historicalProduct = historicalPriceData.find(p => p.product_id === productId);
+   if (!historicalProduct) return null;
+   
+   const diff = historicalProduct.price_difference;
+   const percent = historicalProduct.current_price > 0 
+     ? (diff / historicalProduct.current_price * 100).toFixed(1)
+     : '0';
+   
+   return { diff, percent };
  };
 
  // 卸商品の合計金額
@@ -489,6 +638,56 @@ function WholesaleDashboardContent() {
              grandTotal={grandTotal} 
            />
            <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
+           
+           {/* 過去価格表示モードボタンと価格変更履歴 */}
+           <div className="flex items-center gap-2 flex-wrap">
+             <button
+               onClick={toggleHistoricalMode}
+               disabled={loadingHistorical}
+               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                 isHistoricalMode && !selectedHistoryDate
+                   ? 'bg-amber-600 text-white hover:bg-amber-700' 
+                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+               } ${loadingHistorical ? 'opacity-50 cursor-not-allowed' : ''}`}
+             >
+               <History className="h-4 w-4" />
+               {loadingHistorical ? '読み込み中...' : isHistoricalMode && !selectedHistoryDate ? '過去価格表示中' : '過去価格で表示'}
+             </button>
+             
+             {/* 価格変更日付ボタン */}
+             {priceChangeDates.map((dateInfo) => (
+               <button
+                 key={dateInfo.change_date}
+                 onClick={() => showPriceAtDate(dateInfo.change_date)}
+                 disabled={loadingHistorical}
+                 className={`flex items-center gap-1 px-3 py-2 rounded-md text-sm transition-colors ${
+                   selectedHistoryDate === dateInfo.change_date
+                     ? 'bg-blue-600 text-white hover:bg-blue-700'
+                     : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                 } ${loadingHistorical ? 'opacity-50 cursor-not-allowed' : ''}`}
+                 title={`${dateInfo.product_count}商品の価格変更`}
+               >
+                 <Calendar className="h-3 w-3" />
+                 {formatDate(dateInfo.change_date)}
+               </button>
+             ))}
+             
+             {/* 履歴の管理ボタン */}
+             <button
+               onClick={() => router.push('/wholesale/price-history')}
+               className="flex items-center gap-1 px-3 py-2 bg-gray-600 text-white rounded-md text-sm hover:bg-gray-700"
+             >
+               <History className="h-4 w-4" />
+               履歴の管理
+             </button>
+           </div>
+           
+           {(isHistoricalMode || selectedHistoryDate) && historicalPriceData.length > 0 && (
+             <div className="text-sm text-amber-600 font-medium">
+               ※ 売上金額は{selectedHistoryDate ? formatDate(selectedHistoryDate) : `${selectedYear}年${selectedMonth}月1日`}時点の価格で計算されています
+             </div>
+           )}
+
            <OEMArea 
              oemProducts={oemProducts} 
              oemSales={oemSales}
@@ -541,6 +740,7 @@ function WholesaleDashboardContent() {
                      </tr>
                    ) : products.map((product, productIndex) => {
                      const { totalQuantity, totalAmount } = calculateTotals(product.id);
+                     const priceDiff = getPriceDifference(product.id);
                      const rows = [];
                      
                      // 10商品ごとに日付ヘッダーを挿入
@@ -562,6 +762,11 @@ function WholesaleDashboardContent() {
                              <div className="font-medium text-gray-900 break-words">{product.product_name}</div>
                              <div className="text-xs text-gray-600 mt-1">
                                <span>卸価格: ¥{product.price.toLocaleString()}</span>
+                               {priceDiff && (
+                                 <span className={`ml-2 font-semibold ${priceDiff.diff > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                   {priceDiff.diff > 0 ? '↑' : '↓'} {Math.abs(priceDiff.diff).toLocaleString()} ({priceDiff.percent}%)
+                                 </span>
+                               )}
                                <span className="font-semibold text-blue-600 ml-2">合計: {totalQuantity}</span>
                              </div>
                              <div className="text-xs text-gray-600 font-semibold text-green-600">
