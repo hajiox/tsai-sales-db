@@ -1,36 +1,40 @@
-// /app/wholesale/products/page.tsx ver.2 (完全版商品マスター管理)
+// /app/wholesale/products/page.tsx ver.3 利益率対応版
 "use client"
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Plus, Edit2, Trash2, Save, X, ArrowUp, ArrowDown } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
+import { ArrowUpDown, Pencil, Trash2, Save, X, Plus } from 'lucide-react';
+import Link from 'next/link';
 
 interface Product {
   id: string;
   product_code: string;
   product_name: string;
   price: number;
+  profit_rate: number;
   is_active: boolean;
   display_order: number;
-  created_at?: string;
-  updated_at?: string;
 }
 
 export default function ProductsPage() {
-  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
-  const [formData, setFormData] = useState({
+  const [editForm, setEditForm] = useState({
     product_code: '',
     product_name: '',
-    price: 0,
-    is_active: true
+    price: '',
+    profit_rate: ''
+  });
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newForm, setNewForm] = useState({
+    product_code: '',
+    product_name: '',
+    price: '',
+    profit_rate: '20.00'
   });
 
   useEffect(() => {
@@ -40,11 +44,9 @@ export default function ProductsPage() {
   const fetchProducts = async () => {
     try {
       const response = await fetch('/api/wholesale/products');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && Array.isArray(data.products)) {
-          setProducts(data.products);
-        }
+      const data = await response.json();
+      if (data.success) {
+        setProducts(data.products);
       }
     } catch (error) {
       console.error('商品データ取得エラー:', error);
@@ -53,83 +55,64 @@ export default function ProductsPage() {
     }
   };
 
-  const handleAdd = () => {
-    setIsAdding(true);
-    setFormData({
-      product_code: '',
-      product_name: '',
-      price: 0,
-      is_active: true
-    });
-  };
-
   const handleEdit = (product: Product) => {
     setEditingId(product.id);
-    setFormData({
+    setEditForm({
       product_code: product.product_code,
       product_name: product.product_name,
-      price: product.price,
-      is_active: product.is_active
-    });
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    setIsAdding(false);
-    setFormData({
-      product_code: '',
-      product_name: '',
-      price: 0,
-      is_active: true
+      price: product.price.toString(),
+      profit_rate: product.profit_rate.toString()
     });
   };
 
   const handleSave = async () => {
+    if (!editingId) return;
+
     try {
-      if (isAdding) {
-        // 新規追加
-        const maxOrder = Math.max(...products.map(p => p.display_order || 0), 0);
-        const response = await fetch('/api/wholesale/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            display_order: maxOrder + 1
-          })
-        });
+      const response = await fetch('/api/wholesale/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingId,
+          ...editForm,
+          price: parseInt(editForm.price),
+          profit_rate: parseFloat(editForm.profit_rate)
+        })
+      });
 
-        if (response.ok) {
-          await fetchProducts();
-          setIsAdding(false);
-          handleCancel();
-        } else {
-          const error = await response.json();
-          alert(`エラー: ${error.error}`);
-        }
-      } else if (editingId) {
-        // 更新
-        const response = await fetch(`/api/wholesale/products/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
-        });
-
-        if (response.ok) {
-          await fetchProducts();
-          handleCancel();
-        } else {
-          const error = await response.json();
-          alert(`エラー: ${error.error}`);
-        }
+      if (response.ok) {
+        await fetchProducts();
+        setEditingId(null);
       }
     } catch (error) {
-      console.error('保存エラー:', error);
-      alert('保存中にエラーが発生しました。');
+      console.error('更新エラー:', error);
+      alert('更新に失敗しました');
     }
   };
 
-  const handleDelete = async (id: string, productName: string) => {
-    if (!confirm(`商品「${productName}」を削除しますか？\n\n※この商品の売上データも全て削除されます。`)) {
+  const handleCancel = () => {
+    setEditingId(null);
+    setEditForm({ product_code: '', product_name: '', price: '', profit_rate: '' });
+  };
+
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    try {
+      const response = await fetch('/api/wholesale/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, is_active: !currentStatus })
+      });
+
+      if (response.ok) {
+        await fetchProducts();
+      }
+    } catch (error) {
+      console.error('ステータス更新エラー:', error);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('この商品を削除しますか？関連する売上データも削除されます。')) {
       return;
     }
 
@@ -140,13 +123,10 @@ export default function ProductsPage() {
 
       if (response.ok) {
         await fetchProducts();
-      } else {
-        const error = await response.json();
-        alert(`エラー: ${error.error}`);
       }
     } catch (error) {
       console.error('削除エラー:', error);
-      alert('削除中にエラーが発生しました。');
+      alert('削除に失敗しました');
     }
   };
 
@@ -166,234 +146,218 @@ export default function ProductsPage() {
     }
   };
 
-  const renderProductRow = (product: Product, index: number) => {
-    const isEditing = editingId === product.id;
+  const handleAddNew = async () => {
+    try {
+      const response = await fetch('/api/wholesale/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newForm,
+          price: parseInt(newForm.price),
+          profit_rate: parseFloat(newForm.profit_rate)
+        })
+      });
 
-    if (isEditing) {
-      return (
-        <tr key={product.id} className="border-b hover:bg-gray-50">
-          <td className="p-2 text-center text-gray-500">{index + 1}</td>
-          <td className="p-2">
-            <Input
-              value={formData.product_code}
-              onChange={(e) => setFormData({ ...formData, product_code: e.target.value })}
-              className="h-8 text-sm"
-            />
-          </td>
-          <td className="p-2">
-            <Input
-              value={formData.product_name}
-              onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
-              className="h-8 text-sm"
-            />
-          </td>
-          <td className="p-2">
-            <Input
-              type="number"
-              value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) || 0 })}
-              className="h-8 text-sm w-24"
-            />
-          </td>
-          <td className="p-2 text-center">
-            <input
-              type="checkbox"
-              checked={formData.is_active}
-              onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-              className="h-4 w-4"
-            />
-          </td>
-          <td className="p-2">
-            <div className="flex gap-1">
-              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" disabled>
-                <ArrowUp className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" disabled>
-                <ArrowDown className="h-4 w-4" />
-              </Button>
-            </div>
-          </td>
-          <td className="p-2">
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 px-2"
-                onClick={handleSave}
-              >
-                <Save className="h-4 w-4 mr-1" />
-                保存
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 px-2"
-                onClick={handleCancel}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </td>
-        </tr>
-      );
+      if (response.ok) {
+        await fetchProducts();
+        setShowNewForm(false);
+        setNewForm({ product_code: '', product_name: '', price: '', profit_rate: '20.00' });
+      }
+    } catch (error) {
+      console.error('登録エラー:', error);
+      alert('登録に失敗しました');
     }
+  };
 
-    return (
-      <tr key={product.id} className="border-b hover:bg-gray-50">
-        <td className="p-2 text-center text-gray-500">{index + 1}</td>
-        <td className="p-2 text-sm">{product.product_code}</td>
-        <td className="p-2 text-sm font-medium">{product.product_name}</td>
-        <td className="p-2 text-sm text-right">¥{product.price.toLocaleString()}</td>
-        <td className="p-2 text-center">
-          <span className={`text-xs px-2 py-1 rounded ${product.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-            {product.is_active ? '有効' : '無効'}
-          </span>
-        </td>
-        <td className="p-2">
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0"
-              onClick={() => handleOrderChange(product.id, 'up')}
-              disabled={index === 0}
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0"
-              onClick={() => handleOrderChange(product.id, 'down')}
-              disabled={index === products.length - 1}
-            >
-              <ArrowDown className="h-4 w-4" />
-            </Button>
-          </div>
-        </td>
-        <td className="p-2">
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0"
-              onClick={() => handleEdit(product)}
-            >
-              <Edit2 className="h-4 w-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-              onClick={() => handleDelete(product.id, product.product_name)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </td>
-      </tr>
-    );
+  const validateProfitRate = (value: string) => {
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0 || num > 100) {
+      return '0.00';
+    }
+    return num.toFixed(2);
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen"><p>読み込み中...</p></div>;
+    return <div className="flex items-center justify-center h-screen">読み込み中...</div>;
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">商品マスター管理</h1>
+    <div className="container mx-auto p-4">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">卸商品マスター管理</h1>
         <div className="flex gap-2">
-          <Button onClick={() => router.push('/wholesale/dashboard')}>
-            ダッシュボードに戻る
-          </Button>
-          <Button onClick={handleAdd} disabled={isAdding}>
-            <Plus className="h-4 w-4 mr-2" />
-            新規追加
+          <Link href="/wholesale/dashboard">
+            <Button variant="outline">ダッシュボードに戻る</Button>
+          </Link>
+          <Button onClick={() => setShowNewForm(true)} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            新規登録
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No.</th>
-                <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">商品コード</th>
-                <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">商品名</th>
-                <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">価格</th>
-                <th className="p-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">状態</th>
-                <th className="p-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">並び順</th>
-                <th className="p-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isAdding && (
-                <tr className="border-b bg-blue-50">
-                  <td className="p-2 text-center text-gray-500">新規</td>
-                  <td className="p-2">
+      {showNewForm && (
+        <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+          <h3 className="text-lg font-semibold mb-4">新規商品登録</h3>
+          <div className="grid grid-cols-5 gap-4">
+            <Input
+              placeholder="商品コード"
+              value={newForm.product_code}
+              onChange={(e) => setNewForm({ ...newForm, product_code: e.target.value })}
+            />
+            <Input
+              placeholder="商品名"
+              value={newForm.product_name}
+              onChange={(e) => setNewForm({ ...newForm, product_name: e.target.value })}
+              className="col-span-2"
+            />
+            <Input
+              type="number"
+              placeholder="卸価格"
+              value={newForm.price}
+              onChange={(e) => setNewForm({ ...newForm, price: e.target.value })}
+            />
+            <Input
+              type="number"
+              placeholder="利益率(%)"
+              value={newForm.profit_rate}
+              onChange={(e) => setNewForm({ ...newForm, profit_rate: e.target.value })}
+              onBlur={(e) => setNewForm({ ...newForm, profit_rate: validateProfitRate(e.target.value) })}
+              step="0.01"
+              min="0"
+              max="100"
+            />
+          </div>
+          <div className="flex gap-2 mt-4">
+            <Button onClick={handleAddNew} size="sm">登録</Button>
+            <Button onClick={() => setShowNewForm(false)} size="sm" variant="outline">キャンセル</Button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12">順序</TableHead>
+              <TableHead className="w-32">商品コード</TableHead>
+              <TableHead>商品名</TableHead>
+              <TableHead className="w-28 text-right">卸価格</TableHead>
+              <TableHead className="w-24 text-right">利益率(%)</TableHead>
+              <TableHead className="w-20 text-center">状態</TableHead>
+              <TableHead className="w-32 text-center">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {products.map((product, index) => (
+              <TableRow key={product.id}>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleOrderChange(product.id, 'up')}
+                      disabled={index === 0}
+                      className="h-6 w-6 p-0"
+                    >
+                      <ArrowUpDown className="w-3 h-3 rotate-180" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleOrderChange(product.id, 'down')}
+                      disabled={index === products.length - 1}
+                      className="h-6 w-6 p-0"
+                    >
+                      <ArrowUpDown className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {editingId === product.id ? (
                     <Input
-                      value={formData.product_code}
-                      onChange={(e) => setFormData({ ...formData, product_code: e.target.value })}
-                      className="h-8 text-sm"
-                      placeholder="商品コード"
+                      value={editForm.product_code}
+                      onChange={(e) => setEditForm({ ...editForm, product_code: e.target.value })}
+                      className="h-8"
                     />
-                  </td>
-                  <td className="p-2">
+                  ) : (
+                    product.product_code
+                  )}
+                </TableCell>
+                <TableCell>
+                  {editingId === product.id ? (
                     <Input
-                      value={formData.product_name}
-                      onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
-                      className="h-8 text-sm"
-                      placeholder="商品名"
+                      value={editForm.product_name}
+                      onChange={(e) => setEditForm({ ...editForm, product_name: e.target.value })}
+                      className="h-8"
                     />
-                  </td>
-                  <td className="p-2">
+                  ) : (
+                    product.product_name
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {editingId === product.id ? (
                     <Input
                       type="number"
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) || 0 })}
-                      className="h-8 text-sm w-24"
-                      placeholder="価格"
+                      value={editForm.price}
+                      onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                      className="h-8 text-right"
                     />
-                  </td>
-                  <td className="p-2 text-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_active}
-                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                      className="h-4 w-4"
+                  ) : (
+                    `¥${product.price.toLocaleString()}`
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {editingId === product.id ? (
+                    <Input
+                      type="number"
+                      value={editForm.profit_rate}
+                      onChange={(e) => setEditForm({ ...editForm, profit_rate: e.target.value })}
+                      onBlur={(e) => setEditForm({ ...editForm, profit_rate: validateProfitRate(e.target.value) })}
+                      className="h-8 text-right"
+                      step="0.01"
+                      min="0"
+                      max="100"
                     />
-                  </td>
-                  <td className="p-2">-</td>
-                  <td className="p-2">
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 px-2"
-                        onClick={handleSave}
-                      >
-                        <Save className="h-4 w-4 mr-1" />
-                        保存
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 px-2"
-                        onClick={handleCancel}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {products.map((product, index) => renderProductRow(product, index))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+                  ) : (
+                    `${product.profit_rate}%`
+                  )}
+                </TableCell>
+                <TableCell className="text-center">
+                  <Switch
+                    checked={product.is_active}
+                    onCheckedChange={() => handleToggleActive(product.id, product.is_active)}
+                    disabled={editingId === product.id}
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center justify-center gap-1">
+                    {editingId === product.id ? (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={handleSave} className="h-8 w-8 p-0">
+                          <Save className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={handleCancel} className="h-8 w-8 p-0">
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => handleEdit(product)} className="h-8 w-8 p-0">
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDelete(product.id)} className="h-8 w-8 p-0 text-red-600">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
