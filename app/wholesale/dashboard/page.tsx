@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.36 商品統計追加版
+// /app/wholesale/dashboard/page.tsx ver.37 配置変更版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -615,8 +615,6 @@ function WholesaleDashboardContent() {
            
            <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
            
-           <ProductStatistics selectedYear={selectedYear} selectedMonth={selectedMonth} />
-           
            <PriceHistoryControls
              isHistoricalMode={isHistoricalMode}
              selectedHistoryDate={selectedHistoryDate}
@@ -638,6 +636,8 @@ function WholesaleDashboardContent() {
              selectedYear={selectedYear}
              selectedMonth={selectedMonth}
            />
+
+           <ProductStatistics selectedYear={selectedYear} selectedMonth={selectedMonth} />
 
            <SalesDataTable
              products={products}
