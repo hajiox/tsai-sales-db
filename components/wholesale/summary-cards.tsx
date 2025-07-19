@@ -1,8 +1,8 @@
-// /components/wholesale/summary-cards.tsx ver.4 4指標対応版（修正版）
+// /components/wholesale/summary-cards.tsx ver.5 5枚構成版
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, Package, Calendar, CalendarDays } from 'lucide-react';
+import { TrendingUp, Package, FileText, Calendar, CalendarDays } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface Product {
@@ -86,8 +86,8 @@ export default function SummaryCards({
     }
   };
 
-  // 当月の集計
-  const currentMonthStats = () => {
+  // 当月の卸商品集計
+  const currentMonthWholesaleStats = () => {
     let totalCount = 0;
     let totalAmount = 0;
     let totalProfit = 0;
@@ -106,37 +106,60 @@ export default function SummaryCards({
     return { count: totalCount, amount: totalAmount, profit: totalProfit };
   };
 
-  const currentStats = currentMonthStats();
-  const currentTotal = currentStats.amount + oemTotal;
+  const wholesaleStats = currentMonthWholesaleStats();
+  const totalAmount = wholesaleStats.amount + oemTotal;
+  const totalCount = wholesaleStats.count + oemSalesCount;
+  const totalProfit = wholesaleStats.profit; // OEMの利益率が不明なため卸のみ
 
   return (
-    <div className="grid grid-cols-4 gap-3">
-      {/* ①今月の合計 */}
+    <div className="grid grid-cols-5 gap-3">
+      {/* ①全合計（卸+OEM） */}
       <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
         <CardHeader className="py-2 px-3">
           <CardTitle className="text-sm font-medium text-blue-900 flex items-center gap-1">
             <TrendingUp className="w-3 h-3" />
-            今月の合計
+            今月合計
           </CardTitle>
         </CardHeader>
         <CardContent className="py-1 px-3">
           <div className="text-xs text-blue-700">
-            件数: {currentStats.count + oemSalesCount}件
+            件数: {totalCount}件
           </div>
           <div className="text-sm font-bold text-blue-900">
-            ¥{currentTotal.toLocaleString()}
+            ¥{totalAmount.toLocaleString()}
           </div>
           <div className="text-xs text-blue-600">
-            利益: ¥{currentStats.profit.toLocaleString()}
+            卸+OEM
           </div>
         </CardContent>
       </Card>
 
-      {/* ②OEM商品 */}
+      {/* ②卸のみ */}
+      <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200">
+        <CardHeader className="py-2 px-3">
+          <CardTitle className="text-sm font-medium text-indigo-900 flex items-center gap-1">
+            <Package className="w-3 h-3" />
+            卸商品
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-1 px-3">
+          <div className="text-xs text-indigo-700">
+            件数: {wholesaleStats.count}件
+          </div>
+          <div className="text-sm font-bold text-indigo-900">
+            ¥{wholesaleStats.amount.toLocaleString()}
+          </div>
+          <div className="text-xs text-indigo-600">
+            利益: ¥{wholesaleStats.profit.toLocaleString()}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ③OEMのみ */}
       <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
         <CardHeader className="py-2 px-3">
           <CardTitle className="text-sm font-medium text-green-900 flex items-center gap-1">
-            <Package className="w-3 h-3" />
+            <FileText className="w-3 h-3" />
             OEM商品
           </CardTitle>
         </CardHeader>
@@ -153,7 +176,7 @@ export default function SummaryCards({
         </CardContent>
       </Card>
 
-      {/* ③過去6ヶ月 */}
+      {/* ④過去6ヶ月 */}
       <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
         <CardHeader className="py-2 px-3">
           <CardTitle className="text-sm font-medium text-purple-900 flex items-center gap-1">
@@ -174,7 +197,7 @@ export default function SummaryCards({
         </CardContent>
       </Card>
 
-      {/* ④過去12ヶ月 */}
+      {/* ⑤過去12ヶ月 */}
       <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
         <CardHeader className="py-2 px-3">
           <CardTitle className="text-sm font-medium text-orange-900 flex items-center gap-1">
