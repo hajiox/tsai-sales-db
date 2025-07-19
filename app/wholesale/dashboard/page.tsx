@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.37 配置変更版
+// /app/wholesale/dashboard/page.tsx ver.38 サマリーカード更新版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -606,11 +606,11 @@ function WholesaleDashboardContent() {
          <div className="space-y-4">
            <SummaryCards 
              products={products} 
-             oemProducts={oemProducts}
+             salesData={salesData}
              oemSalesCount={oemSales.length}
-             wholesaleTotal={wholesaleTotal}
              oemTotal={oemTotal}
-             grandTotal={grandTotal} 
+             selectedYear={selectedYear}
+             selectedMonth={selectedMonth}
            />
            
            <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
