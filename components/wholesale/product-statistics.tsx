@@ -1,4 +1,4 @@
-// /components/wholesale/product-statistics.tsx ver.4 10商品区切り版
+// /components/wholesale/product-statistics.tsx ver.5 セクションヘッダー版
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -78,6 +78,36 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
     return `${change > 0 ? '+' : ''}${change.toFixed(1)}%`;
   };
 
+  const renderTableHeader = () => (
+    <tr className="border-b bg-gray-50">
+      <th className="text-center p-3 text-sm font-medium text-gray-700 w-16">順位</th>
+      <th className="text-left p-3 text-sm font-medium text-gray-700">商品名</th>
+      <th className="text-center p-3 text-sm font-medium text-gray-700 whitespace-nowrap">卸価格</th>
+      <th className="text-center p-3 text-sm font-medium text-gray-700 whitespace-nowrap">利益率</th>
+      <th className="text-center p-3 text-sm font-medium text-gray-700">
+        <div>当月</div>
+        <div className="text-xs font-normal">数量 / 売上</div>
+      </th>
+      <th className="text-center p-3 text-sm font-medium text-gray-700">
+        <div>過去3ヶ月</div>
+        <div className="text-xs font-normal">数量 / 売上</div>
+      </th>
+      <th className="text-center p-3 text-sm font-medium text-gray-700">
+        <div>過去6ヶ月</div>
+        <div className="text-xs font-normal">数量 / 売上</div>
+      </th>
+      <th className="text-center p-3 text-sm font-medium text-gray-700">
+        <div>過去12ヶ月</div>
+        <div className="text-xs font-normal">数量 / 売上</div>
+      </th>
+      <th className="text-center p-3 text-sm font-medium text-gray-700">
+        <div>前年同月比</div>
+        <div className="text-xs font-normal">数量 / 売上</div>
+      </th>
+      <th className="text-center p-3 text-sm font-medium text-gray-700">推定利益</th>
+    </tr>
+  );
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow-sm p-4">
@@ -105,33 +135,7 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b bg-gray-50">
-              <th className="text-center p-3 text-sm font-medium text-gray-700 w-16">順位</th>
-              <th className="text-left p-3 text-sm font-medium text-gray-700">商品名</th>
-              <th className="text-center p-3 text-sm font-medium text-gray-700 whitespace-nowrap">卸価格</th>
-              <th className="text-center p-3 text-sm font-medium text-gray-700 whitespace-nowrap">利益率</th>
-              <th className="text-center p-3 text-sm font-medium text-gray-700">
-                <div>当月</div>
-                <div className="text-xs font-normal">数量 / 売上</div>
-              </th>
-              <th className="text-center p-3 text-sm font-medium text-gray-700">
-                <div>過去3ヶ月</div>
-                <div className="text-xs font-normal">数量 / 売上</div>
-              </th>
-              <th className="text-center p-3 text-sm font-medium text-gray-700">
-                <div>過去6ヶ月</div>
-                <div className="text-xs font-normal">数量 / 売上</div>
-              </th>
-              <th className="text-center p-3 text-sm font-medium text-gray-700">
-                <div>過去12ヶ月</div>
-                <div className="text-xs font-normal">数量 / 売上</div>
-              </th>
-              <th className="text-center p-3 text-sm font-medium text-gray-700">
-                <div>前年同月比</div>
-                <div className="text-xs font-normal">数量 / 売上</div>
-              </th>
-              <th className="text-center p-3 text-sm font-medium text-gray-700">推定利益</th>
-            </tr>
+            {renderTableHeader()}
           </thead>
           <tbody>
             {statistics.map((stat, index) => {
@@ -140,6 +144,16 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
               
               return (
                 <>
+                  {/* 10商品ごとにヘッダーを再表示 */}
+                  {index > 0 && index % 10 === 0 && (
+                    <>
+                      <tr key={`spacer-${index}`}>
+                        <td colSpan={10} className="p-2 bg-gray-100"></td>
+                      </tr>
+                      {renderTableHeader()}
+                    </>
+                  )}
+                  
                   <tr key={stat.product_id} className="border-b hover:bg-gray-50">
                     <td className="text-center p-3">
                       <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
@@ -209,14 +223,6 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
                       </div>
                     </td>
                   </tr>
-                  {/* 10商品ごとに太い区切り線を追加 */}
-                  {(index + 1) % 10 === 0 && index !== statistics.length - 1 && (
-                    <tr key={`divider-${index}`}>
-                      <td colSpan={10} className="p-0">
-                        <div className="border-t-4 border-gray-300"></div>
-                      </td>
-                    </tr>
-                  )}
                 </>
               );
             })}
