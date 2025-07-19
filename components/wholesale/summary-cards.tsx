@@ -1,4 +1,4 @@
-// /components/wholesale/summary-cards.tsx ver.4 4指標対応版
+// /components/wholesale/summary-cards.tsx ver.4 4指標対応版（修正版）
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,37 +47,36 @@ export default function SummaryCards({
   const fetchHistoricalData = async () => {
     setLoading(true);
     try {
-      // 過去6ヶ月と12ヶ月のデータを取得
-      const endDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 31);
-      const start6Months = new Date(endDate);
-      start6Months.setMonth(start6Months.getMonth() - 5);
-      const start12Months = new Date(endDate);
-      start12Months.setMonth(start12Months.getMonth() - 11);
-
-      // 6ヶ月間のデータ取得
-      const response6 = await fetch(
-        `/api/wholesale/sales?startMonth=${start6Months.getFullYear()}-${String(start6Months.getMonth() + 1).padStart(2, '0')}&endMonth=${selectedYear}-${selectedMonth}`
+      // 統計APIから過去データを取得
+      const response = await fetch(
+        `/api/wholesale/products/statistics?year=${selectedYear}&month=${selectedMonth}`
       );
-      const data6 = await response6.json();
+      const data = await response.json();
+      
+      if (data.success) {
+        // 全商品の統計を集計
+        let months6Count = 0;
+        let months6Amount = 0;
+        let months6Profit = 0;
+        let months12Count = 0;
+        let months12Amount = 0;
+        let months12Profit = 0;
 
-      // 12ヶ月間のデータ取得
-      const response12 = await fetch(
-        `/api/wholesale/sales?startMonth=${start12Months.getFullYear()}-${String(start12Months.getMonth() + 1).padStart(2, '0')}&endMonth=${selectedYear}-${selectedMonth}`
-      );
-      const data12 = await response12.json();
-
-      if (data6.success && data12.success) {
-        // 商品情報をマップ化
-        const productMap = new Map(products.map(p => [p.id, p]));
-
-        // 6ヶ月集計
-        const stats6 = calculateStats(data6.sales, productMap);
-        // 12ヶ月集計
-        const stats12 = calculateStats(data12.sales, productMap);
+        data.statistics.forEach((stat: any) => {
+          // 6ヶ月集計
+          months6Count += stat.months_6_quantity;
+          months6Amount += stat.months_6_amount;
+          months6Profit += Math.floor(stat.months_6_amount * (stat.profit_rate / 100));
+          
+          // 12ヶ月集計
+          months12Count += stat.months_12_quantity;
+          months12Amount += stat.months_12_amount;
+          months12Profit += Math.floor(stat.months_12_amount * (stat.profit_rate / 100));
+        });
 
         setHistoricalData({
-          months6: stats6,
-          months12: stats12
+          months6: { count: months6Count, amount: months6Amount, profit: months6Profit },
+          months12: { count: months12Count, amount: months12Amount, profit: months12Profit }
         });
       }
     } catch (error) {
@@ -85,23 +84,6 @@ export default function SummaryCards({
     } finally {
       setLoading(false);
     }
-  };
-
-  const calculateStats = (sales: any[], productMap: Map<string, Product>) => {
-    let totalCount = 0;
-    let totalAmount = 0;
-    let totalProfit = 0;
-
-    sales.forEach((sale: any) => {
-      const product = productMap.get(sale.product_id);
-      if (product) {
-        totalCount += sale.quantity;
-        totalAmount += sale.amount;
-        totalProfit += Math.floor(sale.amount * (product.profit_rate / 100));
-      }
-    });
-
-    return { count: totalCount, amount: totalAmount, profit: totalProfit };
   };
 
   // 当月の集計
@@ -181,7 +163,7 @@ export default function SummaryCards({
         </CardHeader>
         <CardContent className="py-1 px-3">
           <div className="text-xs text-purple-700">
-            件数: {loading ? '...' : historicalData.months6.count}件
+            件数: {loading ? '...' : historicalData.months6.count.toLocaleString()}件
           </div>
           <div className="text-sm font-bold text-purple-900">
             ¥{loading ? '...' : historicalData.months6.amount.toLocaleString()}
@@ -202,7 +184,7 @@ export default function SummaryCards({
         </CardHeader>
         <CardContent className="py-1 px-3">
           <div className="text-xs text-orange-700">
-            件数: {loading ? '...' : historicalData.months12.count}件
+            件数: {loading ? '...' : historicalData.months12.count.toLocaleString()}件
           </div>
           <div className="text-sm font-bold text-orange-900">
             ¥{loading ? '...' : historicalData.months12.amount.toLocaleString()}
