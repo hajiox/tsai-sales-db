@@ -1,4 +1,4 @@
-// /components/wholesale/product-statistics.tsx ver.3 売上順ソート版
+// /components/wholesale/product-statistics.tsx ver.4 10商品区切り版
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -139,75 +139,85 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
               const yearProfit = calculateProfit(stat.months_12_amount, stat.profit_rate);
               
               return (
-                <tr key={stat.product_id} className="border-b hover:bg-gray-50">
-                  <td className="text-center p-3">
-                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                      index < 3 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {index + 1}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <div className="font-medium text-sm">{stat.product_name}</div>
-                    <div className="text-xs text-gray-500">{stat.product_code}</div>
-                  </td>
-                  <td className="text-center p-3 text-sm">{formatCurrency(stat.price)}</td>
-                  <td className="text-center p-3 text-sm">{stat.profit_rate}%</td>
-                  
-                  {/* 当月 */}
-                  <td className="text-center p-3">
-                    <div className="text-sm font-medium">{stat.current_month_quantity}</div>
-                    <div className="text-xs text-gray-600">{formatCurrency(stat.current_month_amount)}</div>
-                  </td>
-                  
-                  {/* 過去3ヶ月 */}
-                  <td className="text-center p-3">
-                    <div className="text-sm">{stat.months_3_quantity}</div>
-                    <div className="text-xs text-gray-600">{formatCurrency(stat.months_3_amount)}</div>
-                  </td>
-                  
-                  {/* 過去6ヶ月 */}
-                  <td className="text-center p-3">
-                    <div className="text-sm">{stat.months_6_quantity}</div>
-                    <div className="text-xs text-gray-600">{formatCurrency(stat.months_6_amount)}</div>
-                  </td>
-                  
-                  {/* 過去12ヶ月 */}
-                  <td className="text-center p-3">
-                    <div className="text-sm">{stat.months_12_quantity}</div>
-                    <div className="text-xs text-gray-600">{formatCurrency(stat.months_12_amount)}</div>
-                  </td>
-                  
-                  {/* 前年同月比 */}
-                  <td className="text-center p-3">
-                    <div className="flex items-center justify-center gap-1">
-                      <span className="text-sm">{stat.last_year_same_month_quantity}</span>
-                      {getComparisonIcon(stat.current_month_quantity, stat.last_year_same_month_quantity)}
-                    </div>
-                    <div className="text-xs text-gray-600 flex items-center justify-center gap-1">
-                      {formatCurrency(stat.last_year_same_month_amount)}
-                      <span className={`text-xs ${
-                        stat.current_month_amount > stat.last_year_same_month_amount 
-                          ? 'text-green-600' 
-                          : stat.current_month_amount < stat.last_year_same_month_amount 
-                          ? 'text-red-600' 
-                          : 'text-gray-400'
+                <>
+                  <tr key={stat.product_id} className="border-b hover:bg-gray-50">
+                    <td className="text-center p-3">
+                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
+                        index < 3 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {getChangePercentage(stat.current_month_amount, stat.last_year_same_month_amount)}
+                        {index + 1}
                       </span>
-                    </div>
-                  </td>
-                  
-                  {/* 推定利益 */}
-                  <td className="text-center p-3">
-                    <div className="text-sm font-medium text-green-600">
-                      {formatCurrency(currentProfit)}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      年間: {formatCurrency(yearProfit)}
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td className="p-3">
+                      <div className="font-medium text-sm">{stat.product_name}</div>
+                      <div className="text-xs text-gray-500">{stat.product_code}</div>
+                    </td>
+                    <td className="text-center p-3 text-sm">{formatCurrency(stat.price)}</td>
+                    <td className="text-center p-3 text-sm">{stat.profit_rate}%</td>
+                    
+                    {/* 当月 */}
+                    <td className="text-center p-3">
+                      <div className="text-sm font-medium">{stat.current_month_quantity}</div>
+                      <div className="text-xs text-gray-600">{formatCurrency(stat.current_month_amount)}</div>
+                    </td>
+                    
+                    {/* 過去3ヶ月 */}
+                    <td className="text-center p-3">
+                      <div className="text-sm">{stat.months_3_quantity}</div>
+                      <div className="text-xs text-gray-600">{formatCurrency(stat.months_3_amount)}</div>
+                    </td>
+                    
+                    {/* 過去6ヶ月 */}
+                    <td className="text-center p-3">
+                      <div className="text-sm">{stat.months_6_quantity}</div>
+                      <div className="text-xs text-gray-600">{formatCurrency(stat.months_6_amount)}</div>
+                    </td>
+                    
+                    {/* 過去12ヶ月 */}
+                    <td className="text-center p-3">
+                      <div className="text-sm">{stat.months_12_quantity}</div>
+                      <div className="text-xs text-gray-600">{formatCurrency(stat.months_12_amount)}</div>
+                    </td>
+                    
+                    {/* 前年同月比 */}
+                    <td className="text-center p-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="text-sm">{stat.last_year_same_month_quantity}</span>
+                        {getComparisonIcon(stat.current_month_quantity, stat.last_year_same_month_quantity)}
+                      </div>
+                      <div className="text-xs text-gray-600 flex items-center justify-center gap-1">
+                        {formatCurrency(stat.last_year_same_month_amount)}
+                        <span className={`text-xs ${
+                          stat.current_month_amount > stat.last_year_same_month_amount 
+                            ? 'text-green-600' 
+                            : stat.current_month_amount < stat.last_year_same_month_amount 
+                            ? 'text-red-600' 
+                            : 'text-gray-400'
+                        }`}>
+                          {getChangePercentage(stat.current_month_amount, stat.last_year_same_month_amount)}
+                        </span>
+                      </div>
+                    </td>
+                    
+                    {/* 推定利益 */}
+                    <td className="text-center p-3">
+                      <div className="text-sm font-medium text-green-600">
+                        {formatCurrency(currentProfit)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        年間: {formatCurrency(yearProfit)}
+                      </div>
+                    </td>
+                  </tr>
+                  {/* 10商品ごとに太い区切り線を追加 */}
+                  {(index + 1) % 10 === 0 && index !== statistics.length - 1 && (
+                    <tr key={`divider-${index}`}>
+                      <td colSpan={10} className="p-0">
+                        <div className="border-t-4 border-gray-300"></div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               );
             })}
           </tbody>
