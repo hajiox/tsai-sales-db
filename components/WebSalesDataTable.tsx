@@ -1,4 +1,4 @@
-// /components/WebSalesDataTable.tsx ver.10 (商品変更機能追加版)
+// /components/WebSalesDataTable.tsx ver.11 (利益率対応版)
 "use client"
 
 import React, { useState, useRef } from "react"
@@ -15,6 +15,7 @@ interface WebSalesDataTableProps {
  editedValue: string
  getProductName: (productId: string) => string
  getProductPrice: (productId: string) => number
+ getProductProfitRate?: (productId: string) => number
  onEdit: (productId: string, ecSite: string) => void
  onSave: (productId: string, ecSite: string) => void
  onEditValueChange: (value: string) => void
@@ -35,6 +36,7 @@ export default function WebSalesDataTable({
  editedValue,
  getProductName,
  getProductPrice,
+ getProductProfitRate,
  onEdit,
  onSave,
  onEditValueChange,
@@ -72,6 +74,8 @@ export default function WebSalesDataTable({
    return {
      currentPrice: data.current_price,
      historicalPrice: data.historical_price,
+     currentProfitRate: data.current_profit_rate,
+     historicalProfitRate: data.historical_profit_rate,
      difference: data.price_difference,
      differencePercent: data.current_price > 0 
        ? ((data.current_price - data.historical_price) / data.current_price * 100).toFixed(1)
@@ -225,6 +229,7 @@ export default function WebSalesDataTable({
    id: string;
    name: string;
    price: number;
+   profit_rate: number;
    series_code: number;
    product_code: number;
    series: string;
@@ -333,6 +338,9 @@ export default function WebSalesDataTable({
              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
                合計金額
              </th>
+             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
+               利益額
+             </th>
              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
                操作
              </th>
@@ -341,13 +349,14 @@ export default function WebSalesDataTable({
          <tbody className="bg-white divide-y divide-gray-200">
            {filteredItems.length === 0 ? (
              <tr>
-               <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+               <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                  データがありません
                </td>
              </tr>
            ) : (
              filteredItems.map((row, index) => {
                const productPrice = getProductPrice(row.product_id)
+               const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
                const priceDiff = getPriceDifferenceInfo(row.product_id)
                const totalCount = [
                  "amazon",
@@ -358,6 +367,7 @@ export default function WebSalesDataTable({
                  "qoo10",
                ].reduce((sum, site) => sum + (row[`${site}_count`] || 0), 0)
                const totalAmount = totalCount * productPrice
+               const profitAmount = Math.round(totalAmount * profitRate / 100)
 
                return (
                  <tr 
@@ -374,6 +384,11 @@ export default function WebSalesDataTable({
                      </div>
                      <div className="text-xs text-gray-500 mt-1">
                        単価: ¥{formatNumber(productPrice)}
+                       {profitRate > 0 && (
+                         <span className="ml-2 text-green-600">
+                           利益率: {profitRate}%
+                         </span>
+                       )}
                        {isHistoricalMode && priceDiff && priceDiff.difference !== 0 && (
                          <span className={`ml-2 font-semibold ${priceDiff.difference > 0 ? 'text-red-600' : 'text-green-600'}`}>
                            {priceDiff.difference > 0 ? (
@@ -391,9 +406,10 @@ export default function WebSalesDataTable({
                          </span>
                        )}
                      </div>
-                     {isHistoricalMode && priceDiff && priceDiff.currentPrice !== priceDiff.historicalPrice && (
+                     {isHistoricalMode && priceDiff && (priceDiff.currentPrice !== priceDiff.historicalPrice || priceDiff.currentProfitRate !== priceDiff.historicalProfitRate) && (
                        <div className="text-xs text-amber-600 mt-0.5">
-                         過去価格: ¥{formatNumber(priceDiff.historicalPrice)} → 現在: ¥{formatNumber(priceDiff.currentPrice)}
+                         過去: ¥{formatNumber(priceDiff.historicalPrice)} ({priceDiff.historicalProfitRate}%) → 
+                         現在: ¥{formatNumber(priceDiff.currentPrice)} ({priceDiff.currentProfitRate}%)
                        </div>
                      )}
                    </td>
@@ -453,6 +469,9 @@ export default function WebSalesDataTable({
                        : ''
                    }`}>
                      ¥{formatNumber(totalAmount)}
+                   </td>
+                   <td className="px-4 py-4 text-center font-bold text-green-600">
+                     ¥{formatNumber(profitAmount)}
                    </td>
                    <td className="px-4 py-4 text-center">
                      <div className="flex gap-1 justify-center">
