@@ -1,9 +1,9 @@
-// /app/wholesale/price-history/page.tsx ver.1
+// /app/wholesale/price-history/page.tsx ver.2
 "use client"
 
 import React, { useState, useEffect } from "react"
 import { useRouter } from 'next/navigation'
-import { X, Trash2, Calendar, Package, ChevronLeft } from "lucide-react"
+import { X, Trash2, Calendar, Package, ChevronLeft, TrendingUp } from "lucide-react"
 import { createClient } from '@supabase/supabase-js'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,8 @@ interface DateHistory {
     product_name: string
     old_price: number
     new_price: number
+    old_profit_rate: number | null
+    new_profit_rate: number | null
     history_id: string
   }[]
 }
@@ -45,6 +47,7 @@ export default function WholesalePriceHistory() {
           id,
           product_id,
           price,
+          profit_rate,
           valid_from,
           valid_to
         `)
@@ -55,7 +58,7 @@ export default function WholesalePriceHistory() {
       // 商品情報を取得
       const { data: productsData, error: productsError } = await supabase
         .from('wholesale_products')
-        .select('id, product_name, price')
+        .select('id, product_name, price, profit_rate')
 
       if (productsError) throw productsError
 
@@ -70,7 +73,7 @@ export default function WholesalePriceHistory() {
         
         const product = productsData?.find(p => p.id === history.product_id)
         if (product) {
-          // 前の価格を取得（この履歴の前の履歴を探す）
+          // 前の価格と利益率を取得（この履歴の前の履歴を探す）
           const previousHistory = historyData.find(h => 
             h.product_id === history.product_id && 
             new Date(h.valid_from) < new Date(history.valid_from)
@@ -81,6 +84,8 @@ export default function WholesalePriceHistory() {
             product_name: product.product_name,
             old_price: previousHistory?.price || history.price,
             new_price: history.price,
+            old_profit_rate: previousHistory?.profit_rate || history.profit_rate,
+            new_profit_rate: history.profit_rate,
             history_id: history.id
           })
         }
@@ -201,7 +206,7 @@ export default function WholesalePriceHistory() {
                           {formatDate(dateHistory.change_date)}
                         </div>
                         <div className="text-sm text-gray-600">
-                          {dateHistory.products.length}商品の価格を変更
+                          {dateHistory.products.length}商品の価格・利益率を変更
                         </div>
                       </div>
                     </div>
@@ -231,14 +236,19 @@ export default function WholesalePriceHistory() {
                           <th className="text-center py-2 px-4">→</th>
                           <th className="text-right py-2 px-4">変更後価格</th>
                           <th className="text-right py-2 px-4">差額</th>
+                          <th className="text-right py-2 px-4">変更前利益率</th>
+                          <th className="text-center py-2 px-4">→</th>
+                          <th className="text-right py-2 px-4">変更後利益率</th>
+                          <th className="text-right py-2 px-4">差</th>
                         </tr>
                       </thead>
                       <tbody>
                         {dateHistory.products.map((product) => {
-                          const diff = product.new_price - product.old_price
-                          const diffPercent = product.old_price > 0 
-                            ? ((diff / product.old_price) * 100).toFixed(1)
+                          const priceDiff = product.new_price - product.old_price
+                          const priceDiffPercent = product.old_price > 0 
+                            ? ((priceDiff / product.old_price) * 100).toFixed(1)
                             : '0'
+                          const profitDiff = (product.new_profit_rate || 0) - (product.old_profit_rate || 0)
                           
                           return (
                             <tr key={product.history_id} className="border-b hover:bg-gray-50">
@@ -256,12 +266,32 @@ export default function WholesalePriceHistory() {
                                 ¥{formatNumber(product.new_price)}
                               </td>
                               <td className={`text-right py-2 px-4 font-semibold ${
-                                diff > 0 ? 'text-red-600' : diff < 0 ? 'text-green-600' : 'text-gray-500'
+                                priceDiff > 0 ? 'text-red-600' : priceDiff < 0 ? 'text-green-600' : 'text-gray-500'
                               }`}>
-                                {diff > 0 ? '+' : ''}{formatNumber(diff)}
+                                {priceDiff > 0 ? '+' : ''}{formatNumber(priceDiff)}
                                 <span className="text-xs ml-1">
-                                  ({diff > 0 ? '+' : ''}{diffPercent}%)
+                                  ({priceDiff > 0 ? '+' : ''}{priceDiffPercent}%)
                                 </span>
+                              </td>
+                              <td className="text-right py-2 px-4">
+                                <span className="flex items-center justify-end gap-1">
+                                  <TrendingUp className="h-3 w-3 text-gray-400" />
+                                  {product.old_profit_rate?.toFixed(2) || '0.00'}%
+                                </span>
+                              </td>
+                              <td className="text-center py-2 px-4 text-gray-400">
+                                →
+                              </td>
+                              <td className="text-right py-2 px-4 font-semibold">
+                                <span className="flex items-center justify-end gap-1">
+                                  <TrendingUp className="h-3 w-3 text-gray-400" />
+                                  {product.new_profit_rate?.toFixed(2) || '0.00'}%
+                                </span>
+                              </td>
+                              <td className={`text-right py-2 px-4 font-semibold ${
+                                profitDiff > 0 ? 'text-green-600' : profitDiff < 0 ? 'text-red-600' : 'text-gray-500'
+                              }`}>
+                                {profitDiff > 0 ? '+' : ''}{profitDiff.toFixed(2)}%
                               </td>
                             </tr>
                           )
