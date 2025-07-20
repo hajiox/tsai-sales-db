@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.38 サマリーカード更新版
+// /app/wholesale/dashboard/page.tsx ver.39 利益率履歴対応版
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -61,13 +61,19 @@ interface SalesData {
 
 interface HistoricalPriceData {
   product_id: string;
+  product_code: string;
   product_name: string;
+  total_quantity: number;
   current_price: number;
   historical_price: number;
-  total_quantity: number;
+  current_profit_rate: number;
+  historical_profit_rate: number;
   current_amount: number;
   historical_amount: number;
-  price_difference: number;
+  current_profit: number;
+  historical_profit: number;
+  amount_difference: number;
+  profit_difference: number;
 }
 
 interface PriceChangeDate {
@@ -204,8 +210,8 @@ function WholesaleDashboardContent() {
      const { data: historicalData, error } = await supabase.rpc(
        'calculate_wholesale_sales_with_historical_prices',
        { 
-         target_month: `${selectedYear}-${selectedMonth}`,
-         target_date: date
+         p_month: `${selectedYear}-${selectedMonth}`,
+         p_target_date: new Date(date + 'T00:00:00Z').toISOString()
        }
      );
      
@@ -226,7 +232,7 @@ function WholesaleDashboardContent() {
    try {
      const { data: historicalData, error } = await supabase.rpc(
        'calculate_wholesale_sales_with_historical_prices',
-       { target_month: `${selectedYear}-${selectedMonth}` }
+       { p_month: `${selectedYear}-${selectedMonth}` }
      );
      
      if (error) throw error;
@@ -511,27 +517,38 @@ function WholesaleDashboardContent() {
    return new Date(parseInt(selectedYear), parseInt(selectedMonth), 0).getDate();
  };
 
- // 合計計算（価格履歴考慮）
+ // 合計計算（価格・利益率履歴考慮）
  const calculateTotals = (productId: string) => {
    const sales = salesData[productId] || {};
    const totalQuantity = Object.values(sales).reduce((sum, qty) => sum + (qty || 0), 0);
    
    let price = 0;
+   let profitRate = 0;
+   
    if (isHistoricalMode || selectedHistoryDate) {
      const historicalProduct = historicalPriceData.find(p => p.product_id === productId);
      price = historicalProduct?.historical_price || 0;
+     profitRate = historicalProduct?.historical_profit_rate || 0;
    } else {
      const product = products.find(p => p.id === productId);
      price = product?.price || 0;
+     profitRate = product?.profit_rate || 0;
    }
    
    const totalAmount = totalQuantity * price;
-   return { totalQuantity, totalAmount };
+   const totalProfit = Math.round(totalAmount * profitRate / 100);
+   
+   return { totalQuantity, totalAmount, totalProfit };
  };
 
  const wholesaleTotal = products.reduce((sum, product) => {
    const { totalAmount } = calculateTotals(product.id);
    return sum + totalAmount;
+ }, 0);
+
+ const wholesaleProfit = products.reduce((sum, product) => {
+   const { totalProfit } = calculateTotals(product.id);
+   return sum + totalProfit;
  }, 0);
 
  const oemTotal = oemSales.reduce((sum, sale) => sum + sale.amount, 0);
@@ -611,6 +628,8 @@ function WholesaleDashboardContent() {
              oemTotal={oemTotal}
              selectedYear={selectedYear}
              selectedMonth={selectedMonth}
+             isHistoricalMode={isHistoricalMode || !!selectedHistoryDate}
+             historicalPriceData={historicalPriceData}
            />
            
            <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
@@ -626,7 +645,7 @@ function WholesaleDashboardContent() {
            
            {(isHistoricalMode || selectedHistoryDate) && historicalPriceData.length > 0 && (
              <div className="text-sm text-amber-600 font-medium">
-               ※ 売上金額は{selectedHistoryDate ? formatDate(selectedHistoryDate) : `${selectedYear}年${selectedMonth}月1日`}時点の価格で計算されています
+               ※ 売上金額・利益は{selectedHistoryDate ? formatDate(selectedHistoryDate) : `${selectedYear}年${selectedMonth}月1日`}時点の価格・利益率で計算されています
              </div>
            )}
 
