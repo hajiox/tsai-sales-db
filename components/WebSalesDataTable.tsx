@@ -1,4 +1,4 @@
-// /components/WebSalesDataTable.tsx ver.11 (利益率対応版)
+// /components/WebSalesDataTable.tsx ver.12 (利益率更新バグ修正版)
 "use client"
 
 import React, { useState, useRef } from "react"
@@ -224,7 +224,7 @@ export default function WebSalesDataTable({
    }
  };
 
- // 🔥 商品更新処理
+ // 🔥 商品更新処理 (修正済み)
  const handleUpdateProduct = async (productData: {
    id: string;
    name: string;
@@ -235,13 +235,27 @@ export default function WebSalesDataTable({
    series: string;
  }) => {
    try {
+     // productDataから必要な値を明示的に取り出して新しいオブジェクトを作成
+     const { id, name, price, profit_rate, series_code, product_code, series } = productData;
+
      const response = await fetch('/api/products/update', {
        method: 'PUT',
        headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify(productData),
+       body: JSON.stringify({
+         id,
+         name,
+         price,
+         profit_rate,
+         series_code,
+         product_code,
+         series,
+       }),
      });
      
-     if (!response.ok) throw new Error('商品更新に失敗しました');
+     if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '商品更新に失敗しました');
+     }
      
      setIsEditingProduct(false);
      setEditingProductData(null);
@@ -249,7 +263,7 @@ export default function WebSalesDataTable({
      alert('商品情報を更新しました');
    } catch (error) {
      console.error('商品更新エラー:', error);
-     alert('商品更新に失敗しました');
+     alert(`商品更新に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
    }
  };
 
