@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.61 (価格変更履歴日付管理機能付き)
+// /components/web-sales-editable-table.tsx ver.62 (利益率対応版)
 // 汎用CSV機能統合版
 
 "use client"
@@ -35,6 +35,8 @@ interface HistoricalPriceData {
   product_name: string
   current_price: number
   historical_price: number
+  current_profit_rate?: number
+  historical_profit_rate?: number
   total_count: number
   current_amount: number
   historical_amount: number
@@ -182,8 +184,11 @@ export default function WebSalesEditableTable({
           id: item.product_id,
           name: item.product_name,
           price: item.historical_price, // 過去価格を使用
+          profit_rate: item.historical_profit_rate || 0, // 過去の利益率
           currentPrice: item.current_price,
+          currentProfitRate: item.current_profit_rate || 0,
           historicalPrice: item.historical_price,
+          historicalProfitRate: item.historical_profit_rate || 0,
           priceDifference: item.price_difference
         })
       })
@@ -195,6 +200,7 @@ export default function WebSalesEditableTable({
             id: item.product_id,
             name: item.product_name,
             price: item.price,
+            profit_rate: item.profit_rate || 0, // 利益率を追加
             series: item.series,
             series_code: item.series_code,
             product_code: item.product_code,
@@ -214,6 +220,7 @@ export default function WebSalesEditableTable({
   const getProductSeriesCode = (id:string) => productMap.get(id)?.series_code || 0
   const getProductNumber = (id:string) => productMap.get(id)?.product_code || 0
   const getProductPrice = (id: string) => productMap.get(id)?.price || 0
+  const getProductProfitRate = (id: string) => productMap.get(id)?.profit_rate || 0 // 利益率取得関数を追加
 
   const handleMonthChange = (selectedMonth: string) => {
     const params = new URLSearchParams()
@@ -427,6 +434,7 @@ export default function WebSalesEditableTable({
         editedValue={editedValue}
         getProductName={getProductName}
         getProductPrice={getProductPrice}
+        getProductProfitRate={getProductProfitRate}
         onEdit={(id, ec) => setEditMode({ [`${id}-${ec}`]: true })}
         onSave={() => { console.log("Save button clicked"); }}
         onEditValueChange={setEditedValue}
