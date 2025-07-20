@@ -1,9 +1,10 @@
-// /components/websales-summary-cards.tsx ver.13 (トレンド機能拡張 総合対応版)
+// /components/websales-summary-cards.tsx ver.14 (利益額表示対応版)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { supabase } from "../lib/supabase"
+import { TrendingUp } from "lucide-react"
 
 const SITES = [
   { key: "amazon", name: "Amazon", bgColor: "bg-green-50", borderColor: "border-green-200" },
@@ -15,9 +16,9 @@ const SITES = [
 ]
 
 // 型定義
-type Totals = Record<string, { count: number; amount: number }>
-type SeriesSummary = { seriesName: string; count: number; sales: number; }
-type TrendData = { month_label: string; sales: number; }
+type Totals = Record<string, { count: number; amount: number; profit: number; }>
+type SeriesSummary = { seriesName: string; count: number; sales: number; profit: number; }
+type TrendData = { month_label: string; sales: number; profit: number; }
 type HoveredItem = { type: 'total' | 'site' | 'series'; key: string; name: string; }
 
 type WebSalesSummaryCardsProps = {
@@ -30,7 +31,6 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // トレンド表示関連のState
   const [hoveredItem, setHoveredItem] = useState<HoveredItem | null>(null);
   const [trendData, setTrendData] = useState<Record<string, TrendData[]>>({});
   const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({});
@@ -38,7 +38,6 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // トレンドデータを取得する汎用関数
   const fetchTrendData = async (item: HoveredItem) => {
     const trendKey = `${item.type}-${item.key}`;
     if (trendData[trendKey] || trendLoading[trendKey]) return;
@@ -46,7 +45,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
     setTrendLoading(prev => ({ ...prev, [trendKey]: true }));
 
     try {
-      const dateParam = `${month}-01`; // "YYYY-MM-DD"形式に
+      const dateParam = `${month}-01`;
       let rpcName = '';
       let rpcParams: any = {};
 
@@ -68,33 +67,28 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
       if (!rpcName) return;
 
       const { data, error } = await supabase.rpc(rpcName, rpcParams);
-
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
       
-      // データ構造の差異を吸収 (seriesはseries_amount、他はsales)
       const formattedData = data.map((d: any) => ({
         month_label: d.month_label,
-        sales: d.sales ?? d.series_amount ?? 0
+        sales: d.sales ?? d.series_amount ?? 0,
+        profit: d.profit_amount ?? 0,
       }));
 
       setTrendData(prev => ({ ...prev, [trendKey]: formattedData }));
 
     } catch (error) {
       console.error(`トレンドデータの取得に失敗しました (${trendKey}):`, error);
-      setTrendData(prev => ({ ...prev, [trendKey]: [] })); // エラー時は空データをセット
+      setTrendData(prev => ({ ...prev, [trendKey]: [] }));
     } finally {
       setTrendLoading(prev => ({ ...prev, [trendKey]: false }));
     }
   };
 
-  // メインのサマリーデータを取得
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // DB関数を並列で呼び出し
         const [financialRes, seriesRes] = await Promise.all([
           supabase.rpc('get_monthly_financial_summary', { target_month: month }),
           supabase.rpc('get_monthly_series_summary', { target_month: month })
@@ -103,7 +97,6 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
         if (financialRes.error) throw financialRes.error;
         if (seriesRes.error) throw seriesRes.error;
 
-        // 金額サマリーの処理
         const financialData = financialRes.data;
         if (financialData && financialData.length > 0) {
             const financial = financialData[0];
@@ -111,24 +104,25 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
             SITES.forEach(s => {
                 siteTotals[s.key] = {
                     count: financial[`${s.key}_count`] ?? 0,
-                    amount: financial[`${s.key}_amount`] ?? 0
+                    amount: financial[`${s.key}_amount`] ?? 0,
+                    profit: financial[`${s.key}_profit`] ?? 0,
                 }
             });
             setTotals(siteTotals);
         } else {
             const siteTotals: Totals = {};
-            SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0 }; });
+            SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0, profit: 0 }; });
             setTotals(siteTotals);
         }
 
-        // シリーズサマリーの処理
         const seriesData = seriesRes.data;
         if (seriesData && seriesData.length > 0) {
             const seriesSummaryData = seriesData
               .map((s: any) => ({
                 seriesName: s.series_name || '未分類',
                 count: s.series_count || 0,
-                sales: s.series_amount || 0
+                sales: s.series_amount || 0,
+                profit: s.series_profit || 0,
               }))
               .sort((a, b) => b.sales - a.sales);
             setSeriesSummary(seriesSummaryData);
@@ -139,7 +133,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
         const siteTotals: Totals = {};
-        SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0 }; });
+        SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0, profit: 0 }; });
         setTotals(siteTotals);
         setSeriesSummary([]);
       } finally {
@@ -155,8 +149,6 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
   const handleMouseEnter = (item: HoveredItem, event: React.MouseEvent<HTMLDivElement>) => {
     setHoveredItem(item);
     fetchTrendData(item);
-    
-    // ツールチップの位置計算
     const elementRect = event.currentTarget.getBoundingClientRect();
     const containerRect = containerRef.current?.getBoundingClientRect();
     if(containerRect) {
@@ -167,9 +159,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
     }
   };
 
-  const handleMouseLeave = () => {
-    setHoveredItem(null);
-  };
+  const handleMouseLeave = () => setHoveredItem(null);
 
   if (loading) {
     return (
@@ -182,12 +172,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
 
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
+  const grandTotalProfit = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.profit ?? 0), 0) : 0;
   
   const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
 
   return (
     <div className="space-y-6" ref={containerRef}>
-      {/* --- ECサイト別カード --- */}
       <div className="grid grid-cols-4 md:grid-cols-7 gap-4 relative">
         <Card 
           className="text-center bg-gray-50 border-gray-200 cursor-pointer"
@@ -198,6 +188,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
             <div className="text-sm text-gray-600">¥{formatNumber(grandTotalSales)}</div>
+            <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalProfit)}</div>
           </CardContent>
         </Card>
 
@@ -212,12 +203,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
             <CardContent className="space-y-1">
               <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
               <div className="text-sm text-gray-500">¥{totals ? formatNumber(totals[s.key]?.amount ?? 0) : "-"}</div>
+              <div className="text-sm font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.profit ?? 0) : "-"}</div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* --- シリーズ別サマリー --- */}
       <Card>
         <CardHeader><CardTitle>シリーズ別 売上サマリー</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 relative">
@@ -231,29 +222,28 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
               <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
               <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
               <p className="text-xs text-gray-500">¥{formatNumber(series.sales)}</p>
+              <p className="text-xs font-bold text-green-600">利益: ¥{formatNumber(series.profit)}</p>
             </div>
           ))}
         </CardContent>
       </Card>
       
-      {/* --- 共通ツールチップ --- */}
-      {hoveredItem && currentTrendKey && (
+      {currentTrendKey && (
         <div 
           className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
           style={{
             top: `${tooltipPosition.top}px`,
             left: `${tooltipPosition.left}px`,
-            width: '280px',
+            width: '320px',
           }}
         >
           <div className="text-sm font-semibold mb-2 text-gray-800">
-            {hoveredItem.name} - 過去6ヶ月 売上トレンド
+            {hoveredItem?.name} - 過去6ヶ月 トレンド
           </div>
           
           {trendLoading[currentTrendKey] ? (
             <div className="flex items-center justify-center h-24">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
-              <span className="ml-3 text-sm text-gray-500">トレンド読込中...</span>
             </div>
           ) : trendData[currentTrendKey] && trendData[currentTrendKey].length > 0 ? (
             <div className="space-y-1.5">
@@ -262,17 +252,18 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
                 const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
                 
                 return (
-                  <div key={index} className="flex items-center justify-between text-xs">
-                    <span className="w-16 text-gray-600 text-left">{trend.month_label}</span>
-                    <div className="flex-1 mx-2 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
+                  <div key={index} className="grid grid-cols-3 gap-2 items-center text-xs">
+                    <span className="text-gray-600 text-left">{trend.month_label}</span>
+                    <div className="flex-1 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
                       <div 
                         className="h-full bg-sky-400 transition-all duration-300"
                         style={{ width: `${barWidth}%` }}
                       ></div>
                     </div>
-                    <span className="w-20 text-right text-gray-800 font-mono">
-                      ¥{formatNumber(trend.sales)}
-                    </span>
+                    <div className="text-right text-gray-800 font-mono">
+                      <span>¥{formatNumber(trend.sales)}</span>
+                      <span className="text-green-600 ml-1"> (¥{formatNumber(trend.profit)})</span>
+                    </div>
                   </div>
                 );
               })}
