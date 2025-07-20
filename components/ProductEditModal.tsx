@@ -1,4 +1,4 @@
-// /app/components/ProductEditModal.tsx ver.1
+// /app/components/ProductEditModal.tsx ver.2
 "use client"
 
 import React, { useState, useEffect } from "react"
@@ -11,6 +11,7 @@ interface ProductEditModalProps {
     id: string
     name: string
     price: number
+    profit_rate: number
     series_code: number
     product_code: number
     series: string
@@ -19,6 +20,7 @@ interface ProductEditModalProps {
     id: string
     name: string
     price: number
+    profit_rate?: number
     series_code: number
     product_code: number
     series: string
@@ -34,6 +36,7 @@ export default function ProductEditModal({
   const [formData, setFormData] = useState({
     name: "",
     price: "",
+    profit_rate: "",
     series_code: "",
     product_code: "",
     series: ""
@@ -44,6 +47,7 @@ export default function ProductEditModal({
       setFormData({
         name: product.name || "",
         price: product.price?.toString() || "",
+        profit_rate: product.profit_rate?.toString() || "0",
         series_code: product.series_code?.toString() || "",
         product_code: product.product_code?.toString() || "",
         series: product.series || ""
@@ -60,14 +64,29 @@ export default function ProductEditModal({
       return
     }
 
+    // 利益率のバリデーション
+    const profitRate = parseFloat(formData.profit_rate) || 0
+    if (profitRate < 0 || profitRate > 100) {
+      alert("利益率は0〜100の範囲で入力してください")
+      return
+    }
+
     onUpdate({
       id: product.id,
       name: formData.name,
       price: parseInt(formData.price),
+      profit_rate: profitRate,
       series_code: parseInt(formData.series_code) || 0,
       product_code: parseInt(formData.product_code) || 0,
       series: formData.series
     })
+  }
+
+  // 利益額の計算
+  const calculateProfit = () => {
+    const price = parseInt(formData.price) || 0
+    const profitRate = parseFloat(formData.profit_rate) || 0
+    return Math.round(price * profitRate / 100)
   }
 
   if (!isOpen) return null
@@ -111,6 +130,30 @@ export default function ProductEditModal({
               required
               min="0"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              利益率 (%)
+            </label>
+            <div className="space-y-2">
+              <input
+                type="number"
+                value={formData.profit_rate}
+                onChange={(e) => setFormData({ ...formData, profit_rate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="0"
+                max="100"
+                step="0.01"
+                placeholder="0.00"
+              />
+              {formData.price && formData.profit_rate && (
+                <div className="text-sm text-gray-600">
+                  利益額: ¥{calculateProfit().toLocaleString()} 
+                  （価格 ¥{parseInt(formData.price).toLocaleString()} × {parseFloat(formData.profit_rate)}%）
+                </div>
+              )}
+            </div>
           </div>
 
           <div>
