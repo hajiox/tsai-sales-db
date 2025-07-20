@@ -1,4 +1,4 @@
-// /app/api/products/update/route.ts ver.2
+// /app/api/products/update/route.ts ver.2 (デバッグログ追加版)
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
@@ -48,6 +48,11 @@ export async function PUT(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // ★★★ デバッグ用ログ ★★★
+    // データベースからの更新直後の戻り値を確認します
+    console.log('DBからの戻り値:', data);
+    // ★★★ ここまで ★★★
 
     return NextResponse.json({ 
       success: true, 
