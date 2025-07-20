@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.23 (デバッグ表示削除版)
+// /app/web-sales/dashboard/page.tsx ver.24 (利益率読み込みバグ修正版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -32,7 +32,7 @@ function WebSalesDashboardContent() {
 
   const [month, setMonth] = useState<string>(() => getCurrentMonth());
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
-  const [webSalesData, setWebSalesData] = useState<WebSalesData[]>([]);
+  const [webSalesData, setWebSalesData] = useState<WebSalesData[]>(([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const [viewMode, setViewMode] = useState<ViewMode>('month');
@@ -125,6 +125,7 @@ function WebSalesDashboardContent() {
             product_id: product.id,
             product_name: product.name,
             price: product.price,
+            profit_rate: product.profit_rate, // ★★★ この行を追加 ★★★
             amazon_count: salesItem?.amazon_count || 0,
             rakuten_count: salesItem?.rakuten_count || 0,
             yahoo_count: salesItem?.yahoo_count || 0,
