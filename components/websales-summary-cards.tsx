@@ -281,7 +281,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
           style={{
             top: `${tooltipPosition.top}px`,
             left: `${tooltipPosition.left}px`,
-            width: '320px',
+            width: '380px',
           }}
         >
           <div className="text-sm font-semibold mb-2 text-gray-800">
@@ -299,17 +299,22 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
                 const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
                 
                 return (
-                  <div key={index} className="grid grid-cols-3 gap-2 items-center text-xs">
-                    <span className="text-gray-600 text-left">{trend.month_label}</span>
-                    <div className="flex-1 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
-                      <div 
-                        className="h-full bg-sky-400 transition-all duration-300"
-                        style={{ width: `${barWidth}%` }}
-                      ></div>
+                  <div key={index} className="space-y-1">
+                    <div className="grid grid-cols-3 gap-2 items-center text-xs">
+                      <span className="text-gray-600 text-left">{trend.month_label}</span>
+                      <div className="flex-1 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
+                        <div 
+                          className="h-full bg-sky-400 transition-all duration-300"
+                          style={{ width: `${barWidth}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-right text-gray-800 font-mono text-xs">
+                        <span>¥{formatNumber(trend.sales)}</span>
+                      </div>
                     </div>
-                    <div className="text-right text-gray-800 font-mono text-xs">
-                      <div>¥{formatNumber(trend.sales)}</div>
-                      <div className="text-green-600">利益: ¥{formatNumber(trend.final_profit)}</div>
+                    <div className="text-xs pl-[100px] space-y-0.5">
+                      <div className="text-gray-600">広告費: ¥{formatNumber(trend.ad_cost)}</div>
+                      <div className="text-green-600 font-semibold">利益: ¥{formatNumber(trend.final_profit)}</div>
                     </div>
                   </div>
                 );
