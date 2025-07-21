@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.62 (利益率対応版)
+// /components/web-sales-editable-table.tsx ver.63 (広告費対応版)
 // 汎用CSV機能統合版
 
 "use client"
@@ -217,8 +217,8 @@ export default function WebSalesEditableTable({
   }, [productMap]);
 
   const getProductName = (id: string) => productMap.get(id)?.name || ""
-  const getProductSeriesCode = (id:string) => productMap.get(id)?.series_code || 0
-  const getProductNumber = (id:string) => productMap.get(id)?.product_code || 0
+  const getProductSeriesCode = (id: string) => productMap.get(id)?.series_code || 0
+  const getProductNumber = (id: string) => productMap.get(id)?.product_code || 0
   const getProductPrice = (id: string) => productMap.get(id)?.price || 0
   const getProductProfitRate = (id: string) => productMap.get(id)?.profit_rate || 0 // 利益率取得関数を追加
 
@@ -435,6 +435,7 @@ export default function WebSalesEditableTable({
         getProductName={getProductName}
         getProductPrice={getProductPrice}
         getProductProfitRate={getProductProfitRate}
+        getProductSeriesCode={getProductSeriesCode}
         onEdit={(id, ec) => setEditMode({ [`${id}-${ec}`]: true })}
         onSave={() => { console.log("Save button clicked"); }}
         onEditValueChange={setEditedValue}
@@ -444,6 +445,7 @@ export default function WebSalesEditableTable({
         onChannelDelete={handleChannelDelete}
         isHistoricalMode={isHistoricalMode || !!selectedHistoryDate}
         historicalPriceData={historicalPriceData}
+        month={month}
       />
 
       <WebSalesImportButtons
