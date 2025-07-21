@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.14 (利益額表示対応版)
+// /components/websales-summary-cards.tsx ver.15 (広告費対応版)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
@@ -16,9 +16,29 @@ const SITES = [
 ]
 
 // 型定義
-type Totals = Record<string, { count: number; amount: number; profit: number; }>
-type SeriesSummary = { seriesName: string; count: number; sales: number; profit: number; }
-type TrendData = { month_label: string; sales: number; profit: number; }
+type Totals = Record<string, { 
+  count: number; 
+  amount: number; 
+  profit: number; 
+  adCost: number;
+  finalProfit: number;
+}>
+type SeriesSummary = { 
+  seriesName: string; 
+  seriesCode: number;
+  count: number; 
+  sales: number; 
+  profit: number; 
+  adCost: number;
+  finalProfit: number;
+}
+type TrendData = { 
+  month_label: string; 
+  sales: number; 
+  profit: number; 
+  ad_cost: number;
+  final_profit: number;
+}
 type HoveredItem = { type: 'total' | 'site' | 'series'; key: string; name: string; }
 
 type WebSalesSummaryCardsProps = {
@@ -73,6 +93,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
         month_label: d.month_label,
         sales: d.sales ?? d.series_amount ?? 0,
         profit: d.profit_amount ?? 0,
+        ad_cost: d.ad_cost ?? 0,
+        final_profit: d.final_profit ?? 0,
       }));
 
       setTrendData(prev => ({ ...prev, [trendKey]: formattedData }));
@@ -106,12 +128,22 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
                     count: financial[`${s.key}_count`] ?? 0,
                     amount: financial[`${s.key}_amount`] ?? 0,
                     profit: financial[`${s.key}_profit`] ?? 0,
+                    adCost: financial[`${s.key}_ad_cost`] ?? 0,
+                    finalProfit: financial[`${s.key}_final_profit`] ?? 0,
                 }
             });
             setTotals(siteTotals);
         } else {
             const siteTotals: Totals = {};
-            SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0, profit: 0 }; });
+            SITES.forEach(s => { 
+              siteTotals[s.key] = { 
+                count: 0, 
+                amount: 0, 
+                profit: 0, 
+                adCost: 0,
+                finalProfit: 0
+              }; 
+            });
             setTotals(siteTotals);
         }
 
@@ -120,9 +152,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
             const seriesSummaryData = seriesData
               .map((s: any) => ({
                 seriesName: s.series_name || '未分類',
+                seriesCode: s.series_code || 0,
                 count: s.series_count || 0,
                 sales: s.series_amount || 0,
                 profit: s.series_profit || 0,
+                adCost: s.series_ad_cost || 0,
+                finalProfit: s.series_final_profit || 0,
               }))
               .sort((a, b) => b.sales - a.sales);
             setSeriesSummary(seriesSummaryData);
@@ -133,7 +168,15 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
         const siteTotals: Totals = {};
-        SITES.forEach(s => { siteTotals[s.key] = { count: 0, amount: 0, profit: 0 }; });
+        SITES.forEach(s => { 
+          siteTotals[s.key] = { 
+            count: 0, 
+            amount: 0, 
+            profit: 0, 
+            adCost: 0,
+            finalProfit: 0
+          }; 
+        });
         setTotals(siteTotals);
         setSeriesSummary([]);
       } finally {
@@ -172,7 +215,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
 
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
-  const grandTotalProfit = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.profit ?? 0), 0) : 0;
+  const grandTotalAdCost = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0;
+  const grandTotalFinalProfit = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0;
   
   const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
 
@@ -187,8 +231,9 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
           <CardHeader><CardTitle className="text-sm">総合計</CardTitle></CardHeader>
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
-            <div className="text-sm text-gray-600">¥{formatNumber(grandTotalSales)}</div>
-            <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalProfit)}</div>
+            <div className="text-sm text-gray-600">売上: ¥{formatNumber(grandTotalSales)}</div>
+            <div className="text-sm text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
+            <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
           </CardContent>
         </Card>
 
@@ -202,8 +247,9 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
             <CardHeader><CardTitle className="text-sm">{s.name}</CardTitle></CardHeader>
             <CardContent className="space-y-1">
               <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
-              <div className="text-sm text-gray-500">¥{totals ? formatNumber(totals[s.key]?.amount ?? 0) : "-"}</div>
-              <div className="text-sm font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.profit ?? 0) : "-"}</div>
+              <div className="text-xs text-gray-500">売上: ¥{totals ? formatNumber(totals[s.key]?.amount ?? 0) : "-"}</div>
+              <div className="text-xs text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
+              <div className="text-xs font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
             </CardContent>
           </Card>
         ))}
@@ -221,8 +267,9 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
             >
               <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
               <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
-              <p className="text-xs text-gray-500">¥{formatNumber(series.sales)}</p>
-              <p className="text-xs font-bold text-green-600">利益: ¥{formatNumber(series.profit)}</p>
+              <p className="text-xs text-gray-500">売上: ¥{formatNumber(series.sales)}</p>
+              <p className="text-xs text-red-600">広告: ¥{formatNumber(series.adCost)}</p>
+              <p className="text-xs font-bold text-green-600">利益: ¥{formatNumber(series.finalProfit)}</p>
             </div>
           ))}
         </CardContent>
@@ -260,9 +307,9 @@ export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSales
                         style={{ width: `${barWidth}%` }}
                       ></div>
                     </div>
-                    <div className="text-right text-gray-800 font-mono">
-                      <span>¥{formatNumber(trend.sales)}</span>
-                      <span className="text-green-600 ml-1"> (¥{formatNumber(trend.profit)})</span>
+                    <div className="text-right text-gray-800 font-mono text-xs">
+                      <div>¥{formatNumber(trend.sales)}</div>
+                      <div className="text-green-600">利益: ¥{formatNumber(trend.final_profit)}</div>
                     </div>
                   </div>
                 );
