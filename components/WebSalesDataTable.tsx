@@ -1,7 +1,7 @@
-// /components/WebSalesDataTable.tsx ver.12 (利益率更新バグ修正版)
+// /components/WebSalesDataTable.tsx ver.13 (広告費対応版)
 "use client"
 
-import React, { useState, useRef } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
 import { Plus, Trash2, TrendingUp, TrendingDown, Edit } from "lucide-react"
@@ -16,6 +16,7 @@ interface WebSalesDataTableProps {
  getProductName: (productId: string) => string
  getProductPrice: (productId: string) => number
  getProductProfitRate?: (productId: string) => number
+ getProductSeriesCode?: (productId: string) => number
  onEdit: (productId: string, ecSite: string) => void
  onSave: (productId: string, ecSite: string) => void
  onEditValueChange: (value: string) => void
@@ -25,10 +26,12 @@ interface WebSalesDataTableProps {
  onChannelDelete?: (channel: string) => void
  isHistoricalMode?: boolean
  historicalPriceData?: any[]
+ month?: string
 }
 
 type TrendData = { month_label: string; sales: number; }
 type SiteTrendData = { month_label: string; count: number; }
+type AdCostData = { series_code: number; total_ad_cost: number; }
 
 export default function WebSalesDataTable({
  filteredItems,
@@ -37,6 +40,7 @@ export default function WebSalesDataTable({
  getProductName,
  getProductPrice,
  getProductProfitRate,
+ getProductSeriesCode,
  onEdit,
  onSave,
  onEditValueChange,
@@ -46,6 +50,7 @@ export default function WebSalesDataTable({
  onChannelDelete,
  isHistoricalMode = false,
  historicalPriceData = [],
+ month,
 }: WebSalesDataTableProps) {
  const [isAddingProduct, setIsAddingProduct] = useState(false)
  const [isEditingProduct, setIsEditingProduct] = useState(false)
@@ -64,6 +69,62 @@ export default function WebSalesDataTable({
  
  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
  const containerRef = useRef<HTMLDivElement>(null)
+
+ // 広告費データ
+ const [adCostData, setAdCostData] = useState<AdCostData[]>([])
+
+ // 広告費データを取得
+ useEffect(() => {
+   const fetchAdCostData = async () => {
+     if (!month) return
+     
+     try {
+       const { data, error } = await supabase
+         .from('advertising_costs')
+         .select('series_code, amazon_cost, google_cost, other_cost, rakuten_cost, yahoo_cost')
+         .eq('report_month', `${month}-01`)
+
+       if (error) throw error
+
+       // 楽天・Yahoo広告費の均等配分を計算
+       const seriesCount = new Set(productMaster.map(p => p.series_code)).size || 1
+       const totalRakutenCost = data?.reduce((sum, item) => sum + (item.rakuten_cost || 0), 0) || 0
+       const totalYahooCost = data?.reduce((sum, item) => sum + (item.yahoo_cost || 0), 0) || 0
+       const rakutenPerSeries = Math.round(totalRakutenCost / seriesCount)
+       const yahooPerSeries = Math.round(totalYahooCost / seriesCount)
+
+       // シリーズごとの合計広告費を計算
+       const adCostBySeriesMap = new Map<number, number>()
+       
+       data?.forEach(item => {
+         const totalCost = (item.amazon_cost || 0) + 
+                          (item.google_cost || 0) + 
+                          (item.other_cost || 0) + 
+                          rakutenPerSeries + 
+                          yahooPerSeries
+         adCostBySeriesMap.set(item.series_code, totalCost)
+       })
+
+       const formattedData: AdCostData[] = Array.from(adCostBySeriesMap.entries()).map(([series_code, total_ad_cost]) => ({
+         series_code,
+         total_ad_cost
+       }))
+
+       setAdCostData(formattedData)
+     } catch (error) {
+       console.error('広告費データの取得に失敗しました:', error)
+     }
+   }
+
+   fetchAdCostData()
+ }, [month, productMaster])
+
+ // シリーズコードから広告費を取得
+ const getAdCostForProduct = (productId: string): number => {
+   const seriesCode = getProductSeriesCode ? getProductSeriesCode(productId) : 0
+   const adCost = adCostData.find(item => item.series_code === seriesCode)
+   return adCost?.total_ad_cost || 0
+ }
 
  // 過去価格データから価格差情報を取得
  const getPriceDifferenceInfo = (productId: string) => {
@@ -85,10 +146,11 @@ export default function WebSalesDataTable({
 
  // 現在の月を取得
  const getCurrentMonth = () => {
+   if (month) return `${month}-01`
    const now = new Date()
    const year = now.getFullYear()
-   const month = String(now.getMonth() + 1).padStart(2, '0')
-   return `${year}-${month}-01`
+   const monthNum = String(now.getMonth() + 1).padStart(2, '0')
+   return `${year}-${monthNum}-01`
  }
 
  // 商品トレンドデータを取得する関数
@@ -353,7 +415,10 @@ export default function WebSalesDataTable({
                合計金額
              </th>
              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
-               利益額
+               広告費
+             </th>
+             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
+               利益
              </th>
              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
                操作
@@ -363,7 +428,7 @@ export default function WebSalesDataTable({
          <tbody className="bg-white divide-y divide-gray-200">
            {filteredItems.length === 0 ? (
              <tr>
-               <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+               <td colSpan={12} className="px-4 py-8 text-center text-gray-500">
                  データがありません
                </td>
              </tr>
@@ -382,6 +447,8 @@ export default function WebSalesDataTable({
                ].reduce((sum, site) => sum + (row[`${site}_count`] || 0), 0)
                const totalAmount = totalCount * productPrice
                const profitAmount = Math.round(totalAmount * profitRate / 100)
+               const adCost = getAdCostForProduct(row.product_id)
+               const finalProfit = profitAmount - adCost
 
                return (
                  <tr 
@@ -484,8 +551,11 @@ export default function WebSalesDataTable({
                    }`}>
                      ¥{formatNumber(totalAmount)}
                    </td>
+                   <td className="px-4 py-4 text-center text-red-600">
+                     ¥{formatNumber(adCost)}
+                   </td>
                    <td className="px-4 py-4 text-center font-bold text-green-600">
-                     ¥{formatNumber(profitAmount)}
+                     ¥{formatNumber(finalProfit)}
                    </td>
                    <td className="px-4 py-4 text-center">
                      <div className="flex gap-1 justify-center">
