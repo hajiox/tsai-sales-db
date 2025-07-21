@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.25 (ビルドエラー修正版)
+// /app/web-sales/dashboard/page.tsx ver.26 (広告費管理機能追加版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -9,9 +9,10 @@ import WebSalesEditableTable from "@/components/web-sales-editable-table"
 import WebSalesCharts from "@/components/websales-charts"
 import WebSalesAiSection from "@/components/web-sales-ai-section"
 import ProductAddModal from "@/components/ProductAddModal"
+import AdvertisingCostModal from "@/components/AdvertisingCostModal"
 import { supabase } from "@/lib/supabase"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, DollarSign } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +42,7 @@ function WebSalesDashboardContent() {
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [productMaster, setProductMaster] = useState<any[]>([])
+  const [isAdCostModalOpen, setIsAdCostModalOpen] = useState(false);
 
   const handleMonthChange = useCallback((newMonth: string) => {
     if (newMonth === month) return;
@@ -178,6 +180,10 @@ function WebSalesDashboardContent() {
     // Implementation omitted
   };
 
+  const handleAdCostUpdate = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+
   return (
     <div className="w-full space-y-6">
       <header className="space-y-4">
@@ -248,8 +254,30 @@ function WebSalesDashboardContent() {
             </button>
           </div>
           
-          {/* 月選択ボタンを常時表示 */}
-          <div>
+          {/* 月選択ボタンと広告費管理ボタン */}
+          <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+            <button
+              onClick={() => setIsAdCostModalOpen(true)}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                backgroundColor: '#059669',
+                color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: '500'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#047857'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#059669'}
+            >
+              <DollarSign size={16} />
+              広告費管理
+            </button>
+            
             <input
               type="month"
               value={month}
@@ -316,6 +344,15 @@ function WebSalesDashboardContent() {
             name: p.name,
             seriesName: p.series
           }))}
+        />
+      )}
+
+      {isAdCostModalOpen && (
+        <AdvertisingCostModal
+          isOpen={isAdCostModalOpen}
+          onClose={() => setIsAdCostModalOpen(false)}
+          onUpdate={handleAdCostUpdate}
+          month={month}
         />
       )}
     </div>
