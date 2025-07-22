@@ -67,22 +67,22 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     setTrendLoading(prev => ({ ...prev, [trendKey]: true }));
 
     try {
-      const dateParam = `${month}-01`;
+      const monthParam = month; // "YYYY-MM" 形式
       let rpcName = '';
       let rpcParams: any = {};
 
       switch (item.type) {
         case 'total':
           rpcName = 'get_total_trend_data';
-          rpcParams = { target_month: dateParam };
+          rpcParams = { target_month: monthParam };
           break;
         case 'site':
           rpcName = 'get_site_trend_data';
-          rpcParams = { target_month: dateParam, target_site: item.key };
+          rpcParams = { target_month: monthParam, target_site: item.key };
           break;
         case 'series':
           rpcName = 'get_series_trend_data';
-          rpcParams = { target_month: dateParam, target_series: item.key };
+          rpcParams = { target_month: monthParam, target_series: item.key };
           break;
       }
 
