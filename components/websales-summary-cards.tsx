@@ -279,7 +279,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
       
       {currentTrendKey && (
         <div 
-          className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
+          className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3 pointer-events-none"
           style={{
             top: `${tooltipPosition.top}px`,
             left: `${tooltipPosition.left}px`,
