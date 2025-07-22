@@ -44,9 +44,11 @@ type HoveredItem = { type: 'total' | 'site' | 'series'; key: string; name: strin
 type WebSalesSummaryCardsProps = {
   month: string; // "YYYY-MM"
   refreshTrigger?: number;
+  viewMode?: 'month' | 'period';
+  periodMonths?: number;
 };
 
-export default function WebSalesSummaryCards({ month, refreshTrigger }: WebSalesSummaryCardsProps) {
+export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode = 'month', periodMonths = 6 }: WebSalesSummaryCardsProps) {
   const [totals, setTotals] = useState<Totals | null>(null);
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
