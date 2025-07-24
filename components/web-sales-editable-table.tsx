@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.63 (広告費対応版)
+// /components/web-sales-editable-table.tsx ver.64 (保存機能実装版)
 // 汎用CSV機能統合版
 
 "use client"
@@ -58,6 +58,7 @@ export default function WebSalesEditableTable({
   const [filterValue, setFilterValue] = useState("")
   const [editMode, setEditMode] = useState<{ [key: string]: boolean }>({})
   const [editedValue, setEditedValue] = useState<string>("")
+  const [originalValues, setOriginalValues] = useState<{ [key: string]: number }>({})
   
   // 過去価格表示モード
   const [isHistoricalMode, setIsHistoricalMode] = useState(false)
@@ -244,6 +245,90 @@ export default function WebSalesEditableTable({
     })
     return sum
   }, [filteredItems, isHistoricalMode])
+
+  // 編集開始時の処理
+  const handleEditStart = (productId: string, ecSite: string) => {
+    const key = `${productId}-${ecSite}`
+    const currentItem = data.find(item => item.product_id === productId)
+    const currentValue = currentItem?.[`${ecSite}_count`] || 0
+    
+    setEditMode({ [key]: true })
+    setEditedValue(currentValue.toString())
+    setOriginalValues({ [key]: currentValue })
+  }
+
+  // 保存処理
+  const handleSave = async (productId: string, ecSite: string) => {
+    const key = `${productId}-${ecSite}`
+    const numericValue = parseInt(editedValue, 10)
+    
+    // 数値の検証
+    if (isNaN(numericValue) || numericValue < 0) {
+      alert('販売数は0以上の整数を入力してください')
+      setEditedValue(originalValues[key]?.toString() || '0')
+      setEditMode({})
+      return
+    }
+    
+    // 元の値と同じ場合は何もしない
+    if (numericValue === originalValues[key]) {
+      setEditMode({})
+      return
+    }
+    
+    try {
+      const response = await fetch('/api/web-sales-data', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: productId,
+          report_month: month,
+          site: ecSite,
+          count: numericValue
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || '保存に失敗しました')
+      }
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        // ローカルデータを更新
+        setData(prevData => 
+          prevData.map(item => 
+            item.product_id === productId 
+              ? { ...item, [`${ecSite}_count`]: numericValue }
+              : item
+          )
+        )
+        
+        // 編集モードを終了
+        setEditMode({})
+        setOriginalValues({})
+        
+        // 親コンポーネントに更新を通知
+        onDataUpdated()
+      } else {
+        throw new Error(result.error || '保存に失敗しました')
+      }
+    } catch (error) {
+      console.error('保存エラー:', error)
+      alert('保存に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'))
+      // エラー時は元の値に戻す
+      setEditedValue(originalValues[key]?.toString() || '0')
+      setEditMode({})
+    }
+  }
+
+  // キャンセル処理
+  const handleCancel = () => {
+    setEditMode({})
+    setEditedValue('')
+    setOriginalValues({})
+  }
 
   const handleImportSuccess = () => {
     console.log("Import successful. Notifying parent to refresh.");
@@ -436,10 +521,10 @@ export default function WebSalesEditableTable({
         getProductPrice={getProductPrice}
         getProductProfitRate={getProductProfitRate}
         getProductSeriesCode={getProductSeriesCode}
-        onEdit={(id, ec) => setEditMode({ [`${id}-${ec}`]: true })}
-        onSave={() => { console.log("Save button clicked"); }}
+        onEdit={handleEditStart}
+        onSave={handleSave}
         onEditValueChange={setEditedValue}
-        onCancel={() => setEditMode({})}
+        onCancel={handleCancel}
         productMaster={productMasterList}
         onRefresh={onDataUpdated}
         onChannelDelete={handleChannelDelete}
