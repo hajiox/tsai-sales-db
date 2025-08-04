@@ -1,4 +1,4 @@
-// /app/food-store-analysis/page.tsx ver.3
+// /app/food-store-analysis/page.tsx ver.4
 'use client'
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
@@ -93,31 +93,51 @@ function FoodStoreAnalysisContent() {
       const startDate = new Date(selectedYear, selectedMonth - 1, 1)
       const endDate = new Date(selectedYear, selectedMonth, 0)
 
+      // まず売上データを取得
       const { data: salesData, error: salesError } = await supabase
         .from('food_store_sales')
-        .select(`
-          *,
-          food_product_master!jan_code (
-            category_id,
-            food_category_master (
-              category_name
-            )
-          )
-        `)
+        .select('*')
         .gte('report_month', startDate.toISOString())
         .lte('report_month', endDate.toISOString())
         .order('total_sales', { ascending: false })
 
       if (salesError) throw salesError
 
+      // 商品マスターとカテゴリー情報を別途取得
+      const janCodes = [...new Set(salesData?.map(item => item.jan_code) || [])]
+      
+      const { data: productData, error: productError } = await supabase
+        .from('food_product_master')
+        .select(`
+          jan_code,
+          category_id,
+          food_category_master (
+            category_id,
+            category_name
+          )
+        `)
+        .in('jan_code', janCodes)
+
+      if (productError) throw productError
+
+      // データをマージ
+      const productMap = new Map(
+        productData?.map(p => [p.jan_code, p]) || []
+      )
+
+      const mergedData = salesData?.map(sale => {
+        const product = productMap.get(sale.jan_code)
+        return {
+          ...sale,
+          food_product_master: product || null
+        }
+      }) || []
+
       // カテゴリー別集計
       const categoryMap = new Map()
-      salesData?.forEach(item => {
-        // カテゴリー名を安全に取得
+      mergedData.forEach(item => {
         let categoryName = '未分類'
-        if (item.food_product_master && 
-            item.food_product_master.food_category_master && 
-            item.food_product_master.food_category_master.category_name) {
+        if (item.food_product_master?.food_category_master?.category_name) {
           categoryName = item.food_product_master.food_category_master.category_name
         }
 
@@ -139,7 +159,7 @@ function FoodStoreAnalysisContent() {
         .sort((a, b) => b.totalSales - a.totalSales)
 
       setCategoryData(categoryArray)
-      setProductData(salesData || [])
+      setProductData(mergedData)
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
