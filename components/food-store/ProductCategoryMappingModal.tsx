@@ -1,21 +1,11 @@
-// /components/food-store/ProductCategoryMappingModal.tsx ver.4
-"use client"
-
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Search, Save } from "lucide-react"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+// /components/food-store/ProductCategoryMappingModal.tsx ver.3
+import { useState, useEffect } from 'react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 interface ProductCategoryMappingModalProps {
   isOpen: boolean
@@ -27,6 +17,7 @@ interface Product {
   jan_code: number
   product_name: string
   category_id: string | null
+  custom_gross_profit_rate: number | null
 }
 
 interface Category {
@@ -34,17 +25,17 @@ interface Category {
   category_name: string
 }
 
-export function ProductCategoryMappingModal({ 
-  isOpen, 
-  onClose, 
-  onMappingComplete 
+export function ProductCategoryMappingModal({
+  isOpen,
+  onClose,
+  onMappingComplete
 }: ProductCategoryMappingModalProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterCategory, setFilterCategory] = useState<string>("all")
-  const [modifiedProducts, setModifiedProducts] = useState<Map<number, string>>(new Map())
+  const [selectedMappings, setSelectedMappings] = useState<{[key: number]: string}>({})
+  const [grossProfitRates, setGrossProfitRates] = useState<{[key: number]: string}>({})
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const supabase = createClientComponentClient()
 
   useEffect(() => {
@@ -57,179 +48,132 @@ export function ProductCategoryMappingModal({
     setLoading(true)
     try {
       const [productsResult, categoriesResult] = await Promise.all([
-        supabase
-          .from('food_product_master')
-          .select('jan_code, product_name, category_id')
-          .order('product_name'),
-        supabase
-          .from('food_category_master')
-          .select('category_id, category_name')
-          .order('display_order')
+        supabase.from('food_product_master').select('*').order('product_name'),
+        supabase.from('food_category_master').select('*').order('display_order')
       ])
 
-      if (productsResult.error) {
-        console.error('Products fetch error:', productsResult.error)
-      } else {
-        setProducts(productsResult.data || [])
-      }
+      if (productsResult.error) throw productsResult.error
+      if (categoriesResult.error) throw categoriesResult.error
 
-      if (categoriesResult.error) {
-        console.error('Categories fetch error:', categoriesResult.error)
-      } else {
-        setCategories(categoriesResult.data || [])
-      }
+      setProducts(productsResult.data || [])
+      setCategories(categoriesResult.data || [])
+
+      // 既存のマッピングと粗利率を設定
+      const mappings: {[key: number]: string} = {}
+      const rates: {[key: number]: string} = {}
+      productsResult.data?.forEach(product => {
+        if (product.category_id) {
+          mappings[product.jan_code] = product.category_id
+        }
+        if (product.custom_gross_profit_rate !== null) {
+          rates[product.jan_code] = product.custom_gross_profit_rate.toString()
+        }
+      })
+      setSelectedMappings(mappings)
+      setGrossProfitRates(rates)
     } catch (error) {
-      console.error('Fetch error:', error)
+      console.error('データ取得エラー:', error)
+      alert('データの取得に失敗しました')
     } finally {
       setLoading(false)
     }
   }
 
   const handleCategoryChange = (janCode: number, categoryId: string) => {
-    setModifiedProducts(prev => new Map(prev).set(janCode, categoryId))
+    setSelectedMappings(prev => ({
+      ...prev,
+      [janCode]: categoryId === 'none' ? '' : categoryId
+    }))
+  }
+
+  const handleGrossProfitRateChange = (janCode: number, value: string) => {
+    // 数値のみ許可（小数点含む）
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      setGrossProfitRates(prev => ({
+        ...prev,
+        [janCode]: value
+      }))
+    }
   }
 
   const handleSave = async () => {
-    if (modifiedProducts.size === 0) return
-
-    setLoading(true)
-    const updates = Array.from(modifiedProducts.entries()).map(([jan_code, category_id]) => {
-      const product = products.find(p => p.jan_code === jan_code);
-      return {
-        jan_code,
-        product_name: product?.product_name, // ★ 既存の商品名をセット
-        category_id: category_id === "null" ? null : category_id
-      }
-    })
-
-    // product_nameが見つからないデータを除外（念のため）
-    const validUpdates = updates.filter(u => u.product_name);
-    if (validUpdates.length !== updates.length) {
-      console.error("一部の商品の商品名が見つかりませんでした。");
-      alert("エラー: 一部の商品の情報が不足しています。");
-      setLoading(false);
-      return;
-    }
-
+    setSaving(true)
     try {
-      const { error } = await supabase
-        .from('food_product_master')
-        .upsert(validUpdates, { onConflict: 'jan_code' })
+      // 更新データを準備
+      const updates = products.map(product => {
+        const categoryId = selectedMappings[product.jan_code] || null
+        const rateStr = grossProfitRates[product.jan_code]
+        const rate = rateStr ? parseFloat(rateStr) : null
+        
+        return {
+          jan_code: product.jan_code,
+          category_id: categoryId,
+          custom_gross_profit_rate: rate
+        }
+      })
 
-      if (error) {
-        alert('保存に失敗しました')
-        console.error(error)
-      } else {
-        alert(`${validUpdates.length}件の商品カテゴリーを更新しました`)
-        setModifiedProducts(new Map())
-        await fetchData()
-        onMappingComplete()
+      // バッチ更新
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('food_product_master')
+          .update({
+            category_id: update.category_id,
+            custom_gross_profit_rate: update.custom_gross_profit_rate
+          })
+          .eq('jan_code', update.jan_code)
+
+        if (error) throw error
       }
+
+      alert('保存しました')
+      onMappingComplete()
+      onClose()
     } catch (error) {
-      console.error('Save error:', error)
-      alert('保存中にエラーが発生しました')
+      console.error('保存エラー:', error)
+      alert('保存に失敗しました')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
-  }
-
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.jan_code.toString().includes(searchTerm)
-    
-    if (filterCategory === "all") return matchesSearch
-    if (filterCategory === "uncategorized") return matchesSearch && !product.category_id
-    return matchesSearch && product.category_id === filterCategory
-  })
-
-  const getCategoryName = (categoryId: string | null) => {
-    if (!categoryId) return "未分類"
-    const category = categories.find(c => c.category_id === categoryId)
-    return category?.category_name || "未分類"
-  }
-
-  const getSelectValue = (product: Product) => {
-    const modifiedValue = modifiedProducts.get(product.jan_code)
-    if (modifiedValue !== undefined) {
-      return modifiedValue
-    }
-    return product.category_id || "null"
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl h-[80vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle>商品カテゴリー紐付け</DialogTitle>
+          <DialogTitle>商品カテゴリー紐付け・粗利率設定</DialogTitle>
         </DialogHeader>
-
-        <div className="flex gap-4 mb-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="商品名またはJANコードで検索"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-gray-500">読み込み中...</div>
           </div>
-          <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="すべて" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="uncategorized">未分類のみ</SelectItem>
-              {categories.map(category => (
-                <SelectItem key={category.category_id} value={category.category_id}>
-                  {category.category_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button 
-            onClick={handleSave} 
-            disabled={modifiedProducts.size === 0 || loading}
-          >
-            <Save className="h-4 w-4 mr-2" />
-            保存 {modifiedProducts.size > 0 && `(${modifiedProducts.size}件)`}
-          </Button>
-        </div>
-
-        <div className="flex-1 overflow-auto border rounded-lg">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-gray-500">読み込み中...</div>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>JANコード</TableHead>
-                  <TableHead>商品名</TableHead>
-                  <TableHead>現在のカテゴリー</TableHead>
-                  <TableHead className="w-64">新しいカテゴリー</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProducts.map(product => {
-                  const isModified = modifiedProducts.has(product.jan_code)
-                  
-                  return (
-                    <TableRow key={product.jan_code} className={isModified ? "bg-yellow-50" : ""}>
-                      <TableCell>{product.jan_code}</TableCell>
-                      <TableCell>{product.product_name}</TableCell>
-                      <TableCell>{getCategoryName(product.category_id)}</TableCell>
-                      <TableCell>
+        ) : (
+          <div className="space-y-4">
+            <div className="max-h-[50vh] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-white border-b">
+                  <tr>
+                    <th className="text-left p-2">JANコード</th>
+                    <th className="text-left p-2">商品名</th>
+                    <th className="text-left p-2">カテゴリー</th>
+                    <th className="text-left p-2">独自粗利率(%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map(product => (
+                    <tr key={product.jan_code} className="border-b">
+                      <td className="p-2">{product.jan_code}</td>
+                      <td className="p-2">{product.product_name}</td>
+                      <td className="p-2">
                         <Select
-                          value={getSelectValue(product)}
+                          value={selectedMappings[product.jan_code] || 'none'}
                           onValueChange={(value) => handleCategoryChange(product.jan_code, value)}
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder="カテゴリーを選択" />
+                          <SelectTrigger className="w-48">
+                            <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="null">未分類</SelectItem>
+                            <SelectItem value="none">未分類</SelectItem>
                             {categories.map(category => (
                               <SelectItem key={category.category_id} value={category.category_id}>
                                 {category.category_name}
@@ -237,14 +181,32 @@ export function ProductCategoryMappingModal({
                             ))}
                           </SelectContent>
                         </Select>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </div>
+                      </td>
+                      <td className="p-2">
+                        <Input
+                          type="text"
+                          placeholder="例: 35.5"
+                          value={grossProfitRates[product.jan_code] || ''}
+                          onChange={(e) => handleGrossProfitRateChange(product.jan_code, e.target.value)}
+                          className="w-24"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button variant="outline" onClick={onClose}>
+                キャンセル
+              </Button>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? '保存中...' : '保存'}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
