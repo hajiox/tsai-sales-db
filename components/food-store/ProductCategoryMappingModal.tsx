@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createClient } from '@/utils/supabase/client'
+import { createBrowserClient } from '@supabase/ssr'
 import { Database } from '@/types/supabase'
 
 type FoodProductMaster = Database['public']['Tables']['food_product_master']['Row']
@@ -33,7 +33,10 @@ export function ProductCategoryMappingModal({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  const supabase = createClient()
+  const supabase = createBrowserClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   useEffect(() => {
     if (isOpen) {
