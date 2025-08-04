@@ -1,4 +1,4 @@
-// /app/brand-store-analysis/page.tsx ver.7
+// /app/brand-store-analysis/page.tsx ver.7（修正版）
 "use client"
 
 import { useState, useEffect, Suspense } from 'react'
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BrandStoreCsvImportModal } from '@/components/brand-store/BrandStoreCsvImportModal'
-import { MasterManagementModal } from '@/components/brand-store/MasterManagementModal'
+// import { MasterManagementModal } from '@/components/brand-store/MasterManagementModal'
 import { CategoryRankingCard } from '@/components/brand-store/CategoryRankingCard'
 import { ProductRankingCard } from '@/components/brand-store/ProductRankingCard'
 import { ProductSalesTable } from '@/components/brand-store/ProductSalesTable'
@@ -22,7 +22,7 @@ function BrandStoreAnalysisContent() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [showMasterModal, setShowMasterModal] = useState(false)
+  // const [showMasterModal, setShowMasterModal] = useState(false)
   const [data, setData] = useState<any>(null)
   const [chartData, setChartData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -249,9 +249,11 @@ function BrandStoreAnalysisContent() {
           <Button onClick={() => setShowImportModal(true)}>CSV読込</Button>
           <Button variant="destructive" onClick={handleDeleteMonth} disabled={!data || loading}>月削除</Button>
         </div>
+        {/* マスター管理ボタンを一時的にコメントアウト
         <Button variant="outline" size="sm" onClick={() => setShowMasterModal(true)}>
           <Settings className="h-4 w-4 mr-2" />マスター管理
         </Button>
+        */}
       </div>
 
       <div className="grid grid-cols-2 gap-4 max-w-2xl">
@@ -401,6 +403,7 @@ function BrandStoreAnalysisContent() {
         />
       )}
 
+      {/* マスター管理モーダルを一時的にコメントアウト
       {showMasterModal && (
         <MasterManagementModal
           isOpen={showMasterModal}
@@ -408,6 +411,7 @@ function BrandStoreAnalysisContent() {
           onUpdate={fetchData}
         />
       )}
+      */}
     </div>
   )
 }
