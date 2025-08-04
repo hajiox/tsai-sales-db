@@ -1,4 +1,4 @@
-// /components/food-store/FoodStoreCsvImportModal.tsx ver.1
+// /components/food-store/FoodStoreCsvImportModal.tsx ver.2
 "use client"
 
 import { useState, useCallback } from "react"
@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Upload, FileText, AlertCircle } from "lucide-react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import Papa from 'papaparse'
 
 interface FoodStoreCsvImportModalProps {
@@ -28,7 +27,6 @@ export function FoodStoreCsvImportModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [importedCount, setImportedCount] = useState(0)
-  const supabase = createClientComponentClient()
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -63,10 +61,10 @@ export function FoodStoreCsvImportModal({
       Papa.parse(text, {
         header: true,
         encoding: 'UTF-8',
+        skipEmptyLines: true,
         complete: async (results) => {
           const reportMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
           const validData = []
-          const productMasterData = new Map()
 
           for (const row of results.data as any[]) {
             if (!row['ＪＡＮ'] || !row['商品名']) continue
@@ -74,7 +72,6 @@ export function FoodStoreCsvImportModal({
             const janCode = parseInt(row['ＪＡＮ'])
             if (isNaN(janCode)) continue
 
-            // 売上データの準備
             validData.push({
               report_month: reportMonth,
               jan_code: janCode,
@@ -95,14 +92,6 @@ export function FoodStoreCsvImportModal({
               cumulative_ratio: parseFloat(row['累計比']) || 0,
               rank_category: row['ランク'] || null
             })
-
-            // 商品マスターデータの準備（重複を避ける）
-            if (!productMasterData.has(janCode)) {
-              productMasterData.set(janCode, {
-                jan_code: janCode,
-                product_name: row['商品名'] || ''
-              })
-            }
           }
 
           if (validData.length === 0) {
@@ -111,43 +100,36 @@ export function FoodStoreCsvImportModal({
             return
           }
 
-          // 既存データの削除
-          const { error: deleteError } = await supabase
-            .from('food_store_sales')
-            .delete()
-            .eq('report_month', reportMonth)
+          // APIエンドポイントにデータを送信
+          try {
+            const response = await fetch('/api/food-store/import', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                data: validData,
+                reportMonth: reportMonth
+              })
+            })
 
-          if (deleteError) {
-            setError('既存データの削除に失敗しました')
+            const result = await response.json()
+
+            if (!response.ok) {
+              setError(result.error || 'インポートに失敗しました')
+              setLoading(false)
+              return
+            }
+
+            setImportedCount(result.count)
+            setTimeout(() => {
+              onImportComplete()
+            }, 1500)
+          } catch (error) {
+            console.error('API Error:', error)
+            setError('サーバーとの通信に失敗しました')
             setLoading(false)
-            return
           }
-
-          // 売上データの挿入
-          const { error: insertError } = await supabase
-            .from('food_store_sales')
-            .insert(validData)
-
-          if (insertError) {
-            setError('データの登録に失敗しました')
-            setLoading(false)
-            return
-          }
-
-          // 商品マスターの更新（既存のものは更新、新規のものは追加）
-          const masterArray = Array.from(productMasterData.values())
-          const { error: masterError } = await supabase
-            .from('food_product_master')
-            .upsert(masterArray, { onConflict: 'jan_code' })
-
-          if (masterError) {
-            console.error('商品マスター更新エラー:', masterError)
-          }
-
-          setImportedCount(validData.length)
-          setTimeout(() => {
-            onImportComplete()
-          }, 1500)
         },
         error: (error) => {
           setError(`CSVの解析に失敗しました: ${error.message}`)
