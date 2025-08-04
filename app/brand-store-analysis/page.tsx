@@ -1,27 +1,24 @@
-// /app/brand-store-analysis/page.tsx ver.6 (年選択改善版)
+// /app/brand-store-analysis/page.tsx ver.7
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { BrandStoreCsvImportModal } from "@/components/brand-store/BrandStoreCsvImportModal"
-import { MasterDataModal } from "@/components/brand-store/MasterDataModal"
-import { CategoryRankingCard } from "@/components/brand-store/CategoryRankingCard"
-import { ProductRankingCard } from "@/components/brand-store/ProductRankingCard"
-import { ProductSalesTable } from "@/components/brand-store/ProductSalesTable"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, Package } from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
-import { Settings } from "lucide-react"
+import { useState, useEffect, Suspense } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BrandStoreCsvImportModal } from '@/components/brand-store/BrandStoreCsvImportModal'
+import { BrandStoreMasterModal } from '@/components/brand-store/BrandStoreMasterModal'
+import { CategoryRankingCard } from '@/components/brand-store/CategoryRankingCard'
+import { ProductRankingCard } from '@/components/brand-store/ProductRankingCard'
+import { ProductSalesTable } from '@/components/brand-store/ProductSalesTable'
+import { TrendingUp, Package, Settings } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
 import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { useSearchParams, useRouter } from 'next/navigation'
 
-// ★ 型定義を追加
-type SalesData = any;
-type ProductMaster = { product_id: number; category_id: number; };
-type CategoryMaster = { category_id: number; category_name: string; };
-
-export default function BrandStoreAnalysisPage() {
+function BrandStoreAnalysisContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -31,16 +28,38 @@ export default function BrandStoreAnalysisPage() {
   const [loading, setLoading] = useState(false)
   const supabase = createClientComponentClient()
 
-  // ★ 年の選択肢を固定範囲に変更（2020年から現在年+1年まで）
+  // URLパラメータから年月を読み取る
+  useEffect(() => {
+    const yearParam = searchParams.get('year')
+    const monthParam = searchParams.get('month')
+    
+    if (yearParam && monthParam) {
+      const year = parseInt(yearParam)
+      const month = parseInt(monthParam)
+      
+      if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+        setSelectedYear(year)
+        setSelectedMonth(month)
+      }
+    }
+  }, [searchParams])
+
+  // 年月が変更されたらURLを更新
+  const updateURL = (year: number, month: number) => {
+    const params = new URLSearchParams()
+    params.set('year', year.toString())
+    params.set('month', month.toString())
+    router.push(`/brand-store-analysis?${params.toString()}`)
+  }
+
   const currentYear = new Date().getFullYear()
   const yearOptions = Array.from(
-    { length: currentYear - 2020 + 2 }, // 2020年から現在年+1年まで
+    { length: currentYear - 2020 + 2 },
     (_, i) => 2020 + i
-  ).reverse() // 新しい年を上に表示
+  ).reverse()
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 
-  // データ取得関数をマスター連携版に修正
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -48,19 +67,17 @@ export default function BrandStoreAnalysisPage() {
       const lastYearMonth = `${selectedYear - 1}-${String(selectedMonth).padStart(2, '0')}-01`
       const twoYearsAgoMonth = `${selectedYear - 2}-${String(selectedMonth).padStart(2, '0')}-01`
       
-      // 来月の計算（12月の場合は翌年1月）
       const nextMonth = selectedMonth === 12 ? 1 : selectedMonth + 1
       const nextMonthYear = selectedMonth === 12 ? selectedYear - 1 : selectedYear - 1
       const lastYearNextMonth = `${nextMonthYear}-${String(nextMonth).padStart(2, '0')}-01`
       
-      // ★ 売上データ、商品マスター、カテゴリーマスター、前年度データを同時に取得
       const [
-        { data: salesData, error: salesError },
-        { data: productMaster, error: productMasterError },
-        { data: categoryMaster, error: categoryMasterError },
-        { data: lastYearData, error: lastYearError },
-        { data: twoYearsAgoData, error: twoYearsAgoError },
-        { data: nextMonthPredictionData, error: nextMonthError }
+        salesResult, 
+        productMasterResult, 
+        categoryMasterResult,
+        lastYearResult,
+        twoYearsAgoResult,
+        nextMonthPredictionResult
       ] = await Promise.all([
         supabase.from('brand_store_sales').select('*').eq('report_month', reportMonth).order('total_sales', { ascending: false }),
         supabase.from('product_master').select('product_id, category_id'),
@@ -68,64 +85,60 @@ export default function BrandStoreAnalysisPage() {
         supabase.from('brand_store_sales').select('total_sales').eq('report_month', lastYearMonth),
         supabase.from('brand_store_sales').select('total_sales').eq('report_month', twoYearsAgoMonth),
         supabase.from('brand_store_sales').select('*').eq('report_month', lastYearNextMonth).order('total_sales', { ascending: false }).limit(10)
-      ]);
+      ])
 
-      if (salesError) throw salesError;
-      if (productMasterError) throw productMasterError;
-      if (categoryMasterError) throw categoryMasterError;
+      if (salesResult.error) throw salesResult.error
+      if (productMasterResult.error) throw productMasterResult.error
+      if (categoryMasterResult.error) throw categoryMasterResult.error
 
-      // 前年度データの集計
-      const lastYearSales = lastYearData?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || null;
-      const twoYearsAgoSales = twoYearsAgoData?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || null;
+      const salesData = salesResult.data || []
+      const productMaster = productMasterResult.data || []
+      const categoryMaster = categoryMasterResult.data || []
 
-      if (salesData && salesData.length > 0) {
-        // ★ マスターデータからMapを作成
-        const productToCategoryMap = new Map(productMaster.map((p: ProductMaster) => [p.product_id, p.category_id]));
-        const categoryNameMap = new Map(categoryMaster.map((c: CategoryMaster) => [c.category_id, c.category_name]));
+      const lastYearSales = lastYearResult.data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || null
+      const twoYearsAgoSales = twoYearsAgoResult.data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || null
+      const nextMonthPrediction = nextMonthPredictionResult.data || []
 
-        // ★ 売上データにマスターのカテゴリー名を付与
-        const enrichedSalesData = salesData.map((sale: SalesData) => {
-          const categoryId = productToCategoryMap.get(sale.product_id);
-          const categoryName = categoryId ? categoryNameMap.get(categoryId) : null;
-          return {
-            ...sale,
-            category: categoryName || sale.category || '未設定' // マスターにあれば上書き、なければ元のデータを使う
-          };
-        });
+      if (salesData.length > 0) {
+        const productMap = new Map(productMaster.map(p => [p.product_id, p.category_id]))
+        const categoryMap = new Map(categoryMaster.map(c => [c.category_id, c.category_name]))
 
-        // ★ 合計売上と販売個数の計算
-        const totalSales = enrichedSalesData.reduce((sum: number, item: SalesData) => sum + (item.total_sales || 0), 0);
-        const totalQuantity = enrichedSalesData.reduce((sum: number, item: SalesData) => sum + (item.quantity_sold || 0), 0);
+        const enrichedData = salesData.map(item => ({
+          ...item,
+          category_id: productMap.get(item.product_id) || null,
+          category: categoryMap.get(productMap.get(item.product_id)) || '未分類'
+        }))
 
-        // カテゴリー別集計 (マスター連携後のデータを使用)
-        const categoryTotals = enrichedSalesData.reduce((acc: any, item: SalesData) => {
-          const category = item.category; // ここは↑で上書きされた値
+        const totalSales = enrichedData.reduce((sum, item) => sum + (item.total_sales || 0), 0)
+        const totalQuantity = enrichedData.reduce((sum, item) => sum + (item.quantity_sold || 0), 0)
+
+        const categoryTotals = enrichedData.reduce((acc: any, item) => {
+          const category = item.category
           if (!acc[category]) {
-            acc[category] = { category, total_sales: 0, quantity_sold: 0, product_count: 0 };
+            acc[category] = { category, total_sales: 0, quantity_sold: 0, product_count: 0 }
           }
-          acc[category].total_sales += item.total_sales || 0;
-          acc[category].quantity_sold += item.quantity_sold || 0;
-          acc[category].product_count += 1;
-          return acc;
-        }, {});
+          acc[category].total_sales += item.total_sales || 0
+          acc[category].quantity_sold += item.quantity_sold || 0
+          acc[category].product_count += 1
+          return acc
+        }, {})
 
         const categoryRanking = Object.values(categoryTotals)
           .sort((a: any, b: any) => b.total_sales - a.total_sales)
-          .slice(0, 5); // TOP5
+          .slice(0, 5)
 
         setData({
-          salesData: enrichedSalesData, // ★ 連携後のデータをセット
+          salesData: enrichedData,
           categoryRanking,
-          productRanking: enrichedSalesData.slice(0, 20), // TOP20
-          totalSales, // ★ 合計売上
-          totalQuantity, // ★ 合計販売個数
-          lastYearSales, // ★ 前年度売上
-          twoYearsAgoSales, // ★ 前々年度売上
-          nextMonthPrediction: nextMonthPredictionData || [], // ★ 来月予測
-          hasData: true // ★ データ有無フラグ
-        });
+          productRanking: enrichedData.slice(0, 20),
+          totalSales,
+          totalQuantity,
+          lastYearSales,
+          twoYearsAgoSales,
+          nextMonthPrediction,
+          hasData: true
+        })
       } else {
-        // ★ データがない場合でも前年度比較と来月予測は表示
         setData({
           salesData: [],
           categoryRanking: [],
@@ -134,61 +147,57 @@ export default function BrandStoreAnalysisPage() {
           totalQuantity: 0,
           lastYearSales,
           twoYearsAgoSales,
-          nextMonthPrediction: nextMonthPredictionData || [],
-          hasData: false // ★ データ有無フラグ
-        });
+          nextMonthPrediction,
+          hasData: false
+        })
       }
 
-      // ★ 過去12ヶ月のチャートデータを取得
-      await fetchChartData();
+      await fetchChartData()
     } catch (error) {
-      console.error('データ取得エラー:', error);
-      alert('データの取得に失敗しました');
+      console.error('データ取得エラー:', error)
+      alert('データの取得に失敗しました')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
-  // ★ 過去12ヶ月のチャートデータ取得関数
   const fetchChartData = async () => {
     try {
-      const months = [];
-      const currentDate = new Date(selectedYear, selectedMonth - 1);
+      const months = []
+      const currentDate = new Date(selectedYear, selectedMonth - 1)
       
-      // 過去12ヶ月の年月を生成
       for (let i = 11; i >= 0; i--) {
-        const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+        const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
         months.push({
           year: date.getFullYear(),
           month: date.getMonth() + 1,
           label: `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}`
-        });
+        })
       }
 
-      // 各月のデータを取得
       const chartDataPromises = months.map(async ({ year, month, label }) => {
-        const reportMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+        const reportMonth = `${year}-${String(month).padStart(2, '0')}-01`
         const { data, error } = await supabase
           .from('brand_store_sales')
           .select('total_sales, quantity_sold')
-          .eq('report_month', reportMonth);
+          .eq('report_month', reportMonth)
 
-        if (error) throw error;
+        if (error) throw error
 
-        const totalSales = data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || 0;
-        const totalQuantity = data?.reduce((sum, item) => sum + (item.quantity_sold || 0), 0) || 0;
+        const totalSales = data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || 0
+        const totalQuantity = data?.reduce((sum, item) => sum + (item.quantity_sold || 0), 0) || 0
 
         return {
           month: label,
           売上: totalSales,
           個数: totalQuantity
-        };
-      });
+        }
+      })
 
-      const chartData = await Promise.all(chartDataPromises);
-      setChartData(chartData);
+      const chartData = await Promise.all(chartDataPromises)
+      setChartData(chartData)
     } catch (error) {
-      console.error('チャートデータ取得エラー:', error);
+      console.error('チャートデータ取得エラー:', error)
     }
   }
 
@@ -213,15 +222,27 @@ export default function BrandStoreAnalysisPage() {
     fetchData()
   }, [selectedYear, selectedMonth])
 
+  const handleYearChange = (value: string) => {
+    const year = Number(value)
+    setSelectedYear(year)
+    updateURL(year, selectedMonth)
+  }
+
+  const handleMonthChange = (value: string) => {
+    const month = Number(value)
+    setSelectedMonth(month)
+    updateURL(selectedYear, month)
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Select value={String(selectedYear)} onValueChange={(value) => setSelectedYear(Number(value))}>
+          <Select value={String(selectedYear)} onValueChange={handleYearChange}>
             <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
             <SelectContent>{yearOptions.map(year => <SelectItem key={year} value={String(year)}>{year}年</SelectItem>)}</SelectContent>
           </Select>
-          <Select value={String(selectedMonth)} onValueChange={(value) => setSelectedMonth(Number(value))}>
+          <Select value={String(selectedMonth)} onValueChange={handleMonthChange}>
             <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
             <SelectContent>{monthOptions.map(month => <SelectItem key={month} value={String(month)}>{month}月</SelectItem>)}</SelectContent>
           </Select>
@@ -229,11 +250,10 @@ export default function BrandStoreAnalysisPage() {
           <Button variant="destructive" onClick={handleDeleteMonth} disabled={!data || loading}>月削除</Button>
         </div>
         <Button variant="outline" size="sm" onClick={() => setShowMasterModal(true)}>
-          <Settings className="h-4 w-4 mr-2" />マスターデータ管理
+          <Settings className="h-4 w-4 mr-2" />マスター管理
         </Button>
       </div>
 
-      {/* ★ 売上サマリーカード（統合版＋前年比較） */}
       <div className="grid grid-cols-2 gap-4 max-w-2xl">
         <Card>
           <CardHeader className="pb-2">
@@ -281,7 +301,6 @@ export default function BrandStoreAnalysisPage() {
         </Card>
       </div>
 
-      {/* ★ 来月予測サマリー */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">来月の販売予測</CardTitle>
@@ -314,7 +333,6 @@ export default function BrandStoreAnalysisPage() {
               <CategoryRankingCard key={index} rank={index + 1} category={category} />
             ))
           ) : (
-            // データがない場合も5つのカード枠を表示
             Array.from({ length: 5 }, (_, i) => (
               <Card key={i} className="h-full">
                 <CardContent className="p-4 flex items-center justify-center h-32">
@@ -331,16 +349,9 @@ export default function BrandStoreAnalysisPage() {
         <div className="grid grid-cols-10 gap-2">
           {data?.hasData && data.productRanking.length > 0 ? (
             data.productRanking.map((product: any, index: number) => (
-              <div key={index} className="h-24">
-                <Card className="h-full p-2">
-                  <div className="text-xs font-semibold text-gray-500 mb-1">#{index + 1}</div>
-                  <div className="text-xs font-medium line-clamp-2 mb-1">{product.product_name}</div>
-                  <div className="text-xs font-bold">{formatCurrency(product.total_sales)}</div>
-                </Card>
-              </div>
+              <ProductRankingCard key={index} rank={index + 1} product={product} />
             ))
           ) : (
-            // データがない場合も20個のカード枠を表示
             Array.from({ length: 20 }, (_, i) => (
               <div key={i} className="h-24">
                 <Card className="h-full p-2 flex items-center justify-center">
@@ -352,7 +363,6 @@ export default function BrandStoreAnalysisPage() {
         </div>
       </div>
 
-      {/* ★ 過去12ヶ月の売上・個数グラフ */}
       <div>
         <h2 className="text-lg font-semibold mb-4">売上・販売個数推移（過去12ヶ月）</h2>
         <Card>
@@ -392,11 +402,26 @@ export default function BrandStoreAnalysisPage() {
       )}
 
       {showMasterModal && (
-        <MasterDataModal
+        <BrandStoreMasterModal
           isOpen={showMasterModal}
           onClose={() => setShowMasterModal(false)}
+          onUpdate={fetchData}
         />
       )}
     </div>
+  )
+}
+
+export default function BrandStoreAnalysisPage() {
+  return (
+    <Suspense fallback={
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">読み込み中...</div>
+        </div>
+      </div>
+    }>
+      <BrandStoreAnalysisContent />
+    </Suspense>
   )
 }
