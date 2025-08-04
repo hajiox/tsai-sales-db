@@ -1,229 +1,153 @@
-// /components/food-store/ProductCategoryMappingModal.tsx ver.2 (Supabaseクライアント使用版)
-"use client"
+// /components/food-store/ProductCategoryMappingModal.tsx ver.3
+'use client'
 
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Search, Save } from "lucide-react"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { useState, useEffect } from 'react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { createClient } from '@/utils/supabase/client'
+import { Database } from '@/types/supabase'
+
+type FoodProductMaster = Database['public']['Tables']['food_product_master']['Row']
+type FoodCategoryMaster = Database['public']['Tables']['food_category_master']['Row']
 
 interface ProductCategoryMappingModalProps {
   isOpen: boolean
   onClose: () => void
-  onMappingComplete: () => void
+  janCode: string
+  productName: string
+  currentCategoryId?: string | null
+  onUpdate: () => void
 }
 
-interface Product {
-  jan_code: number
-  product_name: string
-  category_id: string | null
-}
-
-interface Category {
-  category_id: string
-  category_name: string
-}
-
-export function ProductCategoryMappingModal({ 
-  isOpen, 
-  onClose, 
-  onMappingComplete 
+export function ProductCategoryMappingModal({
+  isOpen,
+  onClose,
+  janCode,
+  productName,
+  currentCategoryId,
+  onUpdate
 }: ProductCategoryMappingModalProps) {
-  const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterCategory, setFilterCategory] = useState<string>("all")
-  const [modifiedProducts, setModifiedProducts] = useState<Map<number, string>>(new Map())
+  const [categories, setCategories] = useState<FoodCategoryMaster[]>([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
   const [loading, setLoading] = useState(false)
-  const supabase = createClientComponentClient()
+  const [saving, setSaving] = useState(false)
+
+  const supabase = createClient()
 
   useEffect(() => {
     if (isOpen) {
-      fetchData()
+      fetchCategories()
+      setSelectedCategoryId(currentCategoryId || '')
     }
-  }, [isOpen])
+  }, [isOpen, currentCategoryId])
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchCategories = async () => {
     try {
-      const [productsResult, categoriesResult] = await Promise.all([
-        supabase
-          .from('food_product_master')
-          .select('jan_code, product_name, category_id')
-          .order('product_name'),
-        supabase
-          .from('food_category_master')
-          .select('category_id, category_name')
-          .order('display_order')
-      ])
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('food_category_master')
+        .select('*')
+        .order('display_order')
+        .order('category_name')
 
-      if (productsResult.error) {
-        console.error('Products fetch error:', productsResult.error)
-      } else {
-        setProducts(productsResult.data || [])
-      }
-
-      if (categoriesResult.error) {
-        console.error('Categories fetch error:', categoriesResult.error)
-      } else {
-        setCategories(categoriesResult.data || [])
-      }
+      if (error) throw error
+      setCategories(data || [])
     } catch (error) {
-      console.error('Fetch error:', error)
+      console.error('Error fetching categories:', error)
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleCategoryChange = (janCode: number, categoryId: string) => {
-    setModifiedProducts(prev => new Map(prev).set(janCode, categoryId))
   }
 
   const handleSave = async () => {
-    if (modifiedProducts.size === 0) return
-
-    setLoading(true)
-    const updates = Array.from(modifiedProducts.entries()).map(([jan_code, category_id]) => ({
-      jan_code,
-      category_id: category_id === "null" ? null : category_id
-    }))
-
     try {
-      const { error } = await supabase
+      setSaving(true)
+      
+      // まず商品が存在するか確認
+      const { data: existingProduct } = await supabase
         .from('food_product_master')
-        .upsert(updates, { onConflict: 'jan_code' })
+        .select('*')
+        .eq('jan_code', janCode)
+        .single()
 
-      if (error) {
-        alert('保存に失敗しました')
-        console.error(error)
+      if (existingProduct) {
+        // 既存の商品を更新
+        const { error: updateError } = await supabase
+          .from('food_product_master')
+          .update({ 
+            category_id: selectedCategoryId || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('jan_code', janCode)
+
+        if (updateError) throw updateError
       } else {
-        alert(`${updates.length}件の商品カテゴリーを更新しました`)
-        setModifiedProducts(new Map())
-        await fetchData()
-        onMappingComplete()
+        // 新規商品として挿入
+        const { error: insertError } = await supabase
+          .from('food_product_master')
+          .insert({
+            jan_code: parseInt(janCode),
+            product_name: productName,
+            category_id: selectedCategoryId || null
+          })
+
+        if (insertError) throw insertError
       }
+
+      onUpdate()
+      onClose()
     } catch (error) {
-      console.error('Save error:', error)
-      alert('保存中にエラーが発生しました')
+      console.error('Error updating product category:', error)
+      alert('カテゴリーの更新に失敗しました')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
-  }
-
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.jan_code.toString().includes(searchTerm)
-    
-    if (filterCategory === "all") return matchesSearch
-    if (filterCategory === "uncategorized") return matchesSearch && !product.category_id
-    return matchesSearch && product.category_id === filterCategory
-  })
-
-  const getCategoryName = (categoryId: string | null) => {
-    if (!categoryId) return "未分類"
-    const category = categories.find(c => c.category_id === categoryId)
-    return category?.category_name || "未分類"
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl h-[80vh] flex flex-col">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>商品カテゴリー紐付け</DialogTitle>
         </DialogHeader>
-
-        <div className="flex gap-4 mb-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="商品名またはJANコードで検索"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">商品名</label>
+            <p className="text-sm text-gray-600">{productName}</p>
           </div>
-          <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="uncategorized">未分類のみ</SelectItem>
-              {categories.map(category => (
-                <SelectItem key={category.category_id} value={category.category_id}>
-                  {category.category_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button 
-            onClick={handleSave} 
-            disabled={modifiedProducts.size === 0 || loading}
-          >
-            <Save className="h-4 w-4 mr-2" />
-            保存 {modifiedProducts.size > 0 && `(${modifiedProducts.size}件)`}
-          </Button>
-        </div>
-
-        <div className="flex-1 overflow-auto border rounded-lg">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-gray-500">読み込み中...</div>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>JANコード</TableHead>
-                  <TableHead>商品名</TableHead>
-                  <TableHead>現在のカテゴリー</TableHead>
-                  <TableHead className="w-64">新しいカテゴリー</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProducts.map(product => {
-                  const currentCategoryId = modifiedProducts.get(product.jan_code) ?? product.category_id
-                  const isModified = modifiedProducts.has(product.jan_code)
-                  
-                  return (
-                    <TableRow key={product.jan_code} className={isModified ? "bg-yellow-50" : ""}>
-                      <TableCell>{product.jan_code}</TableCell>
-                      <TableCell>{product.product_name}</TableCell>
-                      <TableCell>{getCategoryName(product.category_id)}</TableCell>
-                      <TableCell>
-                        <Select
-                          value={currentCategoryId || "null"}
-                          onValueChange={(value) => handleCategoryChange(product.jan_code, value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="null">未分類</SelectItem>
-                            {categories.map(category => (
-                              <SelectItem key={category.category_id} value={category.category_id}>
-                                {category.category_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
+          <div>
+            <label className="text-sm font-medium">JANコード</label>
+            <p className="text-sm text-gray-600">{janCode}</p>
+          </div>
+          <div>
+            <label className="text-sm font-medium">カテゴリー</label>
+            {loading ? (
+              <p className="text-sm text-gray-500">読み込み中...</p>
+            ) : (
+              <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="カテゴリーを選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">未分類</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.category_id} value={category.category_id}>
+                      {category.category_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={onClose}>
+              キャンセル
+            </Button>
+            <Button onClick={handleSave} disabled={loading || saving}>
+              {saving ? '保存中...' : '保存'}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
