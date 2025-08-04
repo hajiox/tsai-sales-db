@@ -1,4 +1,4 @@
-// /components/food-store/ProductSalesTable.tsx ver.1
+// /components/food-store/ProductSalesTable.tsx ver.2
 import {
   Table,
   TableBody,
@@ -11,9 +11,18 @@ import { formatCurrency } from "@/lib/utils"
 
 interface ProductSalesTableProps {
   data: any[]
+  categories?: any[]
 }
 
-export function ProductSalesTable({ data }: ProductSalesTableProps) {
+export function ProductSalesTable({ data, categories }: ProductSalesTableProps) {
+  const getCategoryName = (item: any) => {
+    // food_product_masterが存在し、その中のfood_category_masterが存在する場合
+    if (item.food_product_master?.food_category_master?.category_name) {
+      return item.food_product_master.food_category_master.category_name
+    }
+    return '未分類'
+  }
+
   return (
     <div className="border rounded-lg overflow-hidden">
       <Table>
@@ -38,13 +47,13 @@ export function ProductSalesTable({ data }: ProductSalesTableProps) {
                 <TableCell className="font-medium">{index + 1}</TableCell>
                 <TableCell>{item.product_name}</TableCell>
                 <TableCell>{item.jan_code}</TableCell>
-                <TableCell>{item.category || '未分類'}</TableCell>
-                <TableCell>{item.supplier_name}</TableCell>
-                <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
-                <TableCell className="text-right">{item.quantity_sold.toLocaleString()}</TableCell>
-                <TableCell className="text-right">{formatCurrency(item.total_sales)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(item.gross_profit)}</TableCell>
-                <TableCell className="text-right">{item.gross_profit_rate}%</TableCell>
+                <TableCell>{getCategoryName(item)}</TableCell>
+                <TableCell>{item.supplier_name || '-'}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.unit_price || 0)}</TableCell>
+                <TableCell className="text-right">{(item.quantity_sold || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.total_sales || 0)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.gross_profit || 0)}</TableCell>
+                <TableCell className="text-right">{item.gross_profit_rate || 0}%</TableCell>
               </TableRow>
             ))
           ) : (
