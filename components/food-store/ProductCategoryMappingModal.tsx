@@ -1,4 +1,4 @@
-// /components/food-store/ProductCategoryMappingModal.tsx ver.1
+// /components/food-store/ProductCategoryMappingModal.tsx ver.2 (Supabaseクライアント使用版)
 "use client"
 
 import { useState, useEffect } from "react"
@@ -54,19 +54,35 @@ export function ProductCategoryMappingModal({
   }, [isOpen])
 
   const fetchData = async () => {
-    const [productsResult, categoriesResult] = await Promise.all([
-      supabase
-        .from('food_product_master')
-        .select('jan_code, product_name, category_id')
-        .order('product_name'),
-      supabase
-        .from('food_category_master')
-        .select('category_id, category_name')
-        .order('display_order')
-    ])
+    setLoading(true)
+    try {
+      const [productsResult, categoriesResult] = await Promise.all([
+        supabase
+          .from('food_product_master')
+          .select('jan_code, product_name, category_id')
+          .order('product_name'),
+        supabase
+          .from('food_category_master')
+          .select('category_id, category_name')
+          .order('display_order')
+      ])
 
-    if (productsResult.data) setProducts(productsResult.data)
-    if (categoriesResult.data) setCategories(categoriesResult.data)
+      if (productsResult.error) {
+        console.error('Products fetch error:', productsResult.error)
+      } else {
+        setProducts(productsResult.data || [])
+      }
+
+      if (categoriesResult.error) {
+        console.error('Categories fetch error:', categoriesResult.error)
+      } else {
+        setCategories(categoriesResult.data || [])
+      }
+    } catch (error) {
+      console.error('Fetch error:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleCategoryChange = (janCode: number, categoryId: string) => {
@@ -82,20 +98,26 @@ export function ProductCategoryMappingModal({
       category_id: category_id === "null" ? null : category_id
     }))
 
-    const { error } = await supabase
-      .from('food_product_master')
-      .upsert(updates, { onConflict: 'jan_code' })
+    try {
+      const { error } = await supabase
+        .from('food_product_master')
+        .upsert(updates, { onConflict: 'jan_code' })
 
-    if (error) {
-      alert('保存に失敗しました')
-      console.error(error)
-    } else {
-      alert(`${updates.length}件の商品カテゴリーを更新しました`)
-      setModifiedProducts(new Map())
-      fetchData()
-      onMappingComplete()
+      if (error) {
+        alert('保存に失敗しました')
+        console.error(error)
+      } else {
+        alert(`${updates.length}件の商品カテゴリーを更新しました`)
+        setModifiedProducts(new Map())
+        await fetchData()
+        onMappingComplete()
+      }
+    } catch (error) {
+      console.error('Save error:', error)
+      alert('保存中にエラーが発生しました')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const filteredProducts = products.filter(product => {
@@ -154,48 +176,54 @@ export function ProductCategoryMappingModal({
         </div>
 
         <div className="flex-1 overflow-auto border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>JANコード</TableHead>
-                <TableHead>商品名</TableHead>
-                <TableHead>現在のカテゴリー</TableHead>
-                <TableHead className="w-64">新しいカテゴリー</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProducts.map(product => {
-                const currentCategoryId = modifiedProducts.get(product.jan_code) ?? product.category_id
-                const isModified = modifiedProducts.has(product.jan_code)
-                
-                return (
-                  <TableRow key={product.jan_code} className={isModified ? "bg-yellow-50" : ""}>
-                    <TableCell>{product.jan_code}</TableCell>
-                    <TableCell>{product.product_name}</TableCell>
-                    <TableCell>{getCategoryName(product.category_id)}</TableCell>
-                    <TableCell>
-                      <Select
-                        value={currentCategoryId || "null"}
-                        onValueChange={(value) => handleCategoryChange(product.jan_code, value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="null">未分類</SelectItem>
-                          {categories.map(category => (
-                            <SelectItem key={category.category_id} value={category.category_id}>
-                              {category.category_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-gray-500">読み込み中...</div>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>JANコード</TableHead>
+                  <TableHead>商品名</TableHead>
+                  <TableHead>現在のカテゴリー</TableHead>
+                  <TableHead className="w-64">新しいカテゴリー</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProducts.map(product => {
+                  const currentCategoryId = modifiedProducts.get(product.jan_code) ?? product.category_id
+                  const isModified = modifiedProducts.has(product.jan_code)
+                  
+                  return (
+                    <TableRow key={product.jan_code} className={isModified ? "bg-yellow-50" : ""}>
+                      <TableCell>{product.jan_code}</TableCell>
+                      <TableCell>{product.product_name}</TableCell>
+                      <TableCell>{getCategoryName(product.category_id)}</TableCell>
+                      <TableCell>
+                        <Select
+                          value={currentCategoryId || "null"}
+                          onValueChange={(value) => handleCategoryChange(product.jan_code, value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="null">未分類</SelectItem>
+                            {categories.map(category => (
+                              <SelectItem key={category.category_id} value={category.category_id}>
+                                {category.category_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
         </div>
       </DialogContent>
     </Dialog>
