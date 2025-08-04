@@ -1,4 +1,4 @@
-// /app/food-store-analysis/page.tsx ver.2
+// /app/food-store-analysis/page.tsx ver.3
 'use client'
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
@@ -113,7 +113,14 @@ function FoodStoreAnalysisContent() {
       // カテゴリー別集計
       const categoryMap = new Map()
       salesData?.forEach(item => {
-        const categoryName = item.food_product_master?.food_category_master?.category_name || '未分類'
+        // カテゴリー名を安全に取得
+        let categoryName = '未分類'
+        if (item.food_product_master && 
+            item.food_product_master.food_category_master && 
+            item.food_product_master.food_category_master.category_name) {
+          categoryName = item.food_product_master.food_category_master.category_name
+        }
+
         if (!categoryMap.has(categoryName)) {
           categoryMap.set(categoryName, {
             category: categoryName,
@@ -159,7 +166,6 @@ function FoodStoreAnalysisContent() {
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i)
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
 
-  const currentMonthKey = `${selectedYear}-${selectedMonth}`
   const hasDataForCurrentMonth = availableMonths.some(m => 
     m.year === selectedYear && m.month === selectedMonth
   )
