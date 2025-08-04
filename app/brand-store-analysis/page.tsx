@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BrandStoreCsvImportModal } from '@/components/brand-store/BrandStoreCsvImportModal'
-import { BrandStoreMasterModal } from '@/components/brand-store/BrandStoreMasterModal'
+import { MasterManagementModal } from '@/components/brand-store/MasterManagementModal'
 import { CategoryRankingCard } from '@/components/brand-store/CategoryRankingCard'
 import { ProductRankingCard } from '@/components/brand-store/ProductRankingCard'
 import { ProductSalesTable } from '@/components/brand-store/ProductSalesTable'
@@ -402,7 +402,7 @@ function BrandStoreAnalysisContent() {
       )}
 
       {showMasterModal && (
-        <BrandStoreMasterModal
+        <MasterManagementModal
           isOpen={showMasterModal}
           onClose={() => setShowMasterModal(false)}
           onUpdate={fetchData}
