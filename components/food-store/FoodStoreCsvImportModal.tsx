@@ -1,4 +1,4 @@
-// /components/food-store/FoodStoreCsvImportModal.tsx ver.2
+// /components/food-store/FoodStoreCsvImportModal.tsx ver.3 (重複除去対応版)
 "use client"
 
 import { useState, useCallback } from "react"
@@ -64,15 +64,16 @@ export function FoodStoreCsvImportModal({
         skipEmptyLines: true,
         complete: async (results) => {
           const reportMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
-          const validData = []
+          const dataMap = new Map()
 
+          // 重複を除去（後から来たデータで上書き）
           for (const row of results.data as any[]) {
             if (!row['ＪＡＮ'] || !row['商品名']) continue
 
             const janCode = parseInt(row['ＪＡＮ'])
             if (isNaN(janCode)) continue
 
-            validData.push({
+            dataMap.set(janCode, {
               report_month: reportMonth,
               jan_code: janCode,
               product_name: row['商品名'] || '',
@@ -93,6 +94,8 @@ export function FoodStoreCsvImportModal({
               rank_category: row['ランク'] || null
             })
           }
+
+          const validData = Array.from(dataMap.values())
 
           if (validData.length === 0) {
             setError('有効なデータが見つかりませんでした')
@@ -117,6 +120,9 @@ export function FoodStoreCsvImportModal({
 
             if (!response.ok) {
               setError(result.error || 'インポートに失敗しました')
+              if (result.details) {
+                console.error('Import error details:', result.details)
+              }
               setLoading(false)
               return
             }
