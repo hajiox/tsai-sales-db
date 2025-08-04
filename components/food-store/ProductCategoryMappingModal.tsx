@@ -5,11 +5,6 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createBrowserClient } from '@supabase/ssr'
-import { Database } from '@/types/supabase'
-
-type FoodProductMaster = Database['public']['Tables']['food_product_master']['Row']
-type FoodCategoryMaster = Database['public']['Tables']['food_category_master']['Row']
 
 interface ProductCategoryMappingModalProps {
   isOpen: boolean
@@ -20,6 +15,12 @@ interface ProductCategoryMappingModalProps {
   onUpdate: () => void
 }
 
+interface Category {
+  category_id: string
+  category_name: string
+  display_order: number
+}
+
 export function ProductCategoryMappingModal({
   isOpen,
   onClose,
@@ -28,15 +29,10 @@ export function ProductCategoryMappingModal({
   currentCategoryId,
   onUpdate
 }: ProductCategoryMappingModalProps) {
-  const [categories, setCategories] = useState<FoodCategoryMaster[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-
-  const supabase = createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
 
   useEffect(() => {
     if (isOpen) {
@@ -48,13 +44,13 @@ export function ProductCategoryMappingModal({
   const fetchCategories = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('food_category_master')
-        .select('*')
-        .order('display_order')
-        .order('category_name')
-
-      if (error) throw error
+      const response = await fetch('/api/food-store/categories')
+      
+      if (!response.ok) {
+        throw new Error('カテゴリーの取得に失敗しました')
+      }
+      
+      const data = await response.json()
       setCategories(data || [])
     } catch (error) {
       console.error('Error fetching categories:', error)
@@ -67,42 +63,28 @@ export function ProductCategoryMappingModal({
     try {
       setSaving(true)
       
-      // まず商品が存在するか確認
-      const { data: existingProduct } = await supabase
-        .from('food_product_master')
-        .select('*')
-        .eq('jan_code', janCode)
-        .single()
+      const response = await fetch('/api/food-store/products/category', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          janCode: parseInt(janCode),
+          productName,
+          categoryId: selectedCategoryId || null
+        })
+      })
 
-      if (existingProduct) {
-        // 既存の商品を更新
-        const { error: updateError } = await supabase
-          .from('food_product_master')
-          .update({ 
-            category_id: selectedCategoryId || null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('jan_code', janCode)
-
-        if (updateError) throw updateError
-      } else {
-        // 新規商品として挿入
-        const { error: insertError } = await supabase
-          .from('food_product_master')
-          .insert({
-            jan_code: parseInt(janCode),
-            product_name: productName,
-            category_id: selectedCategoryId || null
-          })
-
-        if (insertError) throw insertError
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'カテゴリーの更新に失敗しました')
       }
 
       onUpdate()
       onClose()
     } catch (error) {
       console.error('Error updating product category:', error)
-      alert('カテゴリーの更新に失敗しました')
+      alert(error instanceof Error ? error.message : 'カテゴリーの更新に失敗しました')
     } finally {
       setSaving(false)
     }
