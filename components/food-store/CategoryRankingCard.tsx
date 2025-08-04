@@ -1,4 +1,4 @@
-// /components/food-store/CategoryRankingCard.tsx ver.2
+// /components/food-store/CategoryRankingCard.tsx ver.3
 import { Card, CardContent } from "@/components/ui/card"
 import { formatCurrency } from "@/lib/utils"
 
@@ -17,11 +17,11 @@ const getCategoryColor = (categoryName: string) => {
   switch (categoryName) {
     case '喜多方ラーメン':
       return 'bg-blue-50 border-blue-200'
-    case '味噌ラーメン':
+    case '西会津味噌ラーメン': // 修正：正式名称に変更
       return 'bg-orange-50 border-orange-200'
     case '季節メニュー':
       return 'bg-green-50 border-green-200'
-    case 'ソースカツ丼':
+    case '会津ソースカツ丼': // 修正：正式名称に変更
       return 'bg-amber-50 border-amber-200'
     case '山塩ラーメン':
       return 'bg-gray-50 border-gray-200'
