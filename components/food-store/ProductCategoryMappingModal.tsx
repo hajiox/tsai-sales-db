@@ -1,4 +1,4 @@
-// /components/food-store/ProductCategoryMappingModal.tsx ver.3 (エラー修正版)
+// /components/food-store/ProductCategoryMappingModal.tsx ver.4
 "use client"
 
 import { useState, useEffect } from "react"
@@ -93,21 +93,34 @@ export function ProductCategoryMappingModal({
     if (modifiedProducts.size === 0) return
 
     setLoading(true)
-    const updates = Array.from(modifiedProducts.entries()).map(([jan_code, category_id]) => ({
-      jan_code,
-      category_id: category_id === "null" ? null : category_id
-    }))
+    const updates = Array.from(modifiedProducts.entries()).map(([jan_code, category_id]) => {
+      const product = products.find(p => p.jan_code === jan_code);
+      return {
+        jan_code,
+        product_name: product?.product_name, // ★ 既存の商品名をセット
+        category_id: category_id === "null" ? null : category_id
+      }
+    })
+
+    // product_nameが見つからないデータを除外（念のため）
+    const validUpdates = updates.filter(u => u.product_name);
+    if (validUpdates.length !== updates.length) {
+      console.error("一部の商品の商品名が見つかりませんでした。");
+      alert("エラー: 一部の商品の情報が不足しています。");
+      setLoading(false);
+      return;
+    }
 
     try {
       const { error } = await supabase
         .from('food_product_master')
-        .upsert(updates, { onConflict: 'jan_code' })
+        .upsert(validUpdates, { onConflict: 'jan_code' })
 
       if (error) {
         alert('保存に失敗しました')
         console.error(error)
       } else {
-        alert(`${updates.length}件の商品カテゴリーを更新しました`)
+        alert(`${validUpdates.length}件の商品カテゴリーを更新しました`)
         setModifiedProducts(new Map())
         await fetchData()
         onMappingComplete()
@@ -135,7 +148,6 @@ export function ProductCategoryMappingModal({
     return category?.category_name || "未分類"
   }
 
-  // カテゴリー選択の値を取得（null安全）
   const getSelectValue = (product: Product) => {
     const modifiedValue = modifiedProducts.get(product.jan_code)
     if (modifiedValue !== undefined) {
