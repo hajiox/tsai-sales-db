@@ -1,6 +1,4 @@
-// /app/components/brand-store/ProductSalesTable.tsx ver.1
-"use client"
-
+// /components/food-store/ProductSalesTable.tsx ver.2
 import {
   Table,
   TableBody,
@@ -12,47 +10,50 @@ import {
 import { formatCurrency } from "@/lib/utils"
 
 interface ProductSalesTableProps {
-  data: Array<{
-    product_name: string
-    category: string
-    quantity_sold: number
-    total_sales: number
-  }>
+  data: any[]
 }
 
 export function ProductSalesTable({ data }: ProductSalesTableProps) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="border rounded-lg p-8 text-center text-gray-500">
-        データがありません
-      </div>
-    )
-  }
-
   return (
     <div className="border rounded-lg overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[40%]">商品名</TableHead>
-            <TableHead className="w-[25%]">カテゴリー</TableHead>
-            <TableHead className="w-[15%] text-right">販売数</TableHead>
-            <TableHead className="w-[20%] text-right">総売上</TableHead>
+            <TableHead className="w-16">順位</TableHead>
+            <TableHead>商品名</TableHead>
+            <TableHead>JANコード</TableHead>
+            <TableHead>カテゴリー</TableHead>
+            <TableHead>仕入先</TableHead>
+            <TableHead className="text-right">単価</TableHead>
+            <TableHead className="text-right">個数</TableHead>
+            <TableHead className="text-right">売上</TableHead>
+            <TableHead className="text-right">粗利</TableHead>
+            <TableHead className="text-right">粗利率</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((item, index) => (
-            <TableRow key={index}>
-              <TableCell className="font-medium">{item.product_name}</TableCell>
-              <TableCell>{item.category || "未設定"}</TableCell>
-              <TableCell className="text-right">
-                {item.quantity_sold.toLocaleString()}
-              </TableCell>
-              <TableCell className="text-right font-medium">
-                {formatCurrency(item.total_sales)}
+          {data.length > 0 ? (
+            data.map((item, index) => (
+              <TableRow key={item.id}>
+                <TableCell className="font-medium">{index + 1}</TableCell>
+                <TableCell>{item.product_name}</TableCell>
+                <TableCell>{item.jan_code}</TableCell>
+                <TableCell>{item.category || '未分類'}</TableCell>
+                <TableCell>{item.supplier_name}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
+                <TableCell className="text-right">{item.quantity_sold.toLocaleString()}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.total_sales)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.gross_profit)}</TableCell>
+                <TableCell className="text-right">{item.gross_profit_rate}%</TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={10} className="text-center py-8 text-gray-500">
+                データがありません
               </TableCell>
             </TableRow>
-          ))}
+          )}
         </TableBody>
       </Table>
     </div>
