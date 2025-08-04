@@ -1,4 +1,4 @@
-// /components/food-store/CategoryRankingCard.tsx ver.1
+// /components/food-store/CategoryRankingCard.tsx ver.2
 import { Card, CardContent } from "@/components/ui/card"
 import { formatCurrency } from "@/lib/utils"
 
@@ -12,6 +12,28 @@ interface CategoryRankingCardProps {
   }
 }
 
+// カテゴリー別の色設定
+const getCategoryColor = (categoryName: string) => {
+  switch (categoryName) {
+    case '喜多方ラーメン':
+      return 'bg-blue-50 border-blue-200'
+    case '味噌ラーメン':
+      return 'bg-orange-50 border-orange-200'
+    case '季節メニュー':
+      return 'bg-green-50 border-green-200'
+    case 'ソースカツ丼':
+      return 'bg-amber-50 border-amber-200'
+    case '山塩ラーメン':
+      return 'bg-gray-50 border-gray-200'
+    case '会津カレー':
+      return 'bg-yellow-50 border-yellow-200'
+    case '単品':
+      return 'bg-slate-50 border-slate-200'
+    default:
+      return 'bg-white border-gray-200'
+  }
+}
+
 export function CategoryRankingCard({ rank, category }: CategoryRankingCardProps) {
   const getRankColor = (rank: number) => {
     switch (rank) {
@@ -22,8 +44,10 @@ export function CategoryRankingCard({ rank, category }: CategoryRankingCardProps
     }
   }
 
+  const categoryColor = getCategoryColor(category.category)
+
   return (
-    <Card className="h-full">
+    <Card className={`h-full ${categoryColor} border`}>
       <CardContent className="p-4">
         <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold mb-2 ${getRankColor(rank)}`}>
           {rank}
