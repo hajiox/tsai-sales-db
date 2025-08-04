@@ -1,4 +1,4 @@
-// /components/main-sidebar.tsx ver.3 (ブランド館店舗分析追加版)
+// /components/main-sidebar.tsx ver.4 (食のブランド館分析追加版)
 "use client"
 
 import { useState, useEffect } from "react"
@@ -10,7 +10,7 @@ export default function MainSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
-  const [activeModule, setActiveModule] = useState<'sales' | 'web' | 'wholesale' | 'brand-store'>('sales')
+  const [activeModule, setActiveModule] = useState<'sales' | 'web' | 'wholesale' | 'brand-store' | 'food-store'>('sales')
 
   useEffect(() => {
     if (pathname.startsWith('/web-sales')) {
@@ -19,12 +19,14 @@ export default function MainSidebar() {
       setActiveModule('wholesale')
     } else if (pathname.startsWith('/brand-store-analysis')) {
       setActiveModule('brand-store')
+    } else if (pathname.startsWith('/food-store-analysis')) {
+      setActiveModule('food-store')
     } else {
       setActiveModule('sales')
     }
   }, [pathname])
 
-  const handleModuleChange = (module: 'sales' | 'web' | 'wholesale' | 'brand-store') => {
+  const handleModuleChange = (module: 'sales' | 'web' | 'wholesale' | 'brand-store' | 'food-store') => {
     setActiveModule(module)
     if (module === 'sales') {
       router.push('/sales/dashboard')
@@ -34,6 +36,8 @@ export default function MainSidebar() {
       router.push('/wholesale/dashboard')
     } else if (module === 'brand-store') {
       router.push('/brand-store-analysis')
+    } else if (module === 'food-store') {
+      router.push('/food-store-analysis')
     }
   }
 
@@ -73,6 +77,13 @@ export default function MainSidebar() {
           onClick={() => handleModuleChange('brand-store')}
         >
           ブランド館店舗分析
+        </Button>
+        <Button
+          variant={activeModule === 'food-store' ? 'secondary' : 'ghost'}
+          className="w-full justify-start text-white hover:bg-slate-700"
+          onClick={() => handleModuleChange('food-store')}
+        >
+          食のブランド館分析
         </Button>
       </nav>
 
