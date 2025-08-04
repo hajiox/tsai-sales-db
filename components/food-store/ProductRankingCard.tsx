@@ -1,4 +1,4 @@
-// /components/food-store/ProductRankingCard.tsx ver.2
+// /components/food-store/ProductRankingCard.tsx ver.3
 import { Card, CardContent } from "@/components/ui/card"
 import { formatCurrency } from "@/lib/utils"
 
@@ -44,6 +44,7 @@ export function ProductRankingCard({ rank, product }: ProductRankingCardProps) {
       <div className="text-xs font-semibold text-gray-500 mb-1">#{rank}</div>
       <div className="text-xs font-medium line-clamp-2 mb-1">{product.product_name}</div>
       <div className="text-xs font-bold">{formatCurrency(product.total_sales)}</div>
+      <div className="text-xs text-gray-600">{product.quantity_sold?.toLocaleString() || 0}個</div>
     </Card>
   )
 }
