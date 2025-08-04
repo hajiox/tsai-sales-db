@@ -1,7 +1,7 @@
 // /app/food-store-analysis/page.tsx ver.2
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ import { CategoryManagementModal } from '@/components/food-store/CategoryManagem
 import { ProductCategoryMappingModal } from '@/components/food-store/ProductCategoryMappingModal'
 import { useSearchParams, useRouter } from 'next/navigation'
 
-export default function FoodStoreAnalysisPage() {
+function FoodStoreAnalysisContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
@@ -271,5 +271,19 @@ export default function FoodStoreAnalysisPage() {
         onMappingComplete={fetchData}
       />
     </div>
+  )
+}
+
+export default function FoodStoreAnalysisPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">読み込み中...</div>
+        </div>
+      </div>
+    }>
+      <FoodStoreAnalysisContent />
+    </Suspense>
   )
 }
