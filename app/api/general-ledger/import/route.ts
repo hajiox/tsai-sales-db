@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.9
+// /app/api/general-ledger/import/route.ts ver.10
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
@@ -38,20 +38,6 @@ function parseNumber(value: any): number {
   return 0;
 }
 
-// 勘定科目名からコードを生成する関数
-function generateAccountCode(accountName: string, sheetIndex: number): string {
-  // シンプルなハッシュ関数で名前からコードを生成
-  let hash = 0;
-  for (let i = 0; i < accountName.length; i++) {
-    const char = accountName.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  // 正の数にして、6桁のコードを生成
-  const code = Math.abs(hash) % 1000000;
-  return code.toString().padStart(6, '0');
-}
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -73,7 +59,7 @@ export async function POST(request: NextRequest) {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     
     const allTransactions = [];
-    const accountsMap = new Map<string, any>(); // 重複を防ぐためMapを使用
+    const accountsMap = new Map<string, any>();
     const monthlyBalances = [];
     let processedSheets = 0;
     const errors = [];
@@ -89,48 +75,32 @@ export async function POST(request: NextRequest) {
           return;
         }
         
-        // 勘定科目情報を抽出
+        // シート名から勘定科目情報を取得
+        // シート名の形式: "103 会津 ブランド観光企画"
+        const sheetNameMatch = sheetName.match(/^(\d+)\s+(.+)$/);
         let accountCode = '';
         let accountName = '';
         
-        // 3行目から勘定科目コードを探す
-        for (let col = 0; col < 5; col++) {
-          if (jsonData[2] && jsonData[2][col]) {
-            const cellValue = String(jsonData[2][col]).trim();
-            if (/^[\d\-]+$/.test(cellValue) && cellValue.length >= 4) {
-              accountCode = cellValue;
-              break;
+        if (sheetNameMatch) {
+          accountCode = sheetNameMatch[1]; // 数字部分が勘定科目コード
+          accountName = sheetNameMatch[2].trim(); // それ以降が勘定科目名
+        } else {
+          // シート名が期待する形式でない場合
+          accountName = sheetName.trim();
+          // 2行目のC列（インデックス2）から勘定科目名を確認
+          if (jsonData[1] && jsonData[1][2]) {
+            const cellValue = String(jsonData[1][2]).trim();
+            if (cellValue && !cellValue.includes('ﾍﾟｰｼﾞ')) {
+              accountName = cellValue;
             }
           }
-        }
-        
-        // コードが見つからない場合または07003の場合は生成
-        if (!accountCode || accountCode === '07003') {
-          accountCode = `SHEET${(sheetIndex + 1).toString().padStart(3, '0')}`;
-        }
-        
-        // 2行目に科目名
-        if (jsonData[1]) {
-          const nameParts = [];
-          for (let i = 2; i < Math.min(6, jsonData[1].length); i++) {
-            if (jsonData[1][i] && String(jsonData[1][i]).trim() && 
-                !String(jsonData[1][i]).includes('ﾍﾟｰｼﾞ')) {
-              nameParts.push(String(jsonData[1][i]).trim());
-            }
-          }
-          accountName = nameParts.join('') || `勘定科目${sheetIndex + 1}`;
-        }
-        
-        if (!accountName) return;
-        
-        // 勘定科目名からコード生成（07003対策）
-        if (accountCode === '07003' || accountCode.startsWith('SHEET')) {
-          accountCode = generateAccountCode(accountName, sheetIndex);
+          // コードは連番で生成
+          accountCode = (100 + sheetIndex).toString();
         }
         
         console.log(`処理中: ${accountName} (コード: ${accountCode})`);
         
-        // ヘッダー行を探す
+        // ヘッダー行を探す（「日付」を含む行）
         let headerRow = -1;
         for (let i = 0; i < Math.min(10, jsonData.length); i++) {
           if (jsonData[i] && jsonData[i][0] && 
@@ -142,10 +112,11 @@ export async function POST(request: NextRequest) {
         }
         
         if (headerRow === -1) {
+          console.log(`ヘッダー行が見つかりません: ${sheetName}`);
           return;
         }
         
-        // 勘定科目マスタに追加（重複チェック）
+        // 勘定科目マスタに追加
         if (!accountsMap.has(accountCode)) {
           accountsMap.set(accountCode, {
             account_code: accountCode,
@@ -167,11 +138,11 @@ export async function POST(request: NextRequest) {
           if (!row || !row[0]) continue;
           
           const dateStr = String(row[0]).trim();
-          if (!dateStr || dateStr === ' ') continue;
+          if (!dateStr || dateStr === '') continue;
           
           // 前月繰越行の処理
           if (row[1] && String(row[1]).includes('前月繰越')) {
-            openingBalance = parseNumber(row[7]);
+            openingBalance = parseNumber(row[7]); // H列が残高
             continue;
           }
           
@@ -179,23 +150,28 @@ export async function POST(request: NextRequest) {
           const transactionDate = parseJapaneseDate(dateStr);
           if (!transactionDate) continue;
           
-          // 金額列の位置
+          // 金額列の位置（画像から確認済み）
           // F列（インデックス5）: 借方金額
-          // G列（インデックス6）: 貸方金額
+          // G列（インデックス6）: 貸方金額  
           // H列（インデックス7）: 残高
           const debitAmount = parseNumber(row[5]);
           const creditAmount = parseNumber(row[6]);
           const balance = parseNumber(row[7]);
+          
+          // デバッグ用
+          if (i === headerRow + 1) {
+            console.log(`最初の取引データ: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
+          }
           
           allTransactions.push({
             report_month: reportMonth,
             account_code: accountCode,
             transaction_date: transactionDate,
             counter_account: row[1] ? String(row[1]).trim() : null,
-            description: row[2] ? String(row[2]).trim() : null,
-            debit_amount: debitAmount,
-            credit_amount: creditAmount,
-            balance: balance,
+            description: row[3] ? String(row[3]).trim() : null, // D列が摘要
+            debit_amount: Math.round(debitAmount), // 整数に変換
+            credit_amount: Math.round(creditAmount), // 整数に変換
+            balance: Math.round(balance), // 整数に変換
             sheet_no: sheetIndex + 1,
             row_no: globalRowNumber++
           });
@@ -203,7 +179,7 @@ export async function POST(request: NextRequest) {
           totalDebit += debitAmount;
           totalCredit += creditAmount;
           
-          if (balance !== null) {
+          if (balance !== 0) {
             closingBalance = balance;
           }
           
@@ -212,34 +188,21 @@ export async function POST(request: NextRequest) {
         
         // 月次残高を記録
         if (transactionCount > 0) {
-          const existingBalance = monthlyBalances.find(
-            b => b.account_code === accountCode && b.report_month === reportMonth
-          );
-          
-          if (existingBalance) {
-            // 既存の残高に加算
-            existingBalance.total_debit += totalDebit;
-            existingBalance.total_credit += totalCredit;
-            existingBalance.closing_balance = closingBalance;
-            existingBalance.transaction_count += transactionCount;
-          } else {
-            // 新規追加
-            monthlyBalances.push({
-              account_code: accountCode,
-              report_month: reportMonth,
-              opening_balance: openingBalance,
-              total_debit: totalDebit,
-              total_credit: totalCredit,
-              closing_balance: closingBalance,
-              transaction_count: transactionCount
-            });
-          }
+          monthlyBalances.push({
+            account_code: accountCode,
+            report_month: reportMonth,
+            opening_balance: Math.round(openingBalance),
+            total_debit: Math.round(totalDebit),
+            total_credit: Math.round(totalCredit),
+            closing_balance: Math.round(closingBalance),
+            transaction_count: transactionCount
+          });
         }
         
         processedSheets++;
       } catch (sheetError) {
-        console.error(`シート${sheetIndex + 1}の処理エラー:`, sheetError);
-        errors.push(`シート${sheetIndex + 1}: ${sheetError instanceof Error ? sheetError.message : 'エラー'}`);
+        console.error(`シート${sheetName}の処理エラー:`, sheetError);
+        errors.push(`シート${sheetName}: ${sheetError instanceof Error ? sheetError.message : 'エラー'}`);
       }
     });
 
