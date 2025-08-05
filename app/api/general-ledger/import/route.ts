@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.10
+// /app/api/general-ledger/import/route.ts ver.11
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
@@ -65,6 +65,9 @@ export async function POST(request: NextRequest) {
     const errors = [];
     let globalRowNumber = 1;
     
+    console.log(`総シート数: ${workbook.SheetNames.length}`);
+    console.log(`最初の5つのシート名:`, workbook.SheetNames.slice(0, 5));
+    
     // 各シートを処理
     workbook.SheetNames.forEach((sheetName, sheetIndex) => {
       try {
@@ -75,44 +78,64 @@ export async function POST(request: NextRequest) {
           return;
         }
         
-        // シート名から勘定科目情報を取得
-        // シート名の形式: "103 会津 ブランド観光企画"
-        const sheetNameMatch = sheetName.match(/^(\d+)\s+(.+)$/);
+        console.log(`\nシート${sheetIndex + 1} (${sheetName}) の処理開始`);
+        
+        // 勘定科目情報を抽出
         let accountCode = '';
         let accountName = '';
         
-        if (sheetNameMatch) {
-          accountCode = sheetNameMatch[1]; // 数字部分が勘定科目コード
-          accountName = sheetNameMatch[2].trim(); // それ以降が勘定科目名
-        } else {
-          // シート名が期待する形式でない場合
-          accountName = sheetName.trim();
-          // 2行目のC列（インデックス2）から勘定科目名を確認
-          if (jsonData[1] && jsonData[1][2]) {
+        // 2行目から勘定科目情報を探す（A列からE列まで）
+        if (jsonData[1]) {
+          console.log(`2行目のデータ:`, jsonData[1].slice(0, 5));
+          
+          // A列に数字があればそれが勘定科目コード
+          if (jsonData[1][0] && /^\d+$/.test(String(jsonData[1][0]).trim())) {
+            accountCode = String(jsonData[1][0]).trim();
+          }
+          
+          // C列（インデックス2）に勘定科目名がある
+          if (jsonData[1][2]) {
             const cellValue = String(jsonData[1][2]).trim();
-            if (cellValue && !cellValue.includes('ﾍﾟｰｼﾞ')) {
+            if (cellValue && !cellValue.includes('ﾍﾟｰｼﾞ') && !cellValue.includes('ページ')) {
               accountName = cellValue;
             }
           }
-          // コードは連番で生成
+        }
+        
+        // 3行目も確認（科目コードが3行目にある場合）
+        if (!accountCode && jsonData[2]) {
+          console.log(`3行目のデータ:`, jsonData[2].slice(0, 5));
+          
+          if (jsonData[2][0] && /^\d+$/.test(String(jsonData[2][0]).trim())) {
+            accountCode = String(jsonData[2][0]).trim();
+          }
+        }
+        
+        // 勘定科目名が取得できない場合は、シート名を使用
+        if (!accountName) {
+          accountName = sheetName;
+        }
+        
+        // コードが取得できない場合は連番
+        if (!accountCode) {
           accountCode = (100 + sheetIndex).toString();
         }
         
-        console.log(`処理中: ${accountName} (コード: ${accountCode})`);
+        console.log(`取得した勘定科目: コード=${accountCode}, 名前=${accountName}`);
         
         // ヘッダー行を探す（「日付」を含む行）
         let headerRow = -1;
         for (let i = 0; i < Math.min(10, jsonData.length); i++) {
           if (jsonData[i] && jsonData[i][0] && 
-              String(jsonData[i][0]).includes('日') && 
-              String(jsonData[i][0]).includes('付')) {
+              (String(jsonData[i][0]).includes('日') && String(jsonData[i][0]).includes('付'))) {
             headerRow = i;
+            console.log(`ヘッダー行: ${i}行目`);
             break;
           }
         }
         
         if (headerRow === -1) {
-          console.log(`ヘッダー行が見つかりません: ${sheetName}`);
+          console.log(`ヘッダー行が見つかりません`);
           return;
         }
         
@@ -132,6 +155,7 @@ export async function POST(request: NextRequest) {
         let totalCredit = 0;
         let closingBalance = 0;
         let transactionCount = 0;
+        let firstTransaction = true;
         
         for (let i = headerRow + 1; i < jsonData.length; i++) {
           const row = jsonData[i];
@@ -143,6 +167,7 @@ export async function POST(request: NextRequest) {
           // 前月繰越行の処理
           if (row[1] && String(row[1]).includes('前月繰越')) {
             openingBalance = parseNumber(row[7]); // H列が残高
+            console.log(`前月繰越: ${openingBalance}`);
             continue;
           }
           
@@ -158,9 +183,11 @@ export async function POST(request: NextRequest) {
           const creditAmount = parseNumber(row[6]);
           const balance = parseNumber(row[7]);
           
-          // デバッグ用
-          if (i === headerRow + 1) {
-            console.log(`最初の取引データ: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
+          // 最初の取引データをログ出力
+          if (firstTransaction) {
+            console.log(`最初の取引: 日付=${transactionDate}, 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
+            console.log(`元データ: F列=${row[5]}, G列=${row[6]}, H列=${row[7]}`);
+            firstTransaction = false;
           }
           
           allTransactions.push({
@@ -186,6 +213,8 @@ export async function POST(request: NextRequest) {
           transactionCount++;
         }
         
+        console.log(`取引件数: ${transactionCount}, 借方合計: ${totalDebit}, 貸方合計: ${totalCredit}`);
+        
         // 月次残高を記録
         if (transactionCount > 0) {
           monthlyBalances.push({
@@ -209,7 +238,7 @@ export async function POST(request: NextRequest) {
     // MapからArrayに変換
     const accountsToUpsert = Array.from(accountsMap.values());
 
-    console.log(`処理完了: ${processedSheets}シート, ${allTransactions.length}件の取引, ${accountsToUpsert.length}件の勘定科目`);
+    console.log(`\n処理完了: ${processedSheets}シート, ${allTransactions.length}件の取引, ${accountsToUpsert.length}件の勘定科目`);
 
     // データベースに保存
     try {
