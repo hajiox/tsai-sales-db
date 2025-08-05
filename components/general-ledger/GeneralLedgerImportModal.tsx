@@ -1,4 +1,4 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.9
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.10
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -73,11 +73,30 @@ export default function GeneralLedgerImportModal({
 
   // SheetJSライブラリを読み込む
   useEffect(() => {
-    if (!scriptLoaded) {
+    if (!scriptLoaded && typeof window !== 'undefined') {
+      // 既存のスクリプトをチェック
+      const existingScript = document.querySelector('script[src*="xlsx"]');
+      if (existingScript) {
+        setScriptLoaded(true);
+        return;
+      }
+
       const script = document.createElement('script');
       script.src = 'https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js';
-      script.onload = () => setScriptLoaded(true);
+      script.async = true;
+      script.onload = () => {
+        console.log('SheetJS loaded successfully');
+        setScriptLoaded(true);
+      };
+      script.onerror = () => {
+        console.error('Failed to load SheetJS');
+        setError('ライブラリの読み込みに失敗しました');
+      };
       document.body.appendChild(script);
+
+      return () => {
+        // クリーンアップは行わない（他の場所でも使用される可能性があるため）
+      };
     }
   }, [scriptLoaded]);
 
@@ -102,13 +121,20 @@ export default function GeneralLedgerImportModal({
       reader.onload = (e) => {
         try {
           const data = e.target?.result;
-          const workbook = (window as any).XLSX.read(data, { type: 'binary' });
+          
+          // XLSXオブジェクトの存在確認
+          if (!(window as any).XLSX) {
+            throw new Error('SheetJSライブラリが読み込まれていません');
+          }
+          
+          const XLSX = (window as any).XLSX;
+          const workbook = XLSX.read(data, { type: 'array' });
           const sheets = [];
           
           // 各シートを処理
           workbook.SheetNames.forEach((sheetName: string, index: number) => {
             const worksheet = workbook.Sheets[sheetName];
-            const jsonData = (window as any).XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
             
             if (!jsonData || jsonData.length < 5) return;
             
@@ -117,7 +143,6 @@ export default function GeneralLedgerImportModal({
             let accountName = '';
             
             // 3行目の最初のセルから勘定科目コードを探す
-            // A列からE列まで探す（場合によってはコードの位置が異なるため）
             for (let col = 0; col < 5; col++) {
               if (jsonData[2] && jsonData[2][col]) {
                 const cellValue = String(jsonData[2][col]).trim();
@@ -148,7 +173,7 @@ export default function GeneralLedgerImportModal({
             
             console.log(`シート${index + 1}: コード=${accountCode}, 名称=${accountName}`);
             
-            // ヘッダー行を探す（デバッグ用にログ追加）
+            // ヘッダー行を探す
             let headerRow = -1;
             for (let i = 0; i < Math.min(10, jsonData.length); i++) {
               if (jsonData[i] && jsonData[i][0] && 
@@ -200,7 +225,7 @@ export default function GeneralLedgerImportModal({
               
               // デバッグ用ログ（最初の5行のみ）
               if (rowNumber <= 5) {
-                console.log(`行${rowNumber}: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`, row);
+                console.log(`行${rowNumber}: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
               }
               
               transactions.push({
@@ -226,12 +251,18 @@ export default function GeneralLedgerImportModal({
           
           resolve({ sheets });
         } catch (err) {
+          console.error('Excel処理エラー:', err);
           reject(err);
         }
       };
       
-      reader.onerror = reject;
-      reader.readAsBinaryString(file);
+      reader.onerror = (err) => {
+        console.error('ファイル読み込みエラー:', err);
+        reject(new Error('ファイルの読み込みに失敗しました'));
+      };
+      
+      // ArrayBufferとして読み込む
+      reader.readAsArrayBuffer(file);
     });
   };
 
@@ -272,11 +303,12 @@ export default function GeneralLedgerImportModal({
 
       setImportResult(result);
       
-      // 成功時は親コンポーネントに通知（自動クローズは削除）
+      // 成功時は親コンポーネントに通知
       if (result.success) {
         onImportComplete();
       }
     } catch (err) {
+      console.error('インポートエラー:', err);
       setError(err instanceof Error ? err.message : 'インポート中にエラーが発生しました');
     } finally {
       setIsImporting(false);
