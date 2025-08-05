@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.3
+// /app/api/general-ledger/import/route.ts ver.4
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
     const monthlyBalances = [];
     let processedSheets = 0;
     const errors = [];
+    let globalRowNumber = 1; // 全体での行番号カウンター
 
     // 各シートを処理
     for (const sheetData of parsedData.sheets) {
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
               credit_amount: trans.credit || 0,
               balance: trans.balance,
               sheet_no: processedSheets + 1,
-              row_no: trans.rowNumber
+              row_no: globalRowNumber++ // 全体での連番を使用
             });
 
             totalDebit += trans.debit || 0;
