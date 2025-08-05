@@ -1,4 +1,4 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.8
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.9
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -176,8 +176,8 @@ export default function GeneralLedgerImportModal({
               
               // 前月繰越行の処理
               if (row[1] && String(row[1]).includes('前月繰越')) {
-                // 前月繰越の残高は通常9列目にある
-                const openingBalance = parseNumber(row[9]) || parseNumber(row[8]) || 0;
+                // 前月繰越の残高はH列（インデックス7）
+                const openingBalance = parseNumber(row[7]);
                 transactions.push({
                   isOpeningBalance: true,
                   balance: openingBalance
@@ -190,32 +190,13 @@ export default function GeneralLedgerImportModal({
               const transactionDate = parseJapaneseDate(dateStr);
               if (!transactionDate) continue;
               
-              // 金額列の位置を特定（一般的な総勘定元帳の構造）
-              // 通常：日付(0)、相手科目(1)、摘要(2-4)、借方(5-6)、貸方(7-8)、残高(9)
-              let debitAmount = 0;
-              let creditAmount = 0;
-              let balance = 0;
-              
-              // 借方金額を探す（5列目または6列目）
-              if (row[5] !== null && row[5] !== undefined && row[5] !== '') {
-                debitAmount = parseNumber(row[5]);
-              } else if (row[6] !== null && row[6] !== undefined && row[6] !== '') {
-                debitAmount = parseNumber(row[6]);
-              }
-              
-              // 貸方金額を探す（7列目または8列目）
-              if (row[7] !== null && row[7] !== undefined && row[7] !== '') {
-                creditAmount = parseNumber(row[7]);
-              } else if (row[8] !== null && row[8] !== undefined && row[8] !== '') {
-                creditAmount = parseNumber(row[8]);
-              }
-              
-              // 残高を探す（9列目または10列目）
-              if (row[9] !== null && row[9] !== undefined && row[9] !== '') {
-                balance = parseNumber(row[9]);
-              } else if (row[10] !== null && row[10] !== undefined && row[10] !== '') {
-                balance = parseNumber(row[10]);
-              }
+              // 金額列の位置を特定
+              // F列（インデックス5）: 借方金額
+              // G列（インデックス6）: 貸方金額
+              // H列（インデックス7）: 残高
+              const debitAmount = parseNumber(row[5]);
+              const creditAmount = parseNumber(row[6]);
+              const balance = parseNumber(row[7]);
               
               // デバッグ用ログ（最初の5行のみ）
               if (rowNumber <= 5) {
