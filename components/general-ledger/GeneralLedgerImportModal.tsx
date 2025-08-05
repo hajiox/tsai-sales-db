@@ -1,4 +1,4 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.7
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.8
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -148,13 +148,14 @@ export default function GeneralLedgerImportModal({
             
             console.log(`シート${index + 1}: コード=${accountCode}, 名称=${accountName}`);
             
-            // ヘッダー行を探す
+            // ヘッダー行を探す（デバッグ用にログ追加）
             let headerRow = -1;
             for (let i = 0; i < Math.min(10, jsonData.length); i++) {
               if (jsonData[i] && jsonData[i][0] && 
                   String(jsonData[i][0]).includes('日') && 
                   String(jsonData[i][0]).includes('付')) {
                 headerRow = i;
+                console.log(`ヘッダー行: ${i}行目`, jsonData[i]);
                 break;
               }
             }
@@ -175,10 +176,13 @@ export default function GeneralLedgerImportModal({
               
               // 前月繰越行の処理
               if (row[1] && String(row[1]).includes('前月繰越')) {
+                // 前月繰越の残高は通常9列目にある
+                const openingBalance = parseNumber(row[9]) || parseNumber(row[8]) || 0;
                 transactions.push({
                   isOpeningBalance: true,
-                  balance: parseNumber(row[9])
+                  balance: openingBalance
                 });
+                console.log(`前月繰越: ${openingBalance}`);
                 continue;
               }
               
@@ -186,13 +190,45 @@ export default function GeneralLedgerImportModal({
               const transactionDate = parseJapaneseDate(dateStr);
               if (!transactionDate) continue;
               
+              // 金額列の位置を特定（一般的な総勘定元帳の構造）
+              // 通常：日付(0)、相手科目(1)、摘要(2-4)、借方(5-6)、貸方(7-8)、残高(9)
+              let debitAmount = 0;
+              let creditAmount = 0;
+              let balance = 0;
+              
+              // 借方金額を探す（5列目または6列目）
+              if (row[5] !== null && row[5] !== undefined && row[5] !== '') {
+                debitAmount = parseNumber(row[5]);
+              } else if (row[6] !== null && row[6] !== undefined && row[6] !== '') {
+                debitAmount = parseNumber(row[6]);
+              }
+              
+              // 貸方金額を探す（7列目または8列目）
+              if (row[7] !== null && row[7] !== undefined && row[7] !== '') {
+                creditAmount = parseNumber(row[7]);
+              } else if (row[8] !== null && row[8] !== undefined && row[8] !== '') {
+                creditAmount = parseNumber(row[8]);
+              }
+              
+              // 残高を探す（9列目または10列目）
+              if (row[9] !== null && row[9] !== undefined && row[9] !== '') {
+                balance = parseNumber(row[9]);
+              } else if (row[10] !== null && row[10] !== undefined && row[10] !== '') {
+                balance = parseNumber(row[10]);
+              }
+              
+              // デバッグ用ログ（最初の5行のみ）
+              if (rowNumber <= 5) {
+                console.log(`行${rowNumber}: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`, row);
+              }
+              
               transactions.push({
                 date: transactionDate,
                 counterAccount: row[1] ? String(row[1]).trim() : null,
                 description: row[2] ? String(row[2]).trim() : null,
-                debit: parseNumber(row[5]) || parseNumber(row[7]) || 0,
-                credit: parseNumber(row[7]) || parseNumber(row[8]) || 0,
-                balance: parseNumber(row[9]),
+                debit: debitAmount,
+                credit: creditAmount,
+                balance: balance,
                 rowNumber: rowNumber
               });
             }
