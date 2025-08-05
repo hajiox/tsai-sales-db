@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.13
+// /app/api/general-ledger/import/route.ts ver.14
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
@@ -7,6 +7,29 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// CSVパーサー（シンプルで確実）
+function parseCSVLine(line: string): string[] {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current.trim());
+  return result;
+}
 
 // 日付パーサー
 function parseJapaneseDate(dateStr: string, baseYear: number = 2025): string {
@@ -27,16 +50,13 @@ function parseJapaneseDate(dateStr: string, baseYear: number = 2025): string {
   return '';
 }
 
-// 数値パーサー（カンマ区切りの数値に対応）
-function parseNumber(value: any): number {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    // カンマとスペースを除去
-    const cleaned = value.replace(/[,、\s]/g, '').trim();
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? 0 : num;
-  }
-  return 0;
+// 数値パーサー
+function parseNumber(value: string): number {
+  if (!value) return 0;
+  // カンマとスペースを除去
+  const cleaned = value.replace(/[,、\s]/g, '').trim();
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
 }
 
 export async function POST(request: NextRequest) {
@@ -69,84 +89,117 @@ export async function POST(request: NextRequest) {
     console.log(`総シート数: ${workbook.SheetNames.length}`);
     
     // 各シートを処理
-    workbook.SheetNames.forEach((sheetName, sheetIndex) => {
+    for (const [sheetIndex, sheetName] of workbook.SheetNames.entries()) {
       try {
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as any[][];
         
-        if (!jsonData || jsonData.length < 5) {
-          return;
+        // シートをCSV形式に変換（これが重要！）
+        const csv = XLSX.utils.sheet_to_csv(worksheet, {
+          FS: ',',
+          RS: '\n',
+          strip: false,
+          blankrows: false
+        });
+        
+        const lines = csv.split('\n').filter(line => line.trim() !== '');
+        
+        console.log(`\nシート${sheetIndex + 1} (${sheetName}) をCSVに変換`);
+        console.log(`行数: ${lines.length}`);
+        
+        if (lines.length < 5) {
+          continue;
         }
         
-        console.log(`\nシート${sheetIndex + 1} (${sheetName}) の処理開始`);
+        // 最初の10行をログ出力（デバッグ用）
+        console.log('最初の5行:');
+        lines.slice(0, 5).forEach((line, idx) => {
+          console.log(`行${idx}: ${line}`);
+        });
         
-        // 勘定科目情報を抽出
+        // 勘定科目情報を探す
         let accountCode = '';
         let accountName = '';
         
-        // 2行目（インデックス1）から勘定科目情報を探す
-        // 形式: "100 本 社 現 金"
-        if (jsonData[1]) {
-          // 各セルを確認
-          for (let col = 0; col < Math.min(5, jsonData[1].length); col++) {
-            const cellValue = jsonData[1][col];
-            if (cellValue) {
-              const valueStr = String(cellValue).trim();
-              console.log(`行1, 列${col}: "${valueStr}"`);
-              
-              // 数字とテキストが混在している場合
-              const match = valueStr.match(/^(\d+)\s+(.+)$/);
-              if (match) {
-                accountCode = match[1];
-                accountName = match[2].replace(/\s+/g, ''); // スペースを除去
-                console.log(`パターン1で取得: コード=${accountCode}, 名前=${accountName}`);
+        // 2行目から勘定科目情報を探す
+        for (let i = 1; i < Math.min(5, lines.length); i++) {
+          const columns = parseCSVLine(lines[i]);
+          
+          // パターン1: "100","本","社","現","金" のような分割
+          if (columns[0] && /^\d+$/.test(columns[0])) {
+            accountCode = columns[0];
+            // 次の列から勘定科目名を結合
+            const nameParts = [];
+            for (let j = 1; j < columns.length; j++) {
+              if (columns[j] && !columns[j].includes('ページ')) {
+                nameParts.push(columns[j]);
+              } else {
                 break;
               }
-              
-              // 数字のみの場合（次のセルに名前がある可能性）
-              if (/^\d+$/.test(valueStr) && col < jsonData[1].length - 1) {
-                accountCode = valueStr;
-                // 次のセルを確認
-                const nextCell = jsonData[1][col + 1];
-                if (nextCell) {
-                  accountName = String(nextCell).trim().replace(/\s+/g, '');
-                  console.log(`パターン2で取得: コード=${accountCode}, 名前=${accountName}`);
-                  break;
-                }
-              }
+            }
+            if (nameParts.length > 0) {
+              accountName = nameParts.join('');
+              console.log(`勘定科目を発見: コード=${accountCode}, 名前=${accountName}`);
+              break;
             }
           }
+          
+          // パターン2: "100 本 社 現 金" のような結合
+          for (const col of columns) {
+            const match = col.match(/^(\d+)\s+(.+)$/);
+            if (match) {
+              accountCode = match[1];
+              accountName = match[2].replace(/\s+/g, '');
+              console.log(`勘定科目を発見: コード=${accountCode}, 名前=${accountName}`);
+              break;
+            }
+          }
+          
+          if (accountCode) break;
         }
         
-        // 勘定科目名が取得できない場合は、シート名を使用
-        if (!accountName) {
+        // 勘定科目が見つからない場合
+        if (!accountCode) {
+          accountCode = (100 + sheetIndex).toString();
           accountName = sheetName;
         }
         
-        // コードが取得できない場合は連番
-        if (!accountCode) {
-          accountCode = (100 + sheetIndex).toString();
-        }
-        
-        console.log(`最終的な勘定科目: コード=${accountCode}, 名前=${accountName}`);
-        
-        // ヘッダー行を探す（「日付」または「日 付」を含む行）
+        // ヘッダー行を探す
         let headerRow = -1;
-        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-          if (jsonData[i] && jsonData[i][0]) {
-            const cellValue = String(jsonData[i][0]).replace(/\s+/g, '');
-            if (cellValue.includes('日付')) {
-              headerRow = i;
-              console.log(`ヘッダー行: ${i}行目`);
-              break;
-            }
+        for (let i = 0; i < Math.min(10, lines.length); i++) {
+          if (lines[i].includes('日') && lines[i].includes('付')) {
+            headerRow = i;
+            console.log(`ヘッダー行: ${i}行目`);
+            break;
           }
         }
         
         if (headerRow === -1) {
           console.log(`ヘッダー行が見つかりません`);
-          return;
+          continue;
         }
+        
+        // ヘッダー行の列を解析
+        const headerColumns = parseCSVLine(lines[headerRow]);
+        console.log('ヘッダー列:', headerColumns);
+        
+        // 金額列のインデックスを特定
+        let debitIndex = -1;
+        let creditIndex = -1;
+        let balanceIndex = -1;
+        
+        headerColumns.forEach((col, idx) => {
+          const normalized = col.replace(/\s+/g, '');
+          if (normalized.includes('借方')) debitIndex = idx;
+          if (normalized.includes('貸方')) creditIndex = idx;
+          if (normalized.includes('残高')) balanceIndex = idx;
+        });
+        
+        console.log(`金額列: 借方=${debitIndex}, 貸方=${creditIndex}, 残高=${balanceIndex}`);
+        
+        // デフォルト値（見つからない場合）
+        if (debitIndex === -1) debitIndex = 5;  // F列
+        if (creditIndex === -1) creditIndex = 6; // G列
+        if (balanceIndex === -1) balanceIndex = 7; // H列
         
         // 勘定科目マスタに追加
         if (!accountsMap.has(accountCode)) {
@@ -156,12 +209,6 @@ export async function POST(request: NextRequest) {
             account_type: '未分類',
             is_active: true
           });
-        } else {
-          // 既存のコードがある場合、名前を更新
-          const existing = accountsMap.get(accountCode);
-          if (existing && existing.account_name === `sheet${sheetIndex}`) {
-            existing.account_name = accountName;
-          }
         }
         
         // 取引データを抽出
@@ -170,30 +217,20 @@ export async function POST(request: NextRequest) {
         let totalCredit = 0;
         let closingBalance = 0;
         let transactionCount = 0;
-        let firstTransaction = true;
         
-        for (let i = headerRow + 1; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (!row || !row[0]) continue;
+        for (let i = headerRow + 1; i < lines.length; i++) {
+          const columns = parseCSVLine(lines[i]);
           
-          const dateStr = String(row[0]).trim();
-          if (!dateStr || dateStr === '') continue;
+          if (columns.length < 3) continue;
           
-          // 「以 下 余 白」で終了
-          if (dateStr.includes('以') && dateStr.includes('下') && dateStr.includes('余') && dateStr.includes('白')) {
-            break;
-          }
+          const dateStr = columns[0];
+          if (!dateStr || dateStr.includes('以下余白')) break;
+          if (dateStr.includes('月度計') || dateStr.includes('次月繰越')) continue;
           
-          // 前月繰越行の処理
-          if (row[1] && String(row[1]).includes('前頁より繰越')) {
-            // 前月繰越の残高はG列（インデックス6）
-            openingBalance = parseNumber(row[6]);
+          // 前月繰越
+          if (columns[1] && columns[1].includes('前頁より繰越')) {
+            openingBalance = parseNumber(columns[balanceIndex] || '0');
             console.log(`前月繰越: ${openingBalance}`);
-            continue;
-          }
-          
-          // 月度計行はスキップ
-          if (dateStr.includes('月度計') || dateStr.includes('次月繰越')) {
             continue;
           }
           
@@ -201,27 +238,21 @@ export async function POST(request: NextRequest) {
           const transactionDate = parseJapaneseDate(dateStr);
           if (!transactionDate) continue;
           
-          // 金額列の位置（PDFから確認）
-          // E列（インデックス4）: 借方金額
-          // F列（インデックス5）: 貸方金額  
-          // G列（インデックス6）: 残高
-          const debitAmount = parseNumber(row[4]);
-          const creditAmount = parseNumber(row[5]);
-          const balance = parseNumber(row[6]);
+          // 金額を取得
+          const debitAmount = parseNumber(columns[debitIndex] || '0');
+          const creditAmount = parseNumber(columns[creditIndex] || '0');
+          const balance = parseNumber(columns[balanceIndex] || '0');
           
-          // 最初の取引データをログ出力
-          if (firstTransaction && (debitAmount > 0 || creditAmount > 0)) {
-            console.log(`最初の取引: 日付=${transactionDate}, 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
-            console.log(`元データ: E列=${row[4]}, F列=${row[5]}, G列=${row[6]}`);
-            firstTransaction = false;
+          if (transactionCount === 0 && (debitAmount > 0 || creditAmount > 0)) {
+            console.log(`最初の取引: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
           }
           
           allTransactions.push({
             report_month: reportMonth,
             account_code: accountCode,
             transaction_date: transactionDate,
-            counter_account: row[1] ? String(row[1]).trim() : null,
-            description: row[3] ? String(row[3]).trim() : null, // D列が摘要
+            counter_account: columns[1] || null,
+            description: columns[3] || null,
             debit_amount: Math.round(debitAmount),
             credit_amount: Math.round(creditAmount),
             balance: Math.round(balance),
@@ -231,39 +262,24 @@ export async function POST(request: NextRequest) {
           
           totalDebit += debitAmount;
           totalCredit += creditAmount;
-          
-          if (balance !== 0) {
-            closingBalance = balance;
-          }
-          
+          if (balance !== 0) closingBalance = balance;
           transactionCount++;
         }
         
-        console.log(`取引件数: ${transactionCount}, 借方合計: ${totalDebit}, 貸方合計: ${totalCredit}`);
+        console.log(`処理完了: ${transactionCount}件、借方計${totalDebit}、貸方計${totalCredit}`);
         
-        // 月次残高を記録（Mapを使用して重複を防ぐ）
+        // 月次残高を記録
         if (transactionCount > 0) {
           const balanceKey = `${accountCode}-${reportMonth}`;
-          const existingBalance = monthlyBalancesMap.get(balanceKey);
-          
-          if (existingBalance) {
-            // 既存の残高に加算
-            existingBalance.total_debit += Math.round(totalDebit);
-            existingBalance.total_credit += Math.round(totalCredit);
-            existingBalance.closing_balance = Math.round(closingBalance);
-            existingBalance.transaction_count += transactionCount;
-          } else {
-            // 新規追加
-            monthlyBalancesMap.set(balanceKey, {
-              account_code: accountCode,
-              report_month: reportMonth,
-              opening_balance: Math.round(openingBalance),
-              total_debit: Math.round(totalDebit),
-              total_credit: Math.round(totalCredit),
-              closing_balance: Math.round(closingBalance),
-              transaction_count: transactionCount
-            });
-          }
+          monthlyBalancesMap.set(balanceKey, {
+            account_code: accountCode,
+            report_month: reportMonth,
+            opening_balance: Math.round(openingBalance),
+            total_debit: Math.round(totalDebit),
+            total_credit: Math.round(totalCredit),
+            closing_balance: Math.round(closingBalance),
+            transaction_count: transactionCount
+          });
         }
         
         processedSheets++;
@@ -271,17 +287,17 @@ export async function POST(request: NextRequest) {
         console.error(`シート${sheetName}の処理エラー:`, sheetError);
         errors.push(`シート${sheetName}: ${sheetError instanceof Error ? sheetError.message : 'エラー'}`);
       }
-    });
+    }
 
-    // MapからArrayに変換
+    // データベースに保存（既存のコードと同じ）
     const accountsToUpsert = Array.from(accountsMap.values());
     const monthlyBalances = Array.from(monthlyBalancesMap.values());
 
-    console.log(`\n処理完了: ${processedSheets}シート, ${allTransactions.length}件の取引, ${accountsToUpsert.length}件の勘定科目`);
+    console.log(`\n処理完了: ${processedSheets}シート, ${allTransactions.length}件の取引`);
 
-    // データベースに保存
+    // 以下、データベース保存処理は既存のコードと同じ...
     try {
-      // 1. 最初に勘定科目マスタを更新
+      // 1. 勘定科目マスタを更新
       if (accountsToUpsert.length > 0) {
         const { error: accountError } = await supabase
           .from('account_master')
@@ -290,35 +306,24 @@ export async function POST(request: NextRequest) {
             ignoreDuplicates: false 
           });
           
-        if (accountError) {
-          console.error('勘定科目マスタ更新エラー:', accountError);
-          throw accountError;
-        }
+        if (accountError) throw accountError;
       }
 
-      // 2. 既存の取引データを削除
-      const { error: deleteError } = await supabase
+      // 2. 既存データを削除
+      await supabase
         .from('general_ledger')
         .delete()
         .eq('report_month', reportMonth);
-        
-      if (deleteError) {
-        console.error('既存データ削除エラー:', deleteError);
-      }
 
-      // 3. 新規取引データを挿入
+      // 3. 新規データを挿入
       if (allTransactions.length > 0) {
-        // バッチ処理（500件ずつ）
         for (let i = 0; i < allTransactions.length; i += 500) {
           const batch = allTransactions.slice(i, i + 500);
           const { error: insertError } = await supabase
             .from('general_ledger')
             .insert(batch);
             
-          if (insertError) {
-            console.error('取引データ挿入エラー:', insertError);
-            throw insertError;
-          }
+          if (insertError) throw insertError;
         }
       }
 
@@ -331,13 +336,11 @@ export async function POST(request: NextRequest) {
           });
           
         if (balanceError) {
-          console.error('月次残高更新エラー:', balanceError);
           errors.push(`月次残高更新エラー: ${balanceError.message}`);
         }
       }
 
     } catch (dbError: any) {
-      console.error('データベース処理エラー:', dbError);
       return NextResponse.json(
         { error: `データベース処理エラー: ${dbError.message}` },
         { status: 500 }
