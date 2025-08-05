@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.2
+// /app/api/general-ledger/import/route.ts ver.3
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -7,198 +7,156 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// 日付パーサー（"7. 2. 1" → "2025-02-01"）
-function parseJapaneseDate(dateStr: string, baseYear: number = 2025): string {
-  if (!dateStr || typeof dateStr !== 'string') return '';
-  
-  const parts = dateStr.trim().split('.');
-  if (parts.length < 3) return '';
-  
-  const month = parts[1].trim().padStart(2, '0');
-  const day = parts[2].trim().padStart(2, '0');
-  
-  // 令和7年 = 2025年
-  const year = parts[0].trim() === '7' ? baseYear : parseInt(parts[0]) + 2018;
-  
-  return `${year}-${month}-${day}`;
-}
-
-// CSV行から数値を安全に取得
-function parseNumber(value: any): number {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const cleaned = value.replace(/[,、]/g, '').trim();
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? 0 : num;
-  }
-  return 0;
-}
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const fileData = formData.get('fileData') as string;
     const reportMonth = formData.get('reportMonth') as string;
-    const accountCode = formData.get('accountCode') as string;
-    const accountName = formData.get('accountName') as string;
 
-    if (!file || !reportMonth || !accountCode || !accountName) {
+    if (!fileData || !reportMonth) {
       return NextResponse.json(
         { error: '必要な情報が不足しています' },
         { status: 400 }
       );
     }
 
-    // CSVファイルを読み込む
-    const text = await file.text();
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+    // Base64デコード
+    const parsedData = JSON.parse(fileData);
     
-    if (lines.length < 2) {
-      return NextResponse.json(
-        { error: 'CSVファイルが空です' },
-        { status: 400 }
-      );
-    }
+    const allTransactions = [];
+    const accountsToUpsert = [];
+    const monthlyBalances = [];
+    let processedSheets = 0;
+    const errors = [];
 
-    // 勘定科目マスタに登録/更新
-    const { error: accountError } = await supabase
-      .from('account_master')
-      .upsert({
-        account_code: accountCode,
-        account_name: accountName,
-        account_type: '未分類',
-        is_active: true
-      }, {
-        onConflict: 'account_code'
-      });
+    // 各シートを処理
+    for (const sheetData of parsedData.sheets) {
+      try {
+        const { sheetName, accountCode, accountName, transactions } = sheetData;
+        
+        if (!accountCode || !accountName) continue;
 
-    if (accountError) {
-      console.error('勘定科目マスタ更新エラー:', accountError);
-    }
+        // 勘定科目マスタに追加
+        accountsToUpsert.push({
+          account_code: accountCode,
+          account_name: accountName,
+          account_type: '未分類',
+          is_active: true
+        });
 
-    // CSVデータを解析
-    const transactions = [];
-    let openingBalance = 0;
-    let totalDebit = 0;
-    let totalCredit = 0;
-    let closingBalance = 0;
-    let rowNumber = 0;
+        // 取引データを追加
+        let openingBalance = 0;
+        let totalDebit = 0;
+        let totalCredit = 0;
+        let closingBalance = 0;
 
-    // ヘッダー行をスキップ
-    let startIndex = 0;
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes('日付') || lines[i].includes('相手科目')) {
-        startIndex = i + 1;
-        break;
+        transactions.forEach((trans: any) => {
+          if (trans.isOpeningBalance) {
+            openingBalance = trans.balance || 0;
+          } else {
+            allTransactions.push({
+              report_month: reportMonth,
+              account_code: accountCode,
+              transaction_date: trans.date,
+              counter_account: trans.counterAccount,
+              description: trans.description,
+              debit_amount: trans.debit || 0,
+              credit_amount: trans.credit || 0,
+              balance: trans.balance,
+              sheet_no: processedSheets + 1,
+              row_no: trans.rowNumber
+            });
+
+            totalDebit += trans.debit || 0;
+            totalCredit += trans.credit || 0;
+            
+            if (trans.balance !== null) {
+              closingBalance = trans.balance;
+            }
+          }
+        });
+
+        // 月次残高を記録
+        if (transactions.length > 0) {
+          monthlyBalances.push({
+            account_code: accountCode,
+            report_month: reportMonth,
+            opening_balance: openingBalance,
+            total_debit: totalDebit,
+            total_credit: totalCredit,
+            closing_balance: closingBalance,
+            transaction_count: transactions.filter((t: any) => !t.isOpeningBalance).length
+          });
+        }
+
+        processedSheets++;
+      } catch (sheetError: any) {
+        errors.push(`シート処理エラー: ${sheetError.message}`);
       }
     }
 
-    // データ行を処理
-    for (let i = startIndex; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line) continue;
-
-      // CSVをカンマで分割（エスケープされたカンマに注意）
-      const columns = line.split(',').map(col => col.trim().replace(/^"|"$/g, ''));
-      
-      if (columns.length < 6) continue;
-
-      rowNumber++;
-      
-      // 日付
-      const dateStr = columns[0];
-      if (!dateStr || dateStr === '') continue;
-
-      // 前月繰越行の処理
-      if (columns[1] && columns[1].includes('前月繰越')) {
-        openingBalance = parseNumber(columns[5]);
-        continue;
-      }
-
-      // 日付をパース
-      const transactionDate = parseJapaneseDate(dateStr);
-      if (!transactionDate) continue;
-
-      // 借方・貸方金額の位置を調整（CSVの列構成に応じて）
-      const debitAmount = parseNumber(columns[3]) || 0;
-      const creditAmount = parseNumber(columns[4]) || 0;
-      const balance = parseNumber(columns[5]) || null;
-
-      const transaction = {
-        report_month: reportMonth,
-        account_code: accountCode,
-        transaction_date: transactionDate,
-        counter_account: columns[1] || null,
-        description: columns[2] || null,
-        debit_amount: debitAmount,
-        credit_amount: creditAmount,
-        balance: balance,
-        sheet_no: 1,
-        row_no: rowNumber
-      };
-
-      transactions.push(transaction);
-      totalDebit += debitAmount;
-      totalCredit += creditAmount;
-
-      if (balance !== null) {
-        closingBalance = balance;
+    // データベースに保存
+    // 1. 勘定科目マスタを更新
+    if (accountsToUpsert.length > 0) {
+      const { error: accountError } = await supabase
+        .from('account_master')
+        .upsert(accountsToUpsert, { 
+          onConflict: 'account_code',
+          ignoreDuplicates: false 
+        });
+        
+      if (accountError) {
+        console.error('勘定科目マスタ更新エラー:', accountError);
       }
     }
 
-    // 既存データを削除
+    // 2. 既存の取引データを削除
     const { error: deleteError } = await supabase
       .from('general_ledger')
       .delete()
-      .eq('report_month', reportMonth)
-      .eq('account_code', accountCode);
-
+      .eq('report_month', reportMonth);
+      
     if (deleteError) {
       console.error('既存データ削除エラー:', deleteError);
     }
 
-    // 新規データを挿入
-    if (transactions.length > 0) {
-      const { error: insertError } = await supabase
-        .from('general_ledger')
-        .insert(transactions);
-
-      if (insertError) {
-        console.error('取引データ挿入エラー:', insertError);
-        return NextResponse.json(
-          { error: '取引データの保存に失敗しました' },
-          { status: 500 }
-        );
+    // 3. 新規取引データを挿入
+    if (allTransactions.length > 0) {
+      // バッチ処理（500件ずつ）
+      for (let i = 0; i < allTransactions.length; i += 500) {
+        const batch = allTransactions.slice(i, i + 500);
+        const { error: insertError } = await supabase
+          .from('general_ledger')
+          .insert(batch);
+          
+        if (insertError) {
+          console.error('取引データ挿入エラー:', insertError);
+          errors.push(`取引データ挿入エラー: ${insertError.message}`);
+        }
       }
     }
 
-    // 月次残高を更新
-    const { error: balanceError } = await supabase
-      .from('monthly_account_balance')
-      .upsert({
-        account_code: accountCode,
-        report_month: reportMonth,
-        opening_balance: openingBalance,
-        total_debit: totalDebit,
-        total_credit: totalCredit,
-        closing_balance: closingBalance,
-        transaction_count: transactions.length
-      }, {
-        onConflict: 'account_code,report_month'
-      });
-
-    if (balanceError) {
-      console.error('月次残高更新エラー:', balanceError);
+    // 4. 月次残高を更新
+    if (monthlyBalances.length > 0) {
+      const { error: balanceError } = await supabase
+        .from('monthly_account_balance')
+        .upsert(monthlyBalances, {
+          onConflict: 'account_code,report_month'
+        });
+        
+      if (balanceError) {
+        console.error('月次残高更新エラー:', balanceError);
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: `${accountName}のデータをインポートしました`,
+      message: `${processedSheets}シートを処理しました`,
       details: {
-        transactions: transactions.length,
-        totalDebit,
-        totalCredit,
-        closingBalance
+        processedSheets,
+        totalTransactions: allTransactions.length,
+        accounts: accountsToUpsert.length,
+        errors: errors.length > 0 ? errors : undefined
       }
     });
 
