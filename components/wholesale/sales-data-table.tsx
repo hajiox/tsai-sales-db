@@ -1,4 +1,4 @@
-// /components/wholesale/sales-data-table.tsx ver.1
+// /components/wholesale/sales-data-table.tsx ver.2
 "use client"
 
 import { KeyboardEvent } from 'react';
@@ -145,8 +145,11 @@ export default function SalesDataTable({
                 );
               }
               
+              // ストライプパターンの背景色を適用（偶数行に薄い水色）
+              const rowBgClass = productIndex % 2 === 0 ? 'bg-sky-50' : 'bg-white';
+              
               rows.push(
-                <tr key={product.id} className="border-b hover:bg-gray-50">
+                <tr key={product.id} className={`border-b hover:bg-sky-100 ${rowBgClass}`}>
                   <td className="p-2 border-r">
                     <div className="w-[160px]">
                       <div className="font-medium text-gray-900 break-words">{product.product_name}</div>
