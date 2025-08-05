@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.7
+// /app/api/general-ledger/import/route.ts ver.8
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const parsedData = JSON.parse(fileData);
     
     const allTransactions = [];
-    const accountsToUpsert = [];
+    const accountsMap = new Map<string, any>(); // 重複を防ぐためMapを使用
     const monthlyBalances = [];
     let processedSheets = 0;
     const errors = [];
@@ -59,13 +59,15 @@ export async function POST(request: NextRequest) {
 
         console.log(`処理中: ${accountName} (コード: ${accountCode})`);
 
-        // 勘定科目マスタに追加
-        accountsToUpsert.push({
-          account_code: accountCode,
-          account_name: accountName,
-          account_type: '未分類',
-          is_active: true
-        });
+        // 勘定科目マスタに追加（重複チェック）
+        if (!accountsMap.has(accountCode)) {
+          accountsMap.set(accountCode, {
+            account_code: accountCode,
+            account_name: accountName,
+            account_type: '未分類',
+            is_active: true
+          });
+        }
 
         // 取引データを追加
         let openingBalance = 0;
@@ -101,15 +103,28 @@ export async function POST(request: NextRequest) {
 
         // 月次残高を記録
         if (transactions.length > 0) {
-          monthlyBalances.push({
-            account_code: accountCode,
-            report_month: reportMonth,
-            opening_balance: openingBalance,
-            total_debit: totalDebit,
-            total_credit: totalCredit,
-            closing_balance: closingBalance,
-            transaction_count: transactions.filter((t: any) => !t.isOpeningBalance).length
-          });
+          const existingBalance = monthlyBalances.find(
+            b => b.account_code === accountCode && b.report_month === reportMonth
+          );
+          
+          if (existingBalance) {
+            // 既存の残高に加算
+            existingBalance.total_debit += totalDebit;
+            existingBalance.total_credit += totalCredit;
+            existingBalance.closing_balance = closingBalance;
+            existingBalance.transaction_count += transactions.filter((t: any) => !t.isOpeningBalance).length;
+          } else {
+            // 新規追加
+            monthlyBalances.push({
+              account_code: accountCode,
+              report_month: reportMonth,
+              opening_balance: openingBalance,
+              total_debit: totalDebit,
+              total_credit: totalCredit,
+              closing_balance: closingBalance,
+              transaction_count: transactions.filter((t: any) => !t.isOpeningBalance).length
+            });
+          }
         }
 
         processedSheets++;
@@ -117,6 +132,11 @@ export async function POST(request: NextRequest) {
         errors.push(`シート処理エラー: ${sheetError.message}`);
       }
     }
+
+    // MapからArrayに変換
+    const accountsToUpsert = Array.from(accountsMap.values());
+
+    console.log(`処理完了: ${processedSheets}シート, ${allTransactions.length}件の取引, ${accountsToUpsert.length}件の勘定科目`);
 
     // データベースに保存
     try {
