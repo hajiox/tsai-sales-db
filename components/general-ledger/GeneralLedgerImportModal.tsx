@@ -1,17 +1,17 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.2
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.4
 'use client';
 
-import { useState } from 'react';
-import { X, Upload, AlertCircle, CheckCircle, FileText } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Upload, AlertCircle, CheckCircle, FileSpreadsheet } from 'lucide-react';
 
 interface ImportResult {
   success: boolean;
   message: string;
   details?: {
-    transactions: number;
-    totalDebit: number;
-    totalCredit: number;
-    closingBalance: number;
+    processedSheets: number;
+    totalTransactions: number;
+    accounts: number;
+    errors?: string[];
   };
 }
 
@@ -21,6 +21,36 @@ interface GeneralLedgerImportModalProps {
   onImportComplete: () => void;
 }
 
+// 日付パーサー
+function parseJapaneseDate(dateStr: string, baseYear: number = 2025): string {
+  if (!dateStr || typeof dateStr !== 'string') return '';
+  
+  const trimmed = dateStr.trim();
+  if (trimmed === '') return '';
+  
+  // "7. 2. 1" 形式
+  const parts = trimmed.split('.');
+  if (parts.length === 3) {
+    const month = parts[1].trim().padStart(2, '0');
+    const day = parts[2].trim().padStart(2, '0');
+    const year = parts[0].trim() === '7' ? baseYear : parseInt(parts[0]) + 2018;
+    return `${year}-${month}-${day}`;
+  }
+  
+  return '';
+}
+
+// 数値パーサー
+function parseNumber(value: any): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/[,、]/g, '').trim();
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  }
+  return 0;
+}
+
 export default function GeneralLedgerImportModal({
   isOpen,
   onClose,
@@ -28,26 +58,35 @@ export default function GeneralLedgerImportModal({
 }: GeneralLedgerImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [reportMonth, setReportMonth] = useState<string>('');
-  const [accountCode, setAccountCode] = useState<string>('');
-  const [accountName, setAccountName] = useState<string>('');
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string>('');
+  const [scriptLoaded, setScriptLoaded] = useState(false);
 
   // 現在の年月を初期値として設定
-  useState(() => {
+  useEffect(() => {
     const now = new Date();
     const year = now.getFullYear();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     setReportMonth(`${year}-${month}`);
-  });
+  }, []);
+
+  // SheetJSライブラリを読み込む
+  useEffect(() => {
+    if (!scriptLoaded) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js';
+      script.onload = () => setScriptLoaded(true);
+      document.body.appendChild(script);
+    }
+  }, [scriptLoaded]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       // ファイル形式チェック
-      if (!selectedFile.name.match(/\.csv$/)) {
-        setError('CSV形式のファイルを選択してください');
+      if (!selectedFile.name.match(/\.(xls|xlsx)$/)) {
+        setError('Excel形式（.xls, .xlsx）のファイルを選択してください');
         return;
       }
       setFile(selectedFile);
@@ -56,9 +95,124 @@ export default function GeneralLedgerImportModal({
     }
   };
 
+  const processExcelFile = async (file: File): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = (window as any).XLSX.read(data, { type: 'binary' });
+          const sheets = [];
+          
+          // 各シートを処理
+          workbook.SheetNames.forEach((sheetName: string, index: number) => {
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = (window as any).XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+            
+            if (!jsonData || jsonData.length < 5) return;
+            
+            // 勘定科目情報を抽出
+            let accountCode = '';
+            let accountName = '';
+            
+            // 3行目にコード
+            if (jsonData[2] && jsonData[2][0]) {
+              accountCode = String(jsonData[2][0]).trim();
+            }
+            
+            // 2行目に科目名（複数セルに分かれている可能性）
+            if (jsonData[1]) {
+              const nameParts = [];
+              for (let i = 2; i < Math.min(6, jsonData[1].length); i++) {
+                if (jsonData[1][i] && String(jsonData[1][i]).trim() && 
+                    !String(jsonData[1][i]).includes('ﾍﾟｰｼﾞ')) {
+                  nameParts.push(String(jsonData[1][i]).trim());
+                }
+              }
+              accountName = nameParts.join('');
+            }
+            
+            if (!accountCode || !accountName) return;
+            
+            // ヘッダー行を探す
+            let headerRow = -1;
+            for (let i = 0; i < Math.min(10, jsonData.length); i++) {
+              if (jsonData[i] && jsonData[i][0] && 
+                  String(jsonData[i][0]).includes('日') && 
+                  String(jsonData[i][0]).includes('付')) {
+                headerRow = i;
+                break;
+              }
+            }
+            
+            if (headerRow === -1) return;
+            
+            // 取引データを抽出
+            const transactions = [];
+            let rowNumber = 0;
+            
+            for (let i = headerRow + 1; i < jsonData.length; i++) {
+              const row = jsonData[i];
+              if (!row || !row[0]) continue;
+              
+              rowNumber++;
+              const dateStr = String(row[0]).trim();
+              if (!dateStr || dateStr === ' ') continue;
+              
+              // 前月繰越行の処理
+              if (row[1] && String(row[1]).includes('前月繰越')) {
+                transactions.push({
+                  isOpeningBalance: true,
+                  balance: parseNumber(row[9])
+                });
+                continue;
+              }
+              
+              // 日付をパース
+              const transactionDate = parseJapaneseDate(dateStr);
+              if (!transactionDate) continue;
+              
+              transactions.push({
+                date: transactionDate,
+                counterAccount: row[1] ? String(row[1]).trim() : null,
+                description: row[2] ? String(row[2]).trim() : null,
+                debit: parseNumber(row[5]) || parseNumber(row[7]) || 0,
+                credit: parseNumber(row[7]) || parseNumber(row[8]) || 0,
+                balance: parseNumber(row[9]),
+                rowNumber: rowNumber
+              });
+            }
+            
+            if (transactions.length > 0) {
+              sheets.push({
+                sheetName,
+                accountCode,
+                accountName,
+                transactions
+              });
+            }
+          });
+          
+          resolve({ sheets });
+        } catch (err) {
+          reject(err);
+        }
+      };
+      
+      reader.onerror = reject;
+      reader.readAsBinaryString(file);
+    });
+  };
+
   const handleImport = async () => {
-    if (!file || !reportMonth || !accountCode || !accountName) {
-      setError('すべての項目を入力してください');
+    if (!file || !reportMonth) {
+      setError('ファイルと対象月を選択してください');
+      return;
+    }
+
+    if (!scriptLoaded) {
+      setError('ライブラリを読み込み中です。しばらくお待ちください。');
       return;
     }
 
@@ -67,11 +221,13 @@ export default function GeneralLedgerImportModal({
     setImportResult(null);
 
     try {
+      // Excelファイルを処理
+      const processedData = await processExcelFile(file);
+      
+      // APIに送信
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('fileData', JSON.stringify(processedData));
       formData.append('reportMonth', `${reportMonth}-01`);
-      formData.append('accountCode', accountCode);
-      formData.append('accountName', accountName);
 
       const response = await fetch('/api/general-ledger/import', {
         method: 'POST',
@@ -102,8 +258,6 @@ export default function GeneralLedgerImportModal({
 
   const handleClose = () => {
     setFile(null);
-    setAccountCode('');
-    setAccountName('');
     setImportResult(null);
     setError('');
     onClose();
@@ -133,7 +287,7 @@ export default function GeneralLedgerImportModal({
             </div>
             <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
               <h3 className="text-lg leading-6 font-medium text-gray-900">
-                総勘定元帳CSVインポート
+                総勘定元帳インポート
               </h3>
               
               <div className="mt-4 space-y-4">
@@ -152,49 +306,17 @@ export default function GeneralLedgerImportModal({
                   />
                 </div>
 
-                {/* 勘定科目コード */}
-                <div>
-                  <label htmlFor="accountCode" className="block text-sm font-medium text-gray-700">
-                    勘定科目コード
-                  </label>
-                  <input
-                    type="text"
-                    id="accountCode"
-                    value={accountCode}
-                    onChange={(e) => setAccountCode(e.target.value)}
-                    placeholder="例: 07003"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    disabled={isImporting}
-                  />
-                </div>
-
-                {/* 勘定科目名 */}
-                <div>
-                  <label htmlFor="accountName" className="block text-sm font-medium text-gray-700">
-                    勘定科目名
-                  </label>
-                  <input
-                    type="text"
-                    id="accountName"
-                    value={accountName}
-                    onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="例: 現金"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    disabled={isImporting}
-                  />
-                </div>
-
                 {/* ファイル選択 */}
                 <div>
                   <label htmlFor="file" className="block text-sm font-medium text-gray-700">
-                    CSVファイル選択
+                    Excelファイル選択
                   </label>
                   <div className="mt-1 flex items-center">
-                    <FileText className="h-8 w-8 text-gray-400 mr-2" />
+                    <FileSpreadsheet className="h-8 w-8 text-gray-400 mr-2" />
                     <input
                       type="file"
                       id="file"
-                      accept=".csv"
+                      accept=".xls,.xlsx"
                       onChange={handleFileChange}
                       className="block w-full text-sm text-gray-500
                         file:mr-4 file:py-2 file:px-4
@@ -211,7 +333,7 @@ export default function GeneralLedgerImportModal({
                     </p>
                   )}
                   <p className="mt-2 text-xs text-gray-500">
-                    ※ 総勘定元帳の各シートをCSV形式で保存してアップロードしてください
+                    ※ 総勘定元帳のExcelファイルをそのままアップロードしてください
                   </p>
                 </div>
 
@@ -238,10 +360,9 @@ export default function GeneralLedgerImportModal({
                         </p>
                         {importResult.details && (
                           <div className="mt-2 text-sm text-green-700">
-                            <p>取引件数: {importResult.details.transactions}件</p>
-                            <p>借方合計: ¥{importResult.details.totalDebit.toLocaleString()}</p>
-                            <p>貸方合計: ¥{importResult.details.totalCredit.toLocaleString()}</p>
-                            <p>残高: ¥{importResult.details.closingBalance.toLocaleString()}</p>
+                            <p>処理シート数: {importResult.details.processedSheets}</p>
+                            <p>取引件数: {importResult.details.totalTransactions}</p>
+                            <p>勘定科目数: {importResult.details.accounts}</p>
                           </div>
                         )}
                       </div>
@@ -254,7 +375,7 @@ export default function GeneralLedgerImportModal({
                 <button
                   type="button"
                   onClick={handleImport}
-                  disabled={!file || !reportMonth || !accountCode || !accountName || isImporting}
+                  disabled={!file || !reportMonth || isImporting || !scriptLoaded}
                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isImporting ? (
