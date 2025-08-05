@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.12
+// /app/api/general-ledger/import/route.ts ver.13
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
@@ -27,11 +27,12 @@ function parseJapaneseDate(dateStr: string, baseYear: number = 2025): string {
   return '';
 }
 
-// 数値パーサー
+// 数値パーサー（カンマ区切りの数値に対応）
 function parseNumber(value: any): number {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
-    const cleaned = value.replace(/[,、]/g, '').trim();
+    // カンマとスペースを除去
+    const cleaned = value.replace(/[,、\s]/g, '').trim();
     const num = parseFloat(cleaned);
     return isNaN(num) ? 0 : num;
   }
@@ -60,13 +61,12 @@ export async function POST(request: NextRequest) {
     
     const allTransactions = [];
     const accountsMap = new Map<string, any>();
-    const monthlyBalancesMap = new Map<string, any>(); // 重複を防ぐためMapを使用
+    const monthlyBalancesMap = new Map<string, any>();
     let processedSheets = 0;
     const errors = [];
     let globalRowNumber = 1;
     
     console.log(`総シート数: ${workbook.SheetNames.length}`);
-    console.log(`最初の5つのシート名:`, workbook.SheetNames.slice(0, 5));
     
     // 各シートを処理
     workbook.SheetNames.forEach((sheetName, sheetIndex) => {
@@ -84,30 +84,37 @@ export async function POST(request: NextRequest) {
         let accountCode = '';
         let accountName = '';
         
-        // 2行目から勘定科目情報を探す（A列からE列まで）
+        // 2行目（インデックス1）から勘定科目情報を探す
+        // 形式: "100 本 社 現 金"
         if (jsonData[1]) {
-          console.log(`2行目のデータ:`, jsonData[1].slice(0, 5));
-          
-          // A列に数字があればそれが勘定科目コード
-          if (jsonData[1][0] && /^\d+$/.test(String(jsonData[1][0]).trim())) {
-            accountCode = String(jsonData[1][0]).trim();
-          }
-          
-          // C列（インデックス2）に勘定科目名がある
-          if (jsonData[1][2]) {
-            const cellValue = String(jsonData[1][2]).trim();
-            if (cellValue && !cellValue.includes('ﾍﾟｰｼﾞ') && !cellValue.includes('ページ')) {
-              accountName = cellValue;
+          // 各セルを確認
+          for (let col = 0; col < Math.min(5, jsonData[1].length); col++) {
+            const cellValue = jsonData[1][col];
+            if (cellValue) {
+              const valueStr = String(cellValue).trim();
+              console.log(`行1, 列${col}: "${valueStr}"`);
+              
+              // 数字とテキストが混在している場合
+              const match = valueStr.match(/^(\d+)\s+(.+)$/);
+              if (match) {
+                accountCode = match[1];
+                accountName = match[2].replace(/\s+/g, ''); // スペースを除去
+                console.log(`パターン1で取得: コード=${accountCode}, 名前=${accountName}`);
+                break;
+              }
+              
+              // 数字のみの場合（次のセルに名前がある可能性）
+              if (/^\d+$/.test(valueStr) && col < jsonData[1].length - 1) {
+                accountCode = valueStr;
+                // 次のセルを確認
+                const nextCell = jsonData[1][col + 1];
+                if (nextCell) {
+                  accountName = String(nextCell).trim().replace(/\s+/g, '');
+                  console.log(`パターン2で取得: コード=${accountCode}, 名前=${accountName}`);
+                  break;
+                }
+              }
             }
-          }
-        }
-        
-        // 3行目も確認（科目コードが3行目にある場合）
-        if (!accountCode && jsonData[2]) {
-          console.log(`3行目のデータ:`, jsonData[2].slice(0, 5));
-          
-          if (jsonData[2][0] && /^\d+$/.test(String(jsonData[2][0]).trim())) {
-            accountCode = String(jsonData[2][0]).trim();
           }
         }
         
@@ -121,16 +128,18 @@ export async function POST(request: NextRequest) {
           accountCode = (100 + sheetIndex).toString();
         }
         
-        console.log(`取得した勘定科目: コード=${accountCode}, 名前=${accountName}`);
+        console.log(`最終的な勘定科目: コード=${accountCode}, 名前=${accountName}`);
         
-        // ヘッダー行を探す（「日付」を含む行）
+        // ヘッダー行を探す（「日付」または「日 付」を含む行）
         let headerRow = -1;
         for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-          if (jsonData[i] && jsonData[i][0] && 
-              (String(jsonData[i][0]).includes('日') && String(jsonData[i][0]).includes('付'))) {
-            headerRow = i;
-            console.log(`ヘッダー行: ${i}行目`);
-            break;
+          if (jsonData[i] && jsonData[i][0]) {
+            const cellValue = String(jsonData[i][0]).replace(/\s+/g, '');
+            if (cellValue.includes('日付')) {
+              headerRow = i;
+              console.log(`ヘッダー行: ${i}行目`);
+              break;
+            }
           }
         }
         
@@ -139,7 +148,7 @@ export async function POST(request: NextRequest) {
           return;
         }
         
-        // 勘定科目マスタに追加（重複チェック）
+        // 勘定科目マスタに追加
         if (!accountsMap.has(accountCode)) {
           accountsMap.set(accountCode, {
             account_code: accountCode,
@@ -170,10 +179,21 @@ export async function POST(request: NextRequest) {
           const dateStr = String(row[0]).trim();
           if (!dateStr || dateStr === '') continue;
           
+          // 「以 下 余 白」で終了
+          if (dateStr.includes('以') && dateStr.includes('下') && dateStr.includes('余') && dateStr.includes('白')) {
+            break;
+          }
+          
           // 前月繰越行の処理
-          if (row[1] && String(row[1]).includes('前月繰越')) {
-            openingBalance = parseNumber(row[7]); // H列が残高
+          if (row[1] && String(row[1]).includes('前頁より繰越')) {
+            // 前月繰越の残高はG列（インデックス6）
+            openingBalance = parseNumber(row[6]);
             console.log(`前月繰越: ${openingBalance}`);
+            continue;
+          }
+          
+          // 月度計行はスキップ
+          if (dateStr.includes('月度計') || dateStr.includes('次月繰越')) {
             continue;
           }
           
@@ -181,18 +201,18 @@ export async function POST(request: NextRequest) {
           const transactionDate = parseJapaneseDate(dateStr);
           if (!transactionDate) continue;
           
-          // 金額列の位置（画像から確認済み）
-          // F列（インデックス5）: 借方金額
-          // G列（インデックス6）: 貸方金額  
-          // H列（インデックス7）: 残高
-          const debitAmount = parseNumber(row[5]);
-          const creditAmount = parseNumber(row[6]);
-          const balance = parseNumber(row[7]);
+          // 金額列の位置（PDFから確認）
+          // E列（インデックス4）: 借方金額
+          // F列（インデックス5）: 貸方金額  
+          // G列（インデックス6）: 残高
+          const debitAmount = parseNumber(row[4]);
+          const creditAmount = parseNumber(row[5]);
+          const balance = parseNumber(row[6]);
           
           // 最初の取引データをログ出力
-          if (firstTransaction) {
+          if (firstTransaction && (debitAmount > 0 || creditAmount > 0)) {
             console.log(`最初の取引: 日付=${transactionDate}, 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
-            console.log(`元データ: F列=${row[5]}, G列=${row[6]}, H列=${row[7]}`);
+            console.log(`元データ: E列=${row[4]}, F列=${row[5]}, G列=${row[6]}`);
             firstTransaction = false;
           }
           
@@ -202,9 +222,9 @@ export async function POST(request: NextRequest) {
             transaction_date: transactionDate,
             counter_account: row[1] ? String(row[1]).trim() : null,
             description: row[3] ? String(row[3]).trim() : null, // D列が摘要
-            debit_amount: Math.round(debitAmount), // 整数に変換
-            credit_amount: Math.round(creditAmount), // 整数に変換
-            balance: Math.round(balance), // 整数に変換
+            debit_amount: Math.round(debitAmount),
+            credit_amount: Math.round(creditAmount),
+            balance: Math.round(balance),
             sheet_no: sheetIndex + 1,
             row_no: globalRowNumber++
           });
