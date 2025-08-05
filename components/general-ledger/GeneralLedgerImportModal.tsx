@@ -1,4 +1,4 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.11
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.12
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -78,33 +78,46 @@ export default function GeneralLedgerImportModal({
     setReportMonth(`${year}-${month}`);
   }, []);
 
-  // SheetJSライブラリを読み込む（CDNを変更）
+  // SheetJSライブラリを読み込む
   useEffect(() => {
     if (!scriptLoaded && typeof window !== 'undefined') {
       // 既存のスクリプトをチェック
       const existingScript = document.querySelector('script[src*="xlsx"]');
       if (existingScript) {
-        setScriptLoaded(true);
-        return;
+        existingScript.remove();
       }
 
       const script = document.createElement('script');
-      // CDN URLを変更
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      // より安定したバージョンのCDNを使用
+      script.src = 'https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js';
       script.async = true;
+      
       script.onload = () => {
-        console.log('SheetJS loaded successfully');
-        if (window.XLSX) {
-          setScriptLoaded(true);
-        } else {
-          setError('SheetJSの読み込みに失敗しました');
-        }
+        console.log('SheetJS loaded');
+        // 少し待ってから確認
+        setTimeout(() => {
+          if (window.XLSX) {
+            console.log('XLSX object available:', typeof window.XLSX);
+            setScriptLoaded(true);
+          } else {
+            setError('SheetJSの初期化に失敗しました');
+          }
+        }, 100);
       };
+      
       script.onerror = () => {
         console.error('Failed to load SheetJS');
         setError('ライブラリの読み込みに失敗しました');
       };
+      
       document.body.appendChild(script);
+
+      // クリーンアップ
+      return () => {
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+      };
     }
   }, [scriptLoaded]);
 
@@ -135,17 +148,58 @@ export default function GeneralLedgerImportModal({
             throw new Error('SheetJSライブラリが読み込まれていません');
           }
           
-          const XLSX = window.XLSX;
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheets = [];
+          // データが正しく読み込まれているか確認
+          if (!data) {
+            throw new Error('ファイルデータが空です');
+          }
           
+          console.log('Reading workbook...');
+          
+          // ワークブックを読み込む
+          let workbook;
+          try {
+            // ArrayBufferとして読み込む
+            workbook = window.XLSX.read(new Uint8Array(data as ArrayBuffer), { 
+              type: 'array',
+              cellFormula: false,
+              cellHTML: false,
+              cellText: false
+            });
+          } catch (readError) {
+            console.error('Workbook read error:', readError);
+            throw new Error('Excelファイルの読み込みに失敗しました。ファイルが破損している可能性があります。');
+          }
+          
+          if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+            throw new Error('ワークブックにシートが含まれていません');
+          }
+          
+          const sheets = [];
           console.log(`ワークブック読み込み完了: ${workbook.SheetNames.length}シート`);
           
           // 各シートを処理
           workbook.SheetNames.forEach((sheetName: string, index: number) => {
             try {
               const worksheet = workbook.Sheets[sheetName];
-              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+              if (!worksheet) {
+                console.log(`シート${index + 1}が見つかりません`);
+                return;
+              }
+              
+              // シートをJSONに変換（より安全な方法）
+              const range = window.XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+              const jsonData = [];
+              
+              for (let R = range.s.r; R <= range.e.r; ++R) {
+                const row = [];
+                for (let C = range.s.c; C <= range.e.c; ++C) {
+                  const cellAddress = {c: C, r: R};
+                  const cellRef = window.XLSX.utils.encode_cell(cellAddress);
+                  const cell = worksheet[cellRef];
+                  row.push(cell ? cell.v : null);
+                }
+                jsonData.push(row);
+              }
               
               if (!jsonData || jsonData.length < 5) {
                 console.log(`シート${index + 1}はスキップ（データ不足）`);
@@ -305,6 +359,7 @@ export default function GeneralLedgerImportModal({
 
     try {
       console.log('インポート開始...');
+      console.log('XLSX version:', window.XLSX.version);
       
       // Excelファイルを処理
       const processedData = await processExcelFile(file);
