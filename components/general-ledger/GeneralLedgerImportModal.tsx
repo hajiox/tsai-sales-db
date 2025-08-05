@@ -1,4 +1,4 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.4
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.7
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -116,9 +116,22 @@ export default function GeneralLedgerImportModal({
             let accountCode = '';
             let accountName = '';
             
-            // 3行目にコード
-            if (jsonData[2] && jsonData[2][0]) {
-              accountCode = String(jsonData[2][0]).trim();
+            // 3行目の最初のセルから勘定科目コードを探す
+            // A列からE列まで探す（場合によってはコードの位置が異なるため）
+            for (let col = 0; col < 5; col++) {
+              if (jsonData[2] && jsonData[2][col]) {
+                const cellValue = String(jsonData[2][col]).trim();
+                // 数字のみ、または数字とハイフンを含む値を勘定科目コードとして認識
+                if (/^[\d\-]+$/.test(cellValue) && cellValue.length >= 4) {
+                  accountCode = cellValue;
+                  break;
+                }
+              }
+            }
+            
+            // コードが見つからない場合は、シート番号を基にした仮のコードを生成
+            if (!accountCode) {
+              accountCode = `SHEET${(index + 1).toString().padStart(3, '0')}`;
             }
             
             // 2行目に科目名（複数セルに分かれている可能性）
@@ -130,10 +143,10 @@ export default function GeneralLedgerImportModal({
                   nameParts.push(String(jsonData[1][i]).trim());
                 }
               }
-              accountName = nameParts.join('');
+              accountName = nameParts.join('') || `勘定科目${index + 1}`;
             }
             
-            if (!accountCode || !accountName) return;
+            console.log(`シート${index + 1}: コード=${accountCode}, 名称=${accountName}`);
             
             // ヘッダー行を探す
             let headerRow = -1;
@@ -242,12 +255,9 @@ export default function GeneralLedgerImportModal({
 
       setImportResult(result);
       
-      // 成功時は親コンポーネントに通知
+      // 成功時は親コンポーネントに通知（自動クローズは削除）
       if (result.success) {
-        setTimeout(() => {
-          onImportComplete();
-          handleClose();
-        }, 2000);
+        onImportComplete();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'インポート中にエラーが発生しました');
@@ -363,6 +373,14 @@ export default function GeneralLedgerImportModal({
                             <p>処理シート数: {importResult.details.processedSheets}</p>
                             <p>取引件数: {importResult.details.totalTransactions}</p>
                             <p>勘定科目数: {importResult.details.accounts}</p>
+                            {importResult.details.errors && (
+                              <div className="mt-2">
+                                <p className="text-red-700">エラー:</p>
+                                {importResult.details.errors.map((err, idx) => (
+                                  <p key={idx} className="text-sm text-red-600 ml-2">- {err}</p>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
