@@ -1,8 +1,8 @@
-// /app/finance/general-ledger/page.tsx ver.1
+// /app/finance/general-ledger/page.tsx ver.2
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 import { Upload, TrendingUp, FileText, DollarSign } from 'lucide-react';
 
@@ -30,7 +30,7 @@ export default function GeneralLedgerPage() {
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = createClient();
+  const supabase = createClientComponentClient();
 
   // 初期値設定
   useEffect(() => {
