@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.5
+// /app/api/general-ledger/import/route.ts ver.6
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -28,7 +28,10 @@ export async function POST(request: NextRequest) {
     const monthlyBalances = [];
     let processedSheets = 0;
     const errors = [];
-    let globalRowNumber = 1; // 全体での行番号カウンター
+    let globalRowNumber = 1;
+
+    // デバッグ用：処理済みの組み合わせを記録
+    const processedKeys = new Set<string>();
 
     // 各シートを処理
     for (const sheetData of parsedData.sheets) {
@@ -36,6 +39,8 @@ export async function POST(request: NextRequest) {
         const { sheetName, accountCode, accountName, transactions } = sheetData;
         
         if (!accountCode || !accountName) continue;
+
+        console.log(`処理中のシート: ${sheetName}, 勘定科目: ${accountCode} - ${accountName}`);
 
         // 勘定科目マスタに追加
         accountsToUpsert.push({
@@ -51,11 +56,21 @@ export async function POST(request: NextRequest) {
         let totalCredit = 0;
         let closingBalance = 0;
 
-        transactions.forEach((trans: any) => {
+        transactions.forEach((trans: any, index: number) => {
           if (trans.isOpeningBalance) {
             openingBalance = trans.balance || 0;
           } else {
-            allTransactions.push({
+            // デバッグ用：キーの組み合わせをチェック
+            const key = `${reportMonth}|${accountCode}|${trans.date}|${globalRowNumber}`;
+            
+            if (processedKeys.has(key)) {
+              console.error(`重複キー検出: ${key}`);
+              console.error(`取引詳細: ${JSON.stringify(trans)}`);
+            } else {
+              processedKeys.add(key);
+            }
+
+            const transaction = {
               report_month: reportMonth,
               account_code: accountCode,
               transaction_date: trans.date,
@@ -65,8 +80,15 @@ export async function POST(request: NextRequest) {
               credit_amount: trans.credit || 0,
               balance: trans.balance,
               sheet_no: processedSheets + 1,
-              row_no: globalRowNumber++ // 全体での連番を使用
-            });
+              row_no: globalRowNumber++
+            };
+
+            // デバッグ用ログ
+            if (index < 3) {  // 最初の3件だけログ出力
+              console.log(`取引データ[${index}]:`, JSON.stringify(transaction, null, 2));
+            }
+
+            allTransactions.push(transaction);
 
             totalDebit += trans.debit || 0;
             totalCredit += trans.credit || 0;
@@ -92,14 +114,18 @@ export async function POST(request: NextRequest) {
 
         processedSheets++;
       } catch (sheetError: any) {
+        console.error(`シート処理エラー:`, sheetError);
         errors.push(`シート処理エラー: ${sheetError.message}`);
       }
     }
 
+    console.log(`処理完了: ${processedSheets}シート, ${allTransactions.length}件の取引`);
+
     // データベースに保存（トランザクション処理）
     try {
-      // 1. 最初に勘定科目マスタを更新（これを最初に行う）
+      // 1. 最初に勘定科目マスタを更新
       if (accountsToUpsert.length > 0) {
+        console.log(`勘定科目マスタ更新: ${accountsToUpsert.length}件`);
         const { error: accountError } = await supabase
           .from('account_master')
           .upsert(accountsToUpsert, { 
@@ -114,6 +140,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 2. 既存の取引データを削除
+      console.log(`既存データ削除: report_month = ${reportMonth}`);
       const { error: deleteError } = await supabase
         .from('general_ledger')
         .delete()
@@ -121,20 +148,24 @@ export async function POST(request: NextRequest) {
         
       if (deleteError) {
         console.error('既存データ削除エラー:', deleteError);
-        // 削除エラーは無視して続行（データが存在しない場合もあるため）
       }
 
       // 3. 新規取引データを挿入
       if (allTransactions.length > 0) {
+        console.log(`取引データ挿入開始: ${allTransactions.length}件`);
+        
         // バッチ処理（500件ずつ）
         for (let i = 0; i < allTransactions.length; i += 500) {
           const batch = allTransactions.slice(i, i + 500);
+          console.log(`バッチ挿入: ${i}〜${Math.min(i + 500, allTransactions.length)}件目`);
+          
           const { error: insertError } = await supabase
             .from('general_ledger')
             .insert(batch);
             
           if (insertError) {
             console.error('取引データ挿入エラー:', insertError);
+            console.error('問題のあるバッチの最初のデータ:', JSON.stringify(batch[0], null, 2));
             throw insertError;
           }
         }
@@ -142,6 +173,7 @@ export async function POST(request: NextRequest) {
 
       // 4. 月次残高を更新
       if (monthlyBalances.length > 0) {
+        console.log(`月次残高更新: ${monthlyBalances.length}件`);
         const { error: balanceError } = await supabase
           .from('monthly_account_balance')
           .upsert(monthlyBalances, {
@@ -150,7 +182,6 @@ export async function POST(request: NextRequest) {
           
         if (balanceError) {
           console.error('月次残高更新エラー:', balanceError);
-          // エラーは記録するが処理は続行
           errors.push(`月次残高更新エラー: ${balanceError.message}`);
         }
       }
