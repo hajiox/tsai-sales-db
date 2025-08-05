@@ -1,8 +1,15 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.10
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.11
 'use client';
 
 import { useState, useEffect } from 'react';
 import { X, Upload, AlertCircle, CheckCircle, FileSpreadsheet } from 'lucide-react';
+
+// グローバル宣言
+declare global {
+  interface Window {
+    XLSX: any;
+  }
+}
 
 interface ImportResult {
   success: boolean;
@@ -71,7 +78,7 @@ export default function GeneralLedgerImportModal({
     setReportMonth(`${year}-${month}`);
   }, []);
 
-  // SheetJSライブラリを読み込む
+  // SheetJSライブラリを読み込む（CDNを変更）
   useEffect(() => {
     if (!scriptLoaded && typeof window !== 'undefined') {
       // 既存のスクリプトをチェック
@@ -82,21 +89,22 @@ export default function GeneralLedgerImportModal({
       }
 
       const script = document.createElement('script');
-      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js';
+      // CDN URLを変更
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
       script.async = true;
       script.onload = () => {
         console.log('SheetJS loaded successfully');
-        setScriptLoaded(true);
+        if (window.XLSX) {
+          setScriptLoaded(true);
+        } else {
+          setError('SheetJSの読み込みに失敗しました');
+        }
       };
       script.onerror = () => {
         console.error('Failed to load SheetJS');
         setError('ライブラリの読み込みに失敗しました');
       };
       document.body.appendChild(script);
-
-      return () => {
-        // クリーンアップは行わない（他の場所でも使用される可能性があるため）
-      };
     }
   }, [scriptLoaded]);
 
@@ -123,132 +131,146 @@ export default function GeneralLedgerImportModal({
           const data = e.target?.result;
           
           // XLSXオブジェクトの存在確認
-          if (!(window as any).XLSX) {
+          if (!window.XLSX) {
             throw new Error('SheetJSライブラリが読み込まれていません');
           }
           
-          const XLSX = (window as any).XLSX;
+          const XLSX = window.XLSX;
           const workbook = XLSX.read(data, { type: 'array' });
           const sheets = [];
           
+          console.log(`ワークブック読み込み完了: ${workbook.SheetNames.length}シート`);
+          
           // 各シートを処理
           workbook.SheetNames.forEach((sheetName: string, index: number) => {
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
-            
-            if (!jsonData || jsonData.length < 5) return;
-            
-            // 勘定科目情報を抽出
-            let accountCode = '';
-            let accountName = '';
-            
-            // 3行目の最初のセルから勘定科目コードを探す
-            for (let col = 0; col < 5; col++) {
-              if (jsonData[2] && jsonData[2][col]) {
-                const cellValue = String(jsonData[2][col]).trim();
-                // 数字のみ、または数字とハイフンを含む値を勘定科目コードとして認識
-                if (/^[\d\-]+$/.test(cellValue) && cellValue.length >= 4) {
-                  accountCode = cellValue;
+            try {
+              const worksheet = workbook.Sheets[sheetName];
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+              
+              if (!jsonData || jsonData.length < 5) {
+                console.log(`シート${index + 1}はスキップ（データ不足）`);
+                return;
+              }
+              
+              // 勘定科目情報を抽出
+              let accountCode = '';
+              let accountName = '';
+              
+              // 3行目の最初のセルから勘定科目コードを探す
+              for (let col = 0; col < 5; col++) {
+                if (jsonData[2] && jsonData[2][col]) {
+                  const cellValue = String(jsonData[2][col]).trim();
+                  // 数字のみ、または数字とハイフンを含む値を勘定科目コードとして認識
+                  if (/^[\d\-]+$/.test(cellValue) && cellValue.length >= 4) {
+                    accountCode = cellValue;
+                    break;
+                  }
+                }
+              }
+              
+              // コードが見つからない場合は、シート番号を基にした仮のコードを生成
+              if (!accountCode) {
+                accountCode = `SHEET${(index + 1).toString().padStart(3, '0')}`;
+              }
+              
+              // 2行目に科目名（複数セルに分かれている可能性）
+              if (jsonData[1]) {
+                const nameParts = [];
+                for (let i = 2; i < Math.min(6, jsonData[1].length); i++) {
+                  if (jsonData[1][i] && String(jsonData[1][i]).trim() && 
+                      !String(jsonData[1][i]).includes('ﾍﾟｰｼﾞ')) {
+                    nameParts.push(String(jsonData[1][i]).trim());
+                  }
+                }
+                accountName = nameParts.join('') || `勘定科目${index + 1}`;
+              }
+              
+              console.log(`シート${index + 1}: コード=${accountCode}, 名称=${accountName}`);
+              
+              // ヘッダー行を探す
+              let headerRow = -1;
+              for (let i = 0; i < Math.min(10, jsonData.length); i++) {
+                if (jsonData[i] && jsonData[i][0] && 
+                    String(jsonData[i][0]).includes('日') && 
+                    String(jsonData[i][0]).includes('付')) {
+                  headerRow = i;
+                  console.log(`ヘッダー行: ${i}行目`);
                   break;
                 }
               }
-            }
-            
-            // コードが見つからない場合は、シート番号を基にした仮のコードを生成
-            if (!accountCode) {
-              accountCode = `SHEET${(index + 1).toString().padStart(3, '0')}`;
-            }
-            
-            // 2行目に科目名（複数セルに分かれている可能性）
-            if (jsonData[1]) {
-              const nameParts = [];
-              for (let i = 2; i < Math.min(6, jsonData[1].length); i++) {
-                if (jsonData[1][i] && String(jsonData[1][i]).trim() && 
-                    !String(jsonData[1][i]).includes('ﾍﾟｰｼﾞ')) {
-                  nameParts.push(String(jsonData[1][i]).trim());
+              
+              if (headerRow === -1) {
+                console.log(`シート${index + 1}はスキップ（ヘッダー行なし）`);
+                return;
+              }
+              
+              // 取引データを抽出
+              const transactions = [];
+              let rowNumber = 0;
+              
+              for (let i = headerRow + 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (!row || !row[0]) continue;
+                
+                rowNumber++;
+                const dateStr = String(row[0]).trim();
+                if (!dateStr || dateStr === ' ') continue;
+                
+                // 前月繰越行の処理
+                if (row[1] && String(row[1]).includes('前月繰越')) {
+                  // 前月繰越の残高はH列（インデックス7）
+                  const openingBalance = parseNumber(row[7]);
+                  transactions.push({
+                    isOpeningBalance: true,
+                    balance: openingBalance
+                  });
+                  console.log(`前月繰越: ${openingBalance}`);
+                  continue;
                 }
-              }
-              accountName = nameParts.join('') || `勘定科目${index + 1}`;
-            }
-            
-            console.log(`シート${index + 1}: コード=${accountCode}, 名称=${accountName}`);
-            
-            // ヘッダー行を探す
-            let headerRow = -1;
-            for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-              if (jsonData[i] && jsonData[i][0] && 
-                  String(jsonData[i][0]).includes('日') && 
-                  String(jsonData[i][0]).includes('付')) {
-                headerRow = i;
-                console.log(`ヘッダー行: ${i}行目`, jsonData[i]);
-                break;
-              }
-            }
-            
-            if (headerRow === -1) return;
-            
-            // 取引データを抽出
-            const transactions = [];
-            let rowNumber = 0;
-            
-            for (let i = headerRow + 1; i < jsonData.length; i++) {
-              const row = jsonData[i];
-              if (!row || !row[0]) continue;
-              
-              rowNumber++;
-              const dateStr = String(row[0]).trim();
-              if (!dateStr || dateStr === ' ') continue;
-              
-              // 前月繰越行の処理
-              if (row[1] && String(row[1]).includes('前月繰越')) {
-                // 前月繰越の残高はH列（インデックス7）
-                const openingBalance = parseNumber(row[7]);
+                
+                // 日付をパース
+                const transactionDate = parseJapaneseDate(dateStr);
+                if (!transactionDate) continue;
+                
+                // 金額列の位置を特定
+                // F列（インデックス5）: 借方金額
+                // G列（インデックス6）: 貸方金額
+                // H列（インデックス7）: 残高
+                const debitAmount = parseNumber(row[5]);
+                const creditAmount = parseNumber(row[6]);
+                const balance = parseNumber(row[7]);
+                
+                // デバッグ用ログ（最初の5行のみ）
+                if (rowNumber <= 5) {
+                  console.log(`行${rowNumber}: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
+                }
+                
                 transactions.push({
-                  isOpeningBalance: true,
-                  balance: openingBalance
+                  date: transactionDate,
+                  counterAccount: row[1] ? String(row[1]).trim() : null,
+                  description: row[2] ? String(row[2]).trim() : null,
+                  debit: debitAmount,
+                  credit: creditAmount,
+                  balance: balance,
+                  rowNumber: rowNumber
                 });
-                console.log(`前月繰越: ${openingBalance}`);
-                continue;
               }
               
-              // 日付をパース
-              const transactionDate = parseJapaneseDate(dateStr);
-              if (!transactionDate) continue;
-              
-              // 金額列の位置を特定
-              // F列（インデックス5）: 借方金額
-              // G列（インデックス6）: 貸方金額
-              // H列（インデックス7）: 残高
-              const debitAmount = parseNumber(row[5]);
-              const creditAmount = parseNumber(row[6]);
-              const balance = parseNumber(row[7]);
-              
-              // デバッグ用ログ（最初の5行のみ）
-              if (rowNumber <= 5) {
-                console.log(`行${rowNumber}: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
+              if (transactions.length > 0) {
+                sheets.push({
+                  sheetName,
+                  accountCode,
+                  accountName,
+                  transactions
+                });
+                console.log(`シート${index + 1}: ${transactions.length}件の取引を抽出`);
               }
-              
-              transactions.push({
-                date: transactionDate,
-                counterAccount: row[1] ? String(row[1]).trim() : null,
-                description: row[2] ? String(row[2]).trim() : null,
-                debit: debitAmount,
-                credit: creditAmount,
-                balance: balance,
-                rowNumber: rowNumber
-              });
-            }
-            
-            if (transactions.length > 0) {
-              sheets.push({
-                sheetName,
-                accountCode,
-                accountName,
-                transactions
-              });
+            } catch (sheetError) {
+              console.error(`シート${index + 1}の処理エラー:`, sheetError);
             }
           });
           
+          console.log(`処理完了: ${sheets.length}シート`);
           resolve({ sheets });
         } catch (err) {
           console.error('Excel処理エラー:', err);
@@ -272,7 +294,7 @@ export default function GeneralLedgerImportModal({
       return;
     }
 
-    if (!scriptLoaded) {
+    if (!scriptLoaded || !window.XLSX) {
       setError('ライブラリを読み込み中です。しばらくお待ちください。');
       return;
     }
@@ -282,8 +304,12 @@ export default function GeneralLedgerImportModal({
     setImportResult(null);
 
     try {
+      console.log('インポート開始...');
+      
       // Excelファイルを処理
       const processedData = await processExcelFile(file);
+      
+      console.log('API送信準備...');
       
       // APIに送信
       const formData = new FormData();
@@ -302,6 +328,7 @@ export default function GeneralLedgerImportModal({
       }
 
       setImportResult(result);
+      console.log('インポート成功:', result);
       
       // 成功時は親コンポーネントに通知
       if (result.success) {
