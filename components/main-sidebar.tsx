@@ -1,4 +1,4 @@
-// /components/main-sidebar.tsx ver.4 (食のブランド館分析追加版)
+// /components/main-sidebar.tsx ver.5
 "use client"
 
 import { useState, useEffect } from "react"
@@ -10,7 +10,7 @@ export default function MainSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
-  const [activeModule, setActiveModule] = useState<'sales' | 'web' | 'wholesale' | 'brand-store' | 'food-store'>('sales')
+  const [activeModule, setActiveModule] = useState<'sales' | 'web' | 'wholesale' | 'brand-store' | 'food-store' | 'finance'>('sales')
 
   useEffect(() => {
     if (pathname.startsWith('/web-sales')) {
@@ -21,12 +21,14 @@ export default function MainSidebar() {
       setActiveModule('brand-store')
     } else if (pathname.startsWith('/food-store-analysis')) {
       setActiveModule('food-store')
+    } else if (pathname.startsWith('/finance')) {
+      setActiveModule('finance')
     } else {
       setActiveModule('sales')
     }
   }, [pathname])
 
-  const handleModuleChange = (module: 'sales' | 'web' | 'wholesale' | 'brand-store' | 'food-store') => {
+  const handleModuleChange = (module: 'sales' | 'web' | 'wholesale' | 'brand-store' | 'food-store' | 'finance') => {
     setActiveModule(module)
     if (module === 'sales') {
       router.push('/sales/dashboard')
@@ -38,6 +40,8 @@ export default function MainSidebar() {
       router.push('/brand-store-analysis')
     } else if (module === 'food-store') {
       router.push('/food-store-analysis')
+    } else if (module === 'finance') {
+      router.push('/finance/general-ledger')
     }
   }
 
@@ -84,6 +88,13 @@ export default function MainSidebar() {
           onClick={() => handleModuleChange('food-store')}
         >
           食のブランド館分析
+        </Button>
+        <Button
+          variant={activeModule === 'finance' ? 'secondary' : 'ghost'}
+          className="w-full justify-start text-white hover:bg-slate-700"
+          onClick={() => handleModuleChange('finance')}
+        >
+          財務分析システム
         </Button>
       </nav>
 
