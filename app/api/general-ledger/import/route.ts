@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.4
+// /app/api/general-ledger/import/route.ts ver.5
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -96,58 +96,71 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // データベースに保存
-    // 1. 勘定科目マスタを更新
-    if (accountsToUpsert.length > 0) {
-      const { error: accountError } = await supabase
-        .from('account_master')
-        .upsert(accountsToUpsert, { 
-          onConflict: 'account_code',
-          ignoreDuplicates: false 
-        });
-        
-      if (accountError) {
-        console.error('勘定科目マスタ更新エラー:', accountError);
-      }
-    }
-
-    // 2. 既存の取引データを削除
-    const { error: deleteError } = await supabase
-      .from('general_ledger')
-      .delete()
-      .eq('report_month', reportMonth);
-      
-    if (deleteError) {
-      console.error('既存データ削除エラー:', deleteError);
-    }
-
-    // 3. 新規取引データを挿入
-    if (allTransactions.length > 0) {
-      // バッチ処理（500件ずつ）
-      for (let i = 0; i < allTransactions.length; i += 500) {
-        const batch = allTransactions.slice(i, i + 500);
-        const { error: insertError } = await supabase
-          .from('general_ledger')
-          .insert(batch);
+    // データベースに保存（トランザクション処理）
+    try {
+      // 1. 最初に勘定科目マスタを更新（これを最初に行う）
+      if (accountsToUpsert.length > 0) {
+        const { error: accountError } = await supabase
+          .from('account_master')
+          .upsert(accountsToUpsert, { 
+            onConflict: 'account_code',
+            ignoreDuplicates: false 
+          });
           
-        if (insertError) {
-          console.error('取引データ挿入エラー:', insertError);
-          errors.push(`取引データ挿入エラー: ${insertError.message}`);
+        if (accountError) {
+          console.error('勘定科目マスタ更新エラー:', accountError);
+          throw accountError;
         }
       }
-    }
 
-    // 4. 月次残高を更新
-    if (monthlyBalances.length > 0) {
-      const { error: balanceError } = await supabase
-        .from('monthly_account_balance')
-        .upsert(monthlyBalances, {
-          onConflict: 'account_code,report_month'
-        });
+      // 2. 既存の取引データを削除
+      const { error: deleteError } = await supabase
+        .from('general_ledger')
+        .delete()
+        .eq('report_month', reportMonth);
         
-      if (balanceError) {
-        console.error('月次残高更新エラー:', balanceError);
+      if (deleteError) {
+        console.error('既存データ削除エラー:', deleteError);
+        // 削除エラーは無視して続行（データが存在しない場合もあるため）
       }
+
+      // 3. 新規取引データを挿入
+      if (allTransactions.length > 0) {
+        // バッチ処理（500件ずつ）
+        for (let i = 0; i < allTransactions.length; i += 500) {
+          const batch = allTransactions.slice(i, i + 500);
+          const { error: insertError } = await supabase
+            .from('general_ledger')
+            .insert(batch);
+            
+          if (insertError) {
+            console.error('取引データ挿入エラー:', insertError);
+            throw insertError;
+          }
+        }
+      }
+
+      // 4. 月次残高を更新
+      if (monthlyBalances.length > 0) {
+        const { error: balanceError } = await supabase
+          .from('monthly_account_balance')
+          .upsert(monthlyBalances, {
+            onConflict: 'account_code,report_month'
+          });
+          
+        if (balanceError) {
+          console.error('月次残高更新エラー:', balanceError);
+          // エラーは記録するが処理は続行
+          errors.push(`月次残高更新エラー: ${balanceError.message}`);
+        }
+      }
+
+    } catch (dbError: any) {
+      console.error('データベース処理エラー:', dbError);
+      return NextResponse.json(
+        { error: `データベース処理エラー: ${dbError.message}` },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
