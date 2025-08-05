@@ -1,15 +1,8 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.12
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.13
 'use client';
 
 import { useState, useEffect } from 'react';
 import { X, Upload, AlertCircle, CheckCircle, FileSpreadsheet } from 'lucide-react';
-
-// グローバル宣言
-declare global {
-  interface Window {
-    XLSX: any;
-  }
-}
 
 interface ImportResult {
   success: boolean;
@@ -28,36 +21,6 @@ interface GeneralLedgerImportModalProps {
   onImportComplete: () => void;
 }
 
-// 日付パーサー
-function parseJapaneseDate(dateStr: string, baseYear: number = 2025): string {
-  if (!dateStr || typeof dateStr !== 'string') return '';
-  
-  const trimmed = dateStr.trim();
-  if (trimmed === '') return '';
-  
-  // "7. 2. 1" 形式
-  const parts = trimmed.split('.');
-  if (parts.length === 3) {
-    const month = parts[1].trim().padStart(2, '0');
-    const day = parts[2].trim().padStart(2, '0');
-    const year = parts[0].trim() === '7' ? baseYear : parseInt(parts[0]) + 2018;
-    return `${year}-${month}-${day}`;
-  }
-  
-  return '';
-}
-
-// 数値パーサー
-function parseNumber(value: any): number {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const cleaned = value.replace(/[,、]/g, '').trim();
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? 0 : num;
-  }
-  return 0;
-}
-
 export default function GeneralLedgerImportModal({
   isOpen,
   onClose,
@@ -68,7 +31,6 @@ export default function GeneralLedgerImportModal({
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string>('');
-  const [scriptLoaded, setScriptLoaded] = useState(false);
 
   // 現在の年月を初期値として設定
   useEffect(() => {
@@ -77,49 +39,6 @@ export default function GeneralLedgerImportModal({
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     setReportMonth(`${year}-${month}`);
   }, []);
-
-  // SheetJSライブラリを読み込む
-  useEffect(() => {
-    if (!scriptLoaded && typeof window !== 'undefined') {
-      // 既存のスクリプトをチェック
-      const existingScript = document.querySelector('script[src*="xlsx"]');
-      if (existingScript) {
-        existingScript.remove();
-      }
-
-      const script = document.createElement('script');
-      // より安定したバージョンのCDNを使用
-      script.src = 'https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js';
-      script.async = true;
-      
-      script.onload = () => {
-        console.log('SheetJS loaded');
-        // 少し待ってから確認
-        setTimeout(() => {
-          if (window.XLSX) {
-            console.log('XLSX object available:', typeof window.XLSX);
-            setScriptLoaded(true);
-          } else {
-            setError('SheetJSの初期化に失敗しました');
-          }
-        }, 100);
-      };
-      
-      script.onerror = () => {
-        console.error('Failed to load SheetJS');
-        setError('ライブラリの読み込みに失敗しました');
-      };
-      
-      document.body.appendChild(script);
-
-      // クリーンアップ
-      return () => {
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-      };
-    }
-  }, [scriptLoaded]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -135,221 +54,9 @@ export default function GeneralLedgerImportModal({
     }
   };
 
-  const processExcelFile = async (file: File): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      
-      reader.onload = (e) => {
-        try {
-          const data = e.target?.result;
-          
-          // XLSXオブジェクトの存在確認
-          if (!window.XLSX) {
-            throw new Error('SheetJSライブラリが読み込まれていません');
-          }
-          
-          // データが正しく読み込まれているか確認
-          if (!data) {
-            throw new Error('ファイルデータが空です');
-          }
-          
-          console.log('Reading workbook...');
-          
-          // ワークブックを読み込む
-          let workbook;
-          try {
-            // ArrayBufferとして読み込む
-            workbook = window.XLSX.read(new Uint8Array(data as ArrayBuffer), { 
-              type: 'array',
-              cellFormula: false,
-              cellHTML: false,
-              cellText: false
-            });
-          } catch (readError) {
-            console.error('Workbook read error:', readError);
-            throw new Error('Excelファイルの読み込みに失敗しました。ファイルが破損している可能性があります。');
-          }
-          
-          if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
-            throw new Error('ワークブックにシートが含まれていません');
-          }
-          
-          const sheets = [];
-          console.log(`ワークブック読み込み完了: ${workbook.SheetNames.length}シート`);
-          
-          // 各シートを処理
-          workbook.SheetNames.forEach((sheetName: string, index: number) => {
-            try {
-              const worksheet = workbook.Sheets[sheetName];
-              if (!worksheet) {
-                console.log(`シート${index + 1}が見つかりません`);
-                return;
-              }
-              
-              // シートをJSONに変換（より安全な方法）
-              const range = window.XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-              const jsonData = [];
-              
-              for (let R = range.s.r; R <= range.e.r; ++R) {
-                const row = [];
-                for (let C = range.s.c; C <= range.e.c; ++C) {
-                  const cellAddress = {c: C, r: R};
-                  const cellRef = window.XLSX.utils.encode_cell(cellAddress);
-                  const cell = worksheet[cellRef];
-                  row.push(cell ? cell.v : null);
-                }
-                jsonData.push(row);
-              }
-              
-              if (!jsonData || jsonData.length < 5) {
-                console.log(`シート${index + 1}はスキップ（データ不足）`);
-                return;
-              }
-              
-              // 勘定科目情報を抽出
-              let accountCode = '';
-              let accountName = '';
-              
-              // 3行目の最初のセルから勘定科目コードを探す
-              for (let col = 0; col < 5; col++) {
-                if (jsonData[2] && jsonData[2][col]) {
-                  const cellValue = String(jsonData[2][col]).trim();
-                  // 数字のみ、または数字とハイフンを含む値を勘定科目コードとして認識
-                  if (/^[\d\-]+$/.test(cellValue) && cellValue.length >= 4) {
-                    accountCode = cellValue;
-                    break;
-                  }
-                }
-              }
-              
-              // コードが見つからない場合は、シート番号を基にした仮のコードを生成
-              if (!accountCode) {
-                accountCode = `SHEET${(index + 1).toString().padStart(3, '0')}`;
-              }
-              
-              // 2行目に科目名（複数セルに分かれている可能性）
-              if (jsonData[1]) {
-                const nameParts = [];
-                for (let i = 2; i < Math.min(6, jsonData[1].length); i++) {
-                  if (jsonData[1][i] && String(jsonData[1][i]).trim() && 
-                      !String(jsonData[1][i]).includes('ﾍﾟｰｼﾞ')) {
-                    nameParts.push(String(jsonData[1][i]).trim());
-                  }
-                }
-                accountName = nameParts.join('') || `勘定科目${index + 1}`;
-              }
-              
-              console.log(`シート${index + 1}: コード=${accountCode}, 名称=${accountName}`);
-              
-              // ヘッダー行を探す
-              let headerRow = -1;
-              for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-                if (jsonData[i] && jsonData[i][0] && 
-                    String(jsonData[i][0]).includes('日') && 
-                    String(jsonData[i][0]).includes('付')) {
-                  headerRow = i;
-                  console.log(`ヘッダー行: ${i}行目`);
-                  break;
-                }
-              }
-              
-              if (headerRow === -1) {
-                console.log(`シート${index + 1}はスキップ（ヘッダー行なし）`);
-                return;
-              }
-              
-              // 取引データを抽出
-              const transactions = [];
-              let rowNumber = 0;
-              
-              for (let i = headerRow + 1; i < jsonData.length; i++) {
-                const row = jsonData[i];
-                if (!row || !row[0]) continue;
-                
-                rowNumber++;
-                const dateStr = String(row[0]).trim();
-                if (!dateStr || dateStr === ' ') continue;
-                
-                // 前月繰越行の処理
-                if (row[1] && String(row[1]).includes('前月繰越')) {
-                  // 前月繰越の残高はH列（インデックス7）
-                  const openingBalance = parseNumber(row[7]);
-                  transactions.push({
-                    isOpeningBalance: true,
-                    balance: openingBalance
-                  });
-                  console.log(`前月繰越: ${openingBalance}`);
-                  continue;
-                }
-                
-                // 日付をパース
-                const transactionDate = parseJapaneseDate(dateStr);
-                if (!transactionDate) continue;
-                
-                // 金額列の位置を特定
-                // F列（インデックス5）: 借方金額
-                // G列（インデックス6）: 貸方金額
-                // H列（インデックス7）: 残高
-                const debitAmount = parseNumber(row[5]);
-                const creditAmount = parseNumber(row[6]);
-                const balance = parseNumber(row[7]);
-                
-                // デバッグ用ログ（最初の5行のみ）
-                if (rowNumber <= 5) {
-                  console.log(`行${rowNumber}: 借方=${debitAmount}, 貸方=${creditAmount}, 残高=${balance}`);
-                }
-                
-                transactions.push({
-                  date: transactionDate,
-                  counterAccount: row[1] ? String(row[1]).trim() : null,
-                  description: row[2] ? String(row[2]).trim() : null,
-                  debit: debitAmount,
-                  credit: creditAmount,
-                  balance: balance,
-                  rowNumber: rowNumber
-                });
-              }
-              
-              if (transactions.length > 0) {
-                sheets.push({
-                  sheetName,
-                  accountCode,
-                  accountName,
-                  transactions
-                });
-                console.log(`シート${index + 1}: ${transactions.length}件の取引を抽出`);
-              }
-            } catch (sheetError) {
-              console.error(`シート${index + 1}の処理エラー:`, sheetError);
-            }
-          });
-          
-          console.log(`処理完了: ${sheets.length}シート`);
-          resolve({ sheets });
-        } catch (err) {
-          console.error('Excel処理エラー:', err);
-          reject(err);
-        }
-      };
-      
-      reader.onerror = (err) => {
-        console.error('ファイル読み込みエラー:', err);
-        reject(new Error('ファイルの読み込みに失敗しました'));
-      };
-      
-      // ArrayBufferとして読み込む
-      reader.readAsArrayBuffer(file);
-    });
-  };
-
   const handleImport = async () => {
     if (!file || !reportMonth) {
       setError('ファイルと対象月を選択してください');
-      return;
-    }
-
-    if (!scriptLoaded || !window.XLSX) {
-      setError('ライブラリを読み込み中です。しばらくお待ちください。');
       return;
     }
 
@@ -359,16 +66,10 @@ export default function GeneralLedgerImportModal({
 
     try {
       console.log('インポート開始...');
-      console.log('XLSX version:', window.XLSX.version);
       
-      // Excelファイルを処理
-      const processedData = await processExcelFile(file);
-      
-      console.log('API送信準備...');
-      
-      // APIに送信
+      // FormDataにファイルを直接追加
       const formData = new FormData();
-      formData.append('fileData', JSON.stringify(processedData));
+      formData.append('file', file);
       formData.append('reportMonth', `${reportMonth}-01`);
 
       const response = await fetch('/api/general-ledger/import', {
@@ -524,7 +225,7 @@ export default function GeneralLedgerImportModal({
                 <button
                   type="button"
                   onClick={handleImport}
-                  disabled={!file || !reportMonth || isImporting || !scriptLoaded}
+                  disabled={!file || !reportMonth || isImporting}
                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isImporting ? (
