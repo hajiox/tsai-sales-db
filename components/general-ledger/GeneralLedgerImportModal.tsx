@@ -1,4 +1,4 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.14
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.15 - エラー表示修正版
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -83,12 +83,19 @@ export default function GeneralLedgerImportModal({
         throw new Error(result.error || 'インポートに失敗しました');
       }
 
-      setImportResult(result);
-      console.log('インポート成功:', result);
-      
-      // 成功時は親コンポーネントに通知
-      if (result.success) {
-        onImportComplete();
+      // 成功時の処理
+      if (result && result.success) {
+        setImportResult(result);
+        console.log('インポート成功:', result);
+        
+        // 親コンポーネントに通知（エラーが発生しないよう安全にチェック）
+        if (typeof onImportComplete === 'function') {
+          try {
+            onImportComplete();
+          } catch (e) {
+            console.error('onImportComplete実行エラー:', e);
+          }
+        }
       }
     } catch (err) {
       console.error('インポートエラー:', err);
@@ -205,14 +212,6 @@ export default function GeneralLedgerImportModal({
                             <p>処理シート数: {importResult.details.processedSheets}</p>
                             <p>取引件数: {importResult.details.totalTransactions}</p>
                             <p>勘定科目数: {importResult.details.accounts}</p>
-                            {importResult.details.errors && (
-                              <div className="mt-2">
-                                <p className="text-red-700">エラー:</p>
-                                {importResult.details.errors.map((err, idx) => (
-                                  <p key={idx} className="text-sm text-red-600 ml-2">- {err}</p>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
