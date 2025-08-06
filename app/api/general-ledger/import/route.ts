@@ -1,12 +1,53 @@
-// /app/api/general-ledger/import/route.ts ver.16 - CSV対応版
+// /app/api/general-ledger/import/route.ts ver.17 - CSV対応版（修正）
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { parse } from 'csv-parse/sync';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// CSVパース関数（シンプル版）
+function parseCSV(text: string): any[] {
+  const lines = text.split('\n');
+  if (lines.length === 0) return [];
+  
+  // ヘッダー行を取得
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  
+  const records = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    // カンマ区切りで分割（クォート内のカンマは考慮）
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        values.push(current.trim().replace(/^"|"$/g, ''));
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current.trim().replace(/^"|"$/g, ''));
+    
+    // オブジェクトに変換
+    const record: any = {};
+    headers.forEach((header, index) => {
+      record[header] = values[index] || '';
+    });
+    records.push(record);
+  }
+  
+  return records;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,14 +76,8 @@ export async function POST(request: NextRequest) {
     // CSVファイルを読み込む
     const text = await file.text();
     
-    // CSVをパース
-    const records = parse(text, {
-      columns: true, // ヘッダー行を列名として使用
-      skip_empty_lines: true,
-      encoding: 'utf8',
-      relax_quotes: true,
-      trim: true
-    });
+    // CSVをパース（シンプル版）
+    const records = parseCSV(text);
 
     console.log(`CSVレコード数: ${records.length}`);
     if (records.length > 0) {
@@ -73,7 +108,7 @@ export async function POST(request: NextRequest) {
         // 前月繰越の場合は残高を記録
         if (description.includes('前月繰越')) {
           const accountCode = record['元帳主科目コード'];
-          const balance = parseInt(record['残高'] || '0');
+          const balance = parseInt(record['残高']?.replace(/,/g, '') || '0');
           if (accountCode && balance) {
             const balanceKey = `${accountCode}-${reportMonth}`;
             if (!monthlyBalances.has(balanceKey)) {
@@ -119,10 +154,10 @@ export async function POST(request: NextRequest) {
       const day = String(record['取引日']).padStart(2, '0');
       const transactionDate = `${year}-${month}-${day}`;
 
-      // 金額を数値に変換
-      const debitAmount = parseInt(record['借方金額'] || '0');
-      const creditAmount = parseInt(record['貸方金額'] || '0');
-      const balance = parseInt(record['残高'] || '0');
+      // 金額を数値に変換（カンマを除去）
+      const debitAmount = parseInt(record['借方金額']?.replace(/,/g, '') || '0');
+      const creditAmount = parseInt(record['貸方金額']?.replace(/,/g, '') || '0');
+      const balance = parseInt(record['残高']?.replace(/,/g, '') || '0');
 
       // 取引データを作成
       transactions.push({
@@ -246,6 +281,7 @@ export async function POST(request: NextRequest) {
       details: {
         totalTransactions: transactions.length,
         accounts: accountsToUpsert.length,
+        processedSheets: 1,
         format: 'CSV'
       }
     });
