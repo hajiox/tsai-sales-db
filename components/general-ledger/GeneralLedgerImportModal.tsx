@@ -1,8 +1,8 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.13
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.14
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Upload, AlertCircle, CheckCircle, FileSpreadsheet } from 'lucide-react';
+import { X, Upload, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 
 interface ImportResult {
   success: boolean;
@@ -44,8 +44,8 @@ export default function GeneralLedgerImportModal({
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       // ファイル形式チェック
-      if (!selectedFile.name.match(/\.(xls|xlsx)$/)) {
-        setError('Excel形式（.xls, .xlsx）のファイルを選択してください');
+      if (!selectedFile.name.match(/\.csv$/)) {
+        setError('CSV形式（.csv）のファイルを選択してください');
         return;
       }
       setFile(selectedFile);
@@ -151,14 +151,14 @@ export default function GeneralLedgerImportModal({
                 {/* ファイル選択 */}
                 <div>
                   <label htmlFor="file" className="block text-sm font-medium text-gray-700">
-                    Excelファイル選択
+                    CSVファイル選択
                   </label>
                   <div className="mt-1 flex items-center">
-                    <FileSpreadsheet className="h-8 w-8 text-gray-400 mr-2" />
+                    <FileText className="h-8 w-8 text-gray-400 mr-2" />
                     <input
                       type="file"
                       id="file"
-                      accept=".xls,.xlsx"
+                      accept=".csv"
                       onChange={handleFileChange}
                       className="block w-full text-sm text-gray-500
                         file:mr-4 file:py-2 file:px-4
@@ -175,7 +175,7 @@ export default function GeneralLedgerImportModal({
                     </p>
                   )}
                   <p className="mt-2 text-xs text-gray-500">
-                    ※ 総勘定元帳のExcelファイルをそのままアップロードしてください
+                    ※ 会計ソフトから出力した総勘定元帳のCSVファイルを選択してください
                   </p>
                 </div>
 
