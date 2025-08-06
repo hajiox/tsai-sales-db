@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.24 - 実データ対応版
+// /app/api/general-ledger/import/route.ts ver.25 - エラー修正版
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -187,11 +187,30 @@ export async function POST(request: NextRequest) {
         console.log(`勘定科目追加: ${accountCode} - ${accountName}`);
       }
 
-      // 日付を作成
-      const year = record['取引年'];
-      const month = String(record['取引月']).padStart(2, '0');
-      const day = String(record['取引日']).padStart(2, '0');
+      // 日付を作成（nullチェック追加）
+      const year = record['取引年'] || '';
+      const monthStr = record['取引月'] || '';
+      const dayStr = record['取引日'] || '';
+      
+      // 年月日が不正な場合はスキップ
+      if (!year || !monthStr || !dayStr) {
+        console.log(`日付が不正なレコードをスキップ: 年=${year}, 月=${monthStr}, 日=${dayStr}`);
+        skippedCount++;
+        continue;
+      }
+      
+      // 月と日を2桁にパディング
+      const month = monthStr.toString().padStart(2, '0');
+      const day = dayStr.toString().padStart(2, '0');
       const transactionDate = `${year}-${month}-${day}`;
+      
+      // 日付の妥当性チェック
+      const dateObj = new Date(transactionDate);
+      if (isNaN(dateObj.getTime())) {
+        console.log(`無効な日付をスキップ: ${transactionDate}`);
+        skippedCount++;
+        continue;
+      }
 
       // 金額を数値に変換（カンマを除去）
       const debitStr = (record['借方金額'] || '0').toString().replace(/,/g, '');
