@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.23 - デバッグ強化版
+// /app/api/general-ledger/import/route.ts ver.24 - 実データ対応版
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -18,6 +18,10 @@ function parseCSVWithDuplicateHeaders(text: string): any[] {
   const headerCounts: { [key: string]: number } = {};
   
   for (const header of rawHeaders) {
+    if (header === '') {
+      headers.push('');
+      continue;
+    }
     if (headerCounts[header]) {
       headerCounts[header]++;
       headers.push(`${header}_${headerCounts[header]}`);
@@ -92,20 +96,6 @@ export async function POST(request: NextRequest) {
     const records = parseCSVWithDuplicateHeaders(text);
 
     console.log(`CSVレコード数: ${records.length}`);
-    
-    // 最初の5レコードを確認（データ構造の確認用）
-    for (let i = 0; i < Math.min(5, records.length); i++) {
-      console.log(`レコード${i + 1}:`, {
-        タイトル: records[i]['タイトル'],
-        取引日: records[i]['取引日'],
-        元帳主科目コード: records[i]['元帳主科目コード'],
-        主科目名: records[i]['主科目名'],
-        摘要: records[i]['摘要'],
-        借方金額: records[i]['借方金額'],
-        貸方金額: records[i]['貸方金額'],
-        残高: records[i]['残高']
-      });
-    }
 
     const accountsMap = new Map<string, any>();
     const transactions = [];
@@ -115,32 +105,41 @@ export async function POST(request: NextRequest) {
     let skippedCount = 0;
 
     // 各レコードを処理
-    for (const record of records) {
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
+      
+      // 最初の数行をデバッグ出力
+      if (i < 5) {
+        console.log(`レコード${i + 1}:`, {
+          取引年: record['取引年'],
+          取引月: record['取引月'],
+          取引日: record['取引日'],
+          元帳主科目コード: record['元帳主科目コード'],
+          主科目名: record['主科目名'],
+          摘要: record['摘要'],
+          借方金額: record['借方金額'],
+          貸方金額: record['貸方金額'],
+          残高: record['残高']
+        });
+      }
+
       // タイトル行はスキップ
       if (record['タイトル'] === '総勘定元帳') {
         skippedCount++;
+        console.log('タイトル行をスキップ');
         continue;
       }
 
-      // 取引日がない場合はスキップ
-      if (!record['取引日'] || record['取引日'] === '') {
-        skippedCount++;
-        continue;
-      }
-
-      // 空行や不要な行をスキップ
-      const description = record['摘要'] || '';
-      if (description.includes('※') ||
-          description.includes('前月繰越') || 
-          description.includes('月度計') ||
-          description.includes('次月繰越')) {
-        
-        // 前月繰越の場合は残高を記録
+      // 取引年月日がすべて空の場合はスキップ
+      if (!record['取引年'] && !record['取引月'] && !record['取引日']) {
+        // ただし、前月繰越の場合は処理
+        const description = record['摘要'] || '';
         if (description.includes('前月繰越')) {
           const accountCode = record['元帳主科目コード'];
           const balanceStr = (record['残高'] || '0').toString().replace(/,/g, '');
           const balance = parseInt(balanceStr) || 0;
           if (accountCode && balance) {
+            console.log(`前月繰越を記録: 科目${accountCode}, 残高${balance}`);
             const balanceKey = `${accountCode}-${reportMonth}`;
             if (!monthlyBalances.has(balanceKey)) {
               monthlyBalances.set(balanceKey, {
@@ -157,6 +156,13 @@ export async function POST(request: NextRequest) {
             }
           }
         }
+        skippedCount++;
+        continue;
+      }
+
+      // 摘要の特殊行をスキップ
+      const description = record['摘要'] || '';
+      if (description.includes('※') && !description.includes('前月繰越')) {
         skippedCount++;
         continue;
       }
@@ -182,8 +188,8 @@ export async function POST(request: NextRequest) {
       }
 
       // 日付を作成
-      const year = record['取引年'] || '2025';  // デフォルト値
-      const month = String(record['取引月'] || '2').padStart(2, '0');  // デフォルト値
+      const year = record['取引年'];
+      const month = String(record['取引月']).padStart(2, '0');
       const day = String(record['取引日']).padStart(2, '0');
       const transactionDate = `${year}-${month}-${day}`;
 
@@ -196,12 +202,15 @@ export async function POST(request: NextRequest) {
       const creditAmount = parseInt(creditStr) || 0;
       const balance = parseInt(balanceStr) || 0;
 
+      // 相手科目（23列目の主科目名_2）
+      const counterAccount = record['主科目名_2'] || record['相手主科目コード'] || null;
+
       // 取引データを作成
       transactions.push({
         report_month: reportMonth,
         account_code: accountCode,
         transaction_date: transactionDate,
-        counter_account: record['相手主科目コード'] || record['摘要科目名'] || null,
+        counter_account: counterAccount,
         description: description,
         debit_amount: debitAmount,
         credit_amount: creditAmount,
@@ -241,7 +250,8 @@ export async function POST(request: NextRequest) {
           description: description,
           debit: debitAmount,
           credit: creditAmount,
-          balance: balance
+          balance: balance,
+          counterAccount: counterAccount
         });
       }
     }
@@ -266,6 +276,7 @@ export async function POST(request: NextRequest) {
           console.error('勘定科目マスタ更新エラー:', accountError);
           throw accountError;
         }
+        console.log(`勘定科目マスタ更新完了: ${accountsToUpsert.length}件`);
       }
 
       // 2. 既存データを削除
@@ -291,6 +302,7 @@ export async function POST(request: NextRequest) {
             throw insertError;
           }
         }
+        console.log(`取引データ挿入完了: ${transactions.length}件`);
       }
 
       // 4. 月次残高を更新
@@ -305,6 +317,7 @@ export async function POST(request: NextRequest) {
           console.error('月次残高更新エラー:', balanceError);
           throw balanceError;
         }
+        console.log(`月次残高更新完了: ${monthlyBalancesToUpsert.length}件`);
       }
 
     } catch (dbError: any) {
