@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.25 - エラー修正版
+// /app/api/general-ledger/import/route.ts ver.26 - 勘定科目ブロック対応版
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -103,13 +103,17 @@ export async function POST(request: NextRequest) {
     let rowNumber = 1;
     let processedCount = 0;
     let skippedCount = 0;
+    
+    // 現在処理中の勘定科目情報を保持
+    let currentAccountCode = '';
+    let currentAccountName = '';
 
     // 各レコードを処理
     for (let i = 0; i < records.length; i++) {
       const record = records[i];
       
       // 最初の数行をデバッグ出力
-      if (i < 5) {
+      if (i < 10) {
         console.log(`レコード${i + 1}:`, {
           取引年: record['取引年'],
           取引月: record['取引月'],
@@ -130,20 +134,48 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 取引年月日がすべて空の場合はスキップ
+      // 新しい勘定科目コードがある場合は更新
+      if (record['元帳主科目コード'] && record['元帳主科目コード'] !== '') {
+        currentAccountCode = record['元帳主科目コード'];
+        currentAccountName = record['主科目名'] || `勘定科目${currentAccountCode}`;
+        
+        // 勘定科目マスタに追加
+        if (!accountsMap.has(currentAccountCode)) {
+          accountsMap.set(currentAccountCode, {
+            account_code: currentAccountCode,
+            account_name: currentAccountName,
+            account_type: '未分類',
+            is_active: true
+          });
+          console.log(`勘定科目追加: ${currentAccountCode} - ${currentAccountName}`);
+        }
+        
+        // 勘定科目ヘッダー行の場合、取引年月日が空なので次へ
+        if (!record['取引年'] && !record['取引月'] && !record['取引日']) {
+          skippedCount++;
+          continue;
+        }
+      }
+
+      // 現在の勘定科目コードがない場合はスキップ
+      if (!currentAccountCode) {
+        skippedCount++;
+        continue;
+      }
+
+      // 取引年月日がすべて空の場合の処理
       if (!record['取引年'] && !record['取引月'] && !record['取引日']) {
-        // ただし、前月繰越の場合は処理
+        // 前月繰越の場合は処理
         const description = record['摘要'] || '';
         if (description.includes('前月繰越')) {
-          const accountCode = record['元帳主科目コード'];
           const balanceStr = (record['残高'] || '0').toString().replace(/,/g, '');
           const balance = parseInt(balanceStr) || 0;
-          if (accountCode && balance) {
-            console.log(`前月繰越を記録: 科目${accountCode}, 残高${balance}`);
-            const balanceKey = `${accountCode}-${reportMonth}`;
+          if (balance) {
+            console.log(`前月繰越を記録: 科目${currentAccountCode}, 残高${balance}`);
+            const balanceKey = `${currentAccountCode}-${reportMonth}`;
             if (!monthlyBalances.has(balanceKey)) {
               monthlyBalances.set(balanceKey, {
-                account_code: accountCode,
+                account_code: currentAccountCode,
                 report_month: reportMonth,
                 opening_balance: balance,
                 total_debit: 0,
@@ -166,25 +198,11 @@ export async function POST(request: NextRequest) {
         skippedCount++;
         continue;
       }
-
-      const accountCode = record['元帳主科目コード'];
-      const accountName = record['主科目名'];
       
-      // 勘定科目コードがない場合はスキップ
-      if (!accountCode || accountCode === '') {
+      // 月度計、次月繰越などもスキップ
+      if (description.includes('月度計') || description.includes('次月繰越')) {
         skippedCount++;
         continue;
-      }
-
-      // 勘定科目マスタに追加
-      if (!accountsMap.has(accountCode)) {
-        accountsMap.set(accountCode, {
-          account_code: accountCode,
-          account_name: accountName || `勘定科目${accountCode}`,
-          account_type: '未分類',
-          is_active: true
-        });
-        console.log(`勘定科目追加: ${accountCode} - ${accountName}`);
       }
 
       // 日付を作成（nullチェック追加）
@@ -227,7 +245,7 @@ export async function POST(request: NextRequest) {
       // 取引データを作成
       transactions.push({
         report_month: reportMonth,
-        account_code: accountCode,
+        account_code: currentAccountCode,
         transaction_date: transactionDate,
         counter_account: counterAccount,
         description: description,
@@ -239,10 +257,10 @@ export async function POST(request: NextRequest) {
       });
 
       // 月次残高を更新
-      const balanceKey = `${accountCode}-${reportMonth}`;
+      const balanceKey = `${currentAccountCode}-${reportMonth}`;
       if (!monthlyBalances.has(balanceKey)) {
         monthlyBalances.set(balanceKey, {
-          account_code: accountCode,
+          account_code: currentAccountCode,
           report_month: reportMonth,
           opening_balance: 0,
           total_debit: 0,
@@ -263,8 +281,8 @@ export async function POST(request: NextRequest) {
       // 最初の取引をログ出力
       if (processedCount === 1) {
         console.log('最初の取引:', {
-          accountCode: accountCode,
-          accountName: accountName,
+          accountCode: currentAccountCode,
+          accountName: currentAccountName,
           date: transactionDate,
           description: description,
           debit: debitAmount,
