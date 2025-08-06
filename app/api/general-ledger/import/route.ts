@@ -1,31 +1,12 @@
-// /app/api/general-ledger/import/route.ts ver.18 - CSV対応版（csv-parse使用）
+// /app/api/general-ledger/import/route.ts ver.19 - CSV対応版（Papaparse使用）
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { parse } from 'csv-parse';
+import Papa from 'papaparse';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-// CSVパース用のPromiseラッパー
-function parseCSV(text: string): Promise<any[]> {
-  return new Promise((resolve, reject) => {
-    parse(text, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-      relax_quotes: true,
-      relax_column_count: true
-    }, (err, records) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(records);
-      }
-    });
-  });
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,8 +35,19 @@ export async function POST(request: NextRequest) {
     // CSVファイルを読み込む
     const text = await file.text();
     
-    // CSVをパース
-    const records = await parseCSV(text);
+    // PapaparseでCSVをパース
+    const parseResult = Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true,
+      dynamicTyping: false, // 文字列として扱う
+      encoding: 'UTF-8'
+    });
+
+    if (parseResult.errors && parseResult.errors.length > 0) {
+      console.error('CSVパースエラー:', parseResult.errors);
+    }
+
+    const records = parseResult.data;
 
     console.log(`CSVレコード数: ${records.length}`);
     if (records.length > 0) {
