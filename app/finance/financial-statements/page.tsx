@@ -1,9 +1,10 @@
-// /app/finance/financial-statements/page.tsx ver.1
+// /app/finance/financial-statements/page.tsx ver.2 - サブメニュー追加版
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileText, TrendingUp, DollarSign, Calendar, Download } from 'lucide-react';
+import { FileText, TrendingUp, DollarSign, Calendar, Download, FileSpreadsheet, BarChart3 } from 'lucide-react';
 
 interface AccountBalance {
   account_code: string;
@@ -21,6 +22,8 @@ interface FinancialData {
 }
 
 export default function FinancialStatementsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'bs' | 'pl' | 'cf'>('bs');
   const [financialData, setFinancialData] = useState<FinancialData>({
@@ -314,8 +317,36 @@ export default function FinancialStatementsPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">財務諸表</h1>
-        <p className="text-gray-600">貸借対照表、損益計算書、キャッシュフロー計算書の確認</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">財務分析システム</h1>
+        <p className="text-gray-600">会計データの管理と財務分析</p>
+      </div>
+
+      {/* サブメニュー */}
+      <div className="bg-gray-50 rounded-lg p-1 mb-6">
+        <nav className="flex space-x-1">
+          <button
+            onClick={() => router.push('/finance/general-ledger')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              pathname === '/finance/general-ledger'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>総勘定元帳</span>
+          </button>
+          <button
+            onClick={() => router.push('/finance/financial-statements')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              pathname === '/finance/financial-statements'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>財務諸表</span>
+          </button>
+        </nav>
       </div>
 
       {/* コントロールパネル */}
