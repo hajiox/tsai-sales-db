@@ -1,4 +1,4 @@
-// /app/brand-store-analysis/page.tsx ver.7（修正版）
+// /app/brand-store-analysis/page.tsx ver.8（売上修正機能追加版）
 "use client"
 
 import { useState, useEffect, Suspense } from 'react'
@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BrandStoreCsvImportModal } from '@/components/brand-store/BrandStoreCsvImportModal'
+import { SalesAdjustmentModal } from '@/components/brand-store/SalesAdjustmentModal'
 // import { MasterManagementModal } from '@/components/brand-store/MasterManagementModal'
 import { CategoryRankingCard } from '@/components/brand-store/CategoryRankingCard'
 import { ProductRankingCard } from '@/components/brand-store/ProductRankingCard'
 import { ProductSalesTable } from '@/components/brand-store/ProductSalesTable'
-import { TrendingUp, Package, Settings } from 'lucide-react'
+import { TrendingUp, Package, Settings, Edit } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -22,9 +23,11 @@ function BrandStoreAnalysisContent() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
   // const [showMasterModal, setShowMasterModal] = useState(false)
   const [data, setData] = useState<any>(null)
   const [chartData, setChartData] = useState<any[]>([])
+  const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0)
   const [loading, setLoading] = useState(false)
   const supabase = createClientComponentClient()
 
@@ -60,6 +63,25 @@ function BrandStoreAnalysisContent() {
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 
+  // 売上修正額を取得する関数
+  const fetchAdjustments = async (reportMonth: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('brand_store_sales_adjustments')
+        .select('adjustment_amount')
+        .eq('report_month', reportMonth)
+
+      if (error) throw error
+
+      // 全ての修正額を合計
+      const totalAdjustment = data?.reduce((sum, item) => sum + (item.adjustment_amount || 0), 0) || 0
+      return totalAdjustment
+    } catch (error) {
+      console.error('修正額取得エラー:', error)
+      return 0
+    }
+  }
+
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -77,14 +99,16 @@ function BrandStoreAnalysisContent() {
         categoryMasterResult,
         lastYearResult,
         twoYearsAgoResult,
-        nextMonthPredictionResult
+        nextMonthPredictionResult,
+        adjustmentTotal
       ] = await Promise.all([
         supabase.from('brand_store_sales').select('*').eq('report_month', reportMonth).order('total_sales', { ascending: false }),
         supabase.from('product_master').select('product_id, category_id'),
         supabase.from('category_master').select('category_id, category_name'),
         supabase.from('brand_store_sales').select('total_sales').eq('report_month', lastYearMonth),
         supabase.from('brand_store_sales').select('total_sales').eq('report_month', twoYearsAgoMonth),
-        supabase.from('brand_store_sales').select('*').eq('report_month', lastYearNextMonth).order('total_sales', { ascending: false }).limit(10)
+        supabase.from('brand_store_sales').select('*').eq('report_month', lastYearNextMonth).order('total_sales', { ascending: false }).limit(10),
+        fetchAdjustments(reportMonth)
       ])
 
       if (salesResult.error) throw salesResult.error
@@ -98,6 +122,9 @@ function BrandStoreAnalysisContent() {
       const lastYearSales = lastYearResult.data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || null
       const twoYearsAgoSales = twoYearsAgoResult.data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || null
       const nextMonthPrediction = nextMonthPredictionResult.data || []
+
+      // 修正額をセット
+      setAdjustmentAmount(adjustmentTotal)
 
       if (salesData.length > 0) {
         const productMap = new Map(productMaster.map(p => [p.product_id, p.category_id]))
@@ -177,19 +204,22 @@ function BrandStoreAnalysisContent() {
 
       const chartDataPromises = months.map(async ({ year, month, label }) => {
         const reportMonth = `${year}-${String(month).padStart(2, '0')}-01`
-        const { data, error } = await supabase
-          .from('brand_store_sales')
-          .select('total_sales, quantity_sold')
-          .eq('report_month', reportMonth)
+        const [salesResult, adjustmentTotal] = await Promise.all([
+          supabase
+            .from('brand_store_sales')
+            .select('total_sales, quantity_sold')
+            .eq('report_month', reportMonth),
+          fetchAdjustments(reportMonth)
+        ])
 
-        if (error) throw error
+        if (salesResult.error) throw salesResult.error
 
-        const totalSales = data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || 0
-        const totalQuantity = data?.reduce((sum, item) => sum + (item.quantity_sold || 0), 0) || 0
+        const totalSales = salesResult.data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || 0
+        const totalQuantity = salesResult.data?.reduce((sum, item) => sum + (item.quantity_sold || 0), 0) || 0
 
         return {
           month: label,
-          売上: totalSales,
+          売上: totalSales + adjustmentTotal,  // 修正額を含めた売上
           個数: totalQuantity
         }
       })
@@ -208,8 +238,16 @@ function BrandStoreAnalysisContent() {
 
     try {
       const reportMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
-      const { error } = await supabase.from('brand_store_sales').delete().eq('report_month', reportMonth)
-      if (error) throw error
+      
+      // 売上データと修正データの両方を削除
+      const [salesDelete, adjustmentDelete] = await Promise.all([
+        supabase.from('brand_store_sales').delete().eq('report_month', reportMonth),
+        supabase.from('brand_store_sales_adjustments').delete().eq('report_month', reportMonth)
+      ])
+      
+      if (salesDelete.error) throw salesDelete.error
+      if (adjustmentDelete.error) throw adjustmentDelete.error
+      
       alert('データを削除しました')
       fetchData()
     } catch (error) {
@@ -234,6 +272,9 @@ function BrandStoreAnalysisContent() {
     updateURL(selectedYear, month)
   }
 
+  // 修正後の合計売上を計算
+  const adjustedTotalSales = (data?.totalSales || 0) + adjustmentAmount
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -248,6 +289,9 @@ function BrandStoreAnalysisContent() {
           </Select>
           <Button onClick={() => setShowImportModal(true)}>CSV読込</Button>
           <Button variant="destructive" onClick={handleDeleteMonth} disabled={!data || loading}>月削除</Button>
+          <Button variant="outline" onClick={() => setShowAdjustmentModal(true)}>
+            <Edit className="h-4 w-4 mr-2" />売上修正
+          </Button>
         </div>
         {/* マスター管理ボタンを一時的にコメントアウト
         <Button variant="outline" size="sm" onClick={() => setShowMasterModal(true)}>
@@ -269,7 +313,14 @@ function BrandStoreAnalysisContent() {
                     <TrendingUp className="h-4 w-4 text-blue-600" />
                     <span className="text-sm text-muted-foreground">合計売上</span>
                   </div>
-                  <div className="text-xl font-bold">{formatCurrency(data.totalSales)}</div>
+                  <div className="text-xl font-bold">
+                    {formatCurrency(adjustedTotalSales)}
+                    {adjustmentAmount !== 0 && (
+                      <span className="text-sm text-muted-foreground ml-2">
+                        (修正: {adjustmentAmount > 0 ? '+' : ''}{adjustmentAmount.toLocaleString()}円)
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -282,6 +333,11 @@ function BrandStoreAnalysisContent() {
             ) : (
               <div className="text-center py-4 text-muted-foreground">
                 データ未入力
+                {adjustmentAmount !== 0 && (
+                  <div className="mt-2 text-sm">
+                    修正額: {adjustmentAmount > 0 ? '+' : ''}{adjustmentAmount.toLocaleString()}円
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -400,6 +456,16 @@ function BrandStoreAnalysisContent() {
           }}
           selectedYear={selectedYear}
           selectedMonth={selectedMonth}
+        />
+      )}
+
+      {showAdjustmentModal && (
+        <SalesAdjustmentModal
+          isOpen={showAdjustmentModal}
+          onClose={() => setShowAdjustmentModal(false)}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          onSuccess={fetchData}
         />
       )}
 
