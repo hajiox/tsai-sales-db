@@ -1,10 +1,10 @@
-// /app/finance/general-ledger/page.tsx ver.7 - 完全復元版
+// /app/finance/general-ledger/page.tsx ver.8 - パスワード保護版
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileSpreadsheet, Upload, Calendar, Trash2, BarChart3 } from 'lucide-react';
+import { FileSpreadsheet, Upload, Calendar, Trash2, BarChart3, Lock } from 'lucide-react';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 
 interface MonthlySummary {
@@ -23,6 +23,11 @@ export default function GeneralLedgerPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // パスワード認証用のstate
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,8 +35,39 @@ export default function GeneralLedgerPage() {
   );
 
   useEffect(() => {
-    fetchMonthlySummaries();
+    // セッションストレージから認証状態を確認
+    const authStatus = sessionStorage.getItem('financeSystemAuth');
+    if (authStatus === 'authenticated') {
+      setIsAuthenticated(true);
+      fetchMonthlySummaries();
+    } else {
+      setIsLoading(false);
+    }
   }, []);
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+
+    // APIでパスワード検証
+    try {
+      const response = await fetch('/api/finance/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+
+      if (response.ok) {
+        setIsAuthenticated(true);
+        sessionStorage.setItem('financeSystemAuth', 'authenticated');
+        fetchMonthlySummaries();
+      } else {
+        setPasswordError('パスワードが正しくありません');
+      }
+    } catch (error) {
+      setPasswordError('認証エラーが発生しました');
+    }
+  };
 
   const fetchMonthlySummaries = async () => {
     try {
@@ -89,7 +125,6 @@ export default function GeneralLedgerPage() {
 
     setIsDeleting(true);
     try {
-      // general_ledgerから削除
       const { error: glError } = await supabase
         .from('general_ledger')
         .delete()
@@ -97,7 +132,6 @@ export default function GeneralLedgerPage() {
 
       if (glError) throw glError;
 
-      // monthly_account_balanceから削除
       const { error: mabError } = await supabase
         .from('monthly_account_balance')
         .delete()
@@ -105,7 +139,6 @@ export default function GeneralLedgerPage() {
 
       if (mabError) throw mabError;
 
-      // リスト更新
       await fetchMonthlySummaries();
       alert('データを削除しました');
     } catch (error) {
@@ -128,6 +161,56 @@ export default function GeneralLedgerPage() {
     return `${date.getFullYear()}年${date.getMonth() + 1}月`;
   };
 
+  // パスワード認証画面
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full space-y-8">
+          <div className="bg-white shadow-lg rounded-lg p-8">
+            <div className="text-center mb-8">
+              <Lock className="mx-auto h-12 w-12 text-gray-400" />
+              <h2 className="mt-4 text-2xl font-bold text-gray-900">
+                財務分析システム
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                管理者パスワードを入力してください
+              </p>
+            </div>
+            <form onSubmit={handlePasswordSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="password" className="sr-only">
+                  パスワード
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  placeholder="パスワード"
+                />
+              </div>
+              {passwordError && (
+                <div className="text-red-600 text-sm text-center">
+                  {passwordError}
+                </div>
+              )}
+              <button
+                type="submit"
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                ログイン
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 認証済みの場合は通常の画面を表示
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
