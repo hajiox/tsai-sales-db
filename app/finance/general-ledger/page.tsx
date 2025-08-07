@@ -1,8 +1,8 @@
-// /app/finance/general-ledger/page.tsx ver.4 - 日本語化と削除機能追加版
+// /app/finance/general-ledger/page.tsx ver.5 - インポートパス修正版
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createBrowserClient } from '@supabase/ssr';
 import { FileSpreadsheet, Upload, Calendar, Trash2 } from 'lucide-react';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 
@@ -19,7 +19,12 @@ export default function GeneralLedgerPage() {
   const [monthlySummaries, setMonthlySummaries] = useState<MonthlySummary[]>([]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const supabase = createClient();
+  
+  // Supabaseクライアントを作成
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   // 初期表示時に現在の年月を設定
   useEffect(() => {
