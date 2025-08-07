@@ -1,4 +1,4 @@
-// /app/finance/general-ledger/page.tsx ver.6 - サブメニュー追加版
+// /app/finance/general-ledger/page.tsx ver.7 - 完全復元版
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,14 +7,126 @@ import { createBrowserClient } from '@supabase/ssr';
 import { FileSpreadsheet, Upload, Calendar, Trash2, BarChart3 } from 'lucide-react';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 
-// ... 既存のインターフェース定義 ...
+interface MonthlySummary {
+  report_month: string;
+  account_count: number;
+  transaction_count: number;
+  total_debit: number;
+  total_credit: number;
+}
 
 export default function GeneralLedgerPage() {
   const router = useRouter();
   const pathname = usePathname();
-  // ... 既存のstate定義 ...
+  const [monthlySummaries, setMonthlySummaries] = useState<MonthlySummary[]>([]);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // ... 既存の関数定義 ...
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  useEffect(() => {
+    fetchMonthlySummaries();
+  }, []);
+
+  const fetchMonthlySummaries = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('monthly_account_balance')
+        .select('report_month, account_code')
+        .order('report_month', { ascending: false });
+
+      if (error) throw error;
+
+      // 月ごとに集計
+      const summaryMap = new Map<string, MonthlySummary>();
+      
+      for (const row of data || []) {
+        const month = row.report_month;
+        if (!summaryMap.has(month)) {
+          // 該当月の詳細データを取得
+          const { data: monthData } = await supabase
+            .from('monthly_account_balance')
+            .select('*')
+            .eq('report_month', month);
+
+          const { data: transactionData } = await supabase
+            .from('general_ledger')
+            .select('*')
+            .eq('report_month', month);
+
+          summaryMap.set(month, {
+            report_month: month,
+            account_count: monthData?.length || 0,
+            transaction_count: transactionData?.length || 0,
+            total_debit: monthData?.reduce((sum, item) => sum + (item.total_debit || 0), 0) || 0,
+            total_credit: monthData?.reduce((sum, item) => sum + (item.total_credit || 0), 0) || 0,
+          });
+        }
+      }
+
+      setMonthlySummaries(Array.from(summaryMap.values()));
+    } catch (error) {
+      console.error('Error fetching monthly summaries:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleImportComplete = () => {
+    setIsImportModalOpen(false);
+    fetchMonthlySummaries();
+  };
+
+  const handleDeleteMonth = async (month: string) => {
+    if (!confirm(`${month}のデータを削除してよろしいですか？\nこの操作は取り消せません。`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      // general_ledgerから削除
+      const { error: glError } = await supabase
+        .from('general_ledger')
+        .delete()
+        .eq('report_month', month);
+
+      if (glError) throw glError;
+
+      // monthly_account_balanceから削除
+      const { error: mabError } = await supabase
+        .from('monthly_account_balance')
+        .delete()
+        .eq('report_month', month);
+
+      if (mabError) throw mabError;
+
+      // リスト更新
+      await fetchMonthlySummaries();
+      alert('データを削除しました');
+    } catch (error) {
+      console.error('Error deleting data:', error);
+      alert('削除中にエラーが発生しました');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('ja-JP', {
+      style: 'currency',
+      currency: 'JPY'
+    }).format(amount);
+  };
+
+  const formatMonth = (dateString: string) => {
+    const date = new Date(dateString);
+    return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -51,8 +163,118 @@ export default function GeneralLedgerPage() {
         </nav>
       </div>
 
-      {/* 以下、既存のコンテンツをそのまま維持 */}
-      {/* コントロールパネル、月次サマリーテーブル、インポートモーダルなど */}
+      {/* コントロールパネル */}
+      <div className="bg-white rounded-lg shadow mb-6">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">データ管理</h2>
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              <span>CSVインポート</span>
+            </button>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Calendar className="w-5 h-5 text-gray-400" />
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                lang="ja"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 月次サマリーテーブル */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">月次データ一覧</h2>
+          
+          {isLoading ? (
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            </div>
+          ) : monthlySummaries.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              データがありません。CSVファイルをインポートしてください。
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      対象月
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      勘定科目数
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      取引件数
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      借方合計
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      貸方合計
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      操作
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {monthlySummaries.map((summary) => (
+                    <tr key={summary.report_month} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {formatMonth(summary.report_month)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {summary.account_count}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {summary.transaction_count.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(summary.total_debit)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(summary.total_credit)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <button
+                          onClick={() => handleDeleteMonth(summary.report_month)}
+                          disabled={isDeleting}
+                          className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="削除"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* インポートモーダル */}
+      {isImportModalOpen && (
+        <GeneralLedgerImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImportComplete={handleImportComplete}
+        />
+      )}
     </div>
   );
 }
