@@ -1,4 +1,4 @@
-// /app/food-store-analysis/page.tsx ver.8
+// /app/food-store-analysis/page.tsx ver.9
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
@@ -433,6 +433,8 @@ function FoodStoreAnalysisContent() {
      </div>
 
      <FoodStoreCsvImportModal
+       isOpen={showImportModal}
+       onClose={() => setShowImportModal(false)}
        onImportComplete={() => {
          setShowImportModal(false)
          fetchData()
