@@ -1,4 +1,4 @@
-// /app/api/food-store/import/route.ts ver.3
+// /app/api/food-store/import/route.ts ver.4
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
@@ -9,11 +9,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     console.log('Request body received:', { 
-      dataLength: body.data?.length, 
-      reportMonth: body.reportMonth 
+      dataLength: body.data?.length
     })
 
-    const { data, reportMonth } = body
+    const { data } = body
 
     if (!data || !Array.isArray(data) || data.length === 0) {
       return NextResponse.json(
@@ -23,6 +22,15 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createRouteHandlerClient({ cookies })
+
+    // report_monthを最初のデータから取得
+    const reportMonth = data[0]?.report_month
+    if (!reportMonth) {
+      return NextResponse.json(
+        { error: 'レポート月が指定されていません' },
+        { status: 400 }
+      )
+    }
 
     // 既存データの削除
     console.log('Deleting existing data for:', reportMonth)
@@ -39,7 +47,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 新規データの挿入
+    // 新規データの挿入（category_idを含む）
     console.log('Inserting new data:', data.length, 'records')
     const { error: insertError } = await supabase
       .from('food_store_sales')
@@ -53,25 +61,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 商品マスターの更新
-    const productMasterData = data.map(item => ({
-      jan_code: item.jan_code,
-      product_name: item.product_name
-    }))
-
-    const uniqueProducts = Array.from(
-      new Map(productMasterData.map(p => [p.jan_code, p])).values()
-    )
-
-    console.log('Updating product master:', uniqueProducts.length, 'products')
-    const { error: masterError } = await supabase
-      .from('food_product_master')
-      .upsert(uniqueProducts, { onConflict: 'jan_code' })
-
-    if (masterError) {
-      console.error('Master update error:', masterError)
-      // エラーがあってもインポートは成功とする
-    }
+    // 注意: 商品マスターの更新は、CSVインポートモーダル側で
+    // 新規商品のみを追加するように変更済みのため、ここでは行わない
+    // （カテゴリー情報を保持するため）
 
     return NextResponse.json({ 
       success: true, 
