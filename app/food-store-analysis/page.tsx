@@ -1,4 +1,4 @@
-// /app/food-store-analysis/page.tsx ver.9
+// /app/food-store-analysis/page.tsx ver.10
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
@@ -439,6 +439,8 @@ function FoodStoreAnalysisContent() {
          setShowImportModal(false)
          fetchData()
        }}
+       defaultYear={selectedYear}
+       defaultMonth={selectedMonth}
      />
 
      {showCategoryModal && (
