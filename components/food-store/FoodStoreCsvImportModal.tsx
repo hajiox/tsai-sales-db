@@ -1,4 +1,4 @@
-// /components/food-store/FoodStoreCsvImportModal.tsx ver.8
+// /components/food-store/FoodStoreCsvImportModal.tsx ver.9
 'use client'
 
 import { useState } from 'react'
@@ -58,10 +58,8 @@ export default function FoodStoreCsvImportModal({
     setSuccess(null)
 
     try {
-      // ファイルをテキストとして読み込み
-      const text = await file.text()
-      
-      Papa.parse(text, {
+      // Papaparseで直接ファイルをパース（Shift-JIS対応）
+      Papa.parse(file, {
         header: true,
         encoding: 'Shift-JIS',
         skipEmptyLines: true,
@@ -73,6 +71,20 @@ export default function FoodStoreCsvImportModal({
               setIsImporting(false)
               return
             }
+
+            // 商品マスターからカテゴリー情報を事前に取得
+            const { data: productMasterData, error: fetchError } = await supabase
+              .from('food_product_master')
+              .select('jan_code, category_id')
+
+            if (fetchError) {
+              console.error('商品マスター取得エラー:', fetchError)
+            }
+
+            // カテゴリー情報をマップ化
+            const categoryMap = new Map(
+              productMasterData?.map(p => [p.jan_code, p.category_id]) || []
+            )
 
             // JANコードごとに集計
             const aggregatedMap = new Map()
@@ -93,26 +105,27 @@ export default function FoodStoreCsvImportModal({
                 // 単価は最大値を使用
                 existing.unit_price = Math.max(existing.unit_price, parseInt(row['単価'] || 0))
               } else {
-                // 新規追加
+                // 新規追加（カテゴリー情報も設定）
                 aggregatedMap.set(janCode, {
                   report_month: reportMonth,
                   jan_code: janCode,
                   product_name: row['商品名'] || '',
-                  supplier_code: parseInt(row['仕入先コード'] || 0),
-                  supplier_name: row['仕入先名'] || '',
-                  department_code: parseInt(row['部門コード'] || 0),
-                  department_name: row['部門名'] || '',
-                  rank: parseInt(row['順位'] || 0),
-                  unit_price: parseInt(row['単価'] || 0),
+                  supplier_code: parseInt(row['仕入先コード'] || 0) || null,
+                  supplier_name: row['仕入先名'] || null,
+                  department_code: parseInt(row['部門コード'] || 0) || null,
+                  department_name: row['部門名'] || null,
+                  rank: parseInt(row['順位'] || 0) || null,
+                  unit_price: parseInt(row['単価'] || 0) || null,
                   quantity_sold: parseInt(row['点数'] || 0),
                   total_sales: parseInt(row['金額'] || 0),
                   discount_amount: parseInt(row['値引金額'] || 0),
                   cost_amount: parseInt(row['原価金額'] || 0),
                   gross_profit: parseInt(row['粗利'] || 0),
-                  gross_profit_rate: parseFloat(row['粗利率'] || 0),
-                  composition_ratio: parseFloat(row['構成比'] || 0),
-                  cumulative_ratio: parseFloat(row['累計比'] || 0),
-                  rank_category: row['ランク'] || ''
+                  gross_profit_rate: parseFloat(row['粗利率'] || 0) || null,
+                  composition_ratio: parseFloat(row['構成比'] || 0) || null,
+                  cumulative_ratio: parseFloat(row['累計比'] || 0) || null,
+                  rank_category: row['ランク'] || null,
+                  category_id: categoryMap.get(janCode) || null  // カテゴリーIDを設定
                 })
               }
             })
@@ -133,69 +146,56 @@ export default function FoodStoreCsvImportModal({
               }
             })
 
-            // 既存データを削除
-            const { error: deleteError } = await supabase
-              .from('food_store_sales')
-              .delete()
-              .eq('report_month', reportMonth)
+            // APIを呼び出してインポート
+            const response = await fetch('/api/food-store/import', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ data: importData }),
+            })
 
-            if (deleteError) throw deleteError
+            const result = await response.json()
 
-            // カテゴリー情報を取得してマージ
-            const janCodes = importData.map(item => item.jan_code)
-            const { data: productMasterData, error: fetchError } = await supabase
-              .from('food_product_master')
-              .select('jan_code, category_id')
-              .in('jan_code', janCodes)
-
-            if (fetchError) throw fetchError
-
-            // カテゴリー情報をマップ化
-            const categoryMap = new Map(
-              productMasterData?.map(p => [p.jan_code, p.category_id]) || []
-            )
-
-            // インポートデータにカテゴリー情報を追加
-            const enrichedData = importData.map(item => ({
-              ...item,
-              category_id: categoryMap.get(item.jan_code) || null
-            }))
-
-            // 新しいデータを挿入
-            const { error: insertError } = await supabase
-              .from('food_store_sales')
-              .insert(enrichedData)
-
-            if (insertError) throw insertError
-
-            // 商品マスターの更新（新規商品のみ追加）
-            const newProducts = importData
-              .filter(item => !categoryMap.has(item.jan_code))
-              .map(item => ({
-                jan_code: item.jan_code,
-                product_name: item.product_name
-              }))
-
-            if (newProducts.length > 0) {
-              const { error: upsertError } = await supabase
-                .from('food_product_master')
-                .upsert(newProducts, { 
-                  onConflict: 'jan_code',
-                  ignoreDuplicates: false 
-                })
-
-              if (upsertError) throw upsertError
+            if (!response.ok) {
+              throw new Error(result.error || 'インポートに失敗しました')
             }
 
-            setSuccess(`${importData.length}件のデータをインポートしました`)
-            
-            // 成功後の処理
-            onImportComplete()
-            
-            // 成功後3秒でダイアログを閉じる
-            setTimeout(() => {
-              handleClose()
-            }, 3000)
+            if (result.success) {
+              // 新規商品のみ商品マスターに追加
+              const newProducts = importData
+                .filter(item => !categoryMap.has(item.jan_code))
+                .map(item => ({
+                  jan_code: item.jan_code,
+                  product_name: item.product_name
+                }))
+
+              if (newProducts.length > 0) {
+                const { error: upsertError } = await supabase
+                  .from('food_product_master')
+                  .upsert(newProducts, { 
+                    onConflict: 'jan_code',
+                    ignoreDuplicates: false 
+                  })
+
+                if (upsertError) {
+                  console.error('商品マスター更新エラー:', upsertError)
+                  // エラーがあっても続行（商品マスター更新は必須ではない）
+                }
+              }
+
+              setSuccess(`${result.count}件のデータをインポートしました`)
+              
+              // 成功後の処理
+              onImportComplete()
+              
+              // 成功後3秒でダイアログを閉じる
+              setTimeout(() => {
+                handleClose()
+              }, 3000)
+            } else {
+              setError(result.error || 'インポートに失敗しました')
+            }
           } catch (err) {
             console.error('Import error:', err)
             setError(`インポートエラー: ${err instanceof Error ? err.message : '不明なエラー'}`)
