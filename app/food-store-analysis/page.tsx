@@ -1,13 +1,13 @@
-// /app/food-store-analysis/page.tsx ver.7
+// /app/food-store-analysis/page.tsx ver.8
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { FoodStoreCsvImportModal } from "@/components/food-store/FoodStoreCsvImportModal"
-import { CategoryManagementModal } from "@/components/food-store/CategoryManagementModal"
-import { ProductCategoryMappingModal } from "@/components/food-store/ProductCategoryMappingModal"
+import FoodStoreCsvImportModal from "@/components/food-store/FoodStoreCsvImportModal"  // 修正
+import CategoryManagementModal from "@/components/food-store/CategoryManagementModal"  // 修正
+import ProductCategoryMappingModal from "@/components/food-store/ProductCategoryMappingModal"  // 修正
 import { CategoryRankingCard } from "@/components/food-store/CategoryRankingCard"
 import { ProductRankingCard } from "@/components/food-store/ProductRankingCard"
 import { ProductSalesTable } from "@/components/food-store/ProductSalesTable"
