@@ -1,4 +1,4 @@
-// /components/food-store/FoodStoreCsvImportModal.tsx ver.10
+// /components/food-store/FoodStoreCsvImportModal.tsx ver.11
 'use client'
 
 import { useState } from 'react'
@@ -48,14 +48,16 @@ export default function FoodStoreCsvImportModal({
   }
 
   // 安全な数値変換関数
-  const safeParseInt = (value: any, defaultValue: number = 0): number => {
+  const safeParseInt = (value: any): number | null => {
+    if (value === null || value === undefined || value === '') return null
     const parsed = parseInt(value)
-    return isNaN(parsed) ? defaultValue : parsed
+    return isNaN(parsed) ? null : parsed
   }
 
-  const safeParseFloat = (value: any, defaultValue: number = 0): number => {
+  const safeParseFloat = (value: any): number | null => {
+    if (value === null || value === undefined || value === '') return null
     const parsed = parseFloat(value)
-    return isNaN(parsed) ? defaultValue : parsed
+    return isNaN(parsed) ? null : parsed
   }
 
   const handleImport = async () => {
@@ -70,6 +72,10 @@ export default function FoodStoreCsvImportModal({
 
     try {
       console.log('Starting import process...')
+      
+      // reportMonthを正しい形式に変換（YYYY-MM-DD形式）
+      const formattedReportMonth = `${reportMonth}-01`
+      console.log('Report month:', formattedReportMonth)
       
       // 商品マスターからカテゴリー情報を事前に取得
       const { data: productMasterData, error: fetchError } = await supabase
@@ -88,7 +94,7 @@ export default function FoodStoreCsvImportModal({
       // CSVファイルをパース
       Papa.parse(file, {
         header: true,
-        encoding: 'UTF-8',  // UTF-8として処理
+        encoding: 'UTF-8',
         skipEmptyLines: true,
         complete: async (results) => {
           try {
@@ -108,12 +114,11 @@ export default function FoodStoreCsvImportModal({
 
             results.data.forEach((row: any, index: number) => {
               // JANコードの取得と検証
-              const janCode = safeParseInt(row['ＪＡＮ'], 0)
+              const janCode = safeParseInt(row['ＪＡＮ'])
               
               // JANコードが無効な行はスキップ
-              if (janCode === 0) {
+              if (!janCode) {
                 invalidRowCount++
-                console.log(`Row ${index + 1}: Invalid JAN code, skipping...`)
                 return
               }
 
@@ -122,39 +127,45 @@ export default function FoodStoreCsvImportModal({
               if (aggregatedMap.has(janCode)) {
                 // 既存のデータに加算
                 const existing = aggregatedMap.get(janCode)
-                existing.quantity_sold += safeParseInt(row['点数'], 0)
-                existing.total_sales += safeParseInt(row['金額'], 0)
-                existing.discount_amount += safeParseInt(row['値引金額'], 0)
-                existing.cost_amount += safeParseInt(row['原価金額'], 0)
-                existing.gross_profit += safeParseInt(row['粗利'], 0)
+                const quantity = safeParseInt(row['点数']) || 0
+                const sales = safeParseInt(row['金額']) || 0
+                const discount = safeParseInt(row['値引金額']) || 0
+                const cost = safeParseInt(row['原価金額']) || 0
+                const profit = safeParseInt(row['粗利']) || 0
+                
+                existing.quantity_sold = (existing.quantity_sold || 0) + quantity
+                existing.total_sales = (existing.total_sales || 0) + sales
+                existing.discount_amount = (existing.discount_amount || 0) + discount
+                existing.cost_amount = (existing.cost_amount || 0) + cost
+                existing.gross_profit = (existing.gross_profit || 0) + profit
                 
                 // 単価は最大値を使用
-                const unitPrice = safeParseInt(row['単価'], 0)
-                if (unitPrice > existing.unit_price) {
+                const unitPrice = safeParseInt(row['単価'])
+                if (unitPrice && (!existing.unit_price || unitPrice > existing.unit_price)) {
                   existing.unit_price = unitPrice
                 }
               } else {
                 // 新規追加（カテゴリー情報も設定）
                 aggregatedMap.set(janCode, {
-                  report_month: reportMonth,
+                  report_month: formattedReportMonth,  // 正しい形式で設定
                   jan_code: janCode,
                   product_name: row['商品名'] || '',
-                  supplier_code: safeParseInt(row['仕入先コード'], 0) || null,
+                  supplier_code: safeParseInt(row['仕入先コード']),
                   supplier_name: row['仕入先名'] || null,
-                  department_code: safeParseInt(row['部門コード'], 0) || null,
+                  department_code: safeParseInt(row['部門コード']),
                   department_name: row['部門名'] || null,
-                  rank: safeParseInt(row['順位'], 0) || null,
-                  unit_price: safeParseInt(row['単価'], 0) || null,
-                  quantity_sold: safeParseInt(row['点数'], 0),
-                  total_sales: safeParseInt(row['金額'], 0),
-                  discount_amount: safeParseInt(row['値引金額'], 0),
-                  cost_amount: safeParseInt(row['原価金額'], 0),
-                  gross_profit: safeParseInt(row['粗利'], 0),
-                  gross_profit_rate: safeParseFloat(row['粗利率'], 0) || null,
-                  composition_ratio: safeParseFloat(row['構成比'], 0) || null,
-                  cumulative_ratio: safeParseFloat(row['累計比'], 0) || null,
+                  rank: safeParseInt(row['順位']),
+                  unit_price: safeParseInt(row['単価']),
+                  quantity_sold: safeParseInt(row['点数']) || 0,
+                  total_sales: safeParseInt(row['金額']) || 0,
+                  discount_amount: safeParseInt(row['値引金額']) || 0,
+                  cost_amount: safeParseInt(row['原価金額']) || 0,
+                  gross_profit: safeParseInt(row['粗利']) || 0,
+                  gross_profit_rate: safeParseFloat(row['粗利率']),
+                  composition_ratio: safeParseFloat(row['構成比']),
+                  cumulative_ratio: safeParseFloat(row['累計比']),
                   rank_category: row['ランク'] || null,
-                  category_id: categoryMap.get(janCode) || null  // カテゴリーIDを設定
+                  category_id: categoryMap.get(janCode) || null
                 })
               }
             })
@@ -165,16 +176,17 @@ export default function FoodStoreCsvImportModal({
             const importData = Array.from(aggregatedMap.values())
 
             if (importData.length === 0) {
-              setError('有効なデータが見つかりませんでした（すべての行でJANコードが無効です）')
+              setError('有効なデータが見つかりませんでした')
               setIsImporting(false)
               return
             }
 
             console.log(`Aggregated to ${importData.length} unique products`)
+            console.log('Sample data:', importData[0])
 
             // 粗利率を再計算
             importData.forEach(item => {
-              if (item.total_sales > 0) {
+              if (item.total_sales && item.total_sales > 0) {
                 item.gross_profit_rate = parseFloat(((item.gross_profit / item.total_sales) * 100).toFixed(2))
               }
             })
@@ -216,7 +228,6 @@ export default function FoodStoreCsvImportModal({
 
                 if (upsertError) {
                   console.error('商品マスター更新エラー:', upsertError)
-                  // エラーがあっても続行（商品マスター更新は必須ではない）
                 }
               }
 
