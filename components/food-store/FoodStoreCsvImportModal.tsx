@@ -1,7 +1,7 @@
-// /components/food-store/FoodStoreCsvImportModal.tsx ver.11
+// /components/food-store/FoodStoreCsvImportModal.tsx ver.13
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -14,12 +14,16 @@ interface FoodStoreCsvImportModalProps {
   isOpen?: boolean
   onClose?: () => void
   onImportComplete: () => void
+  defaultYear?: number  // 追加
+  defaultMonth?: number // 追加
 }
 
 export default function FoodStoreCsvImportModal({ 
   isOpen = false, 
   onClose = () => {}, 
-  onImportComplete 
+  onImportComplete,
+  defaultYear,  // 追加
+  defaultMonth  // 追加
 }: FoodStoreCsvImportModalProps) {
   const [file, setFile] = useState<File | null>(null)
   const [reportMonth, setReportMonth] = useState('')
@@ -28,11 +32,22 @@ export default function FoodStoreCsvImportModal({
   const [success, setSuccess] = useState<string | null>(null)
   const supabase = createClientComponentClient()
 
+  // モーダルが開いた時に年月を自動セット
+  useEffect(() => {
+    if (isOpen && defaultYear && defaultMonth) {
+      const formattedMonth = `${defaultYear}-${String(defaultMonth).padStart(2, '0')}`
+      setReportMonth(formattedMonth)
+    }
+  }, [isOpen, defaultYear, defaultMonth])
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0])
+      const selectedFile = e.target.files[0]
+      setFile(selectedFile)
       setError(null)
       setSuccess(null)
+    } else {
+      setFile(null)
     }
   }
 
@@ -71,11 +86,8 @@ export default function FoodStoreCsvImportModal({
     setSuccess(null)
 
     try {
-      console.log('Starting import process...')
-      
       // reportMonthを正しい形式に変換（YYYY-MM-DD形式）
       const formattedReportMonth = `${reportMonth}-01`
-      console.log('Report month:', formattedReportMonth)
       
       // 商品マスターからカテゴリー情報を事前に取得
       const { data: productMasterData, error: fetchError } = await supabase
@@ -98,8 +110,6 @@ export default function FoodStoreCsvImportModal({
         skipEmptyLines: true,
         complete: async (results) => {
           try {
-            console.log('CSV parsed, rows:', results.data.length)
-            
             // データが存在するか確認
             if (!results.data || results.data.length === 0) {
               setError('CSVファイルにデータが含まれていません')
@@ -112,7 +122,7 @@ export default function FoodStoreCsvImportModal({
             let validRowCount = 0
             let invalidRowCount = 0
 
-            results.data.forEach((row: any, index: number) => {
+            results.data.forEach((row: any) => {
               // JANコードの取得と検証
               const janCode = safeParseInt(row['ＪＡＮ'])
               
@@ -147,7 +157,7 @@ export default function FoodStoreCsvImportModal({
               } else {
                 // 新規追加（カテゴリー情報も設定）
                 aggregatedMap.set(janCode, {
-                  report_month: formattedReportMonth,  // 正しい形式で設定
+                  report_month: formattedReportMonth,
                   jan_code: janCode,
                   product_name: row['商品名'] || '',
                   supplier_code: safeParseInt(row['仕入先コード']),
@@ -170,8 +180,6 @@ export default function FoodStoreCsvImportModal({
               }
             })
 
-            console.log(`Valid rows: ${validRowCount}, Invalid rows: ${invalidRowCount}`)
-
             // MapをArrayに変換
             const importData = Array.from(aggregatedMap.values())
 
@@ -181,9 +189,6 @@ export default function FoodStoreCsvImportModal({
               return
             }
 
-            console.log(`Aggregated to ${importData.length} unique products`)
-            console.log('Sample data:', importData[0])
-
             // 粗利率を再計算
             importData.forEach(item => {
               if (item.total_sales && item.total_sales > 0) {
@@ -192,7 +197,6 @@ export default function FoodStoreCsvImportModal({
             })
 
             // APIを呼び出してインポート
-            console.log('Calling API to import data...')
             const response = await fetch('/api/food-store/import', {
               method: 'POST',
               headers: {
@@ -202,7 +206,6 @@ export default function FoodStoreCsvImportModal({
             })
 
             const result = await response.json()
-            console.log('API response:', result)
 
             if (!response.ok) {
               throw new Error(result.error || result.details || 'インポートに失敗しました')
@@ -218,7 +221,6 @@ export default function FoodStoreCsvImportModal({
                 }))
 
               if (newProducts.length > 0) {
-                console.log(`Adding ${newProducts.length} new products to master`)
                 const { error: upsertError } = await supabase
                   .from('food_product_master')
                   .upsert(newProducts, { 
@@ -276,12 +278,18 @@ export default function FoodStoreCsvImportModal({
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="reportMonth">レポート月</Label>
-            <Input
-              id="reportMonth"
-              type="month"
-              value={reportMonth}
-              onChange={(e) => setReportMonth(e.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="reportMonth"
+                type="month"
+                value={reportMonth}
+                onChange={(e) => setReportMonth(e.target.value)}
+                disabled={!!defaultYear && !!defaultMonth}  // 自動設定時は変更不可
+              />
+              {defaultYear && defaultMonth && (
+                <span className="text-sm text-green-600">自動設定済み</span>
+              )}
+            </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="csvFile">CSVファイル（UTF-8）</Label>
@@ -291,6 +299,11 @@ export default function FoodStoreCsvImportModal({
               accept=".csv"
               onChange={handleFileChange}
             />
+            {file && (
+              <p className="text-sm text-green-600">
+                ファイル選択済み: {file.name}
+              </p>
+            )}
           </div>
           {error && (
             <Alert variant="destructive">
