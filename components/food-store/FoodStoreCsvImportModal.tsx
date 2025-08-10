@@ -1,20 +1,25 @@
-// /components/food-store/FoodStoreCsvImportModal.tsx ver.4（安定版に戻す）
+// /components/food-store/FoodStoreCsvImportModal.tsx ver.7
 'use client'
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import Papa from 'papaparse'
 
 interface FoodStoreCsvImportModalProps {
+  isOpen?: boolean
+  onClose?: () => void
   onImportComplete: () => void
 }
 
-export default function FoodStoreCsvImportModal({ onImportComplete }: FoodStoreCsvImportModalProps) {
-  const [isOpen, setIsOpen] = useState(false)
+export default function FoodStoreCsvImportModal({ 
+  isOpen = false, 
+  onClose = () => {}, 
+  onImportComplete 
+}: FoodStoreCsvImportModalProps) {
   const [file, setFile] = useState<File | null>(null)
   const [reportMonth, setReportMonth] = useState('')
   const [isImporting, setIsImporting] = useState(false)
@@ -27,6 +32,17 @@ export default function FoodStoreCsvImportModal({ onImportComplete }: FoodStoreC
       setError(null)
       setSuccess(null)
     }
+  }
+
+  const handleClose = () => {
+    // リセット処理
+    setFile(null)
+    setReportMonth('')
+    setError(null)
+    setSuccess(null)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    if (fileInput) fileInput.value = ''
+    onClose()
   }
 
   const handleImport = async () => {
@@ -110,19 +126,13 @@ export default function FoodStoreCsvImportModal({ onImportComplete }: FoodStoreC
 
           if (result.success) {
             setSuccess(`${result.count}件のデータをインポートしました`)
-            setFile(null)
-            setReportMonth('')
             
-            // 入力フィールドをリセット
-            const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-            if (fileInput) fileInput.value = ''
-            
+            // 成功後の処理
             onImportComplete()
             
             // 成功後3秒でダイアログを閉じる
             setTimeout(() => {
-              setIsOpen(false)
-              setSuccess(null)
+              handleClose()
             }, 3000)
           } else {
             setError(result.error || 'インポートに失敗しました')
@@ -142,12 +152,7 @@ export default function FoodStoreCsvImportModal({ onImportComplete }: FoodStoreC
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button className="bg-blue-600 hover:bg-blue-700">
-          CSVインポート
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>食のブランド館 売上データインポート</DialogTitle>
@@ -188,7 +193,7 @@ export default function FoodStoreCsvImportModal({ onImportComplete }: FoodStoreC
         <div className="flex justify-end gap-2">
           <Button
             variant="outline"
-            onClick={() => setIsOpen(false)}
+            onClick={handleClose}
             disabled={isImporting}
           >
             キャンセル
