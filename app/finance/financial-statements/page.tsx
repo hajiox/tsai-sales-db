@@ -1,237 +1,271 @@
-// /app/finance/financial-statements/page.tsx ver.2 - サブメニュー追加版
+// /app/finance/financial-statements/page.tsx ver.3 - 詳細検索タブ追加版
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileText, TrendingUp, DollarSign, Calendar, Download, FileSpreadsheet, BarChart3 } from 'lucide-react';
+import { FileSpreadsheet, BarChart3, TrendingUp, PieChart, Search, Filter, Calendar } from 'lucide-react';
+import { format } from 'date-fns';
+import { ja } from 'date-fns/locale';
 
 interface AccountBalance {
   account_code: string;
   account_name: string;
-  account_type: string;
   balance: number;
 }
 
-interface FinancialData {
-  assets: AccountBalance[];
-  liabilities: AccountBalance[];
-  equity: AccountBalance[];
-  revenue: AccountBalance[];
-  expenses: AccountBalance[];
+interface TransactionDetail {
+  id: string;
+  transaction_date: string;
+  account_code: string;
+  account_name: string;
+  counter_account: string;
+  description: string;
+  debit_amount: number;
+  credit_amount: number;
+  balance: number;
 }
 
 export default function FinancialStatementsPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'bs' | 'pl' | 'cf'>('bs');
-  const [financialData, setFinancialData] = useState<FinancialData>({
-    assets: [],
-    liabilities: [],
-    equity: [],
-    revenue: [],
-    expenses: []
-  });
-  const [loading, setLoading] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState('2025-02');
+  const [activeTab, setActiveTab] = useState<'bs' | 'pl' | 'cf' | 'detail'>('bs');
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // 財務諸表データ
+  const [bsData, setBsData] = useState<{
+    assets: AccountBalance[];
+    liabilities: AccountBalance[];
+    equity: AccountBalance[];
+  }>({ assets: [], liabilities: [], equity: [] });
+  
+  const [plData, setPlData] = useState<{
+    revenues: AccountBalance[];
+    expenses: AccountBalance[];
+  }>({ revenues: [], expenses: [] });
+
+  // 詳細検索用の状態
+  const [transactions, setTransactions] = useState<TransactionDetail[]>([]);
+  const [accountMaster, setAccountMaster] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [dataLoading, setDataLoading] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  useEffect(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    setSelectedMonth(`${year}-${month}`);
-  }, []);
+  const itemsPerPage = 50;
 
   useEffect(() => {
-    if (selectedMonth) {
+    const authStatus = sessionStorage.getItem('financeSystemAuth');
+    if (authStatus === 'authenticated') {
       loadFinancialData();
+      loadAccountMaster();
+    } else {
+      router.push('/finance/general-ledger');
     }
   }, [selectedMonth]);
 
+  useEffect(() => {
+    if (activeTab === 'detail') {
+      loadTransactions();
+    }
+  }, [activeTab, selectedMonth, selectedAccount, searchTerm, currentPage]);
+
+  const loadAccountMaster = async () => {
+    const { data, error } = await supabase
+      .from('account_master')
+      .select('account_code, account_name')
+      .order('account_code');
+    
+    if (data) {
+      setAccountMaster(data);
+    }
+  };
+
+  const loadTransactions = async () => {
+    if (activeTab !== 'detail') return;
+    
+    setDataLoading(true);
+    
+    let query = supabase
+      .from('general_ledger')
+      .select(`
+        *,
+        account_master!inner(account_name)
+      `, { count: 'exact' })
+      .eq('report_month', `${selectedMonth}-01`)
+      .order('transaction_date', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (selectedAccount) {
+      query = query.eq('account_code', selectedAccount);
+    }
+    
+    if (searchTerm) {
+      query = query.or(`description.ilike.%${searchTerm}%,counter_account.ilike.%${searchTerm}%`);
+    }
+
+    const from = (currentPage - 1) * itemsPerPage;
+    const to = from + itemsPerPage - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
+
+    if (data) {
+      const formattedData = data.map(item => ({
+        ...item,
+        account_name: item.account_master?.account_name || ''
+      }));
+      setTransactions(formattedData);
+      setTotalPages(Math.ceil((count || 0) / itemsPerPage));
+    }
+    
+    setDataLoading(false);
+  };
+
   const loadFinancialData = async () => {
-    setLoading(true);
-    try {
-      const reportMonth = `${selectedMonth}-01`;
-      
-      // 月次残高データを取得
-      const { data: balances, error } = await supabase
-        .from('monthly_account_balance')
-        .select(`
-          account_code,
-          closing_balance,
-          account_master (
-            account_name,
-            account_type
-          )
-        `)
-        .eq('report_month', reportMonth);
+    setIsLoading(true);
+    
+    const { data: balances, error } = await supabase
+      .from('monthly_account_balance')
+      .select(`
+        account_code,
+        closing_balance,
+        account_master!inner(account_name)
+      `)
+      .eq('report_month', `${selectedMonth}-01`);
 
-      if (error) throw error;
+    if (balances) {
+      const assets: AccountBalance[] = [];
+      const liabilities: AccountBalance[] = [];
+      const equity: AccountBalance[] = [];
+      const revenues: AccountBalance[] = [];
+      const expenses: AccountBalance[] = [];
 
-      // 勘定科目コードで分類
-      const categorizedData: FinancialData = {
-        assets: [],
-        liabilities: [],
-        equity: [],
-        revenue: [],
-        expenses: []
-      };
-
-      balances?.forEach((item: any) => {
-        const code = parseInt(item.account_code);
-        const balance: AccountBalance = {
+      balances.forEach(item => {
+        const account: AccountBalance = {
           account_code: item.account_code,
-          account_name: item.account_master?.account_name || `科目${item.account_code}`,
-          account_type: item.account_master?.account_type || '未分類',
+          account_name: item.account_master?.account_name || '',
           balance: item.closing_balance || 0
         };
 
-        // 勘定科目コードで分類
-        if (code >= 100 && code < 200) {
-          // 資産
-          categorizedData.assets.push(balance);
-        } else if (code >= 200 && code < 300) {
-          // 負債
-          categorizedData.liabilities.push(balance);
-        } else if (code >= 300 && code < 400) {
-          // 純資産
-          categorizedData.equity.push(balance);
-        } else if (code >= 800 && code < 900) {
-          // 収益
-          categorizedData.revenue.push(balance);
-        } else if ((code >= 400 && code < 700) || code >= 500) {
-          // 費用
-          categorizedData.expenses.push(balance);
-        }
-      });
-
-      // 特殊な勘定科目の分類調整
-      balances?.forEach((item: any) => {
         const code = parseInt(item.account_code);
-        // 1000番台の資産
-        if (code >= 1000 && code < 1200) {
-          const balance: AccountBalance = {
-            account_code: item.account_code,
-            account_name: item.account_master?.account_name || `科目${item.account_code}`,
-            account_type: item.account_master?.account_type || '未分類',
-            balance: item.closing_balance || 0
-          };
-          categorizedData.assets.push(balance);
+        
+        if ((code >= 100 && code < 200) || (code >= 1000 && code < 1200)) {
+          assets.push(account);
+        } else if ((code >= 200 && code < 300) || (code >= 1200 && code < 1300)) {
+          liabilities.push(account);
+        } else if (code >= 300 && code < 400) {
+          equity.push(account);
+        } else if (code >= 800 && code < 900) {
+          revenues.push(account);
+        } else if (code >= 400 && code < 700) {
+          expenses.push(account);
         }
-        // 1200番台の負債
-        else if (code >= 1200 && code < 1300) {
-          const balance: AccountBalance = {
-            account_code: item.account_code,
-            account_name: item.account_master?.account_name || `科目${item.account_code}`,
-            account_type: item.account_master?.account_type || '未分類',
-            balance: item.closing_balance || 0
-          };
-          categorizedData.liabilities.push(balance);
-        }
-        // 3000番台の特殊勘定
-        else if (code >= 3000 && code < 4000) {
-          const balance: AccountBalance = {
-            account_code: item.account_code,
-            account_name: item.account_master?.account_name || `科目${item.account_code}`,
-            account_type: item.account_master?.account_type || '未分類',
-            balance: item.closing_balance || 0
-          };
-          if (item.account_name?.includes('リース')) {
-            if (item.account_name.includes('資産')) {
-              categorizedData.assets.push(balance);
-            } else if (item.account_name.includes('債務')) {
-              categorizedData.liabilities.push(balance);
-            }
+        
+        if (code >= 3000 && code < 4000) {
+          if (account.account_name.includes('リース資産')) {
+            assets.push(account);
+          } else if (account.account_name.includes('リース債務')) {
+            liabilities.push(account);
           }
         }
       });
 
-      setFinancialData(categorizedData);
-    } catch (error) {
-      console.error('データ取得エラー:', error);
-    } finally {
-      setLoading(false);
+      setBsData({ assets, liabilities, equity });
+      setPlData({ revenues, expenses });
     }
+
+    setIsLoading(false);
   };
 
-  // 貸借対照表コンポーネント
-  const BalanceSheet = () => {
-    const totalAssets = financialData.assets.reduce((sum, item) => sum + item.balance, 0);
-    const totalLiabilities = financialData.liabilities.reduce((sum, item) => sum + item.balance, 0);
-    const totalEquity = financialData.equity.reduce((sum, item) => sum + item.balance, 0);
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('ja-JP', {
+      style: 'currency',
+      currency: 'JPY'
+    }).format(amount);
+  };
+
+  const calculateTotal = (items: AccountBalance[]) => {
+    return items.reduce((sum, item) => sum + item.balance, 0);
+  };
+
+  const renderBalanceSheet = () => {
+    const totalAssets = calculateTotal(bsData.assets);
+    const totalLiabilities = calculateTotal(bsData.liabilities);
+    const totalEquity = calculateTotal(bsData.equity);
+    const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
 
     return (
       <div className="grid grid-cols-2 gap-6">
-        {/* 資産の部 */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">資産の部</h3>
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4 text-blue-700">資産の部</h3>
           <div className="space-y-2">
-            {financialData.assets.map((item) => (
-              <div key={item.account_code} className="flex justify-between text-sm">
-                <span className="text-gray-600">{item.account_name}</span>
-                <span className="font-medium">¥{item.balance.toLocaleString()}</span>
+            {bsData.assets.map(item => (
+              <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
+                <span className="text-sm">{item.account_name}</span>
+                <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
               </div>
             ))}
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="flex justify-between font-semibold">
-              <span>資産合計</span>
-              <span>¥{totalAssets.toLocaleString()}</span>
+            <div className="border-t pt-2 mt-4">
+              <div className="flex justify-between font-semibold">
+                <span>資産合計</span>
+                <span className="font-mono">{formatCurrency(totalAssets)}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* 負債・純資産の部 */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">負債・純資産の部</h3>
-          
-          {/* 負債 */}
-          <div className="mb-6">
-            <h4 className="text-md font-medium text-gray-700 mb-2">負債</h4>
-            <div className="space-y-2">
-              {financialData.liabilities.map((item) => (
-                <div key={item.account_code} className="flex justify-between text-sm">
-                  <span className="text-gray-600 ml-4">{item.account_name}</span>
-                  <span className="font-medium">¥{item.balance.toLocaleString()}</span>
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4 text-red-700">負債・純資産の部</h3>
+          <div className="space-y-4">
+            <div>
+              <h4 className="font-medium mb-2 text-gray-700">負債</h4>
+              <div className="space-y-2 ml-4">
+                {bsData.liabilities.map(item => (
+                  <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
+                    <span className="text-sm">{item.account_name}</span>
+                    <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
+                  </div>
+                ))}
+                <div className="border-t pt-1">
+                  <div className="flex justify-between font-medium">
+                    <span>負債計</span>
+                    <span className="font-mono">{formatCurrency(totalLiabilities)}</span>
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div className="mt-2 pt-2 border-t border-gray-100">
-              <div className="flex justify-between text-sm font-medium">
-                <span className="ml-2">負債合計</span>
-                <span>¥{totalLiabilities.toLocaleString()}</span>
               </div>
             </div>
-          </div>
 
-          {/* 純資産 */}
-          <div>
-            <h4 className="text-md font-medium text-gray-700 mb-2">純資産</h4>
-            <div className="space-y-2">
-              {financialData.equity.map((item) => (
-                <div key={item.account_code} className="flex justify-between text-sm">
-                  <span className="text-gray-600 ml-4">{item.account_name}</span>
-                  <span className="font-medium">¥{item.balance.toLocaleString()}</span>
+            <div>
+              <h4 className="font-medium mb-2 text-gray-700">純資産</h4>
+              <div className="space-y-2 ml-4">
+                {bsData.equity.map(item => (
+                  <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
+                    <span className="text-sm">{item.account_name}</span>
+                    <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
+                  </div>
+                ))}
+                <div className="border-t pt-1">
+                  <div className="flex justify-between font-medium">
+                    <span>純資産計</span>
+                    <span className="font-mono">{formatCurrency(totalEquity)}</span>
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div className="mt-2 pt-2 border-t border-gray-100">
-              <div className="flex justify-between text-sm font-medium">
-                <span className="ml-2">純資産合計</span>
-                <span>¥{totalEquity.toLocaleString()}</span>
               </div>
             </div>
-          </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="flex justify-between font-semibold">
-              <span>負債・純資産合計</span>
-              <span>¥{(totalLiabilities + totalEquity).toLocaleString()}</span>
+            <div className="border-t pt-2">
+              <div className="flex justify-between font-semibold">
+                <span>負債・純資産合計</span>
+                <span className="font-mono">{formatCurrency(totalLiabilitiesAndEquity)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -239,76 +273,205 @@ export default function FinancialStatementsPage() {
     );
   };
 
-  // 損益計算書コンポーネント
-  const ProfitLossStatement = () => {
-    const totalRevenue = financialData.revenue.reduce((sum, item) => sum + Math.abs(item.balance), 0);
-    const totalExpenses = financialData.expenses.reduce((sum, item) => sum + Math.abs(item.balance), 0);
-    const netIncome = totalRevenue - totalExpenses;
+  const renderProfitLoss = () => {
+    const totalRevenues = calculateTotal(plData.revenues);
+    const totalExpenses = calculateTotal(plData.expenses);
+    const netIncome = totalRevenues - totalExpenses;
 
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">損益計算書</h3>
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold mb-4">損益計算書</h3>
         
-        {/* 収益 */}
-        <div className="mb-6">
-          <h4 className="text-md font-medium text-gray-700 mb-2">収益</h4>
-          <div className="space-y-2">
-            {financialData.revenue.map((item) => (
-              <div key={item.account_code} className="flex justify-between text-sm">
-                <span className="text-gray-600 ml-4">{item.account_name}</span>
-                <span className="font-medium">¥{Math.abs(item.balance).toLocaleString()}</span>
+        <div className="space-y-6">
+          <div>
+            <h4 className="font-medium mb-3 text-green-700">収益</h4>
+            <div className="space-y-2 ml-4">
+              {plData.revenues.map(item => (
+                <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
+                  <span className="text-sm">{item.account_name}</span>
+                  <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
+                </div>
+              ))}
+              <div className="border-t pt-2">
+                <div className="flex justify-between font-medium">
+                  <span>収益合計</span>
+                  <span className="font-mono">{formatCurrency(totalRevenues)}</span>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="mt-2 pt-2 border-t border-gray-100">
-            <div className="flex justify-between font-medium">
-              <span>収益合計</span>
-              <span>¥{totalRevenue.toLocaleString()}</span>
             </div>
           </div>
-        </div>
 
-        {/* 費用 */}
-        <div className="mb-6">
-          <h4 className="text-md font-medium text-gray-700 mb-2">費用</h4>
-          <div className="space-y-2">
-            {financialData.expenses.map((item) => (
-              <div key={item.account_code} className="flex justify-between text-sm">
-                <span className="text-gray-600 ml-4">{item.account_name}</span>
-                <span className="font-medium">¥{Math.abs(item.balance).toLocaleString()}</span>
+          <div>
+            <h4 className="font-medium mb-3 text-red-700">費用</h4>
+            <div className="space-y-2 ml-4">
+              {plData.expenses.map(item => (
+                <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
+                  <span className="text-sm">{item.account_name}</span>
+                  <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
+                </div>
+              ))}
+              <div className="border-t pt-2">
+                <div className="flex justify-between font-medium">
+                  <span>費用合計</span>
+                  <span className="font-mono">{formatCurrency(totalExpenses)}</span>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="mt-2 pt-2 border-t border-gray-100">
-            <div className="flex justify-between font-medium">
-              <span>費用合計</span>
-              <span>¥{totalExpenses.toLocaleString()}</span>
             </div>
           </div>
-        </div>
 
-        {/* 当期純利益 */}
-        <div className="pt-4 border-t-2 border-gray-300">
-          <div className="flex justify-between text-lg font-bold">
-            <span>当期純利益</span>
-            <span className={netIncome >= 0 ? 'text-green-600' : 'text-red-600'}>
-              ¥{netIncome.toLocaleString()}
-            </span>
+          <div className="border-t pt-4">
+            <div className="flex justify-between text-lg font-bold">
+              <span>当期純利益</span>
+              <span className={`font-mono ${netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {formatCurrency(netIncome)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
-  // キャッシュフロー計算書コンポーネント（簡易版）
-  const CashFlowStatement = () => {
+  const renderCashFlow = () => {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">キャッシュフロー計算書（簡易版）</h3>
-        <div className="text-gray-500 text-center py-8">
-          <p>キャッシュフロー計算書の作成には、</p>
-          <p>前期比較データと追加の取引情報が必要です。</p>
-          <p className="mt-4 text-sm">過去データの入力完了後に利用可能になります。</p>
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold mb-4">キャッシュフロー計算書（簡易版）</h3>
+        <div className="text-center py-8 text-gray-500">
+          <TrendingUp className="mx-auto h-12 w-12 mb-4 text-gray-300" />
+          <p>キャッシュフロー計算書は準備中です</p>
+          <p className="text-sm mt-2">前期比較データの入力後に表示されます</p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDetailSearch = () => {
+    return (
+      <div className="space-y-4">
+        {/* 検索フィルタ */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">勘定科目</label>
+              <select
+                value={selectedAccount}
+                onChange={(e) => {
+                  setSelectedAccount(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">全て</option>
+                {accountMaster.map((acc) => (
+                  <option key={acc.account_code} value={acc.account_code}>
+                    {acc.account_code} - {acc.account_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">摘要・相手科目検索</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="検索キーワード"
+                  className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+              </div>
+            </div>
+            
+            <div className="flex items-end">
+              <button
+                onClick={() => { 
+                  setSearchTerm(''); 
+                  setSelectedAccount('');
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+              >
+                クリア
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 取引明細テーブル */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          {dataLoading ? (
+            <div className="p-8 text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              <p className="mt-2 text-gray-600">データを読み込んでいます...</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">日付</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">勘定科目</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">相手科目</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">摘要</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">借方</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">貸方</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">残高</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {transactions.map((trans) => (
+                      <tr key={trans.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm">
+                          {format(new Date(trans.transaction_date), 'MM/dd', { locale: ja })}
+                        </td>
+                        <td className="px-4 py-3 text-sm">{trans.account_name}</td>
+                        <td className="px-4 py-3 text-sm">{trans.counter_account}</td>
+                        <td className="px-4 py-3 text-sm">{trans.description}</td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          {trans.debit_amount > 0 ? trans.debit_amount.toLocaleString() : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          {trans.credit_amount > 0 ? trans.credit_amount.toLocaleString() : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          {trans.balance?.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* ページネーション */}
+              <div className="px-6 py-4 border-t flex justify-between items-center">
+                <div className="text-sm text-gray-600">
+                  {totalPages > 0 && `${currentPage} / ${totalPages} ページ`}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    前へ
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    次へ
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -318,7 +481,7 @@ export default function FinancialStatementsPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">財務分析システム</h1>
-        <p className="text-gray-600">会計データの管理と財務分析</p>
+        <p className="text-gray-600">財務諸表と詳細分析</p>
       </div>
 
       {/* サブメニュー */}
@@ -326,22 +489,14 @@ export default function FinancialStatementsPage() {
         <nav className="flex space-x-1">
           <button
             onClick={() => router.push('/finance/general-ledger')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              pathname === '/finance/general-ledger'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
+            className="flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
           >
             <FileSpreadsheet className="w-4 h-4" />
             <span>総勘定元帳</span>
           </button>
           <button
             onClick={() => router.push('/finance/financial-statements')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              pathname === '/finance/financial-statements'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
+            className="flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium bg-white text-blue-600 shadow-sm transition-colors"
           >
             <BarChart3 className="w-4 h-4" />
             <span>財務諸表</span>
@@ -349,88 +504,83 @@ export default function FinancialStatementsPage() {
         </nav>
       </div>
 
-      {/* コントロールパネル */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+      {/* 月選択とタブ */}
+      <div className="bg-white rounded-lg shadow mb-6">
+        <div className="p-4 border-b">
+          <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-gray-500" />
+              <Calendar className="w-5 h-5 text-gray-400" />
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                lang="ja"
               />
             </div>
           </div>
-          
-          <button
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            <span>エクスポート</span>
-          </button>
         </div>
-      </div>
-
-      {/* タブ */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8">
+        
+        <div className="flex border-b">
           <button
             onClick={() => setActiveTab('bs')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`px-6 py-3 text-sm font-medium ${
               activeTab === 'bs'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            <div className="flex items-center space-x-2">
-              <FileText className="w-4 h-4" />
-              <span>貸借対照表</span>
-            </div>
+            貸借対照表
           </button>
           <button
             onClick={() => setActiveTab('pl')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`px-6 py-3 text-sm font-medium ${
               activeTab === 'pl'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            <div className="flex items-center space-x-2">
-              <TrendingUp className="w-4 h-4" />
-              <span>損益計算書</span>
-            </div>
+            損益計算書
           </button>
           <button
             onClick={() => setActiveTab('cf')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`px-6 py-3 text-sm font-medium ${
               activeTab === 'cf'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            <div className="flex items-center space-x-2">
-              <DollarSign className="w-4 h-4" />
-              <span>キャッシュフロー計算書</span>
-            </div>
+            キャッシュフロー計算書
           </button>
-        </nav>
+          <button
+            onClick={() => setActiveTab('detail')}
+            className={`px-6 py-3 text-sm font-medium flex items-center ${
+              activeTab === 'detail'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Search className="w-4 h-4 mr-1" />
+            詳細検索
+          </button>
+        </div>
       </div>
 
       {/* コンテンツ */}
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-2 text-gray-600">データを読み込み中...</p>
-        </div>
-      ) : (
-        <div>
-          {activeTab === 'bs' && <BalanceSheet />}
-          {activeTab === 'pl' && <ProfitLossStatement />}
-          {activeTab === 'cf' && <CashFlowStatement />}
-        </div>
-      )}
+      <div>
+        {isLoading && activeTab !== 'detail' ? (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'bs' && renderBalanceSheet()}
+            {activeTab === 'pl' && renderProfitLoss()}
+            {activeTab === 'cf' && renderCashFlow()}
+            {activeTab === 'detail' && renderDetailSearch()}
+          </>
+        )}
+      </div>
     </div>
   );
 }
