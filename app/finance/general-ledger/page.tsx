@@ -1,10 +1,10 @@
-// /app/finance/general-ledger/page.tsx ver.8 - パスワード保護版
+// /app/finance/general-ledger/page.tsx ver.9 - AI質問機能追加版
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileSpreadsheet, Upload, Calendar, Trash2, BarChart3, Lock } from 'lucide-react';
+import { FileSpreadsheet, Upload, Calendar, Trash2, BarChart3, Lock, MessageSquare, Send, Loader2 } from 'lucide-react';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 
 interface MonthlySummary {
@@ -28,6 +28,11 @@ export default function GeneralLedgerPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+
+  // AI質問機能の状態
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -106,6 +111,12 @@ export default function GeneralLedgerPage() {
       }
 
       setMonthlySummaries(Array.from(summaryMap.values()));
+      
+      // 最新月を選択
+      if (summaryMap.size > 0) {
+        const months = Array.from(summaryMap.keys()).sort();
+        setSelectedMonth(months[months.length - 1].substring(0, 7));
+      }
     } catch (error) {
       console.error('Error fetching monthly summaries:', error);
     } finally {
@@ -146,6 +157,37 @@ export default function GeneralLedgerPage() {
       alert('削除中にエラーが発生しました');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // AI質問処理
+  const handleAiQuestion = async () => {
+    if (!aiQuestion.trim() || !selectedMonth) return;
+    
+    setAiLoading(true);
+    setAiResponse('');
+
+    try {
+      const response = await fetch('/api/finance/ai-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: aiQuestion,
+          reportMonth: selectedMonth
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        setAiResponse(data.response);
+      } else {
+        setAiResponse(`エラー: ${data.error}`);
+      }
+    } catch (err) {
+      setAiResponse('質問の処理中にエラーが発生しました');
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -276,7 +318,7 @@ export default function GeneralLedgerPage() {
       </div>
 
       {/* 月次サマリーテーブル */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow mb-6">
         <div className="p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">月次データ一覧</h2>
           
@@ -345,6 +387,46 @@ export default function GeneralLedgerPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* AI質問ボックス */}
+      <div className="bg-blue-50 rounded-lg shadow mb-6">
+        <div className="p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <MessageSquare className="mr-2 h-5 w-5" />
+            AI分析アシスタント
+          </h2>
+          
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text"
+              value={aiQuestion}
+              onChange={(e) => setAiQuestion(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAiQuestion()}
+              placeholder="例: 今月の広告費の詳細を教えて / 電気代の合計は？"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={aiLoading || !selectedMonth}
+            />
+            <button
+              onClick={handleAiQuestion}
+              disabled={aiLoading || !aiQuestion.trim() || !selectedMonth}
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            >
+              {aiLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              質問
+            </button>
+          </div>
+          
+          {!selectedMonth && (
+            <p className="text-sm text-gray-500 mb-2">対象月を選択してください</p>
+          )}
+          
+          {aiResponse && (
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <pre className="whitespace-pre-wrap text-sm font-mono text-gray-800">{aiResponse}</pre>
             </div>
           )}
         </div>
