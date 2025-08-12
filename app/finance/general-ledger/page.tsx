@@ -1,4 +1,4 @@
-// /app/finance/general-ledger/page.tsx ver.11
+// /app/finance/general-ledger/page.tsx ver.12
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -23,6 +23,7 @@ export default function GeneralLedgerPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedMonthData, setSelectedMonthData] = useState<MonthlyData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiResponse, setAiResponse] = useState('');
@@ -43,6 +44,14 @@ export default function GeneralLedgerPage() {
     }
   }, []);
 
+  // 選択された月が変更されたときの処理
+  useEffect(() => {
+    if (selectedMonth && monthlyData.length > 0) {
+      const data = monthlyData.find(d => d.report_month === selectedMonth);
+      setSelectedMonthData(data || null);
+    }
+  }, [selectedMonth, monthlyData]);
+
   const fetchMonthlyData = async () => {
     setIsLoading(true);
     try {
@@ -56,6 +65,8 @@ export default function GeneralLedgerPage() {
 
       // 月のリストを作成
       const uniqueMonths = [...new Set(monthList?.map(item => item.report_month) || [])];
+      
+      console.log('取得した月のリスト:', uniqueMonths);
       
       const monthlyDataArray: MonthlyData[] = [];
 
@@ -72,7 +83,7 @@ export default function GeneralLedgerPage() {
           .select('*')
           .eq('report_month', month);
 
-        if (!balanceError && balanceData) {
+        if (!balanceError && balanceData && balanceData.length > 0) {
           const accountCount = balanceData.length;
           const totalDebit = balanceData.reduce((sum, b) => sum + (b.total_debit || 0), 0);
           const totalCredit = balanceData.reduce((sum, b) => sum + (b.total_credit || 0), 0);
@@ -80,19 +91,44 @@ export default function GeneralLedgerPage() {
           monthlyDataArray.push({
             report_month: month,
             account_count: accountCount,
-            transaction_count: actualTransactionCount || 0, // 実際の取引件数を使用
+            transaction_count: actualTransactionCount || 0,
             total_debit: totalDebit,
             total_credit: totalCredit,
           });
+        } else {
+          // monthly_account_balanceにデータがない場合でも、general_ledgerにデータがあれば表示
+          const { data: ledgerData, error: ledgerError } = await supabase
+            .from('general_ledger')
+            .select('account_code, debit_amount, credit_amount')
+            .eq('report_month', month);
+
+          if (!ledgerError && ledgerData && ledgerData.length > 0) {
+            const uniqueAccounts = new Set(ledgerData.map(item => item.account_code));
+            const totalDebit = ledgerData.reduce((sum, item) => sum + (item.debit_amount || 0), 0);
+            const totalCredit = ledgerData.reduce((sum, item) => sum + (item.credit_amount || 0), 0);
+
+            monthlyDataArray.push({
+              report_month: month,
+              account_count: uniqueAccounts.size,
+              transaction_count: actualTransactionCount || 0,
+              total_debit: totalDebit,
+              total_credit: totalCredit,
+            });
+          }
         }
       }
 
-      // 月でソート
+      // 月でソート（降順）
       monthlyDataArray.sort((a, b) => b.report_month.localeCompare(a.report_month));
       
+      console.log('処理後のデータ:', monthlyDataArray);
+      
       setMonthlyData(monthlyDataArray);
-      if (monthlyDataArray.length > 0 && !selectedMonth) {
-        setSelectedMonth(monthlyDataArray[0].report_month);
+      if (monthlyDataArray.length > 0) {
+        // 最新の月を選択（存在する場合は現在の選択を維持）
+        if (!selectedMonth || !monthlyDataArray.find(d => d.report_month === selectedMonth)) {
+          setSelectedMonth(monthlyDataArray[0].report_month);
+        }
       }
     } catch (error) {
       console.error('データ取得エラー:', error);
@@ -131,7 +167,7 @@ export default function GeneralLedgerPage() {
   };
 
   const handleDelete = async (month: string) => {
-    if (!confirm(`${month}のデータを削除してもよろしいですか？`)) return;
+    if (!confirm(`${formatMonth(month)}のデータを削除してもよろしいですか？`)) return;
 
     try {
       const { error: ledgerError } = await supabase
@@ -149,6 +185,7 @@ export default function GeneralLedgerPage() {
       if (balanceError) throw balanceError;
 
       // 削除後、自動的にデータを再取得
+      alert(`${formatMonth(month)}のデータを削除しました`);
       fetchMonthlyData();
     } catch (error) {
       console.error('削除エラー:', error);
@@ -281,12 +318,17 @@ export default function GeneralLedgerPage() {
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="w-full md:w-64 p-2 border rounded-md"
+              disabled={monthlyData.length === 0}
             >
-              {monthlyData.map((data) => (
-                <option key={data.report_month} value={data.report_month}>
-                  {formatMonth(data.report_month)}
-                </option>
-              ))}
+              {monthlyData.length === 0 ? (
+                <option value="">データがありません</option>
+              ) : (
+                monthlyData.map((data) => (
+                  <option key={data.report_month} value={data.report_month}>
+                    {formatMonth(data.report_month)}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -309,33 +351,36 @@ export default function GeneralLedgerPage() {
                       読み込み中...
                     </td>
                   </tr>
-                ) : monthlyData.length === 0 ? (
+                ) : selectedMonthData ? (
+                  <tr className="border-b hover:bg-gray-50">
+                    <td className="py-2 px-3">{formatMonth(selectedMonthData.report_month)}</td>
+                    <td className="text-right py-2 px-3">{selectedMonthData.account_count}</td>
+                    <td className="text-right py-2 px-3">{selectedMonthData.transaction_count.toLocaleString()}</td>
+                    <td className="text-right py-2 px-3">{formatCurrency(selectedMonthData.total_debit)}</td>
+                    <td className="text-right py-2 px-3">{formatCurrency(selectedMonthData.total_credit)}</td>
+                    <td className="text-center py-2 px-3">
+                      <button
+                        onClick={() => handleDelete(selectedMonthData.report_month)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
                   <tr>
                     <td colSpan={6} className="text-center py-4 text-gray-500">
                       データがありません
                     </td>
                   </tr>
-                ) : (
-                  monthlyData.map((data) => (
-                    <tr key={data.report_month} className="border-b hover:bg-gray-50">
-                      <td className="py-2 px-3">{formatMonth(data.report_month)}</td>
-                      <td className="text-right py-2 px-3">{data.account_count}</td>
-                      <td className="text-right py-2 px-3">{data.transaction_count.toLocaleString()}</td>
-                      <td className="text-right py-2 px-3">{formatCurrency(data.total_debit)}</td>
-                      <td className="text-right py-2 px-3">{formatCurrency(data.total_credit)}</td>
-                      <td className="text-center py-2 px-3">
-                        <button
-                          onClick={() => handleDelete(data.report_month)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* 全月データ一覧（デバッグ用に一時的に表示） */}
+          <div className="mt-4 text-xs text-gray-500">
+            <p>登録済みの月: {monthlyData.map(d => formatMonth(d.report_month)).join(', ')}</p>
           </div>
 
           <div className="mt-6 flex justify-end">
