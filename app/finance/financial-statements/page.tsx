@@ -1,4 +1,4 @@
-// /app/finance/financial-statements/page.tsx ver.4
+// /app/finance/financial-statements/page.tsx ver.5
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -132,7 +132,7 @@ export default function FinancialStatementsPage() {
   const loadFinancialData = async () => {
     setIsLoading(true);
     
-    // general_ledgerから直接集計（より正確）
+    // general_ledgerから直接集計
     const { data: ledgerData, error } = await supabase
       .from('general_ledger')
       .select(`
@@ -144,6 +144,8 @@ export default function FinancialStatementsPage() {
       .eq('report_month', `${selectedMonth}-01`);
 
     if (ledgerData) {
+      console.log('取得したデータ件数:', ledgerData.length);
+      
       const accountTotals = new Map<string, { name: string, debit: number, credit: number }>();
       
       // 勘定科目ごとに集計
@@ -167,13 +169,14 @@ export default function FinancialStatementsPage() {
       const expenses: AccountBalance[] = [];
 
       accountTotals.forEach((totals, code) => {
-        const codeNum = parseInt(code);
+        // 文字列のまま比較
         let balance = 0;
         
         // 勘定科目コードによって借方・貸方の残高計算を変える
-        if ((codeNum >= 100 && codeNum < 200) || // 資産
-            (codeNum >= 1000 && codeNum < 1200) || // その他資産
-            (codeNum >= 400 && codeNum < 600)) { // 費用（600番台を除く）
+        if ((code >= '100' && code < '200') || // 資産
+            (code >= '1000' && code < '1200') || // その他資産
+            (code >= '400' && code < '600') || // 費用
+            code === '610') { // 支払利息
           // 資産・費用は借方残高
           balance = totals.debit - totals.credit;
         } else {
@@ -184,29 +187,27 @@ export default function FinancialStatementsPage() {
         const account: AccountBalance = {
           account_code: code,
           account_name: totals.name,
-          balance: Math.abs(balance) // 絶対値で表示
+          balance: Math.abs(balance)
         };
 
-        // 勘定科目の分類
-        if ((codeNum >= 100 && codeNum < 200) || (codeNum >= 1000 && codeNum < 1200)) {
+        // 勘定科目の分類（文字列比較）
+        if ((code >= '100' && code < '200') || (code >= '1000' && code < '1200')) {
           assets.push(account);
-        } else if ((codeNum >= 200 && codeNum < 300) || (codeNum >= 1200 && codeNum < 1300)) {
+        } else if ((code >= '200' && code < '300') || (code >= '1200' && code < '1300')) {
           liabilities.push(account);
-        } else if (codeNum >= 300 && codeNum < 400) {
+        } else if (code >= '300' && code < '400') {
           equity.push(account);
-        } else if ((codeNum >= 800 && codeNum < 900) || (codeNum >= 600 && codeNum < 700)) {
-          // 800番台（売上）と600番台（営業外収益）を収益として扱う
+        } else if ((code >= '800' && code < '900') || (code >= '600' && code < '610')) {
+          // 800番台（売上）と600番台（営業外収益、610を除く）を収益として扱う
           revenues.push(account);
-        } else if (codeNum >= 400 && codeNum < 600) {
-          // 400-599番台を費用として扱う（600番台は収益）
+        } else if ((code >= '400' && code < '600') || code === '610') {
+          // 400-599番台と610（支払利息）を費用として扱う
           expenses.push(account);
-        } else if (codeNum === 610) {
-          // 支払利息は費用
-          expenses.push(account);
+          console.log('費用に追加:', code, totals.name, balance);
         }
         
         // リース関連の特殊処理
-        if (codeNum >= 3000 && codeNum < 4000) {
+        if (code >= '3000' && code < '4000') {
           if (totals.name.includes('リース資産')) {
             assets.push(account);
           } else if (totals.name.includes('リース債務')) {
@@ -221,6 +222,9 @@ export default function FinancialStatementsPage() {
       equity.sort((a, b) => a.account_code.localeCompare(b.account_code));
       revenues.sort((a, b) => a.account_code.localeCompare(b.account_code));
       expenses.sort((a, b) => a.account_code.localeCompare(b.account_code));
+
+      console.log('費用の件数:', expenses.length);
+      console.log('費用データ:', expenses);
 
       setBsData({ assets, liabilities, equity });
       setPlData({ revenues, expenses });
