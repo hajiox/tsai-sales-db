@@ -1,10 +1,8 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.16
+// /components/general-ledger/GeneralLedgerImportModal.tsx ver.17
 'use client';
 
 import { useState } from 'react';
 import { X, FileText, Upload, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
 
 interface GeneralLedgerImportModalProps {
   isOpen: boolean;
@@ -18,12 +16,31 @@ export default function GeneralLedgerImportModal({
   onImportComplete,
 }: GeneralLedgerImportModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [reportMonth, setReportMonth] = useState(
-    format(new Date(), 'yyyy-MM')
-  );
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // 西暦から令和への変換
+  const toReiwa = (year: number): string => {
+    const reiwaStart = 2019;
+    if (year >= reiwaStart) {
+      const reiwaYear = year - reiwaStart + 1;
+      return reiwaYear === 1 ? '令和元' : `令和${reiwaYear}`;
+    }
+    return '';
+  };
+
+  // 年の選択肢を生成（過去3年から来年まで）
+  const currentYear = new Date().getFullYear();
+  const yearOptions = [];
+  for (let year = currentYear - 3; year <= currentYear + 1; year++) {
+    yearOptions.push(year);
+  }
+
+  // 月の選択肢
+  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -40,8 +57,8 @@ export default function GeneralLedgerImportModal({
   };
 
   const handleImport = async () => {
-    if (!selectedFile || !reportMonth) {
-      setError('ファイルと対象月を選択してください');
+    if (!selectedFile) {
+      setError('ファイルを選択してください');
       return;
     }
 
@@ -50,6 +67,8 @@ export default function GeneralLedgerImportModal({
     setSuccess(false);
 
     try {
+      const reportMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+      
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('reportMonth', reportMonth);
@@ -113,14 +132,32 @@ export default function GeneralLedgerImportModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               対象月
             </label>
-            <input
-              type="month"
-              value={reportMonth}
-              onChange={(e) => setReportMonth(e.target.value)}
-              className="w-full p-2 border rounded-md"
-              lang="ja"
-              disabled={isImporting}
-            />
+            <div className="flex space-x-2">
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="flex-1 p-2 border rounded-md"
+                disabled={isImporting}
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}年（{toReiwa(year)}年）
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="w-24 p-2 border rounded-md"
+                disabled={isImporting}
+              >
+                {monthOptions.map((month) => (
+                  <option key={month} value={month}>
+                    {month}月
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -188,7 +225,7 @@ export default function GeneralLedgerImportModal({
             </button>
             <button
               onClick={handleImport}
-              disabled={!selectedFile || !reportMonth || isImporting}
+              disabled={!selectedFile || isImporting}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
               {isImporting ? (
