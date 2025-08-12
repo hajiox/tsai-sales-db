@@ -1,13 +1,14 @@
-// /app/finance/general-ledger/page.tsx ver.9 - AI質問機能追加版
+// /app/finance/general-ledger/page.tsx ver.10
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileSpreadsheet, Upload, Calendar, Trash2, BarChart3, Lock, MessageSquare, Send, Loader2 } from 'lucide-react';
+import { FileText, Upload, Trash2, TrendingUp, Search, Download } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 
-interface MonthlySummary {
+interface MonthlyData {
   report_month: string;
   account_count: number;
   transaction_count: number;
@@ -16,65 +17,34 @@ interface MonthlySummary {
 }
 
 export default function GeneralLedgerPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [monthlySummaries, setMonthlySummaries] = useState<MonthlySummary[]>([]);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isDeleting, setIsDeleting] = useState(false);
-  
-  // パスワード認証用のstate
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-
-  // AI質問機能の状態
+  const [authError, setAuthError] = useState('');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiResponse, setAiResponse] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const router = useRouter();
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
   useEffect(() => {
-    // セッションストレージから認証状態を確認
     const authStatus = sessionStorage.getItem('financeSystemAuth');
     if (authStatus === 'authenticated') {
       setIsAuthenticated(true);
-      fetchMonthlySummaries();
+      fetchMonthlyData();
     } else {
       setIsLoading(false);
     }
   }, []);
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPasswordError('');
-
-    // APIでパスワード検証
-    try {
-      const response = await fetch('/api/finance/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-
-      if (response.ok) {
-        setIsAuthenticated(true);
-        sessionStorage.setItem('financeSystemAuth', 'authenticated');
-        fetchMonthlySummaries();
-      } else {
-        setPasswordError('パスワードが正しくありません');
-      }
-    } catch (error) {
-      setPasswordError('認証エラーが発生しました');
-    }
-  };
-
-  const fetchMonthlySummaries = async () => {
+  const fetchMonthlyData = async () => {
+    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('monthly_account_balance')
@@ -83,88 +53,113 @@ export default function GeneralLedgerPage() {
 
       if (error) throw error;
 
-      // 月ごとに集計
-      const summaryMap = new Map<string, MonthlySummary>();
+      const monthlyMap = new Map<string, MonthlyData>();
       
       for (const row of data || []) {
         const month = row.report_month;
-        if (!summaryMap.has(month)) {
-          // 該当月の詳細データを取得
-          const { data: monthData } = await supabase
-            .from('monthly_account_balance')
-            .select('*')
-            .eq('report_month', month);
-
-          const { data: transactionData } = await supabase
-            .from('general_ledger')
-            .select('*')
-            .eq('report_month', month);
-
-          summaryMap.set(month, {
+        if (!monthlyMap.has(month)) {
+          monthlyMap.set(month, {
             report_month: month,
-            account_count: monthData?.length || 0,
-            transaction_count: transactionData?.length || 0,
-            total_debit: monthData?.reduce((sum, item) => sum + (item.total_debit || 0), 0) || 0,
-            total_credit: monthData?.reduce((sum, item) => sum + (item.total_credit || 0), 0) || 0,
+            account_count: 0,
+            transaction_count: 0,
+            total_debit: 0,
+            total_credit: 0,
           });
         }
       }
 
-      setMonthlySummaries(Array.from(summaryMap.values()));
+      for (const [month, monthData] of monthlyMap) {
+        const { data: balanceData, error: balanceError } = await supabase
+          .from('monthly_account_balance')
+          .select('*')
+          .eq('report_month', month);
+
+        if (!balanceError && balanceData) {
+          monthData.account_count = balanceData.length;
+          monthData.transaction_count = balanceData.reduce((sum, b) => sum + (b.transaction_count || 0), 0);
+          monthData.total_debit = balanceData.reduce((sum, b) => sum + (b.total_debit || 0), 0);
+          monthData.total_credit = balanceData.reduce((sum, b) => sum + (b.total_credit || 0), 0);
+        }
+      }
+
+      const sortedData = Array.from(monthlyMap.values()).sort((a, b) => 
+        b.report_month.localeCompare(a.report_month)
+      );
       
-      // 最新月を選択
-      if (summaryMap.size > 0) {
-        const months = Array.from(summaryMap.keys()).sort();
-        setSelectedMonth(months[months.length - 1].substring(0, 7));
+      setMonthlyData(sortedData);
+      if (sortedData.length > 0 && !selectedMonth) {
+        setSelectedMonth(sortedData[0].report_month);
       }
     } catch (error) {
-      console.error('Error fetching monthly summaries:', error);
+      console.error('データ取得エラー:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleImportComplete = () => {
-    setIsImportModalOpen(false);
-    fetchMonthlySummaries();
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    
+    try {
+      const response = await fetch('/api/finance/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+
+      if (response.ok) {
+        sessionStorage.setItem('financeSystemAuth', 'authenticated');
+        setIsAuthenticated(true);
+        fetchMonthlyData();
+      } else {
+        setAuthError('パスワードが正しくありません');
+      }
+    } catch (error) {
+      setAuthError('認証エラーが発生しました');
+    }
   };
 
-  const handleDeleteMonth = async (month: string) => {
-    if (!confirm(`${month}のデータを削除してよろしいですか？\nこの操作は取り消せません。`)) {
-      return;
-    }
+  const handleImportComplete = () => {
+    // インポート完了後、自動的にデータを再取得して画面を更新
+    console.log('インポート完了 - データを再取得します');
+    fetchMonthlyData();
+  };
 
-    setIsDeleting(true);
+  const handleDelete = async (month: string) => {
+    if (!confirm(`${month}のデータを削除してもよろしいですか？`)) return;
+
     try {
-      const { error: glError } = await supabase
+      const { error: ledgerError } = await supabase
         .from('general_ledger')
         .delete()
         .eq('report_month', month);
 
-      if (glError) throw glError;
+      if (ledgerError) throw ledgerError;
 
-      const { error: mabError } = await supabase
+      const { error: balanceError } = await supabase
         .from('monthly_account_balance')
         .delete()
         .eq('report_month', month);
 
-      if (mabError) throw mabError;
+      if (balanceError) throw balanceError;
 
-      await fetchMonthlySummaries();
-      alert('データを削除しました');
+      // 削除後、自動的にデータを再取得
+      fetchMonthlyData();
     } catch (error) {
-      console.error('Error deleting data:', error);
-      alert('削除中にエラーが発生しました');
-    } finally {
-      setIsDeleting(false);
+      console.error('削除エラー:', error);
+      alert('削除に失敗しました');
     }
   };
 
-  // AI質問処理
-  const handleAiQuestion = async () => {
+  const handleExport = () => {
+    alert('エクスポート機能は準備中です');
+  };
+
+  const handleAiQuery = async () => {
     if (!aiQuestion.trim() || !selectedMonth) return;
-    
-    setAiLoading(true);
+
+    setIsAiLoading(true);
     setAiResponse('');
 
     try {
@@ -173,28 +168,27 @@ export default function GeneralLedgerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: aiQuestion,
-          reportMonth: selectedMonth
+          reportMonth: selectedMonth,
         }),
       });
 
       const data = await response.json();
-      
       if (response.ok) {
         setAiResponse(data.response);
       } else {
-        setAiResponse(`エラー: ${data.error}`);
+        setAiResponse('エラー: ' + data.error);
       }
-    } catch (err) {
-      setAiResponse('質問の処理中にエラーが発生しました');
+    } catch (error) {
+      setAiResponse('エラーが発生しました');
     } finally {
-      setAiLoading(false);
+      setIsAiLoading(false);
     }
   };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {
       style: 'currency',
-      currency: 'JPY'
+      currency: 'JPY',
     }).format(amount);
   };
 
@@ -203,243 +197,200 @@ export default function GeneralLedgerPage() {
     return `${date.getFullYear()}年${date.getMonth() + 1}月`;
   };
 
-  // パスワード認証画面
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full space-y-8">
-          <div className="bg-white shadow-lg rounded-lg p-8">
-            <div className="text-center mb-8">
-              <Lock className="mx-auto h-12 w-12 text-gray-400" />
-              <h2 className="mt-4 text-2xl font-bold text-gray-900">
-                財務分析システム
-              </h2>
-              <p className="mt-2 text-sm text-gray-600">
-                管理者パスワードを入力してください
-              </p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+          <h1 className="text-2xl font-bold mb-6 text-center">財務分析システム</h1>
+          <form onSubmit={handleAuth} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                管理者パスワード
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full p-2 border rounded-md"
+                required
+              />
             </div>
-            <form onSubmit={handlePasswordSubmit} className="space-y-6">
-              <div>
-                <label htmlFor="password" className="sr-only">
-                  パスワード
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="パスワード"
-                />
-              </div>
-              {passwordError && (
-                <div className="text-red-600 text-sm text-center">
-                  {passwordError}
-                </div>
-              )}
-              <button
-                type="submit"
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                ログイン
-              </button>
-            </form>
-          </div>
+            {authError && (
+              <p className="text-red-500 text-sm">{authError}</p>
+            )}
+            <button
+              type="submit"
+              className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700"
+            >
+              ログイン
+            </button>
+          </form>
         </div>
       </div>
     );
   }
 
-  // 認証済みの場合は通常の画面を表示
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">財務分析システム</h1>
+        <h1 className="text-2xl font-bold mb-2">財務分析システム</h1>
         <p className="text-gray-600">会計データの管理と財務分析</p>
       </div>
 
-      {/* サブメニュー */}
-      <div className="bg-gray-50 rounded-lg p-1 mb-6">
-        <nav className="flex space-x-1">
-          <button
-            onClick={() => router.push('/finance/general-ledger')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              pathname === '/finance/general-ledger'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>総勘定元帳</span>
-          </button>
-          <button
-            onClick={() => router.push('/finance/financial-statements')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              pathname === '/finance/financial-statements'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>財務諸表</span>
-          </button>
-        </nav>
+      <div className="flex space-x-1 mb-6">
+        <Link
+          href="/finance/general-ledger"
+          className="px-4 py-2 bg-blue-600 text-white rounded-md flex items-center"
+        >
+          <FileText className="h-4 w-4 mr-2" />
+          総勘定元帳
+        </Link>
+        <Link
+          href="/finance/financial-statements"
+          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 flex items-center"
+        >
+          <TrendingUp className="h-4 w-4 mr-2" />
+          財務諸表
+        </Link>
       </div>
 
-      {/* コントロールパネル */}
-      <div className="bg-white rounded-lg shadow mb-6">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">データ管理</h2>
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-6 border-b">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold">データ管理</h2>
             <button
               onClick={() => setIsImportModalOpen(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
             >
-              <Upload className="w-4 h-4" />
-              <span>CSVインポート</span>
+              <Upload className="h-4 w-4 mr-2" />
+              CSVインポート
             </button>
           </div>
-
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-gray-400" />
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                lang="ja"
-              />
-            </div>
-          </div>
         </div>
-      </div>
 
-      {/* 月次サマリーテーブル */}
-      <div className="bg-white rounded-lg shadow mb-6">
         <div className="p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">月次データ一覧</h2>
-          
-          {isLoading ? (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-            </div>
-          ) : monthlySummaries.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              データがありません。CSVファイルをインポートしてください。
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              対象月
+            </label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full md:w-64 p-2 border rounded-md"
+            >
+              {monthlyData.map((data) => (
+                <option key={data.report_month} value={data.report_month}>
+                  {formatMonth(data.report_month)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 px-3">対象月</th>
+                  <th className="text-right py-2 px-3">勘定科目数</th>
+                  <th className="text-right py-2 px-3">取引件数</th>
+                  <th className="text-right py-2 px-3">借方合計</th>
+                  <th className="text-right py-2 px-3">貸方合計</th>
+                  <th className="text-center py-2 px-3">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      対象月
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      勘定科目数
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      取引件数
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      借方合計
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      貸方合計
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      操作
-                    </th>
+                    <td colSpan={6} className="text-center py-4">
+                      読み込み中...
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {monthlySummaries.map((summary) => (
-                    <tr key={summary.report_month} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {formatMonth(summary.report_month)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {summary.account_count}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {summary.transaction_count.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatCurrency(summary.total_debit)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatCurrency(summary.total_credit)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                ) : monthlyData.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-4 text-gray-500">
+                      データがありません
+                    </td>
+                  </tr>
+                ) : (
+                  monthlyData.map((data) => (
+                    <tr key={data.report_month} className="border-b hover:bg-gray-50">
+                      <td className="py-2 px-3">{formatMonth(data.report_month)}</td>
+                      <td className="text-right py-2 px-3">{data.account_count}</td>
+                      <td className="text-right py-2 px-3">{data.transaction_count.toLocaleString()}</td>
+                      <td className="text-right py-2 px-3">{formatCurrency(data.total_debit)}</td>
+                      <td className="text-right py-2 px-3">{formatCurrency(data.total_credit)}</td>
+                      <td className="text-center py-2 px-3">
                         <button
-                          onClick={() => handleDeleteMonth(summary.report_month)}
-                          disabled={isDeleting}
-                          className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="削除"
+                          onClick={() => handleDelete(data.report_month)}
+                          className="text-red-600 hover:text-red-800"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-      {/* AI質問ボックス */}
-      <div className="bg-blue-50 rounded-lg shadow mb-6">
-        <div className="p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <MessageSquare className="mr-2 h-5 w-5" />
-            AI分析アシスタント
-          </h2>
-          
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={aiQuestion}
-              onChange={(e) => setAiQuestion(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleAiQuestion()}
-              placeholder="例: 今月の広告費の詳細を教えて / 電気代の合計は？"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={aiLoading || !selectedMonth}
-            />
+          <div className="mt-6 flex justify-end">
             <button
-              onClick={handleAiQuestion}
-              disabled={aiLoading || !aiQuestion.trim() || !selectedMonth}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              onClick={handleExport}
+              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center"
             >
-              {aiLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-              質問
+              <Download className="h-4 w-4 mr-2" />
+              エクスポート
             </button>
           </div>
-          
-          {!selectedMonth && (
-            <p className="text-sm text-gray-500 mb-2">対象月を選択してください</p>
-          )}
-          
+        </div>
+      </div>
+
+      <div className="mt-6 bg-blue-50 rounded-lg shadow p-6">
+        <div className="flex items-center mb-4">
+          <Search className="h-5 w-5 text-blue-600 mr-2" />
+          <h3 className="text-lg font-semibold">AI分析アシスタント</h3>
+        </div>
+        <div className="space-y-4">
+          <input
+            type="text"
+            value={aiQuestion}
+            onChange={(e) => setAiQuestion(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleAiQuery()}
+            placeholder="例: 今月の広告費の詳細を教えて / 電気代の合計は？"
+            className="w-full p-3 border rounded-md"
+            disabled={isAiLoading || !selectedMonth}
+          />
+          <button
+            onClick={handleAiQuery}
+            disabled={isAiLoading || !aiQuestion.trim() || !selectedMonth}
+            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+          >
+            {isAiLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                分析中...
+              </>
+            ) : (
+              <>
+                <Search className="h-4 w-4 mr-2" />
+                質問する
+              </>
+            )}
+          </button>
           {aiResponse && (
-            <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <pre className="whitespace-pre-wrap text-sm font-mono text-gray-800">{aiResponse}</pre>
+            <div className="bg-white p-4 rounded-md border">
+              <pre className="whitespace-pre-wrap text-sm">{aiResponse}</pre>
             </div>
           )}
         </div>
       </div>
 
-      {/* インポートモーダル */}
-      {isImportModalOpen && (
-        <GeneralLedgerImportModal
-          isOpen={isImportModalOpen}
-          onClose={() => setIsImportModalOpen(false)}
-          onImportComplete={handleImportComplete}
-        />
-      )}
+      <GeneralLedgerImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportComplete={handleImportComplete}
+      />
     </div>
   );
 }
