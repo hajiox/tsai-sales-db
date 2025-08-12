@@ -23,7 +23,6 @@ export default function GeneralLedgerPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [selectedMonthData, setSelectedMonthData] = useState<MonthlyData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiResponse, setAiResponse] = useState('');
@@ -43,14 +42,6 @@ export default function GeneralLedgerPage() {
       setIsLoading(false);
     }
   }, []);
-
-  // 選択された月が変更されたときの処理
-  useEffect(() => {
-    if (selectedMonth && monthlyData.length > 0) {
-      const data = monthlyData.find(d => d.report_month === selectedMonth);
-      setSelectedMonthData(data || null);
-    }
-  }, [selectedMonth, monthlyData]);
 
   const fetchMonthlyData = async () => {
     setIsLoading(true);
@@ -238,6 +229,11 @@ export default function GeneralLedgerPage() {
     return `${date.getFullYear()}年${date.getMonth() + 1}月`;
   };
 
+  // 選択された月のデータを取得
+  const getSelectedMonthData = () => {
+    return monthlyData.find(data => data.report_month === selectedMonth) || null;
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -270,6 +266,8 @@ export default function GeneralLedgerPage() {
       </div>
     );
   }
+
+  const selectedMonthData = getSelectedMonthData();
 
   return (
     <div className="p-6">
@@ -378,7 +376,7 @@ export default function GeneralLedgerPage() {
             </table>
           </div>
 
-          {/* 全月データ一覧（デバッグ用に一時的に表示） */}
+          {/* 全月データ一覧（デバッグ用） */}
           <div className="mt-4 text-xs text-gray-500">
             <p>登録済みの月: {monthlyData.map(d => formatMonth(d.report_month)).join(', ')}</p>
           </div>
