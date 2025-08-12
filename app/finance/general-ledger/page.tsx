@@ -1,4 +1,4 @@
-// /app/finance/general-ledger/page.tsx ver.12
+// /app/finance/general-ledger/page.tsx ver.13
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -115,11 +115,8 @@ export default function GeneralLedgerPage() {
       console.log('処理後のデータ:', monthlyDataArray);
       
       setMonthlyData(monthlyDataArray);
-      if (monthlyDataArray.length > 0) {
-        // 最新の月を選択（存在する場合は現在の選択を維持）
-        if (!selectedMonth || !monthlyDataArray.find(d => d.report_month === selectedMonth)) {
-          setSelectedMonth(monthlyDataArray[0].report_month);
-        }
+      if (monthlyDataArray.length > 0 && !selectedMonth) {
+        setSelectedMonth(monthlyDataArray[0].report_month);
       }
     } catch (error) {
       console.error('データ取得エラー:', error);
@@ -176,7 +173,6 @@ export default function GeneralLedgerPage() {
       if (balanceError) throw balanceError;
 
       // 削除後、自動的にデータを再取得
-      alert(`${formatMonth(month)}のデータを削除しました`);
       fetchMonthlyData();
     } catch (error) {
       console.error('削除エラー:', error);
@@ -229,11 +225,6 @@ export default function GeneralLedgerPage() {
     return `${date.getFullYear()}年${date.getMonth() + 1}月`;
   };
 
-  // 選択された月のデータを取得
-  const getSelectedMonthData = () => {
-    return monthlyData.find(data => data.report_month === selectedMonth) || null;
-  };
-
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -266,8 +257,6 @@ export default function GeneralLedgerPage() {
       </div>
     );
   }
-
-  const selectedMonthData = getSelectedMonthData();
 
   return (
     <div className="p-6">
@@ -310,23 +299,18 @@ export default function GeneralLedgerPage() {
         <div className="p-6">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              対象月
+              対象月（AI分析用）
             </label>
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="w-full md:w-64 p-2 border rounded-md"
-              disabled={monthlyData.length === 0}
             >
-              {monthlyData.length === 0 ? (
-                <option value="">データがありません</option>
-              ) : (
-                monthlyData.map((data) => (
-                  <option key={data.report_month} value={data.report_month}>
-                    {formatMonth(data.report_month)}
-                  </option>
-                ))
-              )}
+              {monthlyData.map((data) => (
+                <option key={data.report_month} value={data.report_month}>
+                  {formatMonth(data.report_month)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -349,36 +333,33 @@ export default function GeneralLedgerPage() {
                       読み込み中...
                     </td>
                   </tr>
-                ) : selectedMonthData ? (
-                  <tr className="border-b hover:bg-gray-50">
-                    <td className="py-2 px-3">{formatMonth(selectedMonthData.report_month)}</td>
-                    <td className="text-right py-2 px-3">{selectedMonthData.account_count}</td>
-                    <td className="text-right py-2 px-3">{selectedMonthData.transaction_count.toLocaleString()}</td>
-                    <td className="text-right py-2 px-3">{formatCurrency(selectedMonthData.total_debit)}</td>
-                    <td className="text-right py-2 px-3">{formatCurrency(selectedMonthData.total_credit)}</td>
-                    <td className="text-center py-2 px-3">
-                      <button
-                        onClick={() => handleDelete(selectedMonthData.report_month)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ) : (
+                ) : monthlyData.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center py-4 text-gray-500">
                       データがありません
                     </td>
                   </tr>
+                ) : (
+                  monthlyData.map((data) => (
+                    <tr key={data.report_month} className="border-b hover:bg-gray-50">
+                      <td className="py-2 px-3">{formatMonth(data.report_month)}</td>
+                      <td className="text-right py-2 px-3">{data.account_count}</td>
+                      <td className="text-right py-2 px-3">{data.transaction_count.toLocaleString()}</td>
+                      <td className="text-right py-2 px-3">{formatCurrency(data.total_debit)}</td>
+                      <td className="text-right py-2 px-3">{formatCurrency(data.total_credit)}</td>
+                      <td className="text-center py-2 px-3">
+                        <button
+                          onClick={() => handleDelete(data.report_month)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
-          </div>
-
-          {/* 全月データ一覧（デバッグ用） */}
-          <div className="mt-4 text-xs text-gray-500">
-            <p>登録済みの月: {monthlyData.map(d => formatMonth(d.report_month)).join(', ')}</p>
           </div>
 
           <div className="mt-6 flex justify-end">
