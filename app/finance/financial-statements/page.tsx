@@ -1,4 +1,4 @@
-// /app/finance/financial-statements/page.tsx ver.3 - 詳細検索タブ追加版
+// /app/finance/financial-statements/page.tsx ver.4
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -132,51 +132,95 @@ export default function FinancialStatementsPage() {
   const loadFinancialData = async () => {
     setIsLoading(true);
     
-    const { data: balances, error } = await supabase
-      .from('monthly_account_balance')
+    // general_ledgerから直接集計（より正確）
+    const { data: ledgerData, error } = await supabase
+      .from('general_ledger')
       .select(`
         account_code,
-        closing_balance,
+        debit_amount,
+        credit_amount,
         account_master!inner(account_name)
       `)
       .eq('report_month', `${selectedMonth}-01`);
 
-    if (balances) {
+    if (ledgerData) {
+      const accountTotals = new Map<string, { name: string, debit: number, credit: number }>();
+      
+      // 勘定科目ごとに集計
+      ledgerData.forEach(item => {
+        const code = item.account_code;
+        const name = item.account_master?.account_name || '';
+        
+        if (!accountTotals.has(code)) {
+          accountTotals.set(code, { name, debit: 0, credit: 0 });
+        }
+        
+        const account = accountTotals.get(code)!;
+        account.debit += item.debit_amount || 0;
+        account.credit += item.credit_amount || 0;
+      });
+
       const assets: AccountBalance[] = [];
       const liabilities: AccountBalance[] = [];
       const equity: AccountBalance[] = [];
       const revenues: AccountBalance[] = [];
       const expenses: AccountBalance[] = [];
 
-      balances.forEach(item => {
+      accountTotals.forEach((totals, code) => {
+        const codeNum = parseInt(code);
+        let balance = 0;
+        
+        // 勘定科目コードによって借方・貸方の残高計算を変える
+        if ((codeNum >= 100 && codeNum < 200) || // 資産
+            (codeNum >= 1000 && codeNum < 1200) || // その他資産
+            (codeNum >= 400 && codeNum < 600)) { // 費用（600番台を除く）
+          // 資産・費用は借方残高
+          balance = totals.debit - totals.credit;
+        } else {
+          // 負債・純資産・収益は貸方残高
+          balance = totals.credit - totals.debit;
+        }
+
         const account: AccountBalance = {
-          account_code: item.account_code,
-          account_name: item.account_master?.account_name || '',
-          balance: item.closing_balance || 0
+          account_code: code,
+          account_name: totals.name,
+          balance: Math.abs(balance) // 絶対値で表示
         };
 
-        const code = parseInt(item.account_code);
-        
-        if ((code >= 100 && code < 200) || (code >= 1000 && code < 1200)) {
+        // 勘定科目の分類
+        if ((codeNum >= 100 && codeNum < 200) || (codeNum >= 1000 && codeNum < 1200)) {
           assets.push(account);
-        } else if ((code >= 200 && code < 300) || (code >= 1200 && code < 1300)) {
+        } else if ((codeNum >= 200 && codeNum < 300) || (codeNum >= 1200 && codeNum < 1300)) {
           liabilities.push(account);
-        } else if (code >= 300 && code < 400) {
+        } else if (codeNum >= 300 && codeNum < 400) {
           equity.push(account);
-        } else if (code >= 800 && code < 900) {
+        } else if ((codeNum >= 800 && codeNum < 900) || (codeNum >= 600 && codeNum < 700)) {
+          // 800番台（売上）と600番台（営業外収益）を収益として扱う
           revenues.push(account);
-        } else if (code >= 400 && code < 700) {
+        } else if (codeNum >= 400 && codeNum < 600) {
+          // 400-599番台を費用として扱う（600番台は収益）
+          expenses.push(account);
+        } else if (codeNum === 610) {
+          // 支払利息は費用
           expenses.push(account);
         }
         
-        if (code >= 3000 && code < 4000) {
-          if (account.account_name.includes('リース資産')) {
+        // リース関連の特殊処理
+        if (codeNum >= 3000 && codeNum < 4000) {
+          if (totals.name.includes('リース資産')) {
             assets.push(account);
-          } else if (account.account_name.includes('リース債務')) {
+          } else if (totals.name.includes('リース債務')) {
             liabilities.push(account);
           }
         }
       });
+
+      // ソート
+      assets.sort((a, b) => a.account_code.localeCompare(b.account_code));
+      liabilities.sort((a, b) => a.account_code.localeCompare(b.account_code));
+      equity.sort((a, b) => a.account_code.localeCompare(b.account_code));
+      revenues.sort((a, b) => a.account_code.localeCompare(b.account_code));
+      expenses.sort((a, b) => a.account_code.localeCompare(b.account_code));
 
       setBsData({ assets, liabilities, equity });
       setPlData({ revenues, expenses });
@@ -286,12 +330,16 @@ export default function FinancialStatementsPage() {
           <div>
             <h4 className="font-medium mb-3 text-green-700">収益</h4>
             <div className="space-y-2 ml-4">
-              {plData.revenues.map(item => (
-                <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
-                  <span className="text-sm">{item.account_name}</span>
-                  <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
-                </div>
-              ))}
+              {plData.revenues.length === 0 ? (
+                <div className="text-sm text-gray-500">データがありません</div>
+              ) : (
+                plData.revenues.map(item => (
+                  <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
+                    <span className="text-sm">{item.account_code} - {item.account_name}</span>
+                    <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
+                  </div>
+                ))
+              )}
               <div className="border-t pt-2">
                 <div className="flex justify-between font-medium">
                   <span>収益合計</span>
@@ -304,12 +352,16 @@ export default function FinancialStatementsPage() {
           <div>
             <h4 className="font-medium mb-3 text-red-700">費用</h4>
             <div className="space-y-2 ml-4">
-              {plData.expenses.map(item => (
-                <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
-                  <span className="text-sm">{item.account_name}</span>
-                  <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
-                </div>
-              ))}
+              {plData.expenses.length === 0 ? (
+                <div className="text-sm text-gray-500">データがありません</div>
+              ) : (
+                plData.expenses.map(item => (
+                  <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
+                    <span className="text-sm">{item.account_code} - {item.account_name}</span>
+                    <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
+                  </div>
+                ))
+              )}
               <div className="border-t pt-2">
                 <div className="flex justify-between font-medium">
                   <span>費用合計</span>
@@ -323,7 +375,7 @@ export default function FinancialStatementsPage() {
             <div className="flex justify-between text-lg font-bold">
               <span>当期純利益</span>
               <span className={`font-mono ${netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(netIncome)}
+                {netIncome >= 0 ? '' : '-'}{formatCurrency(Math.abs(netIncome))}
               </span>
             </div>
           </div>
