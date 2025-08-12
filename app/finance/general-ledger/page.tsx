@@ -1,4 +1,4 @@
-// /app/finance/general-ledger/page.tsx ver.13
+// /app/finance/general-ledger/page.tsx ver.14
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -46,80 +46,73 @@ export default function GeneralLedgerPage() {
   const fetchMonthlyData = async () => {
     setIsLoading(true);
     try {
-      // 月ごとの実際の取引件数を取得（general_ledgerから直接集計）
-      const { data: monthList, error: monthError } = await supabase
-        .from('general_ledger')
-        .select('report_month')
+      // monthly_account_balanceから月ごとの集計データを取得
+      const { data: balanceData, error: balanceError } = await supabase
+        .from('monthly_account_balance')
+        .select('report_month, account_code, total_debit, total_credit, transaction_count')
         .order('report_month', { ascending: false });
 
-      if (monthError) throw monthError;
+      if (balanceError) {
+        console.error('monthly_account_balance取得エラー:', balanceError);
+        throw balanceError;
+      }
 
-      // 月のリストを作成
-      const uniqueMonths = [...new Set(monthList?.map(item => item.report_month) || [])];
-      
-      console.log('取得した月のリスト:', uniqueMonths);
-      
-      const monthlyDataArray: MonthlyData[] = [];
+      // 月ごとに集計
+      const monthlyMap = new Map<string, MonthlyData>();
 
-      for (const month of uniqueMonths) {
-        // general_ledgerから実際の取引件数を取得
-        const { count: actualTransactionCount, error: countError } = await supabase
+      if (balanceData && balanceData.length > 0) {
+        for (const record of balanceData) {
+          const month = record.report_month;
+          
+          if (!monthlyMap.has(month)) {
+            monthlyMap.set(month, {
+              report_month: month,
+              account_count: 0,
+              transaction_count: 0,
+              total_debit: 0,
+              total_credit: 0,
+            });
+          }
+
+          const monthData = monthlyMap.get(month)!;
+          monthData.account_count += 1;
+          monthData.total_debit += record.total_debit || 0;
+          monthData.total_credit += record.total_credit || 0;
+        }
+      }
+
+      // general_ledgerから実際の取引件数を取得して更新
+      const monthArray = Array.from(monthlyMap.keys());
+      
+      for (const month of monthArray) {
+        const { count: actualCount, error: countError } = await supabase
           .from('general_ledger')
           .select('*', { count: 'exact', head: true })
           .eq('report_month', month);
 
-        // monthly_account_balanceから勘定科目数と金額合計を取得
-        const { data: balanceData, error: balanceError } = await supabase
-          .from('monthly_account_balance')
-          .select('*')
-          .eq('report_month', month);
-
-        if (!balanceError && balanceData && balanceData.length > 0) {
-          const accountCount = balanceData.length;
-          const totalDebit = balanceData.reduce((sum, b) => sum + (b.total_debit || 0), 0);
-          const totalCredit = balanceData.reduce((sum, b) => sum + (b.total_credit || 0), 0);
-
-          monthlyDataArray.push({
-            report_month: month,
-            account_count: accountCount,
-            transaction_count: actualTransactionCount || 0,
-            total_debit: totalDebit,
-            total_credit: totalCredit,
-          });
-        } else {
-          // monthly_account_balanceにデータがない場合でも、general_ledgerにデータがあれば表示
-          const { data: ledgerData, error: ledgerError } = await supabase
-            .from('general_ledger')
-            .select('account_code, debit_amount, credit_amount')
-            .eq('report_month', month);
-
-          if (!ledgerError && ledgerData && ledgerData.length > 0) {
-            const uniqueAccounts = new Set(ledgerData.map(item => item.account_code));
-            const totalDebit = ledgerData.reduce((sum, item) => sum + (item.debit_amount || 0), 0);
-            const totalCredit = ledgerData.reduce((sum, item) => sum + (item.credit_amount || 0), 0);
-
-            monthlyDataArray.push({
-              report_month: month,
-              account_count: uniqueAccounts.size,
-              transaction_count: actualTransactionCount || 0,
-              total_debit: totalDebit,
-              total_credit: totalCredit,
-            });
-          }
+        if (!countError && actualCount !== null) {
+          const monthData = monthlyMap.get(month)!;
+          monthData.transaction_count = actualCount;
         }
       }
 
-      // 月でソート（降順）
-      monthlyDataArray.sort((a, b) => b.report_month.localeCompare(a.report_month));
-      
-      console.log('処理後のデータ:', monthlyDataArray);
+      // MapをArrayに変換してソート
+      const monthlyDataArray = Array.from(monthlyMap.values()).sort(
+        (a, b) => b.report_month.localeCompare(a.report_month)
+      );
+
+      console.log('取得した月次データ:', monthlyDataArray);
       
       setMonthlyData(monthlyDataArray);
+      
+      // 初回のみ最新月を選択
       if (monthlyDataArray.length > 0 && !selectedMonth) {
         setSelectedMonth(monthlyDataArray[0].report_month);
       }
     } catch (error) {
       console.error('データ取得エラー:', error);
+      // エラーが発生した場合も空配列をセット
+      setMonthlyData([]);
     } finally {
       setIsLoading(false);
     }
