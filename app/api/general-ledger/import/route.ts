@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.30
+// /app/api/general-ledger/import/route.ts ver.31
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -158,10 +158,21 @@ export async function POST(request: NextRequest) {
  try {
    const formData = await request.formData();
    const file = formData.get('file') as File;
-   const reportMonth = formData.get('reportMonth') as string;
+   let reportMonth = formData.get('reportMonth') as string;
    
    if (!file || !reportMonth) {
      return NextResponse.json({ error: 'ファイルと対象月は必須です' }, { status: 400 });
+   }
+   
+   // reportMonthを確実にYYYY-MM-DD形式に変換
+   // YYYY-MM形式の場合は01日を追加
+   if (reportMonth.match(/^\d{4}-\d{2}$/)) {
+     reportMonth = `${reportMonth}-01`;
+     console.log('報告月を変換:', reportMonth);
+   } else if (!reportMonth.match(/^\d{4}-\d{2}-\d{2}$/)) {
+     return NextResponse.json({ 
+       error: '対象月の形式が不正です。YYYY-MMまたはYYYY-MM-DD形式で指定してください' 
+     }, { status: 400 });
    }
    
    console.log('処理開始:', {
