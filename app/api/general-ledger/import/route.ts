@@ -1,361 +1,377 @@
-// /app/api/general-ledger/import/route.ts ver.28
+// /app/api/general-ledger/import/route.ts ver.29
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+ process.env.NEXT_PUBLIC_SUPABASE_URL!,
+ process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Shift-JISからUTF-8への変換
-async function convertShiftJisToUtf8(buffer: ArrayBuffer): Promise<string> {
-  try {
-    // TextDecoderを使用してShift-JISをデコード
-    const decoder = new TextDecoder('shift-jis');
-    return decoder.decode(buffer);
-  } catch (error) {
-    console.log('Shift-JIS変換エラー、UTF-8として処理:', error);
-    // Shift-JIS変換に失敗した場合はUTF-8として処理
-    const decoder = new TextDecoder('utf-8');
-    return decoder.decode(buffer);
-  }
+// 独自のCSVパーサー（重複ヘッダー対応版）
+function parseCSV(text: string) {
+ const lines = text.split(/\r?\n/);
+ if (lines.length === 0) return { headers: [], rows: [] };
+ 
+ // ヘッダー行を取得
+ const headerLine = lines[0];
+ const headers = [];
+ const headerCounts = new Map();
+ 
+ // ヘッダーを分割（カンマ区切り、ダブルクォート考慮）
+ const rawHeaders = headerLine.match(/("([^"]*)"|[^,]+)/g) || [];
+ 
+ // 重複するヘッダーに番号を付ける
+ for (const rawHeader of rawHeaders) {
+   const header = rawHeader.replace(/^"|"$/g, '').trim();
+   const count = headerCounts.get(header) || 0;
+   headerCounts.set(header, count + 1);
+   
+   if (count > 0) {
+     headers.push(`${header}_${count + 1}`);
+   } else {
+     headers.push(header);
+   }
+ }
+ 
+ // データ行を処理
+ const rows = [];
+ for (let i = 1; i < lines.length; i++) {
+   const line = lines[i];
+   if (!line.trim()) continue;
+   
+   const values = line.match(/("([^"]*)"|[^,]+)/g) || [];
+   const row: any = {};
+   
+   for (let j = 0; j < headers.length; j++) {
+     const value = values[j] ? values[j].replace(/^"|"$/g, '').trim() : '';
+     row[headers[j]] = value;
+   }
+   
+   rows.push(row);
+ }
+ 
+ return { headers, rows };
 }
 
-// CSVパース関数（重複ヘッダー対応）
-function parseCSV(csvText: string): any[] {
-  const lines = csvText.split(/\r?\n/);
-  if (lines.length === 0) return [];
+// 日付のパース関数（決算月対応版）
+const parseDate = (dateStr: any) => {
+ if (!dateStr || dateStr.trim() === '') {
+   return null;
+ }
+ 
+ const dateString = dateStr.toString().trim();
+ 
+ // 令和対応
+ const reiwaMatch = dateString.match(/令和(\d+)年(\d{1,2})月(\d{1,2})日/);
+ if (reiwaMatch) {
+   const year = 2018 + parseInt(reiwaMatch[1]);
+   const month = reiwaMatch[2].padStart(2, '0');
+   const day = reiwaMatch[3].padStart(2, '0');
+   return `${year}-${month}-${day}`;
+ }
+ 
+ // 既存のパターン
+ const patterns = [
+   /(\d{4})年(\d{1,2})月(\d{1,2})日/,
+   /(\d{4})\/(\d{1,2})\/(\d{1,2})/,
+   /(\d{4})-(\d{1,2})-(\d{1,2})/,
+   /(\d{2})\/(\d{1,2})\/(\d{1,2})/  // YY/MM/DD形式
+ ];
+ 
+ for (const pattern of patterns) {
+   const match = dateString.match(pattern);
+   if (match) {
+     let year = match[1];
+     // 2桁年の場合の処理
+     if (year.length === 2) {
+       year = parseInt(year) > 50 ? `19${year}` : `20${year}`;
+     }
+     const month = match[2].padStart(2, '0');
+     const day = match[3].padStart(2, '0');
+     
+     // 日付の妥当性チェック
+     const dateObj = new Date(`${year}-${month}-${day}`);
+     if (isNaN(dateObj.getTime())) {
+       console.error(`無効な日付: ${year}-${month}-${day}`);
+       return null;
+     }
+     
+     return `${year}-${month}-${day}`;
+   }
+ }
+ 
+ // パターンにマッチしない場合
+ console.error(`日付パース失敗: "${dateString}"`);
+ return null;
+};
 
-  // ヘッダー行の処理（重複がある場合は番号を付ける）
-  const headerLine = lines[0];
-  const rawHeaders = headerLine.split(',').map(h => h.trim().replace(/^"/, '').replace(/"$/, ''));
-  
-  const headers: string[] = [];
-  const headerCounts: { [key: string]: number } = {};
-  
-  for (const header of rawHeaders) {
-    if (headerCounts[header]) {
-      headerCounts[header]++;
-      headers.push(`${header}_${headerCounts[header]}`);
-    } else {
-      headerCounts[header] = 1;
-      headers.push(header);
-    }
-  }
+// 金額のパース関数
+const parseAmount = (amountStr: any) => {
+ if (!amountStr) return 0;
+ const cleaned = amountStr.toString().replace(/[,，]/g, '').trim();
+ const amount = parseInt(cleaned);
+ return isNaN(amount) ? 0 : amount;
+};
 
-  console.log('処理後のヘッダー:', headers);
-  console.log('重複ヘッダー:', Object.entries(headerCounts).filter(([_, count]) => count > 1));
-
-  const data: any[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const values = line.split(',').map(v => v.trim().replace(/^"/, '').replace(/"$/, ''));
-    const row: any = {};
-    
-    headers.forEach((header, index) => {
-      row[header] = values[index] || '';
-    });
-    
-    data.push(row);
-  }
-
-  return data;
-}
-
-// 日付文字列をDate型に変換
-function parseDate(year: string, month: string, day: string): string {
-  const y = parseInt(year);
-  const m = parseInt(month);
-  const d = parseInt(day);
-  
-  if (isNaN(y) || isNaN(m) || isNaN(d)) {
-    return '';
-  }
-  
-  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-}
-
-// 金額をパース（カンマを除去して数値に変換）
-function parseAmount(value: string): number {
-  if (!value || value === '') return 0;
-  const cleaned = value.replace(/,/g, '').replace(/"/g, '');
-  const parsed = parseInt(cleaned);
-  return isNaN(parsed) ? 0 : parsed;
-}
-
-// 月次残高を更新する関数
+// 月次残高の更新関数
 async function updateMonthlyBalance(reportMonth: string) {
-  console.log(`月次残高の更新開始: ${reportMonth}`);
-  
-  try {
-    // まず既存の月次残高を削除
-    const { error: deleteError } = await supabase
-      .from('monthly_account_balance')
-      .delete()
-      .eq('report_month', reportMonth);
-    
-    if (deleteError) {
-      console.error('月次残高削除エラー:', deleteError);
-    }
-
-    // 新しい月次残高を計算して挿入
-    const { data: ledgerData, error: ledgerError } = await supabase
-      .from('general_ledger')
-      .select('*')
-      .eq('report_month', reportMonth)
-      .order('account_code')
-      .order('transaction_date')
-      .order('row_no');
-
-    if (ledgerError) {
-      console.error('総勘定元帳取得エラー:', ledgerError);
-      return false;
-    }
-
-    // 勘定科目ごとに集計
-    const accountMap = new Map<string, any>();
-    
-    for (const entry of ledgerData || []) {
-      if (!accountMap.has(entry.account_code)) {
-        accountMap.set(entry.account_code, {
-          account_code: entry.account_code,
-          report_month: reportMonth,
-          opening_balance: 0,
-          total_debit: 0,
-          total_credit: 0,
-          closing_balance: 0,
-          transaction_count: 0
-        });
-      }
-      
-      const account = accountMap.get(entry.account_code);
-      account.total_debit += entry.debit_amount || 0;
-      account.total_credit += entry.credit_amount || 0;
-      account.closing_balance = entry.balance || 0; // 最後の残高を保持
-      account.transaction_count += 1;
-    }
-
-    // 月次残高テーブルに挿入
-    if (accountMap.size > 0) {
-      const balanceData = Array.from(accountMap.values());
-      const { error: insertError } = await supabase
-        .from('monthly_account_balance')
-        .insert(balanceData);
-
-      if (insertError) {
-        console.error('月次残高挿入エラー:', insertError);
-        return false;
-      }
-      
-      console.log(`月次残高更新完了: ${balanceData.length}件`);
-    }
-    
-    return true;
-  } catch (error) {
-    console.error('月次残高更新エラー:', error);
-    return false;
-  }
+ try {
+   const { data, error } = await supabase.rpc('update_monthly_balance', {
+     target_month: reportMonth
+   });
+   
+   if (error) {
+     console.error('月次残高更新エラー:', error);
+     return false;
+   }
+   
+   console.log('月次残高を更新しました');
+   return true;
+ } catch (error) {
+   console.error('月次残高更新で例外発生:', error);
+   return false;
+ }
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const reportMonth = formData.get('reportMonth') as string;
-
-    if (!file || !reportMonth) {
-      return NextResponse.json(
-        { error: 'ファイルと対象月は必須です' },
-        { status: 400 }
-      );
-    }
-
-    console.log('処理開始:', {
-      fileName: file.name,
-      fileSize: file.size,
-      reportMonth: reportMonth
-    });
-
-    // ファイルをArrayBufferとして読み込み
-    const buffer = await file.arrayBuffer();
-    
-    // Shift-JISからUTF-8に変換（.txtファイルの場合）
-    let csvContent: string;
-    if (file.name.endsWith('.txt')) {
-      console.log('TXTファイル検出: Shift-JIS変換を実行');
-      csvContent = await convertShiftJisToUtf8(buffer);
-    } else {
-      // CSVファイルの場合はUTF-8として処理
-      const decoder = new TextDecoder('utf-8');
-      csvContent = decoder.decode(buffer);
-    }
-
-    // CSVパース
-    const data = parseCSV(csvContent);
-    console.log(`CSVパース完了: ${data.length}行`);
-
-    if (data.length === 0) {
-      return NextResponse.json(
-        { error: 'CSVファイルにデータがありません' },
-        { status: 400 }
-      );
-    }
-
-    // 最初の10レコードの内容を確認
-    console.log('最初の10レコード:', data.slice(0, 10));
-
-    // 勘定科目マスタのデータを準備
-    const accountMasterMap = new Map<string, any>();
-    
-    // 総勘定元帳データを準備（ブロック構造対応）
-    const generalLedgerData: any[] = [];
-    let rowNumber = 1;
-    let currentAccountCode = '';
-    let currentAccountName = '';
-    let skippedCount = 0;
-    let processedCount = 0;
-
-    for (const row of data) {
-      // タイトル行のスキップ
-      if (row['タイトル'] === '総勘定元帳') {
-        skippedCount++;
-        continue;
-      }
-
-      // 新しい勘定科目ブロックの開始を検出
-      if (row['元帳主科目コード'] && row['主科目名']) {
-        currentAccountCode = row['元帳主科目コード'];
-        currentAccountName = row['主科目名'];
-        
-        console.log(`勘定科目ブロック開始: ${currentAccountCode} - ${currentAccountName}`);
-        
-        // 勘定科目マスタに追加
-        if (!accountMasterMap.has(currentAccountCode)) {
-          accountMasterMap.set(currentAccountCode, {
-            account_code: currentAccountCode,
-            account_name: currentAccountName,
-            account_type: '未分類',
-            is_active: true
-          });
-        }
-      }
-
-      // 特殊行のスキップ
-      const description = row['摘要'] || '';
-      if (description.includes('※前月繰越')) {
-        skippedCount++;
-        continue;
-      }
-      if (description.includes('月度計') || description.includes('次月繰越') || description.includes('※')) {
-        skippedCount++;
-        continue;
-      }
-
-      // 日付データがない行はスキップ
-      if (!row['取引年'] || !row['取引月'] || !row['取引日']) {
-        skippedCount++;
-        continue;
-      }
-
-      // 取引データの作成
-      const transactionDate = parseDate(row['取引年'], row['取引月'], row['取引日']);
-      if (!transactionDate || !currentAccountCode) {
-        skippedCount++;
-        continue;
-      }
-
-      const ledgerEntry = {
-        report_month: `${reportMonth}-01`,
-        account_code: currentAccountCode,
-        transaction_date: transactionDate,
-        counter_account: row['主科目名_2'] || '',
-        department: '',
-        description: description,
-        debit_amount: parseAmount(row['借方金額']),
-        credit_amount: parseAmount(row['貸方金額']),
-        balance: parseAmount(row['残高']),
-        sheet_no: 1,
-        row_no: rowNumber++
-      };
-
-      generalLedgerData.push(ledgerEntry);
-      processedCount++;
-    }
-
-    console.log('データ処理完了:', {
-      勘定科目数: accountMasterMap.size,
-      取引件数: generalLedgerData.length,
-      スキップ件数: skippedCount,
-      処理件数: processedCount
-    });
-
-    // 勘定科目マスタの更新
-    if (accountMasterMap.size > 0) {
-      const accountMasterData = Array.from(accountMasterMap.values());
-      const { error: masterError } = await supabase
-        .from('account_master')
-        .upsert(accountMasterData, { onConflict: 'account_code' });
-
-      if (masterError) {
-        console.error('勘定科目マスタ更新エラー:', masterError);
-        throw masterError;
-      }
-      console.log(`勘定科目マスタ更新完了: ${accountMasterData.length}件`);
-    }
-
-    // 既存データの削除
-    const { error: deleteError } = await supabase
-      .from('general_ledger')
-      .delete()
-      .eq('report_month', `${reportMonth}-01`);
-
-    if (deleteError) {
-      console.error('既存データ削除エラー:', deleteError);
-      throw deleteError;
-    }
-
-    // 総勘定元帳データの挿入（バッチ処理）
-    if (generalLedgerData.length > 0) {
-      const batchSize = 500;
-      for (let i = 0; i < generalLedgerData.length; i += batchSize) {
-        const batch = generalLedgerData.slice(i, i + batchSize);
-        const { error: insertError } = await supabase
-          .from('general_ledger')
-          .insert(batch);
-
-        if (insertError) {
-          console.error(`バッチ${Math.floor(i/batchSize) + 1}挿入エラー:`, insertError);
-          throw insertError;
-        }
-        console.log(`バッチ${Math.floor(i/batchSize) + 1}挿入完了: ${batch.length}件`);
-      }
-    }
-
-    // 月次残高の更新（改善版）
-    const balanceUpdated = await updateMonthlyBalance(`${reportMonth}-01`);
-    
-    if (!balanceUpdated) {
-      console.warn('月次残高の更新に失敗しましたが、インポートは成功しました');
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'インポートが完了しました',
-      stats: {
-        accountCount: accountMasterMap.size,
-        transactionCount: generalLedgerData.length,
-        skippedCount: skippedCount,
-        balanceUpdated: balanceUpdated
-      }
-    });
-
-  } catch (error) {
-    console.error('インポートエラー:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'インポートに失敗しました' },
-      { status: 500 }
-    );
-  }
+ try {
+   const formData = await request.formData();
+   const file = formData.get('file') as File;
+   const reportMonth = formData.get('reportMonth') as string;
+   
+   if (!file || !reportMonth) {
+     return NextResponse.json({ error: 'ファイルと対象月は必須です' }, { status: 400 });
+   }
+   
+   console.log('処理開始:', {
+     fileName: file.name,
+     fileSize: file.size,
+     reportMonth: reportMonth
+   });
+   
+   // ファイル読み込みと文字コード変換
+   let text: string;
+   const fileExtension = file.name.toLowerCase().split('.').pop();
+   
+   if (fileExtension === 'txt') {
+     console.log('TXTファイル検出: Shift-JIS変換を実行');
+     const arrayBuffer = await file.arrayBuffer();
+     const decoder = new TextDecoder('shift-jis');
+     text = decoder.decode(arrayBuffer);
+   } else {
+     text = await file.text();
+   }
+   
+   // CSVパース
+   const { headers, rows } = parseCSV(text);
+   console.log('処理前のヘッダー:', headers);
+   
+   // デバッグ用：CSVファイル構造確認
+   console.log('=== CSVファイル構造確認 ===');
+   console.log('ヘッダー数:', headers.length);
+   console.log('最初の10個のヘッダー:', headers.slice(0, 10));
+   
+   // データの最初の5行を詳細に確認
+   console.log('\n=== 最初の5行のデータ ===');
+   for (let i = 0; i < Math.min(5, rows.length); i++) {
+     const row = rows[i];
+     console.log(`\n行${i + 1}:`);
+     console.log('タイトル:', row['タイトル']);
+     console.log('日付関連フィールド:');
+     console.log('  - 伝票日付:', row['伝票日付']);
+     console.log('  - 期日年:', row['期日年']);
+     console.log('  - 期日月:', row['期日月']);
+     console.log('  - 期日日:', row['期日日']);
+     console.log('勘定科目コード:', row['勘定科目コード']);
+     console.log('主科目名:', row['主科目名']);
+     console.log('金額フィールド:');
+     console.log('  - 借方金額:', row['借方金額']);
+     console.log('  - 貸方金額:', row['貸方金額']);
+     console.log('  - 残高:', row['残高']);
+   }
+   
+   // 決算特有のフィールドを探す
+   console.log('\n=== 決算関連の可能性があるフィールド ===');
+   headers.forEach((header, index) => {
+     if (header.includes('決算') || header.includes('調整') || header.includes('整理')) {
+       console.log(`列${index}: ${header}`);
+     }
+   });
+   
+   // 勘定科目を収集（ブロック構造対応）
+   const accountMap = new Map();
+   let currentAccountCode = '';
+   let currentAccountName = '';
+   
+   // 勘定科目の収集とブロック構造の解析
+   for (const row of rows) {
+     if (row['勘定科目コード'] && row['勘定科目コード'].trim() !== '') {
+       currentAccountCode = row['勘定科目コード'].trim();
+       currentAccountName = row['主科目名']?.trim() || '';
+       
+       if (currentAccountCode && currentAccountName && !accountMap.has(currentAccountCode)) {
+         accountMap.set(currentAccountCode, currentAccountName);
+         console.log(`新しい勘定科目ブロック開始: ${currentAccountCode} - ${currentAccountName}`);
+       }
+     }
+   }
+   
+   console.log(`勘定科目数: ${accountMap.size}`);
+   
+   // 勘定科目マスタの更新
+   const accountEntries = Array.from(accountMap.entries());
+   for (const [code, name] of accountEntries) {
+     const { error: accountError } = await supabase
+       .from('account_master')
+       .upsert({
+         account_code: code,
+         account_name: name,
+         account_type: '未分類',
+         is_active: true
+       }, {
+         onConflict: 'account_code'
+       });
+     
+     if (accountError) {
+       console.error('勘定科目登録エラー:', accountError);
+     }
+   }
+   
+   // 既存データの削除
+   const { error: deleteError } = await supabase
+     .from('general_ledger')
+     .delete()
+     .eq('report_month', reportMonth);
+   
+   if (deleteError) {
+     console.error('既存データ削除エラー:', deleteError);
+     return NextResponse.json({ error: '既存データの削除に失敗しました' }, { status: 500 });
+   }
+   
+   // 総勘定元帳データの処理
+   const records = [];
+   currentAccountCode = '';
+   currentAccountName = '';
+   let skippedCount = 0;
+   let processedCount = 0;
+   let rowNumber = 1;
+   
+   for (let i = 0; i < rows.length; i++) {
+     const row = rows[i];
+     
+     // 勘定科目コードの更新（ブロック構造対応）
+     if (row['勘定科目コード'] && row['勘定科目コード'].trim() !== '') {
+       currentAccountCode = row['勘定科目コード'].trim();
+       currentAccountName = row['主科目名']?.trim() || '';
+       console.log(`勘定科目切り替え（行${i + 1}）: ${currentAccountCode} - ${currentAccountName}`);
+     }
+     
+     // スキップ条件
+     if (!currentAccountCode) {
+       skippedCount++;
+       continue;
+     }
+     
+     if (row['タイトル'] === '総勘定元帳') {
+       skippedCount++;
+       continue;
+     }
+     
+     if (!row['伝票日付'] || row['伝票日付'].trim() === '') {
+       skippedCount++;
+       continue;
+     }
+     
+     // 月度計、次月繰越をスキップ
+     const description = row['摘要科目コード_2'] || row['摘要'] || '';
+     if (description.includes('月度計') || description.includes('次月繰越')) {
+       skippedCount++;
+       continue;
+     }
+     
+     // 前月繰越以外の※行をスキップ
+     if (description.includes('※') && !description.includes('前月繰越')) {
+       skippedCount++;
+       continue;
+     }
+     
+     // 日付の処理（デバッグ情報付き）
+     console.log(`行${i + 1}: 日付処理前 = "${row['伝票日付']}"`);
+     const transactionDate = parseDate(row['伝票日付']);
+     
+     if (!transactionDate) {
+       console.error(`行${i + 1}: 日付パース失敗 - "${row['伝票日付']}"`);
+       skippedCount++;
+       continue;
+     }
+     console.log(`行${i + 1}: 日付処理後 = ${transactionDate}`);
+     
+     // レコードの作成
+     const record = {
+       report_month: reportMonth,
+       account_code: currentAccountCode,
+       transaction_date: transactionDate,
+       counter_account: row['主科目名_2'] || '',
+       department: row['部門名'] || '',
+       description: description,
+       debit_amount: parseAmount(row['借方金額']),
+       credit_amount: parseAmount(row['貸方金額']),
+       balance: parseAmount(row['残高']),
+       sheet_no: 1,
+       row_no: rowNumber++
+     };
+     
+     records.push(record);
+     processedCount++;
+   }
+   
+   console.log(`処理完了: 処理済み${processedCount}件, スキップ${skippedCount}件`);
+   console.log('最初の3件のレコード:', records.slice(0, 3));
+   
+   // バッチ挿入
+   const batchSize = 500;
+   let insertedCount = 0;
+   
+   for (let i = 0; i < records.length; i += batchSize) {
+     const batch = records.slice(i, i + batchSize);
+     const { error: insertError } = await supabase
+       .from('general_ledger')
+       .insert(batch);
+     
+     if (insertError) {
+       console.error('データ挿入エラー:', insertError);
+       console.error('エラー発生バッチの最初のレコード:', batch[0]);
+       return NextResponse.json({ 
+         error: 'データの登録に失敗しました',
+         details: insertError.message
+       }, { status: 500 });
+     }
+     
+     insertedCount += batch.length;
+     console.log(`挿入完了: ${insertedCount}/${records.length}`);
+   }
+   
+   // 月次残高の更新
+   const balanceUpdated = await updateMonthlyBalance(reportMonth);
+   if (!balanceUpdated) {
+     console.warn('月次残高の更新に失敗しましたが、インポートは成功しました');
+   }
+   
+   return NextResponse.json({
+     success: true,
+     message: `${processedCount}件の取引データを登録しました`,
+     details: {
+       processed: processedCount,
+       skipped: skippedCount,
+       accounts: accountMap.size
+     }
+   });
+   
+ } catch (error) {
+   console.error('インポートエラー:', error);
+   return NextResponse.json({
+     error: 'インポート処理中にエラーが発生しました',
+     details: error instanceof Error ? error.message : '不明なエラー'
+   }, { status: 500 });
+ }
 }
