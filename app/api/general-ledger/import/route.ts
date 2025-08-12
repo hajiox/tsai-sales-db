@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.27
+// /app/api/general-ledger/import/route.ts ver.28
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -83,6 +83,80 @@ function parseAmount(value: string): number {
   const cleaned = value.replace(/,/g, '').replace(/"/g, '');
   const parsed = parseInt(cleaned);
   return isNaN(parsed) ? 0 : parsed;
+}
+
+// 月次残高を更新する関数
+async function updateMonthlyBalance(reportMonth: string) {
+  console.log(`月次残高の更新開始: ${reportMonth}`);
+  
+  try {
+    // まず既存の月次残高を削除
+    const { error: deleteError } = await supabase
+      .from('monthly_account_balance')
+      .delete()
+      .eq('report_month', reportMonth);
+    
+    if (deleteError) {
+      console.error('月次残高削除エラー:', deleteError);
+    }
+
+    // 新しい月次残高を計算して挿入
+    const { data: ledgerData, error: ledgerError } = await supabase
+      .from('general_ledger')
+      .select('*')
+      .eq('report_month', reportMonth)
+      .order('account_code')
+      .order('transaction_date')
+      .order('row_no');
+
+    if (ledgerError) {
+      console.error('総勘定元帳取得エラー:', ledgerError);
+      return false;
+    }
+
+    // 勘定科目ごとに集計
+    const accountMap = new Map<string, any>();
+    
+    for (const entry of ledgerData || []) {
+      if (!accountMap.has(entry.account_code)) {
+        accountMap.set(entry.account_code, {
+          account_code: entry.account_code,
+          report_month: reportMonth,
+          opening_balance: 0,
+          total_debit: 0,
+          total_credit: 0,
+          closing_balance: 0,
+          transaction_count: 0
+        });
+      }
+      
+      const account = accountMap.get(entry.account_code);
+      account.total_debit += entry.debit_amount || 0;
+      account.total_credit += entry.credit_amount || 0;
+      account.closing_balance = entry.balance || 0; // 最後の残高を保持
+      account.transaction_count += 1;
+    }
+
+    // 月次残高テーブルに挿入
+    if (accountMap.size > 0) {
+      const balanceData = Array.from(accountMap.values());
+      const { error: insertError } = await supabase
+        .from('monthly_account_balance')
+        .insert(balanceData);
+
+      if (insertError) {
+        console.error('月次残高挿入エラー:', insertError);
+        return false;
+      }
+      
+      console.log(`月次残高更新完了: ${balanceData.length}件`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('月次残高更新エラー:', error);
+    return false;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -259,15 +333,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 月次残高の更新
-    const { data: balanceData, error: balanceError } = await supabase.rpc(
-      'update_monthly_account_balance',
-      { target_month: `${reportMonth}-01` }
-    );
-
-    if (balanceError) {
-      console.error('月次残高更新エラー:', balanceError);
-      // エラーがあってもインポート自体は成功とする
+    // 月次残高の更新（改善版）
+    const balanceUpdated = await updateMonthlyBalance(`${reportMonth}-01`);
+    
+    if (!balanceUpdated) {
+      console.warn('月次残高の更新に失敗しましたが、インポートは成功しました');
     }
 
     return NextResponse.json({
@@ -276,7 +346,8 @@ export async function POST(request: NextRequest) {
       stats: {
         accountCount: accountMasterMap.size,
         transactionCount: generalLedgerData.length,
-        skippedCount: skippedCount
+        skippedCount: skippedCount,
+        balanceUpdated: balanceUpdated
       }
     });
 
