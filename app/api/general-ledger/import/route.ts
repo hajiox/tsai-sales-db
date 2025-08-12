@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.32
+// /app/api/general-ledger/import/route.ts ver.28
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -53,32 +53,8 @@ function parseCSV(text: string) {
   return { headers, rows };
 }
 
-// 日付のパース関数（決算月13月対応版）
-const parseDate = (dateStr: any, monthStr?: any, dayStr?: any) => {
-  // 年月日が別カラムで渡された場合（決算月対応）
-  if (arguments.length === 3) {
-    const year = parseInt(dateStr);
-    let month = parseInt(monthStr);
-    const day = parseInt(dayStr);
-    
-    if (isNaN(year) || isNaN(month) || isNaN(day)) {
-      return null;
-    }
-    
-    // 13月は7月31日として処理（決算調整月）
-    if (month === 13) {
-      month = 7;  // 7月決算なので7月として処理
-      // 決算日は7月31日固定
-      return `${year}-07-31`;
-    }
-    
-    // 通常の日付
-    const monthPadded = month.toString().padStart(2, '0');
-    const dayPadded = day.toString().padStart(2, '0');
-    return `${year}-${monthPadded}-${dayPadded}`;
-  }
-  
-  // 既存の文字列パース処理
+// 日付のパース関数
+const parseDate = (dateStr: any) => {
   if (!dateStr || dateStr.trim() === '') {
     return null;
   }
@@ -99,19 +75,21 @@ const parseDate = (dateStr: any, monthStr?: any, dayStr?: any) => {
     /(\d{4})年(\d{1,2})月(\d{1,2})日/,
     /(\d{4})\/(\d{1,2})\/(\d{1,2})/,
     /(\d{4})-(\d{1,2})-(\d{1,2})/,
-    /(\d{2})\/(\d{1,2})\/(\d{1,2})/
+    /(\d{2})\/(\d{1,2})\/(\d{1,2})/  // YY/MM/DD形式
   ];
   
   for (const pattern of patterns) {
     const match = dateString.match(pattern);
     if (match) {
       let year = match[1];
+      // 2桁年の場合の処理
       if (year.length === 2) {
         year = parseInt(year) > 50 ? `19${year}` : `20${year}`;
       }
       const month = match[2].padStart(2, '0');
       const day = match[3].padStart(2, '0');
       
+      // 日付の妥当性チェック
       const dateObj = new Date(`${year}-${month}-${day}`);
       if (isNaN(dateObj.getTime())) {
         console.error(`無効な日付: ${year}-${month}-${day}`);
@@ -158,21 +136,10 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    let reportMonth = formData.get('reportMonth') as string;
+    const reportMonth = formData.get('reportMonth') as string;
     
     if (!file || !reportMonth) {
       return NextResponse.json({ error: 'ファイルと対象月は必須です' }, { status: 400 });
-    }
-    
-    // reportMonthを確実にYYYY-MM-DD形式に変換
-    // YYYY-MM形式の場合は01日を追加
-    if (reportMonth.match(/^\d{4}-\d{2}$/)) {
-      reportMonth = `${reportMonth}-01`;
-      console.log('報告月を変換:', reportMonth);
-    } else if (!reportMonth.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      return NextResponse.json({ 
-        error: '対象月の形式が不正です。YYYY-MMまたはYYYY-MM-DD形式で指定してください' 
-      }, { status: 400 });
     }
     
     console.log('処理開始:', {
@@ -191,37 +158,13 @@ export async function POST(request: NextRequest) {
       const decoder = new TextDecoder('shift-jis');
       text = decoder.decode(arrayBuffer);
     } else {
-      // CSVファイルもShift-JISの可能性があるため試す
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const decoder = new TextDecoder('shift-jis');
-        text = decoder.decode(arrayBuffer);
-        console.log('CSVファイル: Shift-JISとして読み込み成功');
-      } catch {
-        text = await file.text();
-        console.log('CSVファイル: UTF-8として読み込み');
-      }
+      text = await file.text();
     }
     
     // CSVパース
     const { headers, rows } = parseCSV(text);
     console.log('処理前のヘッダー:', headers);
     console.log('データ行数:', rows.length);
-    
-    // デバッグ用：CSVファイル構造確認
-    console.log('=== CSVファイル構造確認 ===');
-    console.log('ヘッダー数:', headers.length);
-    console.log('最初の10個のヘッダー:', headers.slice(0, 10));
-    
-    // 決算月かどうかを判定（13月データがあるか）
-    const isSettlementMonth = rows.some(row => row['取引月'] === '13');
-    if (isSettlementMonth) {
-      console.log('決算月データを検出しました（13月のデータあり）');
-    }
-    
-    // 決算月用のカラム名判定
-    const accountCodeColumn = headers.includes('元帳主科目コード') ? '元帳主科目コード' : '勘定科目コード';
-    const accountNameColumn = '主科目名';
     
     // 勘定科目を収集（ブロック構造対応）
     const accountMap = new Map();
@@ -230,9 +173,9 @@ export async function POST(request: NextRequest) {
     
     // 勘定科目の収集とブロック構造の解析
     for (const row of rows) {
-      if (row[accountCodeColumn] && row[accountCodeColumn].trim() !== '') {
-        currentAccountCode = row[accountCodeColumn].trim();
-        currentAccountName = row[accountNameColumn]?.trim() || '';
+      if (row['勘定科目コード'] && row['勘定科目コード'].trim() !== '') {
+        currentAccountCode = row['勘定科目コード'].trim();
+        currentAccountName = row['主科目名']?.trim() || '';
         
         if (currentAccountCode && currentAccountName && !accountMap.has(currentAccountCode)) {
           accountMap.set(currentAccountCode, currentAccountName);
@@ -285,9 +228,9 @@ export async function POST(request: NextRequest) {
       const row = rows[i];
       
       // 勘定科目コードの更新（ブロック構造対応）
-      if (row[accountCodeColumn] && row[accountCodeColumn].trim() !== '') {
-        currentAccountCode = row[accountCodeColumn].trim();
-        currentAccountName = row[accountNameColumn]?.trim() || '';
+      if (row['勘定科目コード'] && row['勘定科目コード'].trim() !== '') {
+        currentAccountCode = row['勘定科目コード'].trim();
+        currentAccountName = row['主科目名']?.trim() || '';
         console.log(`勘定科目切り替え（行${i + 1}）: ${currentAccountCode} - ${currentAccountName}`);
       }
       
@@ -302,27 +245,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
       
-      // 日付の取得（決算月と通常月の両方に対応）
-      let transactionDate = null;
-      
-      // 決算月の場合（取引年、取引月、取引日が別カラム）
-      if (row['取引年'] && row['取引月'] && row['取引日']) {
-        transactionDate = parseDate(row['取引年'], row['取引月'], row['取引日']);
-      } 
-      // 通常月の場合（伝票日付カラム）
-      else if (row['伝票日付']) {
-        transactionDate = parseDate(row['伝票日付']);
-      }
-      
-      if (!transactionDate) {
+      if (!row['伝票日付'] || row['伝票日付'].trim() === '') {
         skippedCount++;
         continue;
       }
       
-      // 摘要の取得（通常月と決算月で異なる可能性）
+      // 月度計、次月繰越をスキップ
       const description = row['摘要科目コード_2'] || row['摘要'] || '';
-      
-      // 月度計、次月繰越をスキップ（通常月の処理）
       if (description.includes('月度計') || description.includes('次月繰越')) {
         skippedCount++;
         continue;
@@ -334,15 +263,19 @@ export async function POST(request: NextRequest) {
         continue;
       }
       
-      // 相手科目の取得（決算月対応）
-      const counterAccount = row['主科目名_2'] || row['相手主科目名'] || row['摘要科目名'] || '';
+      const transactionDate = parseDate(row['伝票日付']);
+      
+      if (!transactionDate) {
+        skippedCount++;
+        continue;
+      }
       
       // レコードの作成
       const record = {
         report_month: reportMonth,
         account_code: currentAccountCode,
         transaction_date: transactionDate,
-        counter_account: counterAccount,
+        counter_account: row['主科目名_2'] || '',
         department: row['部門名'] || '',
         description: description,
         debit_amount: parseAmount(row['借方金額']),
@@ -400,12 +333,11 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      message: `${processedCount}件の取引データを登録しました${isSettlementMonth ? '（決算調整含む）' : ''}`,
+      message: `${processedCount}件の取引データを登録しました`,
       details: {
         processed: processedCount,
         skipped: skippedCount,
-        accounts: accountMap.size,
-        isSettlement: isSettlementMonth
+        accounts: accountMap.size
       }
     });
     
