@@ -1,4 +1,4 @@
-// /app/finance/financial-statements/page.tsx ver.5
+// /app/finance/financial-statements/page.tsx ver.6
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -132,24 +132,43 @@ export default function FinancialStatementsPage() {
   const loadFinancialData = async () => {
     setIsLoading(true);
     
-    // general_ledgerから直接集計
-    const { data: ledgerData, error } = await supabase
-      .from('general_ledger')
-      .select(`
-        account_code,
-        debit_amount,
-        credit_amount,
-        account_master!inner(account_name)
-      `)
-      .eq('report_month', `${selectedMonth}-01`);
+    // Supabaseの1000件制限を回避するため、ページネーションで全件取得
+    let allLedgerData: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
 
-    if (ledgerData) {
-      console.log('取得したデータ件数:', ledgerData.length);
+    while (hasMore) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
       
+      const { data: ledgerData, error } = await supabase
+        .from('general_ledger')
+        .select(`
+          account_code,
+          debit_amount,
+          credit_amount,
+          account_master!inner(account_name)
+        `)
+        .eq('report_month', `${selectedMonth}-01`)
+        .range(from, to);
+
+      if (ledgerData && ledgerData.length > 0) {
+        allLedgerData = [...allLedgerData, ...ledgerData];
+        hasMore = ledgerData.length === pageSize;
+        page++;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    console.log('取得したデータ件数（全件）:', allLedgerData.length);
+
+    if (allLedgerData.length > 0) {
       const accountTotals = new Map<string, { name: string, debit: number, credit: number }>();
       
       // 勘定科目ごとに集計
-      ledgerData.forEach(item => {
+      allLedgerData.forEach(item => {
         const code = item.account_code;
         const name = item.account_master?.account_name || '';
         
@@ -169,7 +188,6 @@ export default function FinancialStatementsPage() {
       const expenses: AccountBalance[] = [];
 
       accountTotals.forEach((totals, code) => {
-        // 文字列のまま比較
         let balance = 0;
         
         // 勘定科目コードによって借方・貸方の残高計算を変える
@@ -190,7 +208,7 @@ export default function FinancialStatementsPage() {
           balance: Math.abs(balance)
         };
 
-        // 勘定科目の分類（文字列比較）
+        // 勘定科目の分類
         if ((code >= '100' && code < '200') || (code >= '1000' && code < '1200')) {
           assets.push(account);
         } else if ((code >= '200' && code < '300') || (code >= '1200' && code < '1300')) {
@@ -198,12 +216,9 @@ export default function FinancialStatementsPage() {
         } else if (code >= '300' && code < '400') {
           equity.push(account);
         } else if ((code >= '800' && code < '900') || (code >= '600' && code < '610')) {
-          // 800番台（売上）と600番台（営業外収益、610を除く）を収益として扱う
           revenues.push(account);
         } else if ((code >= '400' && code < '600') || code === '610') {
-          // 400-599番台と610（支払利息）を費用として扱う
           expenses.push(account);
-          console.log('費用に追加:', code, totals.name, balance);
         }
         
         // リース関連の特殊処理
@@ -222,9 +237,6 @@ export default function FinancialStatementsPage() {
       equity.sort((a, b) => a.account_code.localeCompare(b.account_code));
       revenues.sort((a, b) => a.account_code.localeCompare(b.account_code));
       expenses.sort((a, b) => a.account_code.localeCompare(b.account_code));
-
-      console.log('費用の件数:', expenses.length);
-      console.log('費用データ:', expenses);
 
       setBsData({ assets, liabilities, equity });
       setPlData({ revenues, expenses });
@@ -339,7 +351,7 @@ export default function FinancialStatementsPage() {
               ) : (
                 plData.revenues.map(item => (
                   <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
-                    <span className="text-sm">{item.account_code} - {item.account_name}</span>
+                    <span className="text-sm">{item.account_name}</span>
                     <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
                   </div>
                 ))
@@ -361,7 +373,7 @@ export default function FinancialStatementsPage() {
               ) : (
                 plData.expenses.map(item => (
                   <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
-                    <span className="text-sm">{item.account_code} - {item.account_name}</span>
+                    <span className="text-sm">{item.account_name}</span>
                     <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
                   </div>
                 ))
