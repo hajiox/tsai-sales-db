@@ -1,6 +1,9 @@
-/* /app/api/general-ledger/import/route.ts ver.35
-   総勘定元帳 CSV/TXT(Shift-JIS, TSV) インポート API（通常月）
-   変更点: CSV/TSV 自動判定を追加（TXT=TSV想定）
+/* /app/api/general-ledger/import/route.ts ver.36
+   総勘定元帳 CSV/TXT(Shift-JIS, TSV, 固定幅スペース) インポート API（通常月）
+   強化点:
+     - ヘッダー自動検出（先頭20行を走査）
+     - 区切り自動判定: CSV / TSV / 固定幅スペース→TSV化
+     - 解析失敗時にヘッダー候補をレスポンスに含める（400）
 */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,7 +15,6 @@ if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   throw new Error('Supabase 環境変数が未設定です。NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY')
 }
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
-
 export const runtime = 'nodejs'
 
 // ========== utils ==========
@@ -25,7 +27,6 @@ function decodeBufferByExt(buf: ArrayBuffer, filename: string): string {
   const lower = filename.toLowerCase()
   try {
     if (lower.endsWith('.txt')) {
-      // 会計ソフトTXTは概ねShift-JIS
       // @ts-ignore
       return new TextDecoder('shift_jis').decode(new Uint8Array(buf))
     }
@@ -35,19 +36,7 @@ function decodeBufferByExt(buf: ArrayBuffer, filename: string): string {
 
 type Table = string[][]
 
-function detectDelimiter(firstNonEmptyLine: string): 'csv'|'tsv' {
-  const comma = (firstNonEmptyLine.match(/,/g) ?? []).length
-  const tab = (firstNonEmptyLine.match(/\t/g) ?? []).length
-  return tab > comma ? 'tsv' : 'csv'
-}
-
-function splitTable(text: string, mode: 'csv'|'tsv'): Table {
-  if (mode === 'tsv') {
-    // TSVは引用符のエスケープが稀なため単純分割で十分
-    const lines = text.replace(/\r/g, '').split('\n').filter(l => l.length > 0)
-    return lines.map(l => l.split('\t'))
-  }
-  // CSV: 簡易クォート対応
+function splitCSV(text: string): Table {
   const out: string[][] = []
   let cur: string[] = []
   let field = ''
@@ -71,6 +60,18 @@ function splitTable(text: string, mode: 'csv'|'tsv'): Table {
   return out
 }
 
+function splitTSV(text: string): Table {
+  const lines = text.replace(/\r/g, '').split('\n').filter(l => l.length > 0)
+  return lines.map(l => l.split('\t'))
+}
+
+// 固定幅（連続スペース）→ タブ化してTSV扱い
+function toTSVFromFixed(text: string): string {
+  const lines = text.replace(/\r/g, '').split('\n')
+  // 2つ以上の半角スペース（または全角スペース群）をタブに
+  return lines.map(l => l.replace(/(?: {2,}|\u3000{1,})/g, '\t')).join('\n')
+}
+
 function dedupeHeaders(headers: string[]): string[] {
   const seen = new Map<string, number>()
   return headers.map(h => {
@@ -83,7 +84,7 @@ function dedupeHeaders(headers: string[]): string[] {
 
 function parseInteger(v?: string): number {
   if (!v) return 0
-  const s = v.replace(/[,＿\s]/g, '')
+  const s = v.replace(/[,\s＿]/g, '')
   if (s === '' || s === '-') return 0
   const n = Number(s)
   return Number.isFinite(n) ? Math.trunc(n) : 0
@@ -98,12 +99,37 @@ function normalizeDateFromString(s: string, fallbackYYYYMM01: string): string | 
   return fallbackYYYYMM01
 }
 
-function isSummaryOrSkipRow(rowJoined: string): boolean {
-  if (!rowJoined) return true
-  if (/[※＊]|\u203B/.test(rowJoined)) return true
-  if (rowJoined.includes('月度計') || rowJoined.includes('次月繰越')) return true
-  if (rowJoined.includes('総勘定元帳')) return true
+function isSummaryOrSkipRow(joined: string): boolean {
+  if (!joined) return true
+  if (/[※＊]|\u203B/.test(joined)) return true
+  if (joined.includes('月度計') || joined.includes('次月繰越')) return true
+  if (joined.includes('総勘定元帳')) return true
   return false
+}
+
+// 先頭〜20行でヘッダー候補を探す
+function findHeaderRowIndex(table: Table): number {
+  const must1 = ['勘定科目コード', '元帳主科目コード']
+  const must2 = ['伝票日付','取引日','取引年月日']
+  const maxScan = Math.min(20, table.length)
+  for (let r = 0; r < maxScan; r++) {
+    const row = table[r].map(s => (s ?? '').trim())
+    const joined = row.join('')
+    if (!joined) continue
+    const has1 = row.some(c => must1.includes(c))
+    const has2 = row.some(c => must2.includes(c))
+    if (has1 && has2) return r
+  }
+  return -1
+}
+
+// 一番「列数が多い」テーブルを選ぶ簡易評価
+function pickBestTable(cands: Table[]): Table | null {
+  const scored = cands
+    .filter(Boolean)
+    .map(t => ({ t, width: t.length ? Math.max(...t.slice(0, 50).map(r => r.length)) : 0 }))
+  scored.sort((a,b) => b.width - a.width)
+  return scored[0]?.t ?? null
 }
 
 // ========== handler ==========
@@ -118,25 +144,30 @@ export async function POST(req: NextRequest) {
     }
     const reportMonth = toReportMonth(year, month)
 
+    // 読み込み→複数パーサーで候補作成
     const buf = await file.arrayBuffer()
-    const text = decodeBufferByExt(buf, file.name)
-    const firstLine = (text.split(/\r?\n/).find(l => l.trim().length > 0) ?? '')
-    const mode = detectDelimiter(firstLine) // csv or tsv
-    const table = splitTable(text, mode)
-    if (!table.length) {
-      return NextResponse.json({ ok:false, message:'ファイルが空です（CSV/TSV）' }, { status:400 })
+    const raw = decodeBufferByExt(buf, file.name)
+    const tsvFromFixed = toTSVFromFixed(raw)
+    const candCSV  = splitCSV(raw)
+    const candTSV  = splitTSV(raw)
+    const candFIX  = splitTSV(tsvFromFixed)
+    const table = pickBestTable([candTSV, candCSV, candFIX])
+    if (!table || !table.length) {
+      return NextResponse.json({ ok:false, message:'ファイル解析に失敗（CSV/TSV/固定幅）' }, { status:400 })
     }
 
-    // 1行目をヘッダー、2行目にタイトル「総勘定元帳」が来ることがある
-    const headers = dedupeHeaders(table[0])
-    const dataRows = table.slice(1)
+    // ヘッダー行の自動検出
+    const hdrIdx = findHeaderRowIndex(table)
+    const headersRaw = hdrIdx >= 0 ? table[hdrIdx] : table[0]
+    const headers = dedupeHeaders(headersRaw)
+    const dataRows = table.slice(hdrIdx >= 0 ? hdrIdx + 1 : 1)
 
     const COL = {
       account_code: ['勘定科目コード','元帳主科目コード'],
       account_name: ['主科目名'],
       counter_account: ['主科目名_2','相手科目','相手科目名','相手科目名_2'],
       slip_date: ['伝票日付','取引日','取引年月日'],
-      description: ['摘要科目コード_2','摘要','摘要_2','内容'],
+      description: ['摘要科目コード_2','摘要','摘要_2','内容','取引内容'],
       debit: ['借方金額'],
       credit: ['貸方金額'],
       balance: ['残高'],
@@ -164,13 +195,14 @@ export async function POST(req: NextRequest) {
     if (idx.account_code < 0 || idx.slip_date < 0) {
       return NextResponse.json({
         ok:false,
-        message:`ヘッダーが想定外です（区切り=${mode}）。最低限必要: 勘定科目コード/伝票日付。検出ヘッダー: ${headers.join(' | ')}`
+        message:`ヘッダーが想定外です。検出ヘッダー: ${headers.join(' | ')} / 期待: 勘定科目コード, 伝票日付 など`
       }, { status:400 })
     }
 
     const fallbackDate = reportMonth
     let currentAccountCode = ''
     let rowNo = 0
+
     type GL = {
       account_code: string; account_name: string; transaction_date: string;
       counter_account: string; description: string; debit_amount: number;
@@ -180,24 +212,24 @@ export async function POST(req: NextRequest) {
     const accountSet = new Map<string,string>()
 
     for (const arr of dataRows) {
-      const joined = arr.join('')
-      // 2行目タイトルなどの除外
+      const row = arr.map(s => (s ?? '').trim())
+      const joined = row.join('')
       if (isSummaryOrSkipRow(joined)) continue
 
-      const ac = (arr[idx.account_code] ?? '').trim()
-      const an = idx.account_name >= 0 ? (arr[idx.account_name] ?? '').trim() : ''
+      const ac = (row[idx.account_code] ?? '').trim()
+      const an = idx.account_name >= 0 ? (row[idx.account_name] ?? '').trim() : ''
       if (ac) { currentAccountCode = ac; if (an) accountSet.set(ac, an) }
       if (!currentAccountCode) continue
 
-      const rawDate = idx.slip_date >= 0 ? (arr[idx.slip_date] ?? '') : ''
+      const rawDate = idx.slip_date >= 0 ? (row[idx.slip_date] ?? '') : ''
       const txDate = normalizeDateFromString(rawDate, fallbackDate)
       if (!txDate) continue
 
-      const debit  = idx.debit  >= 0 ? parseInteger(arr[idx.debit])  : 0
-      const credit = idx.credit >= 0 ? parseInteger(arr[idx.credit]) : 0
-      const bal    = idx.balance>= 0 ? parseInteger(arr[idx.balance]): 0
-      const ca     = idx.counter_account>=0 ? (arr[idx.counter_account] ?? '') : ''
-      const desc   = idx.description>=0 ? (arr[idx.description] ?? '') : ''
+      const debit  = idx.debit  >= 0 ? parseInteger(row[idx.debit])  : 0
+      const credit = idx.credit >= 0 ? parseInteger(row[idx.credit]) : 0
+      const bal    = idx.balance>= 0 ? parseInteger(row[idx.balance]): 0
+      const ca     = idx.counter_account>=0 ? (row[idx.counter_account] ?? '') : ''
+      const desc   = idx.description>=0 ? (row[idx.description] ?? '') : ''
 
       rowNo++
       gls.push({
@@ -217,11 +249,11 @@ export async function POST(req: NextRequest) {
     if (gls.length === 0) {
       return NextResponse.json({
         ok:false,
-        message:`取引データが0件でした。区切り=${mode} / ヘッダー=${headers.join(' | ')}`
+        message:`取引データが0件。ヘッダー=${headers.join(' | ')}（固定幅の可能性も吸収済み）`
       }, { status:400 })
     }
 
-    // ===== DB: account_master upsert =====
+    // ===== account_master upsert =====
     if (accountSet.size) {
       const payload = Array.from(accountSet.entries()).map(([code, name]) => ({
         account_code: code, account_name: name || '（名称未設定）', account_type:'未分類', is_active: true
@@ -233,7 +265,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ===== DB: delete old (0件でも成功扱い) =====
+    // ===== delete old (0件でも成功扱い) =====
     {
       const { data: r1, error: e1 } = await supabase.rpc('http_delete_gl_by_month', { p_month: reportMonth })
       if (e1 || r1 == null) {
@@ -242,7 +274,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ===== DB: insert general_ledger =====
+    // ===== insert general_ledger =====
     const glPayload = gls.map(g => ({
       report_month: reportMonth,
       account_code: g.account_code,
@@ -262,7 +294,7 @@ export async function POST(req: NextRequest) {
       if (error) return NextResponse.json({ ok:false, message:`general_ledger 登録失敗: ${error.message}` }, { status:500 })
     }
 
-    // ===== DB: monthly balance update =====
+    // ===== monthly balance update =====
     await supabase.rpc('update_monthly_balance', { target_month: reportMonth as any }).catch(() => {})
 
     return NextResponse.json({
@@ -278,11 +310,9 @@ export async function POST(req: NextRequest) {
 }
 
 /*
--- 任意: 高速削除用RPC
+-- 任意: 高速削除RPC
 create or replace function public.http_delete_gl_by_month(p_month date)
-returns integer
-language sql
-as $$
+returns integer language sql as $$
   with del as (
     delete from public.general_ledger
     where report_month = date_trunc('month', p_month)::date
