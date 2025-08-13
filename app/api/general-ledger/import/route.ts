@@ -1,377 +1,389 @@
-// /app/api/general-ledger/import/route.ts ver.29
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+/* /app/api/general-ledger/import/route.ts ver.34
+   財務分析システム：総勘定元帳 CSV/TXT インポート API（通常月用）
+   仕様ソース：引き継ぎメモ⑫・DBファイル構成⑫
+   - 入力: multipart/form-data { year:number, month:number(1-12), file: csv|txt(Shift-JIS可) }
+   - 機能:
+     1) report_month を YYYY-MM-01 に正規化
+     2) CSV/TXT(Shift-JIS) を独自パーサで読込（重複ヘッダー番号付与）
+     3) 勘定科目ブロック構造に対応（コード継承）
+     4) account_master を UPSERT
+     5) 対象月 general_ledger を削除（0件でも成功扱い）
+     6) general_ledger を 500件バッチで INSERT
+     7) public.update_monthly_balance(:report_month) を呼び出し（月次残高更新）
+   - 返却: { ok: true, reportMonth, deleted, inserted, accountsUpserted }
+   注意:
+     * 決算月（13月）専用CSVは対象外。必要なら別エンドポイントで実装。
+     * ライブラリ(csv-parse等)は使用しない。
+*/
 
-const supabase = createClient(
- process.env.NEXT_PUBLIC_SUPABASE_URL!,
- process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-// 独自のCSVパーサー（重複ヘッダー対応版）
-function parseCSV(text: string) {
- const lines = text.split(/\r?\n/);
- if (lines.length === 0) return { headers: [], rows: [] };
- 
- // ヘッダー行を取得
- const headerLine = lines[0];
- const headers = [];
- const headerCounts = new Map();
- 
- // ヘッダーを分割（カンマ区切り、ダブルクォート考慮）
- const rawHeaders = headerLine.match(/("([^"]*)"|[^,]+)/g) || [];
- 
- // 重複するヘッダーに番号を付ける
- for (const rawHeader of rawHeaders) {
-   const header = rawHeader.replace(/^"|"$/g, '').trim();
-   const count = headerCounts.get(header) || 0;
-   headerCounts.set(header, count + 1);
-   
-   if (count > 0) {
-     headers.push(`${header}_${count + 1}`);
-   } else {
-     headers.push(header);
-   }
- }
- 
- // データ行を処理
- const rows = [];
- for (let i = 1; i < lines.length; i++) {
-   const line = lines[i];
-   if (!line.trim()) continue;
-   
-   const values = line.match(/("([^"]*)"|[^,]+)/g) || [];
-   const row: any = {};
-   
-   for (let j = 0; j < headers.length; j++) {
-     const value = values[j] ? values[j].replace(/^"|"$/g, '').trim() : '';
-     row[headers[j]] = value;
-   }
-   
-   rows.push(row);
- }
- 
- return { headers, rows };
+// ---------------------- 環境変数 ----------------------
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+  throw new Error('Supabase 環境変数が未設定です。NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY')
 }
 
-// 日付のパース関数（決算月対応版）
-const parseDate = (dateStr: any) => {
- if (!dateStr || dateStr.trim() === '') {
-   return null;
- }
- 
- const dateString = dateStr.toString().trim();
- 
- // 令和対応
- const reiwaMatch = dateString.match(/令和(\d+)年(\d{1,2})月(\d{1,2})日/);
- if (reiwaMatch) {
-   const year = 2018 + parseInt(reiwaMatch[1]);
-   const month = reiwaMatch[2].padStart(2, '0');
-   const day = reiwaMatch[3].padStart(2, '0');
-   return `${year}-${month}-${day}`;
- }
- 
- // 既存のパターン
- const patterns = [
-   /(\d{4})年(\d{1,2})月(\d{1,2})日/,
-   /(\d{4})\/(\d{1,2})\/(\d{1,2})/,
-   /(\d{4})-(\d{1,2})-(\d{1,2})/,
-   /(\d{2})\/(\d{1,2})\/(\d{1,2})/  // YY/MM/DD形式
- ];
- 
- for (const pattern of patterns) {
-   const match = dateString.match(pattern);
-   if (match) {
-     let year = match[1];
-     // 2桁年の場合の処理
-     if (year.length === 2) {
-       year = parseInt(year) > 50 ? `19${year}` : `20${year}`;
-     }
-     const month = match[2].padStart(2, '0');
-     const day = match[3].padStart(2, '0');
-     
-     // 日付の妥当性チェック
-     const dateObj = new Date(`${year}-${month}-${day}`);
-     if (isNaN(dateObj.getTime())) {
-       console.error(`無効な日付: ${year}-${month}-${day}`);
-       return null;
-     }
-     
-     return `${year}-${month}-${day}`;
-   }
- }
- 
- // パターンにマッチしない場合
- console.error(`日付パース失敗: "${dateString}"`);
- return null;
-};
+// Service Role クライアント（RLS回避）
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+})
 
-// 金額のパース関数
-const parseAmount = (amountStr: any) => {
- if (!amountStr) return 0;
- const cleaned = amountStr.toString().replace(/[,，]/g, '').trim();
- const amount = parseInt(cleaned);
- return isNaN(amount) ? 0 : amount;
-};
-
-// 月次残高の更新関数
-async function updateMonthlyBalance(reportMonth: string) {
- try {
-   const { data, error } = await supabase.rpc('update_monthly_balance', {
-     target_month: reportMonth
-   });
-   
-   if (error) {
-     console.error('月次残高更新エラー:', error);
-     return false;
-   }
-   
-   console.log('月次残高を更新しました');
-   return true;
- } catch (error) {
-   console.error('月次残高更新で例外発生:', error);
-   return false;
- }
+// ---------------------- ユーティリティ ----------------------
+function toReportMonth(year: number, month: number): string {
+  // YYYY-MM-01 文字列
+  const mm = String(month).padStart(2, '0')
+  return `${year}-${mm}-01`
 }
 
-export async function POST(request: NextRequest) {
- try {
-   const formData = await request.formData();
-   const file = formData.get('file') as File;
-   const reportMonth = formData.get('reportMonth') as string;
-   
-   if (!file || !reportMonth) {
-     return NextResponse.json({ error: 'ファイルと対象月は必須です' }, { status: 400 });
-   }
-   
-   console.log('処理開始:', {
-     fileName: file.name,
-     fileSize: file.size,
-     reportMonth: reportMonth
-   });
-   
-   // ファイル読み込みと文字コード変換
-   let text: string;
-   const fileExtension = file.name.toLowerCase().split('.').pop();
-   
-   if (fileExtension === 'txt') {
-     console.log('TXTファイル検出: Shift-JIS変換を実行');
-     const arrayBuffer = await file.arrayBuffer();
-     const decoder = new TextDecoder('shift-jis');
-     text = decoder.decode(arrayBuffer);
-   } else {
-     text = await file.text();
-   }
-   
-   // CSVパース
-   const { headers, rows } = parseCSV(text);
-   console.log('処理前のヘッダー:', headers);
-   
-   // デバッグ用：CSVファイル構造確認
-   console.log('=== CSVファイル構造確認 ===');
-   console.log('ヘッダー数:', headers.length);
-   console.log('最初の10個のヘッダー:', headers.slice(0, 10));
-   
-   // データの最初の5行を詳細に確認
-   console.log('\n=== 最初の5行のデータ ===');
-   for (let i = 0; i < Math.min(5, rows.length); i++) {
-     const row = rows[i];
-     console.log(`\n行${i + 1}:`);
-     console.log('タイトル:', row['タイトル']);
-     console.log('日付関連フィールド:');
-     console.log('  - 伝票日付:', row['伝票日付']);
-     console.log('  - 期日年:', row['期日年']);
-     console.log('  - 期日月:', row['期日月']);
-     console.log('  - 期日日:', row['期日日']);
-     console.log('勘定科目コード:', row['勘定科目コード']);
-     console.log('主科目名:', row['主科目名']);
-     console.log('金額フィールド:');
-     console.log('  - 借方金額:', row['借方金額']);
-     console.log('  - 貸方金額:', row['貸方金額']);
-     console.log('  - 残高:', row['残高']);
-   }
-   
-   // 決算特有のフィールドを探す
-   console.log('\n=== 決算関連の可能性があるフィールド ===');
-   headers.forEach((header, index) => {
-     if (header.includes('決算') || header.includes('調整') || header.includes('整理')) {
-       console.log(`列${index}: ${header}`);
-     }
-   });
-   
-   // 勘定科目を収集（ブロック構造対応）
-   const accountMap = new Map();
-   let currentAccountCode = '';
-   let currentAccountName = '';
-   
-   // 勘定科目の収集とブロック構造の解析
-   for (const row of rows) {
-     if (row['勘定科目コード'] && row['勘定科目コード'].trim() !== '') {
-       currentAccountCode = row['勘定科目コード'].trim();
-       currentAccountName = row['主科目名']?.trim() || '';
-       
-       if (currentAccountCode && currentAccountName && !accountMap.has(currentAccountCode)) {
-         accountMap.set(currentAccountCode, currentAccountName);
-         console.log(`新しい勘定科目ブロック開始: ${currentAccountCode} - ${currentAccountName}`);
-       }
-     }
-   }
-   
-   console.log(`勘定科目数: ${accountMap.size}`);
-   
-   // 勘定科目マスタの更新
-   const accountEntries = Array.from(accountMap.entries());
-   for (const [code, name] of accountEntries) {
-     const { error: accountError } = await supabase
-       .from('account_master')
-       .upsert({
-         account_code: code,
-         account_name: name,
-         account_type: '未分類',
-         is_active: true
-       }, {
-         onConflict: 'account_code'
-       });
-     
-     if (accountError) {
-       console.error('勘定科目登録エラー:', accountError);
-     }
-   }
-   
-   // 既存データの削除
-   const { error: deleteError } = await supabase
-     .from('general_ledger')
-     .delete()
-     .eq('report_month', reportMonth);
-   
-   if (deleteError) {
-     console.error('既存データ削除エラー:', deleteError);
-     return NextResponse.json({ error: '既存データの削除に失敗しました' }, { status: 500 });
-   }
-   
-   // 総勘定元帳データの処理
-   const records = [];
-   currentAccountCode = '';
-   currentAccountName = '';
-   let skippedCount = 0;
-   let processedCount = 0;
-   let rowNumber = 1;
-   
-   for (let i = 0; i < rows.length; i++) {
-     const row = rows[i];
-     
-     // 勘定科目コードの更新（ブロック構造対応）
-     if (row['勘定科目コード'] && row['勘定科目コード'].trim() !== '') {
-       currentAccountCode = row['勘定科目コード'].trim();
-       currentAccountName = row['主科目名']?.trim() || '';
-       console.log(`勘定科目切り替え（行${i + 1}）: ${currentAccountCode} - ${currentAccountName}`);
-     }
-     
-     // スキップ条件
-     if (!currentAccountCode) {
-       skippedCount++;
-       continue;
-     }
-     
-     if (row['タイトル'] === '総勘定元帳') {
-       skippedCount++;
-       continue;
-     }
-     
-     if (!row['伝票日付'] || row['伝票日付'].trim() === '') {
-       skippedCount++;
-       continue;
-     }
-     
-     // 月度計、次月繰越をスキップ
-     const description = row['摘要科目コード_2'] || row['摘要'] || '';
-     if (description.includes('月度計') || description.includes('次月繰越')) {
-       skippedCount++;
-       continue;
-     }
-     
-     // 前月繰越以外の※行をスキップ
-     if (description.includes('※') && !description.includes('前月繰越')) {
-       skippedCount++;
-       continue;
-     }
-     
-     // 日付の処理（デバッグ情報付き）
-     console.log(`行${i + 1}: 日付処理前 = "${row['伝票日付']}"`);
-     const transactionDate = parseDate(row['伝票日付']);
-     
-     if (!transactionDate) {
-       console.error(`行${i + 1}: 日付パース失敗 - "${row['伝票日付']}"`);
-       skippedCount++;
-       continue;
-     }
-     console.log(`行${i + 1}: 日付処理後 = ${transactionDate}`);
-     
-     // レコードの作成
-     const record = {
-       report_month: reportMonth,
-       account_code: currentAccountCode,
-       transaction_date: transactionDate,
-       counter_account: row['主科目名_2'] || '',
-       department: row['部門名'] || '',
-       description: description,
-       debit_amount: parseAmount(row['借方金額']),
-       credit_amount: parseAmount(row['貸方金額']),
-       balance: parseAmount(row['残高']),
-       sheet_no: 1,
-       row_no: rowNumber++
-     };
-     
-     records.push(record);
-     processedCount++;
-   }
-   
-   console.log(`処理完了: 処理済み${processedCount}件, スキップ${skippedCount}件`);
-   console.log('最初の3件のレコード:', records.slice(0, 3));
-   
-   // バッチ挿入
-   const batchSize = 500;
-   let insertedCount = 0;
-   
-   for (let i = 0; i < records.length; i += batchSize) {
-     const batch = records.slice(i, i + batchSize);
-     const { error: insertError } = await supabase
-       .from('general_ledger')
-       .insert(batch);
-     
-     if (insertError) {
-       console.error('データ挿入エラー:', insertError);
-       console.error('エラー発生バッチの最初のレコード:', batch[0]);
-       return NextResponse.json({ 
-         error: 'データの登録に失敗しました',
-         details: insertError.message
-       }, { status: 500 });
-     }
-     
-     insertedCount += batch.length;
-     console.log(`挿入完了: ${insertedCount}/${records.length}`);
-   }
-   
-   // 月次残高の更新
-   const balanceUpdated = await updateMonthlyBalance(reportMonth);
-   if (!balanceUpdated) {
-     console.warn('月次残高の更新に失敗しましたが、インポートは成功しました');
-   }
-   
-   return NextResponse.json({
-     success: true,
-     message: `${processedCount}件の取引データを登録しました`,
-     details: {
-       processed: processedCount,
-       skipped: skippedCount,
-       accounts: accountMap.size
-     }
-   });
-   
- } catch (error) {
-   console.error('インポートエラー:', error);
-   return NextResponse.json({
-     error: 'インポート処理中にエラーが発生しました',
-     details: error instanceof Error ? error.message : '不明なエラー'
-   }, { status: 500 });
- }
+function normalizeDateFromString(s: string, fallbackYYYYMM01: string): string | null {
+  // "YYYY/MM/DD", "YYYY-MM-DD", "YYYYMMDD" に素朴対応
+  const t = s.trim()
+  if (!t) return null
+  // 数字のみ 8桁
+  if (/^\d{8}$/.test(t)) {
+    const y = t.slice(0, 4)
+    const m = t.slice(4, 6)
+    const d = t.slice(6, 8)
+    return `${y}-${m}-${d}`
+  }
+  // 区切りあり
+  const m1 = t.match(/^(\d{4})[\/\-年]?(\d{1,2})[\/\-月]?(\d{1,2})/)
+  if (m1) {
+    const y = m1[1]
+    const m = String(Number(m1[2])).padStart(2, '0')
+    const d = String(Number(m1[3])).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  // どうしても取れなければ対象月の1日を返す（前月繰越等で日付空の行は後でスキップする）
+  return fallbackYYYYMM01
 }
+
+function parseInteger(jpNumber: string | undefined): number {
+  if (!jpNumber) return 0
+  const s = jpNumber.replace(/[,＿\s]/g, '')
+  if (s === '' || s === '-') return 0
+  const n = Number(s)
+  return Number.isFinite(n) ? Math.trunc(n) : 0
+}
+
+function isSummaryOrSkipRow(row: Record<string, string>): boolean {
+  // 集計行やスキップ行のヒューリスティック
+  const joined = Object.values(row).join('')
+  if (!joined) return true
+  if (/[※＊]|\u203B/.test(joined)) return true // ※印
+  if (joined.includes('月度計') || joined.includes('次月繰越')) return true
+  if (joined.includes('総勘定元帳')) return true
+  return false
+}
+
+// ---- CSV独自パーサ（RFCに厳密ではないが実務CSVに十分） ----
+function splitCSV(text: string): string[][] {
+  const out: string[][] = []
+  let cur: string[] = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"'
+          i++
+        } else {
+          inQuotes = false
+        }
+      } else {
+        field += c
+      }
+    } else {
+      if (c === '"') {
+        inQuotes = true
+      } else if (c === ',') {
+        cur.push(field)
+        field = ''
+      } else if (c === '\n') {
+        cur.push(field)
+        out.push(cur)
+        cur = []
+        field = ''
+      } else if (c === '\r') {
+        // ignore
+      } else {
+        field += c
+      }
+    }
+  }
+  // 末尾
+  cur.push(field)
+  out.push(cur)
+  // 末尾空行除去
+  while (out.length && out[out.length - 1].every(v => v === '')) out.pop()
+  return out
+}
+
+function dedupeHeaders(headers: string[]): string[] {
+  const seen = new Map<string, number>()
+  return headers.map(h => {
+    const base = h.trim()
+    const count = (seen.get(base) ?? 0) + 1
+    seen.set(base, count)
+    return count === 1 ? base : `${base}_${count}`
+  })
+}
+
+// Shift-JIS判定（拡張子でのみ判定）
+function decodeBufferByExt(buf: ArrayBuffer, filename: string): string {
+  const lower = filename.toLowerCase()
+  if (lower.endsWith('.txt')) {
+    try {
+      // @ts-ignore
+      return new TextDecoder('shift_jis').decode(new Uint8Array(buf))
+    } catch {
+      return new TextDecoder().decode(new Uint8Array(buf))
+    }
+  }
+  // CSV はまず UTF-8 で試す
+  return new TextDecoder().decode(new Uint8Array(buf))
+}
+
+// ---------------------- 主要処理 ----------------------
+export const runtime = 'nodejs' // Edge では TextDecoder('shift_jis') が不安定なため nodejs を明示
+
+export async function POST(req: NextRequest) {
+  try {
+    // 1) 受信
+    const form = await req.formData()
+    const year = Number(form.get('year'))
+    const month = Number(form.get('month'))
+    const file = form.get('file') as File | null
+
+    if (!year || !month || !file) {
+      return NextResponse.json({ ok: false, message: 'year, month, file は必須です' }, { status: 400 })
+    }
+    const reportMonth = toReportMonth(year, month)
+
+    // 2) 読み込み & パース
+    const buf = await file.arrayBuffer()
+    const raw = decodeBufferByExt(buf, file.name)
+    const rows = splitCSV(raw)
+    if (!rows.length) {
+      return NextResponse.json({ ok: false, message: 'CSVにデータがありません' }, { status: 400 })
+    }
+
+    // 3) ヘッダー整形
+    let headerRow = rows[0]
+    // 一部の会計CSVは1行目がヘッダー、2行目がタイトル「総勘定元帳」のため、2行目以降がデータ
+    const headers = dedupeHeaders(headerRow)
+    const dataRows = rows.slice(1)
+
+    // 欲しいカラムの候補名
+    const COL = {
+      account_code: ['勘定科目コード', '元帳主科目コード'],
+      account_name: ['主科目名'],
+      counter_account: ['主科目名_2', '相手科目', '相手科目名', '相手科目名_2'],
+      slip_date: ['伝票日付', '取引日', '取引年月日'],
+      description: ['摘要科目コード_2', '摘要', '摘要_2', '内容'],
+      debit: ['借方金額'],
+      credit: ['貸方金額'],
+      balance: ['残高'],
+    }
+
+    const findCol = (cands: string[]) => {
+      for (const c of cands) {
+        const idx = headers.indexOf(c)
+        if (idx >= 0) return idx
+      }
+      // 重複付与パターンの自動探索（_2, _3…）
+      for (const c of cands) {
+        const idx = headers.findIndex(h => h === c || h.startsWith(`${c}_`))
+        if (idx >= 0) return idx
+      }
+      return -1
+    }
+
+    const idx = {
+      account_code: findCol(COL.account_code),
+      account_name: findCol(COL.account_name),
+      counter_account: findCol(COL.counter_account),
+      slip_date: findCol(COL.slip_date),
+      description: findCol(COL.description),
+      debit: findCol(COL.debit),
+      credit: findCol(COL.credit),
+      balance: findCol(COL.balance),
+    }
+
+    // 4) 行変換（ブロック継承）
+    const fallbackDate = reportMonth // 'YYYY-MM-01'
+    let currentAccountCode = ''
+    let sheetNo = 1
+    let rowNo = 0
+
+    type GL = {
+      account_code: string
+      account_name: string
+      transaction_date: string
+      counter_account: string
+      description: string
+      debit_amount: number
+      credit_amount: number
+      balance: number
+      sheet_no: number
+      row_no: number
+    }
+
+    const gls: GL[] = []
+    const accountSet = new Map<string, string>() // code -> name
+
+    for (const arr of dataRows) {
+      // 配列→連想
+      const obj: Record<string, string> = {}
+      headers.forEach((h, i) => (obj[h] = (arr[i] ?? '').trim()))
+
+      // 勘定科目コードが現れたら更新（ブロック開始）
+      const ac = idx.account_code >= 0 ? (obj[headers[idx.account_code]] ?? '').trim() : ''
+      const an = idx.account_name >= 0 ? (obj[headers[idx.account_name]] ?? '').trim() : ''
+      if (ac) {
+        currentAccountCode = ac
+        if (an) accountSet.set(ac, an)
+      }
+
+      // スキップ判定
+      if (!currentAccountCode) continue
+      if (isSummaryOrSkipRow(obj)) continue
+
+      // 取引日
+      const rawDate = idx.slip_date >= 0 ? obj[headers[idx.slip_date]] : ''
+      const txDate = normalizeDateFromString(rawDate, fallbackDate)
+      if (!txDate) continue // 日付不明はスキップ
+
+      // 金額・テキスト
+      const debit = idx.debit >= 0 ? parseInteger(obj[headers[idx.debit]]) : 0
+      const credit = idx.credit >= 0 ? parseInteger(obj[headers[idx.credit]]) : 0
+      const bal = idx.balance >= 0 ? parseInteger(obj[headers[idx.balance]]) : 0
+      const ca = idx.counter_account >= 0 ? (obj[headers[idx.counter_account]] ?? '') : ''
+      const desc = idx.description >= 0 ? (obj[headers[idx.description]] ?? '') : ''
+
+      rowNo += 1
+      gls.push({
+        account_code: currentAccountCode,
+        account_name: accountSet.get(currentAccountCode) ?? '',
+        transaction_date: txDate,
+        counter_account: ca,
+        description: desc,
+        debit_amount: debit,
+        credit_amount: credit,
+        balance: bal,
+        sheet_no: sheetNo,
+        row_no: rowNo,
+      })
+    }
+
+    // データ無しは異常
+    if (gls.length === 0) {
+      return NextResponse.json({ ok: false, message: '取引データが0件でした（ヘッダー不一致or集計行のみ）' }, { status: 400 })
+    }
+
+    // 5) DB 操作
+    // 5-1) 勘定科目マスタ UPSERT
+    if (accountSet.size) {
+      const upserts = Array.from(accountSet.entries()).map(([code, name]) => ({
+        account_code: code,
+        account_name: name || '（名称未設定）',
+        account_type: '未分類',
+        is_active: true,
+      }))
+      // 100件ずつ
+      for (let i = 0; i < upserts.length; i += 100) {
+        const chunk = upserts.slice(i, i + 100)
+        const { error } = await supabase
+          .from('account_master')
+          .upsert(chunk, { onConflict: 'account_code' })
+        if (error) {
+          return NextResponse.json({ ok: false, message: `account_master upsert で失敗: ${error.message}` }, { status: 500 })
+        }
+      }
+    }
+
+    // 5-2) 既存データ削除（0件でも成功扱い）
+    {
+      const { data: delCountRes, error: delErr } = await supabase
+        .rpc('http_delete_gl_by_month', { p_month: reportMonth })
+      // ↑ もし http_delete_gl_by_month が未実装なら通常DELETEを実行
+      if (delErr || delCountRes == null) {
+        const { data: delRes, error: delErr2 } = await supabase
+          .from('general_ledger')
+          .delete()
+          .eq('report_month', reportMonth)
+          .select('id', { count: 'exact', head: true })
+        if (delErr2) {
+          return NextResponse.json({ ok: false, message: `既存データ削除に失敗: ${delErr2.message}` }, { status: 500 })
+        }
+      }
+    }
+
+    // 5-3) general_ledger INSERT（500件バッチ）
+    const glPayload = gls.map((g) => ({
+      report_month: reportMonth,
+      account_code: g.account_code,
+      transaction_date: g.transaction_date,
+      counter_account: g.counter_account,
+      department: null,
+      description: g.description,
+      debit_amount: g.debit_amount,
+      credit_amount: g.credit_amount,
+      balance: g.balance,
+      sheet_no: g.sheet_no,
+      row_no: g.row_no,
+    }))
+
+    let inserted = 0
+    for (let i = 0; i < glPayload.length; i += 500) {
+      const chunk = glPayload.slice(i, i + 500)
+      const { error } = await supabase.from('general_ledger').insert(chunk)
+      if (error) {
+        return NextResponse.json({ ok: false, message: `general_ledger 登録で失敗: ${error.message}` }, { status: 500 })
+      }
+      inserted += chunk.length
+    }
+
+    // 5-4) 月次残高更新 RPC（存在する関数名で実行）
+    {
+      // update_monthly_balance(target_month date)
+      const { error: rpcErr } = await supabase.rpc('update_monthly_balance', { target_month: reportMonth as any })
+      if (rpcErr) {
+        // ここで失敗しても取込自体は成功。メッセージのみ返す。
+        console.warn('update_monthly_balance で失敗:', rpcErr.message)
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      reportMonth,
+      deleted: 'ok', // 0件でも成功扱い
+      inserted,
+      accountsUpserted: accountSet.size,
+    })
+  } catch (e: any) {
+    console.error(e)
+    return NextResponse.json({ ok: false, message: e?.message ?? 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+// ---------------------- 参考：削除用RPC（任意・DB側で用意可） ----------------------
+/*
+-- Supabase SQL Editor で作ると DELETE が高速・権限明確
+create or replace function public.http_delete_gl_by_month(p_month date)
+returns integer
+language sql
+as $$
+  with del as (
+    delete from public.general_ledger
+    where report_month = date_trunc('month', p_month)::date
+    returning 1
+  )
+  select count(*) from del;
+$$;
+*/
