@@ -1,4 +1,4 @@
-// /app/api/general-ledger/import/route.ts ver.28
+// /app/api/general-ledger/import/route.ts ver.33
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -136,10 +136,16 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const reportMonth = formData.get('reportMonth') as string;
+    let reportMonth = formData.get('reportMonth') as string;
     
     if (!file || !reportMonth) {
       return NextResponse.json({ error: 'ファイルと対象月は必須です' }, { status: 400 });
+    }
+    
+    // reportMonthをYYYY-MM-DD形式に変換
+    if (reportMonth.match(/^\d{4}-\d{2}$/)) {
+      reportMonth = `${reportMonth}-01`;
+      console.log('報告月を変換:', reportMonth);
     }
     
     console.log('処理開始:', {
@@ -272,7 +278,7 @@ export async function POST(request: NextRequest) {
       
       // レコードの作成
       const record = {
-        report_month: reportMonth,
+        report_month: reportMonth,  // YYYY-MM-DD形式
         account_code: currentAccountCode,
         transaction_date: transactionDate,
         counter_account: row['主科目名_2'] || '',
