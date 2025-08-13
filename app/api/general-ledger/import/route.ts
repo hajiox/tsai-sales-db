@@ -1,6 +1,8 @@
-/* /app/api/general-ledger/import/route.ts ver.38
+/* /app/api/general-ledger/import/route.ts ver.39
    総勘定元帳 CSV/TXT(Shift-JIS, TSV, 固定幅) インポート API（通常月）
-   追加: 自動デバッグ出力 + 原本保存(Supabase Storage)
+   修正点:
+     - 表形式CSVで「伝票日付」ではなく「取引年/取引月/取引日」で日付を表す形式に対応
+     - 年/月/日が空の行（科目見出し行）はスキップ
 */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -62,12 +64,14 @@ function parseInteger(v?: string): number {
   const s=v.replace(/[,\s＿]/g,''); if(s===''||s==='-') return 0
   const n=Number(s); return Number.isFinite(n)?Math.trunc(n):0
 }
-function normalizeDateFromString(s: string, fallbackYYYYMM01: string): string|null {
-  const t=(s??'').trim(); if(!t) return fallbackYYYYMM01
-  if(/^\d{8}$/.test(t)) return `${t.slice(0,4)}-${t.slice(4,6)}-${t.slice(6,8)}`
-  const m=t.match(/^(\d{4})[\/\-年]?(\d{1,2})[\/\-月]?(\d{1,2})/)
-  if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}-${String(+m[3]).padStart(2,'0')}`
-  return fallbackYYYYMM01
+function makeDateFromYMD(y?: string, m?: string, d?: string): string | null {
+  const yy = (y ?? '').trim(), mm = (m ?? '').trim(), dd = (d ?? '').trim()
+  if (!yy) return null
+  const yN = Number(yy), mN = Number(mm || '1'), dN = Number(dd || '1')
+  if (!Number.isFinite(yN) || !Number.isFinite(mN) || !Number.isFinite(dN)) return null
+  const MM = String(Math.max(1, Math.min(12, mN))).padStart(2,'0')
+  const DD = String(Math.max(1, Math.min(31, dN))).padStart(2,'0')
+  return `${String(yN).padStart(4,'0')}-${MM}-${DD}`
 }
 function isSummary(joined: string): boolean {
   if(!joined) return true
@@ -88,7 +92,7 @@ function splitFlexible(line: string): string[] {
   return line.split(',').map(s=>s.trim())
 }
 
-// ---------- parser A: 表形式(列に勘定科目コード) ----------
+// ---------- parser A: 表形式(列に勘定科目コード)  ←★Y/M/D対応追加
 function tryParseTable(raw: string, reportMonth: string) {
   const tsv = splitTSV(raw)
   const csv = splitCSV(raw)
@@ -97,11 +101,13 @@ function tryParseTable(raw: string, reportMonth: string) {
   const pick = cands.sort((a,b)=> (Math.max(...b.slice(0,50).map(r=>r.length)) - Math.max(...a.slice(0,50).map(r=>r.length))))[0]
   if(!pick) return null
   const headers = dedupeHeaders(pick[0]); const rows = pick.slice(1)
+
   const want = {
     account_code: ['勘定科目コード','元帳主科目コード'],
     account_name: ['主科目名','勘定科目名'],
     counter_account: ['主科目名_2','相手科目','相手科目名','相手科目名_2'],
     slip_date: ['伝票日付','取引日','取引年月日'],
+    y: ['取引年'], m: ['取引月'], d: ['取引日'],
     description: ['摘要科目コード_2','摘要','摘要_2','内容','取引内容'],
     debit: ['借方金額','借方'],
     credit:['貸方金額','貸方'],
@@ -117,41 +123,67 @@ function tryParseTable(raw: string, reportMonth: string) {
     account_name: find(want.account_name),
     counter_account: find(want.counter_account),
     slip_date: find(want.slip_date),
+    y: find(want.y),
+    m: find(want.m),
+    d: find(want.d),
     description: find(want.description),
     debit: find(want.debit),
     credit: find(want.credit),
     balance: find(want.balance),
   }
-  if(idx.account_code<0 || idx.slip_date<0) return null
+  if(idx.account_code<0) return null
 
   let rowNo=0
   const accountSet = new Map<string,string>()
   const gls:any[] = []
+
   for(const arr of rows){
     const joined = arr.join('')
     if(isSummary(joined)) continue
-    const ac = (arr[idx.account_code]??'').trim(); if(!ac) continue
+
+    const ac = (arr[idx.account_code]??'').trim()
     const an = idx.account_name>=0 ? (arr[idx.account_name]??'').trim() : ''
-    if(an) accountSet.set(ac, an)
-    const txDate = normalizeDateFromString(arr[idx.slip_date]??'', reportMonth); if(!txDate) continue
+    if (ac) { if (an) accountSet.set(ac, an) }
+
+    // --- 日付の取り出し：伝票日付 or 取引年/月/日 ---
+    let txDate: string | null = null
+    if (idx.slip_date >= 0 && (arr[idx.slip_date] ?? '').trim()) {
+      const t = (arr[idx.slip_date] ?? '').trim()
+      // 8桁や区切りの軽い正規化
+      const m8 = t.match(/^(\d{4})(\d{2})(\d{2})$/)
+      txDate = m8 ? `${m8[1]}-${m8[2]}-${m8[3]}` : t.replace(/[\/.]/g,'-')
+    } else if (idx.y >= 0 && (arr[idx.y] ?? '').trim()) {
+      txDate = makeDateFromYMD(arr[idx.y], idx.m>=0?arr[idx.m]:'', idx.d>=0?arr[idx.d]:'')
+    }
+    // 日付が取れない＝科目見出し行等 → スキップ
+    if (!txDate) continue
+
     const debit = idx.debit>=0 ? parseInteger(arr[idx.debit]) : 0
     const credit= idx.credit>=0 ? parseInteger(arr[idx.credit]) : 0
     const bal   = idx.balance>=0? parseInteger(arr[idx.balance]): 0
     const ca    = idx.counter_account>=0 ? (arr[idx.counter_account]??'') : ''
     const desc  = idx.description>=0 ? (arr[idx.description]??'') : ''
+
     rowNo++
     gls.push({
-      report_month: reportMonth, account_code: ac, transaction_date: txDate,
-      counter_account: ca, department: null, description: desc,
-      debit_amount: debit, credit_amount: credit, balance: bal,
-      sheet_no: 1, row_no: rowNo,
+      report_month: reportMonth,
+      account_code: ac || 'UNKNOWN',
+      transaction_date: txDate,
+      counter_account: ca,
+      department: null,
+      description: desc,
+      debit_amount: debit,
+      credit_amount: credit,
+      balance: bal,
+      sheet_no: 1,
+      row_no: rowNo,
     })
   }
   if(gls.length===0) return null
   return { gls, accountSet, headers }
 }
 
-// ---------- parser B: ブロック見出し型 ----------
+// ---------- parser B: ブロック見出し型（据え置き） ----------
 function parseBlockTxt(raw: string, reportMonth: string) {
   const lines = raw.replace(/\r/g,'').split('\n').map(l=>l.trimEnd())
   let currentCode = ''; let currentName = ''
@@ -165,10 +197,7 @@ function parseBlockTxt(raw: string, reportMonth: string) {
   const setHeaderFromLine = (line: string) => {
     const cols = splitFlexible(line)
     const find = (keys: string[]) => {
-      for (let i=0;i<cols.length;i++){
-        const h = cols[i]
-        if (keys.some(k=>h.includes(k))) return i
-      }
+      for (let i=0;i<cols.length;i++){ const h=cols[i]; if (keys.some(k=>h.includes(k))) return i }
       return -1
     }
     idxDate  = find(['伝票日付','取引日','取引年月日'])
@@ -189,8 +218,8 @@ function parseBlockTxt(raw: string, reportMonth: string) {
     if (mCode) {
       currentCode = mCode[1]
       const mName = line.match(RX.acctName) || lines[i+1]?.match(RX.acctName) || null
-      currentName = mName ? mName[2] : currentName
-      if (currentCode && currentName) accountSet.set(currentCode, currentName)
+      const nm = mName ? mName[2] : ''
+      if (currentCode && nm) { currentName = nm; accountSet.set(currentCode, currentName) }
       inTable = false
       continue
     }
@@ -202,7 +231,10 @@ function parseBlockTxt(raw: string, reportMonth: string) {
       if (isSummary(j)) continue
 
       const cols = splitFlexible(line)
-      const txDate = normalizeDateFromString(cols[idxDate]??'', reportMonth); if(!txDate) continue
+      const tx = (cols[idxDate]??'').trim()
+      const txDate = tx ? (tx.match(/^(\d{4})(\d{2})(\d{2})$/) ? `${tx.slice(0,4)}-${tx.slice(4,6)}-${tx.slice(6,8)}` : tx.replace(/[\/.]/g,'-')) : null
+      if (!txDate) continue
+
       const debit  = idxDebit>=0 ? parseInteger(cols[idxDebit]) : 0
       const credit = idxCredit>=0? parseInteger(cols[idxCredit]): 0
       const bal    = idxBal>=0   ? parseInteger(cols[idxBal])   : 0
@@ -211,10 +243,17 @@ function parseBlockTxt(raw: string, reportMonth: string) {
 
       rowNo++
       gls.push({
-        report_month: reportMonth, account_code: currentCode, transaction_date: txDate,
-        counter_account: ca, department: null, description: desc,
-        debit_amount: debit, credit_amount: credit, balance: bal,
-        sheet_no: 1, row_no: rowNo,
+        report_month: reportMonth,
+        account_code: currentCode,
+        transaction_date: txDate,
+        counter_account: ca,
+        department: null,
+        description: desc,
+        debit_amount: debit,
+        credit_amount: credit,
+        balance: bal,
+        sheet_no: 1,
+        row_no: rowNo,
       })
     }
   }
@@ -238,21 +277,16 @@ export async function POST(req: NextRequest) {
 
     // 原本保存（debug-imports）
     const buf = await file.arrayBuffer()
-    try {
-      await supabase.storage.createBucket('debug-imports', { public: false })
-      // 既存ならエラーになるが無視
-    } catch {}
+    try { await supabase.storage.createBucket('debug-imports', { public: false }) } catch {}
     const stamp = new Date().toISOString().replace(/[:.]/g,'-')
     const path = `${reportMonth}/${stamp}_${debug.filename || 'upload'}`
     await supabase.storage.from('debug-imports').upload(path, new Uint8Array(buf), { upsert: true })
     debug.saved = path
 
     const raw = decodeBufferByExt(buf, debug.filename || '')
-
-    // 先頭プレビュー
     debug.preview = raw.replace(/\r/g,'').split('\n').slice(0, 20)
 
-    // 解析
+    // 解析（表形式→ダメならブロック見出し）
     let parsed = tryParseTable(raw, reportMonth)
     debug.tableHeaders = parsed?.headers
     if (!parsed) {
@@ -262,7 +296,6 @@ export async function POST(req: NextRequest) {
     }
     debug.parsedCount = parsed?.gls?.length || 0
     debug.accounts = parsed?.accountSet ? Array.from(parsed.accountSet.keys()).slice(0,10) : []
-
     if (!parsed || parsed.gls.length === 0) {
       console.log('IMPORT_DEBUG', JSON.stringify(debug))
       const message = `取引データ0件。先頭プレビュー=${debug.preview.join(' / ')}`
@@ -271,7 +304,7 @@ export async function POST(req: NextRequest) {
 
     const { gls, accountSet } = parsed
 
-    // account_master upsert
+    // マスタ upsert
     if (accountSet.size) {
       const payload = Array.from(accountSet.entries()).map(([code, name]) => ({
         account_code: code, account_name: name || '（名称未設定）', account_type:'未分類', is_active: true
@@ -286,7 +319,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // delete old
+    // 既存削除
     {
       const { data: r1, error: e1 } = await supabase.rpc('http_delete_gl_by_month', { p_month: reportMonth })
       if (e1 || r1 == null) {
@@ -298,7 +331,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // insert
+    // 登録
     for (let i=0;i<gls.length;i+=500) {
       const chunk = gls.slice(i,i+500)
       const { error } = await supabase.from('general_ledger').insert(chunk)
@@ -308,7 +341,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // monthly balance
+    // 残高更新
     await supabase.rpc('update_monthly_balance', { target_month: reportMonth as any }).catch((e:any)=>{
       console.log('IMPORT_DEBUG', JSON.stringify({ ...debug, stage:'rpc_warn', warn: e?.message }))
     })
