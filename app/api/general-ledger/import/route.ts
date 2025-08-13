@@ -4,26 +4,52 @@ import iconv from "iconv-lite";
 import { parse } from "csv-parse/sync";
 import { createClient } from "@supabase/supabase-js";
 
-// --- Next.js Route Handler settings ---
-export const runtime = "nodejs";         // Edge禁止（iconv等を使うため）
-export const dynamic = "force-dynamic";  // キャッシュ無効
-export const maxDuration = 60;           // 実行上限
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-// --- Supabase (server) ---
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // サーバー側鍵
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// --- helpers ---
+// ===== 年月パース（和暦・「月」付き対応）=====
+const ERA_BASE: Record<string, number> = {
+  "令和": 2018, // R1 = 2019
+  "平成": 1988, // H1 = 1989
+  "昭和": 1925, // S1 = 1926
+  "大正": 1911, // T1 = 1912
+  "明治": 1867, // M1 = 1868
+};
+function parseYearLoose(raw: any): number | null {
+  const s = String(raw ?? "").trim();
+  // 4桁西暦があれば最優先
+  const y4 = s.match(/\d{4}/);
+  if (y4) return Number(y4[0]);
+
+  // 和暦「令和6年」「平成31」など
+  const m = s.replace(/\s/g, "").match(/(令和|平成|昭和|大正|明治)\s*(\d+)/);
+  if (m) {
+    const era = m[1];
+    const n = Number(m[2]);
+    if (!Number.isNaN(n) && n > 0) return ERA_BASE[era] + n;
+  }
+  return null;
+}
+function parseMonthLoose(raw: any): number | null {
+  const m = String(raw ?? "").match(/\d{1,2}/);
+  if (!m) return null;
+  const n = Number(m[0]);
+  return n >= 1 && n <= 12 ? n : null;
+}
+// ===========================================
+
 function detectEncoding(buf: Buffer): "utf-8" | "shift_jis" {
-  // 超簡易：UTF-8で置換文字が多ければSJIS扱い
   const asUtf8 = buf.toString("utf-8");
   const bad = (asUtf8.match(/\uFFFD/g) || []).length;
   return bad > 3 ? "shift_jis" : "utf-8";
 }
 
-// CORS プリフライトが来る環境向け（同一オリジンなら実質スルー）
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
@@ -39,8 +65,11 @@ export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const file = form.get("file") as File | null;
-    const year = String(form.get("year") ?? "");
-    const month = String(form.get("month") ?? "");
+    const yearRaw = form.get("year");
+    const monthRaw = form.get("month");
+
+    const yearNum = parseYearLoose(yearRaw);
+    const monthNum = parseMonthLoose(monthRaw);
 
     if (!file) {
       return NextResponse.json(
@@ -48,21 +77,27 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (!/^\d{4}$/.test(year) || !/^\d{1,2}$/.test(month)) {
+    if (!yearNum || !monthNum) {
       return NextResponse.json(
-        { ok: false, stage: "validate", error: "INVALID_PERIOD", detail: { year, month } },
+        {
+          ok: false,
+          stage: "validate",
+          error: "INVALID_PERIOD",
+          detail: { yearRaw, monthRaw, parsed: { yearNum, monthNum } },
+        },
         { status: 400 }
       );
     }
-    const yyyymm = `${year}${String(Number(month)).padStart(2, "0")}`;
+
+    const yyyymm = `${yearNum}${String(monthNum).padStart(2, "0")}`;
 
     const ab = await file.arrayBuffer();
     const buf = Buffer.from(ab);
 
-    const encoding = detectEncoding(buf);
+    const encoding =
+      detectEncoding(buf) === "shift_jis" ? "shift_jis" : "utf-8";
     const text = iconv.decode(buf, encoding === "shift_jis" ? "Shift_JIS" : "UTF-8");
 
-    // 原本保存（監査・再処理用）
     const { error: insertErr } = await supabase.from("gl_raw_uploads").insert({
       yyyymm,
       file_name: file.name ?? "unknown",
@@ -77,7 +112,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 解析プレビュー（区切り自動判定）
     const delimiter = text.includes("\t") ? "\t" : ",";
     let records: any[] = [];
     try {
@@ -90,12 +124,8 @@ export async function POST(req: NextRequest) {
         bom: true,
       });
     } catch {
-      // ヘッダ無し/固定幅は後続TODO。ここでは失敗してもOK
       records = [];
     }
-
-    // TODO: records を本番テーブルへマッピング→挿入
-    // TODO: await supabase.rpc("update_monthly_balance", { p_yyyymm: yyyymm });
 
     return NextResponse.json({
       ok: true,
