@@ -1,9 +1,6 @@
-/* /app/api/general-ledger/import/route.ts ver.37
+/* /app/api/general-ledger/import/route.ts ver.38
    総勘定元帳 CSV/TXT(Shift-JIS, TSV, 固定幅) インポート API（通常月）
-   追加対応：
-     - 「勘定科目コード／主科目名」が列ではなく“ブロック見出し”で出るTXTに対応
-     - 見出し行(伝票日付/借方金額/貸方金額/残高…)を自動検出し、その下の明細を解析
-     - 従来の CSV/TSV 解析も残し、どちらでも通る冗長構成
+   追加: 自動デバッグ出力 + 原本保存(Supabase Storage)
 */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const DEBUG_IMPORT = process.env.DEBUG_IMPORT === '1'
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   throw new Error('Supabase env missing (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)')
 }
@@ -51,7 +49,6 @@ function splitTSV(text: string): Table {
   const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.length>0)
   return lines.map(l=>l.split('\t'))
 }
-// 固定幅（連続スペース/全角スペース）→タブに正規化
 function fixedToTSV(text: string): string {
   const lines = text.replace(/\r/g,'').split('\n')
   return lines.map(l=>l.replace(/(?: {2,}|\u3000{1,})/g,'\t')).join('\n')
@@ -84,7 +81,6 @@ const RX = {
   acctName: /(主科目名|科目名)[^\S\r\n]*[:：]?\s*([^\t ]+)/u,
   isHeaderRow: /(伝票日付|取引日|取引年月日).*(借方|借方金額).*(貸方|貸方金額).*(残高)/u,
 }
-// 汎用スプリット（タブ→2スペ→カンマ）
 function splitFlexible(line: string): string[] {
   if (line.includes('\t')) return line.split('\t').map(s=>s.trim())
   const bySpace = line.split(/ {2,}/).map(s=>s.trim()).filter(s=>s.length>0)
@@ -92,7 +88,7 @@ function splitFlexible(line: string): string[] {
   return line.split(',').map(s=>s.trim())
 }
 
-// ---------- パーサ①: 列に勘定科目コードがある通常CSV/TSV ----------
+// ---------- parser A: 表形式(列に勘定科目コード) ----------
 function tryParseTable(raw: string, reportMonth: string) {
   const tsv = splitTSV(raw)
   const csv = splitCSV(raw)
@@ -130,7 +126,7 @@ function tryParseTable(raw: string, reportMonth: string) {
 
   let rowNo=0
   const accountSet = new Map<string,string>()
-  const gls = []
+  const gls:any[] = []
   for(const arr of rows){
     const joined = arr.join('')
     if(isSummary(joined)) continue
@@ -145,24 +141,17 @@ function tryParseTable(raw: string, reportMonth: string) {
     const desc  = idx.description>=0 ? (arr[idx.description]??'') : ''
     rowNo++
     gls.push({
-      report_month: reportMonth,
-      account_code: ac,
-      transaction_date: txDate,
-      counter_account: ca,
-      department: null,
-      description: desc,
-      debit_amount: debit,
-      credit_amount: credit,
-      balance: bal,
-      sheet_no: 1,
-      row_no: rowNo,
+      report_month: reportMonth, account_code: ac, transaction_date: txDate,
+      counter_account: ca, department: null, description: desc,
+      debit_amount: debit, credit_amount: credit, balance: bal,
+      sheet_no: 1, row_no: rowNo,
     })
   }
   if(gls.length===0) return null
-  return { gls, accountSet }
+  return { gls, accountSet, headers }
 }
 
-// ---------- パーサ②: ブロック見出し型TXT（今回の想定） ----------
+// ---------- parser B: ブロック見出し型 ----------
 function parseBlockTxt(raw: string, reportMonth: string) {
   const lines = raw.replace(/\r/g,'').split('\n').map(l=>l.trimEnd())
   let currentCode = ''; let currentName = ''
@@ -171,6 +160,7 @@ function parseBlockTxt(raw: string, reportMonth: string) {
   let rowNo=0
   const accountSet = new Map<string,string>()
   const gls: any[] = []
+  let lastHeaderLine = ''
 
   const setHeaderFromLine = (line: string) => {
     const cols = splitFlexible(line)
@@ -188,13 +178,13 @@ function parseBlockTxt(raw: string, reportMonth: string) {
     idxBal   = find(['残高'])
     idxCA    = find(['相手科目','相手科目名'])
     inTable = (idxDate>=0 && (idxDebit>=0 || idxCredit>=0) && idxBal>=0)
+    lastHeaderLine = line
   }
 
   for (let i=0;i<lines.length;i++){
     const line = lines[i]?.trim() ?? ''
     if (!line) continue
 
-    // 見出し（科目コード/名）
     const mCode = line.match(RX.acctLine)
     if (mCode) {
       currentCode = mCode[1]
@@ -204,13 +194,8 @@ function parseBlockTxt(raw: string, reportMonth: string) {
       inTable = false
       continue
     }
+    if (RX.isHeaderRow.test(line)) { setHeaderFromLine(line); continue }
 
-    // 明細テーブルのヘッダー行検出
-    if (RX.isHeaderRow.test(line)) {
-      setHeaderFromLine(line)
-      continue
-    }
-    // テーブル開始済みで、次の科目見出しまでがデータ
     if (inTable && currentCode) {
       const j = line.replace(/\s/g,'')
       if (!j || j.includes('勘定科目コード')) { inTable=false; continue }
@@ -226,26 +211,19 @@ function parseBlockTxt(raw: string, reportMonth: string) {
 
       rowNo++
       gls.push({
-        report_month: reportMonth,
-        account_code: currentCode,
-        transaction_date: txDate,
-        counter_account: ca,
-        department: null,
-        description: desc,
-        debit_amount: debit,
-        credit_amount: credit,
-        balance: bal,
-        sheet_no: 1,
-        row_no: rowNo,
+        report_month: reportMonth, account_code: currentCode, transaction_date: txDate,
+        counter_account: ca, department: null, description: desc,
+        debit_amount: debit, credit_amount: credit, balance: bal,
+        sheet_no: 1, row_no: rowNo,
       })
-      continue
     }
   }
-  return { gls, accountSet }
+  return { gls, accountSet, lastHeaderLine }
 }
 
 // ---------- handler ----------
 export async function POST(req: NextRequest) {
+  const debug:any = { stage: 'start' }
   try {
     const form = await req.formData()
     const year = Number(form.get('year'))
@@ -255,26 +233,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok:false, message:'year, month, file は必須です' }, { status:400 })
     }
     const reportMonth = toReportMonth(year, month)
+    debug.reportMonth = reportMonth
+    debug.filename = (file as any)?.name
 
+    // 原本保存（debug-imports）
     const buf = await file.arrayBuffer()
-    const raw = decodeBufferByExt(buf, file.name)
+    try {
+      await supabase.storage.createBucket('debug-imports', { public: false })
+      // 既存ならエラーになるが無視
+    } catch {}
+    const stamp = new Date().toISOString().replace(/[:.]/g,'-')
+    const path = `${reportMonth}/${stamp}_${debug.filename || 'upload'}`
+    await supabase.storage.from('debug-imports').upload(path, new Uint8Array(buf), { upsert: true })
+    debug.saved = path
 
-    // まず表形式での取り込みを試行
+    const raw = decodeBufferByExt(buf, debug.filename || '')
+
+    // 先頭プレビュー
+    debug.preview = raw.replace(/\r/g,'').split('\n').slice(0, 20)
+
+    // 解析
     let parsed = tryParseTable(raw, reportMonth)
-    // ダメならブロック見出し型で解析
-    if (!parsed) parsed = parseBlockTxt(raw, reportMonth)
+    debug.tableHeaders = parsed?.headers
+    if (!parsed) {
+      const block = parseBlockTxt(raw, reportMonth)
+      parsed = block
+      debug.blockHeader = block.lastHeaderLine
+    }
+    debug.parsedCount = parsed?.gls?.length || 0
+    debug.accounts = parsed?.accountSet ? Array.from(parsed.accountSet.keys()).slice(0,10) : []
 
     if (!parsed || parsed.gls.length === 0) {
-      const preview = raw.replace(/\r/g,'').split('\n').slice(0,30).join('\n')
-      return NextResponse.json({
-        ok:false,
-        message:`取引データが0件。おそらくブロック見出しの変則フォーマットです。先頭プレビュー:\n${preview}`
-      }, { status:400 })
+      console.log('IMPORT_DEBUG', JSON.stringify(debug))
+      const message = `取引データ0件。先頭プレビュー=${debug.preview.join(' / ')}`
+      return NextResponse.json({ ok:false, message, debug: DEBUG_IMPORT ? debug : undefined }, { status:400 })
     }
 
     const { gls, accountSet } = parsed
 
-    // ===== account_master upsert =====
+    // account_master upsert
     if (accountSet.size) {
       const payload = Array.from(accountSet.entries()).map(([code, name]) => ({
         account_code: code, account_name: name || '（名称未設定）', account_type:'未分類', is_active: true
@@ -282,37 +279,50 @@ export async function POST(req: NextRequest) {
       for (let i=0;i<payload.length;i+=100) {
         const chunk = payload.slice(i,i+100)
         const { error } = await supabase.from('account_master').upsert(chunk, { onConflict:'account_code' })
-        if (error) return NextResponse.json({ ok:false, message:`account_master upsert失敗: ${error.message}` }, { status:500 })
+        if (error) {
+          console.log('IMPORT_DEBUG', JSON.stringify({ ...debug, stage:'upsert_error', error: error.message }))
+          return NextResponse.json({ ok:false, message:`account_master upsert失敗: ${error.message}`, debug: DEBUG_IMPORT ? debug : undefined }, { status:500 })
+        }
       }
     }
 
-    // ===== delete old (0件でも成功扱い) =====
+    // delete old
     {
       const { data: r1, error: e1 } = await supabase.rpc('http_delete_gl_by_month', { p_month: reportMonth })
       if (e1 || r1 == null) {
         const { error: e2 } = await supabase.from('general_ledger').delete().eq('report_month', reportMonth)
-        if (e2) return NextResponse.json({ ok:false, message:`既存データ削除に失敗: ${e2.message}` }, { status:500 })
+        if (e2) {
+          console.log('IMPORT_DEBUG', JSON.stringify({ ...debug, stage:'delete_error', error: e2.message }))
+          return NextResponse.json({ ok:false, message:`既存データ削除に失敗: ${e2.message}`, debug: DEBUG_IMPORT ? debug : undefined }, { status:500 })
+        }
       }
     }
 
-    // ===== insert general_ledger =====
+    // insert
     for (let i=0;i<gls.length;i+=500) {
       const chunk = gls.slice(i,i+500)
       const { error } = await supabase.from('general_ledger').insert(chunk)
-      if (error) return NextResponse.json({ ok:false, message:`general_ledger 登録失敗: ${error.message}` }, { status:500 })
+      if (error) {
+        console.log('IMPORT_DEBUG', JSON.stringify({ ...debug, stage:'insert_error', error: error.message, batch:i }))
+        return NextResponse.json({ ok:false, message:`general_ledger 登録失敗: ${error.message}`, debug: DEBUG_IMPORT ? debug : undefined }, { status:500 })
+      }
     }
 
-    // ===== monthly balance update =====
-    await supabase.rpc('update_monthly_balance', { target_month: reportMonth as any }).catch(() => {})
+    // monthly balance
+    await supabase.rpc('update_monthly_balance', { target_month: reportMonth as any }).catch((e:any)=>{
+      console.log('IMPORT_DEBUG', JSON.stringify({ ...debug, stage:'rpc_warn', warn: e?.message }))
+    })
 
+    console.log('IMPORT_DEBUG', JSON.stringify({ ...debug, stage:'done', inserted: gls.length }))
     return NextResponse.json({
       ok: true,
       reportMonth,
       inserted: gls.length,
-      accountsUpserted: accountSet.size
+      accountsUpserted: accountSet.size,
+      debug: DEBUG_IMPORT ? debug : undefined
     })
   } catch (e:any) {
-    console.error(e)
+    console.log('IMPORT_DEBUG', JSON.stringify({ error: e?.message }))
     return NextResponse.json({ ok:false, message: e?.message ?? 'Internal Server Error' }, { status:500 })
   }
 }
