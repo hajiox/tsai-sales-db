@@ -1,10 +1,10 @@
 /**
  * TSA 財務分析システム
  * 月次サマリ取得 API
- * ver.42 (2025-08-15 JST)
- * - ?limit= を許可（既定 60 / 最大 120）
+ * ver.43 (2025-08-15 JST)
+ * - 既定取得件数を 120 に拡大（過去分が確実に出る）
+ * - ?limit= で任意指定可（1〜120）
  * - no-store で常に最新を返す
- * - 既存フロント互換のため配列をそのまま返却（ラッパー無し）
  *
  * ファイル: app/api/general-ledger/months/route.ts
  */
@@ -21,13 +21,11 @@ const supabase = createClient(
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const limitRaw = Number(url.searchParams.get("limit") ?? 60);
+  const limitRaw = Number(url.searchParams.get("limit") ?? 120);
   const limit = Math.min(Math.max(limitRaw, 1), 120);
 
-  // 月次サマリのビュー/テーブル名に合わせて必要なら変更
-  // 例: gl_monthly_stats (columns: yyyymm, account_count, tx_count, debit_total, credit_total, ...)
   const { data, error } = await supabase
-    .from("gl_monthly_stats")
+    .from("gl_monthly_stats") // ←実テーブル/ビュー名に合わせて
     .select("*")
     .order("yyyymm", { ascending: false })
     .limit(limit);
