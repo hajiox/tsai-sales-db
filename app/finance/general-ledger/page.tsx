@@ -1,12 +1,13 @@
-// /app/finance/general-ledger/page.tsx ver.14
+// /app/finance/general-ledger/page.tsx ver.15
 'use client';
 
 import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileText, Upload, Trash2, TrendingUp, Search, Download } from 'lucide-react';
+import { FileText, Upload, Trash2, TrendingUp, Search, Download, Calculator } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
+import ClosingImportModal from '@/components/general-ledger/ClosingImportModal';
 
 interface MonthlyData {
   report_month: string;
@@ -16,14 +17,25 @@ interface MonthlyData {
   total_credit: number;
 }
 
+interface ClosingData {
+  fiscal_year: number;
+  account_count: number;
+  adjustment_count: number;
+  total_debit: number;
+  total_credit: number;
+}
+
 export default function GeneralLedgerPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [closingData, setClosingData] = useState<ClosingData[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'monthly' | 'closing'>('monthly');
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -38,6 +50,7 @@ export default function GeneralLedgerPage() {
     if (authStatus === 'authenticated') {
       setIsAuthenticated(true);
       fetchMonthlyData();
+      fetchClosingData();
     } else {
       setIsLoading(false);
     }
@@ -111,10 +124,28 @@ export default function GeneralLedgerPage() {
       }
     } catch (error) {
       console.error('データ取得エラー:', error);
-      // エラーが発生した場合も空配列をセット
       setMonthlyData([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchClosingData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('closing_summary')
+        .select('*')
+        .order('fiscal_year', { ascending: false });
+
+      if (error) {
+        console.error('決算データ取得エラー:', error);
+        setClosingData([]);
+      } else {
+        setClosingData(data || []);
+      }
+    } catch (error) {
+      console.error('決算データ取得エラー:', error);
+      setClosingData([]);
     }
   };
 
@@ -133,6 +164,7 @@ export default function GeneralLedgerPage() {
         sessionStorage.setItem('financeSystemAuth', 'authenticated');
         setIsAuthenticated(true);
         fetchMonthlyData();
+        fetchClosingData();
       } else {
         setAuthError('パスワードが正しくありません');
       }
@@ -142,9 +174,13 @@ export default function GeneralLedgerPage() {
   };
 
   const handleImportComplete = () => {
-    // インポート完了後、自動的にデータを再取得して画面を更新
     console.log('インポート完了 - データを再取得します');
     fetchMonthlyData();
+  };
+
+  const handleClosingImportComplete = () => {
+    console.log('決算インポート完了 - データを再取得します');
+    fetchClosingData();
   };
 
   const handleDelete = async (month: string) => {
@@ -165,10 +201,27 @@ export default function GeneralLedgerPage() {
 
       if (balanceError) throw balanceError;
 
-      // 削除後、自動的にデータを再取得
       fetchMonthlyData();
     } catch (error) {
       console.error('削除エラー:', error);
+      alert('削除に失敗しました');
+    }
+  };
+
+  const handleDeleteClosing = async (fiscalYear: number) => {
+    if (!confirm(`${fiscalYear}年度の決算データを削除してもよろしいですか？`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('closing_adjustments')
+        .delete()
+        .eq('fiscal_year', fiscalYear);
+
+      if (error) throw error;
+
+      fetchClosingData();
+    } catch (error) {
+      console.error('決算データ削除エラー:', error);
       alert('削除に失敗しました');
     }
   };
@@ -278,82 +331,158 @@ export default function GeneralLedgerPage() {
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">データ管理</h2>
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              CSVインポート
-            </button>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setActiveTab('monthly')}
+                className={`pb-2 px-1 border-b-2 ${
+                  activeTab === 'monthly' 
+                    ? 'border-blue-600 text-blue-600' 
+                    : 'border-transparent text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                月次データ
+              </button>
+              <button
+                onClick={() => setActiveTab('closing')}
+                className={`pb-2 px-1 border-b-2 ${
+                  activeTab === 'closing' 
+                    ? 'border-purple-600 text-purple-600' 
+                    : 'border-transparent text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                決算データ
+              </button>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                CSVインポート
+              </button>
+              <button
+                onClick={() => setIsClosingModalOpen(true)}
+                className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 flex items-center"
+              >
+                <Calculator className="h-4 w-4 mr-2" />
+                決算インポート
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="p-6">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              対象月（AI分析用）
-            </label>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full md:w-64 p-2 border rounded-md"
-            >
-              {monthlyData.map((data) => (
-                <option key={data.report_month} value={data.report_month}>
-                  {formatMonth(data.report_month)}
-                </option>
-              ))}
-            </select>
-          </div>
+          {activeTab === 'monthly' ? (
+            <>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  対象月（AI分析用）
+                </label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="w-full md:w-64 p-2 border rounded-md"
+                >
+                  {monthlyData.map((data) => (
+                    <option key={data.report_month} value={data.report_month}>
+                      {formatMonth(data.report_month)}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 px-3">対象月</th>
-                  <th className="text-right py-2 px-3">勘定科目数</th>
-                  <th className="text-right py-2 px-3">取引件数</th>
-                  <th className="text-right py-2 px-3">借方合計</th>
-                  <th className="text-right py-2 px-3">貸方合計</th>
-                  <th className="text-center py-2 px-3">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-4">
-                      読み込み中...
-                    </td>
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 px-3">対象月</th>
+                      <th className="text-right py-2 px-3">勘定科目数</th>
+                      <th className="text-right py-2 px-3">取引件数</th>
+                      <th className="text-right py-2 px-3">借方合計</th>
+                      <th className="text-right py-2 px-3">貸方合計</th>
+                      <th className="text-center py-2 px-3">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-4">
+                          読み込み中...
+                        </td>
+                      </tr>
+                    ) : monthlyData.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-4 text-gray-500">
+                          データがありません
+                        </td>
+                      </tr>
+                    ) : (
+                      monthlyData.map((data) => (
+                        <tr key={data.report_month} className="border-b hover:bg-gray-50">
+                          <td className="py-2 px-3">{formatMonth(data.report_month)}</td>
+                          <td className="text-right py-2 px-3">{data.account_count}</td>
+                          <td className="text-right py-2 px-3">{data.transaction_count.toLocaleString()}</td>
+                          <td className="text-right py-2 px-3">{formatCurrency(data.total_debit)}</td>
+                          <td className="text-right py-2 px-3">{formatCurrency(data.total_credit)}</td>
+                          <td className="text-center py-2 px-3">
+                            <button
+                              onClick={() => handleDelete(data.report_month)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-3">年度</th>
+                    <th className="text-right py-2 px-3">勘定科目数</th>
+                    <th className="text-right py-2 px-3">調整仕訳数</th>
+                    <th className="text-right py-2 px-3">借方合計</th>
+                    <th className="text-right py-2 px-3">貸方合計</th>
+                    <th className="text-center py-2 px-3">操作</th>
                   </tr>
-                ) : monthlyData.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-4 text-gray-500">
-                      データがありません
-                    </td>
-                  </tr>
-                ) : (
-                  monthlyData.map((data) => (
-                    <tr key={data.report_month} className="border-b hover:bg-gray-50">
-                      <td className="py-2 px-3">{formatMonth(data.report_month)}</td>
-                      <td className="text-right py-2 px-3">{data.account_count}</td>
-                      <td className="text-right py-2 px-3">{data.transaction_count.toLocaleString()}</td>
-                      <td className="text-right py-2 px-3">{formatCurrency(data.total_debit)}</td>
-                      <td className="text-right py-2 px-3">{formatCurrency(data.total_credit)}</td>
-                      <td className="text-center py-2 px-3">
-                        <button
-                          onClick={() => handleDelete(data.report_month)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                </thead>
+                <tbody>
+                  {closingData.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-4 text-gray-500">
+                        決算データがありません
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    closingData.map((data) => (
+                      <tr key={data.fiscal_year} className="border-b hover:bg-gray-50">
+                        <td className="py-2 px-3">{data.fiscal_year}年度</td>
+                        <td className="text-right py-2 px-3">{data.account_count}</td>
+                        <td className="text-right py-2 px-3">{data.adjustment_count.toLocaleString()}</td>
+                        <td className="text-right py-2 px-3">{formatCurrency(data.total_debit)}</td>
+                        <td className="text-right py-2 px-3">{formatCurrency(data.total_credit)}</td>
+                        <td className="text-center py-2 px-3">
+                          <button
+                            onClick={() => handleDeleteClosing(data.fiscal_year)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <div className="mt-6 flex justify-end">
             <button
@@ -411,6 +540,12 @@ export default function GeneralLedgerPage() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImportComplete={handleImportComplete}
+      />
+
+      <ClosingImportModal
+        isOpen={isClosingModalOpen}
+        onClose={() => setIsClosingModalOpen(false)}
+        onImportComplete={handleClosingImportComplete}
       />
     </div>
   );
