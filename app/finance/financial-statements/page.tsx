@@ -1,4 +1,3 @@
-```typescript
 // /app/finance/financial-statements/page.tsx ver.7
 'use client';
 
