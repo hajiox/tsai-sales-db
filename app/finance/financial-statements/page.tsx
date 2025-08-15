@@ -1,8 +1,9 @@
-// /app/finance/financial-statements/page.tsx ver.6
+```typescript
+// /app/finance/financial-statements/page.tsx ver.7
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { FileSpreadsheet, BarChart3, TrendingUp, PieChart, Search, Filter, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
@@ -29,7 +30,19 @@ interface TransactionDetail {
 export default function FinancialStatementsPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const [selectedMonth, setSelectedMonth] = useState('2025-02');
+  const searchParams = useSearchParams();
+  
+  // URLパラメータから月を取得、なければ現在の月を使用
+  const getInitialMonth = () => {
+    const monthParam = searchParams.get('month');
+    if (monthParam) {
+      return monthParam;
+    }
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+  
+  const [selectedMonth, setSelectedMonth] = useState(getInitialMonth());
   const [activeTab, setActiveTab] = useState<'bs' | 'pl' | 'cf' | 'detail'>('bs');
   const [isLoading, setIsLoading] = useState(true);
   
@@ -60,6 +73,15 @@ export default function FinancialStatementsPage() {
   );
 
   const itemsPerPage = 50;
+
+  // selectedMonthが変更されたらURLも更新
+  const handleMonthChange = (newMonth: string) => {
+    setSelectedMonth(newMonth);
+    // URLパラメータを更新
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('month', newMonth);
+    router.push(`${pathname}?${params.toString()}`);
+  };
 
   useEffect(() => {
     const authStatus = sessionStorage.getItem('financeSystemAuth');
@@ -581,7 +603,7 @@ export default function FinancialStatementsPage() {
               <input
                 type="month"
                 value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
+                onChange={(e) => handleMonthChange(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 lang="ja"
               />
@@ -652,3 +674,4 @@ export default function FinancialStatementsPage() {
     </div>
   );
 }
+```
