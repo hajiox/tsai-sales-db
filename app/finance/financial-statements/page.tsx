@@ -673,4 +673,3 @@ export default function FinancialStatementsPage() {
     </div>
   );
 }
-```
