@@ -1,4 +1,4 @@
-// /app/brand-store-analysis/page.tsx ver.8（売上修正機能追加版）
+// /app/brand-store-analysis/page.tsx ver.9（売上修正履歴機能追加版）
 "use client"
 
 import { useState, useEffect, Suspense } from 'react'
@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BrandStoreCsvImportModal } from '@/components/brand-store/BrandStoreCsvImportModal'
 import { SalesAdjustmentModal } from '@/components/brand-store/SalesAdjustmentModal'
+import { SalesAdjustmentHistoryModal } from '@/components/brand-store/SalesAdjustmentHistoryModal'
 // import { MasterManagementModal } from '@/components/brand-store/MasterManagementModal'
 import { CategoryRankingCard } from '@/components/brand-store/CategoryRankingCard'
 import { ProductRankingCard } from '@/components/brand-store/ProductRankingCard'
 import { ProductSalesTable } from '@/components/brand-store/ProductSalesTable'
-import { TrendingUp, Package, Settings, Edit } from 'lucide-react'
+import { TrendingUp, Package, Settings, Edit, History } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -24,6 +25,7 @@ function BrandStoreAnalysisContent() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
+  const [showAdjustmentHistoryModal, setShowAdjustmentHistoryModal] = useState(false)
   // const [showMasterModal, setShowMasterModal] = useState(false)
   const [data, setData] = useState<any>(null)
   const [chartData, setChartData] = useState<any[]>([])
@@ -292,6 +294,9 @@ function BrandStoreAnalysisContent() {
           <Button variant="outline" onClick={() => setShowAdjustmentModal(true)}>
             <Edit className="h-4 w-4 mr-2" />売上修正
           </Button>
+          <Button variant="outline" onClick={() => setShowAdjustmentHistoryModal(true)}>
+            <History className="h-4 w-4 mr-2" />修正履歴
+          </Button>
         </div>
         {/* マスター管理ボタンを一時的にコメントアウト
         <Button variant="outline" size="sm" onClick={() => setShowMasterModal(true)}>
@@ -466,6 +471,16 @@ function BrandStoreAnalysisContent() {
           selectedYear={selectedYear}
           selectedMonth={selectedMonth}
           onSuccess={fetchData}
+        />
+      )}
+
+      {showAdjustmentHistoryModal && (
+        <SalesAdjustmentHistoryModal
+          isOpen={showAdjustmentHistoryModal}
+          onClose={() => setShowAdjustmentHistoryModal(false)}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          onUpdate={fetchData}
         />
       )}
 
