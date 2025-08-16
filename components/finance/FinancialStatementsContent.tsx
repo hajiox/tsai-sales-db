@@ -1,4 +1,4 @@
-// /components/finance/FinancialStatementsContent.tsx ver.1
+// /components/finance/FinancialStatementsContent.tsx ver.2
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -26,6 +26,7 @@ export default function FinancialStatementsContent() {
   const [selectedMonth, setSelectedMonth] = useState(getInitialMonth());
   const [activeTab, setActiveTab] = useState<'bs' | 'pl' | 'cf' | 'detail'>('bs');
   const [isLoading, setIsLoading] = useState(true);
+  const [includeClosing, setIncludeClosing] = useState(false); // 決算調整を含めるかどうか
   
   const [bsData, setBsData] = useState<{
     assets: AccountBalance[];
@@ -57,11 +58,12 @@ export default function FinancialStatementsContent() {
     } else {
       router.push('/finance/general-ledger');
     }
-  }, [selectedMonth]);
+  }, [selectedMonth, includeClosing]);
 
   const loadFinancialData = async () => {
     setIsLoading(true);
     
+    // 1. 通常月データの取得
     let allLedgerData: any[] = [];
     let page = 0;
     const pageSize = 1000;
@@ -91,9 +93,28 @@ export default function FinancialStatementsContent() {
       }
     }
 
-    if (allLedgerData.length > 0) {
+    // 2. 決算調整データの取得（7月の場合のみ）
+    let closingData: any[] = [];
+    const [year, month] = selectedMonth.split('-');
+    const isClosingMonth = month === '07'; // 7月決算の場合
+    
+    if (isClosingMonth && includeClosing) {
+      const { data: closingAdjustments } = await supabase
+        .from('closing_adjustments')
+        .select('*')
+        .eq('fiscal_year', parseInt(year))
+        .eq('fiscal_month', 7);
+      
+      if (closingAdjustments) {
+        closingData = closingAdjustments;
+      }
+    }
+
+    // 3. データの集計
+    if (allLedgerData.length > 0 || closingData.length > 0) {
       const accountTotals = new Map<string, { name: string, debit: number, credit: number }>();
       
+      // 通常月データの集計
       allLedgerData.forEach(item => {
         const code = item.account_code;
         const name = item.account_master?.account_name || '';
@@ -107,6 +128,21 @@ export default function FinancialStatementsContent() {
         account.credit += item.credit_amount || 0;
       });
 
+      // 決算調整データの追加
+      closingData.forEach(item => {
+        const code = item.account_code;
+        const name = item.account_name || '';
+        
+        if (!accountTotals.has(code)) {
+          accountTotals.set(code, { name, debit: 0, credit: 0 });
+        }
+        
+        const account = accountTotals.get(code)!;
+        account.debit += item.debit_amount || 0;
+        account.credit += item.credit_amount || 0;
+      });
+
+      // 4. 勘定科目の分類と残高計算
       const assets: AccountBalance[] = [];
       const liabilities: AccountBalance[] = [];
       const equity: AccountBalance[] = [];
@@ -116,12 +152,14 @@ export default function FinancialStatementsContent() {
       accountTotals.forEach((totals, code) => {
         let balance = 0;
         
+        // 資産・費用系は借方残高
         if ((code >= '100' && code < '200') || 
             (code >= '1000' && code < '1200') || 
             (code >= '400' && code < '600') || 
             code === '610') {
           balance = totals.debit - totals.credit;
         } else {
+          // 負債・純資産・収益系は貸方残高
           balance = totals.credit - totals.debit;
         }
 
@@ -131,6 +169,7 @@ export default function FinancialStatementsContent() {
           balance: Math.abs(balance)
         };
 
+        // 勘定科目コードによる分類
         if ((code >= '100' && code < '200') || (code >= '1000' && code < '1200')) {
           assets.push(account);
         } else if ((code >= '200' && code < '300') || (code >= '1200' && code < '1300')) {
@@ -144,6 +183,7 @@ export default function FinancialStatementsContent() {
         }
       });
 
+      // ソート
       assets.sort((a, b) => a.account_code.localeCompare(b.account_code));
       liabilities.sort((a, b) => a.account_code.localeCompare(b.account_code));
       equity.sort((a, b) => a.account_code.localeCompare(b.account_code));
@@ -156,6 +196,10 @@ export default function FinancialStatementsContent() {
 
     setIsLoading(false);
   };
+
+  // 7月の場合のみ決算調整オプションを表示
+  const [year, month] = selectedMonth.split('-');
+  const isClosingMonth = month === '07';
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -184,14 +228,36 @@ export default function FinancialStatementsContent() {
 
       <div className="bg-white rounded-lg shadow mb-6">
         <div className="p-4 border-b">
-          <div className="flex items-center space-x-2">
-            <Calendar className="w-5 h-5 text-gray-400" />
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => handleMonthChange(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Calendar className="w-5 h-5 text-gray-400" />
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => handleMonthChange(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            {/* 7月の場合のみ決算調整オプションを表示 */}
+            {isClosingMonth && (
+              <div className="flex items-center space-x-2">
+                <label className="flex items-center space-x-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={includeClosing}
+                    onChange={(e) => setIncludeClosing(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>決算調整を含める</span>
+                </label>
+                {includeClosing && (
+                  <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                    決算調整適用中
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         
