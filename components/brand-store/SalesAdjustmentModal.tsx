@@ -1,4 +1,4 @@
-// /components/brand-store/SalesAdjustmentModal.tsx ver.1
+// /components/brand-store/SalesAdjustmentModal.tsx ver.2
 'use client'
 
 import { useState } from 'react'
@@ -52,7 +52,13 @@ export function SalesAdjustmentModal({
 
     try {
       const amount = parseInt(adjustmentAmount.replace(/,/g, ''))
-      const reportMonth = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split('T')[0]
+      
+      // 月の1日を確実に設定（月末日にならないように）
+      const year = selectedYear
+      const month = String(selectedMonth).padStart(2, '0')
+      const reportMonth = `${year}-${month}-01`
+      
+      console.log('Saving adjustment for:', reportMonth, 'Amount:', amount)
 
       // 売上修正データを保存
       const { error } = await supabase
