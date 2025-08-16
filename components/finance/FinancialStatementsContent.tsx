@@ -1,14 +1,15 @@
-// /components/finance/FinancialStatementsContent.tsx ver.2
+// /components/finance/FinancialStatementsContent.tsx ver.3
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileSpreadsheet, BarChart3, Calendar } from 'lucide-react';
+import { FileSpreadsheet, BarChart3, Calendar, FileText } from 'lucide-react';
 import { BalanceSheet } from '@/components/finance/BalanceSheet';
 import { ProfitLoss } from '@/components/finance/ProfitLoss';
 import { CashFlow } from '@/components/finance/CashFlow';
 import { DetailSearch } from '@/components/finance/DetailSearch';
+import { FinancialReport } from '@/components/finance/FinancialReport';
 import { AccountBalance } from '@/types/finance';
 
 export default function FinancialStatementsContent() {
@@ -24,9 +25,9 @@ export default function FinancialStatementsContent() {
   };
   
   const [selectedMonth, setSelectedMonth] = useState(getInitialMonth());
-  const [activeTab, setActiveTab] = useState<'bs' | 'pl' | 'cf' | 'detail'>('bs');
+  const [activeTab, setActiveTab] = useState<'bs' | 'pl' | 'cf' | 'detail' | 'report'>('bs');
   const [isLoading, setIsLoading] = useState(true);
-  const [includeClosing, setIncludeClosing] = useState(false); // 決算調整を含めるかどうか
+  const [includeClosing, setIncludeClosing] = useState(false);
   
   const [bsData, setBsData] = useState<{
     assets: AccountBalance[];
@@ -96,7 +97,7 @@ export default function FinancialStatementsContent() {
     // 2. 決算調整データの取得（7月の場合のみ）
     let closingData: any[] = [];
     const [year, month] = selectedMonth.split('-');
-    const isClosingMonth = month === '07'; // 7月決算の場合
+    const isClosingMonth = month === '07';
     
     if (isClosingMonth && includeClosing) {
       const { data: closingAdjustments } = await supabase
@@ -262,7 +263,7 @@ export default function FinancialStatementsContent() {
         </div>
         
         <div className="flex border-b">
-          {['bs', 'pl', 'cf', 'detail'].map((tab) => (
+          {['bs', 'pl', 'cf', 'detail', 'report'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -276,6 +277,12 @@ export default function FinancialStatementsContent() {
               {tab === 'pl' && '損益計算書'}
               {tab === 'cf' && 'キャッシュフロー'}
               {tab === 'detail' && '詳細検索'}
+              {tab === 'report' && (
+                <span className="flex items-center space-x-1">
+                  <FileText className="w-4 h-4" />
+                  <span>決算書</span>
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -292,6 +299,14 @@ export default function FinancialStatementsContent() {
             {activeTab === 'pl' && <ProfitLoss {...plData} />}
             {activeTab === 'cf' && <CashFlow />}
             {activeTab === 'detail' && <DetailSearch selectedMonth={selectedMonth} />}
+            {activeTab === 'report' && (
+              <FinancialReport 
+                bsData={bsData} 
+                plData={plData} 
+                selectedMonth={selectedMonth}
+                includeClosing={includeClosing}
+              />
+            )}
           </>
         )}
       </div>
