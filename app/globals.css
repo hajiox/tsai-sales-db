@@ -92,3 +92,101 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* 印刷用スタイル */
+@media print {
+  /* 基本設定 */
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000;
+    background: #fff;
+  }
+  
+  /* 印刷時に表示する要素 */
+  .print-content {
+    display: block !important;
+  }
+  
+  /* 印刷時に非表示にする要素 */
+  nav,
+  button,
+  .no-print,
+  .bg-gray-50,
+  .shadow,
+  .rounded-lg,
+  input[type="month"],
+  input[type="checkbox"] {
+    display: none !important;
+  }
+  
+  /* ページ設定 */
+  @page {
+    size: A4;
+    margin: 15mm 20mm;
+  }
+  
+  /* 改ページ制御 */
+  .page-break {
+    page-break-after: always;
+  }
+  
+  .page-break-inside-avoid {
+    page-break-inside: avoid;
+  }
+  
+  /* テーブルスタイル */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+  }
+  
+  th {
+    background-color: #f5f5f5;
+    font-weight: bold;
+  }
+  
+  /* 見出しスタイル */
+  h1 {
+    font-size: 24pt;
+    margin-bottom: 12pt;
+  }
+  
+  h2 {
+    font-size: 18pt;
+    margin-bottom: 10pt;
+  }
+  
+  h3 {
+    font-size: 14pt;
+    margin-bottom: 8pt;
+  }
+  
+  /* リンクの色を黒に */
+  a {
+    color: #000;
+    text-decoration: none;
+  }
+  
+  /* 金額の強調 */
+  .print-highlight {
+    font-weight: bold;
+    font-size: 14pt;
+  }
+  
+  /* フッター */
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    font-size: 10pt;
+    color: #666;
+  }
+}
