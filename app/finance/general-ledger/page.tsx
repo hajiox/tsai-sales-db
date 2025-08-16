@@ -1,15 +1,26 @@
-// /app/finance/general-ledger/page.tsx ver.15
+// /app/finance/general-ledger/page.tsx ver.16
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileText, Upload, Trash2, TrendingUp, Search, Download, Calculator } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Database } from '@/types/supabase';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { 
+  Upload, Trash2, AlertCircle, FileText, Calculator, 
+  ChevronDown, ChevronRight, TrendingUp, TrendingDown, Calendar
+} from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 import ClosingImportModal from '@/components/general-ledger/ClosingImportModal';
+import { cn } from '@/lib/utils';
 
 interface MonthlyData {
+  yyyymm: string;
   report_month: string;
   account_count: number;
   transaction_count: number;
@@ -17,536 +28,421 @@ interface MonthlyData {
   total_credit: number;
 }
 
-interface ClosingData {
-  fiscal_year: number;
-  account_count: number;
-  adjustment_count: number;
-  total_debit: number;
-  total_credit: number;
+interface FiscalYearGroup {
+  year: number;
+  yearLabel: string;
+  months: MonthlyData[];
+  totals: {
+    transaction_count: number;
+    total_debit: number;
+    total_credit: number;
+  };
+  hasClosing?: boolean;
 }
 
 export default function GeneralLedgerPage() {
+  const [monthlyData, setMonthlyData] = useState<FiscalYearGroup[]>([]);
+  const [closingData, setClosingData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isClosingImportModalOpen, setIsClosingImportModalOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
-  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
-  const [closingData, setClosingData] = useState<ClosingData[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'monthly' | 'closing'>('monthly');
-  const [aiQuestion, setAiQuestion] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const router = useRouter();
-  const supabase = createBrowserClient(
+  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
+  const [stats, setStats] = useState({
+    totalMonths: 0,
+    totalTransactions: 0,
+    totalAmount: 0,
+    latestMonth: '',
+    oldestMonth: ''
+  });
+
+  const supabase = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  useEffect(() => {
-    const authStatus = sessionStorage.getItem('financeSystemAuth');
-    if (authStatus === 'authenticated') {
-      setIsAuthenticated(true);
-      fetchMonthlyData();
-      fetchClosingData();
-    } else {
-      setIsLoading(false);
-    }
-  }, []);
+  // 会計年度の判定（4月始まり）
+  const getFiscalYear = (dateStr: string): number => {
+    const date = new Date(dateStr);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    return month >= 4 ? year : year - 1;
+  };
+
+  // 年度表示ラベル
+  const getFiscalYearLabel = (year: number): string => {
+    const reiwaYear = year - 2018;
+    return `${year}年度（令和${reiwaYear}年度）`;
+  };
 
   const fetchMonthlyData = async () => {
-    setIsLoading(true);
     try {
-      // monthly_account_balanceから月ごとの集計データを取得
-      const { data: balanceData, error: balanceError } = await supabase
-        .from('monthly_account_balance')
-        .select('report_month, account_code, total_debit, total_credit, transaction_count')
-        .order('report_month', { ascending: false });
-
-      if (balanceError) {
-        console.error('monthly_account_balance取得エラー:', balanceError);
-        throw balanceError;
-      }
-
-      // 月ごとに集計
-      const monthlyMap = new Map<string, MonthlyData>();
-
-      if (balanceData && balanceData.length > 0) {
-        for (const record of balanceData) {
-          const month = record.report_month;
-          
-          if (!monthlyMap.has(month)) {
-            monthlyMap.set(month, {
-              report_month: month,
-              account_count: 0,
-              transaction_count: 0,
-              total_debit: 0,
-              total_credit: 0,
-            });
-          }
-
-          const monthData = monthlyMap.get(month)!;
-          monthData.account_count += 1;
-          monthData.total_debit += record.total_debit || 0;
-          monthData.total_credit += record.total_credit || 0;
-        }
-      }
-
-      // general_ledgerから実際の取引件数を取得して更新
-      const monthArray = Array.from(monthlyMap.keys());
+      setLoading(true);
       
-      for (const month of monthArray) {
-        const { count: actualCount, error: countError } = await supabase
-          .from('general_ledger')
-          .select('*', { count: 'exact', head: true })
-          .eq('report_month', month);
-
-        if (!countError && actualCount !== null) {
-          const monthData = monthlyMap.get(month)!;
-          monthData.transaction_count = actualCount;
-        }
-      }
-
-      // MapをArrayに変換してソート
-      const monthlyDataArray = Array.from(monthlyMap.values()).sort(
-        (a, b) => b.report_month.localeCompare(a.report_month)
-      );
-
-      console.log('取得した月次データ:', monthlyDataArray);
+      // APIから月次データ取得（制限なし）
+      const response = await fetch('/api/general-ledger/months?limit=999');
+      const apiData = await response.json();
       
-      setMonthlyData(monthlyDataArray);
-      
-      // 初回のみ最新月を選択
-      if (monthlyDataArray.length > 0 && !selectedMonth) {
-        setSelectedMonth(monthlyDataArray[0].report_month);
+      if (!apiData.success || !apiData.data) {
+        console.error('Failed to fetch monthly data');
+        return;
       }
-    } catch (error) {
-      console.error('データ取得エラー:', error);
-      setMonthlyData([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  const fetchClosingData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('closing_summary')
-        .select('*')
-        .order('fiscal_year', { ascending: false });
-
-      if (error) {
-        console.error('決算データ取得エラー:', error);
-        setClosingData([]);
-      } else {
-        setClosingData(data || []);
-      }
-    } catch (error) {
-      console.error('決算データ取得エラー:', error);
-      setClosingData([]);
-    }
-  };
-
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-    
-    try {
-      const response = await fetch('/api/finance/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-
-      if (response.ok) {
-        sessionStorage.setItem('financeSystemAuth', 'authenticated');
-        setIsAuthenticated(true);
-        fetchMonthlyData();
-        fetchClosingData();
-      } else {
-        setAuthError('パスワードが正しくありません');
-      }
-    } catch (error) {
-      setAuthError('認証エラーが発生しました');
-    }
-  };
-
-  const handleImportComplete = () => {
-    console.log('インポート完了 - データを再取得します');
-    fetchMonthlyData();
-  };
-
-  const handleClosingImportComplete = () => {
-    console.log('決算インポート完了 - データを再取得します');
-    fetchClosingData();
-  };
-
-  const handleDelete = async (month: string) => {
-    if (!confirm(`${formatMonth(month)}のデータを削除してもよろしいですか？`)) return;
-
-    try {
-      const { error: ledgerError } = await supabase
-        .from('general_ledger')
-        .delete()
-        .eq('report_month', month);
-
-      if (ledgerError) throw ledgerError;
-
-      const { error: balanceError } = await supabase
-        .from('monthly_account_balance')
-        .delete()
-        .eq('report_month', month);
-
-      if (balanceError) throw balanceError;
-
-      fetchMonthlyData();
-    } catch (error) {
-      console.error('削除エラー:', error);
-      alert('削除に失敗しました');
-    }
-  };
-
-  const handleDeleteClosing = async (fiscalYear: number) => {
-    if (!confirm(`${fiscalYear}年度の決算データを削除してもよろしいですか？`)) return;
-
-    try {
-      const { error } = await supabase
+      // 決算データ取得
+      const { data: closingData } = await supabase
         .from('closing_adjustments')
-        .delete()
-        .eq('fiscal_year', fiscalYear);
-
-      if (error) throw error;
-
-      fetchClosingData();
-    } catch (error) {
-      console.error('決算データ削除エラー:', error);
-      alert('削除に失敗しました');
-    }
-  };
-
-  const handleExport = () => {
-    alert('エクスポート機能は準備中です');
-  };
-
-  const handleAiQuery = async () => {
-    if (!aiQuestion.trim() || !selectedMonth) return;
-
-    setIsAiLoading(true);
-    setAiResponse('');
-
-    try {
-      const response = await fetch('/api/finance/ai-query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: aiQuestion,
-          reportMonth: selectedMonth,
-        }),
+        .select('fiscal_year, fiscal_month')
+        .order('fiscal_year', { ascending: false });
+      
+      setClosingData(closingData || []);
+      
+      // 年度別にグループ化
+      const yearGroups = new Map<number, MonthlyData[]>();
+      let totalTransactions = 0;
+      let totalAmount = 0;
+      
+      apiData.data.forEach((item: any) => {
+        const fiscalYear = getFiscalYear(item.report_month);
+        if (!yearGroups.has(fiscalYear)) {
+          yearGroups.set(fiscalYear, []);
+        }
+        
+        const monthData: MonthlyData = {
+          yyyymm: item.yyyymm,
+          report_month: item.report_month,
+          account_count: item.account_count,
+          transaction_count: item.transaction_count,
+          total_debit: item.total_debit || 0,
+          total_credit: item.total_credit || 0
+        };
+        
+        yearGroups.get(fiscalYear)!.push(monthData);
+        totalTransactions += monthData.transaction_count;
+        totalAmount += monthData.total_debit;
       });
 
-      const data = await response.json();
-      if (response.ok) {
-        setAiResponse(data.response);
-      } else {
-        setAiResponse('エラー: ' + data.error);
+      // FiscalYearGroup配列に変換
+      const groups: FiscalYearGroup[] = Array.from(yearGroups.entries())
+        .map(([year, months]) => {
+          // 月でソート（4月〜3月の順）
+          const sortedMonths = months.sort((a, b) => {
+            const dateA = new Date(a.report_month);
+            const dateB = new Date(b.report_month);
+            const monthA = dateA.getMonth() + 1;
+            const monthB = dateB.getMonth() + 1;
+            
+            // 4月を先頭にする
+            const fiscalMonthA = monthA >= 4 ? monthA - 4 : monthA + 8;
+            const fiscalMonthB = monthB >= 4 ? monthB - 4 : monthB + 8;
+            
+            return fiscalMonthA - fiscalMonthB;
+          });
+
+          const totals = sortedMonths.reduce((acc, month) => ({
+            transaction_count: acc.transaction_count + month.transaction_count,
+            total_debit: acc.total_debit + month.total_debit,
+            total_credit: acc.total_credit + month.total_credit
+          }), { transaction_count: 0, total_debit: 0, total_credit: 0 });
+
+          // 決算データの有無確認
+          const hasClosing = closingData?.some(c => 
+            c.fiscal_year === year && c.fiscal_month === 7
+          );
+
+          return {
+            year,
+            yearLabel: getFiscalYearLabel(year),
+            months: sortedMonths,
+            totals,
+            hasClosing
+          };
+        })
+        .sort((a, b) => b.year - a.year);
+
+      setMonthlyData(groups);
+      
+      // 最新の3年度を展開
+      const latestYears = groups.slice(0, 3).map(g => g.year);
+      setExpandedYears(new Set(latestYears));
+
+      // 統計情報
+      const allMonths = apiData.data;
+      if (allMonths.length > 0) {
+        setStats({
+          totalMonths: allMonths.length,
+          totalTransactions,
+          totalAmount,
+          latestMonth: allMonths[0].yyyymm,
+          oldestMonth: allMonths[allMonths.length - 1].yyyymm
+        });
       }
+
     } catch (error) {
-      setAiResponse('エラーが発生しました');
+      console.error('Error fetching data:', error);
     } finally {
-      setIsAiLoading(false);
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const response = await fetch('/api/finance/auth', { method: 'GET' });
+      const data = await response.json();
+      setIsAuthenticated(data.authenticated);
+      if (data.authenticated) {
+        fetchMonthlyData();
+      }
+    };
+    checkAuth();
+  }, []);
+
+  const handleAuth = async () => {
+    const response = await fetch('/api/finance/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const data = await response.json();
+    if (data.success) {
+      setIsAuthenticated(true);
+      fetchMonthlyData();
+    } else {
+      alert('パスワードが正しくありません');
+    }
+  };
+
+  const handleDelete = async (yyyymm: string) => {
+    if (!confirm(`${yyyymm}のデータを削除してもよろしいですか？`)) return;
+    
+    const year = parseInt(yyyymm.substring(0, 4));
+    const month = parseInt(yyyymm.substring(4, 6));
+    const reportMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+    
+    const { error } = await supabase
+      .from('general_ledger')
+      .delete()
+      .eq('report_month', reportMonth);
+    
+    if (!error) {
+      await fetchMonthlyData();
+    }
+  };
+
+  const toggleYear = (year: number) => {
+    const newExpanded = new Set(expandedYears);
+    if (newExpanded.has(year)) {
+      newExpanded.delete(year);
+    } else {
+      newExpanded.add(year);
+    }
+    setExpandedYears(newExpanded);
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ja-JP', {
-      style: 'currency',
-      currency: 'JPY',
-    }).format(amount);
+    return `¥ ${amount.toLocaleString()}`;
   };
 
-  const formatMonth = (dateString: string) => {
-    const date = new Date(dateString);
-    return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+  const formatMonth = (yyyymm: string) => {
+    const year = yyyymm.substring(0, 4);
+    const month = parseInt(yyyymm.substring(4, 6));
+    return `${year}年${month}月`;
   };
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-          <h1 className="text-2xl font-bold mb-6 text-center">財務分析システム</h1>
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                管理者パスワード
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                required
-              />
-            </div>
-            {authError && (
-              <p className="text-red-500 text-sm">{authError}</p>
-            )}
-            <button
-              type="submit"
-              className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700"
-            >
-              ログイン
-            </button>
-          </form>
-        </div>
+      <div className="flex items-center justify-center h-screen">
+        <Card className="w-96">
+          <CardHeader>
+            <CardTitle>認証が必要です</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
+              className="w-full p-2 border rounded mb-4"
+              placeholder="パスワードを入力"
+            />
+            <Button onClick={handleAuth} className="w-full">認証</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
+    <div className="container mx-auto p-4 max-w-7xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">財務分析システム</h1>
-        <p className="text-gray-600">会計データの管理と財務分析</p>
+        <h1 className="text-3xl font-bold mb-2">総勘定元帳管理</h1>
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Calendar className="h-4 w-4" />
+            {stats.totalMonths}ヶ月分
+          </span>
+          <span className="flex items-center gap-1">
+            <FileText className="h-4 w-4" />
+            {stats.totalTransactions.toLocaleString()}件
+          </span>
+          <span className="flex items-center gap-1">
+            <Calculator className="h-4 w-4" />
+            {formatCurrency(stats.totalAmount)}
+          </span>
+        </div>
       </div>
 
-      <div className="flex space-x-1 mb-6">
-        <Link
-          href="/finance/general-ledger"
-          className="px-4 py-2 bg-blue-600 text-white rounded-md flex items-center"
-        >
-          <FileText className="h-4 w-4 mr-2" />
-          総勘定元帳
-        </Link>
-        <Link
-          href="/finance/financial-statements"
-          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 flex items-center"
-        >
-          <TrendingUp className="h-4 w-4 mr-2" />
-          財務諸表
-        </Link>
-      </div>
+      <Tabs defaultValue="monthly" className="space-y-4">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="monthly">通常月データ</TabsTrigger>
+          <TabsTrigger value="closing">決算データ</TabsTrigger>
+        </TabsList>
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b">
+        <TabsContent value="monthly" className="space-y-4">
           <div className="flex justify-between items-center">
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setActiveTab('monthly')}
-                className={`pb-2 px-1 border-b-2 ${
-                  activeTab === 'monthly' 
-                    ? 'border-blue-600 text-blue-600' 
-                    : 'border-transparent text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                月次データ
-              </button>
-              <button
-                onClick={() => setActiveTab('closing')}
-                className={`pb-2 px-1 border-b-2 ${
-                  activeTab === 'closing' 
-                    ? 'border-purple-600 text-purple-600' 
-                    : 'border-transparent text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                決算データ
-              </button>
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setIsImportModalOpen(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
-              >
-                <Upload className="h-4 w-4 mr-2" />
+            <div className="flex gap-2">
+              <Button onClick={() => setIsImportModalOpen(true)} className="gap-2">
+                <Upload className="h-4 w-4" />
                 CSVインポート
-              </button>
-              <button
-                onClick={() => setIsClosingModalOpen(true)}
-                className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 flex items-center"
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const allExpanded = monthlyData.every(g => expandedYears.has(g.year));
+                  if (allExpanded) {
+                    setExpandedYears(new Set());
+                  } else {
+                    setExpandedYears(new Set(monthlyData.map(g => g.year)));
+                  }
+                }}
               >
-                <Calculator className="h-4 w-4 mr-2" />
-                決算インポート
-              </button>
+                {expandedYears.size === monthlyData.length ? '全て折りたたむ' : '全て展開'}
+              </Button>
             </div>
           </div>
-        </div>
 
-        <div className="p-6">
-          {activeTab === 'monthly' ? (
-            <>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  対象月（AI分析用）
-                </label>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="w-full md:w-64 p-2 border rounded-md"
-                >
-                  {monthlyData.map((data) => (
-                    <option key={data.report_month} value={data.report_month}>
-                      {formatMonth(data.report_month)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-3">対象月</th>
-                      <th className="text-right py-2 px-3">勘定科目数</th>
-                      <th className="text-right py-2 px-3">取引件数</th>
-                      <th className="text-right py-2 px-3">借方合計</th>
-                      <th className="text-right py-2 px-3">貸方合計</th>
-                      <th className="text-center py-2 px-3">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isLoading ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-4">
-                          読み込み中...
-                        </td>
-                      </tr>
-                    ) : monthlyData.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-4 text-gray-500">
-                          データがありません
-                        </td>
-                      </tr>
-                    ) : (
-                      monthlyData.map((data) => (
-                        <tr key={data.report_month} className="border-b hover:bg-gray-50">
-                          <td className="py-2 px-3">{formatMonth(data.report_month)}</td>
-                          <td className="text-right py-2 px-3">{data.account_count}</td>
-                          <td className="text-right py-2 px-3">{data.transaction_count.toLocaleString()}</td>
-                          <td className="text-right py-2 px-3">{formatCurrency(data.total_debit)}</td>
-                          <td className="text-right py-2 px-3">{formatCurrency(data.total_credit)}</td>
-                          <td className="text-center py-2 px-3">
-                            <button
-                              onClick={() => handleDelete(data.report_month)}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 px-3">年度</th>
-                    <th className="text-right py-2 px-3">勘定科目数</th>
-                    <th className="text-right py-2 px-3">調整仕訳数</th>
-                    <th className="text-right py-2 px-3">借方合計</th>
-                    <th className="text-right py-2 px-3">貸方合計</th>
-                    <th className="text-center py-2 px-3">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {closingData.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="text-center py-4 text-gray-500">
-                        決算データがありません
-                      </td>
-                    </tr>
-                  ) : (
-                    closingData.map((data) => (
-                      <tr key={data.fiscal_year} className="border-b hover:bg-gray-50">
-                        <td className="py-2 px-3">{data.fiscal_year}年度</td>
-                        <td className="text-right py-2 px-3">{data.account_count}</td>
-                        <td className="text-right py-2 px-3">{data.adjustment_count.toLocaleString()}</td>
-                        <td className="text-right py-2 px-3">{formatCurrency(data.total_debit)}</td>
-                        <td className="text-right py-2 px-3">{formatCurrency(data.total_credit)}</td>
-                        <td className="text-center py-2 px-3">
-                          <button
-                            onClick={() => handleDeleteClosing(data.fiscal_year)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+          <ScrollArea className="h-[600px] pr-4">
+            <div className="space-y-4">
+              {monthlyData.map((yearGroup) => (
+                <Card key={yearGroup.year} className="overflow-hidden">
+                  <CardHeader 
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => toggleYear(yearGroup.year)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {expandedYears.has(yearGroup.year) ? 
+                          <ChevronDown className="h-5 w-5" /> : 
+                          <ChevronRight className="h-5 w-5" />
+                        }
+                        <CardTitle className="text-xl">{yearGroup.yearLabel}</CardTitle>
+                        {yearGroup.hasClosing && (
+                          <Badge variant="secondary">決算済</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span>{yearGroup.months.length}ヶ月</span>
+                        <span className="font-semibold">
+                          {formatCurrency(yearGroup.totals.total_debit)}
+                        </span>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  
+                  {expandedYears.has(yearGroup.year) && (
+                    <CardContent className="pt-0">
+                      <div className="space-y-2">
+                        {yearGroup.months.map((month, idx) => (
+                          <div key={month.yyyymm}>
+                            {idx > 0 && <Separator />}
+                            <div className="flex items-center justify-between py-2 hover:bg-muted/30 px-2 rounded">
+                              <div className="flex items-center gap-4">
+                                <span className="font-medium w-24">
+                                  {formatMonth(month.yyyymm)}
+                                </span>
+                                <div className="flex gap-4 text-sm text-muted-foreground">
+                                  <span>{month.account_count}科目</span>
+                                  <span>{month.transaction_count.toLocaleString()}件</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="font-mono">
+                                  {formatCurrency(month.total_debit)}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(month.yyyymm)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
                   )}
-                </tbody>
-              </table>
+                </Card>
+              ))}
             </div>
-          )}
+          </ScrollArea>
+        </TabsContent>
 
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={handleExport}
-              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              エクスポート
-            </button>
+        <TabsContent value="closing" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <Button onClick={() => setIsClosingImportModalOpen(true)} className="gap-2">
+              <Upload className="h-4 w-4" />
+              決算CSVインポート
+            </Button>
           </div>
-        </div>
-      </div>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>決算調整データ</CardTitle>
+              <CardDescription>各年度の決算調整仕訳を管理します</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {closingData.length > 0 ? (
+                <div className="space-y-2">
+                  {closingData.map((item: any) => (
+                    <div key={`${item.fiscal_year}-${item.fiscal_month}`} 
+                         className="flex items-center justify-between p-2 hover:bg-muted/30 rounded">
+                      <span>{item.fiscal_year}年度 決算調整</span>
+                      <Badge>678件</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">決算データはまだインポートされていません</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
-      <div className="mt-6 bg-blue-50 rounded-lg shadow p-6">
-        <div className="flex items-center mb-4">
-          <Search className="h-5 w-5 text-blue-600 mr-2" />
-          <h3 className="text-lg font-semibold">AI分析アシスタント</h3>
-        </div>
-        <div className="space-y-4">
-          <input
-            type="text"
-            value={aiQuestion}
-            onChange={(e) => setAiQuestion(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAiQuery()}
-            placeholder="例: 今月の広告費の詳細を教えて / 電気代の合計は？"
-            className="w-full p-3 border rounded-md"
-            disabled={isAiLoading || !selectedMonth}
-          />
-          <button
-            onClick={handleAiQuery}
-            disabled={isAiLoading || !aiQuestion.trim() || !selectedMonth}
-            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-          >
-            {isAiLoading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                分析中...
-              </>
-            ) : (
-              <>
-                <Search className="h-4 w-4 mr-2" />
-                質問する
-              </>
-            )}
-          </button>
-          {aiResponse && (
-            <div className="bg-white p-4 rounded-md border">
-              <pre className="whitespace-pre-wrap text-sm">{aiResponse}</pre>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <GeneralLedgerImportModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        onImportComplete={handleImportComplete}
-      />
-
-      <ClosingImportModal
-        isOpen={isClosingModalOpen}
-        onClose={() => setIsClosingModalOpen(false)}
-        onImportComplete={handleClosingImportComplete}
-      />
+      {isImportModalOpen && (
+        <GeneralLedgerImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImportComplete={() => {
+            fetchMonthlyData();
+            setIsImportModalOpen(false);
+          }}
+        />
+      )}
+      
+      {isClosingImportModalOpen && (
+        <ClosingImportModal
+          isOpen={isClosingImportModalOpen}
+          onClose={() => setIsClosingImportModalOpen(false)}
+          onImportComplete={() => {
+            fetchMonthlyData();
+            setIsClosingImportModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
