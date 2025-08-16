@@ -5,19 +5,12 @@ import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { Database } from '@/types/supabase';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { 
-  Upload, Trash2, AlertCircle, FileText, Calculator, 
-  ChevronDown, ChevronRight, TrendingUp, TrendingDown, Calendar
-} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Upload, Trash2, FileText, Calculator, Calendar, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 import ClosingImportModal from '@/components/general-ledger/ClosingImportModal';
-import { cn } from '@/lib/utils';
 
 interface MonthlyData {
   yyyymm: string;
@@ -44,12 +37,13 @@ export default function GeneralLedgerPage() {
   const [monthlyData, setMonthlyData] = useState<FiscalYearGroup[]>([]);
   const [closingData, setClosingData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'monthly' | 'closing'>('monthly');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isClosingImportModalOpen, setIsClosingImportModalOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
+  const [selectedYear, setSelectedYear] = useState<string>('all');
   const [stats, setStats] = useState({
     totalMonths: 0,
     totalTransactions: 0,
@@ -250,6 +244,11 @@ export default function GeneralLedgerPage() {
     return `${year}年${month}月`;
   };
 
+  // フィルター後のデータ
+  const filteredData = selectedYear === 'all' 
+    ? monthlyData 
+    : monthlyData.filter(g => g.year === parseInt(selectedYear));
+
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -293,104 +292,143 @@ export default function GeneralLedgerPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="monthly" className="space-y-4">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="monthly">通常月データ</TabsTrigger>
-          <TabsTrigger value="closing">決算データ</TabsTrigger>
-        </TabsList>
+      {/* タブ切り替えボタン */}
+      <div className="flex gap-2 mb-4 border-b">
+        <button
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'monthly' 
+              ? 'border-b-2 border-primary text-primary' 
+              : 'text-muted-foreground hover:text-primary'
+          }`}
+          onClick={() => setActiveTab('monthly')}
+        >
+          通常月データ
+        </button>
+        <button
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'closing' 
+              ? 'border-b-2 border-primary text-primary' 
+              : 'text-muted-foreground hover:text-primary'
+          }`}
+          onClick={() => setActiveTab('closing')}
+        >
+          決算データ
+        </button>
+      </div>
 
-        <TabsContent value="monthly" className="space-y-4">
+      {/* 通常月データタブ */}
+      {activeTab === 'monthly' && (
+        <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div className="flex gap-2">
               <Button onClick={() => setIsImportModalOpen(true)} className="gap-2">
                 <Upload className="h-4 w-4" />
                 CSVインポート
               </Button>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="年度を選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全年度</SelectItem>
+                  {monthlyData.map(g => (
+                    <SelectItem key={g.year} value={g.year.toString()}>
+                      {g.yearLabel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 variant="outline"
                 onClick={() => {
-                  const allExpanded = monthlyData.every(g => expandedYears.has(g.year));
+                  const allExpanded = filteredData.every(g => expandedYears.has(g.year));
                   if (allExpanded) {
                     setExpandedYears(new Set());
                   } else {
-                    setExpandedYears(new Set(monthlyData.map(g => g.year)));
+                    setExpandedYears(new Set(filteredData.map(g => g.year)));
                   }
                 }}
               >
-                {expandedYears.size === monthlyData.length ? '全て折りたたむ' : '全て展開'}
+                {expandedYears.size === filteredData.length ? '全て折りたたむ' : '全て展開'}
               </Button>
             </div>
           </div>
 
-          <ScrollArea className="h-[600px] pr-4">
-            <div className="space-y-4">
-              {monthlyData.map((yearGroup) => (
-                <Card key={yearGroup.year} className="overflow-hidden">
-                  <CardHeader 
-                    className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => toggleYear(yearGroup.year)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {expandedYears.has(yearGroup.year) ? 
-                          <ChevronDown className="h-5 w-5" /> : 
-                          <ChevronRight className="h-5 w-5" />
-                        }
-                        <CardTitle className="text-xl">{yearGroup.yearLabel}</CardTitle>
-                        {yearGroup.hasClosing && (
-                          <Badge variant="secondary">決算済</Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span>{yearGroup.months.length}ヶ月</span>
-                        <span className="font-semibold">
-                          {formatCurrency(yearGroup.totals.total_debit)}
+          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+            {filteredData.map((yearGroup) => (
+              <Card key={yearGroup.year} className="overflow-hidden">
+                <CardHeader 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => toggleYear(yearGroup.year)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {expandedYears.has(yearGroup.year) ? 
+                        <ChevronDown className="h-5 w-5" /> : 
+                        <ChevronRight className="h-5 w-5" />
+                      }
+                      <CardTitle className="text-xl">{yearGroup.yearLabel}</CardTitle>
+                      {yearGroup.hasClosing && (
+                        <span className="px-2 py-1 text-xs bg-secondary text-secondary-foreground rounded">
+                          決算済
                         </span>
-                      </div>
+                      )}
                     </div>
-                  </CardHeader>
-                  
-                  {expandedYears.has(yearGroup.year) && (
-                    <CardContent className="pt-0">
-                      <div className="space-y-2">
-                        {yearGroup.months.map((month, idx) => (
-                          <div key={month.yyyymm}>
-                            {idx > 0 && <Separator />}
-                            <div className="flex items-center justify-between py-2 hover:bg-muted/30 px-2 rounded">
-                              <div className="flex items-center gap-4">
-                                <span className="font-medium w-24">
-                                  {formatMonth(month.yyyymm)}
-                                </span>
-                                <div className="flex gap-4 text-sm text-muted-foreground">
-                                  <span>{month.account_count}科目</span>
-                                  <span>{month.transaction_count.toLocaleString()}件</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <span className="font-mono">
-                                  {formatCurrency(month.total_debit)}
-                                </span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDelete(month.yyyymm)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span>{yearGroup.months.length}ヶ月</span>
+                      <span className="font-semibold">
+                        {formatCurrency(yearGroup.totals.total_debit)}
+                      </span>
+                    </div>
+                  </div>
+                </CardHeader>
+                
+                {expandedYears.has(yearGroup.year) && (
+                  <CardContent className="pt-0">
+                    <div className="space-y-1">
+                      {yearGroup.months.map((month, idx) => (
+                        <div key={month.yyyymm}>
+                          {idx > 0 && <hr className="my-1" />}
+                          <div className="flex items-center justify-between py-2 hover:bg-muted/30 px-2 rounded">
+                            <div className="flex items-center gap-4">
+                              <span className="font-medium w-24">
+                                {formatMonth(month.yyyymm)}
+                              </span>
+                              <div className="flex gap-4 text-sm text-muted-foreground">
+                                <span>{month.account_count}科目</span>
+                                <span>{month.transaction_count.toLocaleString()}件</span>
                               </div>
                             </div>
+                            <div className="flex items-center gap-4">
+                              <span className="font-mono">
+                                {formatCurrency(month.total_debit)}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(month.yyyymm);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  )}
-                </Card>
-              ))}
-            </div>
-          </ScrollArea>
-        </TabsContent>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
-        <TabsContent value="closing" className="space-y-4">
+      {/* 決算データタブ */}
+      {activeTab === 'closing' && (
+        <div className="space-y-4">
           <div className="flex justify-between items-center">
             <Button onClick={() => setIsClosingImportModalOpen(true)} className="gap-2">
               <Upload className="h-4 w-4" />
@@ -401,26 +439,32 @@ export default function GeneralLedgerPage() {
           <Card>
             <CardHeader>
               <CardTitle>決算調整データ</CardTitle>
-              <CardDescription>各年度の決算調整仕訳を管理します</CardDescription>
             </CardHeader>
             <CardContent>
               {closingData.length > 0 ? (
                 <div className="space-y-2">
                   {closingData.map((item: any) => (
                     <div key={`${item.fiscal_year}-${item.fiscal_month}`} 
-                         className="flex items-center justify-between p-2 hover:bg-muted/30 rounded">
-                      <span>{item.fiscal_year}年度 決算調整</span>
-                      <Badge>678件</Badge>
+                         className="flex items-center justify-between p-3 hover:bg-muted/30 rounded border">
+                      <span className="font-medium">{item.fiscal_year}年度 決算調整</span>
+                      <span className="px-2 py-1 text-sm bg-primary/10 text-primary rounded">
+                        678件
+                      </span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground">決算データはまだインポートされていません</p>
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    決算データはまだインポートされていません
+                  </AlertDescription>
+                </Alert>
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
 
       {isImportModalOpen && (
         <GeneralLedgerImportModal
