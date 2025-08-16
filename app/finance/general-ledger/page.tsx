@@ -1,4 +1,4 @@
-// /app/finance/general-ledger/page.tsx ver.16
+// /app/finance/general-ledger/page.tsx ver.17
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -34,23 +34,18 @@ interface FiscalYearGroup {
 }
 
 export default function GeneralLedgerPage() {
-  const [monthlyData, setMonthlyData] = useState<FiscalYearGroup[]>([]);
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [yearGroups, setYearGroups] = useState<FiscalYearGroup[]>([]);
   const [closingData, setClosingData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'monthly' | 'closing'>('monthly');
+  const [viewMode, setViewMode] = useState<'list' | 'year'>('list');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isClosingImportModalOpen, setIsClosingImportModalOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [selectedYear, setSelectedYear] = useState<string>('all');
-  const [stats, setStats] = useState({
-    totalMonths: 0,
-    totalTransactions: 0,
-    totalAmount: 0,
-    latestMonth: '',
-    oldestMonth: ''
-  });
 
   const supabase = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,50 +70,50 @@ export default function GeneralLedgerPage() {
     try {
       setLoading(true);
       
-      // APIから月次データ取得（制限なし）
-      const response = await fetch('/api/general-ledger/months?limit=999');
-      const apiData = await response.json();
-      
-      if (!apiData.success || !apiData.data) {
-        console.error('Failed to fetch monthly data');
+      // 直接Supabaseから全データ取得
+      const { data: glData, error } = await supabase
+        .from('gl_monthly_stats')
+        .select('*')
+        .order('report_month', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching monthly stats:', error);
         return;
       }
 
       // 決算データ取得
-      const { data: closingData } = await supabase
+      const { data: closingDataResult } = await supabase
         .from('closing_adjustments')
         .select('fiscal_year, fiscal_month')
         .order('fiscal_year', { ascending: false });
       
-      setClosingData(closingData || []);
-      
+      setClosingData(closingDataResult || []);
+
+      // MonthlyData形式に変換
+      const formattedData: MonthlyData[] = (glData || []).map(item => ({
+        yyyymm: item.yyyymm,
+        report_month: item.report_month,
+        account_count: item.account_count || 0,
+        transaction_count: item.transaction_count || 0,
+        total_debit: item.total_debit || 0,
+        total_credit: item.total_credit || 0
+      }));
+
+      setMonthlyData(formattedData);
+
       // 年度別にグループ化
-      const yearGroups = new Map<number, MonthlyData[]>();
-      let totalTransactions = 0;
-      let totalAmount = 0;
+      const yearGroupsMap = new Map<number, MonthlyData[]>();
       
-      apiData.data.forEach((item: any) => {
+      formattedData.forEach(item => {
         const fiscalYear = getFiscalYear(item.report_month);
-        if (!yearGroups.has(fiscalYear)) {
-          yearGroups.set(fiscalYear, []);
+        if (!yearGroupsMap.has(fiscalYear)) {
+          yearGroupsMap.set(fiscalYear, []);
         }
-        
-        const monthData: MonthlyData = {
-          yyyymm: item.yyyymm,
-          report_month: item.report_month,
-          account_count: item.account_count,
-          transaction_count: item.transaction_count,
-          total_debit: item.total_debit || 0,
-          total_credit: item.total_credit || 0
-        };
-        
-        yearGroups.get(fiscalYear)!.push(monthData);
-        totalTransactions += monthData.transaction_count;
-        totalAmount += monthData.total_debit;
+        yearGroupsMap.get(fiscalYear)!.push(item);
       });
 
       // FiscalYearGroup配列に変換
-      const groups: FiscalYearGroup[] = Array.from(yearGroups.entries())
+      const groups: FiscalYearGroup[] = Array.from(yearGroupsMap.entries())
         .map(([year, months]) => {
           // 月でソート（4月〜3月の順）
           const sortedMonths = months.sort((a, b) => {
@@ -141,7 +136,7 @@ export default function GeneralLedgerPage() {
           }), { transaction_count: 0, total_debit: 0, total_credit: 0 });
 
           // 決算データの有無確認
-          const hasClosing = closingData?.some(c => 
+          const hasClosing = closingDataResult?.some(c => 
             c.fiscal_year === year && c.fiscal_month === 7
           );
 
@@ -155,23 +150,11 @@ export default function GeneralLedgerPage() {
         })
         .sort((a, b) => b.year - a.year);
 
-      setMonthlyData(groups);
+      setYearGroups(groups);
       
-      // 最新の3年度を展開
-      const latestYears = groups.slice(0, 3).map(g => g.year);
+      // 最新の2年度を展開
+      const latestYears = groups.slice(0, 2).map(g => g.year);
       setExpandedYears(new Set(latestYears));
-
-      // 統計情報
-      const allMonths = apiData.data;
-      if (allMonths.length > 0) {
-        setStats({
-          totalMonths: allMonths.length,
-          totalTransactions,
-          totalAmount,
-          latestMonth: allMonths[0].yyyymm,
-          oldestMonth: allMonths[allMonths.length - 1].yyyymm
-        });
-      }
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -244,11 +227,6 @@ export default function GeneralLedgerPage() {
     return `${year}年${month}月`;
   };
 
-  // フィルター後のデータ
-  const filteredData = selectedYear === 'all' 
-    ? monthlyData 
-    : monthlyData.filter(g => g.year === parseInt(selectedYear));
-
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -272,6 +250,14 @@ export default function GeneralLedgerPage() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-lg">データを読み込み中...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-4 max-w-7xl">
       <div className="mb-6">
@@ -279,15 +265,15 @@ export default function GeneralLedgerPage() {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
-            {stats.totalMonths}ヶ月分
+            {monthlyData.length}ヶ月分
           </span>
           <span className="flex items-center gap-1">
             <FileText className="h-4 w-4" />
-            {stats.totalTransactions.toLocaleString()}件
+            {monthlyData.reduce((sum, m) => sum + m.transaction_count, 0).toLocaleString()}件
           </span>
           <span className="flex items-center gap-1">
             <Calculator className="h-4 w-4" />
-            {formatCurrency(stats.totalAmount)}
+            {formatCurrency(monthlyData.reduce((sum, m) => sum + m.total_debit, 0))}
           </span>
         </div>
       </div>
@@ -325,104 +311,150 @@ export default function GeneralLedgerPage() {
                 <Upload className="h-4 w-4" />
                 CSVインポート
               </Button>
-              <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="年度を選択" />
+              <Select value={viewMode} onValueChange={(v: any) => setViewMode(v)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">全年度</SelectItem>
-                  {monthlyData.map(g => (
-                    <SelectItem key={g.year} value={g.year.toString()}>
-                      {g.yearLabel}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="list">月次一覧</SelectItem>
+                  <SelectItem value="year">年度別</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const allExpanded = filteredData.every(g => expandedYears.has(g.year));
-                  if (allExpanded) {
-                    setExpandedYears(new Set());
-                  } else {
-                    setExpandedYears(new Set(filteredData.map(g => g.year)));
-                  }
-                }}
-              >
-                {expandedYears.size === filteredData.length ? '全て折りたたむ' : '全て展開'}
-              </Button>
+              {viewMode === 'year' && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const allExpanded = yearGroups.every(g => expandedYears.has(g.year));
+                    if (allExpanded) {
+                      setExpandedYears(new Set());
+                    } else {
+                      setExpandedYears(new Set(yearGroups.map(g => g.year)));
+                    }
+                  }}
+                >
+                  {expandedYears.size === yearGroups.length ? '全て折りたたむ' : '全て展開'}
+                </Button>
+              )}
             </div>
           </div>
 
-          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-            {filteredData.map((yearGroup) => (
-              <Card key={yearGroup.year} className="overflow-hidden">
-                <CardHeader 
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => toggleYear(yearGroup.year)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {expandedYears.has(yearGroup.year) ? 
-                        <ChevronDown className="h-5 w-5" /> : 
-                        <ChevronRight className="h-5 w-5" />
-                      }
-                      <CardTitle className="text-xl">{yearGroup.yearLabel}</CardTitle>
-                      {yearGroup.hasClosing && (
-                        <span className="px-2 py-1 text-xs bg-secondary text-secondary-foreground rounded">
-                          決算済
+          {/* 月次一覧表示 */}
+          {viewMode === 'list' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>月次データ一覧</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">対象月</th>
+                        <th className="text-right py-2">勘定科目数</th>
+                        <th className="text-right py-2">取引件数</th>
+                        <th className="text-right py-2">借方合計</th>
+                        <th className="text-right py-2">貸方合計</th>
+                        <th className="text-center py-2">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthlyData.map((month) => (
+                        <tr key={month.yyyymm} className="border-b hover:bg-muted/30">
+                          <td className="py-2">{formatMonth(month.yyyymm)}</td>
+                          <td className="text-right py-2">{month.account_count}</td>
+                          <td className="text-right py-2">{month.transaction_count.toLocaleString()}</td>
+                          <td className="text-right py-2">{formatCurrency(month.total_debit)}</td>
+                          <td className="text-right py-2">{formatCurrency(month.total_credit)}</td>
+                          <td className="text-center py-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDelete(month.yyyymm)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 年度別表示 */}
+          {viewMode === 'year' && (
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+              {yearGroups.map((yearGroup) => (
+                <Card key={yearGroup.year} className="overflow-hidden">
+                  <CardHeader 
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => toggleYear(yearGroup.year)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {expandedYears.has(yearGroup.year) ? 
+                          <ChevronDown className="h-5 w-5" /> : 
+                          <ChevronRight className="h-5 w-5" />
+                        }
+                        <CardTitle className="text-xl">{yearGroup.yearLabel}</CardTitle>
+                        {yearGroup.hasClosing && (
+                          <span className="px-2 py-1 text-xs bg-secondary text-secondary-foreground rounded">
+                            決算済
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span>{yearGroup.months.length}ヶ月</span>
+                        <span className="font-semibold">
+                          {formatCurrency(yearGroup.totals.total_debit)}
                         </span>
-                      )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span>{yearGroup.months.length}ヶ月</span>
-                      <span className="font-semibold">
-                        {formatCurrency(yearGroup.totals.total_debit)}
-                      </span>
-                    </div>
-                  </div>
-                </CardHeader>
-                
-                {expandedYears.has(yearGroup.year) && (
-                  <CardContent className="pt-0">
-                    <div className="space-y-1">
-                      {yearGroup.months.map((month, idx) => (
-                        <div key={month.yyyymm}>
-                          {idx > 0 && <hr className="my-1" />}
-                          <div className="flex items-center justify-between py-2 hover:bg-muted/30 px-2 rounded">
-                            <div className="flex items-center gap-4">
-                              <span className="font-medium w-24">
-                                {formatMonth(month.yyyymm)}
-                              </span>
-                              <div className="flex gap-4 text-sm text-muted-foreground">
-                                <span>{month.account_count}科目</span>
-                                <span>{month.transaction_count.toLocaleString()}件</span>
+                  </CardHeader>
+                  
+                  {expandedYears.has(yearGroup.year) && (
+                    <CardContent className="pt-0">
+                      <div className="space-y-1">
+                        {yearGroup.months.map((month, idx) => (
+                          <div key={month.yyyymm}>
+                            {idx > 0 && <hr className="my-1" />}
+                            <div className="flex items-center justify-between py-2 hover:bg-muted/30 px-2 rounded">
+                              <div className="flex items-center gap-4">
+                                <span className="font-medium w-24">
+                                  {formatMonth(month.yyyymm)}
+                                </span>
+                                <div className="flex gap-4 text-sm text-muted-foreground">
+                                  <span>{month.account_count}科目</span>
+                                  <span>{month.transaction_count.toLocaleString()}件</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="font-mono">
+                                  {formatCurrency(month.total_debit)}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(month.yyyymm);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <span className="font-mono">
-                                {formatCurrency(month.total_debit)}
-                              </span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(month.yyyymm);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            ))}
-          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
