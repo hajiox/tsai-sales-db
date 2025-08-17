@@ -1,4 +1,4 @@
-// /app/finance/general-ledger/page.tsx ver.18
+// /app/finance/general-ledger/page.tsx ver.19
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -31,16 +31,24 @@ interface FiscalYearGroup {
     total_credit: number;
   };
   hasClosing?: boolean;
-  isComplete: boolean; // 12ヶ月揃っているか
+  isComplete: boolean;
+}
+
+interface ClosingSummary {
+  fiscal_year: number;
+  fiscal_month: number;
+  record_count: number;
+  total_debit: number;
+  total_credit: number;
 }
 
 export default function GeneralLedgerPage() {
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [yearGroups, setYearGroups] = useState<FiscalYearGroup[]>([]);
-  const [closingData, setClosingData] = useState<any[]>([]);
+  const [closingData, setClosingData] = useState<ClosingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'monthly' | 'closing'>('monthly');
-  const [viewMode, setViewMode] = useState<'year' | 'list'>('year'); // デフォルトを年度別に
+  const [viewMode, setViewMode] = useState<'year' | 'list'>('year');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isClosingImportModalOpen, setIsClosingImportModalOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -52,28 +60,21 @@ export default function GeneralLedgerPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // 会計年度の判定（7月決算 = 8月始まり）
   const getFiscalYear = (dateStr: string): number => {
     const date = new Date(dateStr);
     const year = date.getFullYear();
-    const month = date.getMonth() + 1; // 1-12
-    
-    // 8月〜12月は当年度、1月〜7月は前年度
+    const month = date.getMonth() + 1;
     return month >= 8 ? year : year - 1;
   };
 
-  // 年度表示ラベル
   const getFiscalYearLabel = (year: number): string => {
     const reiwaYear = year - 2018;
     const nextYear = year + 1;
     const nextReiwaYear = nextYear - 2018;
-    return `${year}年度（令和${reiwaYear}年8月〜令和${nextReiwaYear}年7月）`;
+    return `${year}年度（令和${reiwaYear}年8月～令和${nextReiwaYear}年7月）`;
   };
 
-  // 月の表示順序を取得（8月を1番目とする）
   const getFiscalMonthOrder = (month: number): number => {
-    // month: 1-12
-    // 8月(8) → 1, 9月(9) → 2, ... 7月(7) → 12
     return month >= 8 ? month - 7 : month + 5;
   };
 
@@ -81,7 +82,6 @@ export default function GeneralLedgerPage() {
     try {
       setLoading(true);
       
-      // 直接Supabaseから全データ取得
       const { data: glData, error } = await supabase
         .from('gl_monthly_stats')
         .select('*')
@@ -92,15 +92,34 @@ export default function GeneralLedgerPage() {
         return;
       }
 
-      // 決算データ取得
+      // 決算データのサマリーを取得（グループ化）
       const { data: closingDataResult } = await supabase
         .from('closing_adjustments')
-        .select('fiscal_year, fiscal_month')
-        .order('fiscal_year', { ascending: false });
+        .select('fiscal_year, fiscal_month, debit_amount, credit_amount');
       
-      setClosingData(closingDataResult || []);
+      // 決算データを年度ごとに集計
+      const closingSummaryMap = new Map<string, ClosingSummary>();
+      if (closingDataResult) {
+        closingDataResult.forEach(item => {
+          const key = `${item.fiscal_year}-${item.fiscal_month}`;
+          if (!closingSummaryMap.has(key)) {
+            closingSummaryMap.set(key, {
+              fiscal_year: item.fiscal_year,
+              fiscal_month: item.fiscal_month,
+              record_count: 0,
+              total_debit: 0,
+              total_credit: 0
+            });
+          }
+          const summary = closingSummaryMap.get(key)!;
+          summary.record_count++;
+          summary.total_debit += item.debit_amount || 0;
+          summary.total_credit += item.credit_amount || 0;
+        });
+      }
+      
+      setClosingData(Array.from(closingSummaryMap.values()));
 
-      // MonthlyData形式に変換
       const formattedData: MonthlyData[] = (glData || []).map(item => ({
         yyyymm: item.yyyymm,
         report_month: item.report_month,
@@ -112,7 +131,6 @@ export default function GeneralLedgerPage() {
 
       setMonthlyData(formattedData);
 
-      // 年度別にグループ化
       const yearGroupsMap = new Map<number, MonthlyData[]>();
       
       formattedData.forEach(item => {
@@ -123,10 +141,8 @@ export default function GeneralLedgerPage() {
         yearGroupsMap.get(fiscalYear)!.push(item);
       });
 
-      // FiscalYearGroup配列に変換
       const groups: FiscalYearGroup[] = Array.from(yearGroupsMap.entries())
         .map(([year, months]) => {
-          // 月でソート（8月〜7月の順）
           const sortedMonths = months.sort((a, b) => {
             const dateA = new Date(a.report_month);
             const dateB = new Date(b.report_month);
@@ -145,12 +161,8 @@ export default function GeneralLedgerPage() {
             total_credit: acc.total_credit + month.total_credit
           }), { transaction_count: 0, total_debit: 0, total_credit: 0 });
 
-          // 決算データの有無確認
-          const hasClosing = closingDataResult?.some(c => 
-            c.fiscal_year === year && c.fiscal_month === 7
-          );
+          const hasClosing = closingSummaryMap.has(`${year}-7`);
 
-          // 12ヶ月揃っているかチェック
           const monthSet = new Set(sortedMonths.map(m => {
             const date = new Date(m.report_month);
             return date.getMonth() + 1;
@@ -170,7 +182,6 @@ export default function GeneralLedgerPage() {
 
       setYearGroups(groups);
       
-      // 最新の2年度を展開
       const latestYears = groups.slice(0, 2).map(g => g.year);
       setExpandedYears(new Set(latestYears));
 
@@ -245,7 +256,6 @@ export default function GeneralLedgerPage() {
     return `${year}年${month}月`;
   };
 
-  // 年度内の欠落月を取得
   const getMissingMonths = (yearGroup: FiscalYearGroup): string[] => {
     const existingMonths = new Set(yearGroup.months.map(m => {
       const date = new Date(m.report_month);
@@ -253,7 +263,7 @@ export default function GeneralLedgerPage() {
     }));
     
     const missingMonths: string[] = [];
-    const monthOrder = [8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7]; // 8月から7月の順
+    const monthOrder = [8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7];
     
     monthOrder.forEach(month => {
       if (!existingMonths.has(month)) {
@@ -316,7 +326,6 @@ export default function GeneralLedgerPage() {
         </div>
       </div>
 
-      {/* タブ切り替えボタン */}
       <div className="flex gap-2 mb-4 border-b">
         <button
           className={`px-4 py-2 font-medium transition-colors ${
@@ -340,7 +349,6 @@ export default function GeneralLedgerPage() {
         </button>
       </div>
 
-      {/* 通常月データタブ */}
       {activeTab === 'monthly' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
@@ -376,7 +384,6 @@ export default function GeneralLedgerPage() {
             </div>
           </div>
 
-          {/* 年度別表示 */}
           {viewMode === 'year' && (
             <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
               {yearGroups.map((yearGroup) => (
@@ -471,7 +478,6 @@ export default function GeneralLedgerPage() {
             </div>
           )}
 
-          {/* 月次一覧表示 */}
           {viewMode === 'list' && (
             <Card>
               <CardHeader>
@@ -523,7 +529,6 @@ export default function GeneralLedgerPage() {
         </div>
       )}
 
-      {/* 決算データタブ */}
       {activeTab === 'closing' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
@@ -540,13 +545,21 @@ export default function GeneralLedgerPage() {
             <CardContent>
               {closingData.length > 0 ? (
                 <div className="space-y-2">
-                  {closingData.map((item: any) => (
+                  {closingData.map((item) => (
                     <div key={`${item.fiscal_year}-${item.fiscal_month}`} 
                          className="flex items-center justify-between p-3 hover:bg-muted/30 rounded border">
                       <span className="font-medium">{item.fiscal_year}年度（7月決算）</span>
-                      <span className="px-2 py-1 text-sm bg-primary/10 text-primary rounded">
-                        678件
-                      </span>
+                      <div className="flex gap-4 items-center">
+                        <span className="text-sm text-muted-foreground">
+                          借方: {formatCurrency(item.total_debit)}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          貸方: {formatCurrency(item.total_credit)}
+                        </span>
+                        <span className="px-2 py-1 text-sm bg-primary/10 text-primary rounded">
+                          {item.record_count}件
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
