@@ -1,4 +1,4 @@
-// /components/finance/CashFlow.tsx ver.2
+// /components/finance/CashFlow.tsx ver.3
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -42,97 +42,6 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
   const [cashFlowData, setCashFlowData] = useState<CashFlowData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchCashFlowData();
-  }, [month, includingClosing]);
-
-  const fetchCashFlowData = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
-
-      // 選択月と前月を計算
-      const currentDate = new Date(month + '-01');
-      const previousDate = new Date(currentDate);
-      previousDate.setMonth(previousDate.getMonth() - 1);
-      const previousMonth = previousDate.toISOString().slice(0, 7);
-
-      // 現金・預金の期首残高を取得
-      const { data: cashBeginData } = await supabase
-        .from('general_ledger')
-        .select('account_code, balance')
-        .eq('report_month', previousMonth + '-01')
-        .in('account_code', ['100', '103', '106'])
-        .order('transaction_date', { ascending: false })
-        .limit(1);
-
-      // 現金・預金の期末残高を取得
-      const { data: cashEndData } = await supabase
-        .from('general_ledger')
-        .select('account_code, balance')
-        .eq('report_month', month + '-01')
-        .in('account_code', ['100', '103', '106'])
-        .order('transaction_date', { ascending: false })
-        .limit(1);
-
-      // 当月の取引データを取得
-      let allTransactions: any[] = [];
-      let offset = 0;
-      const limit = 1000;
-      
-      while (true) {
-        const { data, error } = await supabase
-          .from('general_ledger')
-          .select(`
-            *,
-            account_master!inner(account_name, account_type)
-          `)
-          .eq('report_month', month + '-01')
-          .range(offset, offset + limit - 1);
-
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        
-        allTransactions = [...allTransactions, ...data];
-        if (data.length < limit) break;
-        offset += limit;
-      }
-
-      // 決算調整データの取得（7月のみ）
-      if (month === '2024-07' && includingClosing) {
-        const { data: closingData } = await supabase
-          .from('closing_adjustments')
-          .select('*')
-          .eq('fiscal_year', 2024);
-
-        if (closingData) {
-          allTransactions = [...allTransactions, ...closingData.map(item => ({
-            ...item,
-            account_master: { 
-              account_name: item.account_name,
-              account_type: this.getAccountTypeFromCode(item.account_code)
-            }
-          }))];
-        }
-      }
-
-      // キャッシュフロー計算
-      const cashFlowCalc = this.calculateCashFlow(allTransactions, cashBeginData, cashEndData);
-      setCashFlowData(cashFlowCalc);
-
-    } catch (err) {
-      console.error('Error fetching cash flow data:', err);
-      setError('キャッシュフローデータの取得に失敗しました');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getAccountTypeFromCode = (code: string): string => {
     const codeNum = parseInt(code);
@@ -226,6 +135,97 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
       netCashFlow
     };
   };
+
+  useEffect(() => {
+    const fetchCashFlowData = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+
+        // 選択月と前月を計算
+        const currentDate = new Date(month + '-01');
+        const previousDate = new Date(currentDate);
+        previousDate.setMonth(previousDate.getMonth() - 1);
+        const previousMonth = previousDate.toISOString().slice(0, 7);
+
+        // 現金・預金の期首残高を取得
+        const { data: cashBeginData } = await supabase
+          .from('general_ledger')
+          .select('account_code, balance')
+          .eq('report_month', previousMonth + '-01')
+          .in('account_code', ['100', '103', '106'])
+          .order('transaction_date', { ascending: false })
+          .limit(1);
+
+        // 現金・預金の期末残高を取得
+        const { data: cashEndData } = await supabase
+          .from('general_ledger')
+          .select('account_code, balance')
+          .eq('report_month', month + '-01')
+          .in('account_code', ['100', '103', '106'])
+          .order('transaction_date', { ascending: false })
+          .limit(1);
+
+        // 当月の取引データを取得
+        let allTransactions: any[] = [];
+        let offset = 0;
+        const limit = 1000;
+        
+        while (true) {
+          const { data, error } = await supabase
+            .from('general_ledger')
+            .select(`
+              *,
+              account_master!inner(account_name, account_type)
+            `)
+            .eq('report_month', month + '-01')
+            .range(offset, offset + limit - 1);
+
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+          
+          allTransactions = [...allTransactions, ...data];
+          if (data.length < limit) break;
+          offset += limit;
+        }
+
+        // 決算調整データの取得（7月のみ）
+        if (month === '2024-07' && includingClosing) {
+          const { data: closingData } = await supabase
+            .from('closing_adjustments')
+            .select('*')
+            .eq('fiscal_year', 2024);
+
+          if (closingData) {
+            allTransactions = [...allTransactions, ...closingData.map(item => ({
+              ...item,
+              account_master: { 
+                account_name: item.account_name,
+                account_type: getAccountTypeFromCode(item.account_code)
+              }
+            }))];
+          }
+        }
+
+        // キャッシュフロー計算
+        const cashFlowCalc = calculateCashFlow(allTransactions, cashBeginData || [], cashEndData || []);
+        setCashFlowData(cashFlowCalc);
+
+      } catch (err) {
+        console.error('Error fetching cash flow data:', err);
+        setError('キャッシュフローデータの取得に失敗しました');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCashFlowData();
+  }, [month, includingClosing]);
 
   const formatAmount = (amount: number): string => {
     return new Intl.NumberFormat('ja-JP').format(Math.abs(amount));
