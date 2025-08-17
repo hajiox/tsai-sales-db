@@ -1,4 +1,4 @@
-// /app/finance/general-ledger/page.tsx ver.19
+// /app/finance/general-ledger/page.tsx ver.20
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, Trash2, FileText, Calculator, Calendar, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
+import { Upload, Trash2, FileText, Calculator, Calendar, ChevronDown, ChevronRight, AlertCircle, BarChart3, FileSpreadsheet, DollarSign } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 import ClosingImportModal from '@/components/general-ledger/ClosingImportModal';
 
@@ -54,6 +55,8 @@ export default function GeneralLedgerPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
+  
+  const router = useRouter();
 
   const supabase = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -92,12 +95,10 @@ export default function GeneralLedgerPage() {
         return;
       }
 
-      // 決算データのサマリーを取得（グループ化）
       const { data: closingDataResult } = await supabase
         .from('closing_adjustments')
         .select('fiscal_year, fiscal_month, debit_amount, credit_amount');
       
-      // 決算データを年度ごとに集計
       const closingSummaryMap = new Map<string, ClosingSummary>();
       if (closingDataResult) {
         closingDataResult.forEach(item => {
@@ -275,6 +276,12 @@ export default function GeneralLedgerPage() {
     return missingMonths;
   };
 
+  // 最新の月を取得（財務諸表へのリンク用）
+  const getLatestMonth = () => {
+    if (monthlyData.length === 0) return null;
+    return monthlyData[0].yyyymm;
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -323,6 +330,84 @@ export default function GeneralLedgerPage() {
             <Calculator className="h-4 w-4" />
             {formatCurrency(monthlyData.reduce((sum, m) => sum + m.total_debit, 0))}
           </span>
+        </div>
+      </div>
+
+      {/* 財務諸表へのナビゲーションボタン */}
+      <div className="mb-4 p-4 bg-muted/30 rounded-lg">
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            variant="default"
+            className="gap-2"
+            onClick={() => {
+              const latestMonth = getLatestMonth();
+              if (latestMonth) {
+                const year = latestMonth.substring(0, 4);
+                const month = latestMonth.substring(4, 6);
+                router.push(`/finance/financial-statements?year=${year}&month=${month}`);
+              } else {
+                router.push('/finance/financial-statements');
+              }
+            }}
+          >
+            <BarChart3 className="h-4 w-4" />
+            財務諸表
+          </Button>
+          
+          <Button 
+            variant="outline"
+            className="gap-2"
+            onClick={() => {
+              const latestMonth = getLatestMonth();
+              if (latestMonth) {
+                const year = latestMonth.substring(0, 4);
+                const month = latestMonth.substring(4, 6);
+                router.push(`/finance/financial-statements?year=${year}&month=${month}&tab=balance-sheet`);
+              }
+            }}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            貸借対照表
+          </Button>
+          
+          <Button 
+            variant="outline"
+            className="gap-2"
+            onClick={() => {
+              const latestMonth = getLatestMonth();
+              if (latestMonth) {
+                const year = latestMonth.substring(0, 4);
+                const month = latestMonth.substring(4, 6);
+                router.push(`/finance/financial-statements?year=${year}&month=${month}&tab=profit-loss`);
+              }
+            }}
+          >
+            <DollarSign className="h-4 w-4" />
+            損益計算書
+          </Button>
+          
+          <Button 
+            variant="outline"
+            className="gap-2"
+            disabled
+            title="実装準備中"
+          >
+            <Calculator className="h-4 w-4" />
+            キャッシュフロー計算書
+          </Button>
+          
+          {closingData.some(d => d.fiscal_month === 7) && (
+            <Button 
+              variant="outline"
+              className="gap-2"
+              onClick={() => {
+                router.push('/finance/financial-statements?year=2024&month=07&tab=report');
+              }}
+            >
+              <FileText className="h-4 w-4" />
+              決算書作成
+            </Button>
+          )}
         </div>
       </div>
 
