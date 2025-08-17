@@ -1,10 +1,10 @@
-// /components/finance/FinancialStatementsContent.tsx ver.3
+// /components/finance/FinancialStatementsContent.tsx ver.4
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { FileSpreadsheet, BarChart3, Calendar, FileText } from 'lucide-react';
+import { FileSpreadsheet, BarChart3, Calendar, FileText, ToggleLeft, ToggleRight } from 'lucide-react';
 import { BalanceSheet } from '@/components/finance/BalanceSheet';
 import { ProfitLoss } from '@/components/finance/ProfitLoss';
 import { CashFlow } from '@/components/finance/CashFlow';
@@ -28,6 +28,7 @@ export default function FinancialStatementsContent() {
   const [activeTab, setActiveTab] = useState<'bs' | 'pl' | 'cf' | 'detail' | 'report'>('bs');
   const [isLoading, setIsLoading] = useState(true);
   const [includeClosing, setIncludeClosing] = useState(false);
+  const [showCumulative, setShowCumulative] = useState(false); // 通期累計表示フラグ
   
   const [bsData, setBsData] = useState<{
     assets: AccountBalance[];
@@ -52,6 +53,14 @@ export default function FinancialStatementsContent() {
     router.push(`${pathname}?${params.toString()}`);
   };
 
+  // 会計年度の開始月を取得（7月決算なので8月開始）
+  const getFiscalYearStart = (month: string) => {
+    const [year, monthNum] = month.split('-').map(Number);
+    // 8月以降は当年度、7月以前は前年度
+    const fiscalYear = monthNum >= 8 ? year : year - 1;
+    return `${fiscalYear}-08-01`;
+  };
+
   useEffect(() => {
     const authStatus = sessionStorage.getItem('financeSystemAuth');
     if (authStatus === 'authenticated') {
@@ -59,12 +68,26 @@ export default function FinancialStatementsContent() {
     } else {
       router.push('/finance/general-ledger');
     }
-  }, [selectedMonth, includeClosing]);
+  }, [selectedMonth, includeClosing, showCumulative]);
 
   const loadFinancialData = async () => {
     setIsLoading(true);
     
-    // 1. 通常月データの取得
+    // 期間の設定
+    let dateCondition;
+    if (showCumulative) {
+      // 通期累計：会計年度開始から選択月まで
+      const fiscalStart = getFiscalYearStart(selectedMonth);
+      dateCondition = {
+        gte: fiscalStart,
+        lte: `${selectedMonth}-01`
+      };
+    } else {
+      // 単月：選択月のみ
+      dateCondition = `${selectedMonth}-01`;
+    }
+
+    // 1. データの取得
     let allLedgerData: any[] = [];
     let page = 0;
     const pageSize = 1000;
@@ -74,16 +97,25 @@ export default function FinancialStatementsContent() {
       const from = page * pageSize;
       const to = from + pageSize - 1;
       
-      const { data: ledgerData } = await supabase
+      const query = supabase
         .from('general_ledger')
         .select(`
           account_code,
           debit_amount,
           credit_amount,
-          account_master!inner(account_name)
+          account_master!inner(account_name, account_type)
         `)
-        .eq('report_month', `${selectedMonth}-01`)
         .range(from, to);
+
+      // 期間条件の適用
+      if (showCumulative) {
+        query.gte('report_month', dateCondition.gte)
+             .lte('report_month', dateCondition.lte);
+      } else {
+        query.eq('report_month', dateCondition);
+      }
+
+      const { data: ledgerData } = await query;
 
       if (ledgerData && ledgerData.length > 0) {
         allLedgerData = [...allLedgerData, ...ledgerData];
@@ -113,15 +145,21 @@ export default function FinancialStatementsContent() {
 
     // 3. データの集計
     if (allLedgerData.length > 0 || closingData.length > 0) {
-      const accountTotals = new Map<string, { name: string, debit: number, credit: number }>();
+      const accountTotals = new Map<string, { 
+        name: string, 
+        type: string,
+        debit: number, 
+        credit: number 
+      }>();
       
       // 通常月データの集計
       allLedgerData.forEach(item => {
         const code = item.account_code;
         const name = item.account_master?.account_name || '';
+        const type = item.account_master?.account_type || '未分類';
         
         if (!accountTotals.has(code)) {
-          accountTotals.set(code, { name, debit: 0, credit: 0 });
+          accountTotals.set(code, { name, type, debit: 0, credit: 0 });
         }
         
         const account = accountTotals.get(code)!;
@@ -135,7 +173,25 @@ export default function FinancialStatementsContent() {
         const name = item.account_name || '';
         
         if (!accountTotals.has(code)) {
-          accountTotals.set(code, { name, debit: 0, credit: 0 });
+          // 決算調整データから account_type を推定
+          let type = '未分類';
+          if ((code >= '100' && code < '200') || (code >= '1000' && code < '1200')) {
+            type = '資産';
+          } else if ((code >= '200' && code < '300') || (code >= '1200' && code < '1300')) {
+            type = '負債';
+          } else if (code >= '300' && code < '400') {
+            type = '純資産';
+          } else if (code >= '800' && code < '900') {
+            type = '収益';
+          } else if (code >= '600' && code < '610') {
+            type = '営業外収益';
+          } else if (code === '610') {
+            type = '営業外費用';
+          } else if (code >= '400' && code < '600') {
+            type = '費用';
+          }
+          
+          accountTotals.set(code, { name, type, debit: 0, credit: 0 });
         }
         
         const account = accountTotals.get(code)!;
@@ -153,11 +209,15 @@ export default function FinancialStatementsContent() {
       accountTotals.forEach((totals, code) => {
         let balance = 0;
         
+        // account_type に基づく分類
+        const isAssetType = totals.type === '資産';
+        const isLiabilityType = totals.type === '負債';
+        const isEquityType = totals.type === '純資産';
+        const isRevenueType = totals.type === '収益' || totals.type === '営業外収益';
+        const isExpenseType = totals.type === '費用' || totals.type === '営業外費用';
+        
         // 資産・費用系は借方残高
-        if ((code >= '100' && code < '200') || 
-            (code >= '1000' && code < '1200') || 
-            (code >= '400' && code < '600') || 
-            code === '610') {
+        if (isAssetType || isExpenseType) {
           balance = totals.debit - totals.credit;
         } else {
           // 負債・純資産・収益系は貸方残高
@@ -170,16 +230,16 @@ export default function FinancialStatementsContent() {
           balance: Math.abs(balance)
         };
 
-        // 勘定科目コードによる分類
-        if ((code >= '100' && code < '200') || (code >= '1000' && code < '1200')) {
+        // account_type による分類
+        if (isAssetType) {
           assets.push(account);
-        } else if ((code >= '200' && code < '300') || (code >= '1200' && code < '1300')) {
+        } else if (isLiabilityType) {
           liabilities.push(account);
-        } else if (code >= '300' && code < '400') {
+        } else if (isEquityType) {
           equity.push(account);
-        } else if ((code >= '800' && code < '900') || (code >= '600' && code < '610')) {
+        } else if (isRevenueType) {
           revenues.push(account);
-        } else if ((code >= '400' && code < '600') || code === '610') {
+        } else if (isExpenseType) {
           expenses.push(account);
         }
       });
@@ -230,14 +290,38 @@ export default function FinancialStatementsContent() {
       <div className="bg-white rounded-lg shadow mb-6">
         <div className="p-4 border-b">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-gray-400" />
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => handleMonthChange(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Calendar className="w-5 h-5 text-gray-400" />
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => handleMonthChange(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              {/* 単月/通期累計切り替え */}
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowCumulative(!showCumulative)}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${
+                    showCumulative 
+                      ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                      : 'bg-gray-100 text-gray-700 border border-gray-300'
+                  }`}
+                >
+                  {showCumulative ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                  <span className="text-sm font-medium">
+                    {showCumulative ? '通期累計' : '単月'}
+                  </span>
+                </button>
+                {showCumulative && (
+                  <span className="text-xs text-gray-500">
+                    {getFiscalYearStart(selectedMonth).substring(0, 7)} ～ {selectedMonth}
+                  </span>
+                )}
+              </div>
             </div>
             
             {/* 7月の場合のみ決算調整オプションを表示 */}
@@ -296,7 +380,7 @@ export default function FinancialStatementsContent() {
         ) : (
           <>
             {activeTab === 'bs' && <BalanceSheet {...bsData} />}
-            {activeTab === 'pl' && <ProfitLoss {...plData} />}
+            {activeTab === 'pl' && <ProfitLoss {...plData} showCumulative={showCumulative} />}
             {activeTab === 'cf' && <CashFlow />}
             {activeTab === 'detail' && <DetailSearch selectedMonth={selectedMonth} />}
             {activeTab === 'report' && (
@@ -305,6 +389,7 @@ export default function FinancialStatementsContent() {
                 plData={plData} 
                 selectedMonth={selectedMonth}
                 includeClosing={includeClosing}
+                showCumulative={showCumulative}
               />
             )}
           </>
