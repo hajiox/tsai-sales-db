@@ -1,4 +1,4 @@
-// /components/finance/FinancialStatementsContent.tsx  ver.7
+// /components/finance/FinancialStatementsContent.tsx  ver.8
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -81,7 +81,7 @@ export default function FinancialStatementsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth, includeClosing, showCumulative]);
 
-  /** ===== BS: ビューから取得（JOIN済み・型付き） ===== */
+  /** ===== BS: ビューから取得（JOIN済み） ===== */
   const fetchBalanceSheet = async (month: string) => {
     const monthStart = `${month}-01`;
     const { data, error } = await supabase
@@ -94,17 +94,29 @@ export default function FinancialStatementsContent() {
       return { assets: [], liabilities: [], equity: [] };
     }
     if (!data || data.length === 0) {
-      console.warn('BS残高：0件（RLS/権限 or 期間が一致していない可能性）');
+      console.warn('BS残高：0件（RLS/権限 or 期間不一致の可能性）');
       return { assets: [], liabilities: [], equity: [] };
     }
+
+    // ←★ ここが修正ポイント：未分類/空欄は account_code の番号帯で補正
+    const resolveType = (codeStr: string, rawType?: string | null) => {
+      const t = (rawType || '').trim();
+      if (t === '資産' || t === '負債' || t === '純資産') return t;
+      const n = parseInt(codeStr, 10);
+      if (Number.isNaN(n)) return '未分類';
+      if ((n >= 100 && n < 200) || (n >= 1000 && n < 1200)) return '資産';
+      if ((n >= 200 && n < 300) || (n >= 1200 && n < 1300)) return '負債';
+      if (n >= 300 && n < 400) return '純資産';
+      return '未分類';
+    };
 
     const assets: AccountBalance[] = [];
     const liabilities: AccountBalance[] = [];
     const equity: AccountBalance[] = [];
 
     data.forEach((row: any) => {
-      const type = row.account_type as string;
-      const name = row.account_name as string;
+      const type = resolveType(row.account_code, row.account_type);
+      const name = (row.account_name || '').toString();
       const bal = Number(row.closing_balance) || 0;
       if (!name) return;
 
@@ -113,6 +125,7 @@ export default function FinancialStatementsContent() {
       if (type === '資産') assets.push(acc);
       else if (type === '負債') liabilities.push(acc);
       else if (type === '純資産') equity.push(acc);
+      // 未分類はB/Sに載せない（必要なら別枠で表示可）
     });
 
     const byCode = (a: AccountBalance, b: AccountBalance) => a.account_code.localeCompare(b.account_code);
@@ -121,7 +134,7 @@ export default function FinancialStatementsContent() {
     return { assets, liabilities, equity };
   };
 
-  /** ===== PL: 既存ロジック維持（general_ledger 集計＋決算調整） ===== */
+  /** ===== PL: 既存ロジック（元帳集計＋決算調整） ===== */
   const fetchProfitLoss = async (month: string, cumulative: boolean, withClosing: boolean) => {
     const dateCond = cumulative ? { gte: getFiscalYearStart(month), lte: `${month}-01` } : { eq: `${month}-01` };
 
