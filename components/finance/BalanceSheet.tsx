@@ -1,98 +1,69 @@
-// /components/finance/BalanceSheet.tsx ver.1
-'use client';
+// BalanceSheet.tsx  ver.3
+import { createClient } from '@supabase/supabase-js';
 
-import { AccountBalance } from '@/types/finance';
+const jpy = (v: number) => (v < 0 ? `△¥${Math.abs(v).toLocaleString()}` : `¥${v.toLocaleString()}`);
 
-interface BalanceSheetProps {
-  assets: AccountBalance[];
-  liabilities: AccountBalance[];
-  equity: AccountBalance[];
-}
+export default async function BalanceSheet({ month }: { month: string }) {
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  // 合計
+  const { data: totals, error: te } = await supabase.rpc('bs_totals', { p_month: month });
+  if (te) throw te;
+  const A = Number(totals?.assets ?? 0);
+  const L = Number(totals?.liabilities ?? 0);
+  const E = Number(totals?.equity ?? 0);
 
-export function BalanceSheet({ assets, liabilities, equity }: BalanceSheetProps) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ja-JP', {
-      style: 'currency',
-      currency: 'JPY'
-    }).format(amount);
-  };
+  // 明細（クリーン）
+  const { data: lines, error: le } = await supabase.rpc('bs_snapshot_clean', { p_month: month });
+  if (le) throw le;
 
-  const calculateTotal = (items: AccountBalance[]) => {
-    return items.reduce((sum, item) => sum + item.balance, 0);
-  };
+  const assets = (lines ?? []).filter((x: any) => x.section === '資産');
+  const liabilities = (lines ?? []).filter((x: any) => x.section === '負債');
+  const equity = (lines ?? []).filter((x: any) => x.section === '純資産');
 
-  const totalAssets = calculateTotal(assets);
-  const totalLiabilities = calculateTotal(liabilities);
-  const totalEquity = calculateTotal(equity);
-  const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
+  const ok = Math.round(A) === Math.round(L + E);
 
   return (
     <div className="grid grid-cols-2 gap-6">
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4 text-blue-700">資産の部</h3>
-        <div className="space-y-2">
-          {assets.map(item => (
-            <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
-              <span className="text-sm">{item.account_name}</span>
-              <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
-            </div>
+      <section>
+        <h3 className="font-bold mb-2">資産の部</h3>
+        <ul className="space-y-1">
+          {assets.map((a: any) => (
+            <li key={a.account_code} className="flex justify-between">
+              <span>「{a.account_name}」</span><span>{jpy(a.amount)}</span>
+            </li>
           ))}
-          <div className="border-t pt-2 mt-4">
-            <div className="flex justify-between font-semibold">
-              <span>資産合計</span>
-              <span className="font-mono">{formatCurrency(totalAssets)}</span>
-            </div>
-          </div>
+        </ul>
+        <div className="mt-2 font-bold flex justify-between"><span>資産合計</span><span>{jpy(A)}</span></div>
+      </section>
+
+      <section>
+        <h3 className="font-bold mb-2">負債・純資産の部</h3>
+
+        <div className="mb-2">負債</div>
+        <ul className="space-y-1">
+          {liabilities.map((l: any) => (
+            <li key={l.account_code} className="flex justify-between">
+              <span>「{l.account_name}」</span><span>{jpy(l.amount)}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-2 font-bold flex justify-between"><span>負債合計</span><span>{jpy(L)}</span></div>
+
+        <div className="mt-4 mb-2">純資産</div>
+        <ul className="space-y-1">
+          {equity.map((e: any) => (
+            <li key={e.account_code} className="flex justify-between">
+              <span>「{e.account_name}」</span><span>{jpy(e.amount)}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-2 font-bold flex justify-between"><span>純資産計</span><span>{jpy(E)}</span></div>
+
+        <div className="mt-4 border-t pt-2 font-bold flex justify-between">
+          <span>負債・純資産合計</span><span>{jpy(L + E)}</span>
         </div>
-      </div>
-
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4 text-red-700">負債・純資産の部</h3>
-        <div className="space-y-4">
-          <div>
-            <h4 className="font-medium mb-2 text-gray-700">負債</h4>
-            <div className="space-y-2 ml-4">
-              {liabilities.map(item => (
-                <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
-                  <span className="text-sm">{item.account_name}</span>
-                  <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
-                </div>
-              ))}
-              <div className="border-t pt-1">
-                <div className="flex justify-between font-medium">
-                  <span>負債計</span>
-                  <span className="font-mono">{formatCurrency(totalLiabilities)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-medium mb-2 text-gray-700">純資産</h4>
-            <div className="space-y-2 ml-4">
-              {equity.map(item => (
-                <div key={item.account_code} className="flex justify-between py-1 hover:bg-gray-50">
-                  <span className="text-sm">{item.account_name}</span>
-                  <span className="text-sm font-mono">{formatCurrency(item.balance)}</span>
-                </div>
-              ))}
-              <div className="border-t pt-1">
-                <div className="flex justify-between font-medium">
-                  <span>純資産計</span>
-                  <span className="font-mono">{formatCurrency(totalEquity)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t pt-2">
-            <div className="flex justify-between font-semibold">
-              <span>負債・純資産合計</span>
-              <span className="font-mono">{formatCurrency(totalLiabilitiesAndEquity)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+        {!ok && <p className="text-red-600 mt-1 text-sm">※集計不一致（資産≠負債+純資産）。</p>}
+      </section>
     </div>
   );
 }
