@@ -1,4 +1,4 @@
-// /components/finance/CashFlow.tsx ver.4
+// /components/finance/CashFlow.tsx ver.5
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -38,100 +38,105 @@ interface CashFlowProps {
   includingClosing: boolean;
 }
 
+// コンポーネント外で関数を定義
+const getAccountTypeFromCode = (code: string): string => {
+  const codeNum = parseInt(code);
+  if (codeNum >= 100 && codeNum < 200) return '資産';
+  if (codeNum >= 200 && codeNum < 300) return '負債';
+  if (codeNum >= 300 && codeNum < 400) return '純資産';
+  if (codeNum >= 400 && codeNum < 600) return '費用';
+  if (codeNum >= 600 && codeNum < 610) return '営業外収益';
+  if (codeNum === 610) return '営業外費用';
+  if (codeNum >= 800 && codeNum < 900) return '収益';
+  if (codeNum >= 1000 && codeNum < 1200) return '資産';
+  if (codeNum >= 1200 && codeNum < 1300) return '負債';
+  return '未分類';
+};
+
+const calculateCashFlow = (transactions: any[], cashBeginBalance: number, cashEndBalance: number): CashFlowData => {
+  // 当期純利益の計算
+  let revenues = 0;
+  let expenses = 0;
+  let depreciation = 0;
+
+  transactions.forEach(t => {
+    const accountType = t.account_type || '';
+    const accountName = t.account_name || '';
+    
+    if (accountType === '収益' || accountType === '営業外収益') {
+      revenues += (t.credit_amount || 0) - (t.debit_amount || 0);
+    } else if (accountType === '費用' || accountType === '営業外費用') {
+      expenses += (t.debit_amount || 0) - (t.credit_amount || 0);
+      
+      // 減価償却費の特定
+      if (accountName.includes('減価償却')) {
+        depreciation += (t.debit_amount || 0) - (t.credit_amount || 0);
+      }
+    }
+  });
+
+  const netIncome = revenues - expenses;
+
+  // 営業活動によるキャッシュフロー
+  const operatingCF = {
+    netIncome,
+    depreciation,
+    receivablesChange: 0,
+    inventoryChange: 0,
+    payablesChange: 0,
+    otherOperating: 0,
+    total: netIncome + depreciation
+  };
+
+  // 投資活動によるキャッシュフロー（簡易版）
+  const investingCF = {
+    capitalExpenditures: 0,
+    assetSales: 0,
+    otherInvesting: 0,
+    total: 0
+  };
+
+  // 財務活動によるキャッシュフロー
+  let loanProceeds = 0;
+  let loanRepayments = 0;
+
+  transactions.forEach(t => {
+    const accountName = t.account_name || '';
+    
+    if (accountName.includes('借入金')) {
+      loanProceeds += t.credit_amount || 0;
+      loanRepayments += t.debit_amount || 0;
+    }
+  });
+
+  const financingCF = {
+    loanProceeds,
+    loanRepayments,
+    dividendsPaid: 0,
+    otherFinancing: 0,
+    total: loanProceeds - loanRepayments
+  };
+
+  const netCashFlow = operatingCF.total + investingCF.total + financingCF.total;
+
+  return {
+    operatingActivities: operatingCF,
+    investingActivities: investingCF,
+    financingActivities: financingCF,
+    cashBeginning: cashBeginBalance,
+    cashEnding: cashEndBalance,
+    netCashFlow
+  };
+};
+
+const formatAmount = (amount: number): string => {
+  return new Intl.NumberFormat('ja-JP').format(Math.abs(amount));
+};
+
 export function CashFlow({ month, includingClosing }: CashFlowProps) {
   const [cashFlowData, setCashFlowData] = useState<CashFlowData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const getAccountTypeFromCode = (code: string): string => {
-    const codeNum = parseInt(code);
-    if (codeNum >= 100 && codeNum < 200) return '資産';
-    if (codeNum >= 200 && codeNum < 300) return '負債';
-    if (codeNum >= 300 && codeNum < 400) return '純資産';
-    if (codeNum >= 400 && codeNum < 600) return '費用';
-    if (codeNum >= 600 && codeNum < 610) return '営業外収益';
-    if (codeNum === 610) return '営業外費用';
-    if (codeNum >= 800 && codeNum < 900) return '収益';
-    if (codeNum >= 1000 && codeNum < 1200) return '資産';
-    if (codeNum >= 1200 && codeNum < 1300) return '負債';
-    return '未分類';
-  };
-
-  const calculateCashFlow = (transactions: any[], cashBeginBalance: number, cashEndBalance: number): CashFlowData => {
-    // 当期純利益の計算
-    let revenues = 0;
-    let expenses = 0;
-    let depreciation = 0;
-
-    transactions.forEach(t => {
-      const accountType = t.account_type || '';
-      const accountName = t.account_name || '';
-      
-      if (accountType === '収益' || accountType === '営業外収益') {
-        revenues += (t.credit_amount || 0) - (t.debit_amount || 0);
-      } else if (accountType === '費用' || accountType === '営業外費用') {
-        expenses += (t.debit_amount || 0) - (t.credit_amount || 0);
-        
-        // 減価償却費の特定
-        if (accountName.includes('減価償却')) {
-          depreciation += (t.debit_amount || 0) - (t.credit_amount || 0);
-        }
-      }
-    });
-
-    const netIncome = revenues - expenses;
-
-    // 営業活動によるキャッシュフロー
-    const operatingCF = {
-      netIncome,
-      depreciation,
-      receivablesChange: 0,
-      inventoryChange: 0,
-      payablesChange: 0,
-      otherOperating: 0,
-      total: netIncome + depreciation
-    };
-
-    // 投資活動によるキャッシュフロー（簡易版）
-    const investingCF = {
-      capitalExpenditures: 0,
-      assetSales: 0,
-      otherInvesting: 0,
-      total: 0
-    };
-
-    // 財務活動によるキャッシュフロー
-    let loanProceeds = 0;
-    let loanRepayments = 0;
-
-    transactions.forEach(t => {
-      const accountName = t.account_name || '';
-      
-      if (accountName.includes('借入金')) {
-        loanProceeds += t.credit_amount || 0;
-        loanRepayments += t.debit_amount || 0;
-      }
-    });
-
-    const financingCF = {
-      loanProceeds,
-      loanRepayments,
-      dividendsPaid: 0,
-      otherFinancing: 0,
-      total: loanProceeds - loanRepayments
-    };
-
-    const netCashFlow = operatingCF.total + investingCF.total + financingCF.total;
-
-    return {
-      operatingActivities: operatingCF,
-      investingActivities: investingCF,
-      financingActivities: financingCF,
-      cashBeginning: cashBeginBalance,
-      cashEnding: cashEndBalance,
-      netCashFlow
-    };
-  };
 
   useEffect(() => {
     const fetchCashFlowData = async () => {
@@ -236,10 +241,6 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
 
     fetchCashFlowData();
   }, [month, includingClosing]);
-
-  const formatAmount = (amount: number): string => {
-    return new Intl.NumberFormat('ja-JP').format(Math.abs(amount));
-  };
 
   if (loading) {
     return (
