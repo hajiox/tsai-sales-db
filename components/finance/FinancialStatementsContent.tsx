@@ -1,4 +1,4 @@
-// /components/finance/FinancialStatementsContent.tsx ver.4
+// /components/finance/FinancialStatementsContent.tsx ver.5
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -381,7 +381,10 @@ export default function FinancialStatementsContent() {
           <>
             {activeTab === 'bs' && <BalanceSheet {...bsData} />}
             {activeTab === 'pl' && <ProfitLoss {...plData} showCumulative={showCumulative} />}
-            {activeTab === 'cf' && <CashFlow />}
+            {activeTab === 'cf' && (
+              // 修正点：常に YYYY-MM の selectedMonth と includeClosing を渡す
+              <CashFlow month={selectedMonth} includingClosing={includeClosing} />
+            )}
             {activeTab === 'detail' && <DetailSearch selectedMonth={selectedMonth} />}
             {activeTab === 'report' && (
               <FinancialReport 
