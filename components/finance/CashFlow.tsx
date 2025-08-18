@@ -1,9 +1,15 @@
-// /components/finance/CashFlow.tsx ver.5
+// /components/finance/CashFlow.tsx ver.6
 'use client';
 
 import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { TrendingUp, TrendingDown, DollarSign, Loader2 } from 'lucide-react';
+
+/**
+ * 変更点（ver.6）
+ * - month のバリデーションと早期リターンを追加（undefined-01 が飛ぶのを防止）
+ * - 前月計算を文字列演算で安全に算出（Date 依存を回避）
+ */
 
 interface CashFlowData {
   operatingActivities: {
@@ -34,11 +40,11 @@ interface CashFlowData {
 }
 
 interface CashFlowProps {
-  month: string;
+  month: string; // YYYY-MM
   includingClosing: boolean;
 }
 
-// コンポーネント外で関数を定義
+// 勘定科目コード → 勘定区分（決算仕訳用）
 const getAccountTypeFromCode = (code: string): string => {
   const codeNum = parseInt(code);
   if (codeNum >= 100 && codeNum < 200) return '資産';
@@ -53,22 +59,25 @@ const getAccountTypeFromCode = (code: string): string => {
   return '未分類';
 };
 
-const calculateCashFlow = (transactions: any[], cashBeginBalance: number, cashEndBalance: number): CashFlowData => {
-  // 当期純利益の計算
+// 簡易キャッシュフロー計算
+const calculateCashFlow = (
+  transactions: any[],
+  cashBeginBalance: number,
+  cashEndBalance: number
+): CashFlowData => {
   let revenues = 0;
   let expenses = 0;
   let depreciation = 0;
 
-  transactions.forEach(t => {
+  transactions.forEach((t) => {
     const accountType = t.account_type || '';
     const accountName = t.account_name || '';
-    
+
     if (accountType === '収益' || accountType === '営業外収益') {
       revenues += (t.credit_amount || 0) - (t.debit_amount || 0);
     } else if (accountType === '費用' || accountType === '営業外費用') {
       expenses += (t.debit_amount || 0) - (t.credit_amount || 0);
-      
-      // 減価償却費の特定
+
       if (accountName.includes('減価償却')) {
         depreciation += (t.debit_amount || 0) - (t.credit_amount || 0);
       }
@@ -77,7 +86,6 @@ const calculateCashFlow = (transactions: any[], cashBeginBalance: number, cashEn
 
   const netIncome = revenues - expenses;
 
-  // 営業活動によるキャッシュフロー
   const operatingCF = {
     netIncome,
     depreciation,
@@ -88,7 +96,6 @@ const calculateCashFlow = (transactions: any[], cashBeginBalance: number, cashEn
     total: netIncome + depreciation
   };
 
-  // 投資活動によるキャッシュフロー（簡易版）
   const investingCF = {
     capitalExpenditures: 0,
     assetSales: 0,
@@ -96,13 +103,11 @@ const calculateCashFlow = (transactions: any[], cashBeginBalance: number, cashEn
     total: 0
   };
 
-  // 財務活動によるキャッシュフロー
   let loanProceeds = 0;
   let loanRepayments = 0;
 
-  transactions.forEach(t => {
+  transactions.forEach((t) => {
     const accountName = t.account_name || '';
-    
     if (accountName.includes('借入金')) {
       loanProceeds += t.credit_amount || 0;
       loanRepayments += t.debit_amount || 0;
@@ -129,8 +134,19 @@ const calculateCashFlow = (transactions: any[], cashBeginBalance: number, cashEn
   };
 };
 
-const formatAmount = (amount: number): string => {
-  return new Intl.NumberFormat('ja-JP').format(Math.abs(amount));
+const formatAmount = (amount: number): string =>
+  new Intl.NumberFormat('ja-JP').format(Math.abs(amount));
+
+const isValidMonth = (m?: string): m is string =>
+  !!m && /^\d{4}-(0[1-9]|1[0-2])$/.test(m);
+
+// 前月（YYYY-MM）を安全に算出
+const prevMonthOf = (m: string): string => {
+  const [yStr, mmStr] = m.split('-');
+  const y = Number(yStr);
+  const mm = Number(mmStr);
+  if (mm === 1) return `${y - 1}-12`;
+  return `${y}-${String(mm - 1).padStart(2, '0')}`;
 };
 
 export function CashFlow({ month, includingClosing }: CashFlowProps) {
@@ -142,51 +158,56 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
     const fetchCashFlowData = async () => {
       setLoading(true);
       setError(null);
-      
+
+      // ▼ ver.6 追加：month ガード
+      if (!isValidMonth(month)) {
+        setError('月が未選択または不正です（YYYY-MM 形式）');
+        setLoading(false);
+        return;
+      }
+
       try {
         const supabase = createBrowserClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         );
 
-        // 選択月と前月を計算
-        const currentDate = new Date(month + '-01');
-        const previousDate = new Date(currentDate);
-        previousDate.setMonth(previousDate.getMonth() - 1);
-        const previousMonth = previousDate.toISOString().slice(0, 7);
+        // 選択月と前月
+        const targetMonth = month; // YYYY-MM
+        const previousMonth = prevMonthOf(targetMonth);
 
-        // 現金・預金の期首残高を取得（前月末の残高）
+        // 期首残高（前月末）
         const { data: cashBeginData, error: cashBeginError } = await supabase
           .from('monthly_account_balance')
           .select('closing_balance')
-          .eq('report_month', previousMonth + '-01')
+          .eq('report_month', `${previousMonth}-01`)
           .in('account_code', ['100', '103', '106']);
 
         if (cashBeginError) {
           console.error('期首残高取得エラー:', cashBeginError);
         }
 
-        // 現金・預金の期末残高を取得（当月末の残高）
+        // 期末残高（当月末）
         const { data: cashEndData, error: cashEndError } = await supabase
           .from('monthly_account_balance')
           .select('closing_balance')
-          .eq('report_month', month + '-01')
+          .eq('report_month', `${targetMonth}-01`)
           .in('account_code', ['100', '103', '106']);
 
         if (cashEndError) {
           console.error('期末残高取得エラー:', cashEndError);
         }
 
-        // 当月の取引データを取得（account_masterとJOIN）
+        // 当月の仕訳（勘定科目JOIN）
         let allTransactions: any[] = [];
         let offset = 0;
         const limit = 1000;
-        
+
         while (true) {
           const { data, error } = await supabase
             .from('general_ledger')
             .select('*, account_master(account_name, account_type)')
-            .eq('report_month', month + '-01')
+            .eq('report_month', `${targetMonth}-01`)
             .range(offset, offset + limit - 1);
 
           if (error) {
@@ -194,43 +215,45 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
             throw error;
           }
           if (!data || data.length === 0) break;
-          
-          // フラット化
-          const flatData = data.map(item => ({
+
+          const flat = data.map((item: any) => ({
             ...item,
             account_name: item.account_master?.account_name || '',
             account_type: item.account_master?.account_type || ''
           }));
-          
-          allTransactions = [...allTransactions, ...flatData];
+
+          allTransactions = allTransactions.concat(flat);
           if (data.length < limit) break;
           offset += limit;
         }
 
-        // 決算調整データの取得（7月のみ）
-        if (month === '2024-07' && includingClosing) {
-          const { data: closingData } = await supabase
+        // 決算調整（2024-07 のみ）
+        if (includingClosing && targetMonth === '2024-07') {
+          const { data: closingData, error: closingErr } = await supabase
             .from('closing_adjustments')
             .select('*')
             .eq('fiscal_year', 2024);
 
-          if (closingData) {
-            const closingWithType = closingData.map(item => ({
+          if (closingErr) {
+            console.error('決算調整データ取得エラー:', closingErr);
+          } else if (closingData?.length) {
+            const closingWithType = closingData.map((item: any) => ({
               ...item,
               account_type: getAccountTypeFromCode(item.account_code)
             }));
-            allTransactions = [...allTransactions, ...closingWithType];
+            allTransactions = allTransactions.concat(closingWithType);
           }
         }
 
-        // 現金残高の計算
-        const cashBeginBalance = cashBeginData?.reduce((sum, d) => sum + (d.closing_balance || 0), 0) || 0;
-        const cashEndBalance = cashEndData?.reduce((sum, d) => sum + (d.closing_balance || 0), 0) || 0;
+        // 現金残高（合算）
+        const cashBeginBalance =
+          cashBeginData?.reduce((s, d) => s + (d.closing_balance || 0), 0) ?? 0;
+        const cashEndBalance =
+          cashEndData?.reduce((s, d) => s + (d.closing_balance || 0), 0) ?? 0;
 
-        // キャッシュフロー計算
-        const cashFlowCalc = calculateCashFlow(allTransactions, cashBeginBalance, cashEndBalance);
-        setCashFlowData(cashFlowCalc);
-
+        // 計算
+        const calc = calculateCashFlow(allTransactions, cashBeginBalance, cashEndBalance);
+        setCashFlowData(calc);
       } catch (err) {
         console.error('Error fetching cash flow data:', err);
         setError('キャッシュフローデータの取得に失敗しました');
@@ -266,7 +289,7 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold mb-6">キャッシュフロー計算書</h3>
-      
+
       <div className="space-y-6">
         {/* 営業活動によるキャッシュフロー */}
         <div className="border rounded-lg p-4">
@@ -277,8 +300,15 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">当期純利益</span>
-              <span className={cashFlowData.operatingActivities.netIncome >= 0 ? 'text-green-600' : 'text-red-600'}>
-                {cashFlowData.operatingActivities.netIncome >= 0 ? '' : '△'}{formatAmount(cashFlowData.operatingActivities.netIncome)}
+              <span
+                className={
+                  cashFlowData.operatingActivities.netIncome >= 0
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                }
+              >
+                {cashFlowData.operatingActivities.netIncome >= 0 ? '' : '△'}
+                {formatAmount(cashFlowData.operatingActivities.netIncome)}
               </span>
             </div>
             {cashFlowData.operatingActivities.depreciation > 0 && (
@@ -289,8 +319,15 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
             )}
             <div className="flex justify-between font-semibold border-t pt-2">
               <span>小計</span>
-              <span className={cashFlowData.operatingActivities.total >= 0 ? 'text-green-600' : 'text-red-600'}>
-                {cashFlowData.operatingActivities.total >= 0 ? '' : '△'}{formatAmount(cashFlowData.operatingActivities.total)}
+              <span
+                className={
+                  cashFlowData.operatingActivities.total >= 0
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                }
+              >
+                {cashFlowData.operatingActivities.total >= 0 ? '' : '△'}
+                {formatAmount(cashFlowData.operatingActivities.total)}
               </span>
             </div>
           </div>
@@ -330,13 +367,22 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
             {cashFlowData.financingActivities.loanRepayments > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-600">借入金の返済</span>
-                <span className="text-red-600">△{formatAmount(cashFlowData.financingActivities.loanRepayments)}</span>
+                <span className="text-red-600">
+                  △{formatAmount(cashFlowData.financingActivities.loanRepayments)}
+                </span>
               </div>
             )}
             <div className="flex justify-between font-semibold border-t pt-2">
               <span>小計</span>
-              <span className={cashFlowData.financingActivities.total >= 0 ? 'text-green-600' : 'text-red-600'}>
-                {cashFlowData.financingActivities.total >= 0 ? '' : '△'}{formatAmount(cashFlowData.financingActivities.total)}
+              <span
+                className={
+                  cashFlowData.financingActivities.total >= 0
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                }
+              >
+                {cashFlowData.financingActivities.total >= 0 ? '' : '△'}
+                {formatAmount(cashFlowData.financingActivities.total)}
               </span>
             </div>
           </div>
@@ -351,13 +397,20 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
             </div>
             <div className="flex justify-between font-semibold">
               <span>現金及び現金同等物の増減額</span>
-              <span className={cashFlowData.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}>
-                {cashFlowData.netCashFlow >= 0 ? '' : '△'}{formatAmount(cashFlowData.netCashFlow)}
+              <span
+                className={
+                  cashFlowData.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'
+                }
+              >
+                {cashFlowData.netCashFlow >= 0 ? '' : '△'}
+                {formatAmount(cashFlowData.netCashFlow)}
               </span>
             </div>
             <div className="flex justify-between text-lg font-bold border-t pt-2">
               <span>現金及び現金同等物の期末残高</span>
-              <span className="text-blue-600">{formatAmount(cashFlowData.cashEnding)}</span>
+              <span className="text-blue-600">
+                {formatAmount(cashFlowData.cashEnding)}
+              </span>
             </div>
           </div>
         </div>
