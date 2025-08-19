@@ -1,14 +1,27 @@
+// /components/finance/BalanceSheet.tsx ver.2
 "use client";
 import React from "react";
-import { getSupabase } from "@/lib/supabaseClient";
+import { createBrowserClient } from "@supabase/ssr";
 
+// 通貨表記
 const jpy = (v: number) => (v < 0 ? `△¥${Math.abs(v).toLocaleString()}` : `¥${v.toLocaleString()}`);
+// 型ゆるめ→数値正規化
 const toNum = (v: any) =>
   typeof v === "number" ? v : typeof v === "bigint" ? Number(v) : Number(v ?? 0) || 0;
-const normMonth = (m: string) => (m?.length === 7 ? `${m}-01` : m); // "2025-04" → "2025-04-01"
+// "2025-04" → "2025-04-01"
+const normMonth = (m: string) => (m?.length === 7 ? `${m}-01` : m);
 
 export default function BalanceSheet({ month }: { month: string }) {
-  const supabase = React.useMemo(() => getSupabase(), []);
+  // Supabase クライアントをブラウザ側で生成（方針：createBrowserClient を直接使用）
+  const supabase = React.useMemo(
+    () =>
+      createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      ),
+    []
+  );
+
   const [lines, setLines] = React.useState<any[]>([]);
   const [A, setA] = React.useState(0);
   const [L, setL] = React.useState(0);
@@ -35,7 +48,10 @@ export default function BalanceSheet({ month }: { month: string }) {
         const rows = (r.data ?? []).map((x: any) => ({ ...x, amount: toNum(x.amount) }));
 
         if (mounted) {
-          setA(a); setL(l); setE(e); setLines(rows);
+          setA(a);
+          setL(l);
+          setE(e);
+          setLines(rows);
         }
       } catch (e: any) {
         if (mounted) setErr(e?.message ?? String(e));
@@ -43,7 +59,9 @@ export default function BalanceSheet({ month }: { month: string }) {
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [month, supabase]);
 
   if (loading) return <div className="p-6 text-gray-500">loading…</div>;
@@ -67,7 +85,8 @@ export default function BalanceSheet({ month }: { month: string }) {
           ))}
         </ul>
         <div className="mt-3 flex justify-between border-t pt-3 font-semibold">
-          <span>資産合計</span><span className="tabular-nums">{jpy(A)}</span>
+          <span>資産合計</span>
+          <span className="tabular-nums">{jpy(A)}</span>
         </div>
       </section>
 
@@ -84,7 +103,8 @@ export default function BalanceSheet({ month }: { month: string }) {
           ))}
         </ul>
         <div className="mt-3 flex justify-between border-t pt-3 font-semibold">
-          <span>負債合計</span><span className="tabular-nums">{jpy(L)}</span>
+          <span>負債合計</span>
+          <span className="tabular-nums">{jpy(L)}</span>
         </div>
 
         <div className="mt-6 mb-1 text-sm text-gray-500">純資産</div>
@@ -97,11 +117,13 @@ export default function BalanceSheet({ month }: { month: string }) {
           ))}
         </ul>
         <div className="mt-3 flex justify-between border-t pt-3 font-semibold">
-          <span>純資産計</span><span className="tabular-nums">{jpy(E)}</span>
+          <span>純資産計</span>
+          <span className="tabular-nums">{jpy(E)}</span>
         </div>
 
         <div className="mt-4 flex justify-between border-t pt-3 font-semibold">
-          <span>負債・純資産合計</span><span className="tabular-nums">{jpy(L + E)}</span>
+          <span>負債・純資産合計</span>
+          <span className="tabular-nums">{jpy(L + E)}</span>
         </div>
         {!ok && <p className="mt-2 text-sm text-red-600">※集計不一致（資産≠負債+純資産）。</p>}
       </section>
