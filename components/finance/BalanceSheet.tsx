@@ -1,4 +1,4 @@
-// /components/finance/BalanceSheet.tsx ver.2
+// ver.3 (2025-08-19 JST) - expose both named and default
 "use client";
 import React from "react";
 import getSupabase from "@/lib/supabaseClient";
@@ -11,7 +11,7 @@ const toNum = (v: any) =>
 // "2025-04" → "2025-04-01"
 const normMonth = (m: string) => (m?.length === 7 ? `${m}-01` : m);
 
-export default function BalanceSheet({ month }: { month: string }) {
+function BalanceSheet({ month }: { month: string }) {
   // Supabase クライアントをシングルトンから取得（ビルド時は null）
   const supabase = React.useMemo(
     () => (typeof window !== "undefined" ? getSupabase() : null),
@@ -127,3 +127,7 @@ export default function BalanceSheet({ month }: { month: string }) {
     </div>
   );
 }
+
+// ver.3 (2025-08-19 JST) - expose both named and default
+export { BalanceSheet };
+export default BalanceSheet;

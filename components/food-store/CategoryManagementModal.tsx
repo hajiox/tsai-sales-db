@@ -1,4 +1,4 @@
-// /components/food-store/CategoryManagementModal.tsx ver.1
+// ver.2 (2025-08-19 JST) - add default export
 "use client"
 
 import { useState, useEffect } from "react"
@@ -21,7 +21,7 @@ interface CategoryManagementModalProps {
   onClose: () => void
 }
 
-export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementModalProps) {
+function CategoryManagementModal({ isOpen, onClose }: CategoryManagementModalProps) {
   const [categories, setCategories] = useState<any[]>([])
   const [newCategoryName, setNewCategoryName] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -203,3 +203,7 @@ export function CategoryManagementModal({ isOpen, onClose }: CategoryManagementM
     </Dialog>
   )
 }
+
+// ver.2 (2025-08-19 JST) - add default export
+export default CategoryManagementModal;
+export { CategoryManagementModal };

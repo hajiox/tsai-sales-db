@@ -1,4 +1,4 @@
-// /components/general-ledger/GeneralLedgerImportModal.tsx ver.17
+// ver.18 (2025-08-19 JST) - add default export for Next build
 'use client';
 
 import { useState } from 'react';
@@ -10,7 +10,7 @@ interface GeneralLedgerImportModalProps {
   onImportComplete: () => void;
 }
 
-export default function GeneralLedgerImportModal({
+function GeneralLedgerImportModal({
   isOpen,
   onClose,
   onImportComplete,
@@ -246,3 +246,7 @@ export default function GeneralLedgerImportModal({
     </div>
   );
 }
+
+// ver.18 (2025-08-19 JST) - add default export for Next build
+export default GeneralLedgerImportModal;
+export { GeneralLedgerImportModal };
