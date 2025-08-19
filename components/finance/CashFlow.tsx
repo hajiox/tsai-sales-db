@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
+import getSupabase from '@/lib/supabaseClient';
 import { TrendingUp, TrendingDown, DollarSign, Loader2 } from 'lucide-react';
 
 /**
@@ -167,10 +167,7 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
       }
 
       try {
-        const supabase = createBrowserClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
+        const supabase = getSupabase();
 
         // 選択月と前月
         const targetMonth = month; // YYYY-MM

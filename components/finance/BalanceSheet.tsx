@@ -1,7 +1,7 @@
 // /components/finance/BalanceSheet.tsx ver.2
 "use client";
 import React from "react";
-import { createBrowserClient } from "@supabase/ssr";
+import getSupabase from "@/lib/supabaseClient";
 
 // 通貨表記
 const jpy = (v: number) => (v < 0 ? `△¥${Math.abs(v).toLocaleString()}` : `¥${v.toLocaleString()}`);
@@ -12,13 +12,9 @@ const toNum = (v: any) =>
 const normMonth = (m: string) => (m?.length === 7 ? `${m}-01` : m);
 
 export default function BalanceSheet({ month }: { month: string }) {
-  // Supabase クライアントをブラウザ側で生成（方針：createBrowserClient を直接使用）
+  // Supabase クライアントをシングルトンから取得（ビルド時は null）
   const supabase = React.useMemo(
-    () =>
-      createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      ),
+    () => (typeof window !== "undefined" ? getSupabase() : null),
     []
   );
 
@@ -30,6 +26,7 @@ export default function BalanceSheet({ month }: { month: string }) {
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
+    if (!supabase) return;
     let mounted = true;
     const m = normMonth(month);
     (async () => {

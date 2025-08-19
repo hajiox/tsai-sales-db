@@ -5,8 +5,8 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
+import { useState, useEffect, useMemo } from 'react';
+import getSupabase from '@/lib/supabaseClient';
 import { Database } from '@/types/supabase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -74,9 +74,9 @@ export default function GeneralLedgerPage() {
 
   const router = useRouter();
 
-  const supabase = createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const supabase = useMemo(
+    () => (typeof window !== 'undefined' ? getSupabase() : null),
+    []
   );
 
   const getFiscalYear = (dateStr: string): number => {
@@ -98,6 +98,7 @@ export default function GeneralLedgerPage() {
   };
 
   const fetchMonthlyData = async () => {
+    if (!supabase) return;
     try {
       setLoading(true);
 
@@ -245,6 +246,7 @@ export default function GeneralLedgerPage() {
   };
 
   const handleDelete = async (yyyymm: string) => {
+    if (!supabase) return;
     if (!confirm(`${yyyymm}のデータを削除してもよろしいですか？`)) return;
 
     const year = parseInt(yyyymm.substring(0, 4));

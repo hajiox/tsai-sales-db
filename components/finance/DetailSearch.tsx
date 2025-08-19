@@ -1,8 +1,8 @@
 // /components/finance/DetailSearch.tsx ver.1
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
+import { useState, useEffect, useMemo } from 'react';
+import getSupabase from '@/lib/supabaseClient';
 import { Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -21,10 +21,10 @@ export function DetailSearch({ selectedMonth }: DetailSearchProps) {
   const [totalPages, setTotalPages] = useState(1);
   const [dataLoading, setDataLoading] = useState(false);
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+    const supabase = useMemo(
+      () => (typeof window !== 'undefined' ? getSupabase() : null),
+      []
+    );
 
   const itemsPerPage = 50;
 
@@ -34,6 +34,7 @@ export function DetailSearch({ selectedMonth }: DetailSearchProps) {
   }, [selectedMonth, selectedAccount, searchTerm, currentPage]);
 
   const loadAccountMaster = async () => {
+    if (!supabase) return;
     const { data } = await supabase
       .from('account_master')
       .select('account_code, account_name')
@@ -45,8 +46,9 @@ export function DetailSearch({ selectedMonth }: DetailSearchProps) {
   };
 
   const loadTransactions = async () => {
+    if (!supabase) return;
     setDataLoading(true);
-    
+
     let query = supabase
       .from('general_ledger')
       .select(`

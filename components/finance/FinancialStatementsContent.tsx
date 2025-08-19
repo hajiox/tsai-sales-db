@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
+import getSupabase from '@/lib/supabaseClient';
 import { FileSpreadsheet, BarChart3, Calendar, FileText, ToggleLeft, ToggleRight } from 'lucide-react';
 
 import { BalanceSheet } from '@/components/finance/BalanceSheet';
@@ -45,9 +45,9 @@ export default function FinancialStatementsContent() {
     revenues: [], expenses: []
   });
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const supabase = useMemo(
+    () => (typeof window !== 'undefined' ? getSupabase() : null),
+    []
   );
 
   const pushMonthToUrl = (m: string) => {
@@ -83,6 +83,7 @@ export default function FinancialStatementsContent() {
 
   /** ===== BS: ビューから取得（JOIN済み） ===== */
   const fetchBalanceSheet = async (month: string) => {
+    if (!supabase) return { assets: [], liabilities: [], equity: [] };
     const monthStart = `${month}-01`;
     const { data, error } = await supabase
       .from('v_monthly_balance_with_type')
@@ -136,6 +137,7 @@ export default function FinancialStatementsContent() {
 
   /** ===== PL: 既存ロジック（元帳集計＋決算調整） ===== */
   const fetchProfitLoss = async (month: string, cumulative: boolean, withClosing: boolean) => {
+    if (!supabase) return { revenues: [], expenses: [] };
     const dateCond = cumulative ? { gte: getFiscalYearStart(month), lte: `${month}-01` } : { eq: `${month}-01` };
 
     let all: any[] = [];
@@ -219,6 +221,7 @@ export default function FinancialStatementsContent() {
   };
 
   const loadFinancialData = async () => {
+    if (!supabase) return;
     setLoading(true);
     try {
       const [bs, pl] = await Promise.all([

@@ -1,8 +1,8 @@
 // /app/finance/general-ledger-detail/page.tsx ver.1
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
+import { useState, useEffect, useMemo } from 'react';
+import getSupabase from '@/lib/supabaseClient';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Search, MessageSquare, FileText, TrendingUp, Filter, Send, Loader2 } from 'lucide-react';
@@ -30,9 +30,9 @@ export default function GeneralLedgerDetailPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [queryHistory, setQueryHistory] = useState<Array<{question: string, response: string}>>([]);
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const supabase = useMemo(
+    () => (typeof window !== 'undefined' ? getSupabase() : null),
+    []
   );
 
   const itemsPerPage = 50;
@@ -77,6 +77,7 @@ export default function GeneralLedgerDetailPage() {
 
   // 勘定科目マスタ読み込み
   const loadAccountMaster = async () => {
+    if (!supabase) return;
     const { data, error } = await supabase
       .from('account_master')
       .select('account_code, account_name')
@@ -89,8 +90,9 @@ export default function GeneralLedgerDetailPage() {
 
   // 取引データ読み込み
   const loadTransactions = async () => {
+    if (!supabase) return;
     setDataLoading(true);
-    
+
     let query = supabase
       .from('general_ledger')
       .select(`
