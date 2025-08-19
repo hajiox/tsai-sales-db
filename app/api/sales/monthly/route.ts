@@ -1,4 +1,7 @@
-// /app/api/sales/monthly/route.ts ver.3 正しい認証パス版
+// ver.4 (2025-08-19 JST) - disable prerender; runtime=node; no revalidate
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';

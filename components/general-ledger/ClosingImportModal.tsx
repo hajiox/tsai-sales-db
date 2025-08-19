@@ -1,4 +1,4 @@
-// /components/general-ledger/ClosingImportModal.tsx ver.1
+// ver.2 (2025-08-19 JST) - add default export
 'use client';
 
 import { useState } from 'react';
@@ -10,7 +10,7 @@ interface ClosingImportModalProps {
   onImportComplete: () => void;
 }
 
-export default function ClosingImportModal({
+function ClosingImportModal({
   isOpen,
   onClose,
   onImportComplete,
@@ -231,3 +231,7 @@ export default function ClosingImportModal({
     </div>
   );
 }
+
+// ver.2 (2025-08-19 JST) - add default export
+export default ClosingImportModal;
+export { ClosingImportModal };

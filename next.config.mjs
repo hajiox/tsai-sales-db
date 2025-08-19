@@ -1,3 +1,4 @@
+// ver.1 (2025-08-19 JST) - rename to mjs for ESM
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,

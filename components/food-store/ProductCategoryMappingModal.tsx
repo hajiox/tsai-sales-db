@@ -1,4 +1,4 @@
-// /components/food-store/ProductCategoryMappingModal.tsx ver.3
+// ver.4 (2025-08-19 JST) - add default export
 import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ interface Category {
   category_name: string
 }
 
-export function ProductCategoryMappingModal({
+function ProductCategoryMappingModal({
   isOpen,
   onClose,
   onMappingComplete
@@ -211,3 +211,7 @@ export function ProductCategoryMappingModal({
     </Dialog>
   )
 }
+
+// ver.4 (2025-08-19 JST) - add default export
+export default ProductCategoryMappingModal;
+export { ProductCategoryMappingModal };

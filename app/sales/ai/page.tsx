@@ -1,3 +1,7 @@
+// ver.1 (2025-08-19 JST) - disable prerender; runtime=node; no revalidate
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 
