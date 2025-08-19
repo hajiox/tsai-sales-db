@@ -14,12 +14,7 @@ import OEMArea from '@/components/wholesale/oem-area';
 import PriceHistoryControls from '@/components/wholesale/price-history-controls';
 import SalesDataTable from '@/components/wholesale/sales-data-table';
 import ProductStatistics from '@/components/wholesale/product-statistics';
-import { createClient } from '@supabase/supabase-js';
-
-// Supabaseクライアントの初期化
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import getSupabase from '@/lib/supabaseClient';
 
 // インターフェース定義
 interface Product {
@@ -172,10 +167,11 @@ function WholesaleDashboardContent() {
  }, [selectedYear, selectedMonth, mounted]);
 
  // 価格履歴関連の関数
- const fetchPriceChangeDates = async () => {
-   try {
-     const { data, error } = await supabase
-       .from('wholesale_product_price_history')
+const fetchPriceChangeDates = async () => {
+  try {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('wholesale_product_price_history')
        .select('valid_from, product_id')
        .order('valid_from', { ascending: false });
      
@@ -203,12 +199,13 @@ function WholesaleDashboardContent() {
    }
  };
 
- const showPriceAtDate = async (date: string) => {
-   setLoadingHistorical(true);
-   setSelectedHistoryDate(date);
-   try {
-     const { data: historicalData, error } = await supabase.rpc(
-       'calculate_wholesale_sales_with_historical_prices',
+const showPriceAtDate = async (date: string) => {
+  setLoadingHistorical(true);
+  setSelectedHistoryDate(date);
+  try {
+    const supabase = getSupabase();
+    const { data: historicalData, error } = await supabase.rpc(
+      'calculate_wholesale_sales_with_historical_prices',
        { 
          p_month: `${selectedYear}-${selectedMonth}`,
          p_target_date: new Date(date + 'T00:00:00Z').toISOString()
@@ -227,13 +224,14 @@ function WholesaleDashboardContent() {
    }
  };
 
- const fetchHistoricalPrices = async () => {
-   setLoadingHistorical(true);
-   try {
-     const { data: historicalData, error } = await supabase.rpc(
-       'calculate_wholesale_sales_with_historical_prices',
-       { p_month: `${selectedYear}-${selectedMonth}` }
-     );
+const fetchHistoricalPrices = async () => {
+  setLoadingHistorical(true);
+  try {
+    const supabase = getSupabase();
+    const { data: historicalData, error } = await supabase.rpc(
+      'calculate_wholesale_sales_with_historical_prices',
+      { p_month: `${selectedYear}-${selectedMonth}` }
+    );
      
      if (error) throw error;
      

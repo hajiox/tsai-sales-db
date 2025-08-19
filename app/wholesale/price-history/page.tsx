@@ -4,14 +4,9 @@
 import React, { useState, useEffect } from "react"
 import { useRouter } from 'next/navigation'
 import { X, Trash2, Calendar, Package, ChevronLeft, TrendingUp } from "lucide-react"
-import { createClient } from '@supabase/supabase-js'
+import getSupabase from '@/lib/supabaseClient'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-
-// Supabaseクライアントの初期化
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 interface DateHistory {
   change_date: string
@@ -40,6 +35,7 @@ export default function WholesalePriceHistory() {
   const fetchDateHistories = async () => {
     setLoading(true)
     try {
+      const supabase = getSupabase()
       // 価格変更履歴を日付でグループ化して取得
       const { data: historyData, error: historyError } = await supabase
         .from('wholesale_product_price_history')
@@ -116,6 +112,7 @@ export default function WholesalePriceHistory() {
 
     setDeleting(date)
     try {
+      const supabase = getSupabase()
       // 複数の履歴を一括削除
       const { error } = await supabase
         .from('wholesale_product_price_history')
