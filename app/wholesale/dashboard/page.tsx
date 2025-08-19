@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.39 利益率履歴対応版
+// /app/wholesale/dashboard/page.tsx ver.40 (2025-08-19 JST)
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ import OEMArea from '@/components/wholesale/oem-area';
 import PriceHistoryControls from '@/components/wholesale/price-history-controls';
 import SalesDataTable from '@/components/wholesale/sales-data-table';
 import ProductStatistics from '@/components/wholesale/product-statistics';
-import getSupabase from '@/lib/supabase/browser'; // ver.40 (2025-08-19 JST) - browser singleton client
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 
 // インターフェース定義
 interface Product {
@@ -169,7 +169,7 @@ function WholesaleDashboardContent() {
  // 価格履歴関連の関数
 const fetchPriceChangeDates = async () => {
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabaseBrowserClient();
     const { data, error } = await supabase
       .from('wholesale_product_price_history')
        .select('valid_from, product_id')
@@ -203,7 +203,7 @@ const showPriceAtDate = async (date: string) => {
   setLoadingHistorical(true);
   setSelectedHistoryDate(date);
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabaseBrowserClient();
     const { data: historicalData, error } = await supabase.rpc(
       'calculate_wholesale_sales_with_historical_prices',
        { 
@@ -227,7 +227,7 @@ const showPriceAtDate = async (date: string) => {
 const fetchHistoricalPrices = async () => {
   setLoadingHistorical(true);
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabaseBrowserClient();
     const { data: historicalData, error } = await supabase.rpc(
       'calculate_wholesale_sales_with_historical_prices',
       { p_month: `${selectedYear}-${selectedMonth}` }

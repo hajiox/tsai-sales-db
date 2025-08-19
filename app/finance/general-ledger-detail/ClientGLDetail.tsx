@@ -1,8 +1,8 @@
-// ver.1 (2025-08-19 JST) - extracted browser-only GL detail client
+// /app/finance/general-ledger-detail/ClientGLDetail.tsx ver.2 (2025-08-19 JST) - extracted browser-only GL detail client
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import getSupabase from '@/lib/supabase/browser'; // ver.2 (2025-08-19 JST) - browser singleton client
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Search, MessageSquare, FileText, TrendingUp, Filter, Send, Loader2 } from 'lucide-react';
@@ -31,7 +31,7 @@ export default function ClientGLDetail() {
   const [queryHistory, setQueryHistory] = useState<Array<{question: string, response: string}>>([]);
 
   const supabase = useMemo(
-    () => (typeof window !== 'undefined' ? getSupabase() : null),
+    () => (typeof window !== 'undefined' ? getSupabaseBrowserClient() : null),
     []
   );
 

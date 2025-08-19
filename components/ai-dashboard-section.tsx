@@ -1,7 +1,8 @@
-"use client";
+// /components/ai-dashboard-section.tsx ver.1 (2025-08-19 JST)
+'use client';
 
 import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { toast } from "sonner";
 
 export default function AiDashboardSection() {
@@ -10,7 +11,7 @@ export default function AiDashboardSection() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClientComponentClient();
+  const supabase = getSupabaseBrowserClient();
 
   // "YYYY-MM" 形式を "YYYY年M月" 形式に変換
   const formatMonth = (month: string | null): string => {

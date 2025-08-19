@@ -1,11 +1,11 @@
-// ver.2 (2025-08-19 JST) - add default export
+// /components/food-store/CategoryManagementModal.tsx ver.3 (2025-08-19 JST)
 "use client"
 
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { Plus, Edit2, Trash2, GripVertical } from "lucide-react"
 import {
   Table,
@@ -26,7 +26,7 @@ function CategoryManagementModal({ isOpen, onClose }: CategoryManagementModalPro
   const [newCategoryName, setNewCategoryName] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
 
   useEffect(() => {
     if (isOpen) {

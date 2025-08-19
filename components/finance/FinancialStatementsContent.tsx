@@ -1,9 +1,9 @@
-// /components/finance/FinancialStatementsContent.tsx  ver.8
+// /components/finance/FinancialStatementsContent.tsx  ver.9 (2025-08-19 JST)
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import getSupabase from '@/lib/supabase/browser'; // ver.9 (2025-08-19 JST) - browser singleton client
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { FileSpreadsheet, BarChart3, Calendar, FileText, ToggleLeft, ToggleRight } from 'lucide-react';
 
 import { BalanceSheet } from '@/components/finance/BalanceSheet';
@@ -46,7 +46,7 @@ export default function FinancialStatementsContent() {
   });
 
   const supabase = useMemo(
-    () => (typeof window !== 'undefined' ? getSupabase() : null),
+    () => (typeof window !== 'undefined' ? getSupabaseBrowserClient() : null),
     []
   );
 
