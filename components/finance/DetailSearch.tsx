@@ -1,8 +1,8 @@
-// /components/finance/DetailSearch.tsx ver.1
+// /components/finance/DetailSearch.tsx ver.2 (2025-08-19 JST)
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import getSupabase from '@/lib/supabase/browser'; // ver.2 (2025-08-19 JST) - browser singleton client
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -22,7 +22,7 @@ export function DetailSearch({ selectedMonth }: DetailSearchProps) {
   const [dataLoading, setDataLoading] = useState(false);
 
     const supabase = useMemo(
-      () => (typeof window !== 'undefined' ? getSupabase() : null),
+      () => (typeof window !== 'undefined' ? getSupabaseBrowserClient() : null),
       []
     );
 

@@ -1,9 +1,9 @@
-// ver.1 (2025-08-19 JST) - extracted browser-only GL client
+// /app/finance/general-ledger/ClientGL.tsx ver.2 (2025-08-19 JST) - extracted browser-only GL client
 
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import getSupabase from "@/lib/supabase/browser"; // ver.2 (2025-08-19 JST) - browser singleton client
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 
 // ===== shadcn/ui =====
 import { Button } from "@/components/ui/button";
@@ -150,7 +150,7 @@ const getFiscalYearLabel = (year: number) => {
 
 // ====== Component ======
 export default function ClientGL() {
-  const supabase = useMemo(() => getSupabase(), []);
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const router = useRouter();
 
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);

@@ -1,11 +1,13 @@
-// ver.4 (2025-08-19 JST) - add default export
+// /components/food-store/ProductCategoryMappingModal.tsx ver.5 (2025-08-19 JST)
+'use client'
+
 import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 
 interface ProductCategoryMappingModalProps {
   isOpen: boolean
@@ -36,7 +38,7 @@ function ProductCategoryMappingModal({
   const [grossProfitRates, setGrossProfitRates] = useState<{[key: number]: string}>({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
 
   useEffect(() => {
     if (isOpen) {

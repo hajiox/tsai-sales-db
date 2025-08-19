@@ -1,11 +1,11 @@
-// /app/components/brand-store/MasterDataModal.tsx ver.5 (タブなし版)
-"use client"
+// /components/brand-store/MasterDataModal.tsx ver.6 (2025-08-19 JST)
+'use client'
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Upload, FileText, AlertCircle, Search, Package, Tag, Eye, FileUp } from "lucide-react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { formatCurrency } from "@/lib/utils"
 
 interface Props {
@@ -25,7 +25,7 @@ export function MasterDataModal({ isOpen, onClose }: Props) {
   const [productSearch, setProductSearch] = useState("")
   const [viewMode, setViewMode] = useState<'view' | 'import'>('view')
   const [viewType, setViewType] = useState<'categories' | 'products'>('categories')
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
 
   // マスターデータを取得
   const fetchMasterData = async () => {

@@ -1,10 +1,10 @@
-// /app/wholesale/price-history/page.tsx ver.2
+// /app/wholesale/price-history/page.tsx ver.3 (2025-08-19 JST)
 "use client"
 
 import React, { useState, useEffect } from "react"
 import { useRouter } from 'next/navigation'
 import { X, Trash2, Calendar, Package, ChevronLeft, TrendingUp } from "lucide-react"
-import getSupabase from '@/lib/supabase/browser' // ver.3 (2025-08-19 JST) - browser singleton client
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -35,7 +35,7 @@ export default function WholesalePriceHistory() {
   const fetchDateHistories = async () => {
     setLoading(true)
     try {
-      const supabase = getSupabase()
+      const supabase = getSupabaseBrowserClient()
       // 価格変更履歴を日付でグループ化して取得
       const { data: historyData, error: historyError } = await supabase
         .from('wholesale_product_price_history')

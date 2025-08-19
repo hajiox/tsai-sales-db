@@ -1,8 +1,8 @@
-// /components/brand-store/SalesAdjustmentHistoryModal.tsx ver.1
+// /components/brand-store/SalesAdjustmentHistoryModal.tsx ver.2 (2025-08-19 JST)
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -53,7 +53,7 @@ export function SalesAdjustmentHistoryModal({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editAmount, setEditAmount] = useState<string>('')
   const [editReason, setEditReason] = useState<string>('')
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
 
   // データ取得
   const fetchAdjustments = async () => {
