@@ -29,6 +29,25 @@ import { useRouter } from 'next/navigation';
 import GeneralLedgerImportModal from '@/components/general-ledger/GeneralLedgerImportModal';
 import ClosingImportModal from '@/components/general-ledger/ClosingImportModal';
 
+// === DEBUG: import sanity check (temporary) ===
+const __imports = {
+  Button,
+  Card, CardContent, CardHeader, CardTitle,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Alert, AlertDescription,
+  Upload, Trash2, FileText, Calculator, Calendar,
+  ChevronDown, ChevronRight, AlertCircle, BarChart3,
+  FileSpreadsheet, DollarSign,
+  GeneralLedgerImportModal, ClosingImportModal,
+};
+for (const [k, v] of Object.entries(__imports)) {
+  if (v == null) {
+    throw new Error(`Import "${k}" is ${String(v)}. Check its import/export.`);
+  }
+}
+// ==============================================
+
+
 interface MonthlyData {
   yyyymm: string;
   report_month: string;
