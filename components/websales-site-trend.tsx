@@ -2,7 +2,9 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts"
-import { supabase } from "../lib/supabase"
+import ClientOnly from '@/components/common/ClientOnly'; // ver.1 (2025-08-19 JST) - client-only charts
+import getSupabase from '@/lib/supabase/browser'; // ver.1 (2025-08-19 JST) - browser singleton client
+const supabase = getSupabase(); // ver.1 (2025-08-19 JST)
 
 const SITES = [
   { key: "amazon", name: "Amazon", color: "#3b82f6" },
@@ -99,19 +101,21 @@ export default function WebSalesSiteTrend() {
             </option>
           ))}
         </select>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ left: 10, right: 10 }}>
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              {SITES.map((s) => (
-                <Bar key={s.key} dataKey={s.key} stackId="a" fill={s.color} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <ClientOnly>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ left: 10, right: 10 }}>
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                {SITES.map((s) => (
+                  <Bar key={s.key} dataKey={s.key} stackId="a" fill={s.color} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ClientOnly>
       </CardContent>
     </Card>
   )

@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp, Package, Settings, Link } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import ClientOnly from '@/components/common/ClientOnly' // ver.11 (2025-08-19 JST) - client-only charts
 import { useSearchParams, useRouter } from 'next/navigation'
 
 function FoodStoreAnalysisContent() {
@@ -411,18 +412,20 @@ function FoodStoreAnalysisContent() {
        <h2 className="text-lg font-semibold mb-4">売上・販売個数推移（過去12ヶ月）</h2>
        <Card>
          <CardContent className="pt-6">
-           <ResponsiveContainer width="100%" height={300}>
-             <ComposedChart data={chartData}>
-               <CartesianGrid strokeDasharray="3 3" />
-               <XAxis dataKey="month" />
-               <YAxis yAxisId="left" />
-               <YAxis yAxisId="right" orientation="right" />
-               <Tooltip formatter={(value: number) => value.toLocaleString()} />
-               <Legend />
-               <Bar yAxisId="left" dataKey="売上" fill="#3b82f6" name="売上（円）" />
-               <Line yAxisId="right" type="monotone" dataKey="個数" stroke="#10b981" strokeWidth={2} name="販売個数" />
-             </ComposedChart>
-           </ResponsiveContainer>
+           <ClientOnly>
+             <ResponsiveContainer width="100%" height={300}>
+               <ComposedChart data={chartData}>
+                 <CartesianGrid strokeDasharray="3 3" />
+                 <XAxis dataKey="month" />
+                 <YAxis yAxisId="left" />
+                 <YAxis yAxisId="right" orientation="right" />
+                 <Tooltip formatter={(value: number) => value.toLocaleString()} />
+                 <Legend />
+                 <Bar yAxisId="left" dataKey="売上" fill="#3b82f6" name="売上（円）" />
+                 <Line yAxisId="right" type="monotone" dataKey="個数" stroke="#10b981" strokeWidth={2} name="販売個数" />
+               </ComposedChart>
+             </ResponsiveContainer>
+           </ClientOnly>
          </CardContent>
        </Card>
      </div>

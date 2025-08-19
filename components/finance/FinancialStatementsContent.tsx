@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import getSupabase from '@/lib/supabaseClient';
+import getSupabase from '@/lib/supabase/browser'; // ver.9 (2025-08-19 JST) - browser singleton client
 import { FileSpreadsheet, BarChart3, Calendar, FileText, ToggleLeft, ToggleRight } from 'lucide-react';
 
 import { BalanceSheet } from '@/components/finance/BalanceSheet';
