@@ -1,168 +1,109 @@
 "use client";
-
 import React from "react";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabase } from "@/lib/supabaseClient";
 
-// ---------- helpers ----------
 const jpy = (v: number) => (v < 0 ? `△¥${Math.abs(v).toLocaleString()}` : `¥${v.toLocaleString()}`);
-const toNum = (v: any): number => {
-  if (typeof v === "number") return v;
-  if (typeof v === "bigint") return Number(v);
-  if (v == null) return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
+const toNum = (v: any) =>
+  typeof v === "number" ? v : typeof v === "bigint" ? Number(v) : Number(v ?? 0) || 0;
+const normMonth = (m: string) => (m?.length === 7 ? `${m}-01` : m); // "2025-04" → "2025-04-01"
 
-// API client (browser-safe; anon key only)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// ---------- types ----------
-interface Line {
-  section: "資産" | "負債" | "純資産" | string;
-  account_code: string;
-  account_name: string;
-  amount: number | string | bigint; // will be normalized via toNum
-}
-
-interface TotalsRaw {
-  assets: number | string | bigint | null;
-  liabilities: number | string | bigint | null;
-  equity: number | string | bigint | null;
-}
-
-// ---------- component ----------
 export default function BalanceSheet({ month }: { month: string }) {
-  const [lines, setLines] = React.useState<Line[] | null>(null);
-  const [totals, setTotals] = React.useState<{ A: number; L: number; E: number } | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState<boolean>(true);
+  const supabase = React.useMemo(() => getSupabase(), []);
+  const [lines, setLines] = React.useState<any[]>([]);
+  const [A, setA] = React.useState(0);
+  const [L, setL] = React.useState(0);
+  const [E, setE] = React.useState(0);
+  const [err, setErr] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     let mounted = true;
-    async function load() {
-      setLoading(true);
-      setError(null);
+    const m = normMonth(month);
+    (async () => {
       try {
-        // 1) 合計（A, L, E）
-        const tr = await supabase.rpc("bs_totals", { p_month: month });
-        if (tr.error) throw tr.error;
-        const t = (tr.data || {}) as TotalsRaw;
-        const A = toNum(t.assets);
-        const L = toNum(t.liabilities);
-        const E = toNum(t.equity);
+        setLoading(true);
+        setErr(null);
 
-        // 2) 明細（0円やsheet系はDB側で除外済み）
-        const lr = await supabase.rpc("bs_snapshot_clean", { p_month: month });
-        if (lr.error) throw lr.error;
-        const normalized = (lr.data || []).map((r: Line) => ({
-          ...r,
-          amount: toNum(r.amount),
-        }));
+        const t = await supabase.rpc("bs_totals", { p_month: m });
+        if (t.error) throw t.error;
+        const a = toNum(t.data?.assets);
+        const l = toNum(t.data?.liabilities);
+        const e = toNum(t.data?.equity);
+
+        const r = await supabase.rpc("bs_snapshot_clean", { p_month: m });
+        if (r.error) throw r.error;
+        const rows = (r.data ?? []).map((x: any) => ({ ...x, amount: toNum(x.amount) }));
 
         if (mounted) {
-          setTotals({ A, L, E });
-          setLines(normalized);
+          setA(a); setL(l); setE(e); setLines(rows);
         }
       } catch (e: any) {
-        if (mounted) setError(e?.message ?? String(e));
+        if (mounted) setErr(e?.message ?? String(e));
       } finally {
         if (mounted) setLoading(false);
       }
-    }
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [month]);
+    })();
+    return () => { mounted = false; };
+  }, [month, supabase]);
 
-  if (loading) {
-    return (
-      <div className="grid grid-cols-2 gap-6 animate-pulse">
-        <div className="h-72 rounded-2xl bg-gray-100" />
-        <div className="h-72 rounded-2xl bg-gray-100" />
-      </div>
-    );
-  }
+  if (loading) return <div className="p-6 text-gray-500">loading…</div>;
+  if (err) return <div className="p-4 text-red-700 bg-red-50 rounded">取得エラー：{String(err)}</div>;
 
-  if (error) {
-    return (
-      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-700">
-        データ取得に失敗しました：{error}
-      </div>
-    );
-  }
-
-  const A = totals?.A ?? 0;
-  const L = totals?.L ?? 0;
-  const E = totals?.E ?? 0;
   const ok = Math.round(A) === Math.round(L + E);
-
-  const assets = (lines ?? []).filter((x) => x.section === "資産");
-  const liabilities = (lines ?? []).filter((x) => x.section === "負債");
-  const equity = (lines ?? []).filter((x) => x.section === "純資産");
+  const assets = lines.filter((x) => x.section === "資産");
+  const liabilities = lines.filter((x) => x.section === "負債");
+  const equity = lines.filter((x) => x.section === "純資産");
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      {/* 資産の部 */}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <section className="rounded-2xl border bg-white p-4 shadow-sm">
         <h3 className="mb-3 font-semibold">資産の部</h3>
         <ul className="divide-y">
           {assets.map((a) => (
-            <li key={`${a.section}-${a.account_code}`} className="flex items-center justify-between py-2">
-              <span className="truncate pr-2">「{a.account_name}」</span>
-              <span className="tabular-nums">{jpy(toNum(a.amount))}</span>
+            <li key={`${a.section}-${a.account_code}`} className="flex justify-between py-2">
+              <span className="truncate pr-2">「{String(a.account_name)}」</span>
+              <span className="tabular-nums">{jpy(a.amount)}</span>
             </li>
           ))}
         </ul>
-        <div className="mt-3 flex items-center justify-between border-t pt-3 font-semibold">
-          <span>資産合計</span>
-          <span className="tabular-nums">{jpy(A)}</span>
+        <div className="mt-3 flex justify-between border-t pt-3 font-semibold">
+          <span>資産合計</span><span className="tabular-nums">{jpy(A)}</span>
         </div>
       </section>
 
-      {/* 負債・純資産の部 */}
       <section className="rounded-2xl border bg-white p-4 shadow-sm">
         <h3 className="mb-3 font-semibold">負債・純資産の部</h3>
 
         <div className="mb-1 text-sm text-gray-500">負債</div>
         <ul className="divide-y">
           {liabilities.map((l) => (
-            <li key={`${l.section}-${l.account_code}`} className="flex items-center justify-between py-2">
-              <span className="truncate pr-2">「{l.account_name}」</span>
-              <span className="tabular-nums">{jpy(toNum(l.amount))}</span>
+            <li key={`${l.section}-${l.account_code}`} className="flex justify-between py-2">
+              <span className="truncate pr-2">「{String(l.account_name)}」</span>
+              <span className="tabular-nums">{jpy(l.amount)}</span>
             </li>
           ))}
         </ul>
-        <div className="mt-3 flex items-center justify-between border-t pt-3 font-semibold">
-          <span>負債合計</span>
-          <span className="tabular-nums">{jpy(L)}</span>
+        <div className="mt-3 flex justify-between border-t pt-3 font-semibold">
+          <span>負債合計</span><span className="tabular-nums">{jpy(L)}</span>
         </div>
 
         <div className="mt-6 mb-1 text-sm text-gray-500">純資産</div>
         <ul className="divide-y">
           {equity.map((e) => (
-            <li key={`${e.section}-${e.account_code}`} className="flex items-center justify-between py-2">
-              <span className="truncate pr-2">「{e.account_name}」</span>
-              <span className="tabular-nums">{jpy(toNum(e.amount))}</span>
+            <li key={`${e.section}-${e.account_code}`} className="flex justify-between py-2">
+              <span className="truncate pr-2">「{String(e.account_name)}」</span>
+              <span className="tabular-nums">{jpy(e.amount)}</span>
             </li>
           ))}
         </ul>
-        <div className="mt-3 flex items-center justify-between border-t pt-3 font-semibold">
-          <span>純資産計</span>
-          <span className="tabular-nums">{jpy(E)}</span>
+        <div className="mt-3 flex justify-between border-t pt-3 font-semibold">
+          <span>純資産計</span><span className="tabular-nums">{jpy(E)}</span>
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t pt-3 font-semibold">
-          <span>負債・純資産合計</span>
-          <span className="tabular-nums">{jpy(L + E)}</span>
+        <div className="mt-4 flex justify-between border-t pt-3 font-semibold">
+          <span>負債・純資産合計</span><span className="tabular-nums">{jpy(L + E)}</span>
         </div>
-
-        {!ok && (
-          <p className="mt-2 text-sm text-red-600">※集計不一致（資産≠負債+純資産）。DBに保存の`bs_totals`値を使用中です。データを確認してください。</p>
-        )}
+        {!ok && <p className="mt-2 text-sm text-red-600">※集計不一致（資産≠負債+純資産）。</p>}
       </section>
     </div>
   );
