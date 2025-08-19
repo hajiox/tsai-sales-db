@@ -14,7 +14,7 @@ import OEMArea from '@/components/wholesale/oem-area';
 import PriceHistoryControls from '@/components/wholesale/price-history-controls';
 import SalesDataTable from '@/components/wholesale/sales-data-table';
 import ProductStatistics from '@/components/wholesale/product-statistics';
-import getSupabase from '@/lib/supabaseClient';
+import getSupabase from '@/lib/supabase/browser'; // ver.40 (2025-08-19 JST) - browser singleton client
 
 // インターフェース定義
 interface Product {

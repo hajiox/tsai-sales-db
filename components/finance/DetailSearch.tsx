@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import getSupabase from '@/lib/supabaseClient';
+import getSupabase from '@/lib/supabase/browser'; // ver.2 (2025-08-19 JST) - browser singleton client
 import { Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';

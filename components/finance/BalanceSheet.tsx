@@ -1,7 +1,7 @@
-// ver.3 (2025-08-19 JST) - expose both named and default
+// ver.4 (2025-08-19 JST) - use RPC bs_totals
 "use client";
 import React from "react";
-import getSupabase from "@/lib/supabaseClient";
+import getSupabase from "@/lib/supabase/browser"; // ver.4 (2025-08-19 JST) - browser singleton client
 
 // 通貨表記
 const jpy = (v: number) => (v < 0 ? `△¥${Math.abs(v).toLocaleString()}` : `¥${v.toLocaleString()}`);
@@ -10,6 +10,22 @@ const toNum = (v: any) =>
   typeof v === "number" ? v : typeof v === "bigint" ? Number(v) : Number(v ?? 0) || 0;
 // "2025-04" → "2025-04-01"
 const normMonth = (m: string) => (m?.length === 7 ? `${m}-01` : m);
+
+type BsRow = { side: 'assets' | 'liabilities' | 'equity'; total: number };
+// ver.4 (2025-08-19 JST) - use RPC bs_totals
+async function fetchBsTotals(month?: string): Promise<BsRow[]> {
+  const supabase = (typeof window === 'undefined') ? null : (await import('@/lib/supabase/browser')).default();
+  if (!supabase) return [];
+  if (month) {
+    const { data, error } = await supabase.rpc('bs_totals', { target_month: month });
+    if (error) throw error;
+    return data as BsRow[];
+  } else {
+    const { data, error } = await supabase.rpc('bs_totals');
+    if (error) throw error;
+    return data as BsRow[];
+  }
+}
 
 function BalanceSheet({ month }: { month: string }) {
   // Supabase クライアントをシングルトンから取得（ビルド時は null）
@@ -34,11 +50,10 @@ function BalanceSheet({ month }: { month: string }) {
         setLoading(true);
         setErr(null);
 
-        const t = await supabase.rpc("bs_totals", { p_month: m });
-        if (t.error) throw t.error;
-        const a = toNum(t.data?.assets);
-        const l = toNum(t.data?.liabilities);
-        const e = toNum(t.data?.equity);
+        const totals = await fetchBsTotals(month);
+        const a = toNum(totals.find((x) => x.side === 'assets')?.total);
+        const l = toNum(totals.find((x) => x.side === 'liabilities')?.total);
+        const e = toNum(totals.find((x) => x.side === 'equity')?.total);
 
         const r = await supabase.rpc("bs_snapshot_clean", { p_month: m });
         if (r.error) throw r.error;

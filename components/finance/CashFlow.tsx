@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import getSupabase from '@/lib/supabaseClient';
+import getSupabase from '@/lib/supabase/browser'; // ver.7 (2025-08-19 JST) - browser singleton client
 import { TrendingUp, TrendingDown, DollarSign, Loader2 } from 'lucide-react';
 
 /**

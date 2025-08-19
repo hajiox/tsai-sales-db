@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from "react"
 import { useRouter } from 'next/navigation'
 import { X, Trash2, Calendar, Package, ChevronLeft, TrendingUp } from "lucide-react"
-import getSupabase from '@/lib/supabaseClient'
+import getSupabase from '@/lib/supabase/browser' // ver.3 (2025-08-19 JST) - browser singleton client
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 

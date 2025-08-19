@@ -2,6 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import ClientOnly from '@/components/common/ClientOnly'; // ver.2 (2025-08-19 JST) - client-only charts
 
 const ChartCard = ({ title, children }: { title: string, children: React.ReactNode }) => (
     <Card className="shadow-sm border-slate-200">
@@ -9,7 +10,7 @@ const ChartCard = ({ title, children }: { title: string, children: React.ReactNo
             <CardTitle className="text-base font-semibold text-slate-700">{title}</CardTitle>
         </CardHeader>
         <CardContent className="h-64">
-             {children}
+             <ClientOnly>{children}</ClientOnly>
         </CardContent>
     </Card>
 );
