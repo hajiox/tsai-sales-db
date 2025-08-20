@@ -1,6 +1,9 @@
 // /app/brand-store-analysis/page.tsx ver.9（売上修正履歴機能追加版）
 "use client"
 
+// 動的ページとして扱い、SSGしない（これだけでOK）
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, Suspense } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Button } from '@/components/ui/button'
