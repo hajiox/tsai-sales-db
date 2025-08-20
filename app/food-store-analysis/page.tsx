@@ -4,7 +4,7 @@
 import { useState, useEffect, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import FoodStoreCsvImportModal from "@/components/food-store/FoodStoreCsvImportModal"
 import CategoryManagementModal from "@/components/food-store/CategoryManagementModal"
 import ProductCategoryMappingModal from "@/components/food-store/ProductCategoryMappingModal"
@@ -29,7 +29,7 @@ function FoodStoreAnalysisContent() {
  const [data, setData] = useState<any>(null)
  const [chartData, setChartData] = useState<any[]>([])
  const [loading, setLoading] = useState(false)
- const supabase = createClientComponentClient()
+ const supabase = getSupabaseBrowserClient()
 
  // URLパラメータから年月を読み取る
  useEffect(() => {
