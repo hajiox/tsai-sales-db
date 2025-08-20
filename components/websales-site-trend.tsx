@@ -3,8 +3,8 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts"
 import ClientOnly from '@/components/common/ClientOnly'; // ver.1 (2025-08-19 JST) - client-only charts
-import getSupabase from '@/lib/supabase/browser'; // ver.1 (2025-08-19 JST) - browser singleton client
-const supabase = getSupabase(); // ver.1 (2025-08-19 JST)
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'; // ver.1 (2025-08-19 JST) - browser singleton client
+const supabase = getSupabaseBrowserClient(); // ver.1 (2025-08-19 JST)
 
 const SITES = [
   { key: "amazon", name: "Amazon", color: "#3b82f6" },

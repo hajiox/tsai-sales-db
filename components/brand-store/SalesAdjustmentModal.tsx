@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,7 +36,7 @@ export function SalesAdjustmentModal({
   const [adjustmentAmount, setAdjustmentAmount] = useState<string>('')
   const [adjustmentReason, setAdjustmentReason] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
 
   const handleSubmit = async () => {
     if (!adjustmentAmount || adjustmentAmount === '0') {

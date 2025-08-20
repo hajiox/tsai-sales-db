@@ -1,7 +1,7 @@
 // ver.4 (2025-08-19 JST) - use RPC bs_totals
 "use client";
 import React from "react";
-import getSupabase from "@/lib/supabase/browser"; // ver.4 (2025-08-19 JST) - browser singleton client
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"; // ver.4 (2025-08-19 JST) - browser singleton client
 
 // 通貨表記
 const jpy = (v: number) => (v < 0 ? `△¥${Math.abs(v).toLocaleString()}` : `¥${v.toLocaleString()}`);
@@ -14,7 +14,7 @@ const normMonth = (m: string) => (m?.length === 7 ? `${m}-01` : m);
 type BsRow = { side: 'assets' | 'liabilities' | 'equity'; total: number };
 // ver.4 (2025-08-19 JST) - use RPC bs_totals
 async function fetchBsTotals(month?: string): Promise<BsRow[]> {
-  const supabase = (typeof window === 'undefined') ? null : (await import('@/lib/supabase/browser')).default();
+  const supabase = (typeof window === 'undefined') ? null : (await import('@/lib/supabase/browser')).getSupabaseBrowserClient();
   if (!supabase) return [];
   if (month) {
     const { data, error } = await supabase.rpc('bs_totals', { target_month: month });
@@ -30,7 +30,7 @@ async function fetchBsTotals(month?: string): Promise<BsRow[]> {
 function BalanceSheet({ month }: { month: string }) {
   // Supabase クライアントをシングルトンから取得（ビルド時は null）
   const supabase = React.useMemo(
-    () => (typeof window !== "undefined" ? getSupabase() : null),
+    () => (typeof window !== "undefined" ? getSupabaseBrowserClient() : null),
     []
   );
 

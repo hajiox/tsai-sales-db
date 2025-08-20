@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import getSupabase from '@/lib/supabase/browser'; // ver.7 (2025-08-19 JST) - browser singleton client
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'; // ver.7 (2025-08-19 JST) - browser singleton client
 import { TrendingUp, TrendingDown, DollarSign, Loader2 } from 'lucide-react';
 
 /**
@@ -167,7 +167,7 @@ export function CashFlow({ month, includingClosing }: CashFlowProps) {
       }
 
       try {
-        const supabase = getSupabase();
+        const supabase = getSupabaseBrowserClient();
 
         // 選択月と前月
         const targetMonth = month; // YYYY-MM

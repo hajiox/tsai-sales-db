@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import dynamic from 'next/dynamic';
 
 import DashboardHeader from './dashboard-header';
+import ClientDate from '@/components/common/ClientDate';
 import DashboardStats from './dashboard-stats';
 import DailySalesCrudForm from './daily-sales-crud-form';
 import AiDashboardSection from './ai-dashboard-section';
@@ -109,6 +110,7 @@ export default function DashboardView() {
 
     return (
         <div className="p-4 md:p-6 lg:p-8 bg-slate-50 min-h-screen font-sans">
+            <div className="text-right text-sm text-slate-600"><ClientDate /></div>
             <DashboardHeader selectedDate={selectedDate} onDateChange={setSelectedDate} />
             
             <main className="mt-6 space-y-8">
