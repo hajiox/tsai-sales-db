@@ -5,7 +5,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, Suspense } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,7 +35,7 @@ function BrandStoreAnalysisContent() {
   const [chartData, setChartData] = useState<any[]>([])
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0)
   const [loading, setLoading] = useState(false)
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
 
   // URLパラメータから年月を読み取る
   useEffect(() => {

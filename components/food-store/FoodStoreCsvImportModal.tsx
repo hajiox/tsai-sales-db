@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import Papa from 'papaparse'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 
 interface FoodStoreCsvImportModalProps {
   isOpen?: boolean
@@ -30,7 +30,7 @@ export default function FoodStoreCsvImportModal({
   const [isImporting, setIsImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
 
   // モーダルが開いた時に年月を自動セット
   useEffect(() => {
