@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, ClipboardCheck, Loader2 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 import { formatDateJST, formatCurrency } from "@/lib/utils"
 
 // --- 変更点1: PropsにonSaveSuccessを追加 ---

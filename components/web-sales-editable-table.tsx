@@ -20,7 +20,8 @@ import CsvImportModal from "./CsvImportModal"
 import PriceHistoryManagementModal from "./PriceHistoryManagementModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 import { History, Calendar } from "lucide-react"
 
 interface WebSalesEditableTableProps {

@@ -2,7 +2,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 import { WebSalesData, Product } from "@/types/db"
 
 export function useWebSalesData(initialData: WebSalesData[], month: string) {

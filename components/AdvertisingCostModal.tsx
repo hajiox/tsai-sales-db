@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect } from "react"
 import { X } from "lucide-react"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 
 interface AdvertisingCostModalProps {
   isOpen: boolean

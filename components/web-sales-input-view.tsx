@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
+const supabase = getSupabaseBrowserClient();
 
 // Supabase RPC関数の戻り値型を明確に定義
 type SupabaseRpcResult = {

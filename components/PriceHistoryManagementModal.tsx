@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect } from "react"
 import { X, Trash2, Calendar, Package } from "lucide-react"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 
 interface PriceHistoryManagementModalProps {
   isOpen: boolean
