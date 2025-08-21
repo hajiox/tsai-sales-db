@@ -3,7 +3,8 @@
 
 import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 import { TrendingUp } from "lucide-react"
 
 const SITES = [

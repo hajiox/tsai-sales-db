@@ -7,7 +7,8 @@ import { WebSalesData } from "@/types/db"
 import { Plus, Trash2, TrendingUp, TrendingDown, Edit } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import ProductEditModal from "./ProductEditModal"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 
 interface WebSalesDataTableProps {
  filteredItems: WebSalesData[]

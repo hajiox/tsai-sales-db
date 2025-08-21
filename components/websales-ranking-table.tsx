@@ -2,7 +2,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 
 interface Props {
   month: string

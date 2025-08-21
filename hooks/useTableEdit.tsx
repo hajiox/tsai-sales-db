@@ -2,7 +2,8 @@
 "use client"
 
 import { useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+const supabase = getSupabaseBrowserClient();
 import { WebSalesData } from "@/types/db"
 
 export function useTableEdit() {
