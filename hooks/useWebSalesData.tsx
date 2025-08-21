@@ -2,10 +2,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { WebSalesData, Product } from "@/types/db"
 
 export function useWebSalesData(initialData: WebSalesData[], month: string) {
+  const supabase = getSupabaseBrowserClient();
   const [data, setData] = useState<WebSalesData[]>(initialData)
   const [productMap, setProductMap] = useState<Map<string, Product>>(new Map())
   const [isLoading, setIsLoading] = useState(false)

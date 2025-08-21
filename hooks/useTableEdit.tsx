@@ -2,10 +2,11 @@
 "use client"
 
 import { useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { WebSalesData } from "@/types/db"
 
 export function useTableEdit() {
+  const supabase = getSupabaseBrowserClient();
   const [editMode, setEditMode] = useState<string | null>(null)
   const [editedValue, setEditedValue] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 // Supabase RPC関数の戻り値型を明確に定義
 type SupabaseRpcResult = {
@@ -62,6 +62,7 @@ const getSeriesColor = (seriesName: string) => {
 };
 
 const WebSalesInputView = () => {
+  const supabase = getSupabaseBrowserClient();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [ym, setYm] = useState('2025-04');
