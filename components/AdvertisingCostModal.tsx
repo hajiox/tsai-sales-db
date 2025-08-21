@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react"
 import { X } from "lucide-react"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 
 interface AdvertisingCostModalProps {
   isOpen: boolean
@@ -26,6 +26,7 @@ export default function AdvertisingCostModal({
   onUpdate,
   month
 }: AdvertisingCostModalProps) {
+  const supabase = getSupabaseBrowserClient()
   const [seriesData, setSeriesData] = useState<SeriesData[]>([])
   const [rakutenCost, setRakutenCost] = useState("")
   const [yahooCost, setYahooCost] = useState("")
