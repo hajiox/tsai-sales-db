@@ -1,5 +1,6 @@
 // /app/web-sales/dashboard/page.tsx ver.27 (import パス修正版)
 "use client"
+export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -13,8 +14,6 @@ import AdvertisingCostModal from "@/components/AdvertisingCostModal"
 import { supabase } from "@/lib/supabase"
 import { WebSalesData } from "@/types/db"
 import { Plus, Trash2, DollarSign } from "lucide-react"
-
-export const dynamic = 'force-dynamic'
 
 type ViewMode = 'month' | 'period';
 

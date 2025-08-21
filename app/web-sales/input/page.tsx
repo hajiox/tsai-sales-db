@@ -1,4 +1,5 @@
 "use client"
+export const dynamic = 'force-dynamic'
 import Sidebar from "@/components/sidebar"
 import WebSalesInputView from "@/components/web-sales-input-view"
 export default function WebSalesInputPage() {
