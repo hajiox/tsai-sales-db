@@ -10,7 +10,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, CheckCircle } from "lucide-react"
-import { supabase, type SalesData } from "./lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+
+type SalesData = Record<string, any>
 
 const salesChannels = [
   { key: "amazon", name: "Amazon" },
@@ -22,6 +24,7 @@ const salesChannels = [
 ]
 
 export default function SalesInputForm() {
+  const supabase = getSupabaseBrowserClient()
   const [date, setDate] = useState<Date>(new Date())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)

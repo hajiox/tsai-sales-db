@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, CheckCircle } from "lucide-react"
-import { supabase, type DailySalesReport } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+type DailySalesReport = Record<string, any>
 import { formatDateJST } from "@/lib/utils"
 
 const salesChannels = [
@@ -23,6 +24,7 @@ const salesChannels = [
 ]
 
 export default function SalesEditView() {
+  const supabase = getSupabaseBrowserClient()
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedRecord, setSelectedRecord] = useState<DailySalesReport | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
