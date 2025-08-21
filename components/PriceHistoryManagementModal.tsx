@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react"
 import { X, Trash2, Calendar, Package } from "lucide-react"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 
 interface PriceHistoryManagementModalProps {
   isOpen: boolean
@@ -27,6 +27,7 @@ export default function PriceHistoryManagementModal({
   onClose,
   onRefresh,
 }: PriceHistoryManagementModalProps) {
+  const supabase = getSupabaseBrowserClient();
   const [dateHistories, setDateHistories] = useState<DateHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
