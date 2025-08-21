@@ -20,7 +20,7 @@ import CsvImportModal from "./CsvImportModal"
 import PriceHistoryManagementModal from "./PriceHistoryManagementModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { History, Calendar } from "lucide-react"
 
 interface WebSalesEditableTableProps {
@@ -54,6 +54,7 @@ export default function WebSalesEditableTable({
   month,
   onDataUpdated,
 }: WebSalesEditableTableProps) {
+  const supabase = getSupabaseBrowserClient()
   const [data, setData] = useState(initialWebSalesData)
   const [filterValue, setFilterValue] = useState("")
   const [editMode, setEditMode] = useState<{ [key: string]: boolean }>({})

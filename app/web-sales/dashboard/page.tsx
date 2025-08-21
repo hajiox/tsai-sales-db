@@ -11,13 +11,14 @@ import WebSalesCharts from "@/components/websales-charts"
 import WebSalesAiSection from "@/components/web-sales-ai-section"
 import ProductAddModal from "@/components/ProductAddModal"
 import AdvertisingCostModal from "@/components/AdvertisingCostModal"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { WebSalesData } from "@/types/db"
 import { Plus, Trash2, DollarSign } from "lucide-react"
 
 type ViewMode = 'month' | 'period';
 
 function WebSalesDashboardContent() {
+ const supabase = getSupabaseBrowserClient()
  const router = useRouter();
  const searchParams = useSearchParams();
  const isInitializedRef = useRef(false);

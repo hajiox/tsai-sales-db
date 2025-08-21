@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 
 interface Props {
   month: string
@@ -17,6 +17,7 @@ interface Row {
 type SortType = 'count' | 'amount';
 
 export default function WebSalesRankingTable({ month }: Props) {
+  const supabase = getSupabaseBrowserClient()
   const [bestRows, setBestRows] = useState<Row[]>([])
   const [worstRows, setWorstRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)

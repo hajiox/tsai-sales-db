@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase } from "../lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { TrendingUp } from "lucide-react"
 
 const SITES = [
@@ -49,6 +49,7 @@ type WebSalesSummaryCardsProps = {
 };
 
 export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode = 'month', periodMonths = 6 }: WebSalesSummaryCardsProps) {
+  const supabase = getSupabaseBrowserClient()
   const [totals, setTotals] = useState<Totals | null>(null);
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
