@@ -11,5 +11,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async rewrites() {
+    return [
+      // 旧フロント残骸の fetch('/sales/dashboard') を API へ転送
+      { source: '/sales/dashboard', destination: '/api/sales/dashboard' },
+    ]
+  },
 }
 export default nextConfig
