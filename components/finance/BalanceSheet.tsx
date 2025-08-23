@@ -1,88 +1,87 @@
-// /components/finance/BalanceSheet.tsx ver.6 (2025-08-22 JST)
-// 変更点：bs_totals を text版(target_month)ではなく date版(p_month)に統一。
-//         戻り値は 1行 {assets, liabilities, equity} を想定。
-//         "YYYY-MM" が渡ってきた時は "YYYY-MM-01" に正規化して呼び出し。
-// ----------------------------------------------------------------
+// /components/finance/BalanceSheet.tsx ver.7 (2025-08-22 JST)
+// 変更点：
+// - 合計の一致判定を「資産＋負債＋純資産＝0」で判定
+// - 右側の「負債＋純資産合計」は 符号付きで合算→絶対値 に修正
 
 "use client";
 
 import React from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-// 通貨表記（▲はマイナス表示）
-const jpy = (v: number) => (v < 0 ? `▲¥${Math.abs(v).toLocaleString()}` : `¥${v.toLocaleString()}`);
-// 数値化ユーティリティ
+const jpy = (v: number) =>
+  v < 0 ? `▲¥${Math.abs(v).toLocaleString()}` : `¥${v.toLocaleString()}`;
 const toNum = (v: any) =>
   typeof v === "number" ? v : typeof v === "bigint" ? Number(v) : Number(v ?? 0) || 0;
-// "2025-08" → "2025-08-01"
-const normMonth = (m?: string) => {
-  if (!m) return undefined;
-  return m.length === 7 ? `${m}-01` : m;
-};
+const normMonth = (m?: string) => (m && m.length === 7 ? `${m}-01` : m);
 
-// RPC戻り値型（date版 bs_totals は 1行で返る）
 type BsTotalsRow = { assets?: number; liabilities?: number; equity?: number };
 type BsLine = {
   section: "資産" | "負債" | "純資産";
   account_code: string;
   account_name: string;
-  amount: number;
+  amount: number; // 符号付き（資産＋、負債/純資産－）
 };
 
-type Props = {
-  // 親から "YYYY-MM" か "YYYY-MM-01" が来る想定。未指定なら当日。
-  month?: string;
-};
+type Props = { month?: string };
 
 export default function BalanceSheet({ month }: Props) {
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
+  // 表示用の正数合計
   const [A, setA] = React.useState(0);
   const [L, setL] = React.useState(0);
   const [E, setE] = React.useState(0);
+  const [creditTotal, setCreditTotal] = React.useState(0); // |負債＋純資産|（符号付き合算→絶対値）
+
+  // 検算用の符号付き合計
+  const [signedA, setSignedA] = React.useState(0);
+  const [signedL, setSignedL] = React.useState(0);
+  const [signedE, setSignedE] = React.useState(0);
+
   const [lines, setLines] = React.useState<BsLine[]>([]);
 
-  // 合計が一致しているか
-  const equal = Math.round(A) === Math.round(L + E);
+  const equal = Math.round(signedA + signedL + signedE) === 0;
 
   React.useEffect(() => {
     const run = async () => {
       setLoading(true);
       setErr(null);
       try {
-        const m = normMonth(month) ?? new Date().toISOString().slice(0, 10); // 既定は当日
-
+        const m = normMonth(month) ?? new Date().toISOString().slice(0, 10);
         const supabase = getSupabaseBrowserClient();
 
-        // --- 合計（date版 bs_totals） ----------------------------
-        // 戻り値は [ { assets, liabilities, equity } ]
+        // 合計（date版）
         const { data: totalsData, error: totalsErr } = await supabase.rpc("bs_totals", {
           p_month: m,
         });
         if (totalsErr) throw totalsErr;
         const totals: BsTotalsRow = (totalsData?.[0] ?? {}) as BsTotalsRow;
 
-        const assets = Math.abs(toNum((totals as any).assets));
-        const liabilities = Math.abs(toNum((totals as any).liabilities));
-        const equity = Math.abs(toNum((totals as any).equity));
+        const sA = toNum((totals as any).assets);
+        const sL = toNum((totals as any).liabilities);
+        const sE = toNum((totals as any).equity);
 
-        // --- 明細（bs_snapshot_clean） ---------------------------
+        setSignedA(sA);
+        setSignedL(sL);
+        setSignedE(sE);
+
+        setA(Math.abs(sA));
+        setL(Math.abs(sL));
+        setE(Math.abs(sE));
+        setCreditTotal(Math.abs(sL + sE)); // ←ここがUI合計
+
+        // 明細
         const { data: snapData, error: snapErr } = await supabase.rpc("bs_snapshot_clean", {
           p_month: m,
         });
         if (snapErr) throw snapErr;
-
         const rows: BsLine[] = (snapData ?? []).map((x: any) => ({
           section: x.section,
           account_code: x.account_code,
           account_name: x.account_name,
           amount: toNum(x.amount),
         }));
-
-        setA(assets);
-        setL(liabilities);
-        setE(equity);
         setLines(rows);
       } catch (e: any) {
         setErr(e?.message ?? String(e));
@@ -159,10 +158,10 @@ export default function BalanceSheet({ month }: Props) {
           <div className="mt-3 space-y-1 text-right">
             <div>負債合計：{jpy(L)}</div>
             <div>純資産合計：{jpy(E)}</div>
-            <div className="font-semibold">負債＋純資産合計：{jpy(L + E)}</div>
+            <div className="font-semibold">負債＋純資産合計：{jpy(creditTotal)}</div>
             {!equal && (
               <div className="text-red-600 text-sm">
-                ※貸借不一致（資産≠負債＋純資産）
+                ※貸借不一致（資産≠負債＋純資産）／要データ確認
               </div>
             )}
           </div>
