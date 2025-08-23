@@ -1,29 +1,41 @@
-// /app/finance/financial-statements/page.tsx ver.8
-'use client';
+"use client";
 
-import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
+import dynamic from "next/dynamic";
 
-const FinancialStatementsContent = dynamic(
-  () => import('@/components/finance/FinancialStatementsContent'),
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-      </div>
-    )
-  }
+// B/Sはクライアント側だけで描画（SSRを切って安全に）
+const BalanceSheet = dynamic(
+  () => import("@/components/finance/BalanceSheet"),
+  { ssr: false }
 );
 
-export default function FinancialStatementsPage() {
+type Search = { month?: string; tab?: string };
+
+export default function FinancialStatementsPage({
+  searchParams,
+}: {
+  searchParams?: Search;
+}) {
+  // オブジェクトを直接描画しない（#130対策）
+  const month =
+    typeof searchParams?.month === "string" && searchParams.month
+      ? searchParams.month
+      : undefined;
+  const tab =
+    typeof searchParams?.tab === "string" && searchParams.tab
+      ? searchParams.tab
+      : "bs";
+
   return (
-    <Suspense fallback={
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-      </div>
-    }>
-      <FinancialStatementsContent />
-    </Suspense>
+    <main className="p-6">
+      <h1 className="text-xl font-semibold mb-4">財務諸表</h1>
+
+      {tab === "bs" ? (
+        <BalanceSheet month={month} />
+      ) : (
+        <div className="text-gray-500">
+          このタブはまだ未対応です（tab={tab}）。
+        </div>
+      )}
+    </main>
   );
 }
