@@ -1,16 +1,13 @@
-// /app/layout.tsx ver.1
+// app/layout.tsx (minimal, for isolating React #130)
+// 元に戻したい場合は、あなたが渡してくれた layout.tsx を再貼り戻しします。
+
 import type { Metadata } from "next";
 import "./globals.css";
-import { Providers } from "@/components/providers";
-import MainDashboard from "@/main-dashboard";
-import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "TSA System",
   description: "Sales Management System",
-  icons: {
-    icon: '/favicon.ico',
-  },
+  icons: { icon: "/favicon.ico" },
 };
 
 export default function RootLayout({
@@ -23,14 +20,8 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
-      <body>
-        <Providers>
-          <MainDashboard>
-            {children}
-          </MainDashboard>
-          <Toaster richColors />
-        </Providers>
-      </body>
+      {/* Providers / MainDashboard / Toaster を一旦外す */}
+      <body style={{ margin: 0 }}>{children}</body>
     </html>
   );
 }
