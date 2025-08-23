@@ -1,8 +1,9 @@
-// app/layout.tsx (minimal, for isolating React #130)
-// 元に戻したい場合は、あなたが渡してくれた layout.tsx を再貼り戻しします。
+// app/layout.tsx (minimal + Providers only)
+// MainDashboard / Toaster は一旦外して、#130 の原因切り分けを続けます。
 
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "TSA System",
@@ -20,8 +21,11 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
-      {/* Providers / MainDashboard / Toaster を一旦外す */}
-      <body style={{ margin: 0 }}>{children}</body>
+      <body style={{ margin: 0 }}>
+        <Providers>
+          {children}
+        </Providers>
+      </body>
     </html>
   );
 }
