@@ -1,34 +1,39 @@
 // /components/finance/BalanceSheet.tsx
-// ver.5 (2025-08-23) — B/S 検算を “符号付き純資産” に修正し、RPCを bs_totals_signed_v1 に切替
-//  - UI表示は絶対値のまま（見た目用）
-//  - 検算は assets - (liabilities + equitySigned) を採用
-//  - Supabase クライアントはブラウザ用の単一起点から取得
+// ver.5 (2025-08-23)
+// - Supabase クライアントの named/default どちらのエクスポートにも対応（保険つき）
+// - B/S検算は符号付き純資産を使用（RPC: bs_totals_signed_v1）
+// - 表示は絶対値、検算は assets - (liabilities + equitySigned)
 
 "use client";
 
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/browser";
+import * as SB from "@/lib/supabase/browser"; // ← どちらのexportでも動くように
+
+// named export / default export 両対応
+const createClient =
+  // e.g. export const createClient = () => ...
+  (SB as any).createClient ??
+  // e.g. export default function createClient() { ... }
+  (SB as any).default;
 
 type Side = "assets" | "liabilities" | "equity";
 
 type TotalsRow = {
   side: Side;
-  total: number; // numeric が文字列で返る環境もあるので後で Number(...) します
+  total: number | string;
 };
 
 type SnapshotRow = {
   section: "assets" | "liabilities" | "equity";
   account_code: string;
   account_name: string;
-  amount: number; // 表示は絶対値を使う
+  amount: number | string;
 };
 
 type Props = {
-  /** 'YYYY-MM-01' 形式 or Date。内部で 'YYYY-MM-01' に正規化します。 */
-  targetMonth: string | Date;
-  /** 乖離を警告表示する閾値（円）。デフォルト: 0（完全一致のみ OK） */
-  warnThreshold?: number;
+  targetMonth: string | Date; // 'YYYY-MM-01' か Date
+  warnThreshold?: number; // 許容差（円）
 };
 
 const JPY = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" });
@@ -40,10 +45,8 @@ function toMonthFirstISO(x: string | Date): string {
     const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
     return `${yyyy}-${mm}-01`;
   }
-  // 文字列は YYYY-MM または YYYY-MM-01 を想定
-  const m = x.match(/^(\d{4})-(\d{2})/);
-  if (!m) return x;
-  return `${m[1]}-${m[2]}-01`;
+  const m = x.match?.(/^(\d{4})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-01` : String(x);
 }
 
 export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) {
@@ -51,7 +54,11 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [totals, setTotals] = useState<Record<Side, number>>({ assets: 0, liabilities: 0, equity: 0 });
+  const [totals, setTotals] = useState<Record<Side, number>>({
+    assets: 0,
+    liabilities: 0,
+    equity: 0, // 符号付き
+  });
   const [assetsRows, setAssetsRows] = useState<SnapshotRow[]>([]);
   const [liabRows, setLiabRows] = useState<SnapshotRow[]>([]);
 
@@ -63,28 +70,28 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
       setLoading(true);
       setError(null);
       try {
-        // 1) 符号付きトータル（重要）
-        const { data: totalsData, error: totalsErr } = await supabase
-          .rpc("bs_totals_signed_v1", { p_month: monthISO })
-          .select();
-
+        // 1) 符号付きトータル（RPCは .select() を付けない）
+        const { data: totalsData, error: totalsErr } = await supabase.rpc("bs_totals_signed_v1", {
+          p_month: monthISO,
+        });
         if (totalsErr) throw totalsErr;
-        const find = (k: Side) =>
-          Number((totalsData as TotalsRow[] | null)?.find((r) => r.side === k)?.total ?? 0);
 
-        const assets = find("assets");
-        const liabilities = find("liabilities");
-        const equitySigned = find("equity");
+        const rows = (totalsData as TotalsRow[]) || [];
+        const pick = (k: Side) => Number(rows.find((r) => r.side === k)?.total ?? 0);
 
-        // 2) 行明細（表示用）
-        const { data: snapData, error: snapErr } = await supabase
-          .rpc("bs_snapshot_clean", { p_month: monthISO })
-          .select();
+        const assets = pick("assets");
+        const liabilities = pick("liabilities");
+        const equitySigned = pick("equity");
+
+        // 2) 明細（表示用）
+        const { data: snapData, error: snapErr } = await supabase.rpc("bs_snapshot_clean", {
+          p_month: monthISO,
+        });
         if (snapErr) throw snapErr;
 
-        const rows = (snapData ?? []) as SnapshotRow[];
-        const aRows = rows.filter((r) => r.section === "assets");
-        const lRows = rows.filter((r) => r.section === "liabilities");
+        const snaps = (snapData as SnapshotRow[]) || [];
+        const aRows = snaps.filter((r) => r.section === "assets");
+        const lRows = snaps.filter((r) => r.section === "liabilities");
 
         if (!cancelled) {
           setTotals({ assets, liabilities, equity: equitySigned });
@@ -102,25 +109,26 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
     };
   }, [supabase, monthISO]);
 
-  const gap = useMemo(() => {
-    // 検算（符号付き）: A - (L + E)
-    return totals.assets - (totals.liabilities + totals.equity);
-  }, [totals]);
+  // 検算（符号付き）
+  const gap = useMemo(
+    () => totals.assets - (totals.liabilities + totals.equity),
+    [totals]
+  );
 
   const display = {
     assets: Math.abs(totals.assets),
     liabilities: Math.abs(totals.liabilities),
-    equity: Math.abs(totals.equity), // 見た目は絶対値でOK
+    equity: Math.abs(totals.equity),
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* 左：資産の部 */}
+      {/* 左：資産 */}
       <div className="rounded-2xl border p-4">
         <h2 className="text-lg font-semibold mb-3">資産の部</h2>
         <ul className="space-y-2 max-h-[70vh] overflow-auto pr-1">
           {assetsRows.map((r) => (
-            <li key={`${r.section}-${r.account_code}`} className="flex justify-between text-sm">
+            <li key={`A-${r.account_code}`} className="flex justify-between text-sm">
               <span className="text-muted-foreground">「{r.account_name}」</span>
               <span>{JPY.format(Math.abs(Number(r.amount ?? 0)))}</span>
             </li>
@@ -132,14 +140,14 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
         </div>
       </div>
 
-      {/* 右：負債・純資産の部 */}
+      {/* 右：負債・純資産 */}
       <div className="rounded-2xl border p-4">
         <h2 className="text-lg font-semibold mb-3">負債・純資産の部</h2>
 
         <h3 className="text-sm font-medium mb-2 text-muted-foreground">負債</h3>
-        <ul className="space-y-2">
+        <ul className="space-y-2 max-h-[55vh] overflow-auto pr-1">
           {liabRows.map((r) => (
-            <li key={`${r.section}-${r.account_code}`} className="flex justify-between text-sm">
+            <li key={`L-${r.account_code}`} className="flex justify-between text-sm">
               <span className="text-muted-foreground">「{r.account_name}」</span>
               <span>{JPY.format(Math.abs(Number(r.amount ?? 0)))}</span>
             </li>
@@ -151,8 +159,8 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
           <span>{JPY.format(display.liabilities)}</span>
         </div>
 
-        <div className="mt-6 flex justify-between text-sm">
-          <span className="text-muted-foreground">純資産（符号付きで検算）</span>
+        <div className="mt-4 flex justify-between text-sm">
+          <span className="text-muted-foreground">純資産（検算は符号付き）</span>
           <span className={totals.equity < 0 ? "text-red-600 font-semibold" : "font-semibold"}>
             {JPY.format(display.equity)}
             {totals.equity < 0 ? "（マイナス）" : ""}
@@ -176,9 +184,7 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
               <p className="text-red-600 font-semibold">
                 検算不一致（資産 −（負債＋純資産[符号付き]） ≠ 0）
               </p>
-              <p className="text-muted-foreground">
-                差額：{JPY.format(gap)}／月：{monthISO}
-              </p>
+              <p className="text-muted-foreground">差額：{JPY.format(gap)}／月：{monthISO}</p>
             </div>
           )}
         </div>
