@@ -2,22 +2,7 @@
 
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import * as SB from "@/lib/supabase/browser"; // named / default / instance どれでも対応
-
-// --- Supabase 取得（関数なら実行・インスタンスならそのまま） -------------------------
-function getSupabaseBrowserClient(): any {
-  const mod: any = SB;
-  const exp =
-    mod.createClient ?? // named: export const createClient = ...
-    mod.default ??       // default: export default function createClient() { ... } もしくは default が instance
-    mod.supabase ??      // たまに supabase として出していることがある
-    mod.client;
-
-  if (typeof exp === "function") return exp();       // ファクトリー関数
-  if (exp && typeof exp === "object") return exp;    // すでに生成済みインスタンス
-  throw new Error("Supabase browser client export is invalid");
-}
-// -----------------------------------------------------------------------------
+import { supabase } from "@/lib/supabase/browser";
 
 type Side = "assets" | "liabilities" | "equity";
 
@@ -52,8 +37,6 @@ function toMonthFirstISO(x: string | Date): string {
 }
 
 export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) {
-  // ✔ ここで1回だけ取得（関数でもインスタンスでもOK）
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,7 +95,7 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
     return () => {
       cancelled = true;
     };
-  }, [supabase, monthISO]);
+  }, [monthISO]);
 
   // 検算（符号付き）：A - (L + E)
   const gap = useMemo(
