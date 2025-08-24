@@ -1,23 +1,13 @@
-// app/finance/financial-statements/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-/**
- * 必須: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY を .env に設定
- * ポイント:
- * - p_month は URL の ?month=YYYY-MM をそのまま使って `${month}-01` の「文字列」で渡す
- * - toISOString() などで Date にしない（年ズレ/タイムゾーンを避ける）
- */
+// ページは動的レンダリング（静的プリレンダを回避）
+export const dynamic = "force-dynamic";
 
 type BSTotalRow = { side: "assets" | "liabilities" | "equity"; total: number };
-type BSSnapshotRow = {
-  section: string;
-  account_code: string;
-  account_name: string;
-  amount: number;
-};
+type BSSnapshotRow = { section: string; account_code: string; account_name: string; amount: number };
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SB_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -44,7 +34,8 @@ function yen(n: number | null | undefined) {
   return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" }).format(v);
 }
 
-export default function FinancialStatementsPage() {
+/** 実処理（searchParams を使うのはこの中だけ） */
+function FinancialStatementsInner() {
   const sp = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +52,7 @@ export default function FinancialStatementsPage() {
     return ym;
   }, [sp]);
 
-  // RPC へは 'YYYY-MM-01' の文字列で渡す（Date にしない）
+  // RPCへは 'YYYY-MM-01' の**文字列**を渡す（Date/ISOにしない）
   const pMonth = useMemo(() => `${monthParam}-01`, [monthParam]);
 
   useEffect(() => {
@@ -100,7 +91,6 @@ export default function FinancialStatementsPage() {
         <h1 className="text-2xl font-bold mb-6">財務諸表</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* 資産の部 */}
           <section className="rounded-2xl bg-white shadow p-6">
             <h2 className="text-lg font-semibold mb-4">資産の部</h2>
             <div className="flex items-baseline justify-between">
@@ -109,7 +99,6 @@ export default function FinancialStatementsPage() {
             </div>
           </section>
 
-          {/* 負債・純資産の部 */}
           <section className="rounded-2xl bg-white shadow p-6">
             <h2 className="text-lg font-semibold mb-1">負債・純資産の部</h2>
 
@@ -122,7 +111,6 @@ export default function FinancialStatementsPage() {
               <span className="text-slate-600">
                 純資産 <span className="text-xs text-slate-400">（検算は符号付き）</span>
               </span>
-              {/* 画面表示は絶対値。符号は totals の値（e）に保持 */}
               <span className="text-base font-medium">{yen(Math.abs(e))}</span>
             </div>
 
@@ -136,17 +124,24 @@ export default function FinancialStatementsPage() {
           </section>
         </div>
 
-        {/* エラー/ローディング表示 */}
         <div className="mt-6 text-sm text-slate-500">
           <div>対象月: {monthParam}（送信 p_month: {pMonth}）</div>
           {loading && <div>読み込み中…</div>}
           {error && <div className="text-rose-600">Error: {error}</div>}
         </div>
 
-        {/* （必要なら）明細を後でここに描画できます */}
-        {/* snapshot は B/S明細（section, account_code, account_name, amount） */}
+        {/* 明細の描画は必要に応じて。snapshot は console で確認可 */}
         {/* console.debug("snapshot", snapshot); */}
       </div>
     </main>
+  );
+}
+
+/** ページ：Suspense で中身を包む（Next の要件） */
+export default function FinancialStatementsPage() {
+  return (
+    <Suspense fallback={<main className="p-8 text-slate-500">読み込み中…</main>}>
+      <FinancialStatementsInner />
+    </Suspense>
   );
 }
