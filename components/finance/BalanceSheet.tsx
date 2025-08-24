@@ -12,29 +12,27 @@ type TotalsRow = {
 };
 
 type SnapshotRow = {
-  section: "assets" | "liabilities" | "equity";
+  section: Side;
   account_code: string;
   account_name: string;
   amount: number | string;
 };
 
 type Props = {
-  targetMonth: string | Date; // 'YYYY-MM-01' か Date
-  warnThreshold?: number;     // 許容差
+  targetMonth: string | Date; // 'YYYY-MM-01' or Date
+  warnThreshold?: number;     // 許容差（既定0）
 };
 
 const JPY = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" });
 
-// 何が来ても安全に 'YYYY-MM-01' を返す
+// 何が来ても 'YYYY-MM-01' を返す安全版
 function toMonthFirstISO(input: unknown): string {
-  // Date のとき
   if (input instanceof Date && !isNaN(input.getTime())) {
     const d = new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), 1));
     const yyyy = d.getUTCFullYear();
     const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
     return `${yyyy}-${mm}-01`;
   }
-  // 文字列のとき
   if (typeof input === "string") {
     const m = /^(\d{4})-(\d{2})/.exec(input);
     if (m) return `${m[1]}-${m[2]}-01`;
@@ -45,7 +43,6 @@ function toMonthFirstISO(input: unknown): string {
       return `${yyyy}-${mm}-01`;
     }
   }
-  // フォールバック：今月1日
   const now = new Date();
   const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const yyyy = d.getUTCFullYear();
@@ -54,7 +51,6 @@ function toMonthFirstISO(input: unknown): string {
 }
 
 export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) {
-  // ✔ ここで1回だけ取得（関数でもインスタンスでもOK）
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,11 +63,8 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
   const [assetsRows, setAssetsRows] = useState<SnapshotRow[]>([]);
   const [liabRows, setLiabRows] = useState<SnapshotRow[]>([]);
 
-  // targetMonth が未定義でも落ちないようにフォールバック
-  const monthISO = React.useMemo(
-    () => toMonthFirstISO((targetMonth as unknown) ?? undefined),
-    [targetMonth]
-  );
+  const monthISO = useMemo(() => toMonthFirstISO(targetMonth), [targetMonth]);
+  const monthDate = useMemo(() => new Date(monthISO), [monthISO]); // ← Dateで渡す
 
   useEffect(() => {
     let cancelled = false;
@@ -79,35 +72,31 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
       setLoading(true);
       setError(null);
       try {
-        // 1) 符号付きトータル（RPCに .select() は付けない）
-        const { data: totalsData, error: totalsErr } = await supabase.rpc(
-          "bs_totals_signed_v1",
-          { p_month: monthISO }
-        );
-        if (totalsErr) throw totalsErr;
+        // RPC を同時に呼ぶ（どちらも p_month は Date 型で渡す）
+        const [totalsRes, snapsRes] = await Promise.all([
+          supabase.rpc("bs_totals_signed_v1", { p_month: monthDate }),
+          supabase.rpc("bs_snapshot_clean",   { p_month: monthDate }),
+        ]);
+        if (totalsRes.error) throw totalsRes.error;
+        if (snapsRes.error) throw snapsRes.error;
 
-        const rows = (totalsData as TotalsRow[]) || [];
-        const pick = (k: Side) => Number(rows.find((r) => r.side === k)?.total ?? 0);
+        // totals の確実なマッピング
+        const map: Record<Side, number> = { assets: 0, liabilities: 0, equity: 0 };
+        for (const r of (totalsRes.data as TotalsRow[] | null) ?? []) {
+          const side = String(r.side) as Side;
+          const val = Number(r.total ?? 0);
+          if (side in map) map[side] = val;
+        }
 
-        const assets = pick("assets");
-        const liabilities = pick("liabilities");
-        const equitySigned = pick("equity");
-
-        // 2) 明細（表示用）
-        const { data: snapData, error: snapErr } = await supabase.rpc(
-          "bs_snapshot_clean",
-          { p_month: monthISO }
-        );
-        if (snapErr) throw snapErr;
-
-        const snaps = (snapData as SnapshotRow[]) || [];
-        const aRows = snaps.filter((r) => r.section === "assets");
-        const lRows = snaps.filter((r) => r.section === "liabilities");
+        const snaps = ((snapsRes.data as SnapshotRow[] | null) ?? []).map((r) => ({
+          ...r,
+          amount: Number(r.amount ?? 0),
+        }));
 
         if (!cancelled) {
-          setTotals({ assets, liabilities, equity: equitySigned });
-          setAssetsRows(aRows);
-          setLiabRows(lRows);
+          setTotals(map);
+          setAssetsRows(snaps.filter((r) => r.section === "assets"));
+          setLiabRows(snaps.filter((r) => r.section === "liabilities"));
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "データ取得に失敗しました");
@@ -115,90 +104,76 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [supabase, monthISO]);
+  }, [supabase, monthDate]);
 
   // 検算（符号付き）：A - (L + E)
-  const gap = useMemo(
-    () => totals.assets - (totals.liabilities + totals.equity),
-    [totals]
-  );
-
-  const display = {
-    assets: Math.abs(totals.assets),
-    liabilities: Math.abs(totals.liabilities),
-    equity: Math.abs(totals.equity),
-  };
+  const gap = totals.assets - (totals.liabilities + totals.equity);
+  const ok = Math.abs(gap) <= Math.abs(warnThreshold ?? 0);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* 左：資産 */}
       <div className="rounded-2xl border p-4">
         <h2 className="text-lg font-semibold mb-3">資産の部</h2>
-        <ul className="space-y-2 max-h-[70vh] overflow-auto pr-1">
-          {assetsRows.map((r) => (
-            <li key={`A-${r.account_code}`} className="flex justify-between text-sm">
-              <span className="text-muted-foreground">「{r.account_name}」</span>
-              <span>{JPY.format(Math.abs(Number(r.amount ?? 0)))}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-4 flex justify-between border-t pt-3 font-semibold">
-          <span>資産合計</span>
-          <span>{JPY.format(display.assets)}</span>
-        </div>
+        {loading ? (
+          <p>読み込み中…</p>
+        ) : error ? (
+          <p className="text-red-600">{error}</p>
+        ) : (
+          <>
+            <ul className="space-y-2 max-h-[60vh] overflow-auto pr-1">
+              {assetsRows.map((r) => (
+                <li key={`A-${r.account_code}`} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">「{r.account_name}」</span>
+                  <span>{JPY.format(Math.abs(Number(r.amount)))}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex justify-between font-medium">
+              <span>資産合計</span>
+              <span>{JPY.format(Math.abs(totals.assets))}</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* 右：負債・純資産 */}
       <div className="rounded-2xl border p-4">
         <h2 className="text-lg font-semibold mb-3">負債・純資産の部</h2>
+        {loading ? (
+          <p>読み込み中…</p>
+        ) : error ? (
+          <p className="text-red-600">{error}</p>
+        ) : (
+          <>
+            <ul className="space-y-2 max-h-[46vh] overflow-auto pr-1">
+              {liabRows.map((r) => (
+                <li key={`L-${r.account_code}`} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">「{r.account_name}」</span>
+                  <span>{JPY.format(Math.abs(Number(r.amount)))}</span>
+                </li>
+              ))}
+            </ul>
 
-        <h3 className="text-sm font-medium mb-2 text-muted-foreground">負債</h3>
-        <ul className="space-y-2 max-h-[55vh] overflow-auto pr-1">
-          {liabRows.map((r) => (
-            <li key={`L-${r.account_code}`} className="flex justify-between text-sm">
-              <span className="text-muted-foreground">「{r.account_name}」</span>
-              <span>{JPY.format(Math.abs(Number(r.amount ?? 0)))}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-3 flex justify-between font-semibold">
-          <span>負債合計</span>
-          <span>{JPY.format(display.liabilities)}</span>
-        </div>
-
-        <div className="mt-4 flex justify-between text-sm">
-          <span className="text-muted-foreground">純資産（検算は符号付き）</span>
-          <span className={totals.equity < 0 ? "text-red-600 font-semibold" : "font-semibold"}>
-            {JPY.format(display.equity)}
-            {totals.equity < 0 ? "（マイナス）" : ""}
-          </span>
-        </div>
-
-        <div className="mt-2 flex justify-between border-t pt-3 font-semibold">
-          <span>負債＋純資産合計（＝負債＋純資産[符号付き]）</span>
-          <span>{JPY.format(totals.liabilities + totals.equity)}</span>
-        </div>
-
-        <div className="mt-4">
-          {loading ? (
-            <p className="text-sm text-muted-foreground">読込中…</p>
-          ) : error ? (
-            <p className="text-sm text-red-600">取得エラー：{error}</p>
-          ) : Math.abs(gap) <= warnThreshold ? (
-            <p className="text-sm text-emerald-600">検算一致：差額 {JPY.format(gap)}</p>
-          ) : (
-            <div className="text-sm">
-              <p className="text-red-600 font-semibold">
-                検算不一致（資産 −（負債＋純資産[符号付き]） ≠ 0）
-              </p>
-              <p className="text-muted-foreground">差額：{JPY.format(gap)}／月：{monthISO}</p>
+            <div className="mt-3 space-y-1">
+              <div className="flex justify-between font-medium">
+                <span>負債合計</span>
+                <span>{JPY.format(Math.abs(totals.liabilities))}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>純資産（検算は符号付き）</span>
+                <span>{JPY.format(Math.abs(totals.equity))}</span>
+              </div>
+              <div className={`mt-2 text-sm ${ok ? "text-emerald-600" : "text-red-600"}`}>
+                検算{ok ? "一致" : "不一致"}：差額 {JPY.format(gap)}
+              </div>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
