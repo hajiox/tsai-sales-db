@@ -1,17 +1,15 @@
-// app/sales/dashboard/page.tsx (修正後)
+// /app/sales/dashboard/page.tsx ver.3 (2025-08-20 JST)
+"use client";
 
-// このページを動的にレンダリングするようにNext.jsに指示する
+// ページはSSGしない（ルートの dynamic 設定用）
 export const dynamic = 'force-dynamic';
+export const revalidate = false;
+export const fetchCache = 'force-no-store';
+import NextDynamic from 'next/dynamic';
 
-// 'use client' はこのファイルでは不要です。
-// 子コンポーネントのDashboardViewがクライアントコンポーネントであれば問題ありません。
+const DashboardClient = NextDynamic(() => import('@/components/sales/DashboardClient'), { ssr: false });
 
-import DashboardView from '@/components/dashboard-view';
-
-export default function SalesDashboardPage() {
-    return (
-        <div className="p-4 md:p-6 lg:p-8">
-            <DashboardView />
-        </div>
-    )
+export default function Page() {
+  return <DashboardClient />;
 }
+
