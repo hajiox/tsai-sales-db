@@ -1,21 +1,23 @@
-// /components/finance/BalanceSheet.tsx
-// ver.5 (2025-08-23)
-// - Supabase クライアントの named/default どちらのエクスポートにも対応（保険つき）
-// - B/S検算は符号付き純資産を使用（RPC: bs_totals_signed_v1）
-// - 表示は絶対値、検算は assets - (liabilities + equitySigned)
-
 "use client";
 
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import * as SB from "@/lib/supabase/browser"; // ← どちらのexportでも動くように
+import * as SB from "@/lib/supabase/browser"; // named / default / instance どれでも対応
 
-// named export / default export 両対応
-const createClient =
-  // e.g. export const createClient = () => ...
-  (SB as any).createClient ??
-  // e.g. export default function createClient() { ... }
-  (SB as any).default;
+// --- Supabase 取得（関数なら実行・インスタンスならそのまま） -------------------------
+function getSupabaseBrowserClient(): any {
+  const mod: any = SB;
+  const exp =
+    mod.createClient ?? // named: export const createClient = ...
+    mod.default ??       // default: export default function createClient() { ... } もしくは default が instance
+    mod.supabase ??      // たまに supabase として出していることがある
+    mod.client;
+
+  if (typeof exp === "function") return exp();       // ファクトリー関数
+  if (exp && typeof exp === "object") return exp;    // すでに生成済みインスタンス
+  throw new Error("Supabase browser client export is invalid");
+}
+// -----------------------------------------------------------------------------
 
 type Side = "assets" | "liabilities" | "equity";
 
@@ -33,7 +35,7 @@ type SnapshotRow = {
 
 type Props = {
   targetMonth: string | Date; // 'YYYY-MM-01' か Date
-  warnThreshold?: number; // 許容差（円）
+  warnThreshold?: number;     // 許容差
 };
 
 const JPY = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" });
@@ -45,19 +47,20 @@ function toMonthFirstISO(x: string | Date): string {
     const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
     return `${yyyy}-${mm}-01`;
   }
-  const m = x.match?.(/^(\d{4})-(\d{2})/);
+  const m = (x as string).match?.(/^(\d{4})-(\d{2})/);
   return m ? `${m[1]}-${m[2]}-01` : String(x);
 }
 
 export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) {
-  const supabase = useMemo(() => createClient(), []);
+  // ✔ ここで1回だけ取得（関数でもインスタンスでもOK）
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [totals, setTotals] = useState<Record<Side, number>>({
     assets: 0,
     liabilities: 0,
-    equity: 0, // 符号付き
+    equity: 0, // ← 符号付き
   });
   const [assetsRows, setAssetsRows] = useState<SnapshotRow[]>([]);
   const [liabRows, setLiabRows] = useState<SnapshotRow[]>([]);
@@ -70,10 +73,11 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
       setLoading(true);
       setError(null);
       try {
-        // 1) 符号付きトータル（RPCは .select() を付けない）
-        const { data: totalsData, error: totalsErr } = await supabase.rpc("bs_totals_signed_v1", {
-          p_month: monthISO,
-        });
+        // 1) 符号付きトータル（RPCに .select() は付けない）
+        const { data: totalsData, error: totalsErr } = await supabase.rpc(
+          "bs_totals_signed_v1",
+          { p_month: monthISO }
+        );
         if (totalsErr) throw totalsErr;
 
         const rows = (totalsData as TotalsRow[]) || [];
@@ -84,9 +88,10 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
         const equitySigned = pick("equity");
 
         // 2) 明細（表示用）
-        const { data: snapData, error: snapErr } = await supabase.rpc("bs_snapshot_clean", {
-          p_month: monthISO,
-        });
+        const { data: snapData, error: snapErr } = await supabase.rpc(
+          "bs_snapshot_clean",
+          { p_month: monthISO }
+        );
         if (snapErr) throw snapErr;
 
         const snaps = (snapData as SnapshotRow[]) || [];
@@ -109,7 +114,7 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
     };
   }, [supabase, monthISO]);
 
-  // 検算（符号付き）
+  // 検算（符号付き）：A - (L + E)
   const gap = useMemo(
     () => totals.assets - (totals.liabilities + totals.equity),
     [totals]
