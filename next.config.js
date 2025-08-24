@@ -1,4 +1,3 @@
-// ver.1 (2025-08-19 JST) - rename to mjs for ESM
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -13,9 +12,10 @@ const nextConfig = {
   },
   async rewrites() {
     return [
-      // 旧フロント残骸の fetch('/sales/dashboard') を API へ転送
+      // 旧実装の fetch('/sales/dashboard') を API に転送
       { source: '/sales/dashboard', destination: '/api/sales/dashboard' },
     ]
   },
 }
-export default nextConfig
+
+module.exports = nextConfig

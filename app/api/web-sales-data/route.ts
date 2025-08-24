@@ -1,7 +1,7 @@
 // /app/api/web-sales-data/route.ts
 // ver.9 (PUT機能追加版)
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
