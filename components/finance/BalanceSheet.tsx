@@ -25,15 +25,32 @@ type Props = {
 
 const JPY = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" });
 
-function toMonthFirstISO(x: string | Date): string {
-  if (x instanceof Date) {
-    const d = new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), 1));
+// 何が来ても安全に 'YYYY-MM-01' を返す
+function toMonthFirstISO(input: unknown): string {
+  // Date のとき
+  if (input instanceof Date && !isNaN(input.getTime())) {
+    const d = new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), 1));
     const yyyy = d.getUTCFullYear();
     const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
     return `${yyyy}-${mm}-01`;
   }
-  const m = (x as string).match?.(/^(\d{4})-(\d{2})/);
-  return m ? `${m[1]}-${m[2]}-01` : String(x);
+  // 文字列のとき
+  if (typeof input === "string") {
+    const m = /^(\d{4})-(\d{2})/.exec(input);
+    if (m) return `${m[1]}-${m[2]}-01`;
+    const d = new Date(input);
+    if (!isNaN(d.getTime())) {
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      return `${yyyy}-${mm}-01`;
+    }
+  }
+  // フォールバック：今月1日
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${yyyy}-${mm}-01`;
 }
 
 export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) {
@@ -50,7 +67,11 @@ export default function BalanceSheet({ targetMonth, warnThreshold = 0 }: Props) 
   const [assetsRows, setAssetsRows] = useState<SnapshotRow[]>([]);
   const [liabRows, setLiabRows] = useState<SnapshotRow[]>([]);
 
-  const monthISO = toMonthFirstISO(targetMonth);
+  // targetMonth が未定義でも落ちないようにフォールバック
+  const monthISO = React.useMemo(
+    () => toMonthFirstISO((targetMonth as unknown) ?? undefined),
+    [targetMonth]
+  );
 
   useEffect(() => {
     let cancelled = false;
