@@ -13,7 +13,8 @@ type BSSnapshotRow = {
   account_name: string;
   amount: number; // 符号付き
 };
-type PLRow = Record<string, any>;
+type AccountMaster = { account_code: string; account_type: string };
+type MabRow = { account_code: string; closing_balance: number };
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SB_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -36,13 +37,16 @@ async function callRpc<T>(fn: string, payload: Record<string, unknown>): Promise
   return (await res.json()) as T;
 }
 
-async function getFromTable<T = any>(path: string): Promise<T | null> {
+async function fromTable<T>(path: string): Promise<T> {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
     headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
     cache: "no-store",
   });
-  if (!res.ok) return null;
-  return (await res.json().catch(() => null)) as T | null;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`GET /${path} failed: ${res.status} ${res.statusText} ${body}`);
+  }
+  return (await res.json()) as T;
 }
 
 function yen(n: number | null | undefined) {
@@ -68,7 +72,7 @@ function Line({ name, value }: { name: string; value: number }) {
   );
 }
 
-/** P/L のキー候補を柔軟に吸収 */
+/** P/Lのキー候補を柔軟に吸収（gl_monthly_stats を使う場合の保険） */
 const pick = (obj: any, keys: string[]) => {
   for (const k of keys) if (k in obj && typeof obj[k] === "number") return obj[k];
   return undefined;
@@ -90,15 +94,22 @@ function FinancialStatementsInner() {
   const [bsTotals, setBsTotals] = useState<BSTotalRow[] | null>(null);
   const [bsRows, setBsRows] = useState<BSSnapshotRow[] | null>(null);
   const [netIncomeYtd, setNetIncomeYtd] = useState<number | null>(null);
-  const [plRow, setPlRow] = useState<PLRow | null>(null);
-  const [tab, setTab] = useState<"bs" | "pl">("bs");
+
+  // PL用：収益/費用の集計（monthly_account_balance + account_master）
+  const [plCalc, setPlCalc] = useState<{
+    revenue: number;
+    expense: number;
+  } | null>(null);
+
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"bs" | "pl">("bs");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setError(null);
       try {
+        // B/S & 純利益
         const [t, s, ni] = await Promise.all([
           callRpc<BSTotalRow[]>("bs_totals_signed_v1", { p_month: pMonth }),
           callRpc<BSSnapshotRow[]>("bs_snapshot_clean", { p_month: pMonth }),
@@ -109,16 +120,35 @@ function FinancialStatementsInner() {
           setBsRows(s);
           setNetIncomeYtd(typeof ni === "number" ? ni : 0);
         }
+
+        // P/L：account_master で「収益/費用」分類し、monthly_account_balance で当期累計を集計
+        // 1) すべての科目コードとタイプを取得（必要列のみ）
+        const am = await fromTable<AccountMaster[]>(
+          "account_master?select=account_code,account_type"
+        );
+        const typeMap = new Map(am.map((r) => [r.account_code, r.account_type]));
+
+        // 2) 対象月の残高（当期累計）を取得
+        const mab = await fromTable<MabRow[]>(
+          `monthly_account_balance?select=account_code,closing_balance&report_month=eq.${pMonth}`
+        );
+
+        // 3) 収益/費用で集計（符号はDBのまま、表示は絶対値にする）
+        let revenueSigned = 0;
+        let expenseSigned = 0;
+        for (const row of mab) {
+          const t = typeMap.get(row.account_code);
+          if (t === "収益") revenueSigned += row.closing_balance ?? 0;
+          else if (t === "費用") expenseSigned += row.closing_balance ?? 0;
+        }
+        if (!cancelled) {
+          setPlCalc({
+            revenue: Math.abs(revenueSigned),
+            expense: Math.abs(expenseSigned),
+          });
+        }
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Unknown error");
-      }
-      try {
-        const rows = await getFromTable<any[]>(
-          `gl_monthly_stats?report_month=eq.${pMonth}&select=*&limit=1`
-        );
-        if (!cancelled) setPlRow(rows?.[0] ?? null);
-      } catch {
-        if (!cancelled) setPlRow(null);
       }
     })();
     return () => {
@@ -126,14 +156,14 @@ function FinancialStatementsInner() {
     };
   }, [pMonth]);
 
-  // 合計（e は符号付き）
+  // ====== B/S ======
   const a = bsTotals?.find((r) => r.side === "assets")?.total ?? 0;
   const l = bsTotals?.find((r) => r.side === "liabilities")?.total ?? 0;
-  const e = bsTotals?.find((r) => r.side === "equity")?.total ?? 0;
-  const leTotal = l + e; // 負債＋純資産（符号付き）＝資産
+  const e = bsTotals?.find((r) => r.side === "equity")?.total ?? 0; // 符号付き
+  const leTotal = l + e;
   const gap = a - leTotal;
 
-  // 明細：完全一致判定（"資産" に "純資産" を誤含有させない）
+  // 明細：厳密分類（"資産" に "純資産" を含めない）
   const bySection = useMemo(() => {
     const rows = bsRows ?? [];
     const norm = (s: string) => s.replace(/\s/g, "");
@@ -153,63 +183,15 @@ function FinancialStatementsInner() {
     };
   }, [bsRows]);
 
-  /** P/L 整形（gl_monthly_stats が無い場合は純利益だけ表示） */
-  const pl = useMemo(() => {
-    if (!plRow) {
-      return {
-        revenue: 0,
-        cogs: 0,
-        grossProfit: 0,
-        sga: 0,
-        operatingIncome: 0,
-        nonOpInc: 0,
-        nonOpExp: 0,
-        ordinaryIncome: 0,
-        extraGain: 0,
-        extraLoss: 0,
-        incomeBeforeTax: 0,
-        corporateTax: 0,
-        netIncome: Math.abs(netIncomeYtd ?? 0),
-        note: "※gl_monthly_statsが見つからないため純利益のみ表示",
-      };
-    }
-    const revenue = pick(plRow, ["sales", "revenue", "net_sales", "売上高"]) ?? 0;
-    const cogs = pick(plRow, ["cogs", "cost_of_sales", "売上原価"]) ?? 0;
-    const sga =
-      pick(plRow, ["sga", "selling_general_admin", "販管費", "販売費及び一般管理費"]) ?? 0;
-    const nonOpInc = pick(plRow, ["non_operating_income", "営業外収益"]) ?? 0;
-    const nonOpExp = pick(plRow, ["non_operating_expenses", "営業外費用"]) ?? 0;
-    const extraGain = pick(plRow, ["extraordinary_income", "特別利益"]) ?? 0;
-    const extraLoss = pick(plRow, ["extraordinary_loss", "特別損失"]) ?? 0;
-    const corporateTax = pick(plRow, ["corporate_tax", "法人税等"]) ?? 0;
-    const netIncome =
-      pick(plRow, ["net_income", "当期純利益"]) ?? Math.abs(netIncomeYtd ?? 0);
-
-    const grossProfit = pick(plRow, ["gross_profit", "売上総利益"]) ?? revenue - cogs;
-    const operatingIncome = pick(plRow, ["operating_income", "営業利益"]) ?? grossProfit - sga;
-    const ordinaryIncome =
-      pick(plRow, ["ordinary_income", "経常利益"]) ?? operatingIncome + nonOpInc - nonOpExp;
-    const incomeBeforeTax =
-      pick(plRow, ["income_before_tax", "税引前当期純利益"]) ??
-      ordinaryIncome + extraGain - extraLoss;
-
-    return {
-      revenue,
-      cogs,
-      grossProfit,
-      sga,
-      operatingIncome,
-      nonOpInc,
-      nonOpExp,
-      ordinaryIncome,
-      extraGain,
-      extraLoss,
-      incomeBeforeTax,
-      corporateTax,
-      netIncome: Math.abs(netIncome),
-      note: "",
-    };
-  }, [plRow, netIncomeYtd]);
+  // ====== P/L（収益・費用から作る簡易版）======
+  const revenue = plCalc?.revenue ?? 0;
+  const expense = plCalc?.expense ?? 0;
+  const grossProfit = revenue - expense; // 純粋な粗利扱い（原価/販管費の内訳は不明のため総額で計上）
+  const operatingIncome = grossProfit; // 内訳がないので=粗利
+  const ordinaryIncome = operatingIncome; // 同上
+  const incomeBeforeTax = ordinaryIncome; // 同上
+  const corporateTax = 0; // 不明のため0
+  const netIncomeAbs = Math.abs(netIncomeYtd ?? 0);
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -296,44 +278,37 @@ function FinancialStatementsInner() {
             </SectionCard>
           </div>
         ) : (
-          // P/L
+          // ===== P/L =====
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <SectionCard title="損益計算書（当期累計）">
               <div className="divide-y">
-                <Line name="売上高" value={pl.revenue} />
-                <Line name="売上原価" value={pl.cogs} />
+                <Line name="売上高（収益）" value={revenue} />
+                <Line name="費用合計" value={expense} />
                 <div className="py-1" />
-                <Line name="売上総利益（粗利）" value={pl.grossProfit} />
-                <Line name="販売費及び一般管理費" value={pl.sga} />
+                <Line name="売上総利益（粗利相当）" value={grossProfit} />
+                <Line name="営業利益（簡易）" value={operatingIncome} />
                 <div className="py-1" />
-                <Line name="営業利益" value={pl.operatingIncome} />
-                <Line name="営業外収益" value={pl.nonOpInc} />
-                <Line name="営業外費用" value={pl.nonOpExp} />
-                <div className="py-1" />
-                <Line name="経常利益" value={pl.ordinaryIncome} />
-                <Line name="特別利益" value={pl.extraGain} />
-                <Line name="特別損失" value={pl.extraLoss} />
-                <div className="py-1" />
-                <Line name="税引前当期純利益" value={pl.incomeBeforeTax} />
-                <Line name="法人税等" value={pl.corporateTax} />
+                <Line name="経常利益（簡易）" value={ordinaryIncome} />
+                <Line name="税引前当期純利益（簡易）" value={incomeBeforeTax} />
+                <Line name="法人税等（表示のみ）" value={corporateTax} />
                 <div className="border-t mt-3 pt-2 flex items-baseline justify-between">
-                  <span className="font-semibold">当期純利益</span>
-                  <span className="font-semibold">{yen(pl.netIncome)}</span>
+                  <span className="font-semibold">当期純利益（RPC YTD）</span>
+                  <span className="font-semibold">{yen(netIncomeAbs)}</span>
                 </div>
               </div>
-              {pl.note && <div className="text-xs text-slate-500 mt-2">{pl.note}</div>}
+              <div className="text-xs text-slate-500 mt-2">
+                ※ 原価/販管費などの内訳が取得できないため、{" "}
+                <span className="font-medium">収益・費用の集計から簡易P/Lを作成</span>
+                しています。
+              </div>
             </SectionCard>
 
             <SectionCard title="対象月 / 取得情報">
               <div className="text-sm text-slate-600 space-y-1">
                 <div>対象月: {monthParam}（送信 p_month: {pMonth}）</div>
-                <div>純利益（RPC YTD）: {yen(Math.abs(netIncomeYtd ?? 0))}</div>
+                <div>収益集計: {yen(revenue)} / 費用集計: {yen(expense)}</div>
+                <div>純利益（RPC YTD）: {yen(netIncomeAbs)}</div>
                 {error && <div className="text-rose-600">Error: {error}</div>}
-                {!plRow && (
-                  <div className="text-amber-600">
-                    gl_monthly_stats が見つからないため、主要小計は計算で補完しています。
-                  </div>
-                )}
               </div>
             </SectionCard>
           </div>
