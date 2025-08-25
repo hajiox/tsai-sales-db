@@ -8,13 +8,12 @@ export const dynamic = "force-dynamic";
 
 type BSTotalRow = { side: "assets" | "liabilities" | "equity"; total: number };
 type BSSnapshotRow = {
-  section: string; // 資産 / 負債 / 純資産
+  section: string; // "資産" | "負債" | "純資産"
   account_code: string;
   account_name: string;
   amount: number; // 符号付き
 };
-
-type PLRow = Record<string, any>; // gl_monthly_stats の1行（柔軟に受ける）
+type PLRow = Record<string, any>;
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SB_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -28,6 +27,7 @@ async function callRpc<T>(fn: string, payload: Record<string, unknown>): Promise
       Authorization: `Bearer ${SB_KEY}`,
     },
     body: JSON.stringify(payload),
+    cache: "no-store",
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -38,15 +38,11 @@ async function callRpc<T>(fn: string, payload: Record<string, unknown>): Promise
 
 async function getFromTable<T = any>(path: string): Promise<T | null> {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
-    headers: {
-      apikey: SB_KEY,
-      Authorization: `Bearer ${SB_KEY}`,
-    },
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
     cache: "no-store",
   });
   if (!res.ok) return null;
-  const json = await res.json().catch(() => null);
-  return json;
+  return (await res.json().catch(() => null)) as T | null;
 }
 
 function yen(n: number | null | undefined) {
@@ -81,13 +77,14 @@ const pick = (obj: any, keys: string[]) => {
 function FinancialStatementsInner() {
   const sp = useSearchParams();
 
+  // URL ?month=YYYY-MM（無ければ当月）
   const monthParam = useMemo(() => {
     const q = sp.get("month");
     if (q && /^\d{4}-\d{2}$/.test(q)) return q;
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   }, [sp]);
-
+  // RPCへは 'YYYY-MM-01' の文字列（Date化しない）
   const pMonth = useMemo(() => `${monthParam}-01`, [monthParam]);
 
   const [bsTotals, setBsTotals] = useState<BSTotalRow[] | null>(null);
@@ -115,8 +112,6 @@ function FinancialStatementsInner() {
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Unknown error");
       }
-
-      // P/L: gl_monthly_stats があれば使う（無ければ null）
       try {
         const rows = await getFromTable<any[]>(
           `gl_monthly_stats?report_month=eq.${pMonth}&select=*&limit=1`
@@ -131,25 +126,36 @@ function FinancialStatementsInner() {
     };
   }, [pMonth]);
 
+  // 合計（e は符号付き）
   const a = bsTotals?.find((r) => r.side === "assets")?.total ?? 0;
   const l = bsTotals?.find((r) => r.side === "liabilities")?.total ?? 0;
   const e = bsTotals?.find((r) => r.side === "equity")?.total ?? 0;
-  const gap = a - (l + e);
+  const leTotal = l + e; // 負債＋純資産（符号付き）＝資産
+  const gap = a - leTotal;
 
+  // 明細：完全一致判定（"資産" に "純資産" を誤含有させない）
   const bySection = useMemo(() => {
     const rows = bsRows ?? [];
-    const is = (label: string, s: string) => s.includes(label);
+    const norm = (s: string) => s.replace(/\s/g, "");
     return {
-      assets: rows.filter((r) => is("資産", r.section)),
-      liabilities: rows.filter((r) => is("負債", r.section)),
-      equity: rows.filter((r) => is("純資産", r.section)),
+      assets: rows.filter((r) => {
+        const s = norm(r.section);
+        return s === "資産" || s.startsWith("資産の部");
+      }),
+      liabilities: rows.filter((r) => {
+        const s = norm(r.section);
+        return s === "負債" || s.startsWith("負債の部");
+      }),
+      equity: rows.filter((r) => {
+        const s = norm(r.section);
+        return s === "純資産" || s.startsWith("純資産の部");
+      }),
     };
   }, [bsRows]);
 
-  /** P/L整形：gl_monthly_stats が無ければ計算補完（粗いが見た目はP/L形式） */
+  /** P/L 整形（gl_monthly_stats が無い場合は純利益だけ表示） */
   const pl = useMemo(() => {
     if (!plRow) {
-      // 補完：売上=0, 原価=0, 販管費=0 として 当期純利益(YTD)のみ表示
       return {
         revenue: 0,
         cogs: 0,
@@ -163,40 +169,26 @@ function FinancialStatementsInner() {
         extraLoss: 0,
         incomeBeforeTax: 0,
         corporateTax: 0,
-        netIncome: Math.abs(netIncomeYtd ?? 0), // 純利益はRPCから
+        netIncome: Math.abs(netIncomeYtd ?? 0),
         note: "※gl_monthly_statsが見つからないため純利益のみ表示",
       };
     }
-    // キー候補を吸収
-    const revenue =
-      pick(plRow, ["sales", "revenue", "net_sales", "売上高"]) ?? 0;
-    const cogs =
-      pick(plRow, ["cogs", "cost_of_sales", "売上原価"]) ?? 0;
+    const revenue = pick(plRow, ["sales", "revenue", "net_sales", "売上高"]) ?? 0;
+    const cogs = pick(plRow, ["cogs", "cost_of_sales", "売上原価"]) ?? 0;
     const sga =
-      pick(plRow, ["sga", "selling_general_admin", "販管費", "販売費及び一般管理費"]) ??
-      0;
-    const nonOpInc =
-      pick(plRow, ["non_operating_income", "営業外収益"]) ?? 0;
-    const nonOpExp =
-      pick(plRow, ["non_operating_expenses", "営業外費用"]) ?? 0;
-    const extraGain =
-      pick(plRow, ["extraordinary_income", "特別利益"]) ?? 0;
-    const extraLoss =
-      pick(plRow, ["extraordinary_loss", "特別損失"]) ?? 0;
-    const corporateTax =
-      pick(plRow, ["corporate_tax", "法人税等"]) ?? 0;
+      pick(plRow, ["sga", "selling_general_admin", "販管費", "販売費及び一般管理費"]) ?? 0;
+    const nonOpInc = pick(plRow, ["non_operating_income", "営業外収益"]) ?? 0;
+    const nonOpExp = pick(plRow, ["non_operating_expenses", "営業外費用"]) ?? 0;
+    const extraGain = pick(plRow, ["extraordinary_income", "特別利益"]) ?? 0;
+    const extraLoss = pick(plRow, ["extraordinary_loss", "特別損失"]) ?? 0;
+    const corporateTax = pick(plRow, ["corporate_tax", "法人税等"]) ?? 0;
     const netIncome =
-      pick(plRow, ["net_income", "当期純利益"]) ??
-      Math.abs(netIncomeYtd ?? 0);
+      pick(plRow, ["net_income", "当期純利益"]) ?? Math.abs(netIncomeYtd ?? 0);
 
-    const grossProfit =
-      pick(plRow, ["gross_profit", "売上総利益"]) ?? revenue - cogs;
-    const operatingIncome =
-      pick(plRow, ["operating_income", "営業利益"]) ??
-      grossProfit - sga;
+    const grossProfit = pick(plRow, ["gross_profit", "売上総利益"]) ?? revenue - cogs;
+    const operatingIncome = pick(plRow, ["operating_income", "営業利益"]) ?? grossProfit - sga;
     const ordinaryIncome =
-      pick(plRow, ["ordinary_income", "経常利益"]) ??
-      operatingIncome + nonOpInc - nonOpExp;
+      pick(plRow, ["ordinary_income", "経常利益"]) ?? operatingIncome + nonOpInc - nonOpExp;
     const incomeBeforeTax =
       pick(plRow, ["income_before_tax", "税引前当期純利益"]) ??
       ordinaryIncome + extraGain - extraLoss;
@@ -214,7 +206,7 @@ function FinancialStatementsInner() {
       extraLoss,
       incomeBeforeTax,
       corporateTax,
-      netIncome: Math.abs(netIncome), // 表示は正数
+      netIncome: Math.abs(netIncome),
       note: "",
     };
   }, [plRow, netIncomeYtd]);
@@ -250,11 +242,7 @@ function FinancialStatementsInner() {
             <SectionCard title="資産の部">
               <div className="divide-y">
                 {bySection.assets.map((r) => (
-                  <Line
-                    key={r.account_code}
-                    name={r.account_name}
-                    value={Math.abs(r.amount)}
-                  />
+                  <Line key={r.account_code} name={r.account_name} value={Math.abs(r.amount)} />
                 ))}
               </div>
               <div className="border-t mt-3 pt-2 flex items-baseline justify-between">
@@ -265,15 +253,12 @@ function FinancialStatementsInner() {
 
             {/* 負債・純資産 */}
             <SectionCard title="負債・純資産の部">
+              {/* 負債 */}
               <div className="mb-3">
                 <div className="text-sm text-slate-500 mb-1">負債</div>
                 <div className="divide-y">
                   {bySection.liabilities.map((r) => (
-                    <Line
-                      key={r.account_code}
-                      name={r.account_name}
-                      value={Math.abs(r.amount)}
-                    />
+                    <Line key={r.account_code} name={r.account_name} value={Math.abs(r.amount)} />
                   ))}
                 </div>
                 <div className="border-t mt-3 pt-2 flex items-baseline justify-between">
@@ -282,15 +267,12 @@ function FinancialStatementsInner() {
                 </div>
               </div>
 
+              {/* 純資産 */}
               <div>
                 <div className="text-sm text-slate-500 mb-1">純資産</div>
                 <div className="divide-y">
                   {bySection.equity.map((r) => (
-                    <Line
-                      key={r.account_code}
-                      name={r.account_name}
-                      value={Math.abs(r.amount)}
-                    />
+                    <Line key={r.account_code} name={r.account_name} value={Math.abs(r.amount)} />
                   ))}
                 </div>
                 <div className="border-t mt-3 pt-2 flex items-baseline justify-between">
@@ -299,9 +281,14 @@ function FinancialStatementsInner() {
                 </div>
               </div>
 
-              <div className="text-sm mt-3">
+              {/* 末尾：負債・純資産合計 と 資産合計の一致表示 */}
+              <div className="border-t mt-4 pt-3 flex items-baseline justify-between">
+                <span className="font-semibold">負債・純資産合計</span>
+                <span className="font-semibold">{yen(leTotal)}</span>
+              </div>
+              <div className="text-sm mt-2">
                 {gap === 0 ? (
-                  <span className="text-emerald-600">検算一致：差額 ¥0</span>
+                  <span className="text-emerald-600">検算一致：資産合計 = 負債・純資産合計</span>
                 ) : (
                   <span className="text-rose-600">検算不一致：差額 {yen(gap)}</span>
                 )}
@@ -334,9 +321,7 @@ function FinancialStatementsInner() {
                   <span className="font-semibold">{yen(pl.netIncome)}</span>
                 </div>
               </div>
-              {pl.note && (
-                <div className="text-xs text-slate-500 mt-2">{pl.note}</div>
-              )}
+              {pl.note && <div className="text-xs text-slate-500 mt-2">{pl.note}</div>}
             </SectionCard>
 
             <SectionCard title="対象月 / 取得情報">
