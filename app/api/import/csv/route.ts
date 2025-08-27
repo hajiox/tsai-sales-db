@@ -1,7 +1,7 @@
 // /app/api/import/csv/route.ts
 // ver.11 (Supabase統一版) - クライアント重複警告解決
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/server';
 import { Readable } from 'stream';
 import { Buffer } from 'buffer';
 

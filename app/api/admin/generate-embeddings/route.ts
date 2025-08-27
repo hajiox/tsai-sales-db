@@ -1,6 +1,6 @@
 // /app/api/admin/generate-embeddings/route.ts ver.2
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/server';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';

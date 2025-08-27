@@ -1,6 +1,6 @@
 // /app/api/import/amazon/route.ts ver.1
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase'; // Supabaseクライアントのインポート
+import { supabase } from '@/lib/supabase/server'; // Supabaseクライアントのインポート
 
 // CSVパース関数 (簡易版 - Amazon固定フォーマット向け)
 function parseAmazonCsv(csvContent: string): any[] {

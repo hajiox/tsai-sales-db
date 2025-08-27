@@ -1,7 +1,7 @@
 // /app/api/import/register/route.ts
 // ver.9 (データ集約版)
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
