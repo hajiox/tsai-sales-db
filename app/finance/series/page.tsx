@@ -1,8 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import 'chart.js/auto';
 import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+// Chart.js を明示登録（auto は使わない）
+ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend);
 
 type OverviewRow = {
   month_start: string;
@@ -25,6 +36,19 @@ const yen = (n?: number | null) =>
   n == null
     ? '-'
     : new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(n);
+
+function ChartCard({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <section style={{ border: '1px solid #eee', borderRadius: 12, padding: 14, background: 'white', marginBottom: 16 }}>
+      <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>{title}</div>
+      {children}
+    </section>
+  );
+}
+
+function Empty() {
+  return <div style={{ padding: 16, color: '#666' }}>データがありません</div>;
+}
 
 export default function FinanceSeriesPage() {
   const [from, setFrom] = useState<string>(''); // YYYY-MM
@@ -60,37 +84,48 @@ export default function FinanceSeriesPage() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+  }, []);
 
-  const labels = useMemo(() => ovRows.map(r => r.month_start.slice(0, 7)), [ovRows]); // YYYY-MM
+  const labels = useMemo(() => ovRows.map((r) => r.month_start.slice(0, 7)), [ovRows]); // YYYY-MM
 
-  const bsData = useMemo(() => ({
-    labels,
-    datasets: [
-      { label: '資産', data: ovRows.map(r => r.assets_total) },
-      { label: '負債', data: ovRows.map(r => r.liabilities_total) },
-      { label: '純資産', data: ovRows.map(r => r.equity_total) },
-    ],
-  }), [labels, ovRows]);
+  const bsData = useMemo(
+    () => ({
+      labels,
+      datasets: [
+        { label: '資産', data: ovRows.map((r) => r.assets_total) },
+        { label: '負債', data: ovRows.map((r) => r.liabilities_total) },
+        { label: '純資産', data: ovRows.map((r) => r.equity_total) },
+      ],
+    }),
+    [labels, ovRows]
+  );
 
-  const plYtdData = useMemo(() => ({
-    labels,
-    datasets: [
-      { label: '収益（YTD）', data: ovRows.map(r => r.revenues_total) },
-      { label: '費用（YTD）', data: ovRows.map(r => r.expenses_total) },
-      { label: '当期純利益（YTD）', data: ovRows.map(r => r.net_income_signed) },
-    ],
-  }), [labels, ovRows]);
+  const plYtdData = useMemo(
+    () => ({
+      labels,
+      datasets: [
+        { label: '収益（YTD）', data: ovRows.map((r) => r.revenues_total) },
+        { label: '費用（YTD）', data: ovRows.map((r) => r.expenses_total) },
+        { label: '当期純利益（YTD）', data: ovRows.map((r) => r.net_income_signed) },
+      ],
+    }),
+    [labels, ovRows]
+  );
 
-  const plMonthLabels = useMemo(() => plmRows.map(r => r.month_start.slice(0, 7)), [plmRows]);
-  const plMonthData = useMemo(() => ({
-    labels: plMonthLabels,
-    datasets: [
-      { label: '当月収益', data: plmRows.map(r => r.revenues_month) },
-      { label: '当月費用', data: plmRows.map(r => r.expenses_month) },
-      { label: '当月純利益', data: plmRows.map(r => r.net_income_month) },
-    ],
-  }), [plMonthLabels, plmRows]);
+  const plMonthLabels = useMemo(() => plmRows.map((r) => r.month_start.slice(0, 7)), [plmRows]);
+  const plMonthData = useMemo(
+    () => ({
+      labels: plMonthLabels,
+      datasets: [
+        { label: '当月収益', data: plmRows.map((r) => r.revenues_month) },
+        { label: '当月費用', data: plmRows.map((r) => r.expenses_month) },
+        { label: '当月純利益', data: plmRows.map((r) => r.net_income_month) },
+      ],
+    }),
+    [plMonthLabels, plmRows]
+  );
 
   const search = async () => {
     await loadData({ from: from || undefined, to: to || undefined });
@@ -112,4 +147,44 @@ export default function FinanceSeriesPage() {
         <button
           onClick={search}
           disabled={busy}
-          styl
+          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fafafa' }}
+        >
+          この範囲で表示
+        </button>
+        <button
+          onClick={() => {
+            setFrom('');
+            setTo('');
+            loadData();
+          }}
+          disabled={busy}
+          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fafafa' }}
+        >
+          全期間を表示
+        </button>
+      </section>
+
+      {error && (
+        <div style={{ color: 'crimson', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
+          <strong>エラー:</strong> {error}
+        </div>
+      )}
+
+      <ChartCard title="B/S（資産・負債・純資産）">
+        {ovRows.length ? <Line data={bsData} /> : <Empty />}
+      </ChartCard>
+
+      <ChartCard title="P/L（YTD：収益・費用・純利益）">
+        {ovRows.length ? <Line data={plYtdData} /> : <Empty />}
+      </ChartCard>
+
+      <ChartCard title="P/L（当月：収益・費用・純利益）">
+        {plmRows.length ? <Line data={plMonthData} /> : <Empty />}
+      </ChartCard>
+
+      <div style={{ marginTop: 16, color: '#666' }}>
+        最終月：{labels.at(-1) ?? '-'} ／ 当月純利益：{yen(plmRows.at(-1)?.net_income_month)}
+      </div>
+    </main>
+  );
+}
