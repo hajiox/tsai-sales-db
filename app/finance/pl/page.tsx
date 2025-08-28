@@ -1,205 +1,321 @@
+// app/finance/pl/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 
-type Row = {
-  account_code: string;
+// ---- Types ----------------------------------------------------
+type Scope = 'ytd' | 'month';
+
+type PlRow = {
+  account_code: string | number;
   account_name: string;
-  account_type: '収益' | '費用' | '営業外収益' | '営業外費用';
-  amount_abs: number;
-  amount_signed: number; // 収益＋／費用−
+  category: '収益' | '費用' | string; // 「収益」/「費用」以外は無視される
+  amount: number | string | null;      // Postgres numeric が string で来る想定
 };
 
-type ApiResp = {
-  month: string | null;
-  scope: 'ytd' | 'month';
-  rows: Row[];
+type SnapshotRes = {
+  target_month?: string; // 'YYYY-MM-01' など
+  rows: PlRow[];
 };
 
-const yen = (n?: number) =>
-  n == null
-    ? '-'
-    : new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(n);
+// ---- Helpers --------------------------------------------------
+// 数値に変換（カンマ入り/空/NaN対策）
+function toNum(v: unknown): number {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (typeof v === 'string') {
+    const s = v.replace(/,/g, '').trim();
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
 
-export default function PLPage() {
-  const [scope, setScope] = useState<'ytd' | 'month'>('ytd');
-  const [month, setMonth] = useState<string>(''); // YYYY-MM
-  const [data, setData] = useState<ApiResp | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+// 通貨表示
+function yen(n: number): string {
+  return `¥ ${Number(n || 0).toLocaleString()}`;
+}
 
-  const loadLatest = async () => {
-    setLoading(true); setError(null);
+// ---- Page -----------------------------------------------------
+export default function PlPage() {
+  const [scope, setScope] = useState<Scope>('ytd'); // FY累計= 'ytd'
+  const [month, setMonth] = useState<string>('');   // 指定月（未指定=最新）
+  const [loading, setLoading] = useState<boolean>(true);
+  const [data, setData] = useState<SnapshotRes>({ rows: [] });
+  const [error, setError] = useState<string>('');
+
+  // API から取得（既存API: /api/finance/pl/snapshot を使用）
+  async function fetchSnapshot(s: Scope, m?: string) {
+    setLoading(true);
+    setError('');
     try {
-      const r = await fetch('/api/finance/pl/snapshot', { cache: 'no-store' });
-      if (!r.ok) throw new Error(await r.text());
-      const json: ApiResp = await r.json();
-      setData(json);
-      setScope('ytd');
+      const qs = new URLSearchParams();
+      qs.set('scope', s); // 'ytd' | 'month'
+      if (m) qs.set('month', m); // 'YYYY-MM-01' など（無ければAPI側で最新）
+      const res = await fetch(`/api/finance/pl/snapshot?${qs.toString()}`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText}`);
+      }
+      const json = (await res.json()) as SnapshotRes;
+      setData({ rows: json.rows ?? [], target_month: json.target_month });
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      setError(String(e?.message ?? e));
+      setData({ rows: [] });
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  useEffect(() => { loadLatest(); }, []);
+  useEffect(() => {
+    fetchSnapshot(scope, month);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope]); // scope切替で再読込（指定月は明示ボタンで）
 
-  const search = async () => {
-    if (!month) return;
-    const date = `${month}-01`;
-    setBusy(true); setError(null);
-    try {
-      const r = await fetch(`/api/finance/pl/snapshot?date=${encodeURIComponent(date)}&scope=${scope}`, { cache: 'no-store' });
-      if (!r.ok) throw new Error(await r.text());
-      const json: ApiResp = await r.json();
-      setData(json);
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+  // 合計の計算（常に数値化してから加算）
+  const { revenueTotal, expenseTotal, netIncome } = useMemo(() => {
+    const rev = data.rows
+      .filter((r) => r.category === '収益')
+      .reduce((acc, r) => acc + toNum(r.amount), 0);
 
-  const totals = useMemo(() => {
-    const rows = data?.rows ?? [];
-    const revenues = rows.reduce((s, r) => s + (r.amount_signed >= 0 ? r.amount_signed : 0), 0);
-    const expenses = rows.reduce((s, r) => s + (r.amount_signed < 0 ? -r.amount_signed : 0), 0);
-    const ni = rows.reduce((s, r) => s + r.amount_signed, 0);
-    return { revenues, expenses, ni };
-  }, [data]);
+    const exp = data.rows
+      .filter((r) => r.category === '費用')
+      .reduce((acc, r) => acc + toNum(r.amount), 0);
+
+    // P/L規約：純利益 = 収益（＋）− 費用（＋）
+    const net = rev - exp;
+
+    return { revenueTotal: rev, expenseTotal: exp, netIncome: net };
+  }, [data.rows]);
+
+  // 表示行（符号付検算列は P/L規約：収益＋／費用−）
+  const displayRows = useMemo(() => {
+    return data.rows.map((r) => {
+      const amt = toNum(r.amount);
+      const displayAmount = Math.abs(amt);
+      const signedAmount = r.category === '費用' ? -Math.abs(amt) : Math.abs(amt);
+      return {
+        ...r,
+        displayAmount,
+        signedAmount,
+      };
+    });
+  }, [data.rows]);
 
   return (
-    <main style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
-        P/L Snapshot ({scope === 'ytd' ? 'FY累計' : '当月のみ'})
+    <div style={{ maxWidth: 1240, margin: '0 auto', padding: 16 }}>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>
+        P/L Snapshot（{scope === 'ytd' ? 'FY累計' : '当月'}）
       </h1>
 
-      <section style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span>月を指定</span>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ padding: '6px 8px' }} />
-        </label>
-
-        <div style={{ display: 'inline-flex', border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden' }}>
-          <button
-            onClick={() => setScope('ytd')}
-            style={{ padding: '8px 12px', background: scope === 'ytd' ? '#eef7ff' : '#fff', borderRight: '1px solid #ddd' }}
-          >
-            FY累計
-          </button>
-          <button
-            onClick={() => setScope('month')}
-            style={{ padding: '8px 12px', background: scope === 'month' ? '#eef7ff' : '#fff' }}
-          >
-            当月
-          </button>
-        </div>
+      {/* 操作列 */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          marginBottom: 12,
+        }}
+      >
+        <label>月を指定</label>
+        <input
+          type="month"
+          value={month ? month.slice(0, 7) : ''}
+          onChange={(e) => setMonth(e.target.value ? `${e.target.value}-01` : '')}
+          style={{ padding: 6, border: '1px solid #ddd', borderRadius: 6 }}
+        />
 
         <button
-          onClick={search}
-          disabled={!month || busy}
-          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fafafa' }}
+          onClick={() => fetchSnapshot(scope, month || undefined)}
+          style={btn()}
         >
           この条件で表示
         </button>
 
         <button
-          onClick={loadLatest}
-          disabled={busy}
-          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fafafa' }}
+          onClick={() => {
+            setMonth('');
+            setScope('ytd');
+            fetchSnapshot('ytd');
+          }}
+          style={btn()}
         >
           最新月（FY累計）に戻る
         </button>
-      </section>
 
-      {loading ? (
-        <p>読み込み中...</p>
-      ) : error ? (
-        <div style={{ color: 'crimson', whiteSpace: 'pre-wrap' }}><strong>エラー:</strong> {error}</div>
-      ) : (
-        <>
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
-            <KPI title="対象月">{data?.month ?? '-'}</KPI>
-            <KPI title="収益合計">{yen(totals.revenues)}</KPI>
-            <KPI title="費用合計">{yen(totals.expenses)}</KPI>
-            <KPI title="純利益">
-              <span style={{ color: totals.ni >= 0 ? 'seagreen' : 'crimson' }}>{yen(totals.ni)}</span>
-            </KPI>
-          </section>
+        <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+          <button
+            onClick={() => setScope('ytd')}
+            style={tab(scope === 'ytd')}
+            aria-pressed={scope === 'ytd'}
+          >
+            FY累計
+          </button>
+          <button
+            onClick={() => setScope('month')}
+            style={tab(scope === 'month')}
+            aria-pressed={scope === 'month'}
+          >
+            当月
+          </button>
+        </div>
+      </div>
 
-          <div style={{ border: '1px solid #eee', borderRadius: 12, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-              <thead style={{ position: 'sticky', top: 0, background: '#f9fafb' }}>
-                <tr>
-                  <Th style={{ width: 90 }}>勘定科目コード</Th>
-                  <Th>勘定科目名</Th>
-                  <Th style={{ width: 110 }}>区分</Th>
-                  <Th style={{ width: 140, textAlign: 'right' }}>金額（表示）</Th>
-                  <Th style={{ width: 160, textAlign: 'right' }}>金額（符号付 検算）</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.rows ?? []).map((r) => (
-                  <tr key={r.account_code} style={{ borderTop: '1px solid #f0f0f0' }}>
-                    <Td mono>{r.account_code}</Td>
-                    <Td>{r.account_name}</Td>
-                    <Td>{r.account_type}</Td>
-                    <Td align="right" mono>{yen(r.amount_abs)}</Td>
-                    <Td align="right" mono style={{ color: r.amount_signed >= 0 ? 'seagreen' : 'crimson' }}>
-                      {yen(r.amount_signed)}
-                    </Td>
-                  </tr>
-                ))}
-                {(!data?.rows || data.rows.length === 0) && (
-                  <tr>
-                    <td colSpan={5} style={{ padding: 16, textAlign: 'center', color: '#666' }}>データがありません</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
+      {/* 指標カード */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 12,
+          marginBottom: 12,
+        }}
+      >
+        <StatCard title="収益合計（YTD）" value={yen(revenueTotal)} />
+        <StatCard title="費用合計（YTD）" value={yen(expenseTotal)} />
+        <StatCard title="純利益" value={yen(netIncome)} danger={netIncome < 0} />
+      </div>
+
+      {/* ローディング／エラー */}
+      {loading && <p>読み込み中...</p>}
+      {error && (
+        <p style={{ color: '#b91c1c', marginBottom: 12 }}>
+          取得エラー: {error}
+        </p>
       )}
-    </main>
-  );
-}
 
-function KPI({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div style={{ border: '1px solid #eee', borderRadius: 12, padding: 14, background: 'white' }}>
-      <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 18, fontWeight: 600 }}>{children ?? '-'}</div>
+      {/* 対象月 */}
+      <div style={{ marginBottom: 8, color: '#374151' }}>
+        対象月: {data?.target_month ? data.target_month : '-'}
+      </div>
+
+      {/* テーブル */}
+      <div style={{ overflowX: 'auto' }}>
+        <table
+          style={{
+            borderCollapse: 'collapse',
+            width: '100%',
+            background: 'white',
+            border: '1px solid #eee',
+          }}
+        >
+          <thead style={{ background: '#f9fafb' }}>
+            <tr>
+              <Th>勘定科目コード</Th>
+              <Th>勘定科目名</Th>
+              <Th>区分</Th>
+              <Th>金額（表示）</Th>
+              <Th>金額（符号付 検算）</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.map((r, i) => (
+              <tr key={`${r.account_code}-${i}`} style={{ borderTop: '1px solid #f3f4f6' }}>
+                <Td>{r.account_code}</Td>
+                <Td>{r.account_name}</Td>
+                <Td>{r.category}</Td>
+                <Td>{yen(r.displayAmount)}</Td>
+                <Td style={{ color: r.signedAmount < 0 ? '#b91c1c' : '#111827' }}>
+                  {yen(r.signedAmount)}
+                </Td>
+              </tr>
+            ))}
+            {displayRows.length === 0 && !loading && (
+              <tr>
+                <Td colSpan={5} style={{ textAlign: 'center', padding: 16 }}>
+                  データがありません
+                </Td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
-function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 700, borderBottom: '1px solid #eee', ...style }}>{children}</th>;
+// ---- Small UI pieces ------------------------------------------
+function btn(): React.CSSProperties {
+  return {
+    padding: '8px 12px',
+    border: '1px solid #ddd',
+    borderRadius: 8,
+    background: '#f9fafb',
+    cursor: 'pointer',
+  };
+}
+
+function tab(active: boolean): React.CSSProperties {
+  return {
+    padding: '6px 10px',
+    border: '1px solid #ddd',
+    borderRadius: 8,
+    background: active ? '#111827' : '#f9fafb',
+    color: active ? '#fff' : '#111',
+    cursor: 'pointer',
+  };
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return (
+    <th
+      style={{
+        textAlign: 'left',
+        padding: 10,
+        fontWeight: 600,
+        borderBottom: '1px solid #e5e7eb',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </th>
+  );
 }
 
 function Td({
   children,
-  align,
-  mono,
+  colSpan,
   style,
 }: {
   children: React.ReactNode;
-  align?: 'left' | 'right' | 'center';
-  mono?: boolean;
+  colSpan?: number;
   style?: React.CSSProperties;
 }) {
   return (
-    <td
-      style={{
-        padding: '10px 12px',
-        textAlign: align ?? 'left',
-        fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' : undefined,
-        ...style,
-      }}
-    >
+    <td style={{ padding: 10, whiteSpace: 'nowrap', ...style }} colSpan={colSpan}>
       {children}
     </td>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  danger,
+}: {
+  title: string;
+  value: string;
+  danger?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        padding: 14,
+        border: '1px solid #eee',
+        borderRadius: 12,
+        background: 'white',
+      }}
+    >
+      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>{title}</div>
+      <div
+        style={{
+          fontSize: 18,
+          fontWeight: 700,
+          color: danger ? '#b91c1c' : '#111827',
+        }}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
