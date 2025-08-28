@@ -1,8 +1,11 @@
+// app/finance/layout.tsx
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
-export default function FinanceLayout({ children }: { children: React.ReactNode }) {
+export default function FinanceLayout({ children }: { children: ReactNode }) {
   return (
     <div style={{ maxWidth: 1240, margin: '0 auto', padding: 16 }}>
+      {/* Top Navigation */}
       <nav
         style={{
           display: 'flex',
@@ -15,18 +18,27 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
           marginBottom: 16,
         }}
       >
-        <NavLink href="/finance">Home</NavLink>
-        <NavLink href="/finance/overview">Overview</NavLink>
-        <NavLink href="/finance/bs">B/S 明細</NavLink>
-        <NavLink href="/finance/pl">P/L 明細</NavLink>
-        <NavLink href="/finance/series">推移グラフ</NavLink>
+        {/* NOTE:
+            404回避のため Home は実在ページへ（/finance/overview） */}
+        <LinkButton href="/finance/overview">Home</LinkButton>
+        <LinkButton href="/finance/overview">Overview</LinkButton>
+        <LinkButton href="/finance/bs">B/S 明細</LinkButton>
+        <LinkButton href="/finance/pl">P/L 明細</LinkButton>
+        <LinkButton href="/finance/series">推移グラフ</LinkButton>
       </nav>
-      {children}
+
+      <main>{children}</main>
     </div>
   );
 }
 
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+function LinkButton({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
   return (
     <Link
       href={href}
