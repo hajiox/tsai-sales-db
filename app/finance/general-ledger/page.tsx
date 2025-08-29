@@ -6,10 +6,9 @@ import Link from 'next/link';
 import React, { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 
-// もとの月次一覧（ClientGL）はそのまま動的ロード
 const ClientGL = dynamic(() => import('./ClientGL'), { ssr: false });
 
-/** どんな時でも /finance/general-ledger/import へ飛ばせるリンク */
+/** /finance/general-ledger/import へ確実に遷移するリンク（フォールバック用にのみ使用） */
 function CsvImportLink() {
   const router = useRouter();
   const href = '/finance/general-ledger/import';
@@ -44,24 +43,20 @@ function CsvImportLink() {
   );
 }
 
-/** 例外を飲み込み、フォールバックUIを表示する Error Boundary */
+/** ClientGL の例外を握り、フォールバックUI（ボタン1個だけ）を表示する */
 class GLBoundary extends React.Component<
   { children: React.ReactNode },
-  { hasError: boolean; message?: string }
+  { hasError: boolean }
 > {
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false };
   }
-  static getDerivedStateFromError(err: unknown) {
-    return { hasError: true, message: String(err) };
-  }
-  componentDidCatch() {
-    // ここでログ送信など可能
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
   render() {
     if (this.state.hasError) {
-      // フォールバック：最低限インポート画面へは行ける
       return (
         <div style={{ maxWidth: 1240, margin: '0 auto', padding: 16 }}>
           <div
@@ -73,14 +68,16 @@ class GLBoundary extends React.Component<
               marginBottom: 12,
             }}
           >
+            {/* ← フォールバック時だけ表示（1個だけ） */}
             <CsvImportLink />
             <Link href="/finance/overview" style={btn()}>
               Overview へ戻る
             </Link>
           </div>
-
           <div style={alert()}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>月次一覧の表示中にエラーが発生しました。</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>
+              月次一覧の表示中にエラーが発生しました。
+            </div>
             <div style={{ fontSize: 12, color: '#6b7280' }}>
               右上の「仕訳CSVインポート」から取り込みは続行できます。表示の復旧はこの後対応します。
             </div>
@@ -95,20 +92,7 @@ class GLBoundary extends React.Component<
 export default function GeneralLedgerPage() {
   return (
     <div style={{ maxWidth: 1240, margin: '0 auto', padding: 16 }}>
-      {/* 右上に常設のインポート導線（ClientGLが壊れていても使える） */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: 12,
-          flexWrap: 'wrap',
-          marginBottom: 12,
-        }}
-      >
-        <CsvImportLink />
-      </div>
-
-      {/* ClientGL のエラーはここで握りつぶしてフォールバックに切り替え */}
+      {/* 通常時は ClientGL 側のボタンのみ。フォールバック時は上の CsvImportLink を1つだけ表示 */}
       <GLBoundary>
         <Suspense fallback={<div style={{ padding: 8 }}>読み込み中…</div>}>
           <ClientGL />
