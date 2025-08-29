@@ -166,4 +166,213 @@ function normalizeToGroups(json: any): Group[] {
   // 2) months / rows / 配列 → FYでグループ化
   const rows: MonthSummaryAny[] =
     json?.months || json?.rows || (Array.isArray(json) ? json : []);
-  const g
+  const groupsMap = new Map<number, Group>();
+  for (const r of rows) {
+    const monthDate = normalizeMonthString(r);
+    if (!monthDate) continue;
+    const ym = monthDate.slice(0, 7);
+    const fy = monthToFY(monthDate);
+    const g =
+      groupsMap.get(fy) ||
+      ({ fy, label: fyLabel(fy), months: [] } as Group);
+    const debit =
+      toNum(r.debit_total) ||
+      toNum(r.debit) ||
+      toNum(r.dr_total) ||
+      toNum(r.sum_debit);
+    const credit =
+      toNum(r.credit_total) ||
+      toNum(r.credit) ||
+      toNum(r.cr_total) ||
+      toNum(r.sum_credit);
+    const count =
+      Number(r.entry_count) || Number(r.count) || Number(r.rows) || 0;
+
+    g.months.push({ ym, monthDate, debit, credit, count });
+    groupsMap.set(fy, g);
+  }
+  // FYごとにスケルトン補完
+  return Array.from(groupsMap.values())
+    .map((g) => ({
+      ...g,
+      months: fillSkeletonMonths(g.fy, g.months),
+    }))
+    .sort((a, b) => b.fy - a.fy);
+}
+
+// ===== API 候補 =====
+const ENDPOINTS = [
+  '/api/finance/general-ledger',
+  '/api/finance/general-ledger/summary',
+  '/api/finance/general-ledger/months',
+  '/api/general-ledger/summary',
+  '/api/general-ledger/months',
+];
+
+async function fetchGroups(): Promise<Group[]> {
+  let lastErr = '';
+  for (const url of ENDPOINTS) {
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) {
+        lastErr = `${res.status} ${res.statusText}`;
+        continue;
+      }
+      const json = await res.json();
+      const groups = normalizeToGroups(json);
+      if (groups.length) return groups;
+    } catch (e: any) {
+      lastErr = String(e?.message ?? e);
+      continue;
+    }
+  }
+  throw new Error(lastErr || '集計データの取得に失敗しました。（APIエンドポイント未検出）');
+}
+
+// ===== リフレッシュ候補（どれかが当たればOK） =====
+const REFRESH_ENDPOINTS = [
+  '/api/finance/refresh',
+  '/api/finance/general-ledger/refresh',
+  '/api/general-ledger/refresh',
+  '/api/finance/gl/refresh',
+];
+
+async function tryRefresh(): Promise<boolean> {
+  for (const url of REFRESH_ENDPOINTS) {
+    try {
+      const r = await fetch(url, { method: 'POST' });
+      if (r.ok) return true;
+    } catch {
+      /* noop */
+    }
+  }
+  return false;
+}
+
+// ===== 画面本体 =====
+export default function ClientGL() {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>('');
+  const [busy, setBusy] = useState(false); // 更新中UI
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const g = await fetchGroups();
+      setGroups(g);
+    } catch (e: any) {
+      setError(String(e?.message ?? e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const refreshAndReload = async () => {
+    try {
+      setBusy(true);
+      await tryRefresh(); // 失敗しても続行（スケルトン補完で月は出る）
+      await load();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const empty = !loading && groups.every((g) => g.months.length === 0);
+
+  return (
+    <div>
+      {/* 操作バー */}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <button onClick={load} style={btn()} disabled={loading || busy}>
+          最新を再取得
+        </button>
+        <button onClick={refreshAndReload} style={btn()} disabled={busy}>
+          マテビュー更新 → 再取得
+        </button>
+      </div>
+
+      {busy && <p style={{ padding: 6 }}>更新中…</p>}
+      {loading && <p style={{ padding: 6 }}>読み込み中…</p>}
+      {error && <p style={{ padding: 6, color: '#b91c1c' }}>取得エラー: {error}</p>}
+      {empty && <p style={{ padding: 6, color: '#374151' }}>表示できる月次データがありません。</p>}
+
+      {groups.map((g) => (
+        <section
+          key={g.fy}
+          style={{
+            border: '1px solid #eee',
+            borderRadius: 12,
+            background: 'white',
+            marginBottom: 16,
+            overflow: 'hidden',
+          }}
+        >
+          <header
+            style={{
+              padding: 12,
+              fontWeight: 700,
+              borderBottom: '1px solid #f3f4f6',
+              background: '#f9fafb',
+            }}
+          >
+            {g.label}
+          </header>
+
+          <div style={{ padding: 12, display: 'grid', gap: 12 }}>
+            {g.months.map((m) => (
+              <article
+                key={m.ym}
+                style={{
+                  border: '1px solid #eee',
+                  borderRadius: 10,
+                  padding: 12,
+                  background: 'white',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 15 }}>{m.ym}</div>
+                  <div style={{ color: '#374151', fontSize: 13 }}>
+                    仕訳件数: {m.count}　/　借方合計: {YEN(m.debit)}　/　貸方合計: {YEN(m.credit)}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifySelf: 'end', flexWrap: 'wrap' }}>
+                  <Link href={`/finance/general-ledger-detail?month=${m.monthDate}`} style={btn()}>
+                    $ 財務諸表
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// ===== 付属UI =====
+function btn(): React.CSSProperties {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 12px',
+    border: '1px solid #ddd',
+    borderRadius: 8,
+    background: '#f9fafb',
+    textDecoration: 'none',
+    color: '#111',
+    cursor: 'pointer',
+    fontWeight: 600,
+  };
+}
