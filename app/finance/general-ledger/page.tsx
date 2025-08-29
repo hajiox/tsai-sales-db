@@ -8,10 +8,9 @@ import { useRouter } from 'next/navigation';
 
 const ClientGL = dynamic(() => import('./ClientGL'), { ssr: false });
 
-/** /finance/general-ledger/import へ確実に遷移するリンク（フォールバック用にのみ使用） */
-function CsvImportLink() {
+/** 決め打ち遷移リンク（フォールバック用のみで使用） */
+function ActionLink({ href, children }: { href: string; children: React.ReactNode }) {
   const router = useRouter();
-  const href = '/finance/general-ledger/import';
   return (
     <a
       href={href}
@@ -23,27 +22,14 @@ function CsvImportLink() {
           window.location.href = href;
         }
       }}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '10px 14px',
-        border: '1px solid #ddd',
-        borderRadius: 10,
-        background: '#f9fafb',
-        color: '#111',
-        textDecoration: 'none',
-        fontWeight: 600,
-        cursor: 'pointer',
-      }}
-      aria-label="仕訳CSVインポートへ移動"
+      style={btn()}
     >
-      仕訳CSVインポート
+      {children}
     </a>
   );
 }
 
-/** ClientGL の例外を握り、フォールバックUI（ボタン1個だけ）を表示する */
+/** ClientGL の例外を握り、フォールバックUI（ボタンはここでのみ1セット表示） */
 class GLBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean }
@@ -68,8 +54,9 @@ class GLBoundary extends React.Component<
               marginBottom: 12,
             }}
           >
-            {/* ← フォールバック時だけ表示（1個だけ） */}
-            <CsvImportLink />
+            {/* フォールバック時だけ出す（1個ずつ） */}
+            <ActionLink href="/finance/general-ledger/import">仕訳CSVインポート</ActionLink>
+            <ActionLink href="/finance/general-ledger/closing-import">決算仕訳インポート</ActionLink>
             <Link href="/finance/overview" style={btn()}>
               Overview へ戻る
             </Link>
@@ -79,7 +66,7 @@ class GLBoundary extends React.Component<
               月次一覧の表示中にエラーが発生しました。
             </div>
             <div style={{ fontSize: 12, color: '#6b7280' }}>
-              右上の「仕訳CSVインポート」から取り込みは続行できます。表示の復旧はこの後対応します。
+              右上の「仕訳CSVインポート」「決算仕訳インポート」から取り込みは続行できます。表示の復旧はこの後対応します。
             </div>
           </div>
         </div>
@@ -92,7 +79,7 @@ class GLBoundary extends React.Component<
 export default function GeneralLedgerPage() {
   return (
     <div style={{ maxWidth: 1240, margin: '0 auto', padding: 16 }}>
-      {/* 通常時は ClientGL 側のボタンのみ。フォールバック時は上の CsvImportLink を1つだけ表示 */}
+      {/* 通常時は ClientGL 側のボタンのみ。エラー時は上のフォールバックに2ボタンを表示 */}
       <GLBoundary>
         <Suspense fallback={<div style={{ padding: 8 }}>読み込み中…</div>}>
           <ClientGL />
@@ -114,6 +101,7 @@ function btn(): React.CSSProperties {
     textDecoration: 'none',
     color: '#111',
     fontWeight: 600,
+    cursor: 'pointer',
   };
 }
 
