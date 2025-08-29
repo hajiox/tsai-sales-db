@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // ===== 型（ゆるめ） =====
 type MonthSummaryAny = Record<string, unknown>;
@@ -10,8 +10,8 @@ type Group = {
   fy: number; // 例: 2024（8月始まり: 2024/08〜2025/07）
   label: string;
   months: Array<{
-    ym: string; // 'YYYY-MM'（表示用）
-    monthDate: string; // 'YYYY-MM-01'（リンク等に使用）
+    ym: string; // 'YYYY-MM'
+    monthDate: string; // 'YYYY-MM-01'
     debit: number;
     credit: number;
     count: number;
@@ -21,7 +21,6 @@ type Group = {
 // ===== ユーティリティ =====
 const YEN = (n: number) => `¥ ${Number(n || 0).toLocaleString()}`;
 
-/** number|string|null → number（カンマ・円記号除去） */
 function toNum(v: unknown): number {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
   if (typeof v === 'string') {
@@ -32,7 +31,6 @@ function toNum(v: unknown): number {
   return 0;
 }
 
-/** '2024-05'|'2024-05-01'|'202405'|'2024/05' など → 'YYYY-MM-01' */
 function normalizeMonthString(o: MonthSummaryAny): string | null {
   const cand = [
     o.target_month,
@@ -46,10 +44,9 @@ function normalizeMonthString(o: MonthSummaryAny): string | null {
   for (const c of cand) {
     if (!c) continue;
     const s = String(c).trim();
-    // 202405 or 2024/05 or 2024-05 or 2024-05-01
     const m1 = s.match(/^(\d{4})(\d{2})$/); // 202405
     if (m1) return `${m1[1]}-${m1[2]}-01`;
-    const m2 = s.match(/^(\d{4})[-/](\d{2})$/); // 2024-05 or 2024/05
+    const m2 = s.match(/^(\d{4})[-/](\d{2})$/); // 2024-05
     if (m2) return `${m2[1]}-${m2[2]}-01`;
     const m3 = s.match(/^(\d{4})[-/](\d{2})[-/]\d{2}$/); // 2024-05-01
     if (m3) return `${m3[1]}-${m3[2]}-01`;
@@ -57,31 +54,30 @@ function normalizeMonthString(o: MonthSummaryAny): string | null {
   return null;
 }
 
-/** 月→会計年度（8月開始） */
 function monthToFY(monthDate: string): number {
   const [y, m] = monthDate.split('-').map((x) => Number(x));
   return m >= 8 ? y : y - 1;
 }
 
 function fyLabel(fy: number): string {
-  // 西暦のみの簡易ラベル（例: 2024年度（2024年8月〜2025年7月））
   return `${fy}年度（${fy}年8月〜${fy + 1}年7月）`;
 }
 
-/** APIレスポンスを柔軟に正規化して FY グループにする */
+// ===== 正規化 =====
 function normalizeToGroups(json: any): Group[] {
-  // 1) fiscal_years / groups 形式を優先
+  // 1) fiscal_years / groups 形式
   const srcGroups: any[] = json?.fiscal_years || json?.groups;
   if (Array.isArray(srcGroups)) {
     const out: Group[] = [];
     for (const g of srcGroups) {
+      const items = (g.months || g.items || []) as MonthSummaryAny[];
+      const sampleMonth =
+        items.find((r) => normalizeMonthString(r)) || ({} as MonthSummaryAny);
       const fy: number =
         Number(g.fy) ||
         Number(g.fiscal_year) ||
-        (Array.isArray(g.months) && g.months.length
-          ? monthToFY(normalizeMonthString(g.months[0]) || '1970-08-01')
-          : 0);
-      const items = (g.months || g.items || []) as MonthSummaryAny[];
+        monthToFY(normalizeMonthString(sampleMonth) || '1970-08-01');
+
       const months = items
         .map((r) => {
           const monthDate = normalizeMonthString(r);
@@ -105,16 +101,17 @@ function normalizeToGroups(json: any): Group[] {
           return { ym, monthDate, debit, credit, count };
         })
         .filter(Boolean) as Group['months'];
+
       out.push({
         fy,
         label: String(g.label || fyLabel(fy)),
         months,
       });
     }
-    return out;
+    return out.sort((a, b) => b.fy - a.fy);
   }
 
-  // 2) months / rows / 配列だけ の場合 → FYでグループ化
+  // 2) months / rows / 配列 → FYでグループ化
   const rows: MonthSummaryAny[] =
     json?.months || json?.rows || (Array.isArray(json) ? json : []);
   const groupsMap = new Map<number, Group>();
@@ -142,12 +139,15 @@ function normalizeToGroups(json: any): Group[] {
     g.months.push({ ym, monthDate, debit, credit, count });
     groupsMap.set(fy, g);
   }
-
-  return Array.from(groupsMap.values()).sort((a, b) => b.fy - a.fy);
+  return Array.from(groupsMap.values())
+    .map((g) => ({ ...g, months: g.months.sort((a, b) => (a.ym < b.ym ? -1 : 1)) }))
+    .sort((a, b) => b.fy - a.fy);
 }
 
-// ===== API フェッチ（候補複数） =====
+// ===== API 候補 =====
 const ENDPOINTS = [
+  // まずは既存アプリで使っている可能性が高いもの
+  '/api/finance/general-ledger',
   '/api/finance/general-ledger/summary',
   '/api/finance/general-ledger/months',
   '/api/general-ledger/summary',
@@ -171,9 +171,7 @@ async function fetchGroups(): Promise<Group[]> {
       continue;
     }
   }
-  throw new Error(
-    lastErr || '集計データの取得に失敗しました。（APIエンドポイント未検出）'
-  );
+  throw new Error(lastErr || '集計データの取得に失敗しました。（APIエンドポイント未検出）');
 }
 
 // ===== 画面本体 =====
@@ -181,43 +179,59 @@ export default function ClientGL() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const [busy, setBusy] = useState(false); // 更新中UI
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const g = await fetchGroups();
+      setGroups(g);
+    } catch (e: any) {
+      setError(String(e?.message ?? e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const g = await fetchGroups();
-        if (alive) setGroups(g);
-      } catch (e: any) {
-        if (alive) setError(String(e?.message ?? e));
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    load();
   }, []);
+
+  const refreshAndReload = async () => {
+    try {
+      setBusy(true);
+      // マテビュー更新
+      const r = await fetch('/api/finance/refresh', { method: 'POST' });
+      if (!r.ok) throw new Error('マテビュー更新に失敗しました');
+      // 再取得
+      await load();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const empty = !loading && groups.every((g) => g.months.length === 0);
 
   return (
     <div>
-      {loading && <p style={{ padding: 8 }}>読み込み中…</p>}
-      {error && (
-        <p style={{ padding: 8, color: '#b91c1c' }}>
-          取得エラー: {error}
-        </p>
-      )}
-      {empty && (
-        <p style={{ padding: 8, color: '#374151' }}>
-          表示できる月次データがありません。
-        </p>
-      )}
+      {/* 操作バー */}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <button onClick={load} style={btn()} disabled={loading || busy}>
+          最新を再取得
+        </button>
+        <button onClick={refreshAndReload} style={btn()} disabled={busy}>
+          マテビュー更新 → 再取得
+        </button>
+      </div>
 
-      {/* グループごとに表示 */}
+      {busy && <p style={{ padding: 6 }}>更新中…</p>}
+      {loading && <p style={{ padding: 6 }}>読み込み中…</p>}
+      {error && <p style={{ padding: 6, color: '#b91c1c' }}>取得エラー: {error}</p>}
+      {empty && <p style={{ padding: 6, color: '#374151' }}>表示できる月次データがありません。</p>}
+
       {groups.map((g) => (
         <section
           key={g.fy}
@@ -241,64 +255,33 @@ export default function ClientGL() {
           </header>
 
           <div style={{ padding: 12, display: 'grid', gap: 12 }}>
-            {g.months
-              .slice()
-              .sort((a, b) => (a.ym < b.ym ? -1 : 1))
-              .map((m) => (
-                <article
-                  key={m.ym}
-                  style={{
-                    border: '1px solid #eee',
-                    borderRadius: 10,
-                    padding: 12,
-                    background: 'white',
-                    display: 'grid',
-                    gridTemplateColumns: '1fr auto',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontWeight: 600,
-                        marginBottom: 6,
-                        fontSize: 15,
-                      }}
-                    >
-                      {m.ym}
-                    </div>
-                    <div style={{ color: '#374151', fontSize: 13 }}>
-                      仕訳件数: {m.count}　/　借方合計: {YEN(m.debit)}　/　貸方合計: {YEN(m.credit)}
-                    </div>
+            {g.months.map((m) => (
+              <article
+                key={m.ym}
+                style={{
+                  border: '1px solid #eee',
+                  borderRadius: 10,
+                  padding: 12,
+                  background: 'white',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 15 }}>{m.ym}</div>
+                  <div style={{ color: '#374151', fontSize: 13 }}>
+                    仕訳件数: {m.count}　/　借方合計: {YEN(m.debit)}　/　貸方合計: {YEN(m.credit)}
                   </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 8,
-                      justifySelf: 'end',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <Link
-                      href={`/finance/general-ledger-detail?month=${m.monthDate}`}
-                      style={btn()}
-                    >
-                      $ 財務諸表
-                    </Link>
-                    {/* 必要なら削除APIに合わせて有効化
-                    <button
-                      onClick={() => onDelete(m.monthDate)}
-                      style={btn()}
-                    >
-                      🗑 削除
-                    </button>
-                    */}
-                  </div>
-                </article>
-              ))}
-            {g.months.length === 0 && (
-              <div style={{ color: '#6b7280' }}>この年度のデータはありません</div>
-            )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifySelf: 'end', flexWrap: 'wrap' }}>
+                  <Link href={`/finance/general-ledger-detail?month=${m.monthDate}`} style={btn()}>
+                    $ 財務諸表
+                  </Link>
+                </div>
+              </article>
+            ))}
+            {g.months.length === 0 && <div style={{ color: '#6b7280' }}>この年度のデータはありません</div>}
           </div>
         </section>
       ))}
