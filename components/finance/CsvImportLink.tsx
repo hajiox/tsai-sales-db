@@ -17,13 +17,14 @@ export default function CsvImportLink({
   const href = '/finance/general-ledger/import';
 
   const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
-    // 親要素の onClick（カード全体クリック等）の影響を受けない
+    // 親の onClick（カード全体クリック等）の影響を受けず、必ず遷移
     e.stopPropagation();
     e.preventDefault();
     try {
-      router.push(href);          // 通常遷移
+      router.push(href);
     } catch {
-      window.location.href = href; // フォールバック
+      // それでもダメならフォールバック
+      window.location.href = href;
     }
   };
 
@@ -33,6 +34,7 @@ export default function CsvImportLink({
       prefetch={false}
       onClick={onClick}
       className={className}
+      aria-label="仕訳CSVインポートへ移動"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -46,7 +48,6 @@ export default function CsvImportLink({
         fontWeight: 600,
         cursor: 'pointer',
       }}
-      aria-label="仕訳CSVインポートへ移動"
     >
       {children}
     </Link>
