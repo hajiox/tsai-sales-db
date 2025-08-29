@@ -8,6 +8,8 @@ export default function GeneralLedgerImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string[]>([]);
   const [status, setStatus] = useState<string>('');
+  // 追加：対象月（YYYY-MM-01 形式でAPIへ渡す）
+  const [targetMonth, setTargetMonth] = useState<string>(''); // 例: "2024-10-01"
 
   async function onPick(f: File | null) {
     setFile(f);
@@ -27,10 +29,15 @@ export default function GeneralLedgerImportPage() {
       setStatus('取り込み中…');
       const fd = new FormData();
       fd.append('file', file);
-      // 原本保存などのオプション（必要に応じて API 側で使用）
-      fd.append('options', JSON.stringify({ saveOriginal: true }));
 
-      // 既存 API を想定：/app/api/general-ledger/import/route.ts
+      // API側（/api/general-ledger/import）へ渡すオプション
+      // targetMonth は "YYYY-MM-01" で送信（CSVに日付が無い/壊れている時の既定年月として使用）
+      const options = {
+        saveOriginal: true,
+        targetMonth: targetMonth || undefined,
+      };
+      fd.append('options', JSON.stringify(options));
+
       const res = await fetch('/api/general-ledger/import', {
         method: 'POST',
         body: fd,
@@ -56,6 +63,26 @@ export default function GeneralLedgerImportPage() {
       </div>
 
       <section style={card()}>
+        {/* 対象月（任意） */}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+          <label style={{ fontWeight: 600 }}>対象月（任意）</label>
+          <input
+            type="month"
+            value={targetMonth ? targetMonth.slice(0, 7) : ''}
+            onChange={(e) =>
+              setTargetMonth(e.target.value ? `${e.target.value}-01` : '')
+            }
+            style={{
+              padding: 8,
+              border: '1px solid #ddd',
+              borderRadius: 8,
+            }}
+          />
+          <span style={{ color: '#6b7280' }}>
+            ※ CSVに日付が無い/壊れている場合、この年月を既定値として用います
+          </span>
+        </div>
+
         <div style={{ marginBottom: 8 }}>
           対応拡張子: <code>.csv, .tsv, .txt</code>（UTF-8推奨）
         </div>
@@ -127,7 +154,7 @@ function btn(): CSSProperties {
 
 function card(): CSSProperties {
   return {
-    border: '1px solid #eee', // ← 修正済み（クオートミス対策）
+    border: '1px solid #eee',
     borderRadius: 12,
     background: 'white',
     padding: 14,
