@@ -2,41 +2,37 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, type CSSProperties } from 'react';
 
 type Encoding = 'auto' | 'utf-8' | 'shift_jis';
 
 export default function GeneralLedgerImportPage() {
+  const router = useRouter();
+
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string[]>([]);
   const [status, setStatus] = useState<string>('');
   const [targetMonth, setTargetMonth] = useState<string>(''); // "YYYY-MM-01"
-  const [encoding, setEncoding] = useState<Encoding>('auto'); // 文字コード選択
-  const [usedEncoding, setUsedEncoding] = useState<Exclude<Encoding, 'auto'> | null>(null); // 実際に使用したエンコーディング
+  const [encoding, setEncoding] = useState<Encoding>('auto');
+  const [usedEncoding, setUsedEncoding] = useState<Exclude<Encoding, 'auto'> | null>(null);
 
   // ---------- helpers ----------
   function countReplacementChars(s: string) {
-    // U+FFFD の個数（文字化け指標）
     return (s.match(/\uFFFD/g) || []).length;
   }
-
   function decodeBuffer(buf: ArrayBuffer, enc: Exclude<Encoding, 'auto'>) {
-    // TextDecoder は 'shift_jis' をサポート（Windows-31J エイリアス）
     const dec = new TextDecoder(enc, { fatal: false });
     return dec.decode(buf);
   }
-
   function autoDecode(buf: ArrayBuffer): { text: string; used: Exclude<Encoding, 'auto'> } {
     const utf8 = decodeBuffer(buf, 'utf-8');
     const sjis = decodeBuffer(buf, 'shift_jis');
-
-    // 置換文字が少ない方を採用。完全同数なら UTF-8 を優先
     const r1 = countReplacementChars(utf8);
     const r2 = countReplacementChars(sjis);
     if (r2 < r1) return { text: sjis, used: 'shift_jis' };
     return { text: utf8, used: 'utf-8' };
   }
-
   async function readFile(f: File, enc: Encoding) {
     const buf = await f.arrayBuffer();
     if (enc === 'auto') {
@@ -68,30 +64,41 @@ export default function GeneralLedgerImportPage() {
     try {
       setStatus('取り込み中…');
 
-      // 送信直前に、ユーザーの選択（または自動判定）で再デコードしてAPIへ渡す
+      // 再デコードしてテキストとして送信
       const buf = await file.arrayBuffer();
       const encToUse = encoding === 'auto' ? (usedEncoding ?? 'utf-8') : encoding;
-      const text = encToUse === 'utf-8' ? decodeBuffer(buf, 'utf-8') : decodeBuffer(buf, 'shift_jis');
+      const text =
+        encToUse === 'utf-8' ? decodeBuffer(buf, 'utf-8') : decodeBuffer(buf, 'shift_jis');
 
       const fd = new FormData();
-      // サーバー側で text/csv を受け取りたいケースもあるので Blob を作り直す
-      fd.append('file', new Blob([text], { type: 'text/plain;charset=utf-8' }), file.name.replace(/\.(txt|csv|tsv)$/i, '') + '.csv');
+      fd.append(
+        'file',
+        new Blob([text], { type: 'text/plain;charset=utf-8' }),
+        file.name.replace(/\.(txt|csv|tsv)$/i, '') + '.csv'
+      );
+      fd.append(
+        'options',
+        JSON.stringify({
+          saveOriginal: true,
+          targetMonth: targetMonth || undefined, // "YYYY-MM-01"
+          encoding: encToUse, // 'utf-8' | 'shift_jis'
+        })
+      );
 
-      // API側オプション
-      const options = {
-        saveOriginal: true,
-        targetMonth: targetMonth || undefined,         // "YYYY-MM-01"
-        encoding: encToUse,                             // 'utf-8' | 'shift_jis'
-      };
-      fd.append('options', JSON.stringify(options));
-
+      // 1) 取り込み
       const res = await fetch('/api/general-ledger/import', { method: 'POST', body: fd });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? res.statusText);
 
-      setStatus(`完了: ${json?.message ?? '取り込みが完了しました'}`);
+      // 2) マテビュー更新（ここが肝）
+      setStatus('取り込み完了 → マテビュー更新中…');
+      const r2 = await fetch('/api/finance/refresh', { method: 'POST' });
+      if (!r2.ok) throw new Error('マテビュー更新に失敗しました');
+
+      setStatus('完了: 取り込み＋マテビュー更新 OK。月次一覧に反映されました。');
     } catch (e: any) {
       setStatus(`失敗: ${String(e?.message ?? e)}`);
+      return;
     }
   }
 
@@ -102,6 +109,9 @@ export default function GeneralLedgerImportPage() {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <Link href="/finance/general-ledger" style={btn()}>← 月次一覧に戻る</Link>
+        <button onClick={() => router.push('/finance/general-ledger')} style={btn()}>
+          月次一覧を再表示
+        </button>
       </div>
 
       <section style={card()}>
@@ -126,7 +136,6 @@ export default function GeneralLedgerImportPage() {
               const enc = e.target.value as Encoding;
               setEncoding(enc);
               setStatus('');
-              // すでに選ばれているファイルがあれば、プレビューをその場で再デコード
               if (file) {
                 const text = await readFile(file, enc);
                 setPreview(text.split(/\r?\n/).slice(0, 8));
