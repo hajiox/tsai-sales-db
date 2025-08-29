@@ -1,7 +1,8 @@
+// app/finance/general-ledger/import/page.tsx
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 
 export default function GeneralLedgerImportPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -26,9 +27,10 @@ export default function GeneralLedgerImportPage() {
       setStatus('取り込み中…');
       const fd = new FormData();
       fd.append('file', file);
+      // 原本保存などのオプション（必要に応じて API 側で使用）
       fd.append('options', JSON.stringify({ saveOriginal: true }));
 
-      // 既存の API ルート想定
+      // 既存 API を想定：/app/api/general-ledger/import/route.ts
       const res = await fetch('/api/general-ledger/import', {
         method: 'POST',
         body: fd,
@@ -110,7 +112,7 @@ export default function GeneralLedgerImportPage() {
   );
 }
 
-function btn(): React.CSSProperties {
+function btn(): CSSProperties {
   return {
     padding: '8px 12px',
     border: '1px solid #ddd',
@@ -123,9 +125,9 @@ function btn(): React.CSSProperties {
   };
 }
 
-function card(): React.CSSProperties {
+function card(): CSSProperties {
   return {
-    border: '1px solid '#eee',
+    border: '1px solid #eee', // ← 修正済み（クオートミス対策）
     borderRadius: 12,
     background: 'white',
     padding: 14,
