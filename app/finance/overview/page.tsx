@@ -1,226 +1,65 @@
-'use client';
+// app/finance/overview/page.tsx  （置換）
+import { headers } from "next/headers";
 
-import { useEffect, useState } from 'react';
-
-type Overview = {
-  month_start?: string;
-  assets_total?: number;
-  liabilities_total?: number;
-  equity_total?: number;
-  bs_diff?: number;
-  revenues_total?: number;
-  expenses_total?: number;
-  net_income_signed?: number;
-  pl_diff?: number;
+type Api = {
+  month_start: string;
+  bs: { assets_total: number; liabilities_total: number; equity_total: number; diff: number };
+  pl: { revenues_total: number; expenses_total: number; net_income_signed: number; diff: number };
+  is_balanced: boolean;
 };
 
-const yen = (n?: number) =>
-  n == null
-    ? '-'
-    : new Intl.NumberFormat('ja-JP', {
-        style: 'currency',
-        currency: 'JPY',
-        maximumFractionDigits: 0,
-      }).format(n);
+export default async function Page({ searchParams }: { searchParams?: { date?: string } }) {
+  const date = searchParams?.date ?? "";
+  const host = headers().get("host")!;
+  const proto = process.env.VERCEL ? "https" : "http";
+  const url = `${proto}://${host}/api/finance/overview${date ? `?date=${date}` : ""}`;
 
-function Diff({ value }: { value?: number }) {
-  if (value == null) return <span>-</span>;
-  const ok = Number(value) === 0;
-  return (
-    <span style={{ color: ok ? 'seagreen' : 'crimson' }}>
-      {yen(value)} {ok ? '✅' : '⚠️'}
-    </span>
-  );
-}
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    return (
+      <div className="p-6">
+        <h1 className="text-xl font-semibold mb-2">Finance Overview</h1>
+        <p className="text-red-600">Error: {res.status} {res.statusText}</p>
+        <p className="text-sm text-gray-500 mt-2">URL: {url}</p>
+      </div>
+    );
+  }
 
-function Card({
-  title,
-  children,
-}: {
-  title: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        border: '1px solid #eee',
-        borderRadius: 12,
-        padding: 14,
-        background: 'white',
-      }}
-    >
-      <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 18, fontWeight: 600 }}>{children ?? '-'}</div>
-    </div>
-  );
-}
-
-export default function FinanceOverviewPage() {
-  const [loading, setLoading] = useState(true);
-  const [ov, setOv] = useState<Overview | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [month, setMonth] = useState<string>(''); // YYYY-MM
-  const [busy, setBusy] = useState(false);
-
-  const fetchLatest = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await fetch('/api/finance/overview', { cache: 'no-store' });
-      if (!r.ok) throw new Error(await r.text());
-      setOv(await r.json());
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLatest();
-  }, []);
-
-  const fetchByMonth = async () => {
-    if (!month) return;
-    const date = `${month}-01`;
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await fetch(
-        `/api/finance/overview?date=${encodeURIComponent(date)}`,
-        { cache: 'no-store' }
-      );
-      if (!r.ok) throw new Error(await r.text());
-      const data = await r.json();
-      setOv({ month_start: date, ...data });
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const refreshMVs = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await fetch('/api/finance/refresh', { method: 'POST' });
-      if (!r.ok) throw new Error(await r.text());
-      await fetchLatest();
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const data = (await res.json()) as Api;
+  const { month_start, bs, pl, is_balanced } = data;
 
   return (
-    <main style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
-        Financial Overview (final)
-      </h1>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Finance Overview</h1>
+        <span className={`px-3 py-1 rounded-full text-sm ${is_balanced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+          {is_balanced ? "OK (bs_diff/pl_diff = 0)" : "Unbalanced"}
+        </span>
+      </div>
 
-      <section
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          gap: 12,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span>月を指定</span>
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            style={{ padding: '6px 8px' }}
-          />
-        </label>
-        <button
-          onClick={fetchByMonth}
-          disabled={!month || busy}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #ddd',
-            background: '#fafafa',
-          }}
-        >
-          この月を表示
-        </button>
-        <button
-          onClick={fetchLatest}
-          disabled={busy}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #ddd',
-            background: '#fafafa',
-          }}
-        >
-          最新月を再取得
-        </button>
-        <button
-          onClick={refreshMVs}
-          disabled={busy}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #ddd',
-            background: '#eef7ff',
-          }}
-        >
-          マテビュー更新
-        </button>
-      </section>
+      <div className="text-sm text-gray-600">month_start: {month_start}</div>
 
-      {loading ? (
-        <p>読み込み中...</p>
-      ) : error ? (
-        <div style={{ color: 'crimson', whiteSpace: 'pre-wrap' }}>
-          <strong>エラー:</strong> {error}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-2xl shadow p-4">
+          <h2 className="font-medium mb-2">B/S</h2>
+          <div className="space-y-1">
+            <div>assets_total: {bs.assets_total.toLocaleString()}</div>
+            <div>liabilities_total: {bs.liabilities_total.toLocaleString()}</div>
+            <div>equity_total: {bs.equity_total.toLocaleString()}</div>
+            <div className={`${bs.diff === 0 ? "text-green-700" : "text-red-700"}`}>diff: {bs.diff}</div>
+          </div>
         </div>
-      ) : (
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 12,
-          }}
-        >
-          <Card title="対象月">
-            <div style={{ fontSize: 18 }}>{ov?.month_start ?? '-'}</div>
-          </Card>
-          <Card title="資産合計">{yen(ov?.assets_total)}</Card>
-          <Card title="負債合計">{yen(ov?.liabilities_total)}</Card>
-          <Card title="純資産合計">{yen(ov?.equity_total)}</Card>
-          <Card title="B/S差分 (A-(L+E))">
-            <Diff value={ov?.bs_diff} />
-          </Card>
-          <Card title="収益合計（YTD）">{yen(ov?.revenues_total)}</Card>
-          <Card title="費用合計（YTD）">{yen(ov?.expenses_total)}</Card>
-          <Card title="当期純利益（YTD）">
-            <span
-              style={{
-                color:
-                  (ov?.net_income_signed ?? 0) >= 0 ? 'seagreen' : 'crimson',
-              }}
-            >
-              {yen(ov?.net_income_signed)}
-            </span>
-          </Card>
-          <Card title="P/L検算差 (NI-(R-E))">
-            <Diff value={ov?.pl_diff} />
-          </Card>
-        </section>
-      )}
 
-      <p style={{ marginTop: 16, color: '#666' }}>
-        ※ B/SとP/Lの差分がいずれも 0 なら貸借一致です。必要に応じて詳細API（/api/finance/bs/snapshot,
-/api/finance/pl/snapshot）を参照してください。
-      </p>
-    </main>
+        <div className="rounded-2xl shadow p-4">
+          <h2 className="font-medium mb-2">P/L</h2>
+          <div className="space-y-1">
+            <div>revenues_total: {pl.revenues_total.toLocaleString()}</div>
+            <div>expenses_total: {pl.expenses_total.toLocaleString()}</div>
+            <div>net_income_signed: {pl.net_income_signed.toLocaleString()}</div>
+            <div className={`${pl.diff === 0 ? "text-green-700" : "text-red-700"}`}>diff: {pl.diff}</div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
