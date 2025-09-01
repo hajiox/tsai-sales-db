@@ -11,7 +11,7 @@ type Api = {
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { date?: string; refresh?: string };
+  searchParams?: { date?: string; refresh?: string; ts?: string };
 }) {
   const host = headers().get("host")!;
   const proto = process.env.VERCEL ? "https" : "http";
@@ -19,21 +19,32 @@ export default async function Page({
   const date = searchParams?.date ?? "";
   const doRefresh = searchParams?.refresh === "1";
 
-  // ?refresh=1 のときサーバー側で先に更新実行
+  // 1) 更新実行（結果を表示用に保持）
+  let refreshed:
+    | { ok: boolean; at: string; latest?: { month_start: string; bs_diff: number; pl_diff: number; is_balanced: boolean } }
+    | null = null;
+
   if (doRefresh) {
     try {
-      await fetch(`${proto}://${host}/api/finance/refresh`, {
+      const r = await fetch(`${proto}://${host}/api/finance/refresh`, {
         method: "POST",
         cache: "no-store",
       });
-    } catch {}
+      const j = (await r.json()) as any;
+      refreshed = {
+        ok: !!j?.ok,
+        at: new Date().toISOString(),
+        latest: j?.latest,
+      };
+    } catch {
+      refreshed = { ok: false, at: new Date().toISOString() };
+    }
   }
 
+  // 2) Overview取得（no-store）
   const qs = new URLSearchParams();
   if (date) qs.set("date", date);
-  const overviewUrl = `${proto}://${host}/api/finance/overview${
-    qs.size ? `?${qs.toString()}` : ""
-  }`;
+  const overviewUrl = `${proto}://${host}/api/finance/overview${qs.size ? `?${qs.toString()}` : ""}`;
 
   const res = await fetch(overviewUrl, { cache: "no-store" });
   if (!res.ok) {
@@ -45,14 +56,14 @@ export default async function Page({
       </div>
     );
   }
-
   const data = (await res.json()) as Api;
   const { month_start, bs, pl, is_balanced } = data;
 
-  // ページ内の「更新」リンク（?refresh=1 を付けるだけのGET）
+  // 3) 「更新」リンク（キャッシュ回避のため ts を付ける）
   const refreshParams = new URLSearchParams();
   if (date) refreshParams.set("date", date);
   refreshParams.set("refresh", "1");
+  refreshParams.set("ts", Date.now().toString());
   const refreshHref = `?${refreshParams.toString()}`;
 
   return (
@@ -60,22 +71,14 @@ export default async function Page({
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Finance Overview</h1>
         <div className="flex items-center gap-3">
-          {doRefresh && (
-            <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
-              refreshed
+          {refreshed && (
+            <span className={`px-2 py-1 rounded-full text-xs ${refreshed.ok ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"}`}>
+              refreshed {new Date(refreshed.at).toLocaleTimeString()}{" "}
+              {refreshed.latest ? `(bs:${refreshed.latest.bs_diff}, pl:${refreshed.latest.pl_diff})` : ""}
             </span>
           )}
-          <a
-            href={refreshHref}
-            className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50"
-          >
-            更新
-          </a>
-          <span
-            className={`px-3 py-1 rounded-full text-sm ${
-              is_balanced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-            }`}
-          >
+          <a href={refreshHref} className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50">更新</a>
+          <span className={`px-3 py-1 rounded-full text-sm ${is_balanced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
             {is_balanced ? "OK (bs_diff/pl_diff = 0)" : "Unbalanced"}
           </span>
         </div>
