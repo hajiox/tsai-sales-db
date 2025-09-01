@@ -1,4 +1,4 @@
-// app/finance/overview/page.tsx  （置換）
+// app/finance/overview/page.tsx  ←置換
 import { headers } from "next/headers";
 
 type Api = {
@@ -8,19 +8,40 @@ type Api = {
   is_balanced: boolean;
 };
 
-export default async function Page({ searchParams }: { searchParams?: { date?: string } }) {
-  const date = searchParams?.date ?? "";
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: { date?: string; refresh?: string };
+}) {
   const host = headers().get("host")!;
   const proto = process.env.VERCEL ? "https" : "http";
-  const url = `${proto}://${host}/api/finance/overview${date ? `?date=${date}` : ""}`;
 
-  const res = await fetch(url, { cache: "no-store" });
+  const date = searchParams?.date ?? "";
+  const doRefresh = searchParams?.refresh === "1";
+
+  // ?refresh=1 のときサーバー側で先に更新実行
+  if (doRefresh) {
+    try {
+      await fetch(`${proto}://${host}/api/finance/refresh`, {
+        method: "POST",
+        cache: "no-store",
+      });
+    } catch {}
+  }
+
+  const qs = new URLSearchParams();
+  if (date) qs.set("date", date);
+  const overviewUrl = `${proto}://${host}/api/finance/overview${
+    qs.size ? `?${qs.toString()}` : ""
+  }`;
+
+  const res = await fetch(overviewUrl, { cache: "no-store" });
   if (!res.ok) {
     return (
       <div className="p-6">
         <h1 className="text-xl font-semibold mb-2">Finance Overview</h1>
         <p className="text-red-600">Error: {res.status} {res.statusText}</p>
-        <p className="text-sm text-gray-500 mt-2">URL: {url}</p>
+        <p className="text-sm text-gray-500 mt-2">URL: {overviewUrl}</p>
       </div>
     );
   }
@@ -28,13 +49,36 @@ export default async function Page({ searchParams }: { searchParams?: { date?: s
   const data = (await res.json()) as Api;
   const { month_start, bs, pl, is_balanced } = data;
 
+  // ページ内の「更新」リンク（?refresh=1 を付けるだけのGET）
+  const refreshParams = new URLSearchParams();
+  if (date) refreshParams.set("date", date);
+  refreshParams.set("refresh", "1");
+  const refreshHref = `?${refreshParams.toString()}`;
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Finance Overview</h1>
-        <span className={`px-3 py-1 rounded-full text-sm ${is_balanced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-          {is_balanced ? "OK (bs_diff/pl_diff = 0)" : "Unbalanced"}
-        </span>
+        <div className="flex items-center gap-3">
+          {doRefresh && (
+            <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
+              refreshed
+            </span>
+          )}
+          <a
+            href={refreshHref}
+            className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50"
+          >
+            更新
+          </a>
+          <span
+            className={`px-3 py-1 rounded-full text-sm ${
+              is_balanced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+            }`}
+          >
+            {is_balanced ? "OK (bs_diff/pl_diff = 0)" : "Unbalanced"}
+          </span>
+        </div>
       </div>
 
       <div className="text-sm text-gray-600">month_start: {month_start}</div>
