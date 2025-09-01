@@ -1,69 +1,77 @@
 // app/api/finance/overview/route.ts
-// GET /api/finance/overview?date=YYYY-MM-DD
-// - date を付けない: 最新月のサマリを返す
-// - NODE ランタイム（Edge不可）。DATABASE_URL が必要。
-
 import { NextRequest } from "next/server";
 import { Pool } from "pg";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
-declare global {
-  // Reuse a single Pool in dev/hot-reload
-  // eslint-disable-next-line no-var
-  var _pgPool: Pool | undefined;
-}
-
+type GlobalWithPool = typeof globalThis & { __pgPool?: Pool };
+const g = globalThis as GlobalWithPool;
 const pool =
-  global._pgPool ??
+  g.__pgPool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
-    // 例: Heroku/Neon等でSSL必須なら、接続文字列に ?sslmode=require を付けてください
-    max: 10,
+    // Vercelのpooler推奨: port=6543, sslmode=require を環境変数側で設定
+    max: 5,
     idleTimeoutMillis: 30_000,
   });
+g.__pgPool = pool;
 
-if (!global._pgPool) global._pgPool = pool;
-
-const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+async function getLatestMonthStart(client: any): Promise<string> {
+  const { rows } = await client.query(
+    `SELECT month_start FROM public.v_trial_balance_final_latest LIMIT 1;`
+  );
+  return rows[0]?.month_start ?? new Date().toISOString().slice(0, 10);
+}
 
 export async function GET(req: NextRequest) {
-  if (!process.env.DATABASE_URL) {
-    return Response.json(
-      { error: "missing_DATABASE_URL" },
-      { status: 500 }
-    );
-  }
-
-  const url = new URL(req.url);
-  const date = url.searchParams.get("date");
-
-  let sql: string;
-  let params: any[] = [];
-
-  if (date && isoDate.test(date)) {
-    sql = "SELECT * FROM public.financial_overview_final_v1($1::date)";
-    params = [date];
-  } else {
-    sql = "SELECT * FROM public.v_financial_overview_final_latest";
-  }
-
+  const client = await pool.connect();
   try {
-    const client = await pool.connect();
-    try {
-      const { rows } = await client.query(sql, params);
-      // 関数は1行、ビューは1行想定
-      const body = rows[0] ?? null;
-      return Response.json(body, { status: 200 });
-    } finally {
-      client.release();
-    }
-  } catch (err: any) {
-    console.error(err);
-    return Response.json(
-      { error: "db_error", message: err?.message ?? String(err) },
-      { status: 500 }
+    const url = new URL(req.url);
+    const dateParam = url.searchParams.get("date"); // 例: 2025-04-01
+    const monthStart =
+      dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+        ? dateParam
+        : await getLatestMonthStart(client);
+
+    const { rows } = await client.query(
+      `SELECT * FROM public.financial_overview_final_v1($1::date);`,
+      [monthStart]
     );
+    const r = rows[0];
+
+    const bs_diff = Number(r.bs_diff ?? 0);
+    const pl_diff = Number(r.pl_diff ?? 0);
+    const is_balanced = bs_diff === 0 && pl_diff === 0;
+
+    return new Response(
+      JSON.stringify(
+        {
+          month_start: monthStart,
+          bs: {
+            assets_total: Number(r.assets_total ?? 0),
+            liabilities_total: Number(r.liabilities_total ?? 0),
+            equity_total: Number(r.equity_total ?? 0),
+            diff: bs_diff,
+          },
+          pl: {
+            revenues_total: Number(r.revenues_total ?? 0),
+            expenses_total: Number(r.expenses_total ?? 0),
+            net_income_signed: Number(r.net_income_signed ?? 0),
+            diff: pl_diff,
+          },
+          is_balanced,
+        },
+        null,
+        2
+      ),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  } catch (e: any) {
+    return new Response(
+      JSON.stringify({ error: e?.message ?? "internal error" }),
+      { status: 500, headers: { "content-type": "application/json" } }
+    );
+  } finally {
+    client.release();
   }
 }
