@@ -1,107 +1,143 @@
-// /app/api/food-store/import-sjis/route.ts
-// 目的: Shift_JIS(cp932)のCSVを安全にUTF-8化→全列文字列でパース→JAN検証→{ data, reportMonth }を返す
-export const runtime = "nodejs";
+// /app/api/food-store/import/route.ts ver.5
+import { NextRequest, NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
-import { NextResponse } from "next/server";
-import iconv from "iconv-lite";
-import { parse } from "csv-parse/sync";
-
-type Row = Record<string, string>;
-
-const toHalf = (s: string) =>
-  s.replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
-const normHeader = (s: string) =>
-  toHalf(String(s || "").trim()).replace(/\s+/g, "").replace(/\uFEFF/g, "");
-const digitsOnly = (v: string) => (v ?? "").replace(/\D/g, "");
-const hasEPlus = (v: string) => String(v || "").toLowerCase().includes("e+");
-
-const pickBestDecode = (buf: Buffer) => {
-  const cands = ["cp932", "Shift_JIS", "utf-8"] as const;
-  let best = { enc: "cp932" as (typeof cands)[number], score: -Infinity, text: "" };
-  for (const enc of cands) {
-    try {
-      const text = iconv.decode(buf, enc);
-      const rep = (text.match(/\uFFFD/g) || []).length; // replacement char
-      const jp = (text.match(/[\u3040-\u30ff\u4e00-\u9faf]/g) || []).length; // JP chars
-      const score = jp - rep * 10;
-      if (score > best.score) best = { enc, score, text };
-    } catch {}
-  }
-  return best.text;
-};
-
-const detectJanCol = (headers: string[]) => {
-  const idx = headers.findIndex((h) => /jan|ＪＡＮ/i.test(h));
-  return idx >= 0 ? headers[idx] : null;
-};
-
-const validateJan = (rows: Row[], janCol: string) => {
-  let bad = 0;
-  for (const r of rows) {
-    const raw = String(r[janCol] ?? "");
-    const jan = digitsOnly(raw);
-    const len = jan.length;
-    // 8〜14桁以外 or E+混入 はNG
-    if (len === 0 || len < 8 || len > 14 || hasEPlus(raw)) bad++;
-  }
-  const total = rows.length;
-  const rate = total ? bad / total : 0;
-  return { bad, total, rate };
-};
-
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
+  console.log('API Route called')
+  
   try {
-    const form = await req.formData();
-    const file = form.get("file") as File | null;
-    const reportMonth = String(form.get("report_month") ?? ""); // 例: 2025-08-01
-    if (!file)  return NextResponse.json({ error: "file is required" }, { status: 400 });
-    if (!reportMonth) return NextResponse.json({ error: "report_month is required" }, { status: 400 });
+    const body = await request.json()
+    console.log('Request body received:', { 
+      dataLength: body.data?.length,
+      firstItem: body.data?.[0]
+    })
 
-    // 生バイナリ→SJIS/CP932優先で安全デコード
-    const buf = Buffer.from(await file.arrayBuffer());
-    const text = pickBestDecode(buf);
+    const { data } = body
 
-    // 全列“文字列”でCSVパース（列名は正規化）
-    const records: Row[] = parse(text, {
-      columns: (h: string[]) => h.map(normHeader),
-      bom: true,
-      skip_empty_lines: true,
-      relax_column_count: true,
-      trim: true,
-      cast: false,
-    });
-    if (!records.length) {
-      return NextResponse.json({ error: "empty csv" }, { status: 400 });
-    }
-
-    const headers = Object.keys(records[0]);
-    const janCol = detectJanCol(headers);
-    if (!janCol) {
-      return NextResponse.json({ error: "ＪＡＮ列が見当たりません（ヘッダ名にJAN/ＪＡＮを含めてください）" }, { status: 400 });
-    }
-
-    // JANバリデーション（Excel指数表記/桁落ちを弾く）
-    const v = validateJan(records, janCol);
-    if (v.bad > 0) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
       return NextResponse.json(
-        { error: "JAN不正検出（指数表記/桁落ちの可能性）", detail: { jan_col: janCol, invalid_rows: v.bad, total_rows: v.total, invalid_rate: v.rate } },
+        { error: '有効なデータが見つかりませんでした' },
         { status: 400 }
-      );
+      )
     }
 
-    // 既存の /api/food-store/import が期待する形に整形して返す
-    // ※ ここではDB登録せず、既存ルートへフロントから渡してもらう
-    return NextResponse.json({
-      ok: true,
-      reportMonth,
-      data: records, // ← このまま既存の route.ts に { data, reportMonth } でPOSTすれば従来経路で登録される
-      stats: {
-        rows: records.length,
-        uniqueJan: new Set(records.map((r) => digitsOnly(String(r[janCol])))).size,
-        jan_col: janCol,
+    const supabase = createRouteHandlerClient({ cookies })
+
+    // 認証状態を確認
+    const { data: { session }, error: authError } = await supabase.auth.getSession()
+    if (authError) {
+      console.error('Auth error:', authError)
+      return NextResponse.json(
+        { error: '認証エラーが発生しました', details: authError.message },
+        { status: 401 }
+      )
+    }
+
+    // report_monthを最初のデータから取得
+    const reportMonth = data[0]?.report_month
+    if (!reportMonth) {
+      return NextResponse.json(
+        { error: 'レポート月が指定されていません' },
+        { status: 400 }
+      )
+    }
+
+    // 既存データの削除 - まず存在確認
+    console.log('Checking existing data for:', reportMonth)
+    const { data: existingData, error: checkError } = await supabase
+      .from('food_store_sales')
+      .select('id')
+      .eq('report_month', reportMonth)
+      .limit(1)
+
+    if (checkError) {
+      console.error('Check error:', checkError)
+      // エラーがあっても続行を試みる
+    }
+
+    if (existingData && existingData.length > 0) {
+      console.log('Deleting existing data for:', reportMonth)
+      const { error: deleteError } = await supabase
+        .from('food_store_sales')
+        .delete()
+        .eq('report_month', reportMonth)
+
+      if (deleteError) {
+        console.error('Delete error details:', {
+          message: deleteError.message,
+          details: deleteError.details,
+          hint: deleteError.hint,
+          code: deleteError.code
+        })
+        
+        // 削除エラーでも新規挿入を試みる
+        console.log('Delete failed, but attempting to continue with insert...')
+      }
+    }
+
+    // 新規データの挿入（category_idを含む）
+    console.log('Inserting new data:', data.length, 'records')
+    
+    // データを小さなバッチに分割して挿入（大量データ対策）
+    const batchSize = 100
+    let insertedCount = 0
+    
+    for (let i = 0; i < data.length; i += batchSize) {
+      const batch = data.slice(i, i + batchSize)
+      const { error: insertError } = await supabase
+        .from('food_store_sales')
+        .insert(batch)
+
+      if (insertError) {
+        console.error('Insert error at batch', i / batchSize, ':', {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code
+        })
+        
+        return NextResponse.json(
+          { 
+            error: 'データの登録に失敗しました', 
+            details: insertError.message,
+            insertedCount: insertedCount 
+          },
+          { status: 500 }
+        )
+      }
+      
+      insertedCount += batch.length
+    }
+
+    console.log('Successfully inserted', insertedCount, 'records')
+
+    return NextResponse.json({ 
+      success: true, 
+      count: insertedCount 
+    })
+
+  } catch (error: any) {
+    console.error('Import error:', error)
+    return NextResponse.json(
+      { 
+        error: 'サーバーエラーが発生しました', 
+        details: error?.message || 'Unknown error',
+        stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined
       },
-    });
-  } catch (e: any) {
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+      { status: 500 }
+    )
   }
+}
+
+// デバッグ用にGETメソッドも追加
+export async function GET() {
+  const supabase = createRouteHandlerClient({ cookies })
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  return NextResponse.json({ 
+    message: 'Food Store Import API is working',
+    authenticated: !!session,
+    timestamp: new Date().toISOString()
+  })
 }
