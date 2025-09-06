@@ -1,99 +1,189 @@
-// app/kpi/page.tsx
-import 'server-only';
-import { createClient } from '@supabase/supabase-js';
+// ver.1 — 売上KPIダッシュボード（SSR, 1ファイル版）
+// 目的: kpi.kpi_sales_monthly_computed_v2 を参照し、直近13ヶ月の売上をKPIカード+ピボット表で表示
+// 前提: 環境変数 DATABASE_URL（Postgres接続, pooler:6543 + ?sslmode=require 推奨）
+// 依存: pg（サーバーのみ） — 未導入なら: `pnpm add pg`
+// ルート: /kpi
 
-type AnyRow = Record<string, number | null | string>;
-type ChannelBlock = { channel_code: string; channel_name: string; rows: AnyRow[] };
-type Dashboard = {
-  fy_start_year: number;
-  sales_total: AnyRow[];
-  sales_by_channel: ChannelBlock[];
-  manual_kpis: AnyRow[];
-};
+import { Pool } from "pg";
+import React from "react";
 
-const MONTHS = ['8月','9月','10月','11月','12月','1月','2月','3月','4月','5月','6月','7月','計'];
+export const runtime = "nodejs"; // Node ランタイム固定
+export const dynamic = "force-dynamic"; // 常に最新を取得
 
-function fmt(v: number | null | string) {
-  if (v === null || v === undefined || v === '') return '—';
-  if (typeof v === 'number') return v.toLocaleString('ja-JP');
-  return String(v);
+// 単一Pool（Lambda再利用でも安全なようにmodule scopeで保持）
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes("sslmode=")
+    ? undefined
+    : { rejectUnauthorized: false },
+});
+
+// 型
+interface Row {
+  channel_code: string;
+  fiscal_month: string; // ISO (YYYY-MM-01)
+  amount: number;
 }
 
-function Table({ title, rows }: { title: string; rows: AnyRow[] }) {
-  if (!rows?.length) return (
-    <section className="mb-8">
-      <h2 className="text-xl font-semibold mb-2">{title}</h2>
-      <div className="text-sm text-gray-500">データなし</div>
-    </section>
-  );
+// 通貨フォーマッタ
+const jpy = (v: number | null | undefined) =>
+  v == null ? "—" : v.toLocaleString("ja-JP", { maximumFractionDigits: 0 });
 
-  // 想定フォーマット: { row: '今年度目標', '8月':0, ..., '計':0 }
-  const cols = ['row', ...MONTHS];
+// 月ラベル（YYYY-MM）
+const ym = (isoDate: string) => isoDate.slice(0, 7);
 
-  return (
-    <section className="mb-8">
-      <h2 className="text-xl font-semibold mb-2">{title}</h2>
-      <div className="overflow-x-auto rounded-2xl shadow">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              {cols.map((c) => (
-                <th key={c} className="px-3 py-2 text-left whitespace-nowrap">{c === 'row' ? '指標' : c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="odd:bg-white even:bg-gray-50">
-                {cols.map((c) => (
-                  <td key={c} className="px-3 py-2 whitespace-nowrap">
-                    {c === 'row' ? r['row'] as string : fmt(r[c] as number | null)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-export default async function Page({ searchParams }: { searchParams?: { fy?: string } }) {
-  const fy = Number(searchParams?.fy ?? 2024); // 例: /kpi?fy=2025
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!; // サーバ側のみ利用
-  const sb = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
-
-  const { data, error } = await sb.rpc('get_dashboard_json_v1', { p_fy_start_year: fy });
-  if (error) {
-    return (
-      <main className="p-6">
-        <h1 className="text-2xl font-bold mb-4">KPI ダッシュボード</h1>
-        <div className="text-red-600 text-sm">RPCエラー: {error.message}</div>
-      </main>
+async function fetchData(): Promise<Row[]> {
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "環境変数 DATABASE_URL が未設定です。Postgres接続文字列を設定してください。"
     );
   }
 
-  const d = data as Dashboard;
+  const sql = `
+    SELECT
+      channel_code,
+      (fiscal_month)::date AS fiscal_month,
+      actual_amount_yen::bigint AS amount
+    FROM kpi.kpi_sales_monthly_computed_v2
+    WHERE fiscal_month >= date_trunc('month', (current_date - interval '12 months'))
+    ORDER BY fiscal_month ASC, channel_code ASC;
+  `;
+
+  const { rows } = await pool.query(sql);
+  // fiscal_monthをISO文字列に統一（タイムゾーン影響排除）
+  return rows.map((r: any) => ({
+    channel_code: r.channel_code as string,
+    fiscal_month: new Date(r.fiscal_month).toISOString().slice(0, 10),
+    amount: Number(r.amount),
+  }));
+}
+
+function computePivot(rows: Row[]) {
+  const monthsSet = new Set<string>();
+  const channelsSet = new Set<string>();
+  const map = new Map<string, number>(); // key: channel|month(YYYY-MM)
+
+  for (const r of rows) {
+    const m = ym(r.fiscal_month);
+    monthsSet.add(m);
+    channelsSet.add(r.channel_code);
+    map.set(`${r.channel_code}|${m}`, (map.get(`${r.channel_code}|${m}`) || 0) + r.amount);
+  }
+
+  const months = Array.from(monthsSet).sort();
+  const channels = Array.from(channelsSet).sort();
+
+  // 月別合計
+  const monthTotals = months.map((m) =>
+    channels.reduce((sum, c) => sum + (map.get(`${c}|${m}`) || 0), 0)
+  );
+
+  // 最新月/前月/前年比
+  const latestIdx = months.length - 1;
+  const prevIdx = latestIdx - 1;
+  const yoyIdx = latestIdx - 12;
+
+  const latestTotal = latestIdx >= 0 ? monthTotals[latestIdx] : null;
+  const prevTotal = prevIdx >= 0 ? monthTotals[prevIdx] : null;
+  const yoyTotal = yoyIdx >= 0 ? monthTotals[yoyIdx] : null;
+
+  const momDelta =
+    latestTotal != null && prevTotal != null ? latestTotal - prevTotal : null;
+  const momPct =
+    latestTotal != null && prevTotal ? (latestTotal / prevTotal - 1) * 100 : null;
+
+  const yoyDelta =
+    latestTotal != null && yoyTotal != null ? latestTotal - yoyTotal : null;
+  const yoyPct =
+    latestTotal != null && yoyTotal ? (latestTotal / yoyTotal - 1) * 100 : null;
+
+  return { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct };
+}
+
+export default async function Page() {
+  const rows = await fetchData();
+  const { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct } =
+    computePivot(rows);
+
+  const latestLabel = months.length ? months[months.length - 1] : "—";
 
   return (
-    <main className="p-6 space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">KPI ダッシュボード</h1>
-        <div className="text-sm text-gray-600">FY {d.fy_start_year}（{d.fy_start_year}-08 〜 {d.fy_start_year + 1}-07）</div>
+    <div className="p-6 space-y-6">
+      <header className="flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">売上KPIダッシュボード</h1>
+          <p className="text-sm text-muted-foreground">直近13ヶ月 / ソース: kpi.kpi_sales_monthly_computed_v2</p>
+        </div>
+        <div className="text-sm text-muted-foreground">最新月: {latestLabel}</div>
       </header>
 
-      {/* 1) 全社トータル */}
-      <Table title="全社トータル（売上）" rows={d.sales_total} />
+      {/* KPI Cards */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard title={`{${latestLabel}} 売上合計`} value={`¥${jpy(latestTotal ?? 0)}`} sub={"（税抜/税込はデータ定義に依存）"} />
+        <KpiCard
+          title="前月比 (MoM)"
+          value={momDelta == null ? "—" : `${momDelta >= 0 ? "+" : ""}¥${jpy(momDelta)}`}
+          sub={momPct == null ? "—" : `${momPct >= 0 ? "+" : ""}${momPct.toFixed(1)}%`}
+        />
+        <KpiCard
+          title="前年比 (YoY)"
+          value={yoyDelta == null ? "—" : `${yoyDelta >= 0 ? "+" : ""}¥${jpy(yoyDelta)}`}
+          sub={yoyPct == null ? "—" : `${yoyPct >= 0 ? "+" : ""}${yoyPct.toFixed(1)}%`}
+        />
+      </section>
 
-      {/* 2) チャネル別 */}
-      {d.sales_by_channel?.map((ch) => (
-        <Table key={ch.channel_code} title={`${ch.channel_name}`} rows={ch.rows} />
-      ))}
+      {/* ピボット表 */}
+      <section className="overflow-x-auto">
+        <table className="min-w-full border-separate border-spacing-0">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 bg-white/80 backdrop-blur border-b px-3 py-2 text-left text-xs font-medium text-muted-foreground">Channel</th>
+              {months.map((m) => (
+                <th key={m} className="border-b px-3 py-2 text-right text-xs font-medium text-muted-foreground">
+                  {m}
+                </th>
+              ))}
+              <th className="border-b px-3 py-2 text-right text-xs font-medium text-muted-foreground">合計</th>
+            </tr>
+          </thead>
+          <tbody>
+            {channels.map((c, i) => {
+              const rowTotal = months.reduce((s, m) => s + (map.get(`${c}|${m}`) || 0), 0);
+              return (
+                <tr key={c} className={i % 2 ? "bg-muted/20" : "bg-white"}>
+                  <td className="sticky left-0 z-10 bg-inherit border-b px-3 py-2 text-sm font-medium">{c}</td>
+                  {months.map((m) => (
+                    <td key={m} className="border-b px-3 py-2 text-right tabular-nums">¥{jpy(map.get(`${c}|${m}`) || 0)}</td>
+                  ))}
+                  <td className="border-b px-3 py-2 text-right font-semibold tabular-nums">¥{jpy(rowTotal)}</td>
+                </tr>
+              );
+            })}
+            {/* 月合計行 */}
+            <tr>
+              <td className="sticky left-0 z-10 bg-white border-t px-3 py-2 text-sm font-semibold">月合計</td>
+              {monthTotals.map((v, idx) => (
+                <td key={idx} className="border-t px-3 py-2 text-right font-semibold tabular-nums">¥{jpy(v)}</td>
+              ))}
+              <td className="border-t px-3 py-2 text-right font-semibold tabular-nums">¥{jpy(monthTotals.reduce((a, b) => a + b, 0))}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
-      {/* 3) 製造・営業KPI（手入力系） */}
-      <Table title="製造・営業KPI" rows={d.manual_kpis} />
-    </main>
+      <footer className="text-xs text-muted-foreground">
+        次ステップ（ver.2）予定: ①月次スタック棒グラフ（Recharts）②チャネルフィルタ/年度切替 ③CSVエクスポート
+      </footer>
+    </div>
+  );
+}
+
+function KpiCard({ title, value, sub }: { title: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-2xl border p-4 shadow-sm">
+      <div className="text-xs text-muted-foreground">{title}</div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{value}</div>
+      {sub ? <div className="mt-1 text-xs text-muted-foreground">{sub}</div> : null}
+    </div>
   );
 }
