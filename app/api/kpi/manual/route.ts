@@ -1,6 +1,6 @@
 // /app/api/kpi/manual/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query } from '@/lib/db/pool';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(rows);
 }
 
-// POST: { metric:'TARGET|BUDGET|ADJUSTMENT', channel_code:'SHOKU|STORE|WEB|WHOLESALE|TOTAL', month:'YYYY-MM|YYYY-MM-01', amount:number, note?:string }
+// POST: { metric, channel_code, month:'YYYY-MM|YYYY-MM-01', amount, note? }
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const metric = String(body.metric || '');
@@ -37,13 +37,12 @@ export async function POST(req: NextRequest) {
   const amount = Number(body.amount || 0);
   const note = String(body.note || '');
 
-  if (!['TARGET','BUDGET','ADJUSTMENT'].includes(metric)) return NextResponse.json({ error: 'invalid metric' }, { status: 400 });
-  if (!['SHOKU','STORE','WEB','WHOLESALE','TOTAL'].includes(channel)) return NextResponse.json({ error: 'invalid channel' }, { status: 400 });
-  if (!monthIso || Number.isNaN(m.getTime())) return NextResponse.json({ error: 'invalid month' }, { status: 400 });
-  if (amount < 0) return NextResponse.json({ error: 'invalid amount' }, { status: 400 });
+  if (!['TARGET','BUDGET','ADJUSTMENT'].includes(metric))  return NextResponse.json({ error:'invalid metric' },  { status:400 });
+  if (!['SHOKU','STORE','WEB','WHOLESALE','TOTAL'].includes(channel)) return NextResponse.json({ error:'invalid channel' }, { status:400 });
+  if (!monthIso || Number.isNaN(m.getTime())) return NextResponse.json({ error:'invalid month' },   { status:400 });
+  if (amount < 0)                               return NextResponse.json({ error:'invalid amount' }, { status:400 });
 
   const monthFirst = new Date(m.getFullYear(), m.getMonth(), 1);
-
   const sql = `
     INSERT INTO kpi.kpi_manual_monthly (metric, channel_code, month, amount, note)
     VALUES ($1,$2,$3,$4,$5)
@@ -63,12 +62,12 @@ export async function DELETE(req: NextRequest) {
   const rawMonth = String(body.month || '');
   const monthIso = rawMonth.length === 7 ? `${rawMonth}-01` : rawMonth;
   const m = new Date(monthIso);
-  if (!['TARGET','BUDGET','ADJUSTMENT'].includes(metric)) return NextResponse.json({ error: 'invalid metric' }, { status: 400 });
-  if (!['SHOKU','STORE','WEB','WHOLESALE','TOTAL'].includes(channel)) return NextResponse.json({ error: 'invalid channel' }, { status: 400 });
-  if (!monthIso || Number.isNaN(m.getTime())) return NextResponse.json({ error: 'invalid month' }, { status: 400 });
+
+  if (!['TARGET','BUDGET','ADJUSTMENT'].includes(metric))  return NextResponse.json({ error:'invalid metric' },  { status:400 });
+  if (!['SHOKU','STORE','WEB','WHOLESALE','TOTAL'].includes(channel)) return NextResponse.json({ error:'invalid channel' }, { status:400 });
+  if (!monthIso || Number.isNaN(m.getTime())) return NextResponse.json({ error:'invalid month' },   { status:400 });
 
   const monthFirst = new Date(m.getFullYear(), m.getMonth(), 1);
-
   const sql = `
     DELETE FROM kpi.kpi_manual_monthly
     WHERE metric=$1 AND channel_code=$2 AND month=$3
