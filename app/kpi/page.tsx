@@ -1,9 +1,8 @@
-// ver.4 — 売上KPIダッシュボード（不具合修正）
-// 修正内容:
-//  1) 未来月が混入しKPIが0になる問題 → SQLで上限を「今月」までに制限
-//  2) KPIカードが最終列（ゼロ月）を拾ってしまう問題 → 直近で合計>0 の月を自動検知して採用
-//  3) MoM/YoY パーセンテージの 0 除算を回避
-//  4) WEB正規化（AMAZON/RAKUTEN/YAHOO/MERCARI/BASE/QOO10など）は維持
+// ver.5 — 売上KPIダッシュボード（“各システムの月次合計をそのままコピー”方式）
+// 仕様: DB内で各システムが公開する「月次合計の最終ビュー」だけをUNIONした
+//       kpi.kpi_sales_monthly_final_v1 をソースに採用。UI側では一切再計算しない。
+// 期待カラム: (channel_code text in ['SHOKU','STORE','WEB','WHOLESALE'], month date (月初), amount bigint)
+// 範囲: 直近13ヶ月（今月まで）。KPIは直近で“月合計>0”の月を採用。
 
 import { Pool } from "pg";
 import React from "react";
@@ -19,19 +18,6 @@ const CHANNEL_LABEL: Record<(typeof ALL_CHANNELS)[number], string> = {
   WHOLESALE: "外販・OEM（本社）",
 };
 
-// ECサイト別コード → WEB への正規化辞書/ルール
-const EC_ALIASES = new Set(["WEB", "EC", "ONLINE", "NET", "AMAZON", "RAKUTEN", "YAHOO", "MERCARI", "BASE", "QOO10"]);
-function normalizeChannel(raw: string): (typeof ALL_CHANNELS)[number] | null {
-  if (!raw) return null;
-  const up = String(raw).trim().toUpperCase();
-  if (EC_ALIASES.has(up) || /^(WEB|EC|ONLINE|NET)[-_]/.test(up)) return "WEB";
-  if (["STORE", "RETAIL", "ABH_STORE", "BRANDHALL_STORE"].includes(up)) return "STORE";
-  if (["SHOKU", "SHOKU_道の駅", "MICHINOEKI", "FOOD_HALL"].includes(up)) return "SHOKU";
-  if (["WHOLESALE", "OEM", "B2B", "OUTBOUND"].includes(up)) return "WHOLESALE";
-  if (/AMAZON|RAKUTEN|YAHOO|MERCARI|BASE|QOO10/.test(up)) return "WEB";
-  return null;
-}
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL?.includes("sslmode=") ? undefined : { rejectUnauthorized: false },
@@ -43,15 +29,17 @@ const ym = (isoDate: string) => isoDate.slice(0, 7);
 
 async function fetchData(): Promise<Row[]> {
   if (!process.env.DATABASE_URL) throw new Error("環境変数 DATABASE_URL が未設定です。Postgres接続文字列を設定してください。");
-  // 直近13ヶ月かつ「今月以下」に制限（未来月混入をブロック）
+  // 各システム最終ビューをUNIONした “確定値” ビューのみ参照
   const sql = `
     WITH range AS (
       SELECT date_trunc('month', current_date - interval '12 months') AS from_m,
              date_trunc('month', current_date)                         AS to_m
     )
-    SELECT channel_code, (fiscal_month)::date AS fiscal_month, actual_amount_yen::bigint AS amount
-    FROM kpi.kpi_sales_monthly_computed_v2, range
-    WHERE fiscal_month BETWEEN from_m AND to_m
+    SELECT channel_code,
+           (month)::date AS fiscal_month,
+           amount::bigint AS amount
+    FROM kpi.kpi_sales_monthly_final_v1, range
+    WHERE month BETWEEN from_m AND to_m
     ORDER BY fiscal_month ASC, channel_code ASC;
   `;
   const { rows } = await pool.query(sql);
@@ -65,15 +53,11 @@ async function fetchData(): Promise<Row[]> {
 function computePivot(rows: Row[]) {
   const map = new Map<string, number>(); // key: channel|YYYY-MM
   const monthsSet = new Set<string>();
-  const rawChannels = new Set<string>();
 
   for (const r of rows) {
     const m = ym(r.fiscal_month);
     monthsSet.add(m);
-    rawChannels.add(String(r.channel_code));
-    const norm = normalizeChannel(r.channel_code);
-    if (!norm) continue;
-    const key = `${norm}|${m}`;
+    const key = `${r.channel_code}|${m}`;
     map.set(key, (map.get(key) || 0) + r.amount);
   }
 
@@ -96,7 +80,6 @@ function computePivot(rows: Row[]) {
   const yoyTotal    = yoyIdx    >= 0 ? monthTotals[yoyIdx]    : null;
 
   const safePct = (num: number | null, den: number | null) => (num != null && den != null && den !== 0 ? (num / den - 1) * 100 : null);
-
   const momDelta = latestTotal != null && prevTotal != null ? latestTotal - prevTotal : null;
   const momPct   = safePct(latestTotal, prevTotal);
   const yoyDelta = latestTotal != null && yoyTotal != null ? latestTotal - yoyTotal : null;
@@ -111,12 +94,12 @@ function computePivot(rows: Row[]) {
     return { channel: c, latest: latestVal, yoyDelta: d, yoyPct: p };
   });
 
-  return { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, rawChannels: Array.from(rawChannels).sort(), latestIdx };
+  return { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestIdx };
 }
 
 export default async function Page() {
   const rows = await fetchData();
-  const { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, rawChannels, latestIdx } = computePivot(rows);
+  const { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestIdx } = computePivot(rows);
   const latestLabel = months.length ? months[latestIdx] : "—";
 
   return (
@@ -124,16 +107,14 @@ export default async function Page() {
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">売上KPIダッシュボード</h1>
-          <p className="text-sm text-muted-foreground">
-            直近13ヶ月 / 今月まで / 並び: 食の→店舗→WEB→外販（WEBはECサイト別コードも合算） / KPIは直近“非ゼロ月”を採用
-          </p>
+          <p className="text-sm text-muted-foreground">直近13ヶ月（今月まで）/ データソース: kpi.kpi_sales_monthly_final_v1（各システム最終月次合計のUNION）</p>
         </div>
         <div className="text-sm text-muted-foreground">最新月（検知）: {latestLabel}</div>
       </header>
 
       {/* トータルKPI */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard title={`{${latestLabel}} 売上合計`} value={`¥${jpy(latestTotal ?? 0)}`} sub={"（税抜/税込はデータ定義に依存）"} />
+        <KpiCard title={`{${latestLabel}} 売上合計`} value={`¥${jpy(latestTotal ?? 0)}`} sub={"（税抜/税込は各システムの定義に依存）"} />
         <KpiCard title="前月比 (MoM)" value={momDelta == null ? "—" : `${momDelta >= 0 ? "+" : ""}¥${jpy(momDelta)}`} sub={momPct == null ? "—" : `${momPct >= 0 ? "+" : ""}${momPct.toFixed(1)}%`} />
         <KpiCard title="前年比 (YoY)" value={yoyDelta == null ? "—" : `${yoyDelta >= 0 ? "+" : ""}¥${jpy(yoyDelta)}`} sub={yoyPct == null ? "—" : `${yoyPct >= 0 ? "+" : ""}${yoyPct.toFixed(1)}%`} />
       </section>
@@ -186,8 +167,8 @@ export default async function Page() {
       </section>
 
       <footer className="text-xs text-muted-foreground space-y-1">
-        <div>Raw channel codes: {rawChannels.join(', ') || '—'}</div>
-        <div>次ステップ（ver.5）: ①目標テーブルJOIN（達成率%） ②年度切替 ③CSV ④Recharts</div>
+        <div>※ 本画面は各システムが公開する「月次合計：確定値」のUNIONのみを表示（UI側で再計算なし）。</div>
+        <div>次ステップ（ver.6）: ①年度セレクタ ②目標JOIN（達成率%） ③CSV ④Recharts</div>
       </footer>
     </div>
   );
