@@ -1,9 +1,9 @@
-// ver.3 — 売上KPIダッシュボード（WEBの未集計対策：ECサイト別コードもWEBに正規化）
-// 変更点:
-//  - ‘WEB’ が0表示になる事象に対し、AMAZON/RAKUTEN/YAHOO/MERCARI/BASE/QOO10 等のECサイト別コードを
-//    UI側で ‘WEB’ に正規化して合算。
-//  - フッターに“取得した生チャンネルコード一覧”を表示し、マッピングの有効性を即時確認可能。
-//  - 並びは引き続き PDF「年間目標数値」順（食の→店舗→WEB→外販）。
+// ver.4 — 売上KPIダッシュボード（不具合修正）
+// 修正内容:
+//  1) 未来月が混入しKPIが0になる問題 → SQLで上限を「今月」までに制限
+//  2) KPIカードが最終列（ゼロ月）を拾ってしまう問題 → 直近で合計>0 の月を自動検知して採用
+//  3) MoM/YoY パーセンテージの 0 除算を回避
+//  4) WEB正規化（AMAZON/RAKUTEN/YAHOO/MERCARI/BASE/QOO10など）は維持
 
 import { Pool } from "pg";
 import React from "react";
@@ -20,12 +20,7 @@ const CHANNEL_LABEL: Record<(typeof ALL_CHANNELS)[number], string> = {
 };
 
 // ECサイト別コード → WEB への正規化辞書/ルール
-const EC_ALIASES = new Set([
-  "WEB", "EC", "ONLINE", "NET",
-  // サイト名（大文字前提で比較・小文字も後で吸収）
-  "AMAZON", "RAKUTEN", "YAHOO", "MERCARI", "BASE", "QOO10",
-]);
-
+const EC_ALIASES = new Set(["WEB", "EC", "ONLINE", "NET", "AMAZON", "RAKUTEN", "YAHOO", "MERCARI", "BASE", "QOO10"]);
 function normalizeChannel(raw: string): (typeof ALL_CHANNELS)[number] | null {
   if (!raw) return null;
   const up = String(raw).trim().toUpperCase();
@@ -33,9 +28,8 @@ function normalizeChannel(raw: string): (typeof ALL_CHANNELS)[number] | null {
   if (["STORE", "RETAIL", "ABH_STORE", "BRANDHALL_STORE"].includes(up)) return "STORE";
   if (["SHOKU", "SHOKU_道の駅", "MICHINOEKI", "FOOD_HALL"].includes(up)) return "SHOKU";
   if (["WHOLESALE", "OEM", "B2B", "OUTBOUND"].includes(up)) return "WHOLESALE";
-  // サイト名を含む ‘WEB_楽天’ ‘AMAZON_WEB’ 等もWEBへ
   if (/AMAZON|RAKUTEN|YAHOO|MERCARI|BASE|QOO10/.test(up)) return "WEB";
-  return null; // 既知以外は非表示（必要ならWHOLESALE等にフォールバック可能）
+  return null;
 }
 
 const pool = new Pool({
@@ -49,10 +43,15 @@ const ym = (isoDate: string) => isoDate.slice(0, 7);
 
 async function fetchData(): Promise<Row[]> {
   if (!process.env.DATABASE_URL) throw new Error("環境変数 DATABASE_URL が未設定です。Postgres接続文字列を設定してください。");
+  // 直近13ヶ月かつ「今月以下」に制限（未来月混入をブロック）
   const sql = `
+    WITH range AS (
+      SELECT date_trunc('month', current_date - interval '12 months') AS from_m,
+             date_trunc('month', current_date)                         AS to_m
+    )
     SELECT channel_code, (fiscal_month)::date AS fiscal_month, actual_amount_yen::bigint AS amount
-    FROM kpi.kpi_sales_monthly_computed_v2
-    WHERE fiscal_month >= date_trunc('month', (current_date - interval '12 months'))
+    FROM kpi.kpi_sales_monthly_computed_v2, range
+    WHERE fiscal_month BETWEEN from_m AND to_m
     ORDER BY fiscal_month ASC, channel_code ASC;
   `;
   const { rows } = await pool.query(sql);
@@ -73,7 +72,7 @@ function computePivot(rows: Row[]) {
     monthsSet.add(m);
     rawChannels.add(String(r.channel_code));
     const norm = normalizeChannel(r.channel_code);
-    if (!norm) continue; // 未知コードは今は無視
+    if (!norm) continue;
     const key = `${norm}|${m}`;
     map.set(key, (map.get(key) || 0) + r.amount);
   }
@@ -83,43 +82,53 @@ function computePivot(rows: Row[]) {
 
   const monthTotals = months.map((m) => channels.reduce((sum, c) => sum + (map.get(`${c}|${m}`) || 0), 0));
 
-  const latestIdx = months.length - 1;
+  // 直近で合計>0の月を採用（なければ末尾）
+  const lastIdx = months.length - 1;
+  let latestIdx = lastIdx;
+  for (let i = lastIdx; i >= 0; i--) {
+    if ((monthTotals[i] || 0) > 0) { latestIdx = i; break; }
+  }
   const prevIdx = latestIdx - 1;
-  const yoyIdx = latestIdx - 12;
+  const yoyIdx  = latestIdx - 12;
 
   const latestTotal = latestIdx >= 0 ? monthTotals[latestIdx] : null;
-  const prevTotal = prevIdx >= 0 ? monthTotals[prevIdx] : null;
-  const yoyTotal = yoyIdx >= 0 ? monthTotals[yoyIdx] : null;
+  const prevTotal   = prevIdx   >= 0 ? monthTotals[prevIdx]   : null;
+  const yoyTotal    = yoyIdx    >= 0 ? monthTotals[yoyIdx]    : null;
+
+  const safePct = (num: number | null, den: number | null) => (num != null && den != null && den !== 0 ? (num / den - 1) * 100 : null);
+
   const momDelta = latestTotal != null && prevTotal != null ? latestTotal - prevTotal : null;
-  const momPct = latestTotal != null && prevTotal ? (latestTotal / prevTotal - 1) * 100 : null;
+  const momPct   = safePct(latestTotal, prevTotal);
   const yoyDelta = latestTotal != null && yoyTotal != null ? latestTotal - yoyTotal : null;
-  const yoyPct = latestTotal != null && yoyTotal ? (latestTotal / yoyTotal - 1) * 100 : null;
+  const yoyPct   = safePct(latestTotal, yoyTotal);
 
   type ChannelKPI = { channel: (typeof ALL_CHANNELS)[number]; latest: number | null; yoyDelta: number | null; yoyPct: number | null };
   const perChannel: ChannelKPI[] = channels.map((c) => {
     const latestVal = latestIdx >= 0 ? (map.get(`${c}|${months[latestIdx]}`) || 0) : null;
-    const yoyVal = yoyIdx >= 0 ? (map.get(`${c}|${months[yoyIdx]}`) || 0) : null;
+    const yoyVal    = yoyIdx    >= 0 ? (map.get(`${c}|${months[yoyIdx]}`)    || 0) : null;
     const d = latestVal != null && yoyVal != null ? latestVal - yoyVal : null;
-    const p = latestVal != null && yoyVal ? (latestVal / yoyVal - 1) * 100 : null;
+    const p = safePct(latestVal, yoyVal);
     return { channel: c, latest: latestVal, yoyDelta: d, yoyPct: p };
   });
 
-  return { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, rawChannels: Array.from(rawChannels).sort() };
+  return { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, rawChannels: Array.from(rawChannels).sort(), latestIdx };
 }
 
 export default async function Page() {
   const rows = await fetchData();
-  const { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, rawChannels } = computePivot(rows);
-  const latestLabel = months.length ? months[months.length - 1] : "—";
+  const { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, rawChannels, latestIdx } = computePivot(rows);
+  const latestLabel = months.length ? months[latestIdx] : "—";
 
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">売上KPIダッシュボード</h1>
-          <p className="text-sm text-muted-foreground">直近13ヶ月 / ソース: kpi.kpi_sales_monthly_computed_v2 / 並び: 食のブランド館→店舗→WEB→外販</p>
+          <p className="text-sm text-muted-foreground">
+            直近13ヶ月 / 今月まで / 並び: 食の→店舗→WEB→外販（WEBはECサイト別コードも合算） / KPIは直近“非ゼロ月”を採用
+          </p>
         </div>
-        <div className="text-sm text-muted-foreground">最新月: {latestLabel}</div>
+        <div className="text-sm text-muted-foreground">最新月（検知）: {latestLabel}</div>
       </header>
 
       {/* トータルKPI */}
@@ -177,9 +186,8 @@ export default async function Page() {
       </section>
 
       <footer className="text-xs text-muted-foreground space-y-1">
-        <div>※ この画面は PDF「年間目標数値」の構成に準拠したチャネル順で表示しています（WEBはECサイト別コードも合算）。</div>
         <div>Raw channel codes: {rawChannels.join(', ') || '—'}</div>
-        <div>次ステップ（ver.4）予定: ①目標テーブルJOIN（達成率%） ②年度切替 ③CSV ④Recharts</div>
+        <div>次ステップ（ver.5）: ①目標テーブルJOIN（達成率%） ②年度切替 ③CSV ④Recharts</div>
       </footer>
     </div>
   );
