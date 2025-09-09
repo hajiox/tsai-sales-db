@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase';
+import { getSupabaseBrowserClient } from '@/lib/supabase';
 import { nf } from '@/lib/utils';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,13 @@ const FormInput = ({ id, label, value, onChange }: { id: string, label: string, 
 
 export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyData, onDataUpdate, accessToken }: DailySalesCrudFormProps) {
     const [formData, setFormData] = useState<any>({});
+    const supabase = getSupabaseBrowserClient();
+
+    useEffect(() => {
+        if (accessToken) {
+            supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
+        }
+    }, [accessToken, supabase]);
 
     useEffect(() => {
         // 修正: 直接テーブルから取得したデータ構造に対応
@@ -61,20 +68,18 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyDat
 
     const handleSave = async () => {
         if (!accessToken) { toast.error('エラー: 認証トークンがありません'); return; }
-        const supabase = createAuthenticatedSupabaseClient(accessToken);
         const dataToSave = { date: selectedDate, ...formData };
         for(const key in dataToSave) { if (dataToSave[key] === '') { dataToSave[key] = null; } }
         const { error } = await supabase.from('daily_sales_report').upsert(dataToSave, { onConflict: 'date' });
-        if (error) { toast.error(`保存に失敗しました: ${error.message}`); } 
+        if (error) { toast.error(`保存に失敗しました: ${error.message}`); }
         else { toast.success(`${selectedDate}のデータを保存しました。`); onDataUpdate(); }
     };
 
     const handleDelete = async () => {
         if (!accessToken) { toast.error('エラー: 認証トークンがありません'); return; }
         if (!confirm(`${selectedDate}のデータを本当に削除しますか？`)) return;
-        const supabase = createAuthenticatedSupabaseClient(accessToken);
         const { error } = await supabase.from('daily_sales_report').delete().eq('date', selectedDate);
-        if (error) { toast.error(`削除に失敗しました: ${error.message}`); } 
+        if (error) { toast.error(`削除に失敗しました: ${error.message}`); }
         else { toast.success(`${selectedDate}のデータを削除しました。`); onDataUpdate(); }
     };
 
