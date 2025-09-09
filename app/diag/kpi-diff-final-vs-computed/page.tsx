@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -5,14 +7,47 @@ export const revalidate = 0;
 const JPY = (n:number)=>new Intl.NumberFormat("ja-JP",{style:"currency",currency:"JPY",maximumFractionDigits:0}).format(n||0);
 const CHS = ["WEB","WHOLESALE","STORE","SHOKU","OTHER"];
 
+// 同一オリジンの絶対URLを安全に生成（相対fetchでの実行時差異を回避）
+function makeAbsolute(path: string) {
+  const h = headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  return `${proto}://${host}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export default async function Page(){
-  const res = await fetch(`/api/diag/kpi-diff-final-vs-computed`, { cache:"no-store" });
-  const data = await res.json();
+  const url = makeAbsolute("/api/diag/kpi-diff-final-vs-computed");
+
+  // 失敗時は text まで表示して原因を潰す
+  let data: any = null;
+  try {
+    const res = await fetch(url, { cache:"no-store" });
+    const text = await res.text();
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return (
+        <main className="p-6">
+          <h1 className="text-xl font-semibold">final vs computed 差分</h1>
+          <p className="text-sm text-red-600">API応答がJSONではありません。下に生の応答を表示します。</p>
+          <pre className="mt-4 text-xs whitespace-pre-wrap">{text}</pre>
+        </main>
+      );
+    }
+  } catch (e:any) {
+    return (
+      <main className="p-6">
+        <h1 className="text-xl font-semibold">final vs computed 差分</h1>
+        <p className="text-sm text-red-600">fetchに失敗: {String(e?.message ?? e)}</p>
+      </main>
+    );
+  }
 
   if(!data?.ok){
     return (
       <main className="p-6">
         <h1 className="text-xl font-semibold">final vs computed 差分</h1>
+        <p className="text-sm text-red-600">APIからエラーが返りました。</p>
         <pre className="mt-4 text-xs whitespace-pre-wrap">{JSON.stringify(data,null,2)}</pre>
       </main>
     );
@@ -30,7 +65,7 @@ export default async function Page(){
       </header>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-medium">月次差分（非0のみ強調）</h2>
+        <h2 className="text-lg font-medium">月次差分</h2>
         <div className="overflow-x-auto rounded-2xl border">
           <table className="min-w-[900px] w-full text-sm">
             <thead className="bg-neutral-50">
@@ -44,13 +79,15 @@ export default async function Page(){
               {months.map(m=>{
                 const row = data.delta[m] || {};
                 const has = Object.keys(row).length>0;
-                if(!has) return (
-                  <tr key={m} className="border-t">
-                    <td className="px-3 py-2 font-medium">{m}</td>
-                    {CHS.map(c=> <td key={`${m}-${c}`} className="px-3 py-2 text-right">—</td>)}
-                    <td className="px-3 py-2 text-right">—</td>
-                  </tr>
-                );
+                if(!has) {
+                  return (
+                    <tr key={m} className="border-t">
+                      <td className="px-3 py-2 font-medium">{m}</td>
+                      {CHS.map(c=> <td key={`${m}-${c}`} className="px-3 py-2 text-right">—</td>)}
+                      <td className="px-3 py-2 text-right">—</td>
+                    </tr>
+                  );
+                }
                 return (
                   <tr key={m} className="border-t">
                     <td className="px-3 py-2 font-medium">{m}</td>
