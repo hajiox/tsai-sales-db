@@ -1,6 +1,7 @@
 // ver.5 — 売上KPIダッシュボード（“各システムの月次合計をそのままコピー”方式）
-// 仕様: DB内で各システムが公開する「月次合計の最終ビュー」だけをUNIONした
-//       kpi.kpi_sales_monthly_final_v1 をソースに採用。UI側では一切再計算しない。
+// 仕様: DB内で各システムが公開する「月次合計の最終ビュー」だけをUNIONし、
+//       欠けている月×チャネルは computed_v2 で補完した
+//       kpi.kpi_sales_monthly_unified_v1 をソースに採用。UI側では一切再計算しない。
 // 期待カラム: (channel_code text in ['SHOKU','STORE','WEB','WHOLESALE'], month date (月初), amount bigint)
 // 範囲: 直近13ヶ月（今月まで）。KPIは直近で“月合計>0”の月を採用。
 
@@ -29,7 +30,8 @@ const ym = (isoDate: string) => isoDate.slice(0, 7);
 
 async function fetchData(): Promise<Row[]> {
   if (!process.env.DATABASE_URL) throw new Error("環境変数 DATABASE_URL が未設定です。Postgres接続文字列を設定してください。");
-  // 各システム最終ビューをUNIONした “確定値” ビューのみ参照
+  // final_v1 を優先し、欠けている月×チャネルだけ computed_v2 で補完した
+  // “確定値” ビューのみ参照
   const sql = `
     WITH range AS (
       SELECT date_trunc('month', current_date - interval '12 months') AS from_m,
@@ -38,7 +40,7 @@ async function fetchData(): Promise<Row[]> {
     SELECT channel_code,
            (month)::date AS fiscal_month,
            amount::bigint AS amount
-    FROM kpi.kpi_sales_monthly_final_v1, range
+    FROM kpi.kpi_sales_monthly_unified_v1, range
     WHERE month BETWEEN from_m AND to_m
     ORDER BY fiscal_month ASC, channel_code ASC;
   `;
@@ -107,7 +109,7 @@ export default async function Page() {
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">売上KPIダッシュボード</h1>
-          <p className="text-sm text-muted-foreground">直近13ヶ月（今月まで）/ データソース: kpi.kpi_sales_monthly_final_v1（各システム最終月次合計のUNION）</p>
+          <p className="text-sm text-muted-foreground">直近13ヶ月（今月まで）/ データソース: kpi.kpi_sales_monthly_unified_v1（final_v1 を優先し、欠けた月は computed_v2 で補完）</p>
         </div>
         <div className="text-sm text-muted-foreground">最新月（検知）: {latestLabel}</div>
       </header>
@@ -167,7 +169,7 @@ export default async function Page() {
       </section>
 
       <footer className="text-xs text-muted-foreground space-y-1">
-        <div>※ 本画面は各システムが公開する「月次合計：確定値」のUNIONのみを表示（UI側で再計算なし）。</div>
+        <div>※ 本画面は各システムが公開する「月次合計：確定値」に、欠けている月×チャネルのみ computed_v2 で補完したビューを表示（UI側で再計算なし）。</div>
         <div>次ステップ（ver.6）: ①年度セレクタ ②目標JOIN（達成率%） ③CSV ④Recharts</div>
       </footer>
     </div>
