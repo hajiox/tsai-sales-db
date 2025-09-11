@@ -1,7 +1,7 @@
 /* app/api/kpi/manual/route.ts
    集計API。常に取り直し。DBは DATABASE_URL(Postgres) を使用。
 */
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Pool } from "pg";
 
 export const revalidate = 0;
@@ -88,7 +88,29 @@ SELECT 'SHOKU'::text     AS channel_code, month, amount FROM shoku_final
 ORDER BY month, channel_code;
 `;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const year = searchParams.get("year");
+  const metric = searchParams.get("metric");
+
+  // --- 手入力値の取得モード ---
+  if (year && metric) {
+    try {
+      if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL が未設定です。");
+      const sql = `
+        SELECT metric, channel_code, month, amount, note, updated_at
+        FROM kpi.kpi_manual_entries_v1
+        WHERE metric = $1 AND date_part('year', month) = $2
+        ORDER BY month, channel_code`;
+      const { rows } = await pool.query(sql, [metric, Number(year)]);
+      return NextResponse.json(rows, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    } catch (err: any) {
+      console.error("[/api/kpi/manual] GET manual error:", err);
+      return NextResponse.json({ error: err?.message ?? "unknown error" }, { status: 500 });
+    }
+  }
+
+  // --- 集計モード（従来処理） ---
   try {
     if (!process.env.DATABASE_URL) {
       throw new Error("DATABASE_URL が未設定です。");
@@ -128,5 +150,43 @@ export async function GET() {
       },
       { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } }
     );
+  }
+}
+
+// --- 手入力値の保存（UPSERT） ---
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { metric, channel_code, month, amount, note } = body || {};
+    if (!metric || !channel_code || !month)
+      return NextResponse.json({ error: "missing parameters" }, { status: 400 });
+
+    const sql = `
+      INSERT INTO kpi.kpi_manual_entries_v1 (metric, channel_code, month, amount, note)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (metric, channel_code, month)
+      DO UPDATE SET amount = EXCLUDED.amount, note = EXCLUDED.note, updated_at = now();`;
+    await pool.query(sql, [metric, channel_code, month, amount || 0, note || ""]);
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (err: any) {
+    console.error("[/api/kpi/manual] POST error:", err);
+    return NextResponse.json({ error: err?.message ?? "unknown error" }, { status: 500 });
+  }
+}
+
+// --- 手入力値の削除 ---
+export async function DELETE(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { metric, channel_code, month } = body || {};
+    if (!metric || !channel_code || !month)
+      return NextResponse.json({ error: "missing parameters" }, { status: 400 });
+
+    const sql = `DELETE FROM kpi.kpi_manual_entries_v1 WHERE metric = $1 AND channel_code = $2 AND month = $3;`;
+    await pool.query(sql, [metric, channel_code, month]);
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (err: any) {
+    console.error("[/api/kpi/manual] DELETE error:", err);
+    return NextResponse.json({ error: err?.message ?? "unknown error" }, { status: 500 });
   }
 }
