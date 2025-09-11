@@ -12,9 +12,9 @@ export async function POST(req: Request) {
     const month = date.slice(0, 7); // "2025-06"
 
     // ------- env -------
-    const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const okey = process.env.OPENAI_API_KEY!;
+    const url  = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })();
+    const key  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })();
+    const okey = process.env.OPENAI_API_KEY ?? (() => { throw new Error("OPENAI_API_KEY is not set"); })();
     if (!url || !key || !okey) throw new Error('env_missing');
 
     // ------- db -------

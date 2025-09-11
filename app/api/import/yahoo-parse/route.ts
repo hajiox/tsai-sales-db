@@ -6,8 +6,8 @@ import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
 // SERVICE_ROLE_KEY を使用して、RLSをバイパスし全データにアクセス
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })()
 );
 
 // 文字列が有効かチェックするユーティリティ
