@@ -6,7 +6,7 @@ import { findBestMatchSimplified } from '@/lib/csvHelpers';
 
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient( process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY! );
+const supabase = createClient( process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(), process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })() );
 
 const toNumber = (raw: string | number): number => { return Number(raw?.toString().replace(/[,，\s]/g, '').trim() || 0); };
 

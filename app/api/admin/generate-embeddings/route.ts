@@ -6,8 +6,12 @@ import OpenAI from 'openai';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+const openaiApiKey = process.env.OPENAI_API_KEY;
+if (!openaiApiKey) {
+  throw new Error('OPENAI_API_KEY is not set');
+}
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: openaiApiKey,
 });
 
 const BATCH_SIZE = 500;

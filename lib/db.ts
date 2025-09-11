@@ -1,7 +1,10 @@
 // /lib/db.ts
 import { Pool } from 'pg';
 
-const connectionString = process.env.DATABASE_URL!;
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL is not set');
+}
 export const pool = new Pool({
   connectionString,
   ssl: connectionString && !connectionString.includes('sslmode=disable')

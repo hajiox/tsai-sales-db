@@ -21,8 +21,8 @@ type MabRow = { account_code: string; closing_balance: number };
 /* =========================
    Supabase helpers
 ========================= */
-const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SB_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })();
+const SB_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not set"); })();
 
 async function callRpc<T>(fn: string, payload: Record<string, unknown>): Promise<T> {
   const res = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
