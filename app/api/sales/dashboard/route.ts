@@ -1,16 +1,36 @@
 // ver.4 (2025-08-21 JST) - dashboard API with default date handling
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-export const revalidate = 0;
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })();
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })();
+const hasSupabaseEnv =
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+  !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
 
 export async function GET(request: Request) {
+  if (!hasSupabaseEnv) {
+    return NextResponse.json(
+      { ok: true, skipped: 'no_supabase_env_in_runner' },
+      { status: 200 }
+    );
+  }
+
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ??
+    (() => {
+      throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set');
+    })();
+  const supabaseServiceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    (() => {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
+    })();
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.supabaseAccessToken) {
