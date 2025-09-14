@@ -24,11 +24,11 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL?.includes("sslmode=") ? undefined : { rejectUnauthorized: false },
 });
 
-interface Row { channel_code: string; fiscal_month: string; amount: number }
+interface UnifiedRow { channel_code: string; fiscal_month: string; amount: number }
 const jpy = (v: number | null | undefined) => (v == null ? "—" : v.toLocaleString("ja-JP", { maximumFractionDigits: 0 }));
 const ym = (isoDate: string) => isoDate.slice(0, 7);
 
-async function fetchData(): Promise<Row[]> {
+async function fetchData(): Promise<UnifiedRow[]> {
   if (!process.env.DATABASE_URL) throw new Error("環境変数 DATABASE_URL が未設定です。Postgres接続文字列を設定してください。");
   // final_v1 を優先し、欠けている月×チャネルだけ computed_v2 で補完した
   // “確定値” ビューのみ参照
@@ -52,7 +52,7 @@ async function fetchData(): Promise<Row[]> {
   }));
 }
 
-function computePivot(rows: Row[]) {
+function computePivot(rows: UnifiedRow[]) {
   const map = new Map<string, number>(); // key: channel|YYYY-MM
   const monthsSet = new Set<string>();
 
@@ -100,16 +100,21 @@ function computePivot(rows: Row[]) {
 }
 
 export default async function Page() {
-  const rows = await fetchData();
-  const { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestIdx } = computePivot(rows);
-  const latestLabel = months.length ? months[latestIdx] : "—";
+  const unified = await fetchData();
+  const { months: allMonths, channels, map, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestIdx } = computePivot(unified);
+  const months = deriveLast12Months(allMonths);
+  const tableRows = channels.map((c) => ({
+    label: CHANNEL_LABEL[c as keyof typeof CHANNEL_LABEL],
+    values: months.map((m) => map.get(`${c}|${m}`) ?? 0),
+  }));
+  const latestLabel = allMonths.length ? allMonths[latestIdx] : "—";
 
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">売上KPIダッシュボード</h1>
-          <p className="text-sm text-muted-foreground">直近13ヶ月（今月まで）/ データソース: kpi.kpi_sales_monthly_unified_v1（final_v1 を優先し、欠けた月は computed_v2 で補完）</p>
+          <p className="text-sm text-muted-foreground">直近12ヶ月（今月まで）/ データソース: kpi.kpi_sales_monthly_unified_v1（final_v1 を優先し、欠けた月は computed_v2 で補完）</p>
         </div>
         <div className="text-sm text-muted-foreground">最新月（検知）: {latestLabel}</div>
       </header>
@@ -132,40 +137,9 @@ export default async function Page() {
         ))}
       </section>
 
-      {/* ピボット表 */}
+      {/* 月次マトリクス */}
       <section className="overflow-x-auto">
-        <table className="min-w-full border-separate border-spacing-0">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-10 bg-white/80 backdrop-blur border-b px-3 py-2 text-left text-xs font-medium text-muted-foreground">部門 / Channel</th>
-              {months.map((m) => (
-                <th key={m} className="border-b px-3 py-2 text-right text-xs font-medium text-muted-foreground">{m}</th>
-              ))}
-              <th className="border-b px-3 py-2 text-right text-xs font-medium text-muted-foreground">合計</th>
-            </tr>
-          </thead>
-          <tbody>
-            {channels.map((c, i) => {
-              const rowTotal = months.reduce((s, m) => s + (map.get(`${c}|${m}`) || 0), 0);
-              return (
-                <tr key={c} className={i % 2 ? "bg-muted/20" : "bg-white"}>
-                  <td className="sticky left-0 z-10 bg-inherit border-b px-3 py-2 text-sm font-medium">{CHANNEL_LABEL[c as keyof typeof CHANNEL_LABEL]}</td>
-                  {months.map((m) => (
-                    <td key={m} className="border-b px-3 py-2 text-right tabular-nums">¥{jpy(map.get(`${c}|${m}`) || 0)}</td>
-                  ))}
-                  <td className="border-b px-3 py-2 text-right font-semibold tabular-nums">¥{jpy(rowTotal)}</td>
-                </tr>
-              );
-            })}
-            <tr>
-              <td className="sticky left-0 z-10 bg-white border-t px-3 py-2 text-sm font-semibold">月合計</td>
-              {monthTotals.map((v, idx) => (
-                <td key={idx} className="border-t px-3 py-2 text-right font-semibold tabular-nums">¥{jpy(v)}</td>
-              ))}
-              <td className="border-t px-3 py-2 text-right font-semibold tabular-nums">¥{jpy(monthTotals.reduce((a, b) => a + b, 0))}</td>
-            </tr>
-          </tbody>
-        </table>
+        <MonthlyTable months={months} rows={tableRows} />
       </section>
 
       <footer className="text-xs text-muted-foreground space-y-1">
@@ -182,6 +156,100 @@ function KpiCard({ title, value, sub }: { title: string; value: string; sub?: st
       <div className="text-xs text-muted-foreground">{title}</div>
       <div className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{value}</div>
       {sub ? <div className="mt-1 text-xs text-muted-foreground">{sub}</div> : null}
+    </div>
+  );
+}
+
+// 金額フォーマット
+const fmtJPY = (v: number | null | undefined) =>
+  v == null ? "—" : `¥${jpy(v)}`;
+
+// 直近12ヶ月のラベルを抽出（"YYYY-MM"）
+function deriveLast12Months(keys: string[]): string[] {
+  const norm = (k: string) => k.slice(0, 7);
+  const uniq = Array.from(new Set(keys.map(norm)));
+  // 最新→過去で並んでいない場合はここで sort しても良い
+  return uniq.slice(-12);
+}
+
+type Row = { label: string; values: (number | null | undefined)[] };
+
+function MonthlyTable({
+  months,
+  rows,
+  showFooterTotal = true,
+}: {
+  months: string[]; // 長さ12
+  rows: Row[]; // 各行 values は長さ12
+  showFooterTotal?: boolean;
+}) {
+  const headCell = "px-2 py-1 text-[11px] font-semibold";
+  const cell = "px-2 py-1 text-[11px] leading-tight tabular-nums";
+  const border = "border-b border-gray-100";
+
+  const totals = months.map((_, i) =>
+    rows.reduce<number>((sum, r) => sum + (r.values[i] ?? 0), 0)
+  );
+
+  return (
+    <div className="w-full">
+      <table className="w-full table-fixed border-separate border-spacing-0">
+        <colgroup>
+          <col className="w-[160px]" />
+          {months.map((_, i) => (
+            <col key={i} className="w-[88px]" />
+          ))}
+        </colgroup>
+
+        <thead>
+          <tr className="bg-gray-50">
+            <th className={`${headCell} text-left sticky left-0 z-10 bg-gray-50 ${border}`}>
+              部門 / Channel
+            </th>
+            {months.map((m) => (
+              <th key={m} className={`${headCell} text-right ${border}`}>
+                {m}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.label} className="odd:bg-white even:bg-gray-50">
+              <th
+                className={`${cell} text-left sticky left-0 z-10 bg-inherit ${border} font-medium truncate`}
+                title={r.label}
+              >
+                {r.label}
+              </th>
+              {r.values.map((v, i) => (
+                <td key={i} className={`${cell} text-right ${border}`}>
+                  {fmtJPY(v ?? null)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+
+        {showFooterTotal && (
+          <tfoot>
+            <tr className="bg-gray-50">
+              <th className={`${headCell} text-left sticky left-0 z-10 bg-gray-50 ${border}`}>
+                月合計
+              </th>
+              {totals.map((v, i) => (
+                <td
+                  key={i}
+                  className={`${cell} text-right font-semibold ${border}`}
+                >
+                  {fmtJPY(v)}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
+      </table>
     </div>
   );
 }
