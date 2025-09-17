@@ -1,13 +1,21 @@
 import { Pool } from "pg";
 
+import { fiscalWindowFromLatest } from "@/lib/fiscal";
+import {
+  CHANNELS,
+  assertChannelSums,
+  shapeMonthly,
+  type MonthlyRow,
+} from "@/lib/kpiMonthly";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type DBRow = {
-  channel_code: string;
-  fiscal_month: any; // Date|string|null
-  actual_amount_yen: string | number | null;
+type RawRow = {
+  month: string | Date | null;
+  channel_code: string | null;
+  amount: string | number | null;
 };
 
 const pool = new Pool({
@@ -15,149 +23,225 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-// FY=8月開始〜翌7月（UTCで安全に計算）
-function fyRangeToday() {
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth() + 1; // 1-12
-  const fyStartYear = m >= 8 ? y : y - 1;
-  const start = new Date(Date.UTC(fyStartYear, 7, 1)); // 8月=7
-  const end = new Date(Date.UTC(fyStartYear + 1, 7, 1)); // 翌年8月1日(排他)
-  return {
-    startISO: start.toISOString().slice(0, 10), // YYYY-MM-DD
-    endISO: end.toISOString().slice(0, 10),
-    label: `FY${fyStartYear + 1 - 2000}`, // 例: FY26
-  };
-}
-
-function toYYYYMM(v: unknown): string {
-  if (v == null) return "unknown";
-  if (typeof v === "string") {
-    if (v.length >= 7) return v.slice(0, 7);
-    const d = new Date(v);
-    return isNaN(+d) ? String(v) : d.toISOString().slice(0, 7);
-  }
-  if (v instanceof Date) return v.toISOString().slice(0, 7);
-  const s = String(v);
-  return s.length >= 7 ? s.slice(0, 7) : s;
-}
-
-const fmtJPY = (v: string | number | null | undefined) => {
-  const n = typeof v === "string" ? Number(v) : (v ?? 0);
-  const num = Number.isFinite(n as number) ? (n as number) : 0;
-  return new Intl.NumberFormat("ja-JP", {
+const fmtJPY = (value: number) =>
+  new Intl.NumberFormat("ja-JP", {
     style: "currency",
     currency: "JPY",
     maximumFractionDigits: 0,
-  }).format(num);
-};
+  }).format(value ?? 0);
 
-// 当期のみ & 0円除外 & 未来月除外
-async function fetchFY(): Promise<DBRow[]> {
-  const { startISO, endISO } = fyRangeToday();
+const monthLabel = (iso: string) => iso.slice(0, 7);
+
+async function fetchLatestMonth(): Promise<string | null> {
   const sql = `
-    SELECT channel_code, fiscal_month, actual_amount_yen
-    FROM kpi.kpi_sales_monthly_computed_v2
-    WHERE fiscal_month >= $1
-      AND fiscal_month <  $2
-      AND COALESCE(actual_amount_yen, 0) <> 0
-    ORDER BY fiscal_month DESC, channel_code ASC
+    SELECT max(month) AS latest_month
+    FROM kpi.kpi_sales_monthly_unified_v1
+    WHERE COALESCE(amount, 0) > 0
   `;
-  const { rows } = await pool.query(sql, [startISO, endISO]);
-  return rows as DBRow[];
+  const { rows } = await pool.query<{ latest_month: string | Date | null }>(sql);
+  const raw = rows[0]?.latest_month;
+  if (!raw) return null;
+  if (raw instanceof Date) {
+    return raw.toISOString().slice(0, 10);
+  }
+  if (typeof raw === "string" && raw.length >= 10) {
+    return raw.slice(0, 10);
+  }
+  return null;
 }
 
-// 表示順（必要ならお好みで調整）
-const CHANNEL_ORDER = ["WEB", "WHOLESALE", "STORE", "SHOKU"];
-const channelRank = (c: string) => {
-  const i = CHANNEL_ORDER.indexOf(c);
-  return i === -1 ? 999 : i;
-};
+function normalizeMonth(value: RawRow["month"]): string | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    const iso = value.toISOString();
+    return iso.slice(0, 10);
+  }
+  if (typeof value === "string" && value.length >= 10) {
+    return value.slice(0, 10);
+  }
+  return null;
+}
+
+function normalizeAmount(value: RawRow["amount"]): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === "string" && value.length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+async function fetchMonthlyRows(start: string, end: string): Promise<MonthlyRow[]> {
+  const sql = `
+    SELECT month, channel_code, amount
+    FROM kpi.kpi_sales_monthly_unified_v1
+    WHERE month >= $1 AND month <= $2
+    ORDER BY month ASC, channel_code ASC
+  `;
+  const { rows } = await pool.query<RawRow>(sql, [start, end]);
+  return rows
+    .map((row) => ({
+      month: normalizeMonth(row.month),
+      channel_code: row.channel_code ?? "",
+      amount: normalizeAmount(row.amount),
+    }))
+    .filter((row): row is MonthlyRow => {
+      if (!row.month) return false;
+      return CHANNELS.includes(row.channel_code as (typeof CHANNELS)[number]);
+    })
+    .map((row) => ({
+      month: `${row.month.slice(0, 7)}-01`,
+      channel_code: row.channel_code as (typeof CHANNELS)[number],
+      amount: row.amount,
+    }));
+}
+
+function buildChannelMatrix(shaped: ReturnType<typeof shapeMonthly>) {
+  return CHANNELS.map((channel, idx) => ({
+    channel,
+    monthly: shaped.map((row) => row.byChannel[idx]),
+    total: shaped.reduce((sum, row) => sum + row.byChannel[idx], 0),
+  }));
+}
+
+function sum(values: number[]) {
+  return values.reduce((acc, value) => acc + value, 0);
+}
 
 export default async function Page() {
-  let data: DBRow[] = [];
+  let latestMonth = null;
   try {
-    data = await fetchFY();
-  } catch (e: any) {
+    latestMonth = await fetchLatestMonth();
+  } catch (error: unknown) {
     return (
       <main className="p-6">
-        <h1 className="text-2xl font-semibold">売上KPI（当期・月次）</h1>
-        <pre className="mt-4 whitespace-pre-wrap text-xs p-3 rounded border bg-neutral-50">
-{`fetch error: ${e?.message || e}`}
-        </pre>
+        <h1 className="text-2xl font-semibold">売上KPI（月次・会計年度表示）</h1>
+        <p className="mt-4 text-sm text-red-600">最新月の取得に失敗しました。</p>
+        <pre className="mt-2 whitespace-pre-wrap text-xs rounded border bg-neutral-50 p-3">{String(error)}</pre>
       </main>
     );
   }
 
-  // 月ごとにグルーピング & 月小計
-  const map = new Map<string, DBRow[]>();
-  for (const r of data) {
-    const ym = toYYYYMM(r.fiscal_month);
-    const arr = map.get(ym) || [];
-    arr.push(r);
-    map.set(ym, arr);
+  if (!latestMonth) {
+    return (
+      <main className="p-6">
+        <h1 className="text-2xl font-semibold">売上KPI（月次・会計年度表示）</h1>
+        <p className="mt-4 text-sm text-neutral-600">表示可能なデータがありません。</p>
+      </main>
+    );
   }
 
-  const months = Array.from(map.keys()).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
-  const { label } = fyRangeToday();
+  let fiscal;
+  try {
+    fiscal = fiscalWindowFromLatest(latestMonth);
+  } catch (error: unknown) {
+    return (
+      <main className="p-6">
+        <h1 className="text-2xl font-semibold">売上KPI（月次・会計年度表示）</h1>
+        <p className="mt-4 text-sm text-red-600">会計年度の算出に失敗しました。</p>
+        <pre className="mt-2 whitespace-pre-wrap text-xs rounded border bg-neutral-50 p-3">{String(error)}</pre>
+      </main>
+    );
+  }
+
+  let rows: MonthlyRow[] = [];
+  try {
+    rows = await fetchMonthlyRows(fiscal.start, fiscal.end);
+  } catch (error: unknown) {
+    return (
+      <main className="p-6">
+        <h1 className="text-2xl font-semibold">売上KPI（月次・会計年度表示）</h1>
+        <p className="mt-4 text-sm text-red-600">データ取得に失敗しました。</p>
+        <pre className="mt-2 whitespace-pre-wrap text-xs rounded border bg-neutral-50 p-3">{String(error)}</pre>
+      </main>
+    );
+  }
+
+  const shaped = shapeMonthly(rows, fiscal.months);
+
+  try {
+    assertChannelSums(shaped);
+  } catch (error: unknown) {
+    return (
+      <main className="p-6 space-y-4">
+        <header>
+          <h1 className="text-2xl font-semibold">売上KPI（月次・会計年度表示）</h1>
+          <p className="text-sm text-neutral-600">表示対象: {fiscal.fiscalLabel}（{monthLabel(fiscal.start)} 〜 {monthLabel(fiscal.end)})</p>
+        </header>
+        <div className="rounded border border-red-400 bg-red-50 p-4 text-sm text-red-800">
+          月別のチャネル合計が月合計と一致していません。詳細はサーバーログを確認してください。
+        </div>
+        <pre className="whitespace-pre-wrap text-xs rounded border bg-neutral-50 p-3">{String(error)}</pre>
+      </main>
+    );
+  }
+
+  const matrix = buildChannelMatrix(shaped);
+  const monthlyTotals = shaped.map((row) => row.monthTotal);
+  const grandTotal = sum(monthlyTotals);
 
   return (
-    <main className="p-6 space-y-8">
+    <main className="p-6 space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">売上KPI（{label} 当期・月次・チャネル別）</h1>
-        <p className="text-sm text-neutral-500">
-          Source: <code>kpi.kpi_sales_monthly_computed_v2</code>（当期のみ、0円除外、未来月除外）
+        <h1 className="text-2xl font-semibold">売上KPI（月次・会計年度表示）</h1>
+        <p className="text-sm text-neutral-600">
+          表示対象: {fiscal.fiscalLabel}（{monthLabel(fiscal.start)} 〜 {monthLabel(fiscal.end)}）
+        </p>
+        <p className="text-xs text-neutral-500">
+          Source: <code>kpi.kpi_sales_monthly_unified_v1</code>（完了済み会計年度・月次）
         </p>
       </header>
 
-      {months.length === 0 ? (
-        <div className="text-sm text-neutral-500">当期のデータがありません。</div>
-      ) : (
-        months.map((ym) => {
-          const rows = (map.get(ym) || []).slice().sort((a, b) => {
-            const ac = String(a.channel_code ?? "");
-            const bc = String(b.channel_code ?? "");
-            const r = channelRank(ac) - channelRank(bc);
-            return r !== 0 ? r : ac.localeCompare(bc);
-          });
-
-          const monthTotal = rows.reduce((s, r) => {
-            const n = typeof r.actual_amount_yen === "string"
-              ? Number(r.actual_amount_yen)
-              : (r.actual_amount_yen ?? 0);
-            return s + (Number.isFinite(n) ? n : 0);
-          }, 0);
-
-          return (
-            <section key={ym} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-medium">{ym}</h2>
-                <div className="text-sm font-medium">小計: {fmtJPY(monthTotal)}</div>
-              </div>
-              <div className="overflow-x-auto rounded-xl border">
-                <table className="min-w-[560px] w-full text-sm">
-                  <thead className="bg-neutral-50">
-                    <tr className="text-left">
-                      <th className="px-4 py-2 w-[160px]">channel_code</th>
-                      <th className="px-4 py-2 w-[160px]">fiscal_month</th>
-                      <th className="px-4 py-2 text-right">actual_amount_yen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r, i) => (
-                      <tr key={`${ym}-${r.channel_code}-${i}`} className="border-t">
-                        <td className="px-4 py-2">{r.channel_code}</td>
-                        <td className="px-4 py-2">{ym}</td>
-                        <td className="px-4 py-2 text-right">{fmtJPY(r.actual_amount_yen)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          );
-        })
-      )}
+      <div className="overflow-hidden rounded-xl border">
+        <table className="w-full table-fixed text-xs">
+          <colgroup>
+            <col className="w-[12%]" />
+            {fiscal.months.map((month) => (
+              <col key={month} className="w-[7.33%]" />
+            ))}
+          </colgroup>
+          <thead className="bg-neutral-50">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium">チャネル</th>
+              {fiscal.months.map((month) => (
+                <th key={month} className="px-2 py-3 text-right font-medium">
+                  {monthLabel(month)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.map((row) => (
+              <tr key={row.channel} className="border-t">
+                <th className="px-4 py-2 text-left font-medium">{row.channel}</th>
+                {row.monthly.map((value, idx) => (
+                  <td key={`${row.channel}-${idx}`} className="px-2 py-2 text-right">
+                    {fmtJPY(value)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="border-t bg-neutral-50">
+            <tr>
+              <th className="px-4 py-2 text-left font-semibold">月合計</th>
+              {monthlyTotals.map((value, idx) => (
+                <td key={`total-${idx}`} className="px-2 py-2 text-right font-semibold">
+                  {fmtJPY(value)}
+                </td>
+              ))}
+            </tr>
+            <tr>
+              <th className="px-4 py-2 text-left font-semibold">年間合計</th>
+              <td className="px-2 py-2 text-right font-semibold" colSpan={fiscal.months.length}>
+                {fmtJPY(grandTotal)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </main>
   );
 }
