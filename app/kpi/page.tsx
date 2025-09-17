@@ -5,6 +5,7 @@
 // 期待カラム: (channel_code text in ['SHOKU','STORE','WEB','WHOLESALE'], month date (月初), amount bigint)
 // 範囲: 直近13ヶ月（今月まで）。KPIは直近で“月合計>0”の月を採用。
 
+import { addMonths, format, parseISO, startOfMonth, subMonths } from "date-fns";
 import { Pool } from "pg";
 import React from "react";
 
@@ -53,11 +54,12 @@ async function fetchData(): Promise<UnifiedRow[]> {
 }
 
 function computePivot(rows: UnifiedRow[]) {
-  const map = new Map<string, number>(); // key: channel|YYYY-MM
+  const map = new Map<string, number>(); // key: channel|YYYY-MM-01
   const monthsSet = new Set<string>();
 
   for (const r of rows) {
-    const m = ym(r.fiscal_month);
+    const monthStart = startOfMonth(parseISO(r.fiscal_month));
+    const m = format(monthStart, "yyyy-MM-01");
     monthsSet.add(m);
     const key = `${r.channel_code}|${m}`;
     map.set(key, (map.get(key) || 0) + r.amount);
@@ -96,18 +98,20 @@ function computePivot(rows: UnifiedRow[]) {
     return { channel: c, latest: latestVal, yoyDelta: d, yoyPct: p };
   });
 
-  return { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestIdx };
+  const latestMonthISO = latestIdx >= 0 ? months[latestIdx] : null;
+
+  return { months, channels, map, monthTotals, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestIdx, latestMonthISO };
 }
 
 export default async function Page() {
   const unified = await fetchData();
-  const { months: allMonths, channels, map, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestIdx } = computePivot(unified);
-  const months = deriveLast12Months(allMonths);
+  const { channels, map, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestMonthISO } = computePivot(unified);
+  const months = buildLast12Months(latestMonthISO);
   const tableRows = channels.map((c) => ({
     label: CHANNEL_LABEL[c as keyof typeof CHANNEL_LABEL],
     values: months.map((m) => map.get(`${c}|${m}`) ?? 0),
   }));
-  const latestLabel = allMonths.length ? allMonths[latestIdx] : "—";
+  const latestLabel = latestMonthISO ? ym(latestMonthISO) : "—";
 
   return (
     <div className="p-6 space-y-6">
@@ -164,12 +168,12 @@ function KpiCard({ title, value, sub }: { title: string; value: string; sub?: st
 const fmtJPY = (v: number | null | undefined) =>
   v == null ? "—" : `¥${jpy(v)}`;
 
-// 直近12ヶ月のラベルを抽出（"YYYY-MM"）
-function deriveLast12Months(keys: string[]): string[] {
-  const norm = (k: string) => k.slice(0, 7);
-  const uniq = Array.from(new Set(keys.map(norm)));
-  // 最新→過去で並んでいない場合はここで sort しても良い
-  return uniq.slice(-12);
+// 直近12ヶ月のラベルを生成（"YYYY-MM-01"）
+function buildLast12Months(latestMonthISO: string | null): string[] {
+  if (!latestMonthISO) return [];
+  const latest = startOfMonth(parseISO(latestMonthISO));
+  const start = subMonths(latest, 11);
+  return Array.from({ length: 12 }, (_, i) => format(addMonths(start, i), "yyyy-MM-01"));
 }
 
 type Row = { label: string; values: (number | null | undefined)[] };
@@ -179,7 +183,7 @@ function MonthlyTable({
   rows,
   showFooterTotal = true,
 }: {
-  months: string[]; // 長さ12
+  months: string[]; // 長さ12 / ISO日付（月初）
   rows: Row[]; // 各行 values は長さ12
   showFooterTotal?: boolean;
 }) {
@@ -208,7 +212,7 @@ function MonthlyTable({
             </th>
             {months.map((m) => (
               <th key={m} className={`${headCell} text-right ${border}`}>
-                {m}
+                {ym(m)}
               </th>
             ))}
           </tr>
