@@ -6,8 +6,8 @@ export const revalidate = 0;
 
 type DBRow = {
   channel_code: string;
-  fiscal_month: any; // Date|string|null など想定
-  actual_amount_yen: string | number;
+  month: any; // Date|string|null など想定
+  amount: string | number;
 };
 
 const pool = new Pool({
@@ -39,9 +39,9 @@ const fmtJPY = (v: string | number) => {
 
 async function fetchMonthlyKPI(limit = 200): Promise<DBRow[]> {
   const sql = `
-    SELECT channel_code, fiscal_month, actual_amount_yen
-    FROM kpi.kpi_sales_monthly_computed_v2
-    ORDER BY fiscal_month DESC, channel_code ASC
+    SELECT channel_code, month::date AS month, amount
+    FROM kpi.kpi_sales_monthly_unified_v1
+    ORDER BY month DESC, channel_code ASC
     LIMIT $1
   `;
   const { rows } = await pool.query(sql, [limit]);
@@ -66,7 +66,7 @@ export default async function Page() {
   // "YYYY-MM" 文字列でグルーピング
   const map = new Map<string, DBRow[]>();
   for (const r of data) {
-    const ym = toYYYYMM(r.fiscal_month);
+    const ym = toYYYYMM(r.month);
     const arr = map.get(ym) || [];
     arr.push(r);
     map.set(ym, arr);
@@ -82,7 +82,7 @@ export default async function Page() {
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">売上KPI（月次・チャネル別）</h1>
         <p className="text-sm text-neutral-500">
-          Source: <code>kpi.kpi_sales_monthly_computed_v2</code>
+          Source: <code>kpi.kpi_sales_monthly_unified_v1</code>
         </p>
       </header>
 
@@ -99,8 +99,8 @@ export default async function Page() {
                   <thead className="bg-neutral-50">
                     <tr className="text-left">
                       <th className="px-4 py-2 w-[160px]">channel_code</th>
-                      <th className="px-4 py-2 w-[160px]">fiscal_month</th>
-                      <th className="px-4 py-2 text-right">actual_amount_yen</th>
+                      <th className="px-4 py-2 w-[160px]">month</th>
+                      <th className="px-4 py-2 text-right">amount</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -109,7 +109,7 @@ export default async function Page() {
                         <td className="px-4 py-2">{r.channel_code}</td>
                         <td className="px-4 py-2">{ym}</td>
                         <td className="px-4 py-2 text-right">
-                          {fmtJPY(r.actual_amount_yen)}
+                          {fmtJPY(r.amount)}
                         </td>
                       </tr>
                     ))}
