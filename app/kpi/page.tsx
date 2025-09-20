@@ -13,6 +13,7 @@ import { getWholesaleOemOverview } from "@/server/db/kpi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const ALL_CHANNELS = ["SHOKU", "STORE", "WEB", "WHOLESALE"] as const;
 const CHANNEL_LABEL: Record<(typeof ALL_CHANNELS)[number], string> = {
@@ -147,7 +148,7 @@ export default async function Page() {
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">売上KPIダッシュボード</h1>
-          <p className="text-sm text-muted-foreground">直近12ヶ月（今月まで）/ データソース: kpi.kpi_sales_monthly_unified_v1（final_v1 を優先し、欠けた月は computed_v2 で補完）</p>
+          <p className="text-sm text-muted-foreground">直近12ヶ月（今月まで）/ データソース: kpi.kpi_sales_monthly_unified_v1（actuals → final → computed の優先順位で採用）</p>
         </div>
         <div className="text-sm text-muted-foreground">最新月（検知）: {latestLabel}</div>
       </header>

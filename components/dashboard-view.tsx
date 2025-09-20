@@ -36,7 +36,7 @@ export default function DashboardView() {
         const day = String(date.getDate()).padStart(2, '0');
         const dateString = `${year}-${month}-${day}`;
         
-        const response = await fetch(`/api/sales/daily?date=${dateString}`);
+        const response = await fetch(`/api/sales/daily?date=${dateString}`, { cache: 'no-store' });
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || '日次データの取得に失敗しました');
@@ -52,7 +52,7 @@ export default function DashboardView() {
         const day = String(date.getDate()).padStart(2, '0');
         const dateString = `${year}-${month}-${day}`;
         
-        const response = await fetch(`/api/sales/monthly?date=${dateString}`);
+        const response = await fetch(`/api/sales/monthly?date=${dateString}`, { cache: 'no-store' });
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || '月累計データの取得に失敗しました');
@@ -65,7 +65,7 @@ export default function DashboardView() {
     const getSixMonthData = useCallback(async (date: Date) => {
         const dateString = date.toISOString().split('T')[0];
         
-        const response = await fetch(`/api/sales/six-month?date=${dateString}`);
+        const response = await fetch(`/api/sales/six-month?date=${dateString}`, { cache: 'no-store' });
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'グラフデータの取得に失敗しました');
