@@ -67,11 +67,11 @@ async function fetchAgg(): Promise<{ rows: RowAgg[]; meta: ReturnType<typeof ran
   const sql = `
     SELECT
       channel_code,
-      SUM(actual_amount_yen) FILTER (WHERE fiscal_month >= $1 AND fiscal_month < $4) AS ytd_amount,
-      SUM(actual_amount_yen) FILTER (WHERE fiscal_month >= $2 AND fiscal_month < $4) AS curr_amount,
-      SUM(actual_amount_yen) FILTER (WHERE fiscal_month >= $3 AND fiscal_month < $2) AS prev_amount
-    FROM kpi.kpi_sales_monthly_computed_v2
-    WHERE COALESCE(actual_amount_yen, 0) <> 0
+      SUM(amount) FILTER (WHERE month >= $1 AND month < $4) AS ytd_amount,
+      SUM(amount) FILTER (WHERE month >= $2 AND month < $4) AS curr_amount,
+      SUM(amount) FILTER (WHERE month >= $3 AND month < $2) AS prev_amount
+    FROM kpi.kpi_sales_monthly_unified_v1
+    WHERE COALESCE(amount, 0) <> 0
     GROUP BY channel_code
   `;
   const { rows } = await pool.query<RowAgg>(sql, [
@@ -130,7 +130,7 @@ export default async function Page() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">売上KPIサマリ（{meta.fyLabel} 当期）</h1>
         <p className="text-sm text-neutral-500">
-          Source: <code>kpi.kpi_sales_monthly_computed_v2</code>（0円除外、未来月除外）
+          Source: <code>kpi.kpi_sales_monthly_unified_v1</code>（0円除外、未来月除外）
         </p>
       </header>
 
