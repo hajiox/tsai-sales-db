@@ -7,6 +7,7 @@ import {
   shapeMonthly,
   type MonthlyRow,
 } from "@/lib/kpiMonthly";
+import { getWholesaleOemOverview } from "@/server/db/kpi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,7 +82,7 @@ async function fetchMonthlyRows(start: string, end: string): Promise<MonthlyRow[
     ORDER BY month ASC, channel_code ASC
   `;
   const { rows } = await pool.query<RawRow>(sql, [start, end]);
-  return rows
+  const normalized = rows
     .map((row) => ({
       month: normalizeMonth(row.month),
       channel_code: row.channel_code ?? "",
@@ -96,6 +97,33 @@ async function fetchMonthlyRows(start: string, end: string): Promise<MonthlyRow[
       channel_code: row.channel_code as (typeof CHANNELS)[number],
       amount: row.amount,
     }));
+
+  const wholesaleMonths = Array.from(
+    new Set(
+      normalized
+        .filter((row) => row.channel_code === "WHOLESALE")
+        .map((row) => row.month)
+    )
+  );
+
+  if (wholesaleMonths.length === 0) {
+    return normalized;
+  }
+
+  const totals = await Promise.all(
+    wholesaleMonths.map(async (month) => {
+      const overview = await getWholesaleOemOverview(month);
+      return [month, Number(overview.total_amount ?? 0)] as const;
+    })
+  );
+
+  const totalMap = new Map(totals);
+
+  return normalized.map((row) =>
+    row.channel_code === "WHOLESALE"
+      ? { ...row, amount: totalMap.get(row.month) ?? 0 }
+      : row
+  );
 }
 
 function buildChannelMatrix(shaped: ReturnType<typeof shapeMonthly>) {

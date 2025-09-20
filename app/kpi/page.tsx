@@ -9,6 +9,8 @@ import { addMonths, format, parseISO, startOfMonth, subMonths } from "date-fns";
 import { Pool } from "pg";
 import React from "react";
 
+import { getWholesaleOemOverview } from "@/server/db/kpi";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -46,11 +48,38 @@ async function fetchData(): Promise<UnifiedRow[]> {
     ORDER BY fiscal_month ASC, channel_code ASC;
   `;
   const { rows } = await pool.query(sql);
-  return rows.map((r: any) => ({
+  const mapped = rows.map((r: any) => ({
     channel_code: String(r.channel_code ?? ""),
     fiscal_month: new Date(r.fiscal_month).toISOString().slice(0, 10),
     amount: Number(r.amount),
   }));
+
+  const wholesaleMonths = Array.from(
+    new Set(
+      mapped
+        .filter((row) => row.channel_code === "WHOLESALE")
+        .map((row) => row.fiscal_month)
+    )
+  );
+
+  if (wholesaleMonths.length === 0) {
+    return mapped;
+  }
+
+  const totals = await Promise.all(
+    wholesaleMonths.map(async (month) => {
+      const overview = await getWholesaleOemOverview(month);
+      return [month, Number(overview.total_amount ?? 0)] as const;
+    })
+  );
+
+  const totalMap = new Map(totals);
+
+  return mapped.map((row) =>
+    row.channel_code === "WHOLESALE"
+      ? { ...row, amount: totalMap.get(row.fiscal_month) ?? 0 }
+      : row
+  );
 }
 
 function computePivot(rows: UnifiedRow[]) {
