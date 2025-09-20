@@ -52,10 +52,18 @@ from mapped
 where fiscal_month is not null
 ;
 
--- 2) final を優先し、無い (channel, month) だけ computed で補完
+-- 2) sales_actuals を最優先 → final → computed の優先順位で統合
 --   ★アプリの期待に合わせて列名は (channel_code, month, amount) に揃える
 create or replace view kpi.kpi_sales_monthly_unified_v1 as
-with f as (
+with a as (
+  select upper(btrim(dc.channel_code)) as channel_code,
+         date_trunc('month', s.fiscal_month)::date as month,
+         sum(coalesce(s.actual_amount_yen, 0))::numeric as amount
+  from kpi.sales_actuals_monthly s
+  join kpi.dim_channel dc on dc.channel_id = s.channel_id
+  group by 1,2
+),
+f as (
   select channel_code,
          fiscal_month::date as month,
          sum(actual_amount_yen)::numeric as amount
@@ -69,13 +77,19 @@ c as (
   from kpi.kpi_sales_monthly_computed_v2
   group by 1,2
 )
+select a.channel_code, a.month, a.amount
+from a
+union all
 select f.channel_code, f.month, f.amount
 from f
+left join a as a1 on a1.channel_code = f.channel_code and a1.month = f.month
+where a1.channel_code is null
 union all
 select c.channel_code, c.month, c.amount
 from c
-left join f on f.channel_code = c.channel_code and f.month = c.month
-where f.channel_code is null
+left join a as a2 on a2.channel_code = c.channel_code and a2.month = c.month
+left join f as f2 on f2.channel_code = c.channel_code and f2.month = c.month
+where a2.channel_code is null and f2.channel_code is null
 ;
 `;
 
