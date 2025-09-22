@@ -150,6 +150,14 @@ export async function GET() {
   } catch (error) {
     console.error('[api/kpi-monthly/summary] error', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: message },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
+      }
+    );
   }
 }
