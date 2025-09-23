@@ -1,8 +1,8 @@
 // ================================================
-// File: /app/api/kpi-annual/print/route.ts   ver.1
+// File: /app/api/kpi-annual/print/route.ts   ver.2
 // Purpose: KPI 年間一覧（FY=8月開始）の印刷用HTMLを返す
 // Usage : GET /api/kpi-annual/print?fy=2025  ← FY2025 (2025-08〜2026-07)
-// Data  : kpi.kpi_sales_monthly_unified_v1 を唯一の参照元
+// Data  : kpi.kpi_sales_monthly_unified_v1 ＋ kpi.kpi_targets_fy_v1 を参照
 // Runtime: nodejs / dynamic / no-store
 // ================================================
 
@@ -26,10 +26,7 @@ function parseFY(searchParams: URLSearchParams): number {
   return n;
 }
 
-function fmtYen(n: number | null | undefined): string {
-  const v = typeof n === 'number' ? n : 0;
-  return v.toLocaleString('ja-JP');
-}
+const yen = (n: number) => (Number(n) || 0).toLocaleString('ja-JP');
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -37,7 +34,7 @@ export async function GET(req: Request) {
 
   const client = await pool.connect();
   try {
-    // 月別ピボット（行=月, 列=チャネル, 合計）
+    // 月別ピボット（行=月, 列=チャネル, 合計＋目標／前年）
     const pivotSql = `
       WITH fy AS (
         SELECT make_date($1::int, 8, 1)::date AS fy_start,
@@ -54,7 +51,7 @@ export async function GET(req: Request) {
             WHEN UPPER(BTRIM(channel_code)) IN ('WHOLESALE','OEM') THEN 'WHOLESALE'
             ELSE UPPER(BTRIM(channel_code))
           END AS ch,
-          (month)::date AS month,
+          month::date AS month,
           COALESCE(amount,0)::numeric AS amount
         FROM kpi.kpi_sales_monthly_unified_v1, fy
         WHERE month >= (SELECT fy_start FROM fy)
@@ -66,9 +63,13 @@ export async function GET(req: Request) {
         COALESCE(SUM(u.amount) FILTER (WHERE u.ch='STORE'),0)     AS store,
         COALESCE(SUM(u.amount) FILTER (WHERE u.ch='SHOKU'),0)     AS shoku,
         COALESCE(SUM(u.amount) FILTER (WHERE u.ch='WHOLESALE'),0) AS wholesale,
-        COALESCE(SUM(u.amount),0)                                 AS total_all
+        COALESCE(SUM(u.amount),0)                                 AS total_all,
+        COALESCE(SUM(t.target_amount),0)                          AS target_total,
+        COALESCE(SUM(t.last_year_amount),0)                       AS last_year_total
       FROM months m
       LEFT JOIN u ON u.month = m.m::date
+      LEFT JOIN kpi.kpi_targets_fy_v1 t
+             ON t.fy = $1 AND t.month = m.m::date
       GROUP BY 1
       ORDER BY 1;
     `;
@@ -86,7 +87,7 @@ export async function GET(req: Request) {
             WHEN UPPER(BTRIM(channel_code)) IN ('WHOLESALE','OEM') THEN 'WHOLESALE'
             ELSE UPPER(BTRIM(channel_code))
           END AS ch,
-          (month)::date AS month,
+          month::date AS month,
           COALESCE(amount,0)::numeric AS amount
         FROM kpi.kpi_sales_monthly_unified_v1, fy
         WHERE month >= (SELECT fy_start FROM fy)
@@ -103,21 +104,26 @@ export async function GET(req: Request) {
       client.query(totalsSql, [fy]),
     ]);
 
-    type PivotRow = {
+    type Row = {
       month: string;
-      web: string | number;
-      store: string | number;
-      shoku: string | number;
-      wholesale: string | number;
-      total_all: string | number;
+      web: number;
+      store: number;
+      shoku: number;
+      wholesale: number;
+      total_all: number;
+      target_total: number;
+      last_year_total: number;
     };
 
-    const rows: PivotRow[] = pivotRes.rows;
+    const rows = pivotRes.rows as Row[];
     const totalsMap = new Map<string, number>();
-    for (const r of totalsRes.rows as { channel_code: string; ytd_amount: string | number }[]) {
+    for (const r of totalsRes.rows as { channel_code: string; ytd_amount: number }[]) {
       totalsMap.set(r.channel_code, Number(r.ytd_amount));
     }
-    const totalAllYtd = rows.reduce((s, r) => s + Number(r.total_all), 0);
+    const ytdAll = rows.reduce((s, r) => s + Number(r.total_all), 0);
+    const ytdTarget = rows.reduce((s, r) => s + Number(r.target_total), 0);
+    const ytdLast = rows.reduce((s, r) => s + Number(r.last_year_total), 0);
+    const ytdAchv = ytdTarget > 0 ? (ytdAll / ytdTarget) * 100 : null;
 
     // HTML（印刷CSS付き）
     const html = `<!DOCTYPE html>
@@ -127,30 +133,26 @@ export async function GET(req: Request) {
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>KPI 年間一覧 印刷 | FY${fy}</title>
 <style>
-  :root { --w: 1080px; --fg:#111; --muted:#666; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP",
-         "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-         color: var(--fg); margin: 24px; }
+  :root { --w: 1200px; --fg:#111; --muted:#666; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; color:var(--fg); margin:24px; }
   .wrap { max-width: var(--w); margin: 0 auto; }
   h1 { font-size: 20px; margin: 0 0 8px; }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  .btnbar { display:flex; gap:8px; margin: 12px 0; }
+  .btn { border:1px solid #ccc; border-radius:6px; padding:6px 10px; background:#fff; cursor:pointer; }
   table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
-  th { background: #f7f7f7; }
+  th, td { border:1px solid #ddd; padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+  th { background:#f7f7f7; }
   td.month, th.month { text-align: left; white-space: nowrap; }
-  tfoot td { font-weight: 600; background: #fafafa; }
-  .btnbar { display: flex; gap: 8px; margin: 16px 0; }
-  .btn { border: 1px solid #ccc; padding: 6px 10px; border-radius: 6px; background: #fff; cursor: pointer; }
-  @media print { .btnbar { display: none; } body { margin: 0; } }
+  tfoot td { font-weight: 600; background:#fafafa; }
+  @media print { .btnbar { display:none; } body{ margin:0; } }
 </style>
 </head>
 <body>
   <div class="wrap">
     <h1>KPI 年間一覧（FY${fy}）</h1>
-    <div class="meta">期間: ${fy}-08 〜 ${fy+1}-07 ／ 参照: kpi.kpi_sales_monthly_unified_v1</div>
-    <div class="btnbar">
-      <button class="btn" onclick="window.print()">印刷する</button>
-    </div>
+    <div class="meta">期間: ${fy}-08 〜 ${fy+1}-07 ／ 参照: kpi.kpi_sales_monthly_unified_v1 ＋ kpi.kpi_targets_fy_v1</div>
+    <div class="btnbar"><button class="btn" onclick="window.print()">印刷する</button></div>
     <table>
       <thead>
         <tr>
@@ -160,30 +162,41 @@ export async function GET(req: Request) {
           <th>SHOKU</th>
           <th>WHOLESALE</th>
           <th>合計</th>
+          <th>目標</th>
+          <th>達成率(%)</th>
+          <th>前年</th>
         </tr>
       </thead>
       <tbody>
         ${rows.map(r => {
           const d = new Date(r.month);
           const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
+          const ach = r.target_total > 0 ? (Number(r.total_all) / Number(r.target_total)) * 100 : null;
+          const achTxt = ach == null ? '—' : ach.toFixed(1);
           return `<tr>
             <td class="month">${ym}</td>
-            <td>${fmtYen(Number(r.web))}</td>
-            <td>${fmtYen(Number(r.store))}</td>
-            <td>${fmtYen(Number(r.shoku))}</td>
-            <td>${fmtYen(Number(r.wholesale))}</td>
-            <td>${fmtYen(Number(r.total_all))}</td>
+            <td>${yen(r.web)}</td>
+            <td>${yen(r.store)}</td>
+            <td>${yen(r.shoku)}</td>
+            <td>${yen(r.wholesale)}</td>
+            <td>${yen(r.total_all)}</td>
+            <td>${yen(r.target_total)}</td>
+            <td>${achTxt}</td>
+            <td>${yen(r.last_year_total)}</td>
           </tr>`;
         }).join('')}
       </tbody>
       <tfoot>
         <tr>
           <td class="month">年間合計</td>
-          <td>${fmtYen(totalsMap.get('WEB') ?? 0)}</td>
-          <td>${fmtYen(totalsMap.get('STORE') ?? 0)}</td>
-          <td>${fmtYen(totalsMap.get('SHOKU') ?? 0)}</td>
-          <td>${fmtYen(totalsMap.get('WHOLESALE') ?? 0)}</td>
-          <td>${fmtYen(totalAllYtd)}</td>
+          <td>${yen(totalsMap.get('WEB') ?? 0)}</td>
+          <td>${yen(totalsMap.get('STORE') ?? 0)}</td>
+          <td>${yen(totalsMap.get('SHOKU') ?? 0)}</td>
+          <td>${yen(totalsMap.get('WHOLESALE') ?? 0)}</td>
+          <td>${yen(ytdAll)}</td>
+          <td>${yen(ytdTarget)}</td>
+          <td>${ytdAchv == null ? '—' : ytdAchv.toFixed(1)}</td>
+          <td>${yen(ytdLast)}</td>
         </tr>
       </tfoot>
     </table>
