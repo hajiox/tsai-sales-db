@@ -20,7 +20,7 @@ const CHANNEL_LABEL: Record<(typeof ALL_CHANNELS)[number], string> = {
   SHOKU: "食のブランド館（道の駅）",
   STORE: "会津ブランド館（店舗）",
   WEB: "会津ブランド館（ネット販売）",
-  WHOLESALE: "外販・OEM（本社）",
+  WHOLESALE: "外販・OEM",
 };
 
 const pool = new Pool({
@@ -30,6 +30,8 @@ const pool = new Pool({
 
 interface UnifiedRow { channel_code: string; fiscal_month: string; amount: number }
 const jpy = (v: number | null | undefined) => (v == null ? "—" : v.toLocaleString("ja-JP", { maximumFractionDigits: 0 }));
+const formatNumber = (v: number | null | undefined) =>
+  v == null ? "—" : v.toLocaleString("ja-JP", { maximumFractionDigits: 0 });
 const ym = (isoDate: string) => isoDate.slice(0, 7);
 
 async function fetchData(): Promise<UnifiedRow[]> {
@@ -135,7 +137,7 @@ function computePivot(rows: UnifiedRow[]) {
 
 export default async function Page() {
   const unified = await fetchData();
-  const { channels, map, latestTotal, momDelta, momPct, yoyDelta, yoyPct, perChannel, latestMonthISO } = computePivot(unified);
+  const { channels, map, latestTotal, momDelta, momPct, perChannel, latestMonthISO } = computePivot(unified);
   const months = buildLast12Months(latestMonthISO);
   const tableRows = channels.map((c) => ({
     label: CHANNEL_LABEL[c as keyof typeof CHANNEL_LABEL],
@@ -143,31 +145,58 @@ export default async function Page() {
   }));
   const latestLabel = latestMonthISO ? ym(latestMonthISO) : "—";
 
+  const fyNow = (() => {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth() + 1;
+    return m >= 8 ? y : y - 1;
+  })();
+  const printUrl = `/api/kpi-annual/print?fy=${fyNow}`;
+
   return (
     <div className="p-6 space-y-6">
-      <header className="flex items-end justify-between">
+      {/* === KPI Toolbar (v1) ========================= */}
+      <div className="flex items-start justify-between gap-3 mb-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">売上KPIダッシュボード</h1>
-          <p className="text-sm text-muted-foreground">直近12ヶ月（今月まで）/ データソース: kpi.kpi_sales_monthly_unified_v1（actuals → final → computed の優先順位で採用）</p>
+          <div className="text-xl font-semibold">売上KPIダッシュボード</div>
+          <div className="text-xs text-neutral-500 mt-1 space-y-0.5">
+            <div>直近12ヶ月（今月まで）／ データソース: kpi.kpi_sales_monthly_unified_v1</div>
+            <div>最新月（検知）: {latestLabel}</div>
+          </div>
         </div>
-        <div className="text-sm text-muted-foreground">最新月（検知）: {latestLabel}</div>
-      </header>
+        <div className="flex items-center gap-2">
+          <a
+            href={printUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+            title="年間の月別一覧を開いてそのまま印刷"
+          >
+            年間一覧を印刷
+          </a>
+        </div>
+      </div>
+      {/* ============================================== */}
 
       {/* トータルKPI */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard title={`{${latestLabel}} 売上合計`} value={`¥${jpy(latestTotal ?? 0)}`} sub={"（税抜/税込は各システムの定義に依存）"} />
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <KpiCard title="売上合計（直近12ヶ月）" value={`¥${jpy(latestTotal ?? 0)}`} sub={"（税抜/税込は各システムの定義に依存）"} />
         <KpiCard title="前月比 (MoM)" value={momDelta == null ? "—" : `${momDelta >= 0 ? "+" : ""}¥${jpy(momDelta)}`} sub={momPct == null ? "—" : `${momPct >= 0 ? "+" : ""}${momPct.toFixed(1)}%`} />
-        <KpiCard title="前年比 (YoY)" value={yoyDelta == null ? "—" : `${yoyDelta >= 0 ? "+" : ""}¥${jpy(yoyDelta)}`} sub={yoyPct == null ? "—" : `${yoyPct >= 0 ? "+" : ""}${yoyPct.toFixed(1)}%`} />
       </section>
 
       {/* チャネル別KPI（今月） */}
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {perChannel.map((k) => (
-          <div key={k.channel} className="rounded-2xl border p-4 shadow-sm">
-            <div className="text-xs text-muted-foreground">{CHANNEL_LABEL[k.channel as keyof typeof CHANNEL_LABEL]}</div>
-            <div className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">¥{jpy(k.latest ?? 0)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">YoY: {k.yoyDelta == null ? "—" : `${k.yoyDelta >= 0 ? "+" : ""}¥${jpy(k.yoyDelta)} (${k.yoyPct == null ? "—" : `${k.yoyPct >= 0 ? "+" : ""}${k.yoyPct.toFixed(1)}%`})`}</div>
-          </div>
+          <KpiCard
+            key={k.channel}
+            title={CHANNEL_LABEL[k.channel as keyof typeof CHANNEL_LABEL]}
+            value={`¥${jpy(k.latest ?? 0)}`}
+            sub={
+              k.yoyDelta == null
+                ? "YoY: —"
+                : `YoY: ${k.yoyDelta >= 0 ? "+" : ""}¥${jpy(k.yoyDelta)} (${k.yoyPct == null ? "—" : `${k.yoyPct >= 0 ? "+" : ""}${k.yoyPct.toFixed(1)}%`})`
+            }
+          />
         ))}
       </section>
 
@@ -176,10 +205,9 @@ export default async function Page() {
         <MonthlyTable months={months} rows={tableRows} />
       </section>
 
-      <footer className="text-xs text-muted-foreground space-y-1">
-        <div>※ 本画面は各システムが公開する「月次合計：確定値」に、欠けている月×チャネルのみ computed_v2 で補完したビューを表示（UI側で再計算なし）。</div>
-        <div>次ステップ（ver.6）: ①年度セレクタ ②目標JOIN（達成率%） ③CSV ④Recharts</div>
-      </footer>
+      <p className="mt-2 text-xs text-neutral-500">
+        ※ データソース: kpi.kpi_sales_monthly_unified_v1（actuals → final → computed の優先順）
+      </p>
     </div>
   );
 }
@@ -193,10 +221,6 @@ function KpiCard({ title, value, sub }: { title: string; value: string; sub?: st
     </div>
   );
 }
-
-// 金額フォーマット
-const fmtJPY = (v: number | null | undefined) =>
-  v == null ? "—" : `¥${jpy(v)}`;
 
 // 直近12ヶ月のラベルを生成（"YYYY-MM-01"）
 function buildLast12Months(latestMonthISO: string | null): string[] {
@@ -235,13 +259,13 @@ function MonthlyTable({
           ))}
         </colgroup>
 
-        <thead>
-          <tr className="bg-gray-50">
-            <th className={`${headCell} text-left sticky left-0 z-10 bg-gray-50 ${border}`}>
+        <thead className="sticky top-0 bg-white z-10">
+          <tr className="bg-white">
+            <th className={`${headCell} text-left sticky left-0 z-10 bg-white ${border}`}>
               部門 / Channel
             </th>
             {months.map((m) => (
-              <th key={m} className={`${headCell} text-right ${border}`}>
+              <th key={m} className={`${headCell} text-left whitespace-nowrap ${border}`}>
                 {ym(m)}
               </th>
             ))}
@@ -259,7 +283,7 @@ function MonthlyTable({
               </th>
               {r.values.map((v, i) => (
                 <td key={i} className={`${cell} text-right ${border}`}>
-                  {fmtJPY(v ?? null)}
+                  {formatNumber(v ?? null)}
                 </td>
               ))}
             </tr>
@@ -268,16 +292,13 @@ function MonthlyTable({
 
         {showFooterTotal && (
           <tfoot>
-            <tr className="bg-gray-50">
-              <th className={`${headCell} text-left sticky left-0 z-10 bg-gray-50 ${border}`}>
+            <tr className="bg-white">
+              <th className={`${headCell} text-left sticky left-0 z-10 bg-white ${border}`}>
                 月合計
               </th>
               {totals.map((v, i) => (
-                <td
-                  key={i}
-                  className={`${cell} text-right font-semibold ${border}`}
-                >
-                  {fmtJPY(v)}
+                <td key={i} className={`${cell} text-right font-semibold ${border}`}>
+                  {formatNumber(v)}
                 </td>
               ))}
             </tr>
