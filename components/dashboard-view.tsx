@@ -8,7 +8,7 @@ import dynamic from 'next/dynamic';
 
 import DashboardHeader from './dashboard-header';
 import ClientDate from '@/components/common/ClientDate';
-import DashboardStats from './dashboard-stats';
+import SalesSummaryTable from './sales-summary-table';
 import DailySalesCrudForm from './daily-sales-crud-form';
 import AiDashboardSection from './ai-dashboard-section';
 
@@ -116,7 +116,11 @@ export default function DashboardView() {
             <main className="mt-6 space-y-8">
                 {error && <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md"><p className="font-bold">エラーが発生しました:</p><p>{error}</p></div>}
                 
-                <DashboardStats data={dailyData} monthlyData={monthlyData} isLoading={dailyLoading} />
+                <SalesSummaryTable
+                    dailyData={dailyData}
+                    monthlyData={monthlyData}
+                    isLoading={dailyLoading}
+                />
                 
                 <SalesChartGrid data={sixMonthData} isLoading={graphLoading} />
 
