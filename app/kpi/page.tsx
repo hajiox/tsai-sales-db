@@ -9,6 +9,9 @@ import { addMonths, format, parseISO, startOfMonth, subMonths } from "date-fns";
 import { Pool } from "pg";
 import React from "react";
 
+import KpiPrintToolbar from "@/components/kpi/KpiPrintToolbar";
+import KpiTargetsPanel from "@/components/kpi/KpiTargetsPanel";
+
 import { getWholesaleOemOverview } from "@/server/db/kpi";
 
 export const runtime = "nodejs";
@@ -145,44 +148,17 @@ export default async function Page() {
   }));
   const latestLabel = latestMonthISO ? ym(latestMonthISO) : "—";
 
-  const fyNow = (() => {
-    const now = new Date();
-    const y = now.getUTCFullYear();
-    const m = now.getUTCMonth() + 1;
-    return m >= 8 ? y : y - 1;
-  })();
-  const printUrl = `/api/kpi-annual/print?fy=${fyNow}`;
-
   return (
     <div className="p-6 space-y-6">
-      {/* === KPI Toolbar (v1) ========================= */}
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div>
-          <div className="text-xl font-semibold">売上KPIダッシュボード</div>
-          <div className="text-xs text-neutral-500 mt-1 space-y-0.5">
-            <div>直近12ヶ月（今月まで）／ データソース: kpi.kpi_sales_monthly_unified_v1</div>
-            <div>最新月（検知）: {latestLabel}</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={printUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
-            title="年間の月別一覧を開いてそのまま印刷"
-          >
-            年間一覧を印刷
-          </a>
-        </div>
-      </div>
-      {/* ============================================== */}
+      <KpiPrintToolbar latestLabel={latestLabel} />
 
       {/* トータルKPI */}
       <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <KpiCard title="売上合計（直近12ヶ月）" value={`¥${jpy(latestTotal ?? 0)}`} sub={"（税抜/税込は各システムの定義に依存）"} />
         <KpiCard title="前月比 (MoM)" value={momDelta == null ? "—" : `${momDelta >= 0 ? "+" : ""}¥${jpy(momDelta)}`} sub={momPct == null ? "—" : `${momPct >= 0 ? "+" : ""}${momPct.toFixed(1)}%`} />
       </section>
+
+      <KpiTargetsPanel />
 
       {/* チャネル別KPI（今月） */}
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
