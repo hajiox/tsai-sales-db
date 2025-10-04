@@ -1,9 +1,9 @@
-// /app/layout.tsx ver.1-fixA （MainDashboardのみ復帰・Toaster保留）
-
+// app/layout.tsx ver.2
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import MainDashboard from "@/main-dashboard"; // ←元と同じパス
+import MainDashboard from "@/main-dashboard";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "TSA System",
@@ -26,7 +26,7 @@ export default function RootLayout({
           <MainDashboard>
             {children}
           </MainDashboard>
-          {/* Toaster は一旦外したまま */}
+          <Toaster position="top-center" richColors />
         </Providers>
       </body>
     </html>
