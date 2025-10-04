@@ -1,3 +1,4 @@
+// components/sales-input-view.tsx ver.2
 "use client"
 
 import type React from "react"
@@ -22,6 +23,7 @@ const salesChannels = [
   { key: "mercari", name: "メルカリ" },
   { key: "base", name: "BASE" },
   { key: "qoo10", name: "Qoo10" },
+  { key: "tiktok", name: "TikTok" },
 ]
 
 export default function SalesInputView() {
@@ -47,6 +49,8 @@ export default function SalesInputView() {
     base_amount: "",
     qoo10_count: "",
     qoo10_amount: "",
+    tiktok_count: "",
+    tiktok_amount: "",
   })
 
   const handleInputChange = (field: string, value: string) => {
@@ -78,20 +82,22 @@ export default function SalesInputView() {
       data.yahoo_count +
       data.mercari_count +
       data.base_count +
-      data.qoo10_count
+      data.qoo10_count +
+      data.tiktok_count
     const totalEcAmount =
       data.amazon_amount +
       data.rakuten_amount +
       data.yahoo_amount +
       data.mercari_amount +
       data.base_amount +
-      data.qoo10_amount
+      data.qoo10_amount +
+      data.tiktok_amount
 
     return `【会津ブランド館売上報告】
 ${data.date}
 
 フロア日計 / ${formatCurrency(data.floor_sales)}
-入　金 / ${formatCurrency(data.cash_income)}
+入　　金 / ${formatCurrency(data.cash_income)}
 レジ通過人数 / 　${data.register_count} 人
 
 【ECサイト売上】
@@ -101,6 +107,7 @@ Yahoo!: ${data.yahoo_count}件 / ${formatCurrency(data.yahoo_amount)}
 メルカリ: ${data.mercari_count}件 / ${formatCurrency(data.mercari_amount)}
 BASE: ${data.base_count}件 / ${formatCurrency(data.base_amount)}
 Qoo10: ${data.qoo10_count}件 / ${formatCurrency(data.qoo10_amount)}
+TikTok: ${data.tiktok_count}件 / ${formatCurrency(data.tiktok_amount)}
 
 EC合計: ${totalEcCount}件 / ${formatCurrency(totalEcAmount)}
 総売上: ${formatCurrency(data.floor_sales + totalEcAmount)}
@@ -131,6 +138,8 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
         base_amount: Number.parseInt(formData.base_amount) || 0,
         qoo10_count: Number.parseInt(formData.qoo10_count) || 0,
         qoo10_amount: Number.parseInt(formData.qoo10_amount) || 0,
+        tiktok_count: Number.parseInt(formData.tiktok_count) || 0,
+        tiktok_amount: Number.parseInt(formData.tiktok_amount) || 0,
       }
 
       const { data, error } = await supabase.from("daily_sales_report").insert([salesData]).select().single()
@@ -157,6 +166,8 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
         base_amount: "",
         qoo10_count: "",
         qoo10_amount: "",
+        tiktok_count: "",
+        tiktok_amount: "",
       })
     } catch (error) {
       console.error("Error submitting data:", error)
