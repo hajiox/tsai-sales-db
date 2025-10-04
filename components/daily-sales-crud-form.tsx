@@ -1,3 +1,4 @@
+// components/daily-sales-crud-form.tsx ver.2
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -33,7 +34,6 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyDat
     const [formData, setFormData] = useState<any>({});
 
     useEffect(() => {
-        // 修正: 直接テーブルから取得したデータ構造に対応
         const initialFormData: any = {
             floor_sales: dailyData?.floor_sales ?? '',
             cash_income: dailyData?.cash_income ?? '',
@@ -44,12 +44,14 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyDat
             mercari_count: dailyData?.mercari_count ?? '',
             rakuten_count: dailyData?.rakuten_count ?? '',
             qoo10_count: dailyData?.qoo10_count ?? '',
+            tiktok_count: dailyData?.tiktok_count ?? '',
             amazon_amount: dailyData?.amazon_amount ?? '',
             base_amount: dailyData?.base_amount ?? '',
             yahoo_amount: dailyData?.yahoo_amount ?? '',
             mercari_amount: dailyData?.mercari_amount ?? '',
             rakuten_amount: dailyData?.rakuten_amount ?? '',
             qoo10_amount: dailyData?.qoo10_amount ?? '',
+            tiktok_amount: dailyData?.tiktok_amount ?? '',
         };
         setFormData(initialFormData);
     }, [dailyData]);
@@ -91,7 +93,7 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyDat
 ${selectedDate}
 フロア日計 / ${nf(d.floor_sales || 0).padStart(8, ' ')}円
 フロア累計 / ${nf(m.m_floor_total || 0)}円
-入 金 / ${nf(d.cash_income || 0).padStart(8, ' ')} 円
+入　　金 / ${nf(d.cash_income || 0).padStart(8, ' ')} 円
 レジ通過人数 / ${nf(d.register_count || 0).padStart(3, ' ')} 人
 【WEB売上】
 Amazon 売上 / ${nf(d.amazon_count || 0)}件  ${nf(d.amazon_amount || 0)}円
@@ -100,12 +102,14 @@ Yahoo! 売上 / ${nf(d.yahoo_count || 0)}件  ${nf(d.yahoo_amount || 0)}円
 メルカリ 売上 / ${nf(d.mercari_count || 0)}件  ${nf(d.mercari_amount || 0)}円
 楽天 売上 / ${nf(d.rakuten_count || 0)}件  ${nf(d.rakuten_amount || 0)}円
 Qoo10 売上 / ${nf(d.qoo10_count || 0)}件  ${nf(d.qoo10_amount || 0)}円
+TikTok 売上 / ${nf(d.tiktok_count || 0)}件  ${nf(d.tiktok_amount || 0)}円
 Amazon累計/  ${nf(m.m_amazon_total || 0)}円
 BASE累計/  ${nf(m.m_base_total || 0)}円
 Yahoo!累計/  ${nf(m.m_yahoo_total || 0)}円
 メルカリ累計/  ${nf(m.m_mercari_total || 0)}円
 楽天累計/  ${nf(m.m_rakuten_total || 0)}円
 Qoo10累計/  ${nf(m.m_qoo10_total || 0)}円
+TikTok累計/  ${nf(m.m_tiktok_total || 0)}円
 ---------------------------------------
 WEB売上累計 / ${nf(m.m_web_total || 0)}円
 【月内フロア＋WEB累計売上】
@@ -126,21 +130,23 @@ ${nf(m.m_grand_total || 0)}円`;
                     <FormInput id="cash_income" label="入金" value={formData.cash_income ?? ''} onChange={handleChange} />
                     <FormInput id="register_count" label="レジ通過人数" value={formData.register_count ?? ''} onChange={handleChange} />
                 </div>
-                <div className="grid grid-cols-6 gap-4">
+                <div className="grid grid-cols-7 gap-4">
                     <FormInput id="amazon_count" label="Amazon 件数" value={formData.amazon_count ?? ''} onChange={handleChange} />
                     <FormInput id="base_count" label="BASE 件数" value={formData.base_count ?? ''} onChange={handleChange} />
                     <FormInput id="yahoo_count" label="Yahoo! 件数" value={formData.yahoo_count ?? ''} onChange={handleChange} />
                     <FormInput id="mercari_count" label="メルカリ 件数" value={formData.mercari_count ?? ''} onChange={handleChange} />
                     <FormInput id="rakuten_count" label="楽天 件数" value={formData.rakuten_count ?? ''} onChange={handleChange} />
                     <FormInput id="qoo10_count" label="Qoo10 件数" value={formData.qoo10_count ?? ''} onChange={handleChange} />
+                    <FormInput id="tiktok_count" label="TikTok 件数" value={formData.tiktok_count ?? ''} onChange={handleChange} />
                 </div>
-                <div className="grid grid-cols-6 gap-4">
-                     <FormInput id="amazon_amount" label="Amazon 売上" value={formData.amazon_amount ?? ''} onChange={handleChange} />
+                <div className="grid grid-cols-7 gap-4">
+                    <FormInput id="amazon_amount" label="Amazon 売上" value={formData.amazon_amount ?? ''} onChange={handleChange} />
                     <FormInput id="base_amount" label="BASE 売上" value={formData.base_amount ?? ''} onChange={handleChange} />
                     <FormInput id="yahoo_amount" label="Yahoo! 売上" value={formData.yahoo_amount ?? ''} onChange={handleChange} />
                     <FormInput id="mercari_amount" label="メルカリ 売上" value={formData.mercari_amount ?? ''} onChange={handleChange} />
                     <FormInput id="rakuten_amount" label="楽天 売上" value={formData.rakuten_amount ?? ''} onChange={handleChange} />
                     <FormInput id="qoo10_amount" label="Qoo10 売上" value={formData.qoo10_amount ?? ''} onChange={handleChange} />
+                    <FormInput id="tiktok_amount" label="TikTok 売上" value={formData.tiktok_amount ?? ''} onChange={handleChange} />
                 </div>
             </div>
 
