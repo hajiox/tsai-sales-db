@@ -1,3 +1,4 @@
+// components/web-sales-input-view.tsx ver.2
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -17,6 +18,7 @@ type SupabaseRpcResult = {
   mercari_count: number;
   base_count: number;
   qoo10_count: number;
+  tiktok_count: number;
 };
 
 // フロント側で使用する型
@@ -33,6 +35,7 @@ type Row = {
   mercari_count: number;
   base_count: number;
   qoo10_count: number;
+  tiktok_count: number;
 };
 
 // シリーズ番号に応じた背景色を取得
@@ -117,6 +120,7 @@ const WebSalesInputView = () => {
             mercari_count: Number(item.mercari_count) || 0,
             base_count: Number(item.base_count) || 0,
             qoo10_count: Number(item.qoo10_count) || 0,
+            tiktok_count: Number(item.tiktok_count) || 0,
           };
         } catch (mappingError) {
           console.error(`Error mapping row ${index}:`, mappingError, item);
@@ -162,6 +166,7 @@ const WebSalesInputView = () => {
               mercari_count: row.mercari_count,
               base_count: row.base_count,
               qoo10_count: row.qoo10_count,
+              tiktok_count: row.tiktok_count,
             })
             .eq('id', row.id);
           
@@ -179,6 +184,7 @@ const WebSalesInputView = () => {
               mercari_count: row.mercari_count,
               base_count: row.base_count,
               qoo10_count: row.qoo10_count,
+              tiktok_count: row.tiktok_count,
             });
           
           if (error) throw error;
@@ -276,13 +282,13 @@ const WebSalesInputView = () => {
   // 合計値を計算
   const grandTotal = rows.reduce((sum, row) => {
     const totalCount = row.amazon_count + row.rakuten_count + row.yahoo_count + 
-                      row.mercari_count + row.base_count + row.qoo10_count;
+                      row.mercari_count + row.base_count + row.qoo10_count + row.tiktok_count;
     return sum + (totalCount * row.price);
   }, 0);
 
   const grandTotalCount = rows.reduce((sum, row) => {
     return sum + row.amazon_count + row.rakuten_count + row.yahoo_count + 
-           row.mercari_count + row.base_count + row.qoo10_count;
+           row.mercari_count + row.base_count + row.qoo10_count + row.tiktok_count;
   }, 0);
 
   return (
@@ -438,6 +444,7 @@ const WebSalesInputView = () => {
                 <th className="border px-1 py-1 text-center w-16">メルカリ</th>
                 <th className="border px-1 py-1 text-center w-16">BASE</th>
                 <th className="border px-1 py-1 text-center w-16">Qoo10</th>
+                <th className="border px-1 py-1 text-center w-16">TikTok</th>
                 <th className="border px-1 py-1 text-center w-16">合計数</th>
                 <th className="border px-1 py-1 text-right w-20">売上</th>
                 <th className="border px-1 py-1 text-center w-12">操作</th>
@@ -446,7 +453,7 @@ const WebSalesInputView = () => {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="border px-4 py-6 text-center text-gray-500 text-sm">
+                  <td colSpan={14} className="border px-4 py-6 text-center text-gray-500 text-sm">
                     選択した月のデータがありません
                   </td>
                 </tr>
@@ -458,7 +465,8 @@ const WebSalesInputView = () => {
                     r.yahoo_count +
                     r.mercari_count +
                     r.base_count +
-                    r.qoo10_count;
+                    r.qoo10_count +
+                    r.tiktok_count;
                   const total_price = total_count * r.price;
                   const rowColor = getSeriesColor(r.series_name);
 
@@ -518,6 +526,15 @@ const WebSalesInputView = () => {
                           type="number"
                           value={r.qoo10_count}
                           onChange={(e) => updateCount(i, 'qoo10_count', e.target.value)}
+                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
+                          min="0"
+                        />
+                      </td>
+                      <td className="border px-0.5 py-0.5">
+                        <input
+                          type="number"
+                          value={r.tiktok_count}
+                          onChange={(e) => updateCount(i, 'tiktok_count', e.target.value)}
                           className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
                           min="0"
                         />
