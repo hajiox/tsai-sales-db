@@ -1,0 +1,92 @@
+# TSai Sales DB システム調査レポート
+
+## 1. プロジェクト概要
+- Next.js 14 をベースにした社内向けダッシュボード/販売管理システム。
+- Supabase(PostgreSQL) と直接接続する pg プールの両方を利用し、日次/週次/期間別の販売データ、卸売、ブランドストア、飲食店売上、財務 KPI などを統合管理。
+- Google アカウントでの NextAuth 認証を行い、Supabase 用の署名済み JWT を払い出す構成。
+
+## 2. 技術スタック
+- フロント: Next.js(App Router), React 18, Tailwind CSS, Radix UI, NextUI, Chart.js, Recharts。
+- 認証: next-auth + Google Provider、JWT で Supabase のアクセストークンを生成。
+- データ層: Supabase JS SDK、PostgreSQL(pg Pool)、サーバー RPC 関数、SQL スクリプト。
+- AI/外部: OpenAI API、Supabase Vector RPC(`match_products`)。
+
+## 3. ディレクトリ構成(主要部)
+```
+app/
+  api/                — Supabase/PostgreSQL に接続する API ルート群
+  sales/, web-sales/  — 各ダッシュボードと入力画面
+  finance/, kpi/, wholesale/, brand-store-analysis/ など機能別ページ
+components/           — ダッシュボード UI・CSV モーダル・表などの再利用部品
+hooks/                — Supabase 連携や CSV 読み込み用の React フック
+lib/                  — DB 接続、Supabase クライアント、財務ロジック
+server/               — KPI 向けのサーバーサイド DB ラッパー
+scripts/, sql/        — テーブル作成・ビジネスロジック SQL
+types/                — DB や CSV の型定義
+utils/                — Web 売上ユーティリティ
+styles/               — Tailwind / グローバル CSS
+```
+
+## 4. 主な機能モジュールと役割
+### 4.1 認証・共通レイアウト
+- `app/api/auth/[...nextauth]/route.ts`: Google アカウントを許可リストで照合し、Supabase JWT を生成。セッションへ `supabaseAccessToken` を付与。
+- `main-dashboard.tsx` と `components/main-sidebar.tsx`: 各モジュールを横断するサイドバー付きレイアウト。
+
+### 4.2 売上ダッシュボード (app/sales, app/api/sales)
+- API (`daily`, `monthly`, `six-month`, `dashboard`): `daily_sales_report` テーブルと Supabase RPC (`get_sales_report_data`, `get_6month_sales_summary`) を使用して日次～半年分のデータを返却。
+- フロント (`sales-dashboard` 系コンポーネント、`components/sales-chart-grid.tsx` 等): 取得したデータをチャートや表で可視化し、`SalesDataTable` などで編集サポート。
+- CSV 連携: `components/csv-import-section.tsx` と `hooks/useCSVImport.tsx` が複数サイト(Amazon/Rakuten/Yahoo/Base/Mercari/Qoo10/CSV)のインポート UI を提供。
+
+### 4.3 Web販売管理 (app/web-sales)
+- ダッシュボード (`app/web-sales/dashboard/page.client.tsx`): Supabase から `web_sales_summary` と `products` を取得し、ランキング/推移/AI 分析コンポーネント(`components/websales-summary-cards.tsx`, `websales-charts.tsx`, `web-sales-ai-section.tsx`)を描画。AI セクションは `web_sales_ai_reports` を参照。
+- 入力画面 (`app/web-sales/input/page.client.tsx`): `web_sales_summary` への登録や `add_product_with_global_id` RPC を利用して商品追加。
+- 期間集計 API (`app/api/web-sales-period/route.ts`): `get_period_sales_data` RPC で期間別売上を取得。
+- チャート API (`app/api/web-sales-chart-data/route.ts`): `get_monthly_financial_summary`, `get_monthly_series_summary`, `get_monthly_chart_data` を呼び出し。
+
+### 4.4 商品マスタ & 学習機能
+- `app/api/products/*`: `products` テーブルへの CRUD。`Generate` 系コンポーネントと連携。
+- 学習リセット/学習データ投入 (`app/api/learning/*`, `app/api/import/*-learn`): 各モール毎のマッピングテーブル(`amazon_product_mapping`, `rakuten_product_mapping`, `yahoo_product_mapping`, `mercari_product_mapping`, `base_product_mapping`, `qoo10_product_mapping`, `csv_product_mapping`)を管理。
+- `lib/db/productMatcher.ts`: Supabase RPC `match_products` を使用してベクトル類似検索を実行。
+
+### 4.5 卸売・OEM 管理 (app/wholesale)
+- API (`app/api/wholesale/*`): `wholesale_products`, `wholesale_sales`, `oem_products`, `oem_customers`, `oem_sales` を CRUD。`upsert_oem_sale` RPC で OEM 売上登録。
+- サーバー側 KPI (`server/db/kpi.ts`): PostgreSQL 関数 `kpi.wholesale_oem_monthly_overview_v2` を呼び出し、KPI ダッシュボードへ提供。
+- フロント (`components/Wholesale*`, `app/wholesale/dashboard/page.tsx` 等): 商品別・顧客別の管理画面、価格履歴モーダル。
+
+### 4.6 ブランドストア & 飲食店分析
+- ブランドストア API (`app/api/brand-store/*`): `brand_store_sales`, `product_master`, `category_master`, `product_name_aliases`, `category_master_history`, `product_master_history` にアクセス。CSV 解析(`parse`), データ確認(`confirm`), マスタ一括更新(`import-masters`).
+- 飲食店 (`app/api/food-store/*`): `food_store_sales`, `food_product_master`, `food_category_master` を扱い、カテゴリ・商品・売上インポートを提供。
+
+### 4.7 財務・KPI
+- 財務 API (`app/api/finance/*`): PostgreSQL 直結で `financial_overview_final_v1`, `bs_snapshot_clean` 等のストアド関数を呼び出し、`general_ledger` や財務スナップショットの差分を返却。`app/api/general-ledger` 系ルートは `general_ledger` ビューを参照。
+- KPI (`app/api/kpi*`, `app/kpi-*`): 月次/年次の KPI データを取得し、`sql/20240914_kpi_manual_entries.sql` などで補正値を管理。
+- 年間計画 (`app/annual-plan`, `app/api/annual-plan/*`): `annual_plan` 関連 SQL(エクスポート, 保存)と Supabase 経由の計画データ更新。
+
+### 4.8 レポート・AI
+- `app/api/analyze/route.ts`: `daily_sales_report`, `ai_reports` を参照し、OpenAI で要約を生成する分析エンドポイント。
+- `components/ai-analysis-widget.tsx` & `components/ai-dashboard-section.tsx`: AI 分析の UI。`lib/utils.ts` などのヘルパーを使用。
+- `app/api/report/*`: Amazon/CSV レポート生成で `web_sales_summary`, `products` を利用し、CSV エクスポート。
+
+### 4.9 検証・デバッグ
+- `app/api/verify/*`: 各モールの売上データと `products`・マッピングテーブルを照合して重複検出。
+- `app/api/debug/*`: 環境変数表示など開発時の診断。
+- `app/diag/*`: KPI 差分やベンチマークを可視化する診断ページ群。DB ビュー(`kpi_web_audit`, `kpi_final_audit`, `kpi_web_audit_reclass` 等)を参照。
+
+## 5. DB テーブル・ビュー・関数一覧 (参照元)
+- **主要テーブル**: `daily_sales_report`, `sales_reports`, `web_sales_summary`, `web_sales_ai_reports`, `products`, `series_master`, `product_master`, `category_master`, `brand_store_sales`, `food_store_sales`, `food_product_master`, `food_category_master`, `wholesale_products`, `wholesale_sales`, `oem_products`, `oem_customers`, `oem_sales`, `ai_reports`, `general_ledger`, 各種 `*_product_mapping`。
+- **補助テーブル/履歴**: `product_master_history`, `category_master_history`, `product_name_aliases`。
+- **ビュー/関数(RPC含む)**:
+  - Supabase RPC: `get_sales_report_data`, `get_6month_sales_summary`, `get_period_sales_data`, `get_monthly_financial_summary`, `get_monthly_series_summary`, `get_monthly_chart_data`, `get_previous_year_data`, `get_product_trend_data`, `get_product_site_trend_data`, `get_product_trend_analysis`, `web_sales_full_month`, `add_product_with_global_id`, `upsert_oem_sale`, `bs_snapshot_clean`, `match_products`。
+  - PostgreSQL 関数/ビュー: `financial_overview_final_v1`, `v_trial_balance_final_latest`, `kpi.wholesale_oem_monthly_overview_v2`。
+- **SQL スクリプト**: `scripts/create-sales-table.sql`, `scripts/create-daily-sales-table.sql`, `scripts/create-ai-reports-table.sql`, `scripts/create-web-sales-full-month-function.sql`, `scripts/deduplicate-daily-sales-report.sql`, `sql/20240914_kpi_manual_entries.sql`, `sql/20250908_annual_plan.sql` など。テーブル作成とデータ補正のベース資料。
+
+## 6. サービス間の依存関係
+- フロントコンポーネントは `hooks/useWebSalesData.tsx` や `hooks/useCsvAnalysis.ts` などのフックを通じて API ルートを叩き、API ルートは Supabase もしくは `lib/db/pool.ts` 経由で DB に接続。
+- 認証済みセッションから渡された `supabaseAccessToken` によりブラウザ側でも Supabase の行レベルセキュリティを突破できる。
+- 既存データと AI/CSV インポート機能が連携し、マッピングテーブルの学習結果を利用して重複チェック(`hooks/useDuplicateChecker.ts`, `components/DuplicateResolverModal.tsx`)を実行。
+- KPI や財務データは基本的に PostgreSQL のビュー/ストアド関数経由で集約済みデータを取得し、アプリ側はビジュアライズと差分検証に集中。
+
+## 7. 補足
+- `.env.example` には Supabase と OpenAI、PostgreSQL の接続情報が必要。
+- `middleware.ts` で一部ルートの保護/リダイレクト設定を行う想定。
+- Tailwind 設定や `components.json` は shadcn/UI のコンポーネント生成に対応。
