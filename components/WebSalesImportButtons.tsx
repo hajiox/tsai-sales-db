@@ -1,5 +1,5 @@
-// /components/WebSalesImportButtons.tsx ver.6
-// アンカー追加版
+// /components/WebSalesImportButtons.tsx ver.7
+// TikTok追加版
 
 "use client"
 
@@ -13,7 +13,8 @@ interface WebSalesImportButtonsProps {
   onYahooClick: () => void
   onMercariClick: () => void
   onBaseClick: () => void
-  onQoo10Click: () => void  // 🟣 Qoo10追加
+  onQoo10Click: () => void
+  onTiktokClick: () => void  // 🟢 TikTok追加
 }
 
 export default function WebSalesImportButtons({
@@ -24,7 +25,8 @@ export default function WebSalesImportButtons({
   onYahooClick,
   onMercariClick,
   onBaseClick,
-  onQoo10Click,  // 🟣 Qoo10追加
+  onQoo10Click,
+  onTiktokClick,  // 🟢 TikTok追加
 }: WebSalesImportButtonsProps) {
   return (
     <div id="csv-input-section" className="p-3 border-t">
@@ -69,16 +71,22 @@ export default function WebSalesImportButtons({
           BASE
         </button>
         <button
-          onClick={onQoo10Click}  // 🟣 Qoo10有効化
+          onClick={onQoo10Click}
           className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600"
         >
           Qoo10
+        </button>
+        <button
+          onClick={onTiktokClick}  // 🟢 TikTok有効化
+          className="px-3 py-1 text-xs font-semibold text-white bg-teal-500 rounded hover:bg-teal-600"
+        >
+          TikTok
         </button>
       </div>
 
       {/* ▼ 追加した注意書き */}
       <p className="mt-1 text-xs text-gray-500 text-center">
-        ※ Yahoo・メルカリ・BASE・Qoo10のCSV はアップロード前に <span className="font-semibold">必ず「CSV UTF-8 (カンマ区切り)」形式</span> で保存してください。
+        ※ Yahoo・メルカリ・BASE・Qoo10・TikTokのCSV はアップロード前に <span className="font-semibold">必ず「CSV UTF-8 (カンマ区切り)」形式</span> で保存してください。
       </p>
     </div>
   );
