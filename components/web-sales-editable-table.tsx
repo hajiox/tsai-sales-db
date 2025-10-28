@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.65 (TikTok対応版)
+// /components/web-sales-editable-table.tsx ver.66 (TikTok products追加版)
 // 汎用CSV機能統合版
 
 "use client"
@@ -249,7 +249,8 @@ export default function WebSalesEditableTable({
       yahoo: 'Yahoo',
       mercari: 'メルカリ',
       base: 'BASE',
-      qoo10: 'Qoo10'
+      qoo10: 'Qoo10',
+      tiktok: 'TikTok'
     };
 
     const isConfirmed = confirm(
@@ -302,7 +303,8 @@ export default function WebSalesEditableTable({
       yahoo: 'Yahoo',
       mercari: 'メルカリ',
       base: 'BASE',
-      qoo10: 'Qoo10'
+      qoo10: 'Qoo10',
+      tiktok: 'TikTok'
     };
 
     const tableName = `${channel}_product_mapping`;
@@ -384,6 +386,7 @@ export default function WebSalesEditableTable({
           mercari_count: 0,
           base_count: 0,
           qoo10_count: 0,
+          tiktok_count: 0,
           report_date: new Date().toISOString().split('T')[0],
           [field]: newValue
         }
@@ -722,6 +725,7 @@ export default function WebSalesEditableTable({
           isOpen={isTiktokCsvModalOpen}
           onClose={() => setIsTiktokCsvModalOpen(false)}
           onImportComplete={handleImportSuccess}
+          products={productMasterList}
         />
       )}
 
