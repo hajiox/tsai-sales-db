@@ -10,6 +10,7 @@ export interface WebSalesData {
   mercari_count: number
   base_count: number
   qoo10_count: number
+  tiktok_count: number
   total_count: number
   series?: string
   series_code?: number
