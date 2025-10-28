@@ -1,472 +1,435 @@
-// app/components/TiktokCsvImportModal.tsx ver.1
+// /components/TiktokCsvImportModal.tsx ver.2 (BASE完全移植版)
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Upload, CheckCircle, AlertCircle, BookOpen } from 'lucide-react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { X, Upload, AlertCircle, ArrowRight, ArrowLeft, FileText, AlertTriangle, Edit2, Check, Save } from 'lucide-react';
 
 interface Product {
   id: string;
   name: string;
-  series: string | null;
-  price: number;
-}
-
-interface ParsedItem {
-  title: string;
-  count: number;
-  saleDate: string;
-  productId: string | null;
-  isLearned: boolean;
+  series: string;
+  series_code: number;
+  product_code: number;
 }
 
 interface TiktokCsvImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportComplete: () => void;
+  products: Product[];
 }
 
 export default function TiktokCsvImportModal({ 
   isOpen, 
   onClose, 
-  onImportComplete 
+  onImportComplete,
+  products
 }: TiktokCsvImportModalProps) {
   const [step, setStep] = useState(1);
-  const [file, setFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [parsedData, setParsedData] = useState<{
-    learned: ParsedItem[];
-    unlearned: ParsedItem[];
-  }>({ learned: [], unlearned: [] });
-  const [products, setProducts] = useState<Product[]>([]);
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [parseResult, setParseResult] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [saleMonth, setSaleMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
 
-  const supabase = createClientComponentClient();
+  // マッチング修正用の状態
+  const [allMappings, setAllMappings] = useState<Array<{
+    tiktokTitle: string;
+    productId: string;
+    productName: string;
+    quantity: number;
+    isLearned?: boolean;
+  }>>([]);
+  const [savingMapping, setSavingMapping] = useState<string | null>(null);
 
-  // 商品一覧取得
   useEffect(() => {
-    if (isOpen && step === 3) {
-      fetchProducts();
+    if (!isOpen) {
+      setStep(1);
+      setCsvFile(null);
+      setParseResult(null);
+      setError('');
+      setAllMappings([]);
+      setSavingMapping(null);
     }
-  }, [isOpen, step]);
+  }, [isOpen]);
 
-  const fetchProducts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, name, series, price')
-        .order('series', { ascending: true })
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (err) {
-      console.error('商品一覧の取得エラー:', err);
-      setError('商品一覧の取得に失敗しました');
+  useEffect(() => {
+    if (parseResult && step === 3) {
+      const learned = parseResult.results?.learned || [];
+      const unlearned = parseResult.results?.unlearned || [];
+      
+      const mappings = [
+        ...learned.map((item: any) => ({ 
+          tiktokTitle: item.title,
+          productId: item.productId || '',
+          productName: products.find(p => p.id === item.productId)?.name || '',
+          quantity: item.count,
+          isLearned: false 
+        })),
+        ...unlearned.map((item: any) => ({
+          tiktokTitle: item.title,
+          productId: '',
+          productName: '',
+          quantity: item.count,
+          isLearned: false
+        }))
+      ];
+      
+      setAllMappings(mappings);
     }
-  };
+  }, [parseResult, step, products]);
 
-  // ファイル選択
+  if (!isOpen) return null;
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setError(null);
+    const file = e.target.files?.[0];
+    if (file) {
+      setCsvFile(file);
+      setParseResult(null);
+      setError('');
+      setAllMappings([]);
     }
   };
-
-  // Step2: CSV解析
+  
   const handleParse = async () => {
-    if (!file) {
-      setError('ファイルを選択してください');
+    if (!csvFile) {
+      setError('CSVファイルを選択してください');
       return;
     }
 
-    setIsProcessing(true);
-    setError(null);
+    setIsLoading(true);
+    setError('');
 
     try {
-      const csvText = await file.text();
-
+      const text = await csvFile.text();
+      
       const response = await fetch('/api/import/tiktok-parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csvText })
+        body: JSON.stringify({ csvText: text }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'CSVの解析に失敗しました');
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'TikTok CSVの解析に失敗しました');
       }
 
-      const data = await response.json();
-      setParsedData(data.results);
+      setParseResult(result);
+      setStep(2);
+    } catch (error) {
+      console.error('TikTok CSV解析エラー:', error);
+      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      if (data.results.unlearned.length > 0) {
-        setStep(3); // 未学習商品がある場合はStep3へ
+  // 個別学習機能
+  const handleLearnMapping = async (index: number) => {
+    const mapping = allMappings[index];
+    if (!mapping.productId || mapping.isLearned) return;
+
+    setSavingMapping(mapping.tiktokTitle);
+    
+    try {
+      const response = await fetch('/api/import/tiktok-learn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: mapping.tiktokTitle,
+          productId: mapping.productId
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setAllMappings(prev => prev.map((m, i) => 
+          i === index ? { ...m, isLearned: true } : m
+        ));
       } else {
-        setStep(4); // 全て学習済みの場合はStep4へ
+        throw new Error(result.error || '学習に失敗しました');
       }
-    } catch (err) {
-      console.error('Parse エラー:', err);
-      setError(err instanceof Error ? err.message : 'CSVの解析に失敗しました');
+    } catch (error) {
+      console.error('学習エラー:', error);
+      alert('学習に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'));
     } finally {
-      setIsProcessing(false);
+      setSavingMapping(null);
     }
   };
 
-  // Step3: 未学習商品の割り当て
-  const handleAssignProduct = (title: string, productId: string) => {
-    setAssignments(prev => ({
-      ...prev,
-      [title]: productId
-    }));
+  // マッピング変更
+  const handleMappingChange = (index: number, productId: string) => {
+    const product = products.find(p => p.id === productId);
+    setAllMappings(prev => prev.map((m, i) => 
+      i === index ? { 
+        ...m, 
+        productId, 
+        productName: product?.name || '',
+        isLearned: false 
+      } : m
+    ));
   };
 
-  // Step3→Step4: 学習を実行
-  const handleLearnAndProceed = async () => {
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-      // 割り当てられた商品を学習
-      const learnPromises = Object.entries(assignments).map(([title, productId]) =>
-        fetch('/api/import/tiktok-learn', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, productId })
-        })
-      );
-
-      await Promise.all(learnPromises);
-
-      // 未学習商品を学習済みに移動
-      const newLearned = parsedData.unlearned
-        .filter(item => assignments[item.title])
-        .map(item => ({
-          ...item,
-          productId: assignments[item.title],
-          isLearned: true
-        }));
-
-      setParsedData(prev => ({
-        learned: [...prev.learned, ...newLearned],
-        unlearned: prev.unlearned.filter(item => !assignments[item.title])
-      }));
-
-      setStep(4);
-    } catch (err) {
-      console.error('学習エラー:', err);
-      setError('学習データの保存に失敗しました');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Step3→Step4: 学習をスキップ
-  const handleSkipLearning = () => {
-    setStep(4);
-  };
-
-  // Step4: 確定
   const handleConfirm = async () => {
-    setIsProcessing(true);
-    setError(null);
-
+    setIsLoading(true);
+    setError('');
+    
     try {
-      const itemsToConfirm = parsedData.learned;
-
-      if (itemsToConfirm.length === 0) {
-        setError('確定するデータがありません');
-        return;
+      const validMappings = allMappings.filter(m => m.productId);
+      
+      if (validMappings.length === 0) {
+        throw new Error('インポートする商品が1件もありません');
       }
 
+      const items = validMappings.map(item => ({
+        title: item.tiktokTitle,
+        count: item.quantity,
+        saleDate: saleMonth,
+        productId: item.productId
+      }));
+      
       const response = await fetch('/api/import/tiktok-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: itemsToConfirm })
+        body: JSON.stringify({ items }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'データの確定に失敗しました');
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'インポートに失敗しました');
       }
 
-      setSuccessMessage(`${itemsToConfirm.length}件のデータを正常にインポートしました`);
-      setStep(5);
-
-      // 親コンポーネントに完了を通知
-      setTimeout(() => {
-        onImportComplete();
-        handleClose();
-      }, 2000);
-    } catch (err) {
-      console.error('Confirm エラー:', err);
-      setError(err instanceof Error ? err.message : 'データの確定に失敗しました');
+      alert(`✅ ${validMappings.length}件の商品をインポートしました`);
+      onImportComplete();
+      onClose();
+    } catch (error) {
+      console.error('Confirmエラー:', error);
+      setError(error instanceof Error ? error.message : '不明なエラー');
     } finally {
-      setIsProcessing(false);
+      setIsLoading(false);
     }
   };
 
-  // モーダルを閉じる
-  const handleClose = () => {
-    setStep(1);
-    setFile(null);
-    setError(null);
-    setParsedData({ learned: [], unlearned: [] });
-    setAssignments({});
-    setSuccessMessage(null);
-    onClose();
+  const stats = {
+    matched: allMappings.filter(m => m.productId).length,
+    unmatched: allMappings.filter(m => !m.productId).length,
+    totalQuantity: allMappings.filter(m => m.productId).reduce((sum, m) => sum + m.quantity, 0),
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            TikTokショップ CSV インポート
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Step Indicator */}
-          <div className="flex items-center justify-between mb-6">
-            {[1, 2, 3, 4, 5].map((s) => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+          <h2 className="text-xl font-bold">TikTokショップ CSV インポート</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X /></button>
+        </div>
+        
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            {[1, 2, 3].map((s) => (
               <div key={s} className="flex items-center">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    s <= step
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-600'
-                  }`}
-                >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${s <= step ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
                   {s}
                 </div>
-                {s < 5 && (
-                  <div
-                    className={`w-16 h-1 ${
-                      s < step ? 'bg-blue-500' : 'bg-gray-200'
-                    }`}
-                  />
-                )}
+                {s < 3 && <div className={`w-24 h-1 mx-2 ${s < step ? 'bg-blue-600' : 'bg-gray-200'}`} />}
               </div>
             ))}
           </div>
 
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Success Alert */}
-          {successMessage && (
-            <Alert className="bg-green-50 border-green-200">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800">
-                {successMessage}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Step 1: ファイル選択 */}
           {step === 1 && (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="csv-file">TikTokショップのCSVファイルを選択</Label>
-                <Input
-                  id="csv-file"
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileChange}
-                  className="mt-2"
-                />
-              </div>
-              {file && (
-                <p className="text-sm text-gray-600">
-                  選択されたファイル: {file.name}
-                </p>
+            <>
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  <span className="text-red-600 text-sm">{error}</span>
+                </div>
               )}
-              <Button
-                onClick={() => setStep(2)}
-                disabled={!file}
-                className="w-full"
-              >
-                次へ
-              </Button>
-            </div>
-          )}
-
-          {/* Step 2: CSV解析 */}
-          {step === 2 && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                CSVファイルを解析しています...
-              </p>
-              <Button
-                onClick={handleParse}
-                disabled={isProcessing}
-                className="w-full"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    解析中...
-                  </>
-                ) : (
-                  '解析開始'
-                )}
-              </Button>
-            </div>
-          )}
-
-          {/* Step 3: 未学習商品の割り当て */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                <p className="text-sm text-yellow-800">
-                  <BookOpen className="inline h-4 w-4 mr-1" />
-                  未学習の商品が {parsedData.unlearned.length} 件あります。
-                  商品マスターから該当する商品を選択してください。
-                </p>
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">TikTok CSV ファイル:</label>
+                <div className="flex items-center gap-4 p-4 border-2 border-dashed rounded-lg">
+                  <label htmlFor="tiktok-csv-upload" className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition-colors">ファイルを選択</label>
+                  <Input id="tiktok-csv-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <FileText className="h-5 w-5 text-gray-400" />
+                    <span>{csvFile ? csvFile.name : '選択されていません'}</span>
+                  </div>
+                </div>
+                <Button onClick={handleParse} disabled={!csvFile || isLoading} className="w-full mt-4">
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isLoading ? '解析中...' : '次へ（確認画面）'}
+                </Button>
               </div>
+            </>
+          )}
 
-              <div className="max-h-96 overflow-y-auto space-y-3">
-                {parsedData.unlearned.map((item, index) => (
-                  <div key={index} className="border rounded-md p-3">
-                    <div className="flex flex-col gap-2">
-                      <div>
-                        <span className="font-medium text-sm">TikTok商品名:</span>
-                        <p className="text-sm text-gray-700">{item.title}</p>
-                        <p className="text-xs text-gray-500">
-                          個数: {item.count} / 売上月: {item.saleDate}
-                        </p>
-                      </div>
-                      <select
-                        className="border rounded-md p-2 text-sm"
-                        value={assignments[item.title] || ''}
-                        onChange={(e) => handleAssignProduct(item.title, e.target.value)}
-                      >
-                        <option value="">商品を選択...</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.series || '未分類'} - {product.name}
-                          </option>
-                        ))}
-                      </select>
+          {step === 2 && parseResult && (
+            <>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">売上月:</label>
+                <input type="month" value={saleMonth} onChange={(e) => setSaleMonth(e.target.value)} className="border rounded-md p-2 w-full" />
+              </div>
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2">📊 数量チェック</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600">CSV総商品数</div>
+                    <div className="text-2xl font-bold text-green-600">{parseResult.summary?.total || 0}件</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600">登録可能数量</div>
+                    <div className="text-2xl font-bold text-green-600">{stats.totalQuantity}個</div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <div className="grid grid-cols-2 gap-4 my-4">
+                <Card className="bg-green-50">
+                  <CardHeader><CardTitle className="text-green-700">学習済み</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold text-green-600">{parseResult.summary?.learned || 0}件</div></CardContent>
+                </Card>
+                <Card className="bg-yellow-50">
+                  <CardHeader><CardTitle className="text-yellow-700">未学習</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold text-yellow-600">{parseResult.summary?.unlearned || 0}件</div></CardContent>
+                </Card>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                  <ArrowLeft className="h-4 w-4 mr-2" />戻る
+                </Button>
+                <Button onClick={() => setStep(3)} className="flex-1">
+                  <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
+                </Button>
+                <Button 
+                  onClick={handleConfirm}
+                  disabled={isLoading || stats.matched === 0}
+                  className="flex-1"
+                >
+                  {isLoading ? '処理中...' : 'インポート実行'}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <h3 className="text-lg font-bold mb-4">マッチング結果の修正</h3>
+              <Card className="mb-4">
+                <CardHeader>
+                  <CardTitle>📊 現在の状況</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-sm text-gray-600">合計</div>
+                      <div className="text-2xl font-bold">{allMappings.length}件</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600">マッチ済み</div>
+                      <div className="text-2xl font-bold text-green-600">{stats.matched}件</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600">未マッチ</div>
+                      <div className="text-2xl font-bold text-yellow-600">{stats.unmatched}件</div>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleLearnAndProceed}
-                  disabled={
-                    isProcessing ||
-                    Object.keys(assignments).length === 0
-                  }
-                  className="flex-1"
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      学習中...
-                    </>
-                  ) : (
-                    '学習して次へ'
-                  )}
-                </Button>
-                <Button
-                  onClick={handleSkipLearning}
-                  variant="outline"
-                  disabled={isProcessing}
-                  className="flex-1"
-                >
-                  学習せずに次へ
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: 確認 */}
-          {step === 4 && (
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                <p className="text-sm text-blue-800">
-                  <CheckCircle className="inline h-4 w-4 mr-1" />
-                  学習済み商品: {parsedData.learned.length} 件
-                </p>
-                {parsedData.unlearned.length > 0 && (
-                  <p className="text-sm text-yellow-800 mt-1">
-                    <AlertCircle className="inline h-4 w-4 mr-1" />
-                    未学習商品: {parsedData.unlearned.length} 件（インポート対象外）
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>📋 商品マッピング一覧</CardTitle>
+                  <p className="text-sm text-gray-600">
+                    TikTok商品名とマスタ商品を紐付けてください。未マッチの商品は空欄のまま保存されません。
                   </p>
-                )}
-              </div>
-
-              <div className="max-h-96 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="p-2 text-left">商品名</th>
-                      <th className="p-2 text-right">個数</th>
-                      <th className="p-2 text-left">売上月</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parsedData.learned.map((item, index) => (
-                      <tr key={index} className="border-t">
-                        <td className="p-2">{item.title}</td>
-                        <td className="p-2 text-right">{item.count}</td>
-                        <td className="p-2">{item.saleDate}</td>
-                      </tr>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {allMappings.map((mapping, index) => (
+                      <div key={index} className={`p-4 border rounded-lg ${mapping.productId ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">TikTok商品名</label>
+                            <div className="mt-1 p-2 bg-white rounded border text-sm break-words">
+                              {mapping.tiktokTitle}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">数量: {mapping.quantity}個</div>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">マスタ商品</label>
+                            <select
+                              value={mapping.productId}
+                              onChange={(e) => handleMappingChange(index, e.target.value)}
+                              className="mt-1 w-full p-2 border rounded text-sm"
+                            >
+                              <option value="">-- 未選択（この商品はスキップ） --</option>
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                            {mapping.productId && (
+                              <div className="mt-2 flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant={mapping.isLearned ? "secondary" : "default"}
+                                  disabled={mapping.isLearned || savingMapping === mapping.tiktokTitle}
+                                  onClick={() => handleLearnMapping(index)}
+                                >
+                                  {savingMapping === mapping.tiktokTitle ? (
+                                    <>学習中...</>
+                                  ) : mapping.isLearned ? (
+                                    <>
+                                      <Check className="h-3 w-3 mr-1" />
+                                      学習済み
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Save className="h-3 w-3 mr-1" />
+                                      この組み合わせを学習
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              {error && (
+                <div className="my-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  <span className="text-red-600 text-sm">{error}</span>
+                </div>
+              )}
+              
+              <div className="flex gap-2 mt-4">
+                <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+                  <ArrowLeft className="h-4 w-4 mr-2" />確認画面に戻る
+                </Button>
+                <Button 
+                  onClick={handleConfirm} 
+                  disabled={isLoading || stats.matched === 0} 
+                  className="flex-1"
+                >
+                  {isLoading ? '処理中...' : `インポート実行（${stats.matched}件）`}
+                </Button>
               </div>
-
-              <Button
-                onClick={handleConfirm}
-                disabled={isProcessing || parsedData.learned.length === 0}
-                className="w-full"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    確定中...
-                  </>
-                ) : (
-                  '確定してインポート'
-                )}
-              </Button>
-            </div>
-          )}
-
-          {/* Step 5: 完了 */}
-          {step === 5 && (
-            <div className="text-center py-8">
-              <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-              <p className="text-lg font-semibold text-gray-900">
-                インポート完了
-              </p>
-              <p className="text-sm text-gray-600 mt-2">
-                {successMessage}
-              </p>
-            </div>
+            </>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
