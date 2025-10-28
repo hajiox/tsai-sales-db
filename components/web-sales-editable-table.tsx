@@ -1,4 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.64 (保存機能実装版)
+// /components/web-sales-editable-table.tsx ver.65 (TikTok対応版)
 // 汎用CSV機能統合版
 
 "use client"
@@ -16,6 +16,7 @@ import YahooCsvImportModal from "./YahooCsvImportModal"
 import MercariCsvImportModal from "./MercariCsvImportModal"
 import BaseCsvImportModal from "./BaseCsvImportModal"
 import Qoo10CsvImportModal from "./Qoo10CsvImportModal"
+import TiktokCsvImportModal from "./TiktokCsvImportModal"
 import CsvImportModal from "./CsvImportModal"
 import PriceHistoryManagementModal from "./PriceHistoryManagementModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
@@ -78,6 +79,7 @@ export default function WebSalesEditableTable({
   const [isMercariCsvModalOpen, setIsMercariCsvModalOpen] = useState(false)
   const [isBaseCsvModalOpen, setIsBaseCsvModalOpen] = useState(false)
   const [isQoo10CsvModalOpen, setIsQoo10CsvModalOpen] = useState(false)
+  const [isTiktokCsvModalOpen, setIsTiktokCsvModalOpen] = useState(false)
   
   const router = useRouter()
 
@@ -231,108 +233,192 @@ export default function WebSalesEditableTable({
   }
 
   const filteredItems = useMemo(() => {
-    if (!data) return []
-    const sortedData = sortWebSalesData(data, getProductSeriesCode, getProductNumber)
-    return filterWebSalesData(sortedData, filterValue, getProductName)
+    const filtered = filterWebSalesData(data, filterValue)
+    return sortWebSalesData(filtered)
   }, [data, filterValue])
 
-  const totalCount = useMemo(() => calculateTotalAllECSites(filteredItems), [filteredItems])
-  const totalAmount = useMemo(() => {
-    let sum = 0
-    filteredItems.forEach(item => {
-      const productPrice = getProductPrice(item.product_id) || 0
-      const totalItemQuantity = ["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10"].reduce((total, site) => total + (item[`${site}_count`] || 0), 0)
-      sum += totalItemQuantity * productPrice
-    })
-    return sum
-  }, [filteredItems, isHistoricalMode])
+  const { totalCount, totalAmount } = useMemo(() => {
+    return calculateTotalAllECSites(filteredItems, productMap)
+  }, [filteredItems, productMap])
 
-  // 編集開始時の処理
-  const handleEditStart = (productId: string, ecSite: string) => {
-    const key = `${productId}-${ecSite}`
-    const currentItem = data.find(item => item.product_id === productId)
-    const currentValue = currentItem?.[`${ecSite}_count`] || 0
-    
-    setEditMode({ [key]: true })
-    setEditedValue(currentValue.toString())
-    setOriginalValues({ [key]: currentValue })
-  }
+  const handleChannelDelete = async (channel: string) => {
+    const channelNames: { [key: string]: string } = {
+      csv: '汎用CSV',
+      amazon: 'Amazon',
+      rakuten: '楽天',
+      yahoo: 'Yahoo',
+      mercari: 'メルカリ',
+      base: 'BASE',
+      qoo10: 'Qoo10'
+    };
 
-  // 保存処理
-  const handleSave = async (productId: string, ecSite: string) => {
-    const key = `${productId}-${ecSite}`
-    const numericValue = parseInt(editedValue, 10)
-    
-    // 数値の検証
-    if (isNaN(numericValue) || numericValue < 0) {
-      alert('販売数は0以上の整数を入力してください')
-      setEditedValue(originalValues[key]?.toString() || '0')
-      setEditMode({})
-      return
-    }
-    
-    // 元の値と同じ場合は何もしない
-    if (numericValue === originalValues[key]) {
-      setEditMode({})
-      return
-    }
-    
+    const isConfirmed = confirm(
+      `${channelNames[channel]}のデータを削除してもよろしいですか？\n\n` +
+      `対象月: ${month}\n` +
+      `この操作は取り消せません。`
+    );
+
+    if (!isConfirmed) return;
+
     try {
-      const response = await fetch('/api/web-sales-data', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_id: productId,
-          report_month: month,
-          site: ecSite,
-          count: numericValue
-        })
-      })
+      const columnName = channel === 'csv' ? 'csv_count' : `${channel}_count`;
       
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || '保存に失敗しました')
+      const { data: existingData, error: fetchError } = await supabase
+        .from('web_sales_summary')
+        .select('*')
+        .eq('report_month', `${month}-01`);
+
+      if (fetchError) throw fetchError;
+
+      if (!existingData || existingData.length === 0) {
+        alert('削除対象のデータが見つかりませんでした。');
+        return;
       }
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        // ローカルデータを更新
-        setData(prevData => 
-          prevData.map(item => 
-            item.product_id === productId 
-              ? { ...item, [`${ecSite}_count`]: numericValue }
-              : item
-          )
-        )
-        
-        // 編集モードを終了
-        setEditMode({})
-        setOriginalValues({})
-        
-        // 親コンポーネントに更新を通知
-        onDataUpdated()
-      } else {
-        throw new Error(result.error || '保存に失敗しました')
-      }
+
+      const updates = existingData.map(record => ({
+        id: record.id,
+        [columnName]: 0
+      }));
+
+      const { error: updateError } = await supabase
+        .from('web_sales_summary')
+        .upsert(updates);
+
+      if (updateError) throw updateError;
+
+      alert(`${channelNames[channel]}のデータを削除しました。`);
+      onDataUpdated();
     } catch (error) {
-      console.error('保存エラー:', error)
-      alert('保存に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'))
-      // エラー時は元の値に戻す
-      setEditedValue(originalValues[key]?.toString() || '0')
-      setEditMode({})
+      console.error('削除エラー:', error);
+      alert('データの削除に失敗しました。');
+    }
+  };
+
+  const handleLearningReset = async (channel: string) => {
+    const channelNames: { [key: string]: string } = {
+      csv: '汎用CSV',
+      amazon: 'Amazon',
+      rakuten: '楽天',
+      yahoo: 'Yahoo',
+      mercari: 'メルカリ',
+      base: 'BASE',
+      qoo10: 'Qoo10'
+    };
+
+    const tableName = `${channel}_product_mapping`;
+
+    const isConfirmed = confirm(
+      `${channelNames[channel]}の学習データをリセットしてもよろしいですか？\n\n` +
+      `この操作により、これまでの商品マッピング情報が全て削除されます。\n` +
+      `次回のCSVインポート時に、再度商品の割り当てが必要になります。\n\n` +
+      `この操作は取り消せません。`
+    );
+
+    if (!isConfirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from(tableName)
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // 全件削除（ダミー条件）
+
+      if (error) throw error;
+
+      alert(`${channelNames[channel]}の学習データをリセットしました。`);
+    } catch (error) {
+      console.error('学習データリセットエラー:', error);
+      alert('学習データのリセットに失敗しました。');
+    }
+  };
+
+  const handleEditStart = (itemId: string, field: string, value: number) => {
+    const key = `${itemId}-${field}`
+    setEditMode((prev) => ({ ...prev, [key]: true }))
+    setEditedValue(value.toString())
+    setOriginalValues((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSave = async (itemId: string, field: string) => {
+    const key = `${itemId}-${field}`
+    const newValue = parseInt(editedValue, 10)
+
+    if (isNaN(newValue) || newValue < 0) {
+      alert("有効な数値を入力してください")
+      return
+    }
+
+    try {
+      const reportMonth = `${month}-01`
+      const updateData: any = {
+        product_id: itemId,
+        report_month: reportMonth,
+        [field]: newValue,
+        report_date: new Date().toISOString().split('T')[0]
+      }
+
+      const { data: existingRecord, error: fetchError } = await supabase
+        .from('web_sales_summary')
+        .select('*')
+        .eq('product_id', itemId)
+        .eq('report_month', reportMonth)
+        .single()
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError
+      }
+
+      if (existingRecord) {
+        const { error: updateError } = await supabase
+          .from('web_sales_summary')
+          .update(updateData)
+          .eq('id', existingRecord.id)
+
+        if (updateError) throw updateError
+      } else {
+        const defaultData = {
+          product_id: itemId,
+          report_month: reportMonth,
+          amazon_count: 0,
+          rakuten_count: 0,
+          yahoo_count: 0,
+          mercari_count: 0,
+          base_count: 0,
+          qoo10_count: 0,
+          report_date: new Date().toISOString().split('T')[0],
+          [field]: newValue
+        }
+
+        const { error: insertError } = await supabase
+          .from('web_sales_summary')
+          .insert(defaultData)
+
+        if (insertError) throw insertError
+      }
+
+      setData((prevData) =>
+        prevData.map((item) => {
+          if (item.product_id === itemId) {
+            return { ...item, [field]: newValue }
+          }
+          return item
+        })
+      )
+
+      setEditMode((prev) => ({ ...prev, [key]: false }))
+      onDataUpdated()
+    } catch (error) {
+      console.error("保存エラー:", error)
+      alert("データの保存に失敗しました")
     }
   }
 
-  // キャンセル処理
-  const handleCancel = () => {
-    setEditMode({})
-    setEditedValue('')
-    setOriginalValues({})
+  const handleCancel = (itemId: string, field: string) => {
+    const key = `${itemId}-${field}`
+    setEditMode((prev) => ({ ...prev, [key]: false }))
+    setEditedValue("")
   }
 
   const handleImportSuccess = () => {
-    console.log("Import successful. Notifying parent to refresh.");
     setIsCsvModalOpen(false)
     setIsAmazonCsvModalOpen(false)
     setIsRakutenCsvModalOpen(false)
@@ -340,113 +426,8 @@ export default function WebSalesEditableTable({
     setIsMercariCsvModalOpen(false)
     setIsBaseCsvModalOpen(false)
     setIsQoo10CsvModalOpen(false)
+    setIsTiktokCsvModalOpen(false)
     onDataUpdated()
-  }
-
-  const handleDeleteMonthData = async () => {
-    if (!confirm(`${month}のデータを削除しますか？この操作は取り消せません。`)) {
-      return
-    }
-
-    try {
-      console.log("Delete button clicked - executing deletion for month:", month);
-      
-      const response = await fetch(`/api/web-sales-data?month=${month}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error('削除に失敗しました')
-      }
-
-      const result = await response.json()
-      
-      if (result.success || result.message) {
-        const deletedCount = result.deletedCount !== null ? result.deletedCount : '不明'
-        alert(`${month}のデータを削除しました（${deletedCount}件）`)
-        onDataUpdated()
-      } else {
-        throw new Error(result.error || '削除に失敗しました')
-      }
-    } catch (error) {
-      console.error('削除エラー:', error)
-      alert('削除中にエラーが発生しました: ' + (error instanceof Error ? error.message : '不明なエラー'))
-    }
-  }
-
-  // ECチャネル別削除機能
-  const handleChannelDelete = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10' | 'csv') => {
-    const channelNames = {
-      amazon: 'Amazon',
-      rakuten: '楽天', 
-      yahoo: 'Yahoo',
-      mercari: 'メルカリ',
-      base: 'BASE',
-      qoo10: 'Qoo10',
-      csv: '汎用CSV'
-    };
-
-    if (!confirm(`${month}の${channelNames[channel]}データを削除しますか？この操作は取り消せません。`)) {
-      return
-    }
-
-    try {
-      console.log(`${channelNames[channel]} delete button clicked - executing deletion for month:`, month);
-      
-      const response = await fetch(`/api/web-sales-data?month=${month}&channel=${channel}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error(`${channelNames[channel]}データの削除に失敗しました`)
-      }
-
-      const result = await response.json()
-      
-      if (result.success) {
-        alert(`${result.message}（${result.deletedCount}件、${result.totalQuantity}個）`)
-        onDataUpdated()
-      } else {
-        throw new Error(result.error || `${channelNames[channel]}データの削除に失敗しました`)
-      }
-    } catch (error) {
-      console.error(`${channelNames[channel]}削除エラー:`, error)
-      alert(`${channelNames[channel]}データの削除中にエラーが発生しました: ` + (error instanceof Error ? error.message : '不明なエラー'))
-    }
-  }
-
-  // 学習データリセット機能
-  const handleLearningReset = async (channel: 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10' | 'csv') => {
-    const channelNames = {
-      amazon: 'Amazon',
-      rakuten: '楽天', 
-      yahoo: 'Yahoo',
-      mercari: 'メルカリ',
-      base: 'BASE',
-      qoo10: 'Qoo10',
-      csv: '汎用CSV'
-    };
-
-    if (!confirm(`${channelNames[channel]}の学習データをリセットしますか？`)) {
-      return
-    }
-
-    try {
-      const response = await fetch(`/api/learning/${channel}-reset`, {
-        method: 'POST',
-      })
-
-      const result = await response.json()
-      
-      if (result.success) {
-        alert(`${channelNames[channel]}の学習データをリセットしました（${result.deletedCount}件削除）`)
-      } else {
-        throw new Error(result.error || 'リセットに失敗しました')
-      }
-    } catch (error) {
-      console.error('学習データリセットエラー:', error)
-      alert('リセット中にエラーが発生しました: ' + (error instanceof Error ? error.message : '不明なエラー'))
-    }
   }
 
   const formatDate = (dateString: string) => {
@@ -457,51 +438,51 @@ export default function WebSalesEditableTable({
   return (
     <div className="space-y-4">
       <WebSalesTableHeader
-        currentMonth={month}
+        month={month}
         filterValue={filterValue}
-        isLoading={false}
         onMonthChange={handleMonthChange}
         onFilterChange={setFilterValue}
-        onDeleteMonthData={handleDeleteMonthData}
       />
-
-      {/* 過去価格表示モードボタンと価格変更履歴 */}
+      
+      {/* 過去価格表示ボタンと価格変更日付ボタン */}
       <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={toggleHistoricalMode}
           disabled={loadingHistorical}
-          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            isHistoricalMode && !selectedHistoryDate
-              ? 'bg-amber-600 text-white hover:bg-amber-700' 
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            isHistoricalMode
+              ? 'bg-amber-500 text-white hover:bg-amber-600'
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          } ${loadingHistorical ? 'opacity-50 cursor-not-allowed' : ''}`}
+          } disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
         >
           <History className="h-4 w-4" />
-          {loadingHistorical ? '読み込み中...' : isHistoricalMode && !selectedHistoryDate ? '過去価格表示中' : '過去価格で表示'}
+          {loadingHistorical ? '読み込み中...' : isHistoricalMode ? '現在価格で表示' : '過去価格で表示'}
         </button>
-        
-        {/* 価格変更日付ボタン */}
-        {priceChangeDates.map((dateInfo) => (
-          <button
-            key={dateInfo.change_date}
-            onClick={() => showPriceAtDate(dateInfo.change_date)}
-            disabled={loadingHistorical}
-            className={`flex items-center gap-1 px-3 py-2 rounded-md text-sm transition-colors ${
-              selectedHistoryDate === dateInfo.change_date
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            } ${loadingHistorical ? 'opacity-50 cursor-not-allowed' : ''}`}
-            title={`${dateInfo.product_count}商品の価格変更`}
-          >
-            <Calendar className="h-3 w-3" />
-            {formatDate(dateInfo.change_date)}
-          </button>
-        ))}
-        
-        {/* 履歴の管理ボタン */}
+
+        {priceChangeDates.length > 0 && (
+          <>
+            <span className="text-sm text-gray-600">価格変更日:</span>
+            {priceChangeDates.map((dateInfo, index) => (
+              <button
+                key={index}
+                onClick={() => showPriceAtDate(dateInfo.change_date)}
+                disabled={loadingHistorical}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  selectedHistoryDate === dateInfo.change_date
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                } disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1`}
+              >
+                <Calendar className="h-3 w-3" />
+                {formatDate(dateInfo.change_date)} ({dateInfo.product_count}商品)
+              </button>
+            ))}
+          </>
+        )}
+
         <button
           onClick={() => setShowHistoryManagementModal(true)}
-          className="flex items-center gap-1 px-3 py-2 bg-gray-600 text-white rounded-md text-sm hover:bg-gray-700"
+          className="px-4 py-2 rounded-md text-sm font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors flex items-center gap-2"
         >
           <History className="h-4 w-4" />
           履歴の管理
@@ -558,6 +539,10 @@ export default function WebSalesEditableTable({
           console.log('Qoo10 button clicked!');
           setIsQoo10CsvModalOpen(true);
         }}
+        onTiktokClick={() => {
+          console.log('TikTok button clicked!');
+          setIsTiktokCsvModalOpen(true);
+        }}
       />
       
       {/* 学習データ管理ボタン群 */}
@@ -605,6 +590,12 @@ export default function WebSalesEditableTable({
         >
           🔄 Qoo10学習データリセット
         </button>
+        <button 
+          onClick={() => handleLearningReset('tiktok')}
+          className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200"
+        >
+          🔄 TikTok学習データリセット
+        </button>
       </div>
 
       {/* ECチャネル別削除ボタン群 */}
@@ -651,6 +642,12 @@ export default function WebSalesEditableTable({
           className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200"
         >
           🗑️ Qoo10削除
+        </button>
+        <button 
+          onClick={() => handleChannelDelete('tiktok')}
+          className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200"
+        >
+          🗑️ TikTok削除
         </button>
       </div>
 
@@ -717,6 +714,14 @@ export default function WebSalesEditableTable({
           onClose={() => setIsQoo10CsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+        />
+      )}
+
+      {isTiktokCsvModalOpen && (
+        <TiktokCsvImportModal
+          isOpen={isTiktokCsvModalOpen}
+          onClose={() => setIsTiktokCsvModalOpen(false)}
+          onImportComplete={handleImportSuccess}
         />
       )}
 
