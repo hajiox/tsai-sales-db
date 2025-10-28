@@ -1,4 +1,4 @@
-// /components/WebSalesDataTable.tsx ver.13 (広告費対応版)
+// /components/WebSalesDataTable.tsx ver.14 (TikTok対応版)
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
@@ -210,218 +210,205 @@ export default function WebSalesDataTable({
    }
  }
 
- const handleProductMouseEnter = (productId: string, event: React.MouseEvent<HTMLDivElement>) => {
+ // マウスホバー処理（商品名）
+ const handleProductNameMouseEnter = (productId: string, event: React.MouseEvent) => {
    setHoveredProductId(productId)
-   setHoveredSiteCell(null)
    fetchTrendData(productId)
-   
-   const elementRect = event.currentTarget.getBoundingClientRect()
-   const containerRect = containerRef.current?.getBoundingClientRect()
-   if(containerRect) {
-       setTooltipPosition({
-           top: elementRect.bottom - containerRect.top + 8,
-           left: elementRect.left - containerRect.left,
-       })
-   }
+   updateTooltipPosition(event)
  }
 
- const handleSiteMouseEnter = (productId: string, site: string, event: React.MouseEvent<HTMLDivElement>) => {
+ // マウスホバー処理（ECサイトセル）
+ const handleSiteMouseEnter = (productId: string, site: string, event: React.MouseEvent) => {
    const key = `${productId}-${site}`
    setHoveredSiteCell(key)
-   setHoveredProductId(null)
    fetchSiteTrendData(productId, site)
-   
-   const elementRect = event.currentTarget.getBoundingClientRect()
-   const containerRect = containerRef.current?.getBoundingClientRect()
-   if(containerRect) {
-       setTooltipPosition({
-           top: elementRect.bottom - containerRect.top + 8,
-           left: elementRect.left - containerRect.left,
-       })
-   }
+   updateTooltipPosition(event)
  }
 
+ // マウスリーブ処理
  const handleMouseLeave = () => {
    setHoveredProductId(null)
    setHoveredSiteCell(null)
  }
 
- // 🔥 商品追加処理
- const handleAddProduct = async (productData: { 
-   productName: string; 
-   price: number; 
-   seriesNumber: number; 
-   productNumber: number; 
-   seriesName: string 
- }) => {
+ // ツールチップの位置を更新
+ const updateTooltipPosition = (event: React.MouseEvent) => {
+   if (!containerRef.current) return
+
+   const containerRect = containerRef.current.getBoundingClientRect()
+   const relativeX = event.clientX - containerRect.left
+   const relativeY = event.clientY - containerRect.top
+
+   setTooltipPosition({
+     top: relativeY + 15,
+     left: relativeX - 140
+   })
+ }
+
+ const formatNumber = (num: number) => {
+   return num.toLocaleString('ja-JP')
+ }
+
+ const handleAddProduct = async (productData: { productName: string; price: number; seriesNumber: number; productNumber: number; seriesName: string; profitRate: number }) => {
    try {
-     const response = await fetch('/api/products/add', {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({
+     const { data, error } = await supabase
+       .from('products')
+       .insert({
          name: productData.productName,
          price: productData.price,
          series_code: productData.seriesNumber,
          product_code: productData.productNumber,
-         series: productData.seriesName
-       }),
-     });
-     
-     if (!response.ok) throw new Error('商品追加に失敗しました');
-     
-     setIsAddingProduct(false);
-     onRefresh?.();
-     alert('商品を追加しました');
+         series: productData.seriesName,
+         profit_rate: productData.profitRate,
+       })
+       .select()
+
+     if (error) throw error
+
+     alert('商品を追加しました')
+     setIsAddingProduct(false)
+     if (onRefresh) onRefresh()
    } catch (error) {
-     console.error('商品追加エラー:', error);
-     alert('商品追加に失敗しました');
+     console.error('商品追加エラー:', error)
+     alert('商品の追加に失敗しました')
    }
- };
+ }
 
- // 🔥 商品編集ボタンクリック処理
- const handleEditProduct = (productId: string) => {
-   const product = productMaster.find(p => p.id === productId);
-   if (product) {
-     setEditingProductData(product);
-     setIsEditingProduct(true);
-   }
- };
-
- // 🔥 商品更新処理 (修正済み)
- const handleUpdateProduct = async (productData: {
-   id: string;
-   name: string;
-   price: number;
-   profit_rate: number;
-   series_code: number;
-   product_code: number;
-   series: string;
- }) => {
+ const handleEditProduct = async (productId: string) => {
    try {
-     // productDataから必要な値を明示的に取り出して新しいオブジェクトを作成
-     const { id, name, price, profit_rate, series_code, product_code, series } = productData;
+     const { data, error } = await supabase
+       .from('products')
+       .select('*')
+       .eq('id', productId)
+       .single()
 
-     const response = await fetch('/api/products/update', {
-       method: 'PUT',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({
-         id,
-         name,
-         price,
-         profit_rate,
-         series_code,
-         product_code,
-         series,
-       }),
-     });
-     
-     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '商品更新に失敗しました');
-     }
-     
-     setIsEditingProduct(false);
-     setEditingProductData(null);
-     onRefresh?.();
-     alert('商品情報を更新しました');
+     if (error) throw error
+
+     setEditingProductData(data)
+     setIsEditingProduct(true)
    } catch (error) {
-     console.error('商品更新エラー:', error);
-     alert(`商品更新に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+     console.error('商品データ取得エラー:', error)
+     alert('商品データの取得に失敗しました')
    }
- };
+ }
 
- // 🔥 商品削除処理
+ const handleUpdateProduct = async (productId: string, productData: any) => {
+   try {
+     const { error } = await supabase
+       .from('products')
+       .update({
+         name: productData.productName,
+         price: productData.price,
+         series: productData.seriesName,
+         series_code: productData.seriesNumber,
+         product_code: productData.productNumber,
+         profit_rate: productData.profitRate,
+       })
+       .eq('id', productId)
+
+     if (error) throw error
+
+     alert('商品を更新しました')
+     setIsEditingProduct(false)
+     setEditingProductData(null)
+     if (onRefresh) onRefresh()
+   } catch (error) {
+     console.error('商品更新エラー:', error)
+     alert('商品の更新に失敗しました')
+   }
+ }
+
  const handleDeleteProduct = async (productId: string, productName: string) => {
-   if (!confirm(`商品「${productName}」を削除しますか？\nこの操作は取り消せません。`)) {
-     return;
-   }
+   const isConfirmed = confirm(
+     `商品「${productName}」を削除してもよろしいですか？\n\n` +
+     `この操作により、この商品に関連する全ての売上データも削除されます。\n` +
+     `この操作は取り消せません。`
+   )
 
-   setIsDeleting(true);
+   if (!isConfirmed) return
+
+   setIsDeleting(true)
+
    try {
-     const response = await fetch('/api/products/delete', {
-       method: 'DELETE',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({ id: productId }),
-     });
+     const { error: salesError } = await supabase
+       .from('web_sales_summary')
+       .delete()
+       .eq('product_id', productId)
 
-     if (!response.ok) {
-       throw new Error('商品削除に失敗しました');
-     }
+     if (salesError) throw salesError
 
-     onRefresh?.();
-     alert('商品を削除しました');
+     const { error: productError } = await supabase
+       .from('products')
+       .delete()
+       .eq('id', productId)
+
+     if (productError) throw productError
+
+     alert(`商品「${productName}」を削除しました`)
+     if (onRefresh) onRefresh()
    } catch (error) {
-     console.error('商品削除エラー:', error);
-     alert('商品削除に失敗しました');
+     console.error('削除エラー:', error)
+     alert('商品の削除に失敗しました')
    } finally {
-     setIsDeleting(false);
+     setIsDeleting(false)
    }
- };
+ }
 
- const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
+ const sites = [
+   { key: 'amazon_count', label: 'Amazon', bgColor: 'bg-orange-100' },
+   { key: 'rakuten_count', label: '楽天', bgColor: 'bg-red-100' },
+   { key: 'yahoo_count', label: 'Yahoo', bgColor: 'bg-purple-100' },
+   { key: 'mercari_count', label: 'メルカリ', bgColor: 'bg-sky-100' },
+   { key: 'base_count', label: 'BASE', bgColor: 'bg-green-100' },
+   { key: 'qoo10_count', label: 'Qoo10', bgColor: 'bg-pink-100' },
+   { key: 'tiktok_count', label: 'TikTok', bgColor: 'bg-teal-100' },  // TikTok追加
+ ]
 
- const siteNames = {
-   amazon: 'Amazon',
-   rakuten: '楽天',
-   yahoo: 'Yahoo',
-   mercari: 'メルカリ',
-   base: 'BASE',
-   qoo10: 'Qoo10'
- };
+ const siteNames: Record<string, string> = {
+   'amazon_count': 'Amazon',
+   'rakuten_count': '楽天',
+   'yahoo_count': 'Yahoo',
+   'mercari_count': 'メルカリ',
+   'base_count': 'BASE',
+   'qoo10_count': 'Qoo10',
+   'tiktok_count': 'TikTok',  // TikTok追加
+ }
 
  return (
-   <div className="rounded-lg border bg-white shadow-sm relative" ref={containerRef}>
-     <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
-       <h3 className="text-lg font-semibold">全商品一覧 ({filteredItems.length}商品)</h3>
-       <div className="flex gap-2">
-         <button
-           onClick={() => setIsAddingProduct(true)}
-           className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-         >
-           <Plus className="h-4 w-4" />
-           商品登録
-         </button>
-       </div>
-     </div>
-
-     <div className="overflow-x-auto">
-       <table className="min-w-full">
-         <thead className="bg-gray-50">
+   <div ref={containerRef} className="relative overflow-auto border border-gray-300 rounded-lg">
+     <div className="inline-block min-w-full align-middle">
+       <table className="min-w-full divide-y divide-gray-200">
+         <thead className="bg-gray-50 sticky top-0 z-10">
            <tr>
-             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-52">
+             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider w-[150px]">
                商品名
              </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-               Amazon
+             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+               価格<br />
+               {isHistoricalMode && <span className="text-amber-600 text-[10px]">(過去価格)</span>}
              </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-               楽天
+             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+               利益率<br />
+               {isHistoricalMode && <span className="text-amber-600 text-[10px]">(過去)</span>}
              </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-               Yahoo!
+             {sites.map(site => (
+               <th key={site.key} className={`px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap ${site.bgColor}`}>
+                 {site.label}
+               </th>
+             ))}
+             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+               合計
              </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-               メルカリ
+             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+               売上金額
              </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-               BASE
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-               Qoo10
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-               合計数
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
-               合計金額
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
+             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
                広告費
              </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
-               利益
+             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+               最終利益
              </th>
-             <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
                操作
              </th>
            </tr>
@@ -429,90 +416,100 @@ export default function WebSalesDataTable({
          <tbody className="bg-white divide-y divide-gray-200">
            {filteredItems.length === 0 ? (
              <tr>
-               <td colSpan={12} className="px-4 py-8 text-center text-gray-500">
+               <td colSpan={sites.length + 7} className="px-6 py-12 text-center text-gray-500">
                  データがありません
                </td>
              </tr>
            ) : (
-             filteredItems.map((row, index) => {
-               const productPrice = getProductPrice(row.product_id)
+             filteredItems.map((row) => {
+               const price = getProductPrice(row.product_id)
                const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
                const priceDiff = getPriceDifferenceInfo(row.product_id)
-               const totalCount = [
-                 "amazon",
-                 "rakuten", 
-                 "yahoo",
-                 "mercari",
-                 "base",
-                 "qoo10",
-               ].reduce((sum, site) => sum + (row[`${site}_count`] || 0), 0)
-               const totalAmount = totalCount * productPrice
-               const profitAmount = Math.round(totalAmount * profitRate / 100)
+
+               const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
+               const totalAmount = totalCount * price
+               const profitAmount = Math.round(totalAmount * (profitRate / 100))
                const adCost = getAdCostForProduct(row.product_id)
                const finalProfit = profitAmount - adCost
 
                return (
-                 <tr 
-                   key={row.product_id}
-                   className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                 >
-                   <td className="px-4 py-4 text-left text-xs">
-                     <div 
-                       className="cursor-pointer hover:text-blue-600 transition-colors"
-                       onMouseEnter={(e) => handleProductMouseEnter(row.product_id, e)}
+                 <tr key={row.product_id} className="hover:bg-gray-50">
+                   <td className="px-4 py-4 text-sm text-gray-900">
+                     <div
+                       className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
+                       onMouseEnter={(e) => handleProductNameMouseEnter(row.product_id, e)}
                        onMouseLeave={handleMouseLeave}
                      >
                        {getProductName(row.product_id)}
                      </div>
-                     <div className="text-xs text-gray-500 mt-1">
-                       単価: ¥{formatNumber(productPrice)}
-                       {profitRate > 0 && (
-                         <span className="ml-2 text-green-600">
-                           利益率: {profitRate}%
-                         </span>
-                       )}
+                   </td>
+                   <td className={`px-4 py-4 text-center ${
+                     isHistoricalMode && priceDiff && priceDiff.difference !== 0 
+                       ? 'bg-amber-50' 
+                       : ''
+                   }`}>
+                     <div className="flex flex-col items-center">
+                       <span>¥{formatNumber(price)}</span>
                        {isHistoricalMode && priceDiff && priceDiff.difference !== 0 && (
-                         <span className={`ml-2 font-semibold ${priceDiff.difference > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                         <div className="flex items-center gap-1 text-xs mt-1">
                            {priceDiff.difference > 0 ? (
                              <>
-                               <TrendingUp className="inline h-3 w-3" />
-                               +¥{formatNumber(Math.abs(priceDiff.difference))}
+                               <TrendingUp className="h-3 w-3 text-green-600" />
+                               <span className="text-green-600">
+                                 +¥{formatNumber(priceDiff.difference)} ({priceDiff.differencePercent}%)
+                               </span>
                              </>
                            ) : (
                              <>
-                               <TrendingDown className="inline h-3 w-3" />
-                               -¥{formatNumber(Math.abs(priceDiff.difference))}
+                               <TrendingDown className="h-3 w-3 text-red-600" />
+                               <span className="text-red-600">
+                                 ¥{formatNumber(priceDiff.difference)} ({priceDiff.differencePercent}%)
+                               </span>
                              </>
                            )}
-                           ({priceDiff.differencePercent}%)
-                         </span>
+                         </div>
                        )}
                      </div>
-                     {isHistoricalMode && priceDiff && (priceDiff.currentPrice !== priceDiff.historicalPrice || priceDiff.currentProfitRate !== priceDiff.historicalProfitRate) && (
-                       <div className="text-xs text-amber-600 mt-0.5">
-                         過去: ¥{formatNumber(priceDiff.historicalPrice)} ({priceDiff.historicalProfitRate}%) → 
-                         現在: ¥{formatNumber(priceDiff.currentPrice)} ({priceDiff.currentProfitRate}%)
-                       </div>
-                     )}
                    </td>
-                   {(
-                     [
-                       "amazon",
-                       "rakuten",
-                       "yahoo", 
-                       "mercari",
-                       "base",
-                       "qoo10",
-                     ] as const
-                   ).map((site) => {
-                     const cellKey = `${row.product_id}-${site}`
-                     const count = row[`${site}_count`] || 0
-                     const displayValue = `${count}`
+                   <td className={`px-4 py-4 text-center ${
+                     isHistoricalMode && priceDiff && 
+                     priceDiff.currentProfitRate !== priceDiff.historicalProfitRate 
+                       ? 'bg-amber-50' 
+                       : ''
+                   }`}>
+                     <div className="flex flex-col items-center">
+                       <span>{profitRate}%</span>
+                       {isHistoricalMode && priceDiff && 
+                        priceDiff.currentProfitRate !== priceDiff.historicalProfitRate && (
+                         <div className="flex items-center gap-1 text-xs mt-1">
+                           {(priceDiff.currentProfitRate || 0) > (priceDiff.historicalProfitRate || 0) ? (
+                             <>
+                               <TrendingUp className="h-3 w-3 text-green-600" />
+                               <span className="text-green-600">
+                                 +{((priceDiff.currentProfitRate || 0) - (priceDiff.historicalProfitRate || 0)).toFixed(1)}%
+                               </span>
+                             </>
+                           ) : (
+                             <>
+                               <TrendingDown className="h-3 w-3 text-red-600" />
+                               <span className="text-red-600">
+                                 {((priceDiff.currentProfitRate || 0) - (priceDiff.historicalProfitRate || 0)).toFixed(1)}%
+                               </span>
+                             </>
+                           )}
+                         </div>
+                       )}
+                     </div>
+                   </td>
+                   {sites.map((site) => {
+                     const cellKey = `${row.product_id}-${site.key}`
+                     const displayValue = (row as any)[site.key] || 0
+
                      return (
                        <td key={cellKey} className="px-4 py-4 text-center">
                          <div
-                           onClick={() => onEdit(row.product_id, site)}
-                           onMouseEnter={(e) => handleSiteMouseEnter(row.product_id, site, e)}
+                           onClick={() => onEdit(row.product_id, site.key)}
+                           onMouseEnter={(e) => handleSiteMouseEnter(row.product_id, site.key, e)}
                            onMouseLeave={handleMouseLeave}
                            className={`cursor-pointer hover:bg-gray-100 p-1 rounded ${
                              editMode[cellKey] ? "bg-blue-50" : ""
@@ -523,10 +520,10 @@ export default function WebSalesDataTable({
                                autoFocus
                                value={editedValue}
                                onChange={(e) => onEditValueChange(e.target.value)}
-                               onBlur={() => onSave(row.product_id, site)}
+                               onBlur={() => onSave(row.product_id, site.key)}
                                onKeyDown={(e) => {
                                  if (e.key === "Enter") {
-                                   onSave(row.product_id, site)
+                                   onSave(row.product_id, site.key)
                                  } else if (e.key === "Escape") {
                                    onCancel()
                                  }
@@ -588,7 +585,7 @@ export default function WebSalesDataTable({
      {/* 商品名トレンドツールチップ */}
      {hoveredProductId && trendData[hoveredProductId] && (
        <div 
-         className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
+         className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3 pointer-events-none"
          style={{
            top: `${tooltipPosition.top}px`,
            left: `${tooltipPosition.left}px`,
@@ -637,7 +634,7 @@ export default function WebSalesDataTable({
      {/* ECサイト別トレンドツールチップ */}
      {hoveredSiteCell && siteTrendData[hoveredSiteCell] && (
        <div 
-         className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
+         className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3 pointer-events-none"
          style={{
            top: `${tooltipPosition.top}px`,
            left: `${tooltipPosition.left}px`,
