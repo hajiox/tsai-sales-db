@@ -1,4 +1,4 @@
-// /app/web-sales/dashboard/page.tsx ver.27 (import パス修正版)
+// /app/web-sales/dashboard/page.tsx ver.28 (TikTok対応版)
 "use client"
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
@@ -133,6 +133,7 @@ function WebSalesDashboardContent() {
            mercari_count: salesItem?.mercari_count || 0,
            base_count: salesItem?.base_count || 0,
            qoo10_count: salesItem?.qoo10_count || 0,
+           tiktok_count: salesItem?.tiktok_count || 0,
            name: product.name,
            series: product.series,
            series_code: product.series_code,
