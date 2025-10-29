@@ -1,4 +1,4 @@
-// app/api/import/tiktok-parse/route.ts ver.1
+// app/api/import/tiktok-parse/route.ts ver.2 (カンマ区切り対応)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -13,14 +13,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSVテキストが必要です' }, { status: 400 });
     }
 
-    // CSVをタブ区切りで解析
-    const lines = csvText.split('\n').filter(line => line.trim());
+    // CSVをカンマ区切りで解析（BOM除去）
+    const cleanedText = csvText.replace(/^\uFEFF/, ''); // BOM除去
+    const lines = cleanedText.split('\n').filter(line => line.trim());
+    
     if (lines.length < 2) {
       return NextResponse.json({ error: 'CSVデータが空です' }, { status: 400 });
     }
 
-    const header = lines[0].split('\t');
-    console.log('[TikTok Parse] ヘッダー:', header);
+    const header = lines[0].split(',');
+    console.log('[TikTok Parse] ヘッダー列数:', header.length);
+    console.log('[TikTok Parse] ヘッダー（最初の10列）:', header.slice(0, 10));
 
     // 必要な列のインデックスを取得
     const productNameIndex = 7; // 商品名（8列目、0始まりなので7）
@@ -53,7 +56,8 @@ export async function POST(request: NextRequest) {
     const productMap = new Map<string, { count: number; saleDate: string }>();
 
     for (let i = 1; i < lines.length; i++) {
-      const columns = lines[i].split('\t');
+      // CSVの値を正しく分割（ダブルクォートで囲まれた値に対応）
+      const columns = parseCSVLine(lines[i]);
       
       if (columns.length < 25) {
         console.log(`[TikTok Parse] 行${i + 1}: 列数不足 (${columns.length}列)`);
@@ -87,6 +91,7 @@ export async function POST(request: NextRequest) {
       // 日付をYYYY-MM形式に変換
       let formattedDate = '';
       if (paymentDate) {
+        // MM/DD/YYYY HH:MM:SS AM/PM 形式を解析
         const dateMatch = paymentDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
         if (dateMatch) {
           const month = dateMatch[1].padStart(2, '0');
@@ -149,4 +154,35 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : String(error)
     }, { status: 500 });
   }
+}
+
+// CSV行をパースする関数（ダブルクォートで囲まれた値に対応）
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        // エスケープされたダブルクォート
+        current += '"';
+        i++;
+      } else {
+        // クォートの開始/終了
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      // カンマ区切り（クォート外）
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current);
+  return result;
 }
