@@ -292,23 +292,31 @@ export default function WebSalesDataTable({
    }
  }
 
- const handleUpdateProduct = async (productId: string, productData: any) => {
-   try {
-     const { error } = await supabase
-       .from('products')
-       .update({
-         name: productData.productName,
-         price: productData.price,
-         series: productData.seriesName,
-         series_code: productData.seriesNumber,
-         product_code: productData.productNumber,
-         profit_rate: productData.profitRate,
-       })
-       .eq('id', productId)
+ const handleUpdateProduct = async (updatedProduct: {
+   id: string
+   name: string
+   price: number
+   profit_rate: number
+   series_code: number
+   product_code: number
+   series: string
+ }) => {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .update({
+        name: updatedProduct.name,
+        price: updatedProduct.price,
+        series: updatedProduct.series,
+        series_code: updatedProduct.series_code,
+        product_code: updatedProduct.product_code,
+        profit_rate: updatedProduct.profit_rate,
+      })
+      .eq('id', updatedProduct.id)
 
-     if (error) throw error
+    if (error) throw error
 
-     alert('商品を更新しました')
+    alert('商品を更新しました')
      setIsEditingProduct(false)
      setEditingProductData(null)
      if (onRefresh) onRefresh()
