@@ -1,4 +1,4 @@
-// /components/websales-summary-cards.tsx ver.15 (広告費対応版)
+// /components/websales-summary-cards.tsx ver.16 (TikTok対応版)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
@@ -13,6 +13,7 @@ const SITES = [
   { key: "mercari", name: "メルカリ", bgColor: "bg-yellow-50", borderColor: "border-yellow-200" },
   { key: "base", name: "BASE", bgColor: "bg-blue-50", borderColor: "border-blue-200" },
   { key: "qoo10", name: "Qoo10", bgColor: "bg-pink-50", borderColor: "border-pink-200" },
+  { key: "tiktok", name: "TikTok", bgColor: "bg-teal-50", borderColor: "border-teal-200" },
 ]
 
 // 型定義
@@ -225,7 +226,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
   return (
     <div className="space-y-6" ref={containerRef}>
-      <div className="grid grid-cols-4 md:grid-cols-7 gap-4 relative">
+      <div className="grid grid-cols-4 md:grid-cols-8 gap-4 relative">
         <Card 
           className="text-center bg-gray-50 border-gray-200 cursor-pointer"
           onMouseEnter={(e) => handleMouseEnter({ type: 'total', key: 'grandTotal', name: '総合計' }, e)}
