@@ -1,4 +1,4 @@
-// app/api/import/tiktok-confirm/route.ts ver.1
+// app/api/import/tiktok-confirm/route.ts ver.2
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -45,13 +45,14 @@ export async function POST(request: NextRequest) {
     const upsertPromises = Array.from(productSummary.entries()).map(
       async ([productId, data]) => {
         const reportMonth = data.saleDate + '-01'; // YYYY-MM-01形式に変換
+        const reportDate = new Date().toISOString().split('T')[0]; // 今日の日付
 
-        // 既存データを確認
+        // 既存データを確認（report_dateで検索）
         const { data: existing, error: selectError } = await supabase
           .from('web_sales_summary')
           .select('*')
           .eq('product_id', productId)
-          .eq('report_month', reportMonth)
+          .eq('report_date', reportDate)
           .single();
 
         if (selectError && selectError.code !== 'PGRST116') {
@@ -65,10 +66,10 @@ export async function POST(request: NextRequest) {
             .from('web_sales_summary')
             .update({
               tiktok_count: data.count,
-              report_date: new Date().toISOString().split('T')[0]
+              report_month: reportMonth
             })
             .eq('product_id', productId)
-            .eq('report_month', reportMonth);
+            .eq('report_date', reportDate);
 
           if (updateError) {
             console.error(`[TikTok Confirm] 更新エラー:`, updateError);
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
               base_count: 0,
               qoo10_count: 0,
               tiktok_count: data.count,
-              report_date: new Date().toISOString().split('T')[0]
+              report_date: reportDate
             });
 
           if (insertError) {
