@@ -1,4 +1,4 @@
-// app/api/import/tiktok-confirm/route.ts ver.3
+// app/api/import/tiktok-confirm/route.ts ver.4
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -45,7 +45,10 @@ export async function POST(request: NextRequest) {
     const upsertPromises = Array.from(productSummary.entries()).map(
       async ([productId, data]) => {
         const reportMonth = data.saleDate + '-01'; // YYYY-MM-01形式に変換
-        const reportDate = new Date().toISOString().split('T')[0]; // 今日の日付
+        // report_dateは売上月の末日を設定
+        const reportDate = getMonthEndDate(data.saleDate);
+
+        console.log(`[TikTok Confirm] 処理中: product_id=${productId}, report_month=${reportMonth}, report_date=${reportDate}`);
 
         // 既存データを確認（report_monthとproduct_idで検索）
         const { data: existing, error: selectError } = await supabase
@@ -124,4 +127,18 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : String(error)
     }, { status: 500 });
   }
+}
+
+// 月末日を取得する関数
+function getMonthEndDate(yearMonth: string): string {
+  // YYYY-MM形式の文字列から月末日を取得
+  const [year, month] = yearMonth.split('-').map(Number);
+  // 翌月の0日 = 当月の末日
+  const lastDay = new Date(year, month, 0);
+  
+  const yyyy = lastDay.getFullYear();
+  const mm = String(lastDay.getMonth() + 1).padStart(2, '0');
+  const dd = String(lastDay.getDate()).padStart(2, '0');
+  
+  return `${yyyy}-${mm}-${dd}`;
 }
