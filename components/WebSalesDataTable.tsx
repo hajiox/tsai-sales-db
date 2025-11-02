@@ -1,4 +1,4 @@
-// /components/WebSalesDataTable.tsx ver.14 (TikTok対応版)
+// /components/WebSalesDataTable.tsx ver.15 (新規登録ボタン復活版)
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
@@ -301,50 +301,40 @@ export default function WebSalesDataTable({
    product_code: number
    series: string
  }) => {
-  try {
-    const { error } = await supabase
-      .from('products')
-      .update({
-        name: updatedProduct.name,
-        price: updatedProduct.price,
-        series: updatedProduct.series,
-        series_code: updatedProduct.series_code,
-        product_code: updatedProduct.product_code,
-        profit_rate: updatedProduct.profit_rate,
-      })
-      .eq('id', updatedProduct.id)
+   try {
+     const { error } = await supabase
+       .from('products')
+       .update({
+         name: updatedProduct.name,
+         price: updatedProduct.price,
+         series: updatedProduct.series,
+         series_code: updatedProduct.series_code,
+         product_code: updatedProduct.product_code,
+         profit_rate: updatedProduct.profit_rate,
+       })
+       .eq('id', updatedProduct.id)
 
-    if (error) throw error
+     if (error) throw error
 
-    alert('商品を更新しました')
+     alert('商品情報を更新しました')
      setIsEditingProduct(false)
      setEditingProductData(null)
      if (onRefresh) onRefresh()
    } catch (error) {
      console.error('商品更新エラー:', error)
-     alert('商品の更新に失敗しました')
+     alert('商品情報の更新に失敗しました')
    }
  }
 
- const handleDeleteProduct = async (productId: string, productName: string) => {
-   const isConfirmed = confirm(
-     `商品「${productName}」を削除してもよろしいですか？\n\n` +
-     `この操作により、この商品に関連する全ての売上データも削除されます。\n` +
-     `この操作は取り消せません。`
-   )
-
-   if (!isConfirmed) return
+ const handleDeleteProduct = async (productId: string) => {
+   const productName = getProductName(productId)
+   
+   if (!confirm(`商品「${productName}」を削除しますか？\n\n※ 関連するすべての販売データも削除されます`)) {
+     return
+   }
 
    setIsDeleting(true)
-
    try {
-     const { error: salesError } = await supabase
-       .from('web_sales_summary')
-       .delete()
-       .eq('product_id', productId)
-
-     if (salesError) throw salesError
-
      const { error: productError } = await supabase
        .from('products')
        .delete()
@@ -369,7 +359,7 @@ export default function WebSalesDataTable({
    { key: 'mercari_count', label: 'メルカリ', bgColor: 'bg-sky-100' },
    { key: 'base_count', label: 'BASE', bgColor: 'bg-green-100' },
    { key: 'qoo10_count', label: 'Qoo10', bgColor: 'bg-pink-100' },
-   { key: 'tiktok_count', label: 'TikTok', bgColor: 'bg-teal-100' },  // TikTok追加
+   { key: 'tiktok_count', label: 'TikTok', bgColor: 'bg-teal-100' },
  ]
 
  const siteNames: Record<string, string> = {
@@ -379,229 +369,238 @@ export default function WebSalesDataTable({
    'mercari_count': 'メルカリ',
    'base_count': 'BASE',
    'qoo10_count': 'Qoo10',
-   'tiktok_count': 'TikTok',  // TikTok追加
+   'tiktok_count': 'TikTok',
  }
 
  return (
-   <div ref={containerRef} className="relative overflow-auto border border-gray-300 rounded-lg">
-     <div className="inline-block min-w-full align-middle">
-       <table className="min-w-full divide-y divide-gray-200">
-         <thead className="bg-gray-50 sticky top-0 z-10">
-           <tr>
-             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider w-[150px]">
-               商品名
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-               価格<br />
-               {isHistoricalMode && <span className="text-amber-600 text-[10px]">(過去価格)</span>}
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-               利益率<br />
-               {isHistoricalMode && <span className="text-amber-600 text-[10px]">(過去)</span>}
-             </th>
-             {sites.map(site => (
-               <th key={site.key} className={`px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap ${site.bgColor}`}>
-                 {site.label}
-               </th>
-             ))}
-             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-               合計
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-               売上金額
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-               広告費
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-               最終利益
-             </th>
-             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-               操作
-             </th>
-           </tr>
-         </thead>
-         <tbody className="bg-white divide-y divide-gray-200">
-           {filteredItems.length === 0 ? (
-             <tr>
-               <td colSpan={sites.length + 7} className="px-6 py-12 text-center text-gray-500">
-                 データがありません
-               </td>
-             </tr>
-           ) : (
-             filteredItems.map((row) => {
-               const price = getProductPrice(row.product_id)
-               const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
-               const priceDiff = getPriceDifferenceInfo(row.product_id)
-
-               const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
-               const totalAmount = totalCount * price
-               const profitAmount = Math.round(totalAmount * (profitRate / 100))
-               const adCost = getAdCostForProduct(row.product_id)
-               const finalProfit = profitAmount - adCost
-
-               return (
-                 <tr key={row.product_id} className="hover:bg-gray-50">
-                   <td className="px-4 py-4 text-sm text-gray-900">
-                     <div
-                       className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
-                       onMouseEnter={(e) => handleProductNameMouseEnter(row.product_id, e)}
-                       onMouseLeave={handleMouseLeave}
-                     >
-                       {getProductName(row.product_id)}
-                     </div>
-                   </td>
-                   <td className={`px-4 py-4 text-center ${
-                     isHistoricalMode && priceDiff && priceDiff.difference !== 0 
-                       ? 'bg-amber-50' 
-                       : ''
-                   }`}>
-                     <div className="flex flex-col items-center">
-                       <span>¥{formatNumber(price)}</span>
-                       {isHistoricalMode && priceDiff && priceDiff.difference !== 0 && (
-                         <div className="flex items-center gap-1 text-xs mt-1">
-                           {priceDiff.difference > 0 ? (
-                             <>
-                               <TrendingUp className="h-3 w-3 text-green-600" />
-                               <span className="text-green-600">
-                                 +¥{formatNumber(priceDiff.difference)} ({priceDiff.differencePercent}%)
-                               </span>
-                             </>
-                           ) : (
-                             <>
-                               <TrendingDown className="h-3 w-3 text-red-600" />
-                               <span className="text-red-600">
-                                 ¥{formatNumber(priceDiff.difference)} ({priceDiff.differencePercent}%)
-                               </span>
-                             </>
-                           )}
-                         </div>
-                       )}
-                     </div>
-                   </td>
-                   <td className={`px-4 py-4 text-center ${
-                     isHistoricalMode && priceDiff && 
-                     priceDiff.currentProfitRate !== priceDiff.historicalProfitRate 
-                       ? 'bg-amber-50' 
-                       : ''
-                   }`}>
-                     <div className="flex flex-col items-center">
-                       <span>{profitRate}%</span>
-                       {isHistoricalMode && priceDiff && 
-                        priceDiff.currentProfitRate !== priceDiff.historicalProfitRate && (
-                         <div className="flex items-center gap-1 text-xs mt-1">
-                           {(priceDiff.currentProfitRate || 0) > (priceDiff.historicalProfitRate || 0) ? (
-                             <>
-                               <TrendingUp className="h-3 w-3 text-green-600" />
-                               <span className="text-green-600">
-                                 +{((priceDiff.currentProfitRate || 0) - (priceDiff.historicalProfitRate || 0)).toFixed(1)}%
-                               </span>
-                             </>
-                           ) : (
-                             <>
-                               <TrendingDown className="h-3 w-3 text-red-600" />
-                               <span className="text-red-600">
-                                 {((priceDiff.currentProfitRate || 0) - (priceDiff.historicalProfitRate || 0)).toFixed(1)}%
-                               </span>
-                             </>
-                           )}
-                         </div>
-                       )}
-                     </div>
-                   </td>
-                   {sites.map((site) => {
-                     const cellKey = `${row.product_id}-${site.key}`
-                     const displayValue = (row as any)[site.key] || 0
-
-                     return (
-                       <td key={cellKey} className="px-4 py-4 text-center">
-                         <div
-                           onClick={() => onEdit(row.product_id, site.key)}
-                           onMouseEnter={(e) => handleSiteMouseEnter(row.product_id, site.key, e)}
-                           onMouseLeave={handleMouseLeave}
-                           className={`cursor-pointer hover:bg-gray-100 p-1 rounded ${
-                             editMode[cellKey] ? "bg-blue-50" : ""
-                           }`}
-                         >
-                           {editMode[cellKey] ? (
-                             <Input
-                               autoFocus
-                               value={editedValue}
-                               onChange={(e) => onEditValueChange(e.target.value)}
-                               onBlur={() => onSave(row.product_id, site.key)}
-                               onKeyDown={(e) => {
-                                 if (e.key === "Enter") {
-                                   onSave(row.product_id, site.key)
-                                 } else if (e.key === "Escape") {
-                                   onCancel()
-                                 }
-                               }}
-                               type="number"
-                               className="text-center"
-                               size="sm"
-                             />
-                           ) : (
-                             displayValue
-                           )}
-                         </div>
-                       </td>
-                     )
-                   })}
-                   <td className="px-4 py-4 text-center font-bold">
-                     {formatNumber(totalCount)}
-                   </td>
-                   <td className={`px-4 py-4 text-center font-bold ${
-                     isHistoricalMode && priceDiff && priceDiff.difference !== 0 
-                       ? 'bg-amber-50' 
-                       : ''
-                   }`}>
-                     ¥{formatNumber(totalAmount)}
-                   </td>
-                   <td className="px-4 py-4 text-center text-red-600">
-                     ¥{formatNumber(adCost)}
-                   </td>
-                   <td className="px-4 py-4 text-center font-bold text-green-600">
-                     ¥{formatNumber(finalProfit)}
-                   </td>
-                   <td className="px-4 py-4 text-center">
-                     <div className="flex gap-1 justify-center">
-                       <button
-                         onClick={() => handleEditProduct(row.product_id)}
-                         className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
-                       >
-                         <Edit className="h-3 w-3" />
-                         変更
-                       </button>
-                       <button
-                         onClick={() => handleDeleteProduct(row.product_id, getProductName(row.product_id))}
-                         disabled={isDeleting}
-                         className="inline-flex items-center gap-1 px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 disabled:opacity-50"
-                       >
-                         <Trash2 className="h-3 w-3" />
-                         削除
-                       </button>
-                     </div>
-                   </td>
-                 </tr>
-               )
-             })
-           )}
-         </tbody>
-       </table>
+   <div ref={containerRef} className="relative">
+     {/* 🆕 新規登録ボタンを追加 */}
+     <div className="mb-4 flex justify-end">
+       <button
+         onClick={() => setIsAddingProduct(true)}
+         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+       >
+         <Plus className="h-4 w-4" />
+         新規登録
+       </button>
      </div>
 
-     {/* 商品名トレンドツールチップ */}
-     {hoveredProductId && trendData[hoveredProductId] && (
-       <div 
-         className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3 pointer-events-none"
+     <div className="overflow-auto border border-gray-300 rounded-lg">
+       <div className="inline-block min-w-full align-middle">
+         <table className="min-w-full divide-y divide-gray-200">
+           <thead className="bg-gray-50 sticky top-0 z-10">
+             <tr>
+               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider w-[150px]">
+                 商品名
+               </th>
+               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+                 価格<br />
+                 {isHistoricalMode && <span className="text-amber-600 text-[10px]">(過去価格)</span>}
+               </th>
+               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+                 利益率<br />
+                 {isHistoricalMode && <span className="text-amber-600 text-[10px]">(過去)</span>}
+               </th>
+               {sites.map(site => (
+                 <th key={site.key} className={`px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap ${site.bgColor}`}>
+                   {site.label}
+                 </th>
+               ))}
+               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+                 合計
+               </th>
+               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+                 売上金額
+               </th>
+               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+                 広告費
+               </th>
+               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+                 最終利益
+               </th>
+               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
+                 操作
+               </th>
+             </tr>
+           </thead>
+           <tbody className="bg-white divide-y divide-gray-200">
+             {filteredItems.length === 0 ? (
+               <tr>
+                 <td colSpan={sites.length + 7} className="px-6 py-12 text-center text-gray-500">
+                   データがありません
+                 </td>
+               </tr>
+             ) : (
+               filteredItems.map((row) => {
+                 const price = getProductPrice(row.product_id)
+                 const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
+                 const priceDiff = getPriceDifferenceInfo(row.product_id)
+
+                 const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
+                 const totalAmount = totalCount * price
+                 const profitAmount = Math.round(totalAmount * (profitRate / 100))
+                 const adCost = getAdCostForProduct(row.product_id)
+                 const finalProfit = profitAmount - adCost
+
+                 return (
+                   <tr key={row.product_id} className="hover:bg-gray-50">
+                     <td className="px-4 py-4 text-sm text-gray-900">
+                       <div
+                         className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
+                         onMouseEnter={(e) => handleProductNameMouseEnter(row.product_id, e)}
+                         onMouseLeave={handleMouseLeave}
+                       >
+                         {getProductName(row.product_id)}
+                       </div>
+                     </td>
+                     <td className={`px-4 py-4 text-center ${
+                       isHistoricalMode && priceDiff && priceDiff.difference !== 0 
+                         ? 'bg-amber-50' 
+                         : ''
+                     }`}>
+                       <div className="flex flex-col items-center">
+                         <span>¥{formatNumber(price)}</span>
+                         {isHistoricalMode && priceDiff && priceDiff.difference !== 0 && (
+                           <div className="flex items-center gap-1 text-xs mt-1">
+                             {priceDiff.difference > 0 ? (
+                               <>
+                                 <TrendingUp className="h-3 w-3 text-green-600" />
+                                 <span className="text-green-600">
+                                   +¥{formatNumber(priceDiff.difference)} ({priceDiff.differencePercent}%)
+                                 </span>
+                               </>
+                             ) : (
+                               <>
+                                 <TrendingDown className="h-3 w-3 text-red-600" />
+                                 <span className="text-red-600">
+                                   ¥{formatNumber(priceDiff.difference)} ({priceDiff.differencePercent}%)
+                                 </span>
+                               </>
+                             )}
+                           </div>
+                         )}
+                       </div>
+                     </td>
+                     <td className={`px-4 py-4 text-center ${
+                       isHistoricalMode && priceDiff && 
+                       priceDiff.currentProfitRate !== priceDiff.historicalProfitRate 
+                         ? 'bg-amber-50' 
+                         : ''
+                     }`}>
+                       <div className="flex flex-col items-center">
+                         <span>{profitRate}%</span>
+                         {isHistoricalMode && priceDiff && 
+                          priceDiff.currentProfitRate !== priceDiff.historicalProfitRate && (
+                           <div className="flex items-center gap-1 text-xs mt-1">
+                             {(priceDiff.currentProfitRate || 0) > (priceDiff.historicalProfitRate || 0) ? (
+                               <>
+                                 <TrendingUp className="h-3 w-3 text-green-600" />
+                                 <span className="text-green-600">
+                                   +{((priceDiff.currentProfitRate || 0) - (priceDiff.historicalProfitRate || 0)).toFixed(1)}%
+                                 </span>
+                               </>
+                             ) : (
+                               <>
+                                 <TrendingDown className="h-3 w-3 text-red-600" />
+                                 <span className="text-red-600">
+                                   {((priceDiff.currentProfitRate || 0) - (priceDiff.historicalProfitRate || 0)).toFixed(1)}%
+                                 </span>
+                               </>
+                             )}
+                           </div>
+                         )}
+                       </div>
+                     </td>
+                     {sites.map(site => {
+                       const count = (row as any)[site.key] || 0
+                       const cellKey = `${row.product_id}-${site.key}`
+                       
+                       return (
+                         <td 
+                           key={site.key} 
+                           className={`px-4 py-4 text-center ${site.bgColor} cursor-pointer hover:opacity-80`}
+                           onMouseEnter={(e) => handleSiteMouseEnter(row.product_id, site.key, e)}
+                           onMouseLeave={handleMouseLeave}
+                         >
+                           {editMode[cellKey] ? (
+                             <div className="flex items-center justify-center gap-1">
+                               <Input
+                                 type="number"
+                                 value={editedValue}
+                                 onChange={(e) => onEditValueChange(e.target.value)}
+                                 className="w-16 h-8 text-center"
+                                 size="sm"
+                                 autoFocus
+                               />
+                               <button onClick={() => onSave(row.product_id, site.key)} className="text-green-600 hover:text-green-800 text-sm">
+                                 ✓
+                               </button>
+                               <button onClick={onCancel} className="text-red-600 hover:text-red-800 text-sm">
+                                 ✗
+                               </button>
+                             </div>
+                           ) : (
+                             <span onClick={() => onEdit(row.product_id, site.key)}>
+                               {count}
+                             </span>
+                           )}
+                         </td>
+                       )
+                     })}
+                     <td className="px-4 py-4 text-center font-semibold">
+                       {totalCount}
+                     </td>
+                     <td className="px-4 py-4 text-center font-semibold">
+                       ¥{formatNumber(totalAmount)}
+                     </td>
+                     <td className="px-4 py-4 text-center text-red-600 font-semibold">
+                       ¥{formatNumber(adCost)}
+                     </td>
+                     <td className={`px-4 py-4 text-center font-semibold ${
+                       finalProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                     }`}>
+                       ¥{formatNumber(finalProfit)}
+                     </td>
+                     <td className="px-4 py-4 text-center">
+                       <div className="flex items-center justify-center gap-2">
+                         <button
+                           onClick={() => handleEditProduct(row.product_id)}
+                           className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                           title="変更"
+                         >
+                           <Edit className="h-4 w-4" />
+                         </button>
+                         <button
+                           onClick={() => handleDeleteProduct(row.product_id)}
+                           disabled={isDeleting}
+                           className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                           title="削除"
+                         >
+                           <Trash2 className="h-4 w-4" />
+                         </button>
+                       </div>
+                     </td>
+                   </tr>
+                 )
+               })
+             )}
+           </tbody>
+         </table>
+       </div>
+     </div>
+
+     {/* 商品名ホバー時のツールチップ */}
+     {hoveredProductId && (
+       <div
+         className="absolute z-50 bg-white border-2 border-gray-300 rounded-lg shadow-xl p-4 w-72"
          style={{
            top: `${tooltipPosition.top}px`,
            left: `${tooltipPosition.left}px`,
-           width: '280px',
+           pointerEvents: 'none',
          }}
        >
          <div className="text-sm font-semibold mb-2 text-gray-800">
-           {getProductName(hoveredProductId)} - 過去6ヶ月 売上トレンド
+           {getProductName(hoveredProductId)} - 過去6ヶ月 売上推移
          </div>
          
          {trendLoading[hoveredProductId] ? (
@@ -620,7 +619,7 @@ export default function WebSalesDataTable({
                    <span className="w-16 text-gray-600 text-left">{trend.month_label}</span>
                    <div className="flex-1 mx-2 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
                      <div 
-                       className="h-full bg-sky-400 transition-all duration-300"
+                       className="h-full bg-blue-400 transition-all duration-300"
                        style={{ width: `${barWidth}%` }}
                      ></div>
                    </div>
@@ -639,14 +638,14 @@ export default function WebSalesDataTable({
        </div>
      )}
 
-     {/* ECサイト別トレンドツールチップ */}
-     {hoveredSiteCell && siteTrendData[hoveredSiteCell] && (
-       <div 
-         className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3 pointer-events-none"
+     {/* ECサイト別ホバー時のツールチップ */}
+     {hoveredSiteCell && (
+       <div
+         className="absolute z-50 bg-white border-2 border-gray-300 rounded-lg shadow-xl p-4 w-72"
          style={{
            top: `${tooltipPosition.top}px`,
            left: `${tooltipPosition.left}px`,
-           width: '280px',
+           pointerEvents: 'none',
          }}
        >
          <div className="text-sm font-semibold mb-2 text-gray-800">
