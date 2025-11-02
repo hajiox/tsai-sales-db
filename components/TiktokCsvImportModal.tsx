@@ -1,7 +1,7 @@
-// /components/TiktokCsvImportModal.tsx ver.2 (BASE完全移植版)
+// /components/TiktokCsvImportModal.tsx ver.3 (インポートボタン修正版)
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,6 +48,19 @@ export default function TiktokCsvImportModal({
   }>>([]);
   const [savingMapping, setSavingMapping] = useState<string | null>(null);
 
+  // 統計情報を計算
+  const stats = useMemo(() => {
+    const matched = allMappings.filter(m => m.productId).length;
+    const unmatched = allMappings.length - matched;
+    const totalQuantity = allMappings.filter(m => m.productId).reduce((sum, m) => sum + m.quantity, 0);
+    
+    return {
+      matched,
+      unmatched,
+      totalQuantity
+    };
+  }, [allMappings]);
+
   useEffect(() => {
     if (!isOpen) {
       setStep(1);
@@ -60,7 +73,7 @@ export default function TiktokCsvImportModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (parseResult && step === 3) {
+    if (parseResult && step >= 2) {
       const learned = parseResult.results?.learned || [];
       const unlearned = parseResult.results?.unlearned || [];
       
@@ -207,32 +220,25 @@ export default function TiktokCsvImportModal({
         throw new Error(result.error || 'インポートに失敗しました');
       }
 
-      alert(`✅ ${validMappings.length}件の商品をインポートしました`);
       onImportComplete();
       onClose();
     } catch (error) {
-      console.error('Confirmエラー:', error);
-      setError(error instanceof Error ? error.message : '不明なエラー');
+      console.error('確定エラー:', error);
+      setError(error instanceof Error ? error.message : '不明なエラーが発生しました');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const stats = {
-    matched: allMappings.filter(m => m.productId).length,
-    unmatched: allMappings.filter(m => !m.productId).length,
-    totalQuantity: allMappings.filter(m => m.productId).reduce((sum, m) => sum + m.quantity, 0),
-  };
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
           <h2 className="text-xl font-bold">TikTokショップ CSV インポート</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X /></button>
         </div>
         
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             {[1, 2, 3].map((s) => (
               <div key={s} className="flex items-center">
@@ -305,7 +311,7 @@ export default function TiktokCsvImportModal({
                 <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />戻る
                 </Button>
-                <Button onClick={() => setStep(3)} className="flex-1">
+                <Button onClick={() => setStep(3)} className="flex-1" disabled={stats.unmatched === 0}>
                   <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
                 </Button>
                 <Button 
