@@ -1,7 +1,9 @@
+// /components/ai-dashboard-section.tsx ver.7 (クライアントサイド専用に修正)
+
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { toast } from "sonner";
 
 export default function AiDashboardSection() {
@@ -10,7 +12,7 @@ export default function AiDashboardSection() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = getSupabaseBrowserClient();
+  const supabase = createClientComponentClient();
 
   // "YYYY-MM" 形式を "YYYY年M月" 形式に変換
   const formatMonth = (month: string | null): string => {
@@ -35,7 +37,6 @@ export default function AiDashboardSection() {
       if (fetchError || !data) {
         setError("過去の分析レポートを取得できませんでした。");
       } else if (data.content) {
-        // 修正: contentは既に文字列形式
         setAnalysisResult(data.content);
         setLatestMonth(data.month);
       } else {
@@ -54,7 +55,6 @@ export default function AiDashboardSection() {
     toast.info("AI分析を開始しました。完了まで1〜2分お待ちください。");
 
     try {
-      // 現在の日付を送信
       const today = new Date().toISOString().slice(0, 10);
       
       const response = await fetch("/api/analyze", {
@@ -73,7 +73,6 @@ export default function AiDashboardSection() {
       const result = await response.json();
       
       if (result.ok && result.result) {
-        // 修正: APIの新しいレスポンス形式に対応
         setAnalysisResult(result.result);
         setLatestMonth(result.meta?.month || today.slice(0, 7));
         toast.success("AI分析が完了しました。");
@@ -89,7 +88,7 @@ export default function AiDashboardSection() {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md mt-8">
+    <div className="bg-white p-6 rounded-lg shadow-md">
       <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
         <h2 className="text-xl font-bold text-slate-800">AI分析レポート</h2>
         <button
