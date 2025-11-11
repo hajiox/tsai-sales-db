@@ -4,7 +4,11 @@ export const runtime = 'nodejs';
 export const revalidate = 0;
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
-import SalesTop10Summary from "@/components/sales-top10-summary";
+import dynamic from "next/dynamic";
+
+const SalesTop10Summary = dynamic(() => import("@/components/sales-top10-summary"), {
+  ssr: false,
+});
 
 // "YYYY-MM" 形式の月を "YYYY年M月" 形式に変換
 const formatMonth = (month: string | null): string => {

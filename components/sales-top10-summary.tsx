@@ -56,27 +56,45 @@ export default function SalesTop10Summary() {
       return;
     }
 
-    const supabase = getSupabaseBrowserClient();
+    let isSubscribed = true;
+    let supabaseClient: ReturnType<typeof getSupabaseBrowserClient> | null = null;
+
+    try {
+      supabaseClient = getSupabaseBrowserClient();
+    } catch (error) {
+      console.error("Supabaseクライアント初期化エラー:", error);
+      if (isSubscribed) {
+        setErrorMessage("ブラウザ用のSupabaseクライアント初期化に失敗しました");
+        setIsLoading(false);
+      }
+      return () => {
+        isSubscribed = false;
+      };
+    }
 
     const fetchTopRecords = async () => {
+      if (!supabaseClient) return;
+
       setIsLoading(true);
       setErrorMessage(null);
-      
+
       try {
         // 売上TOP10を取得
-        const { data: salesData, error: salesError } = await supabase.rpc('get_top_sales', { limit_count: 10 });
-        
+        const { data: salesData, error: salesError } = await supabaseClient.rpc("get_top_sales", { limit_count: 10 });
+
         if (salesError) throw salesError;
-        
+
         // 件数TOP10を取得
-        const { data: countsData, error: countsError } = await supabase.rpc('get_top_counts', { limit_count: 10 });
-        
+        const { data: countsData, error: countsError } = await supabaseClient.rpc("get_top_counts", { limit_count: 10 });
+
         if (countsError) throw countsError;
 
         // 最大値を取得
-        const { data: maxData, error: maxError } = await supabase.rpc('get_max_sales_and_counts');
-        
+        const { data: maxData, error: maxError } = await supabaseClient.rpc("get_max_sales_and_counts");
+
         if (maxError) throw maxError;
+
+        if (!isSubscribed) return;
 
         setTopSales(salesData || []);
         setTopCounts(countsData || []);
@@ -90,14 +108,22 @@ export default function SalesTop10Summary() {
         }
       } catch (err: any) {
         console.error("TOP10データ取得エラー:", err);
-        setErrorMessage("TOP10データの取得に失敗しました");
-        toast.error("TOP10データの取得に失敗しました");
+        if (isSubscribed) {
+          setErrorMessage("TOP10データの取得に失敗しました");
+          toast.error("TOP10データの取得に失敗しました");
+        }
       } finally {
-        setIsLoading(false);
+        if (isSubscribed) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchTopRecords();
+
+    return () => {
+      isSubscribed = false;
+    };
   }, []);
 
   return (
