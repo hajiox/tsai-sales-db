@@ -1,4 +1,4 @@
-// /components/dashboard-view.tsx ver.5 動的インポート適用版（タイプミス修正）
+// /components/dashboard-view.tsx ver.6 (TOP10サマリー追加版)
 
 "use client";
 
@@ -10,6 +10,7 @@ import DashboardHeader from './dashboard-header';
 import ClientDate from '@/components/common/ClientDate';
 import SalesSummaryTable from './sales-summary-table';
 import DailySalesCrudForm from './daily-sales-crud-form';
+import SalesTop10Summary from './sales-top10-summary';
 import AiDashboardSection from './ai-dashboard-section';
 
 // SalesChartGridを動的にインポートし、サーバーサイドレンダリング(SSR)を無効化
@@ -133,7 +134,7 @@ export default function DashboardView() {
                             selectedDate={(() => {
                                 const year = selectedDate.getFullYear();
                                 const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-                                const day = String(selectedDate.getDate()).padStart(2, '0');  // ← ここを修正
+                                const day = String(selectedDate.getDate()).padStart(2, '0');
                                 return `${year}-${month}-${day}`;
                             })()}
                             dailyData={dailyData}
@@ -143,6 +144,8 @@ export default function DashboardView() {
                         />
                     )}
                 </div>
+
+                <SalesTop10Summary />
 
                 <AiDashboardSection />
             </main>
