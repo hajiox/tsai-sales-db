@@ -3,39 +3,64 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { toast } from "sonner";
 import Link from "next/link";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-interface TopRecord {
-  report_date: string;
-  value: number;
+interface RawTopRecord {
+  report_date: string | null;
+  value: number | string | null;
 }
 
 export default function SalesTop10Summary() {
-  const [topSales, setTopSales] = useState<TopRecord[]>([]);
-  const [topCounts, setTopCounts] = useState<TopRecord[]>([]);
+  const [topSales, setTopSales] = useState<RawTopRecord[]>([]);
+  const [topCounts, setTopCounts] = useState<RawTopRecord[]>([]);
   const [maxSales, setMaxSales] = useState<number>(0);
   const [maxCounts, setMaxCounts] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  
-  const supabase = createClientComponentClient();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const toNumber = (value: number | string | null | undefined): number => {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : 0;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
 
   // 日付フォーマット（YYYY-MM-DD → YYYY/M/D）
-  const formatDate = (dateStr: string): string => {
-    const [year, month, day] = dateStr.split("-");
+  const formatDate = (input: string | null): string => {
+    if (!input) return "日付不明";
+
+    const datePart = typeof input === "string" ? input : String(input);
+    const [year, month = "", day = ""] = datePart.split("T")[0].split("-");
+
+    if (!year || !month || !day) {
+      return datePart.replace(/-/g, "/");
+    }
+
     return `${year}/${parseInt(month, 10)}/${parseInt(day, 10)}`;
   };
 
   // 金額フォーマット
-  const formatCurrency = (value: number): string => {
-    return value.toLocaleString('ja-JP');
+  const formatCurrency = (value: number | string | null): string => {
+    return toNumber(value).toLocaleString("ja-JP");
   };
 
   // TOP10データを取得
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+
     const fetchTopRecords = async () => {
       setIsLoading(true);
+      setErrorMessage(null);
       
       try {
         // 売上TOP10を取得
@@ -55,13 +80,17 @@ export default function SalesTop10Summary() {
 
         setTopSales(salesData || []);
         setTopCounts(countsData || []);
-        
+
         if (maxData && maxData.length > 0) {
-          setMaxSales(maxData[0].max_sales || 0);
-          setMaxCounts(maxData[0].max_counts || 0);
+          setMaxSales(toNumber(maxData[0].max_sales));
+          setMaxCounts(toNumber(maxData[0].max_counts));
+        } else {
+          setMaxSales(0);
+          setMaxCounts(0);
         }
       } catch (err: any) {
         console.error("TOP10データ取得エラー:", err);
+        setErrorMessage("TOP10データの取得に失敗しました");
         toast.error("TOP10データの取得に失敗しました");
       } finally {
         setIsLoading(false);
@@ -69,7 +98,7 @@ export default function SalesTop10Summary() {
     };
 
     fetchTopRecords();
-  }, [supabase]);
+  }, []);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
@@ -77,6 +106,8 @@ export default function SalesTop10Summary() {
       
       {isLoading ? (
         <p className="text-slate-500 text-center py-10">データを読み込んでいます...</p>
+      ) : errorMessage ? (
+        <p className="text-red-500 text-center py-10">{errorMessage}</p>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 売上金額TOP10 */}
@@ -85,33 +116,42 @@ export default function SalesTop10Summary() {
               💰 売上金額TOP10
             </h3>
             <div className="space-y-2">
-              {topSales.map((record, index) => {
-                const isNewRecord = index === 0 && record.value === maxSales;
-                return (
-                  <Link 
-                    key={`sales-${index}`}
-                    href={`/sales/daily?date=${record.report_date}`}
-                    className="flex justify-between items-center p-2 hover:bg-slate-50 rounded transition-colors group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-slate-500 w-6">
-                        {index + 1}
-                      </span>
-                      <span className="text-sm text-slate-600 group-hover:text-blue-600 group-hover:underline">
-                        {formatDate(record.report_date)}
-                      </span>
-                      {isNewRecord && (
-                        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold">
-                          🏆 NEW!
+              {topSales.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-6">表示できるデータがありません。</p>
+              ) : (
+                topSales.map((record, index) => {
+                  const recordValue = toNumber(record.value);
+                  const isNewRecord = index === 0 && recordValue === maxSales;
+                  const hasValidDate = Boolean(record.report_date);
+                  const linkHref = hasValidDate ? `/sales/daily?date=${record.report_date}` : "#";
+
+                  return (
+                    <Link
+                      key={`sales-${index}-${record.report_date ?? "unknown"}`}
+                      href={linkHref}
+                      className={`flex justify-between items-center p-2 rounded transition-colors group ${hasValidDate ? "hover:bg-slate-50" : "opacity-70 cursor-not-allowed"}`}
+                      prefetch={false}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-slate-500 w-6">
+                          {index + 1}
                         </span>
-                      )}
-                    </div>
-                    <span className="text-sm font-semibold text-slate-800">
-                      ¥{formatCurrency(record.value)}
-                    </span>
-                  </Link>
-                );
-              })}
+                        <span className={`text-sm ${hasValidDate ? "text-slate-600 group-hover:text-blue-600 group-hover:underline" : "text-slate-400"}`}>
+                          {formatDate(record.report_date)}
+                        </span>
+                        {isNewRecord && (
+                          <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold">
+                            🏆 NEW!
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-slate-800">
+                        ¥{formatCurrency(recordValue)}
+                      </span>
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -121,33 +161,42 @@ export default function SalesTop10Summary() {
               📦 売上件数TOP10
             </h3>
             <div className="space-y-2">
-              {topCounts.map((record, index) => {
-                const isNewRecord = index === 0 && record.value === maxCounts;
-                return (
-                  <Link 
-                    key={`counts-${index}`}
-                    href={`/sales/daily?date=${record.report_date}`}
-                    className="flex justify-between items-center p-2 hover:bg-slate-50 rounded transition-colors group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-slate-500 w-6">
-                        {index + 1}
-                      </span>
-                      <span className="text-sm text-slate-600 group-hover:text-blue-600 group-hover:underline">
-                        {formatDate(record.report_date)}
-                      </span>
-                      {isNewRecord && (
-                        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold">
-                          🏆 NEW!
+              {topCounts.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-6">表示できるデータがありません。</p>
+              ) : (
+                topCounts.map((record, index) => {
+                  const recordValue = toNumber(record.value);
+                  const isNewRecord = index === 0 && recordValue === maxCounts;
+                  const hasValidDate = Boolean(record.report_date);
+                  const linkHref = hasValidDate ? `/sales/daily?date=${record.report_date}` : "#";
+
+                  return (
+                    <Link
+                      key={`counts-${index}-${record.report_date ?? "unknown"}`}
+                      href={linkHref}
+                      className={`flex justify-between items-center p-2 rounded transition-colors group ${hasValidDate ? "hover:bg-slate-50" : "opacity-70 cursor-not-allowed"}`}
+                      prefetch={false}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-slate-500 w-6">
+                          {index + 1}
                         </span>
-                      )}
-                    </div>
-                    <span className="text-sm font-semibold text-slate-800">
-                      {formatCurrency(record.value)}件
-                    </span>
-                  </Link>
-                );
-              })}
+                        <span className={`text-sm ${hasValidDate ? "text-slate-600 group-hover:text-blue-600 group-hover:underline" : "text-slate-400"}`}>
+                          {formatDate(record.report_date)}
+                        </span>
+                        {isNewRecord && (
+                          <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold">
+                            🏆 NEW!
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-slate-800">
+                        {formatCurrency(recordValue)}件
+                      </span>
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
