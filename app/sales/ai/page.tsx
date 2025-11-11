@@ -4,9 +4,9 @@ export const runtime = 'nodejs';
 export const revalidate = 0;
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
-import dynamic from "next/dynamic";
+import dynamicImport from "next/dynamic";
 
-const SalesTop10Summary = dynamic(() => import("@/components/sales-top10-summary"), {
+const SalesTop10Summary = dynamicImport(() => import("@/components/sales-top10-summary"), {
   ssr: false,
 });
 
