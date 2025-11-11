@@ -4,6 +4,7 @@ export const runtime = 'nodejs';
 export const revalidate = 0;
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import SalesTop10Summary from "@/components/sales-top10-summary";
 
 // "YYYY-MM" 形式の月を "YYYY年M月" 形式に変換
 const formatMonth = (month: string | null): string => {
@@ -65,6 +66,10 @@ export default async function AiReportsPage() {
 
   return (
     <div className="h-full">
+      <div className="mb-8">
+        <SalesTop10Summary />
+      </div>
+
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-slate-800">AI分析レポート</h1>
         <p className="text-sm text-slate-500 mt-1">過去に生成された月次の分析レポートを閲覧できます。</p>
