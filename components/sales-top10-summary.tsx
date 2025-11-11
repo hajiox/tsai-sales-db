@@ -1,9 +1,9 @@
-// /components/sales-top10-summary.tsx ver.1
+// /components/sales-top10-summary.tsx ver.2 (クライアントサイド専用に修正)
 
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -19,7 +19,7 @@ export default function SalesTop10Summary() {
   const [maxCounts, setMaxCounts] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
-  const supabase = getSupabaseBrowserClient();
+  const supabase = createClientComponentClient();
 
   // 日付フォーマット（YYYY-MM-DD → YYYY/M/D）
   const formatDate = (dateStr: string): string => {
