@@ -1,9 +1,10 @@
-// /components/dashboard-view.tsx ver.7 (SalesTop10Summaryを動的インポート)
+// /components/dashboard-view.tsx ver.8 (URL同期版)
 
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
 import DashboardHeader from './dashboard-header';
@@ -12,15 +13,27 @@ import SalesSummaryTable from './sales-summary-table';
 import DailySalesCrudForm from './daily-sales-crud-form';
 import AiDashboardSection from './ai-dashboard-section';
 
-// SalesChartGridを動的にインポートし、サーバーサイドレンダリング(SSR)を無効化
 const SalesChartGrid = dynamic(() => import('./sales-chart-grid'), { ssr: false });
-
-// SalesTop10Summaryも動的にインポートし、SSRを無効化
 const SalesTop10Summary = dynamic(() => import('./sales-top10-summary'), { ssr: false });
 
 export default function DashboardView() {
     const { data: session } = useSession();
-    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    
+    // URLパラメータから日付を取得、なければ今日の日付
+    const getInitialDate = () => {
+        const dateParam = searchParams.get('date');
+        if (dateParam) {
+            const parsed = new Date(dateParam);
+            if (!isNaN(parsed.getTime())) {
+                return parsed;
+            }
+        }
+        return new Date();
+    };
+    
+    const [selectedDate, setSelectedDate] = useState<Date>(getInitialDate());
     
     // データステート
     const [dailyData, setDailyData] = useState<any>(null);
@@ -31,6 +44,16 @@ export default function DashboardView() {
     const [dailyLoading, setDailyLoading] = useState(true);
     const [graphLoading, setGraphLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // 日付が変更されたらURLを更新
+    const handleDateChange = (date: Date) => {
+        setSelectedDate(date);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+        router.push(`/sales/dashboard?date=${dateString}`, { scroll: false });
+    };
 
     // 日次データを取得
     const getDailyData = useCallback(async (date: Date) => {
@@ -95,7 +118,6 @@ export default function DashboardView() {
             setError(err.message);
             console.error("データ取得エラー:", err);
         } finally {
-            // 成功・失敗に関わらずローディングを終了
             setDailyLoading(false);
             setGraphLoading(false);
         }
@@ -114,7 +136,7 @@ export default function DashboardView() {
     return (
         <div className="p-4 md:p-6 lg:p-8 bg-slate-50 min-h-screen font-sans">
             <div className="text-right text-sm text-slate-600"><ClientDate /></div>
-            <DashboardHeader selectedDate={selectedDate} onDateChange={setSelectedDate} />
+            <DashboardHeader selectedDate={selectedDate} onDateChange={handleDateChange} />
             
             <main className="mt-6 space-y-8">
                 {error && <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md"><p className="font-bold">エラーが発生しました:</p><p>{error}</p></div>}
