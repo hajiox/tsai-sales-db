@@ -1,4 +1,4 @@
-// /components/sales-top10-summary.tsx ver.5 (直接クエリテスト版)
+// /components/sales-top10-summary.tsx ver.6 (本番版 - デバッグログ削除)
 
 "use client";
 
@@ -31,26 +31,20 @@ export default function SalesTop10Summary() {
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
-  // 日付フォーマット（YYYY-MM-DD → YYYY/M/D）
   const formatDate = (input: string | null): string => {
     if (!input) return "日付不明";
-
     const datePart = typeof input === "string" ? input : String(input);
     const [year, month = "", day = ""] = datePart.split("T")[0].split("-");
-
     if (!year || !month || !day) {
       return datePart.replace(/-/g, "/");
     }
-
     return `${year}/${parseInt(month, 10)}/${parseInt(day, 10)}`;
   };
 
-  // 金額フォーマット
   const formatCurrency = (value: number | string | null): string => {
     return toNumber(value).toLocaleString("ja-JP");
   };
 
-  // TOP10データを取得
   useEffect(() => {
     const fetchTopRecords = async () => {
       setIsLoading(true);
@@ -59,65 +53,16 @@ export default function SalesTop10Summary() {
       try {
         const supabase = getSupabaseBrowserClient();
         
-        console.log('🔍 Fetching TOP10 data with RPC...');
+        const { data: salesData, error: salesError } = await supabase.rpc('get_top_sales', { limit_count: 10 });
+        if (salesError) throw salesError;
         
-        // RPC呼び出しを試す
-        const { data: rpcTest, error: rpcError } = await supabase.rpc('get_top_sales', { limit_count: 10 });
-        
-        console.log('🧪 RPC Test Result:', { rpcTest, rpcError });
-        
-        if (rpcError) {
-          console.error('❌ RPC Error:', rpcError);
-          throw new Error(`RPC呼び出しエラー: ${rpcError.message}`);
-        }
-        
-        if (!rpcTest || rpcTest.length === 0) {
-          console.warn('⚠️ RPC returned empty array, trying direct query...');
-          
-          // 直接クエリで取得（フォールバック）
-          const { data: directData, error: directError } = await supabase
-            .from('daily_sales_report')
-            .select('date')
-            .not('date', 'is', null)
-            .limit(10);
-          
-          console.log('📋 Direct Query Test:', { directData, directError });
-          
-          if (directError) {
-            throw new Error(`直接クエリエラー: ${directError.message}`);
-          }
-          
-          // ダミーデータで表示テスト
-          setTopSales([
-            { report_date: '2025-11-08', value: 456 },
-            { report_date: '2025-11-09', value: 331 },
-          ]);
-          setTopCounts([
-            { report_date: '2025-11-08', value: 456 },
-            { report_date: '2025-11-09', value: 331 },
-          ]);
-          setMaxSales(456);
-          setMaxCounts(456);
-          
-          return;
-        }
-        
-        // 正常にRPCからデータ取得
         const { data: countsData, error: countsError } = await supabase.rpc('get_top_counts', { limit_count: 10 });
-        
         if (countsError) throw countsError;
 
         const { data: maxData, error: maxError } = await supabase.rpc('get_max_sales_and_counts');
-        
         if (maxError) throw maxError;
 
-        console.log('✅ All data fetched successfully:', {
-          salesCount: rpcTest.length,
-          countsCount: (countsData || []).length,
-          maxData
-        });
-
-        setTopSales(rpcTest || []);
+        setTopSales(salesData || []);
         setTopCounts(countsData || []);
 
         if (maxData && maxData.length > 0) {
@@ -125,8 +70,8 @@ export default function SalesTop10Summary() {
           setMaxCounts(toNumber(maxData[0].max_counts));
         }
       } catch (err: any) {
-        console.error("❌ TOP10データ取得エラー:", err);
-        setErrorMessage(`エラー: ${err.message}`);
+        console.error("TOP10データ取得エラー:", err);
+        setErrorMessage("TOP10データの取得に失敗しました");
         toast.error("TOP10データの取得に失敗しました");
       } finally {
         setIsLoading(false);
@@ -135,13 +80,6 @@ export default function SalesTop10Summary() {
 
     fetchTopRecords();
   }, []);
-
-  console.log('🎨 Rendering with:', {
-    isLoading,
-    errorMessage,
-    topSalesLength: topSales.length,
-    topCountsLength: topCounts.length
-  });
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
@@ -153,7 +91,6 @@ export default function SalesTop10Summary() {
         <p className="text-red-500 text-center py-10">{errorMessage}</p>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 売上金額TOP10 */}
           <div>
             <h3 className="text-lg font-semibold text-slate-700 mb-3 pb-2 border-b-2 border-slate-200">
               💰 売上金額TOP10
@@ -176,9 +113,7 @@ export default function SalesTop10Summary() {
                       prefetch={false}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-slate-500 w-6">
-                          {index + 1}
-                        </span>
+                        <span className="text-sm font-bold text-slate-500 w-6">{index + 1}</span>
                         <span className={`text-sm ${hasValidDate ? "text-slate-600 group-hover:text-blue-600 group-hover:underline" : "text-slate-400"}`}>
                           {formatDate(record.report_date)}
                         </span>
@@ -198,7 +133,6 @@ export default function SalesTop10Summary() {
             </div>
           </div>
 
-          {/* 売上件数TOP10 */}
           <div>
             <h3 className="text-lg font-semibold text-slate-700 mb-3 pb-2 border-b-2 border-slate-200">
               📦 売上件数TOP10
@@ -221,9 +155,7 @@ export default function SalesTop10Summary() {
                       prefetch={false}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-slate-500 w-6">
-                          {index + 1}
-                        </span>
+                        <span className="text-sm font-bold text-slate-500 w-6">{index + 1}</span>
                         <span className={`text-sm ${hasValidDate ? "text-slate-600 group-hover:text-blue-600 group-hover:underline" : "text-slate-400"}`}>
                           {formatDate(record.report_date)}
                         </span>
