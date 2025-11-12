@@ -1,4 +1,4 @@
-// /components/sales-top10-summary.tsx ver.3 (useEffect依存配列修正)
+// /components/sales-top10-summary.tsx ver.4 (デバッグログ追加)
 
 "use client";
 
@@ -59,20 +59,34 @@ export default function SalesTop10Summary() {
       try {
         const supabase = getSupabaseBrowserClient();
         
+        console.log('🔍 Fetching TOP10 data...');
+        
         // 売上TOP10を取得
         const { data: salesData, error: salesError } = await supabase.rpc('get_top_sales', { limit_count: 10 });
+        
+        console.log('📊 Sales Data:', { salesData, salesError });
         
         if (salesError) throw salesError;
         
         // 件数TOP10を取得
         const { data: countsData, error: countsError } = await supabase.rpc('get_top_counts', { limit_count: 10 });
         
+        console.log('📦 Counts Data:', { countsData, countsError });
+        
         if (countsError) throw countsError;
 
         // 最大値を取得
         const { data: maxData, error: maxError } = await supabase.rpc('get_max_sales_and_counts');
         
+        console.log('🏆 Max Data:', { maxData, maxError });
+        
         if (maxError) throw maxError;
+
+        console.log('✅ Setting state with:', {
+          salesDataLength: (salesData || []).length,
+          countsDataLength: (countsData || []).length,
+          maxData
+        });
 
         setTopSales(salesData || []);
         setTopCounts(countsData || []);
@@ -85,7 +99,7 @@ export default function SalesTop10Summary() {
           setMaxCounts(0);
         }
       } catch (err: any) {
-        console.error("TOP10データ取得エラー:", err);
+        console.error("❌ TOP10データ取得エラー:", err);
         setErrorMessage("TOP10データの取得に失敗しました");
         toast.error("TOP10データの取得に失敗しました");
       } finally {
@@ -94,7 +108,16 @@ export default function SalesTop10Summary() {
     };
 
     fetchTopRecords();
-  }, []); // 依存配列を空にする
+  }, []);
+
+  console.log('🎨 Rendering with:', {
+    isLoading,
+    errorMessage,
+    topSalesLength: topSales.length,
+    topCountsLength: topCounts.length,
+    maxSales,
+    maxCounts
+  });
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
