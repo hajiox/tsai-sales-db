@@ -1,4 +1,4 @@
-// /components/dashboard-view.tsx ver.6 (TOP10サマリー追加版)
+// /components/dashboard-view.tsx ver.7 (SalesTop10Summaryを動的インポート)
 
 "use client";
 
@@ -10,11 +10,13 @@ import DashboardHeader from './dashboard-header';
 import ClientDate from '@/components/common/ClientDate';
 import SalesSummaryTable from './sales-summary-table';
 import DailySalesCrudForm from './daily-sales-crud-form';
-import SalesTop10Summary from './sales-top10-summary';
 import AiDashboardSection from './ai-dashboard-section';
 
 // SalesChartGridを動的にインポートし、サーバーサイドレンダリング(SSR)を無効化
 const SalesChartGrid = dynamic(() => import('./sales-chart-grid'), { ssr: false });
+
+// SalesTop10Summaryも動的にインポートし、SSRを無効化
+const SalesTop10Summary = dynamic(() => import('./sales-top10-summary'), { ssr: false });
 
 export default function DashboardView() {
     const { data: session } = useSession();
