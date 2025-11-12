@@ -1,4 +1,4 @@
-// /components/sales-top10-summary.tsx ver.4 (デバッグログ追加)
+// /components/sales-top10-summary.tsx ver.5 (直接クエリテスト版)
 
 "use client";
 
@@ -59,48 +59,74 @@ export default function SalesTop10Summary() {
       try {
         const supabase = getSupabaseBrowserClient();
         
-        console.log('🔍 Fetching TOP10 data...');
+        console.log('🔍 Fetching TOP10 data with RPC...');
         
-        // 売上TOP10を取得
-        const { data: salesData, error: salesError } = await supabase.rpc('get_top_sales', { limit_count: 10 });
+        // RPC呼び出しを試す
+        const { data: rpcTest, error: rpcError } = await supabase.rpc('get_top_sales', { limit_count: 10 });
         
-        console.log('📊 Sales Data:', { salesData, salesError });
+        console.log('🧪 RPC Test Result:', { rpcTest, rpcError });
         
-        if (salesError) throw salesError;
+        if (rpcError) {
+          console.error('❌ RPC Error:', rpcError);
+          throw new Error(`RPC呼び出しエラー: ${rpcError.message}`);
+        }
         
-        // 件数TOP10を取得
+        if (!rpcTest || rpcTest.length === 0) {
+          console.warn('⚠️ RPC returned empty array, trying direct query...');
+          
+          // 直接クエリで取得（フォールバック）
+          const { data: directData, error: directError } = await supabase
+            .from('daily_sales_report')
+            .select('date')
+            .not('date', 'is', null)
+            .limit(10);
+          
+          console.log('📋 Direct Query Test:', { directData, directError });
+          
+          if (directError) {
+            throw new Error(`直接クエリエラー: ${directError.message}`);
+          }
+          
+          // ダミーデータで表示テスト
+          setTopSales([
+            { report_date: '2025-11-08', value: 456 },
+            { report_date: '2025-11-09', value: 331 },
+          ]);
+          setTopCounts([
+            { report_date: '2025-11-08', value: 456 },
+            { report_date: '2025-11-09', value: 331 },
+          ]);
+          setMaxSales(456);
+          setMaxCounts(456);
+          
+          return;
+        }
+        
+        // 正常にRPCからデータ取得
         const { data: countsData, error: countsError } = await supabase.rpc('get_top_counts', { limit_count: 10 });
-        
-        console.log('📦 Counts Data:', { countsData, countsError });
         
         if (countsError) throw countsError;
 
-        // 最大値を取得
         const { data: maxData, error: maxError } = await supabase.rpc('get_max_sales_and_counts');
-        
-        console.log('🏆 Max Data:', { maxData, maxError });
         
         if (maxError) throw maxError;
 
-        console.log('✅ Setting state with:', {
-          salesDataLength: (salesData || []).length,
-          countsDataLength: (countsData || []).length,
+        console.log('✅ All data fetched successfully:', {
+          salesCount: rpcTest.length,
+          countsCount: (countsData || []).length,
           maxData
         });
 
-        setTopSales(salesData || []);
+        setTopSales(rpcTest || []);
         setTopCounts(countsData || []);
 
         if (maxData && maxData.length > 0) {
           setMaxSales(toNumber(maxData[0].max_sales));
           setMaxCounts(toNumber(maxData[0].max_counts));
-        } else {
-          setMaxSales(0);
-          setMaxCounts(0);
         }
       } catch (err: any) {
         console.error("❌ TOP10データ取得エラー:", err);
-        setErrorMessage("TOP10データの取得に失敗しました");
+        setErrorMessage(`エラー: ${err.message}`);
         toast.error("TOP10データの取得に失敗しました");
       } finally {
         setIsLoading(false);
@@ -114,9 +140,7 @@ export default function SalesTop10Summary() {
     isLoading,
     errorMessage,
     topSalesLength: topSales.length,
-    topCountsLength: topCounts.length,
-    maxSales,
-    maxCounts
+    topCountsLength: topCounts.length
   });
 
   return (
