@@ -1,4 +1,4 @@
-// /components/sales-top10-summary.tsx ver.6 (本番版 - デバッグログ削除)
+// /components/sales-top10-summary.tsx ver.7 (リンク先修正版)
 
 "use client";
 
@@ -103,7 +103,7 @@ export default function SalesTop10Summary() {
                   const recordValue = toNumber(record.value);
                   const isNewRecord = index === 0 && recordValue === maxSales;
                   const hasValidDate = Boolean(record.report_date);
-                  const linkHref = hasValidDate ? `/sales/daily?date=${record.report_date}` : "#";
+                  const linkHref = hasValidDate ? `/sales/dashboard?date=${record.report_date}` : "#";
 
                   return (
                     <Link
@@ -145,7 +145,7 @@ export default function SalesTop10Summary() {
                   const recordValue = toNumber(record.value);
                   const isNewRecord = index === 0 && recordValue === maxCounts;
                   const hasValidDate = Boolean(record.report_date);
-                  const linkHref = hasValidDate ? `/sales/daily?date=${record.report_date}` : "#";
+                  const linkHref = hasValidDate ? `/sales/dashboard?date=${record.report_date}` : "#";
 
                   return (
                     <Link
