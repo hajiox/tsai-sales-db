@@ -1,4 +1,4 @@
-// /components/sales-top10-summary.tsx ver.2 (クライアントサイド専用に修正)
+// /components/sales-top10-summary.tsx ver.3 (useEffect依存配列修正)
 
 "use client";
 
@@ -19,8 +19,6 @@ export default function SalesTop10Summary() {
   const [maxCounts, setMaxCounts] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const supabase = getSupabaseBrowserClient();
 
   const toNumber = (value: number | string | null | undefined): number => {
     if (value === null || value === undefined) {
@@ -59,6 +57,8 @@ export default function SalesTop10Summary() {
       setErrorMessage(null);
       
       try {
+        const supabase = getSupabaseBrowserClient();
+        
         // 売上TOP10を取得
         const { data: salesData, error: salesError } = await supabase.rpc('get_top_sales', { limit_count: 10 });
         
@@ -94,7 +94,7 @@ export default function SalesTop10Summary() {
     };
 
     fetchTopRecords();
-  }, [supabase]);
+  }, []); // 依存配列を空にする
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
