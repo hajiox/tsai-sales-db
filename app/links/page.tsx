@@ -1,4 +1,4 @@
-// /app/links/page.tsx ver.3
+// /app/links/page.tsx ver.1.1 (Fixed)
 "use client"
 
 import { useState, useEffect } from "react"
@@ -32,6 +32,7 @@ export default function LinksPage() {
   const [fetchingOgp, setFetchingOgp] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // リンク一覧取得
   const fetchLinks = async () => {
     try {
       const res = await fetch("/api/links")
@@ -50,6 +51,7 @@ export default function LinksPage() {
     fetchLinks()
   }, [])
 
+  // OGP情報を取得
   const handleFetchOgp = async () => {
     if (!formUrl) return
     setFetchingOgp(true)
@@ -78,6 +80,7 @@ export default function LinksPage() {
     }
   }
 
+  // モーダルを開く（新規）
   const openNewModal = () => {
     setEditingLink(null)
     setFormUrl("")
@@ -89,6 +92,7 @@ export default function LinksPage() {
     setShowModal(true)
   }
 
+  // モーダルを開く（編集）
   const openEditModal = (link: CompanyLink) => {
     setEditingLink(link)
     setFormUrl(link.url)
@@ -100,6 +104,7 @@ export default function LinksPage() {
     setShowModal(true)
   }
 
+  // 保存
   const handleSave = async () => {
     if (!formUrl) {
       alert("URLを入力してください")
@@ -146,10 +151,13 @@ export default function LinksPage() {
     }
   }
 
+  // 削除
   const handleDelete = async (id: string) => {
     if (!confirm("このリンクを削除しますか？")) return
     try {
-      const res = await fetch(`/api/links/${id}`, { method: "DELETE" })
+      const res = await fetch(`/api/links/${id}`, {
+        method: "DELETE",
+      })
       const json = await res.json()
       if (json.success) {
         fetchLinks()
@@ -164,6 +172,7 @@ export default function LinksPage() {
 
   return (
     <div className="p-6">
+      {/* ヘッダー */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">自社リンク集</h1>
         <Button onClick={openNewModal}>
@@ -172,6 +181,7 @@ export default function LinksPage() {
         </Button>
       </div>
 
+      {/* リンク一覧 */}
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -187,6 +197,7 @@ export default function LinksPage() {
               key={link.id}
               className="bg-white border rounded-lg p-4 flex gap-4 hover:shadow-md transition-shadow"
             >
+              {/* OGP画像 */}
               <div className="flex-shrink-0 w-32 h-20 bg-gray-100 rounded overflow-hidden">
                 {link.og_image ? (
                   <img
@@ -204,8 +215,9 @@ export default function LinksPage() {
                 )}
               </div>
 
+              {/* コンテンツ */}
               <div className="flex-1 min-w-0">
-                
+                <a
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -220,14 +232,19 @@ export default function LinksPage() {
                 )}
                 {link.memo && (
                   <p className="text-sm text-orange-600 mt-1 bg-orange-50 px-2 py-1 rounded inline-block">
-                    メモ: {link.memo}
+                    📝 {link.memo}
                   </p>
                 )}
                 <p className="text-xs text-gray-400 mt-2 truncate">{link.url}</p>
               </div>
 
+              {/* アクションボタン */}
               <div className="flex-shrink-0 flex flex-col gap-2">
-                <Button variant="outline" size="sm" onClick={() => openEditModal(link)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openEditModal(link)}
+                >
                   <Pencil className="w-4 h-4" />
                 </Button>
                 <Button
@@ -244,6 +261,7 @@ export default function LinksPage() {
         </div>
       )}
 
+      {/* モーダル */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg w-full max-w-xl mx-4 max-h-[90vh] overflow-y-auto">
@@ -252,6 +270,7 @@ export default function LinksPage() {
                 {editingLink ? "リンク編集" : "リンク追加"}
               </h2>
 
+              {/* URL入力 + OGP取得ボタン */}
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">URL *</label>
                 <div className="flex gap-2">
@@ -277,6 +296,7 @@ export default function LinksPage() {
                 </div>
               </div>
 
+              {/* タイトル */}
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">タイトル</label>
                 <Input
@@ -286,6 +306,7 @@ export default function LinksPage() {
                 />
               </div>
 
+              {/* 説明 */}
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">説明</label>
                 <textarea
@@ -296,6 +317,7 @@ export default function LinksPage() {
                 />
               </div>
 
+              {/* OGP画像URL */}
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">OGP画像URL</label>
                 <Input
@@ -317,6 +339,7 @@ export default function LinksPage() {
                 )}
               </div>
 
+              {/* メモ */}
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">メモ</label>
                 <textarea
@@ -327,6 +350,7 @@ export default function LinksPage() {
                 />
               </div>
 
+              {/* 表示順 */}
               <div className="mb-6">
                 <label className="block text-sm font-medium mb-1">表示順</label>
                 <Input
@@ -339,12 +363,19 @@ export default function LinksPage() {
                 <p className="text-xs text-gray-500 mt-1">小さいほど上に表示されます</p>
               </div>
 
+              {/* ボタン */}
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowModal(false)}
+                  disabled={saving}
+                >
                   キャンセル
                 </Button>
                 <Button onClick={handleSave} disabled={saving}>
-                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
                   {editingLink ? "更新" : "追加"}
                 </Button>
               </div>
