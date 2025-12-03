@@ -1,4 +1,4 @@
-// components/main-sidebar.tsx
+// components/main-sidebar.tsx ver.2
 "use client";
 
 import { useEffect, useState } from "react";
@@ -13,7 +13,8 @@ type Module =
   | "brand-store"
   | "food-store"
   | "finance"
-  | "kpi";
+  | "kpi"
+  | "links";
 
 export default function MainSidebar() {
   const pathname = usePathname();
@@ -30,6 +31,7 @@ export default function MainSidebar() {
     else if (pathname.startsWith("/food-store-analysis")) setActiveModule("food-store");
     else if (pathname.startsWith("/finance")) setActiveModule("finance");
     else if (pathname.startsWith("/kpi")) setActiveModule("kpi");
+    else if (pathname.startsWith("/links")) setActiveModule("links");
     else setActiveModule("sales");
   }, [pathname]);
 
@@ -43,6 +45,7 @@ export default function MainSidebar() {
       "food-store": "/food-store-analysis",
       finance: "/finance/general-ledger",
       kpi: "/kpi",
+      links: "/links",
     } as const;
     router.push(map[module]);
   };
@@ -107,7 +110,6 @@ export default function MainSidebar() {
           財務分析システム
         </Button>
 
-        {/* KPI を一番下に配置 */}
         <Button
           variant={activeVariant("kpi")}
           className={baseBtn}
@@ -115,6 +117,16 @@ export default function MainSidebar() {
         >
           売上KPIダッシュボード
         </Button>
+
+        <div className="border-t border-slate-700 my-2 pt-2">
+          <Button
+            variant={activeVariant("links")}
+            className={baseBtn}
+            onClick={() => goto("links")}
+          >
+            自社リンク集
+          </Button>
+        </div>
       </nav>
 
       {session && (
