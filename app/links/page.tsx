@@ -1,4 +1,4 @@
-// /app/links/page.tsx ver.2
+// /app/links/page.tsx ver.3
 "use client"
 
 import { useState, useEffect } from "react"
@@ -32,7 +32,6 @@ export default function LinksPage() {
   const [fetchingOgp, setFetchingOgp] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // リンク一覧取得
   const fetchLinks = async () => {
     try {
       const res = await fetch("/api/links")
@@ -51,7 +50,6 @@ export default function LinksPage() {
     fetchLinks()
   }, [])
 
-  // OGP情報を取得
   const handleFetchOgp = async () => {
     if (!formUrl) return
     setFetchingOgp(true)
@@ -80,7 +78,6 @@ export default function LinksPage() {
     }
   }
 
-  // モーダルを開く（新規）
   const openNewModal = () => {
     setEditingLink(null)
     setFormUrl("")
@@ -92,7 +89,6 @@ export default function LinksPage() {
     setShowModal(true)
   }
 
-  // モーダルを開く（編集）
   const openEditModal = (link: CompanyLink) => {
     setEditingLink(link)
     setFormUrl(link.url)
@@ -104,7 +100,6 @@ export default function LinksPage() {
     setShowModal(true)
   }
 
-  // 保存
   const handleSave = async () => {
     if (!formUrl) {
       alert("URLを入力してください")
@@ -151,13 +146,10 @@ export default function LinksPage() {
     }
   }
 
-  // 削除
   const handleDelete = async (id: string) => {
     if (!confirm("このリンクを削除しますか？")) return
     try {
-      const res = await fetch(`/api/links/${id}`, {
-        method: "DELETE",
-      })
+      const res = await fetch(`/api/links/${id}`, { method: "DELETE" })
       const json = await res.json()
       if (json.success) {
         fetchLinks()
@@ -235,11 +227,7 @@ export default function LinksPage() {
               </div>
 
               <div className="flex-shrink-0 flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openEditModal(link)}
-                >
+                <Button variant="outline" size="sm" onClick={() => openEditModal(link)}>
                   <Pencil className="w-4 h-4" />
                 </Button>
                 <Button
@@ -352,17 +340,11 @@ export default function LinksPage() {
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowModal(false)}
-                  disabled={saving}
-                >
+                <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
                   キャンセル
                 </Button>
                 <Button onClick={handleSave} disabled={saving}>
-                  {saving ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : null}
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                   {editingLink ? "更新" : "追加"}
                 </Button>
               </div>
