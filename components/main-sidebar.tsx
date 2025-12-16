@@ -1,4 +1,4 @@
-// components/main-sidebar.tsx ver.2
+// components/main-sidebar.tsx ver.3
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,7 +14,8 @@ type Module =
   | "food-store"
   | "finance"
   | "kpi"
-  | "links";
+  | "links"
+  | "ai-tools";
 
 export default function MainSidebar() {
   const pathname = usePathname();
@@ -32,6 +33,7 @@ export default function MainSidebar() {
     else if (pathname.startsWith("/finance")) setActiveModule("finance");
     else if (pathname.startsWith("/kpi")) setActiveModule("kpi");
     else if (pathname.startsWith("/links")) setActiveModule("links");
+    else if (pathname.startsWith("/ai-tools")) setActiveModule("ai-tools");
     else setActiveModule("sales");
   }, [pathname]);
 
@@ -46,6 +48,7 @@ export default function MainSidebar() {
       finance: "/finance/general-ledger",
       kpi: "/kpi",
       links: "/links",
+      "ai-tools": "/ai-tools",
     } as const;
     router.push(map[module]);
   };
@@ -125,6 +128,14 @@ export default function MainSidebar() {
             onClick={() => goto("links")}
           >
             自社リンク集
+          </Button>
+
+          <Button
+            variant={activeVariant("ai-tools")}
+            className={baseBtn}
+            onClick={() => goto("ai-tools")}
+          >
+            使用可能AI
           </Button>
         </div>
       </nav>
