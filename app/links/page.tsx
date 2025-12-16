@@ -1,4 +1,4 @@
-// /app/links/page.tsx ver.5
+// /app/links/page.tsx ver.6
 "use client"
 
 import { useState, useEffect } from "react"
@@ -35,9 +35,9 @@ export default function LinksPage() {
   const fetchLinks = async () => {
     try {
       const res = await fetch("/api/links")
-      const json = await res.json()
-      if (json.success) {
-        setLinks(json.data)
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setLinks(data)
       }
     } catch (error) {
       console.error("リンク取得エラー:", error)
@@ -132,12 +132,11 @@ export default function LinksPage() {
         })
       }
 
-      const json = await res.json()
-      if (json.success) {
+      if (res.ok) {
         setShowModal(false)
         fetchLinks()
       } else {
-        alert(json.error || "保存に失敗しました")
+        alert("保存に失敗しました")
       }
     } catch (error) {
       console.error("保存エラー:", error)
@@ -148,14 +147,13 @@ export default function LinksPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("このリンクを削除しますか？")) return
+    if (!confirm("このリンクを削除しますか?")) return
     try {
       const res = await fetch(`/api/links/${id}`, { method: "DELETE" })
-      const json = await res.json()
-      if (json.success) {
+      if (res.ok) {
         fetchLinks()
       } else {
-        alert(json.error || "削除に失敗しました")
+        alert("削除に失敗しました")
       }
     } catch (error) {
       console.error("削除エラー:", error)
@@ -228,41 +226,19 @@ export default function LinksPage() {
       ) : (
         <div className="grid gap-4">
           {links.map((link, index) => (
-            <div
-              key={link.id}
-              className="bg-white border rounded-lg p-4 flex gap-4 hover:shadow-md transition-shadow"
-            >
+            <div key={link.id} className="bg-white border rounded-lg p-4 flex gap-4 hover:shadow-md transition-shadow">
               <div className="flex-shrink-0 flex flex-col justify-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleMoveUp(index)}
-                  disabled={index === 0}
-                  className="h-6 w-6 p-0"
-                >
+                <Button variant="ghost" size="sm" onClick={() => handleMoveUp(index)} disabled={index === 0} className="h-6 w-6 p-0">
                   <ChevronUp className="w-4 h-4" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleMoveDown(index)}
-                  disabled={index === links.length - 1}
-                  className="h-6 w-6 p-0"
-                >
+                <Button variant="ghost" size="sm" onClick={() => handleMoveDown(index)} disabled={index === links.length - 1} className="h-6 w-6 p-0">
                   <ChevronDown className="w-4 h-4" />
                 </Button>
               </div>
 
               <div className="flex-shrink-0 w-32 h-20 bg-gray-100 rounded overflow-hidden">
                 {link.og_image ? (
-                  <img
-                    src={link.og_image}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none"
-                    }}
-                  />
+                  <img src={link.og_image} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">
                     <ExternalLink className="w-8 h-8" />
