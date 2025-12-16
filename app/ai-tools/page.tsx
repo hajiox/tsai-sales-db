@@ -1,4 +1,4 @@
-// /app/ai-tools/page.tsx ver.1
+// /app/ai-tools/page.tsx ver.2
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -24,6 +24,9 @@ export default function AIToolsPage() {
 
   // 新規追加フォーム
   const [newUrl, setNewUrl] = useState('');
+  const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newOgImage, setNewOgImage] = useState('');
   const [newLoginMethod, setNewLoginMethod] = useState('google');
   const [newAccount, setNewAccount] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -59,25 +62,66 @@ export default function AIToolsPage() {
     fetchTools();
   }, []);
 
-  // OGP取得
-  const fetchOgpData = async (url: string) => {
+  // OGP取得（新規追加用）
+  const fetchOgpForNew = async () => {
+    if (!newUrl.trim()) {
+      alert('URLを入力してください');
+      return;
+    }
+
     setIsFetchingOgp(true);
     try {
       const res = await fetch('/api/links/fetch-ogp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url: newUrl })
       });
       const result = await res.json();
       if (result.success && result.data) {
-        return result.data;
+        setNewTitle(result.data.title || '');
+        setNewDescription(result.data.description || '');
+        setNewOgImage(result.data.image || '');
+        alert('OGP情報を取得しました');
+      } else {
+        alert('OGP情報の取得に失敗しました');
       }
     } catch (error) {
       console.error('OGP取得エラー:', error);
+      alert('OGP情報の取得に失敗しました');
     } finally {
       setIsFetchingOgp(false);
     }
-    return null;
+  };
+
+  // OGP取得（編集用）
+  const fetchOgpForEdit = async () => {
+    if (!editUrl.trim()) {
+      alert('URLを入力してください');
+      return;
+    }
+
+    setIsFetchingOgp(true);
+    try {
+      const res = await fetch('/api/links/fetch-ogp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: editUrl })
+      });
+      const result = await res.json();
+      if (result.success && result.data) {
+        setEditTitle(result.data.title || '');
+        setEditDescription(result.data.description || '');
+        setEditOgImage(result.data.image || '');
+        alert('OGP情報を取得しました');
+      } else {
+        alert('OGP情報の取得に失敗しました');
+      }
+    } catch (error) {
+      console.error('OGP取得エラー:', error);
+      alert('OGP情報の取得に失敗しました');
+    } finally {
+      setIsFetchingOgp(false);
+    }
   };
 
   // 新規追加
@@ -87,17 +131,15 @@ export default function AIToolsPage() {
       return;
     }
 
-    const ogpData = await fetchOgpData(newUrl);
-
     try {
       const res = await fetch('/api/ai-tools', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: newUrl,
-          title: ogpData?.title || '',
-          description: ogpData?.description || '',
-          og_image: ogpData?.image || '',
+          title: newTitle,
+          description: newDescription,
+          og_image: newOgImage,
           login_method: newLoginMethod,
           account: newAccount || null,
           password: newPassword || null,
@@ -107,6 +149,9 @@ export default function AIToolsPage() {
 
       if (res.ok) {
         setNewUrl('');
+        setNewTitle('');
+        setNewDescription('');
+        setNewOgImage('');
         setNewLoginMethod('google');
         setNewAccount('');
         setNewPassword('');
@@ -198,8 +243,27 @@ export default function AIToolsPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">URL *</label>
-              <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="https://..." disabled={isFetchingOgp} />
+              <div className="flex gap-2">
+                <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="flex-1 px-3 py-2 border rounded" placeholder="https://..." disabled={isFetchingOgp} />
+                <button onClick={fetchOgpForNew} disabled={isFetchingOgp} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 whitespace-nowrap">
+                  {isFetchingOgp ? '取得中...' : 'OGP取得'}
+                </button>
+              </div>
             </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">タイトル</label>
+              <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full px-3 py-2 border rounded bg-gray-100" readOnly />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">説明</label>
+              <input type="text" value={newDescription} onChange={(e) => setNewDescription(e.target.value)} className="w-full px-3 py-2 border rounded bg-gray-100" readOnly />
+            </div>
+            {newOgImage && (
+              <div>
+                <label className="block text-sm font-medium mb-1">OGP画像</label>
+                <img src={newOgImage} alt="OGP" className="w-32 h-32 object-cover rounded border" />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium mb-1">ログイン方法 *</label>
               <select value={newLoginMethod} onChange={(e) => setNewLoginMethod(e.target.value)} className="w-full px-3 py-2 border rounded">
@@ -223,8 +287,8 @@ export default function AIToolsPage() {
                 </div>
               </>
             )}
-            <button onClick={handleAdd} disabled={isFetchingOgp} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400">
-              {isFetchingOgp ? '取得中...' : '追加'}
+            <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+              追加
             </button>
           </div>
         </div>
@@ -240,16 +304,27 @@ export default function AIToolsPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">URL</label>
-                    <input type="url" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} className="w-full px-3 py-2 border rounded" />
+                    <div className="flex gap-2">
+                      <input type="url" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} className="flex-1 px-3 py-2 border rounded" />
+                      <button onClick={fetchOgpForEdit} disabled={isFetchingOgp} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 whitespace-nowrap">
+                        {isFetchingOgp ? '取得中...' : 'OGP取得'}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">タイトル</label>
-                    <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full px-3 py-2 border rounded" />
+                    <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full px-3 py-2 border rounded bg-gray-100" readOnly />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">説明</label>
-                    <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="w-full px-3 py-2 border rounded" />
+                    <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="w-full px-3 py-2 border rounded bg-gray-100" readOnly />
                   </div>
+                  {editOgImage && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">OGP画像</label>
+                      <img src={editOgImage} alt="OGP" className="w-32 h-32 object-cover rounded border" />
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium mb-1">ログイン方法</label>
                     <select value={editLoginMethod} onChange={(e) => setEditLoginMethod(e.target.value)} className="w-full px-3 py-2 border rounded">
