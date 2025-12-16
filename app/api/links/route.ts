@@ -1,4 +1,4 @@
-// /app/api/links/route.ts ver.1
+// /app/api/links/route.ts ver.2
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -7,73 +7,57 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// リンク一覧取得
+// GET: リンク一覧取得
 export async function GET() {
-  try {
-    const { data, error } = await supabase
-      .from('company_links')
-      .select('*')
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: false })
+  const { data, error } = await supabase
+    .from('company_links')
+    .select('*')
+    // 数値が小さい順（昇順）で表示。これにより sort_order=1 が一番上に来ます
+    .order('sort_order', { ascending: true })
+    // sort_orderが同じ場合は作成日時順（念の為のフォールバック）
+    .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('リンク取得エラー:', error)
-      return NextResponse.json(
-        { error: 'リンクの取得に失敗しました' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({ success: true, data })
-  } catch (error) {
-    console.error('リンク取得エラー:', error)
-    return NextResponse.json(
-      { error: 'リンクの取得に失敗しました' },
-      { status: 500 }
-    )
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  return NextResponse.json(data)
 }
 
-// リンク追加
+// POST: リンク追加
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { url, title, description, og_image, memo, sort_order } = body
+  const { url, title, description, og_image, memo } = await request.json()
 
-    if (!url) {
-      return NextResponse.json(
-        { error: 'URLは必須です' },
-        { status: 400 }
-      )
-    }
+  // 1. 現在の「最小の」sort_orderを取得（リストの一番上の数値）
+  const { data: minData } = await supabase
+    .from('company_links')
+    .select('sort_order')
+    .order('sort_order', { ascending: true })
+    .limit(1)
+    .single()
 
-    const { data, error } = await supabase
-      .from('company_links')
-      .insert({
-        url,
-        title: title || null,
-        description: description || null,
-        og_image: og_image || null,
-        memo: memo || null,
-        sort_order: sort_order || 0,
-      })
-      .select()
-      .single()
+  // 2. 新しいリンクには「最小値 - 1」を設定して、確実に一番上に表示させる
+  // データが空（初回）の場合は 1 とする
+  const currentMin = minData ? minData.sort_order : 1
+  const newSortOrder = currentMin - 1
 
-    if (error) {
-      console.error('リンク追加エラー:', error)
-      return NextResponse.json(
-        { error: 'リンクの追加に失敗しました' },
-        { status: 500 }
-      )
-    }
+  // 3. データ挿入
+  const { data, error } = await supabase
+    .from('company_links')
+    .insert({ 
+      url, 
+      title, 
+      description, 
+      og_image, 
+      memo, 
+      sort_order: newSortOrder // 計算した順序値をセット
+    })
+    .select()
+    .single()
 
-    return NextResponse.json({ success: true, data })
-  } catch (error) {
-    console.error('リンク追加エラー:', error)
-    return NextResponse.json(
-      { error: 'リンクの追加に失敗しました' },
-      { status: 500 }
-    )
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  return NextResponse.json(data)
 }
