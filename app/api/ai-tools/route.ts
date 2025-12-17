@@ -1,4 +1,4 @@
-// /app/api/ai-tools/route.ts ver.1
+// /app/api/ai-tools/route.ts ver.2
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -33,19 +33,18 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { url, title, description, og_image, login_method, account, password, memo } = body;
+    const { url, name, login_method, account, password, memo } = body;
 
     const { data, error } = await supabase
       .from('ai_tools')
       .insert({
         url,
-        title,
-        description,
-        og_image,
+        name,
         login_method: login_method || 'google',
         account,
         password,
-        memo
+        memo,
+        ai_description: null
       })
       .select()
       .single();
