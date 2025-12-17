@@ -1,4 +1,4 @@
-// /app/api/ai-tools/generate-description/route.ts ver.1
+// /app/api/ai-tools/generate-description/route.ts ver.3
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -52,9 +52,9 @@ URL: ${url}
 
 必ず中学生でもわかる言葉で、専門用語は避けてください。`;
 
-    // Gemini API呼び出し
+    // Gemini API呼び出し（最新の安定版モデル）
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
