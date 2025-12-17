@@ -1,4 +1,4 @@
-// /app/ai-tools/page.tsx ver.2
+// /app/ai-tools/page.tsx ver.3
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,13 +6,12 @@ import { useState, useEffect } from 'react';
 interface AITool {
   id: string;
   url: string;
-  title: string | null;
-  description: string | null;
-  og_image: string | null;
+  name: string;
   login_method: string;
   account: string | null;
   password: string | null;
   memo: string | null;
+  ai_description: string | null;
   created_at: string;
 }
 
@@ -21,27 +20,24 @@ export default function AIToolsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [generatingDescId, setGeneratingDescId] = useState<string | null>(null);
 
   // 新規追加フォーム
   const [newUrl, setNewUrl] = useState('');
-  const [newTitle, setNewTitle] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [newOgImage, setNewOgImage] = useState('');
+  const [newName, setNewName] = useState('');
   const [newLoginMethod, setNewLoginMethod] = useState('google');
   const [newAccount, setNewAccount] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newMemo, setNewMemo] = useState('');
-  const [isFetchingOgp, setIsFetchingOgp] = useState(false);
 
   // 編集フォーム
   const [editUrl, setEditUrl] = useState('');
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editOgImage, setEditOgImage] = useState('');
+  const [editName, setEditName] = useState('');
   const [editLoginMethod, setEditLoginMethod] = useState('google');
   const [editAccount, setEditAccount] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editMemo, setEditMemo] = useState('');
+  const [editAiDescription, setEditAiDescription] = useState('');
 
   // データ取得
   const fetchTools = async () => {
@@ -62,72 +58,51 @@ export default function AIToolsPage() {
     fetchTools();
   }, []);
 
-  // OGP取得（新規追加用）
-  const fetchOgpForNew = async () => {
-    if (!newUrl.trim()) {
-      alert('URLを入力してください');
-      return;
-    }
-
-    setIsFetchingOgp(true);
+  // AI説明生成
+  const generateDescription = async (id: string, url: string, name: string) => {
+    setGeneratingDescId(id);
     try {
-      const res = await fetch('/api/links/fetch-ogp', {
+      const res = await fetch('/api/ai-tools/generate-description', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: newUrl })
+        body: JSON.stringify({ url, name })
       });
+
       const result = await res.json();
-      if (result.success && result.data) {
-        setNewTitle(result.data.title || '');
-        setNewDescription(result.data.description || '');
-        setNewOgImage(result.data.image || '');
-        alert('OGP情報を取得しました');
+      
+      if (result.success && result.description) {
+        // DBに保存
+        await fetch(`/api/ai-tools/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            name,
+            login_method: tools.find(t => t.id === id)?.login_method || 'google',
+            account: tools.find(t => t.id === id)?.account || null,
+            password: tools.find(t => t.id === id)?.password || null,
+            memo: tools.find(t => t.id === id)?.memo || null,
+            ai_description: result.description
+          })
+        });
+        
+        fetchTools();
+        alert('AI説明を生成しました！');
       } else {
-        alert('OGP情報の取得に失敗しました');
+        alert('説明の生成に失敗しました');
       }
     } catch (error) {
-      console.error('OGP取得エラー:', error);
-      alert('OGP情報の取得に失敗しました');
+      console.error('説明生成エラー:', error);
+      alert('説明の生成に失敗しました');
     } finally {
-      setIsFetchingOgp(false);
-    }
-  };
-
-  // OGP取得（編集用）
-  const fetchOgpForEdit = async () => {
-    if (!editUrl.trim()) {
-      alert('URLを入力してください');
-      return;
-    }
-
-    setIsFetchingOgp(true);
-    try {
-      const res = await fetch('/api/links/fetch-ogp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: editUrl })
-      });
-      const result = await res.json();
-      if (result.success && result.data) {
-        setEditTitle(result.data.title || '');
-        setEditDescription(result.data.description || '');
-        setEditOgImage(result.data.image || '');
-        alert('OGP情報を取得しました');
-      } else {
-        alert('OGP情報の取得に失敗しました');
-      }
-    } catch (error) {
-      console.error('OGP取得エラー:', error);
-      alert('OGP情報の取得に失敗しました');
-    } finally {
-      setIsFetchingOgp(false);
+      setGeneratingDescId(null);
     }
   };
 
   // 新規追加
   const handleAdd = async () => {
-    if (!newUrl.trim()) {
-      alert('URLを入力してください');
+    if (!newUrl.trim() || !newName.trim()) {
+      alert('URLと名前を入力してください');
       return;
     }
 
@@ -137,9 +112,7 @@ export default function AIToolsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: newUrl,
-          title: newTitle,
-          description: newDescription,
-          og_image: newOgImage,
+          name: newName,
           login_method: newLoginMethod,
           account: newAccount || null,
           password: newPassword || null,
@@ -149,9 +122,7 @@ export default function AIToolsPage() {
 
       if (res.ok) {
         setNewUrl('');
-        setNewTitle('');
-        setNewDescription('');
-        setNewOgImage('');
+        setNewName('');
         setNewLoginMethod('google');
         setNewAccount('');
         setNewPassword('');
@@ -169,13 +140,12 @@ export default function AIToolsPage() {
   const startEdit = (tool: AITool) => {
     setEditingId(tool.id);
     setEditUrl(tool.url);
-    setEditTitle(tool.title || '');
-    setEditDescription(tool.description || '');
-    setEditOgImage(tool.og_image || '');
+    setEditName(tool.name);
     setEditLoginMethod(tool.login_method);
     setEditAccount(tool.account || '');
     setEditPassword(tool.password || '');
     setEditMemo(tool.memo || '');
+    setEditAiDescription(tool.ai_description || '');
   };
 
   // 更新
@@ -186,13 +156,12 @@ export default function AIToolsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: editUrl,
-          title: editTitle,
-          description: editDescription,
-          og_image: editOgImage,
+          name: editName,
           login_method: editLoginMethod,
           account: editAccount || null,
           password: editPassword || null,
-          memo: editMemo || null
+          memo: editMemo || null,
+          ai_description: editAiDescription
         })
       });
 
@@ -243,27 +212,12 @@ export default function AIToolsPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">URL *</label>
-              <div className="flex gap-2">
-                <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="flex-1 px-3 py-2 border rounded" placeholder="https://..." disabled={isFetchingOgp} />
-                <button onClick={fetchOgpForNew} disabled={isFetchingOgp} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 whitespace-nowrap">
-                  {isFetchingOgp ? '取得中...' : 'OGP取得'}
-                </button>
-              </div>
+              <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="https://..." />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">タイトル</label>
-              <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full px-3 py-2 border rounded bg-gray-100" readOnly />
+              <label className="block text-sm font-medium mb-1">名前 *</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="例: ChatGPT" />
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">説明</label>
-              <input type="text" value={newDescription} onChange={(e) => setNewDescription(e.target.value)} className="w-full px-3 py-2 border rounded bg-gray-100" readOnly />
-            </div>
-            {newOgImage && (
-              <div>
-                <label className="block text-sm font-medium mb-1">OGP画像</label>
-                <img src={newOgImage} alt="OGP" className="w-32 h-32 object-cover rounded border" />
-              </div>
-            )}
             <div>
               <label className="block text-sm font-medium mb-1">ログイン方法 *</label>
               <select value={newLoginMethod} onChange={(e) => setNewLoginMethod(e.target.value)} className="w-full px-3 py-2 border rounded">
@@ -304,27 +258,12 @@ export default function AIToolsPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">URL</label>
-                    <div className="flex gap-2">
-                      <input type="url" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} className="flex-1 px-3 py-2 border rounded" />
-                      <button onClick={fetchOgpForEdit} disabled={isFetchingOgp} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 whitespace-nowrap">
-                        {isFetchingOgp ? '取得中...' : 'OGP取得'}
-                      </button>
-                    </div>
+                    <input type="url" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} className="w-full px-3 py-2 border rounded" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">タイトル</label>
-                    <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full px-3 py-2 border rounded bg-gray-100" readOnly />
+                    <label className="block text-sm font-medium mb-1">名前</label>
+                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full px-3 py-2 border rounded" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">説明</label>
-                    <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="w-full px-3 py-2 border rounded bg-gray-100" readOnly />
-                  </div>
-                  {editOgImage && (
-                    <div>
-                      <label className="block text-sm font-medium mb-1">OGP画像</label>
-                      <img src={editOgImage} alt="OGP" className="w-32 h-32 object-cover rounded border" />
-                    </div>
-                  )}
                   <div>
                     <label className="block text-sm font-medium mb-1">ログイン方法</label>
                     <select value={editLoginMethod} onChange={(e) => setEditLoginMethod(e.target.value)} className="w-full px-3 py-2 border rounded">
@@ -355,27 +294,32 @@ export default function AIToolsPage() {
                 </div>
               ) : (
                 <div>
-                  <div className="flex gap-4">
-                    {tool.og_image && (
-                      <img src={tool.og_image} alt={tool.title || ''} className="w-32 h-32 object-cover rounded" />
-                    )}
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-2">{tool.title || 'タイトルなし'}</h3>
-                      <p className="text-sm text-gray-600 mb-2">{tool.description}</p>
-                      <a href={tool.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm break-all">{tool.url}</a>
-                      <div className="mt-3 text-sm">
-                        <p><strong>ログイン方法:</strong> {tool.login_method === 'google' ? 'Googleログイン' : '直接入力'}</p>
-                        {tool.login_method === 'direct' && (
-                          <>
-                            {tool.account && <p><strong>アカウント:</strong> {tool.account}</p>}
-                            {tool.password && <p><strong>パスワード:</strong> {tool.password}</p>}
-                            {tool.memo && <p className="mt-2"><strong>説明:</strong> {tool.memo}</p>}
-                          </>
-                        )}
-                      </div>
+                  <div className="mb-4">
+                    <h3 className="text-xl font-bold mb-2">{tool.name}</h3>
+                    <a href={tool.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm break-all">{tool.url}</a>
+                    <div className="mt-3 text-sm">
+                      <p><strong>ログイン方法:</strong> {tool.login_method === 'google' ? 'Googleログイン' : '直接入力'}</p>
+                      {tool.login_method === 'direct' && (
+                        <>
+                          {tool.account && <p><strong>アカウント:</strong> {tool.account}</p>}
+                          {tool.password && <p><strong>パスワード:</strong> {tool.password}</p>}
+                          {tool.memo && <p className="mt-2"><strong>説明:</strong> {tool.memo}</p>}
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-2 mt-4">
+
+                  {tool.ai_description && (
+                    <div className="mb-4 p-4 bg-blue-50 rounded border border-blue-200">
+                      <h4 className="font-semibold mb-2 text-blue-900">🤖 AIによる説明</h4>
+                      <div className="text-sm whitespace-pre-wrap text-gray-800">{tool.ai_description}</div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button onClick={() => generateDescription(tool.id, tool.url, tool.name)} disabled={generatingDescId === tool.id} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400">
+                      {generatingDescId === tool.id ? '生成中...' : '🤖 説明'}
+                    </button>
                     <button onClick={() => startEdit(tool)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">編集</button>
                     <button onClick={() => handleDelete(tool.id)} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">削除</button>
                   </div>
