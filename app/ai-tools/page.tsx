@@ -23,7 +23,6 @@ export default function AIToolsPage() {
   const [generatingDescId, setGeneratingDescId] = useState<string | null>(null);
   const [expandedDescId, setExpandedDescId] = useState<string | null>(null);
 
-  // 新規追加フォーム
   const [newUrl, setNewUrl] = useState('');
   const [newName, setNewName] = useState('');
   const [newLoginMethod, setNewLoginMethod] = useState('google');
@@ -31,7 +30,6 @@ export default function AIToolsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [newMemo, setNewMemo] = useState('');
 
-  // 編集フォーム
   const [editUrl, setEditUrl] = useState('');
   const [editName, setEditName] = useState('');
   const [editLoginMethod, setEditLoginMethod] = useState('google');
@@ -40,7 +38,6 @@ export default function AIToolsPage() {
   const [editMemo, setEditMemo] = useState('');
   const [editAiDescription, setEditAiDescription] = useState('');
 
-  // データ取得
   const fetchTools = async () => {
     try {
       const res = await fetch('/api/ai-tools');
@@ -49,7 +46,7 @@ export default function AIToolsPage() {
         setTools(data);
       }
     } catch (error) {
-      console.error('データ取得エラー:', error);
+      console.error('Error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +56,6 @@ export default function AIToolsPage() {
     fetchTools();
   }, []);
 
-  // AI説明生成
   const generateDescription = async (id: string, url: string, name: string) => {
     setGeneratingDescId(id);
     try {
@@ -75,7 +71,6 @@ export default function AIToolsPage() {
         const tool = tools.find(t => t.id === id);
         if (!tool) return;
 
-        // DBに保存
         await fetch(`/api/ai-tools/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -92,21 +87,20 @@ export default function AIToolsPage() {
         
         fetchTools();
         setExpandedDescId(id);
-        alert('AI説明を生成しました！');
+        alert('AI説明を生成しました');
       } else {
         alert('説明の生成に失敗しました');
       }
     } catch (error) {
-      console.error('説明生成エラー:', error);
+      console.error('Error:', error);
       alert('説明の生成に失敗しました');
     } finally {
       setGeneratingDescId(null);
     }
   };
 
-  // AI説明削除
   const deleteDescription = async (id: string) => {
-    if (!confirm('AI説明を削除しますか？（ツール情報は削除されません）')) return;
+    if (!confirm('AI説明を削除しますか？')) return;
 
     const tool = tools.find(t => t.id === id);
     if (!tool) return;
@@ -129,12 +123,11 @@ export default function AIToolsPage() {
       fetchTools();
       alert('AI説明を削除しました');
     } catch (error) {
-      console.error('説明削除エラー:', error);
+      console.error('Error:', error);
       alert('削除に失敗しました');
     }
   };
 
-  // 新規追加
   const handleAdd = async () => {
     if (!newUrl.trim() || !newName.trim()) {
       alert('URLと名前を入力してください');
@@ -171,12 +164,11 @@ export default function AIToolsPage() {
         fetchTools();
       }
     } catch (error) {
-      console.error('追加エラー:', error);
+      console.error('Error:', error);
       alert('追加に失敗しました');
     }
   };
 
-  // 編集開始
   const startEdit = (tool: AITool) => {
     setEditingId(tool.id);
     setEditUrl(tool.url);
@@ -188,7 +180,6 @@ export default function AIToolsPage() {
     setEditAiDescription(tool.ai_description || '');
   };
 
-  // 更新
   const handleUpdate = async (id: string) => {
     if (!editAccount.trim() || !editPassword.trim()) {
       alert('アカウントとパスワードを入力してください');
@@ -215,12 +206,11 @@ export default function AIToolsPage() {
         fetchTools();
       }
     } catch (error) {
-      console.error('更新エラー:', error);
+      console.error('Error:', error);
       alert('更新に失敗しました');
     }
   };
 
-  // ツール削除
   const handleDelete = async (id: string) => {
     if (!confirm('このAIツールを完全に削除しますか？')) return;
 
@@ -233,7 +223,7 @@ export default function AIToolsPage() {
         fetchTools();
       }
     } catch (error) {
-      console.error('削除エラー:', error);
+      console.error('Error:', error);
       alert('削除に失敗しました');
     }
   };
@@ -246,9 +236,7 @@ export default function AIToolsPage() {
     <div className="p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">使用可能AI</h1>
-        <button onClick={() => setIsAdding(!isAdding)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-          {isAdding ? 'キャンセル' : '+ 新規追加'}
-        </button>
+        <button onClick={() => setIsAdding(!isAdding)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">{isAdding ? 'キャンセル' : '+ 新規追加'}</button>
       </div>
 
       {isAdding && (
@@ -282,9 +270,7 @@ export default function AIToolsPage() {
               <label className="block text-sm font-medium mb-1">メモ（任意）</label>
               <textarea value={newMemo} onChange={(e) => setNewMemo(e.target.value)} className="w-full px-3 py-2 border rounded" rows={3} placeholder="補足情報など" />
             </div>
-            <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-              追加
-            </button>
+            <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">追加</button>
           </div>
         </div>
       )}
@@ -297,24 +283,34 @@ export default function AIToolsPage() {
             <div key={tool.id} className="border rounded-lg p-6 bg-white shadow-sm">
               {editingId === tool.id ? (
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">URL</label>
-                    <input type="url" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} className="w-full px-3 py-2 border rounded" />
+                  <div><label className="block text-sm font-medium mb-1">URL</label><input type="url" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} className="w-full px-3 py-2 border rounded" /></div>
+                  <div><label className="block text-sm font-medium mb-1">名前</label><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full px-3 py-2 border rounded" /></div>
+                  <div><label className="block text-sm font-medium mb-1">ログイン方法</label><select value={editLoginMethod} onChange={(e) => setEditLoginMethod(e.target.value)} className="w-full px-3 py-2 border rounded"><option value="google">Googleログイン</option><option value="direct">直接入力</option></select></div>
+                  <div><label className="block text-sm font-medium mb-1">アカウント *</label><input type="text" value={editAccount} onChange={(e) => setEditAccount(e.target.value)} className="w-full px-3 py-2 border rounded" /></div>
+                  <div><label className="block text-sm font-medium mb-1">パスワード *</label><input type="text" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} className="w-full px-3 py-2 border rounded" /></div>
+                  <div><label className="block text-sm font-medium mb-1">メモ</label><textarea value={editMemo} onChange={(e) => setEditMemo(e.target.value)} className="w-full px-3 py-2 border rounded" rows={3} /></div>
+                  <div className="flex gap-2"><button onClick={() => handleUpdate(tool.id)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">保存</button><button onClick={() => setEditingId(null)} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">キャンセル</button></div>
+                </div>
+              ) : (
+                <div>
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2"><h3 className="text-xl font-bold">{tool.name}</h3><span className="text-xs px-2 py-1 bg-gray-200 rounded">{tool.login_method === 'google' ? 'Google' : '直接'}</span></div>
+                    <a href={tool.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm break-all block mb-3">{tool.url}</a>
+                    <div className="bg-gray-50 p-3 rounded text-sm space-y-1"><p><strong>アカウント:</strong> {tool.account}</p><p><strong>パスワード:</strong> {tool.password}</p>{tool.memo && <p className="mt-2 text-gray-600"><strong>メモ:</strong> {tool.memo}</p>}</div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">名前</label>
-                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full px-3 py-2 border rounded" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">ログイン方法</label>
-                    <select value={editLoginMethod} onChange={(e) => setEditLoginMethod(e.target.value)} className="w-full px-3 py-2 border rounded">
-                      <option value="google">Googleログイン</option>
-                      <option value="direct">直接入力</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">アカウント *</label>
-                    <input type="text" value={editAccount} onChange={(e) => setEditAccount(e.target.value)} className="w-full px-3 py-2 border rounded" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">パス
+                  {tool.ai_description && (
+                    <div className="mb-4">
+                      <button onClick={() => setExpandedDescId(expandedDescId === tool.id ? null : tool.id)} className="w-full flex items-center justify-between p-3 bg-blue-50 rounded border border-blue-200 hover:bg-blue-100 transition"><span className="font-semibold text-blue-900">AI説明を表示</span><span className="text-blue-600">{expandedDescId === tool.id ? '▲' : '▼'}</span></button>
+                      {expandedDescId === tool.id && (<div className="mt-2 p-4 bg-white rounded border border-blue-200"><div className="text-sm whitespace-pre-wrap text-gray-800 mb-3">{tool.ai_description}</div><button onClick={() => deleteDescription(tool.id)} className="text-xs px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200">説明を削除</button></div>)}
+                    </div>
+                  )}
+                  <div className="flex gap-2 flex-wrap"><button onClick={() => generateDescription(tool.id, tool.url, tool.name)} disabled={generatingDescId === tool.id} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400">{generatingDescId === tool.id ? '生成中...' : tool.ai_description ? '説明を再生成' : 'AI説明を生成'}</button><button onClick={() => startEdit(tool)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">編集</button><button onClick={() => handleDelete(tool.id)} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">ツールを削除</button></div>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
