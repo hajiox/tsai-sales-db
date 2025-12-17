@@ -1,7 +1,8 @@
-// /app/ai-tools/page.tsx ver.4
+// /app/ai-tools/page.tsx ver.5
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 
 interface AITool {
   id: string;
@@ -234,6 +235,10 @@ export default function AIToolsPage() {
 
   return (
     <div className="p-8">
+      <div className="mb-6">
+        <img src="/manga.jpg" alt="AI tools guide" className="w-full max-w-4xl mx-auto rounded-lg shadow-lg" />
+      </div>
+
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">使用可能AI</h1>
         <button onClick={() => setIsAdding(!isAdding)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">{isAdding ? 'キャンセル' : '+ 新規追加'}</button>
