@@ -1,4 +1,4 @@
-// /app/api/ai-tools/[id]/route.ts ver.1
+// /app/api/ai-tools/[id]/route.ts ver.2
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -14,19 +14,18 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const { url, title, description, og_image, login_method, account, password, memo } = body;
+    const { url, name, login_method, account, password, memo, ai_description } = body;
 
     const { data, error } = await supabase
       .from('ai_tools')
       .update({
         url,
-        title,
-        description,
-        og_image,
+        name,
         login_method,
         account,
         password,
-        memo
+        memo,
+        ai_description
       })
       .eq('id', params.id)
       .select()
