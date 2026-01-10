@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Fragment } from 'react';
 
 interface Transaction {
   date: string;
@@ -308,7 +308,7 @@ export default function TrialBalancePage() {
                 ].map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => setActiveTab(tab.id as 'summary' | 'bs' | 'pl' | 'all')}
                     className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${
                       activeTab === tab.id
                         ? 'bg-blue-600 text-white'
@@ -404,15 +404,3 @@ export default function TrialBalancePage() {
     </div>
   );
 }
-```
-
----
-
-## 配置先
-```
-app/
-├── api/finance/
-│   ├── trial-balance/route.ts   ← 新規
-│   └── transactions/route.ts    ← 新規
-└── finance/
-    └── trial-balance/page.tsx   ← 新規
