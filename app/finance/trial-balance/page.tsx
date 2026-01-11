@@ -1,4 +1,4 @@
-// /app/finance/trial-balance/page.tsx ver.3
+// /app/finance/trial-balance/page.tsx ver.4
 "use client";
 
 import { useState, useEffect } from "react";
@@ -28,6 +28,9 @@ import {
   Upload,
   Trash2,
   AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -55,7 +58,7 @@ interface SummaryData {
 
 interface TrialBalanceResponse {
   accounts: AccountData[];
-  summary: SummaryData; // APIによってはここがnullになる可能性がある
+  summary: SummaryData;
   month: string;
 }
 
@@ -75,7 +78,10 @@ export default function TrialBalancePage() {
   const [currentMonth, setCurrentMonth] = useState<string>("");
   const [data, setData] = useState<TrialBalanceResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"summary" | "bs" | "pl" | "all">("summary");
+  
+  // タブは「損益計算書(PL)」と「全科目」のみにする
+  const [tab, setTab] = useState<"pl" | "all">("pl");
+  
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(
     new Set()
   );
@@ -274,11 +280,9 @@ export default function TrialBalancePage() {
   const getCategoryColor = (category: string) => {
     switch (category) {
       case "資産":
-        return "bg-blue-50 hover:bg-blue-100";
       case "負債":
-        return "bg-red-50 hover:bg-red-100";
       case "純資産":
-        return "bg-green-50 hover:bg-green-100";
+        return "bg-gray-50 hover:bg-gray-100 opacity-60"; // BS項目は目立たなくする
       case "収益":
         return "bg-purple-50 hover:bg-purple-100";
       case "費用":
@@ -292,8 +296,7 @@ export default function TrialBalancePage() {
   const filteredAccounts =
     data?.accounts.filter((acc) => {
       if (tab === "all") return true;
-      if (tab === "bs")
-        return ["資産", "負債", "純資産"].includes(acc.category);
+      // PLタブは収益と費用のみ表示
       if (tab === "pl") return ["収益", "費用"].includes(acc.category);
       return false;
     }) || [];
@@ -303,9 +306,9 @@ export default function TrialBalancePage() {
       {/* ヘッダーエリア */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">試算表ビューアー</h1>
+          <h1 className="text-2xl font-bold text-gray-800">損益分析ビューアー</h1>
           <p className="text-sm text-gray-500">
-            科目をクリックすると取引明細が展開されます
+            当月の収支状況を確認します (貸借対照表は非表示)
           </p>
         </div>
 
@@ -342,22 +345,20 @@ export default function TrialBalancePage() {
 
       {/* タブ切り替え */}
       <div className="flex gap-2 border-b">
-        {(["summary", "bs", "pl", "all"] as const).map((t) => (
-          <Button
-            key={t}
-            variant={tab === t ? "default" : "ghost"}
-            onClick={() => setTab(t)}
-            className="rounded-b-none"
-          >
-            {t === "summary"
-              ? "サマリー"
-              : t === "bs"
-              ? "貸借対照表"
-              : t === "pl"
-              ? "損益計算書"
-              : "全科目"}
-          </Button>
-        ))}
+        <Button
+          variant={tab === "pl" ? "default" : "ghost"}
+          onClick={() => setTab("pl")}
+          className="rounded-b-none"
+        >
+          損益計算書 (P/L)
+        </Button>
+        <Button
+          variant={tab === "all" ? "default" : "ghost"}
+          onClick={() => setTab("all")}
+          className="rounded-b-none"
+        >
+          全科目リスト
+        </Button>
       </div>
 
       {loading ? (
@@ -365,236 +366,205 @@ export default function TrialBalancePage() {
           <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
         </div>
       ) : !data || !data.summary ? (
-        /* 修正箇所: dataが存在してもsummaryがnullの場合は「データなし」を表示 */
         <div className="text-center py-20 text-gray-500">
           データがありません。対象月を選択するかインポートしてください。
         </div>
       ) : (
         <>
-          {/* サマリータブ */}
-          {tab === "summary" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>貸借対照表サマリー</CardTitle>
+          {/* PLタブ選択時のトップサマリー */}
+          {tab === "pl" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="border-t-4 border-t-purple-500">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-purple-500" />
+                    収益合計 (売上など)
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex justify-between border-b pb-2">
-                    <span>資産合計</span>
-                    <span className="font-bold text-blue-600">
-                      ¥{fmt(data.summary.totalAssets)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span>負債合計</span>
-                    <span className="font-bold text-red-600">
-                      ¥{fmt(data.summary.totalLiabilities)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span>純資産合計</span>
-                    <span className="font-bold text-green-600">
-                      ¥{fmt(data.summary.totalEquity)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-2 bg-gray-50 p-2 rounded">
-                    <span>検算 (資産 - 負債 - 純資産)</span>
-                    <span
-                      className={`font-bold ${
-                        data.summary.bsBalance === 0
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      ¥{fmt(data.summary.bsBalance)}
-                      {data.summary.bsBalance === 0 ? " ✓ OK" : " ⚠️ 差異あり"}
-                    </span>
+                <CardContent>
+                  <div className="text-2xl font-bold text-purple-700">
+                    ¥{fmt(data.summary.totalRevenues)}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>損益計算書サマリー</CardTitle>
+              <Card className="border-t-4 border-t-orange-500">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4 text-orange-500" />
+                    費用合計 (経費など)
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex justify-between border-b pb-2">
-                    <span>収益合計</span>
-                    <span className="font-bold text-purple-600">
-                      ¥{fmt(data.summary.totalRevenues)}
-                    </span>
+                <CardContent>
+                  <div className="text-2xl font-bold text-orange-700">
+                    ¥{fmt(data.summary.totalExpenses)}
                   </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span>費用合計</span>
-                    <span className="font-bold text-orange-600">
-                      ¥{fmt(data.summary.totalExpenses)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-2 bg-gray-50 p-2 rounded">
-                    <span>当期純利益 (収益 - 費用)</span>
-                    <span
-                      className={`font-bold ${
-                        data.summary.netIncome >= 0
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      ¥{fmt(data.summary.netIncome)}
-                    </span>
+                </CardContent>
+              </Card>
+
+              <Card className={`border-t-4 ${data.summary.netIncome >= 0 ? "border-t-green-500" : "border-t-red-500"}`}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-gray-500" />
+                    当期純利益 (収益 - 費用)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${data.summary.netIncome >= 0 ? "text-green-700" : "text-red-600"}`}>
+                    ¥{fmt(data.summary.netIncome)}
                   </div>
                 </CardContent>
               </Card>
             </div>
           )}
 
-          {/* 科目一覧テーブル (BS/PL/ALL) */}
-          {tab !== "summary" && (
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10"></TableHead>
-                    <TableHead>コード</TableHead>
-                    <TableHead>科目名</TableHead>
-                    <TableHead>分類</TableHead>
-                    <TableHead className="text-right">期首残高</TableHead>
-                    <TableHead className="text-right">借方合計</TableHead>
-                    <TableHead className="text-right">貸方合計</TableHead>
-                    <TableHead className="text-right">期末残高</TableHead>
-                    <TableHead className="text-right">件数</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAccounts.map((acc) => {
-                    const isExpanded = expandedAccounts.has(acc.code);
-                    const trans = transactions.get(acc.code);
-                    const isLoadingTrans = loadingTransactions.has(acc.code);
+          {/* 科目一覧テーブル */}
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10"></TableHead>
+                  <TableHead>コード</TableHead>
+                  <TableHead>科目名</TableHead>
+                  <TableHead>分類</TableHead>
+                  {/* B/S関連の残高列は全科目タブでのみ重要だが、PLでも期末残高＝当月の動きの蓄積として表示して問題ない */}
+                  <TableHead className="text-right">借方合計</TableHead>
+                  <TableHead className="text-right">貸方合計</TableHead>
+                  <TableHead className="text-right">差引残高</TableHead>
+                  <TableHead className="text-right">件数</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredAccounts.map((acc) => {
+                  const isExpanded = expandedAccounts.has(acc.code);
+                  const trans = transactions.get(acc.code);
+                  const isLoadingTrans = loadingTransactions.has(acc.code);
+                  
+                  // PL科目において、期末残高は必ずしも重要ではないが、
+                  // 収益は貸方、費用は借方に残高が残るのが基本。
+                  // ここではシンプルに計算上の期末残高を表示する。
 
-                    return (
-                      <>
-                        <TableRow
-                          key={acc.code}
-                          className={`cursor-pointer transition-colors ${getCategoryColor(
-                            acc.category
-                          )}`}
-                          onClick={() => toggleAccountExpand(acc.code)}
-                        >
-                          <TableCell>
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4" />
-                            )}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {acc.code}
-                          </TableCell>
-                          <TableCell>{acc.name}</TableCell>
-                          <TableCell>
-                            <span className="px-2 py-1 rounded-full text-xs bg-white border">
-                              {acc.category}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-gray-500">
-                            {fmt(acc.openingBalance)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {fmt(acc.debitTotal)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {fmt(acc.creditTotal)}
-                          </TableCell>
-                          <TableCell className="text-right font-bold">
-                            {fmt(acc.closingBalance)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {acc.transactionCount}
+                  return (
+                    <>
+                      <TableRow
+                        key={acc.code}
+                        className={`cursor-pointer transition-colors ${getCategoryColor(
+                          acc.category
+                        )}`}
+                        onClick={() => toggleAccountExpand(acc.code)}
+                      >
+                        <TableCell>
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {acc.code}
+                        </TableCell>
+                        <TableCell>{acc.name}</TableCell>
+                        <TableCell>
+                          <span className="px-2 py-1 rounded-full text-xs bg-white border">
+                            {acc.category}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {fmt(acc.debitTotal)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {fmt(acc.creditTotal)}
+                        </TableCell>
+                        <TableCell className="text-right font-bold">
+                          {fmt(acc.closingBalance)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {acc.transactionCount}
+                        </TableCell>
+                      </TableRow>
+
+                      {/* 展開時の取引明細 */}
+                      {isExpanded && (
+                        <TableRow className="bg-slate-50 hover:bg-slate-50">
+                          <TableCell colSpan={8} className="p-4">
+                            <div className="pl-4 border-l-4 border-slate-300">
+                              <h4 className="mb-2 text-sm font-bold text-slate-700">
+                                {acc.name} - 取引明細 ({currentMonth})
+                              </h4>
+                              {isLoadingTrans ? (
+                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  読み込み中...
+                                </div>
+                              ) : trans && trans.length > 0 ? (
+                                <div className="overflow-x-auto">
+                                  <Table className="bg-white border text-sm">
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>日付</TableHead>
+                                        <TableHead>相手科目</TableHead>
+                                        <TableHead>摘要</TableHead>
+                                        <TableHead className="text-right">
+                                          借方
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                          貸方
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                          残高
+                                        </TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {trans.map((t, idx) => (
+                                        <TableRow key={idx}>
+                                          <TableCell className="whitespace-nowrap">
+                                            {t.date}
+                                          </TableCell>
+                                          <TableCell>
+                                            {t.counterAccount}
+                                          </TableCell>
+                                          <TableCell className="max-w-[300px] truncate" title={t.description}>
+                                            {t.description}
+                                          </TableCell>
+                                          <TableCell className="text-right text-blue-600">
+                                            {t.debit > 0
+                                              ? fmt(t.debit)
+                                              : "-"}
+                                          </TableCell>
+                                          <TableCell className="text-right text-red-600">
+                                            {t.credit > 0
+                                              ? fmt(t.credit)
+                                              : "-"}
+                                          </TableCell>
+                                          <TableCell className="text-right font-medium">
+                                            {fmt(t.balance)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                  {trans.length >= 100 && (
+                                    <p className="text-xs text-gray-500 mt-2 text-right">
+                                      ※ 最大100件まで表示しています
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500">
+                                  取引データがありません
+                                </p>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
-
-                        {/* 展開時の取引明細 */}
-                        {isExpanded && (
-                          <TableRow className="bg-slate-50 hover:bg-slate-50">
-                            <TableCell colSpan={9} className="p-4">
-                              <div className="pl-4 border-l-4 border-slate-300">
-                                <h4 className="mb-2 text-sm font-bold text-slate-700">
-                                  {acc.name} - 取引明細 ({currentMonth})
-                                </h4>
-                                {isLoadingTrans ? (
-                                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    読み込み中...
-                                  </div>
-                                ) : trans && trans.length > 0 ? (
-                                  <div className="overflow-x-auto">
-                                    <Table className="bg-white border text-sm">
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>日付</TableHead>
-                                          <TableHead>相手科目</TableHead>
-                                          <TableHead>摘要</TableHead>
-                                          <TableHead className="text-right">
-                                            借方
-                                          </TableHead>
-                                          <TableHead className="text-right">
-                                            貸方
-                                          </TableHead>
-                                          <TableHead className="text-right">
-                                            残高
-                                          </TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {trans.map((t, idx) => (
-                                          <TableRow key={idx}>
-                                            <TableCell className="whitespace-nowrap">
-                                              {t.date}
-                                            </TableCell>
-                                            <TableCell>
-                                              {t.counterAccount}
-                                            </TableCell>
-                                            <TableCell className="max-w-[300px] truncate" title={t.description}>
-                                              {t.description}
-                                            </TableCell>
-                                            <TableCell className="text-right text-blue-600">
-                                              {t.debit > 0
-                                                ? fmt(t.debit)
-                                                : "-"}
-                                            </TableCell>
-                                            <TableCell className="text-right text-red-600">
-                                              {t.credit > 0
-                                                ? fmt(t.credit)
-                                                : "-"}
-                                            </TableCell>
-                                            <TableCell className="text-right font-medium">
-                                              {fmt(t.balance)}
-                                            </TableCell>
-                                          </TableRow>
-                                        ))}
-                                      </TableBody>
-                                    </Table>
-                                    {trans.length >= 100 && (
-                                      <p className="text-xs text-gray-500 mt-2 text-right">
-                                        ※ 最大100件まで表示しています
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <p className="text-sm text-gray-500">
-                                    取引データがありません
-                                  </p>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                      )}
+                    </>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </>
       )}
 
