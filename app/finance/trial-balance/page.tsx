@@ -58,6 +58,11 @@ export default function TrialBalancePage() {
   const [activeTab, setActiveTab] = useState<'summary' | 'bs' | 'pl' | 'all'>('summary');
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // インポートモーダル用
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importMonth, setImportMonth] = useState<string>('');
 
   const fetchAvailableMonths = useCallback(async () => {
     try {
@@ -115,28 +120,32 @@ export default function TrialBalancePage() {
     }
   };
 
-  // ファイルアップロード処理
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // ファイル選択時にモーダルを開く
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    
+    setImportFile(file);
+    // デフォルトで今月をセット
+    const now = new Date();
+    const defaultMonth = selectedMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    setImportMonth(defaultMonth);
+    setShowImportModal(true);
+    event.target.value = '';
+  };
 
-    // 月を入力させる
-    const month = prompt('対象月を入力してください（例: 2025-08）', selectedMonth || '2025-08');
-    if (!month) return;
-
-    // フォーマット確認
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      setMessage({ type: 'error', text: '月の形式が正しくありません（例: 2025-08）' });
-      return;
-    }
+  // インポート実行
+  const handleImport = async () => {
+    if (!importFile || !importMonth) return;
 
     setUploading(true);
     setMessage(null);
+    setShowImportModal(false);
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('reportMonth', month);
+      formData.append('file', importFile);
+      formData.append('reportMonth', importMonth);
 
       const res = await fetch('/api/general-ledger/import', {
         method: 'POST',
@@ -150,10 +159,9 @@ export default function TrialBalancePage() {
           type: 'success', 
           text: `インポート完了: ${data.accountCount || '?'}科目、${data.transactionCount || '?'}件の取引` 
         });
-        // 月リストを更新して、インポートした月を選択
         await fetchAvailableMonths();
-        setSelectedMonth(month);
-        await fetchTrialBalance(month);
+        setSelectedMonth(importMonth);
+        await fetchTrialBalance(importMonth);
       } else {
         setMessage({ type: 'error', text: data.error || 'インポートに失敗しました' });
       }
@@ -161,7 +169,7 @@ export default function TrialBalancePage() {
       setMessage({ type: 'error', text: 'アップロード中にエラーが発生しました' });
     } finally {
       setUploading(false);
-      event.target.value = '';
+      setImportFile(null);
     }
   };
 
@@ -313,6 +321,51 @@ export default function TrialBalancePage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* インポートモーダル */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 shadow-xl">
+            <h2 className="text-lg font-bold mb-4">総勘定元帳インポート</h2>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">ファイル:</p>
+              <p className="text-sm font-mono bg-gray-100 p-2 rounded truncate">
+                {importFile?.name}
+              </p>
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-sm text-gray-600 mb-2">対象月:</label>
+              <input
+                type="month"
+                value={importMonth}
+                onChange={(e) => setImportMonth(e.target.value)}
+                className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={handleImport}
+                disabled={!importMonth}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
+              >
+                インポート
+              </button>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                }}
+                className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="bg-gray-800 text-white py-4 px-6 shadow-lg">
         <div className="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-4">
           <div>
@@ -335,7 +388,7 @@ export default function TrialBalancePage() {
               <input
                 type="file"
                 accept=".txt,.csv"
-                onChange={handleFileUpload}
+                onChange={handleFileSelect}
                 className="hidden"
                 disabled={uploading}
               />
@@ -345,7 +398,6 @@ export default function TrialBalancePage() {
       </header>
 
       <main className="max-w-7xl mx-auto py-6 px-4">
-        {/* メッセージ表示 */}
         {message && (
           <div
             className={`mb-4 p-3 rounded ${
@@ -369,7 +421,7 @@ export default function TrialBalancePage() {
               <input
                 type="file"
                 accept=".txt,.csv"
-                onChange={handleFileUpload}
+                onChange={handleFileSelect}
                 className="hidden"
                 disabled={uploading}
               />
@@ -475,7 +527,6 @@ export default function TrialBalancePage() {
               <p className="font-semibold text-yellow-800">💡 使い方</p>
               <p className="text-yellow-700 mt-1">
                 各勘定科目の行をクリックすると、その科目の取引明細が展開されます。
-                新しいデータをインポートするには右上の「インポート」ボタンから総勘定元帳ファイルを選択してください。
               </p>
             </div>
           </>
