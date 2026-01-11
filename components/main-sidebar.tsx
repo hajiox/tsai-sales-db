@@ -1,4 +1,4 @@
-// components/main-sidebar.tsx ver.3
+// components/main-sidebar.tsx ver.4
 "use client";
 
 import { useEffect, useState } from "react";
@@ -45,7 +45,7 @@ export default function MainSidebar() {
       wholesale: "/wholesale/dashboard",
       "brand-store": "/brand-store-analysis",
       "food-store": "/food-store-analysis",
-      finance: "/finance/general-ledger",
+      finance: "/finance/trial-balance",
       kpi: "/kpi",
       links: "/links",
       "ai-tools": "/ai-tools",
