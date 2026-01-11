@@ -1,57 +1,26 @@
-// app/finance/layout.tsx
-import Link from 'next/link';
-import type { ReactNode } from 'react';
+// app/finance/layout.tsx ver.2
+// ナビゲーションバーを削除し、コンテンツのみを表示するシンプルなレイアウトに変更
+import type { Metadata } from "next";
 
-export default function FinanceLayout({ children }: { children: ReactNode }) {
-  return (
-    <div style={{ maxWidth: 1240, margin: '0 auto', padding: 16 }}>
-      {/* Top Navigation */}
-      <nav
-        style={{
-          display: 'flex',
-          gap: 8,
-          flexWrap: 'wrap',
-          padding: 12,
-          border: '1px solid #eee',
-          borderRadius: 12,
-          background: 'white',
-          marginBottom: 16,
-        }}
-      >
-        {/* NOTE:
-            404回避のため Home は実在ページへ（/finance/overview） */}
-        <LinkButton href="/finance/overview">Home</LinkButton>
-        <LinkButton href="/finance/overview">Overview</LinkButton>
-        <LinkButton href="/finance/bs">B/S 明細</LinkButton>
-        <LinkButton href="/finance/pl">P/L 明細</LinkButton>
-        <LinkButton href="/finance/series">推移グラフ</LinkButton>
-      </nav>
+export const metadata: Metadata = {
+  title: "財務分析システム",
+  description: "財務データの分析と可視化",
+};
 
-      <main>{children}</main>
-    </div>
-  );
-}
-
-function LinkButton({
-  href,
+export default function FinanceLayout({
   children,
 }: {
-  href: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <Link
-      href={href}
-      style={{
-        padding: '8px 12px',
-        border: '1px solid #ddd',
-        borderRadius: 8,
-        textDecoration: 'none',
-        color: '#111',
-        background: '#f9fafb',
-      }}
-    >
-      {children}
-    </Link>
+    <div className="flex flex-col min-h-screen bg-slate-50">
+      {/* 旧ナビゲーションバー（Home, Overview...）を削除しました。
+        サイドバーは親の layout.tsx で管理されているため、ここでは
+        コンテンツ領域のラッパーのみを提供します。
+      */}
+      <main className="flex-1 w-full max-w-[1600px] mx-auto">
+        {children}
+      </main>
+    </div>
   );
 }
