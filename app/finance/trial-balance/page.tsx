@@ -1,17 +1,38 @@
-'use client';
+// /app/finance/trial-balance/page.tsx ver.2
+"use client";
 
-import { useState, useCallback, useEffect, Fragment } from 'react';
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Loader2,
+  ChevronRight,
+  ChevronDown,
+  Upload,
+  Trash2,
+  AlertTriangle,
+} from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
-interface Transaction {
-  date: string;
-  counterAccount: string;
-  description: string;
-  debit: number;
-  credit: number;
-  balance: number;
-}
-
-interface Account {
+// --- 型定義 ---
+interface AccountData {
   code: string;
   name: string;
   category: string;
@@ -22,7 +43,7 @@ interface Account {
   transactionCount: number;
 }
 
-interface Summary {
+interface SummaryData {
   totalAssets: number;
   totalLiabilities: number;
   totalEquity: number;
@@ -32,506 +53,640 @@ interface Summary {
   bsBalance: number;
 }
 
-const formatAmount = (amount: number): string => {
-  if (amount === 0) return '-';
-  return amount.toLocaleString('ja-JP');
-};
+interface TrialBalanceResponse {
+  accounts: AccountData[];
+  summary: SummaryData;
+  month: string;
+}
 
-const categoryColors: Record<string, string> = {
-  資産: 'bg-blue-50 hover:bg-blue-100',
-  負債: 'bg-red-50 hover:bg-red-100',
-  純資産: 'bg-green-50 hover:bg-green-100',
-  収益: 'bg-purple-50 hover:bg-purple-100',
-  費用: 'bg-orange-50 hover:bg-orange-100',
-  その他: 'bg-gray-50 hover:bg-gray-100',
-};
+interface Transaction {
+  date: string;
+  counterAccount: string;
+  description: string;
+  debit: number;
+  credit: number;
+  balance: number;
+  rowNo: number;
+}
 
+// --- メインコンポーネント ---
 export default function TrialBalancePage() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-  const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  // 状態管理
+  const [currentMonth, setCurrentMonth] = useState<string>("");
+  const [data, setData] = useState<TrialBalanceResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingTx, setLoadingTx] = useState(false);
-  const [activeTab, setActiveTab] = useState<'summary' | 'bs' | 'pl' | 'all'>('summary');
-  const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  
-  // インポートモーダル用
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [tab, setTab] = useState<"summary" | "bs" | "pl" | "all">("summary");
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(
+    new Set()
+  );
+  const [transactions, setTransactions] = useState<Map<string, Transaction[]>>(
+    new Map()
+  );
+  const [loadingTransactions, setLoadingTransactions] = useState<Set<string>>(
+    new Set()
+  );
+
+  // モーダル状態
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importMonth, setImportMonth] = useState<string>('');
+  const [importMonth, setImportMonth] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
 
-  const fetchAvailableMonths = useCallback(async () => {
-    try {
-      const res = await fetch('/api/finance/trial-balance', { method: 'OPTIONS' });
-      const data = await res.json();
-      if (data.months?.length > 0) {
-        setAvailableMonths(data.months);
-        if (!selectedMonth) setSelectedMonth(data.months[0]);
-      }
-    } catch (error) {
-      console.error('Failed to fetch months:', error);
-    }
-  }, [selectedMonth]);
+  // 削除モーダル状態
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteMonth, setDeleteMonth] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const fetchTrialBalance = useCallback(async (month: string) => {
-    if (!month) return;
+  const { toast } = useToast();
+
+  // 初期化：現在の年月を設定
+  useEffect(() => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    setCurrentMonth(`${yyyy}-${mm}`);
+  }, []);
+
+  // データ取得
+  useEffect(() => {
+    if (!currentMonth) return;
+    fetchData(currentMonth);
+  }, [currentMonth]);
+
+  const fetchData = async (month: string) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/finance/trial-balance?month=${month}`);
-      const data = await res.json();
-      if (data.accounts) {
-        setAccounts(data.accounts);
-        setSummary(data.summary);
-      }
+      if (!res.ok) throw new Error("データの取得に失敗しました");
+      const jsonData = await res.json();
+      setData(jsonData);
+      // 月が変わったら展開状態と取引データをリセット
+      setExpandedAccounts(new Set());
+      setTransactions(new Map());
     } catch (error) {
-      console.error('Failed to fetch trial balance:', error);
+      console.error(error);
+      toast({
+        title: "エラー",
+        description: "データの読み込みに失敗しました。",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  const fetchTransactions = useCallback(async (accountCode: string) => {
-    if (!selectedMonth) return;
-    setLoadingTx(true);
+  // 取引明細取得
+  const toggleAccountExpand = async (accountCode: string) => {
+    const newExpanded = new Set(expandedAccounts);
+
+    if (newExpanded.has(accountCode)) {
+      newExpanded.delete(accountCode);
+    } else {
+      newExpanded.add(accountCode);
+      if (!transactions.has(accountCode)) {
+        await fetchTransactions(accountCode);
+      }
+    }
+    setExpandedAccounts(newExpanded);
+  };
+
+  const fetchTransactions = async (accountCode: string) => {
+    setLoadingTransactions((prev) => new Set(prev).add(accountCode));
     try {
       const res = await fetch(
-        `/api/finance/transactions?month=${selectedMonth}&accountCode=${accountCode}`
+        `/api/finance/transactions?month=${currentMonth}&accountCode=${accountCode}`
       );
-      const data = await res.json();
-      if (data.transactions) setTransactions(data.transactions);
+      if (!res.ok) throw new Error("取引データの取得に失敗しました");
+      const json = await res.json();
+      setTransactions((prev) =>
+        new Map(prev).set(accountCode, json.transactions)
+      );
     } catch (error) {
-      console.error('Failed to fetch transactions:', error);
+      console.error(error);
+      toast({
+        title: "エラー",
+        description: "取引明細の取得に失敗しました。",
+        variant: "destructive",
+      });
     } finally {
-      setLoadingTx(false);
-    }
-  }, [selectedMonth]);
-
-  const handleAccountClick = async (code: string) => {
-    if (expandedAccount === code) {
-      setExpandedAccount(null);
-      setTransactions([]);
-    } else {
-      setExpandedAccount(code);
-      await fetchTransactions(code);
+      setLoadingTransactions((prev) => {
+        const next = new Set(prev);
+        next.delete(accountCode);
+        return next;
+      });
     }
   };
 
-  // ファイル選択時にモーダルを開く
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    setImportFile(file);
-    // デフォルトで今月をセット
-    const now = new Date();
-    const defaultMonth = selectedMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    setImportMonth(defaultMonth);
-    setShowImportModal(true);
-    event.target.value = '';
-  };
-
-  // インポート実行
+  // インポート処理
   const handleImport = async () => {
-    if (!importFile || !importMonth) return;
+    if (!importFile || !importMonth) {
+      toast({
+        title: "エラー",
+        description: "ファイルと対象月を選択してください。",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    setUploading(true);
-    setMessage(null);
-    setShowImportModal(false);
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append("file", importFile);
+    formData.append("reportMonth", importMonth);
 
     try {
-      const formData = new FormData();
-      formData.append('file', importFile);
-      formData.append('reportMonth', importMonth);
-
-      const res = await fetch('/api/general-ledger/import', {
-        method: 'POST',
+      const res = await fetch("/api/general-ledger/import", {
+        method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
-
-      if (res.ok) {
-        setMessage({ 
-          type: 'success', 
-          text: `インポート完了: ${data.accountCount || '?'}科目、${data.transactionCount || '?'}件の取引` 
-        });
-        await fetchAvailableMonths();
-        setSelectedMonth(importMonth);
-        await fetchTrialBalance(importMonth);
-      } else {
-        setMessage({ type: 'error', text: data.error || 'インポートに失敗しました' });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "インポートに失敗しました");
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'アップロード中にエラーが発生しました' });
-    } finally {
-      setUploading(false);
+
+      toast({
+        title: "完了",
+        description: "インポートが完了しました。",
+      });
+      setIsImportModalOpen(false);
       setImportFile(null);
+      // インポートした月を表示して更新
+      setCurrentMonth(importMonth);
+      fetchData(importMonth);
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "エラー",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
     }
   };
 
-  useEffect(() => {
-    fetchAvailableMonths();
-  }, [fetchAvailableMonths]);
+  // 削除処理
+  const handleDelete = async () => {
+    if (!deleteMonth) return;
 
-  useEffect(() => {
-    if (selectedMonth) {
-      fetchTrialBalance(selectedMonth);
-      setExpandedAccount(null);
-      setTransactions([]);
+    if (!confirm(`${deleteMonth}のデータを本当に削除しますか？`)) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch("/api/finance/trial-balance/delete", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ month: deleteMonth }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "削除に失敗しました");
+      }
+
+      toast({
+        title: "削除完了",
+        description: `${deleteMonth}のデータを削除しました。`,
+      });
+      setIsDeleteModalOpen(false);
+      // データを再取得（削除されているのでクリアされるはず）
+      if (currentMonth === deleteMonth) {
+        fetchData(currentMonth);
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "エラー",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
     }
-  }, [selectedMonth, fetchTrialBalance]);
-
-  const AccountTable = ({ title, categories }: { title: string; categories: string[] }) => {
-    const filtered = accounts.filter((a) => categories.includes(a.category));
-    if (filtered.length === 0) return null;
-
-    const totals = filtered.reduce(
-      (acc, a) => ({
-        opening: acc.opening + a.openingBalance,
-        debit: acc.debit + a.debitTotal,
-        credit: acc.credit + a.creditTotal,
-        closing: acc.closing + a.closingBalance,
-      }),
-      { opening: 0, debit: 0, credit: 0, closing: 0 }
-    );
-
-    return (
-      <div className="mb-6">
-        <h3 className="text-lg font-bold mb-2 px-3 py-2 bg-gray-700 text-white rounded">{title}</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse border text-sm">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="px-2 py-2 border w-8"></th>
-                <th className="px-2 py-2 border w-20 text-left">コード</th>
-                <th className="px-2 py-2 border text-left">勘定科目名</th>
-                <th className="px-2 py-2 border w-16 text-center">分類</th>
-                <th className="px-2 py-2 border w-28 text-right">前月残高</th>
-                <th className="px-2 py-2 border w-28 text-right">借方発生</th>
-                <th className="px-2 py-2 border w-28 text-right">貸方発生</th>
-                <th className="px-2 py-2 border w-28 text-right">当月残高</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((account) => {
-                const isExpanded = expandedAccount === account.code;
-                const bgColor = categoryColors[account.category] || categoryColors['その他'];
-
-                return (
-                  <Fragment key={account.code}>
-                    <tr
-                      className={`${bgColor} cursor-pointer transition-colors`}
-                      onClick={() => handleAccountClick(account.code)}
-                    >
-                      <td className="px-2 py-2 border text-center text-xs">
-                        {account.transactionCount > 0 ? (isExpanded ? '▼' : '▶') : ''}
-                      </td>
-                      <td className="px-2 py-2 border font-mono text-xs">{account.code}</td>
-                      <td className="px-2 py-2 border text-sm">{account.name}</td>
-                      <td className="px-2 py-2 border text-center text-xs">{account.category}</td>
-                      <td className="px-2 py-2 border text-right font-mono text-sm">
-                        {formatAmount(account.openingBalance)}
-                      </td>
-                      <td className="px-2 py-2 border text-right font-mono text-sm">
-                        {formatAmount(account.debitTotal)}
-                      </td>
-                      <td className="px-2 py-2 border text-right font-mono text-sm">
-                        {formatAmount(account.creditTotal)}
-                      </td>
-                      <td className="px-2 py-2 border text-right font-mono text-sm font-semibold">
-                        {formatAmount(account.closingBalance)}
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={8} className="p-0">
-                          <div className="bg-gray-100 p-3">
-                            {loadingTx ? (
-                              <p className="text-gray-500 text-sm">読み込み中...</p>
-                            ) : transactions.length === 0 ? (
-                              <p className="text-gray-500 text-sm">取引明細なし</p>
-                            ) : (
-                              <table className="w-full text-sm bg-white border">
-                                <thead>
-                                  <tr className="bg-gray-200">
-                                    <th className="px-2 py-1 border text-left w-24">日付</th>
-                                    <th className="px-2 py-1 border text-left w-32">相手科目</th>
-                                    <th className="px-2 py-1 border text-left">摘要</th>
-                                    <th className="px-2 py-1 border text-right w-24">借方</th>
-                                    <th className="px-2 py-1 border text-right w-24">貸方</th>
-                                    <th className="px-2 py-1 border text-right w-28">残高</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {transactions.slice(0, 100).map((tx, idx) => (
-                                    <tr key={idx} className="hover:bg-gray-50">
-                                      <td className="px-2 py-1 border font-mono text-xs">{tx.date}</td>
-                                      <td className="px-2 py-1 border text-xs">{tx.counterAccount}</td>
-                                      <td className="px-2 py-1 border text-xs truncate max-w-xs">
-                                        {tx.description}
-                                      </td>
-                                      <td className="px-2 py-1 border text-right font-mono text-xs">
-                                        {tx.debit ? formatAmount(tx.debit) : ''}
-                                      </td>
-                                      <td className="px-2 py-1 border text-right font-mono text-xs">
-                                        {tx.credit ? formatAmount(tx.credit) : ''}
-                                      </td>
-                                      <td className="px-2 py-1 border text-right font-mono text-xs">
-                                        {formatAmount(tx.balance)}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                  {transactions.length > 100 && (
-                                    <tr>
-                                      <td colSpan={6} className="px-2 py-1 text-center text-gray-500 text-xs">
-                                        ... 他 {transactions.length - 100} 件
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-              <tr className="bg-gray-300 font-bold">
-                <td className="px-2 py-2 border"></td>
-                <td className="px-2 py-2 border"></td>
-                <td className="px-2 py-2 border">合計</td>
-                <td className="px-2 py-2 border"></td>
-                <td className="px-2 py-2 border text-right font-mono">{formatAmount(totals.opening)}</td>
-                <td className="px-2 py-2 border text-right font-mono">{formatAmount(totals.debit)}</td>
-                <td className="px-2 py-2 border text-right font-mono">{formatAmount(totals.credit)}</td>
-                <td className="px-2 py-2 border text-right font-mono">{formatAmount(totals.closing)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
   };
+
+  // 金額フォーマット
+  const fmt = (num: number) => num.toLocaleString();
+
+  // カテゴリごとの背景色
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case "資産":
+        return "bg-blue-50 hover:bg-blue-100";
+      case "負債":
+        return "bg-red-50 hover:bg-red-100";
+      case "純資産":
+        return "bg-green-50 hover:bg-green-100";
+      case "収益":
+        return "bg-purple-50 hover:bg-purple-100";
+      case "費用":
+        return "bg-orange-50 hover:bg-orange-100";
+      default:
+        return "bg-gray-50 hover:bg-gray-100";
+    }
+  };
+
+  // 表示データのフィルタリング
+  const filteredAccounts =
+    data?.accounts.filter((acc) => {
+      if (tab === "all") return true;
+      if (tab === "bs")
+        return ["資産", "負債", "純資産"].includes(acc.category);
+      if (tab === "pl") return ["収益", "費用"].includes(acc.category);
+      return false;
+    }) || [];
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* インポートモーダル */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 shadow-xl">
-            <h2 className="text-lg font-bold mb-4">総勘定元帳インポート</h2>
-            
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">ファイル:</p>
-              <p className="text-sm font-mono bg-gray-100 p-2 rounded truncate">
-                {importFile?.name}
-              </p>
+    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+      {/* ヘッダーエリア */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">試算表ビューアー</h1>
+          <p className="text-sm text-gray-500">
+            科目をクリックすると取引明細が展開されます
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Input
+            type="month"
+            value={currentMonth}
+            onChange={(e) => setCurrentMonth(e.target.value)}
+            className="w-40"
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              setImportMonth(currentMonth);
+              setIsImportModalOpen(true);
+            }}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            インポート
+          </Button>
+          <Button
+            variant="destructive"
+            size="icon"
+            onClick={() => {
+              setDeleteMonth(currentMonth);
+              setIsDeleteModalOpen(true);
+            }}
+            title="表示中の月のデータを削除"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* タブ切り替え */}
+      <div className="flex gap-2 border-b">
+        {(["summary", "bs", "pl", "all"] as const).map((t) => (
+          <Button
+            key={t}
+            variant={tab === t ? "default" : "ghost"}
+            onClick={() => setTab(t)}
+            className="rounded-b-none"
+          >
+            {t === "summary"
+              ? "サマリー"
+              : t === "bs"
+              ? "貸借対照表"
+              : t === "pl"
+              ? "損益計算書"
+              : "全科目"}
+          </Button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+        </div>
+      ) : !data ? (
+        <div className="text-center py-20 text-gray-500">
+          データがありません。対象月を選択するかインポートしてください。
+        </div>
+      ) : (
+        <>
+          {/* サマリータブ */}
+          {tab === "summary" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>貸借対照表サマリー</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between border-b pb-2">
+                    <span>資産合計</span>
+                    <span className="font-bold text-blue-600">
+                      ¥{fmt(data.summary.totalAssets)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span>負債合計</span>
+                    <span className="font-bold text-red-600">
+                      ¥{fmt(data.summary.totalLiabilities)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span>純資産合計</span>
+                    <span className="font-bold text-green-600">
+                      ¥{fmt(data.summary.totalEquity)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2 bg-gray-50 p-2 rounded">
+                    <span>検算 (資産 - 負債 - 純資産)</span>
+                    <span
+                      className={`font-bold ${
+                        data.summary.bsBalance === 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      ¥{fmt(data.summary.bsBalance)}
+                      {data.summary.bsBalance === 0 ? " ✓ OK" : " ⚠️ 差異あり"}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>損益計算書サマリー</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between border-b pb-2">
+                    <span>収益合計</span>
+                    <span className="font-bold text-purple-600">
+                      ¥{fmt(data.summary.totalRevenues)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span>費用合計</span>
+                    <span className="font-bold text-orange-600">
+                      ¥{fmt(data.summary.totalExpenses)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2 bg-gray-50 p-2 rounded">
+                    <span>当期純利益 (収益 - 費用)</span>
+                    <span
+                      className={`font-bold ${
+                        data.summary.netIncome >= 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      ¥{fmt(data.summary.netIncome)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-            
-            <div className="mb-6">
-              <label className="block text-sm text-gray-600 mb-2">対象月:</label>
-              <input
+          )}
+
+          {/* 科目一覧テーブル (BS/PL/ALL) */}
+          {tab !== "summary" && (
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>コード</TableHead>
+                    <TableHead>科目名</TableHead>
+                    <TableHead>分類</TableHead>
+                    <TableHead className="text-right">期首残高</TableHead>
+                    <TableHead className="text-right">借方合計</TableHead>
+                    <TableHead className="text-right">貸方合計</TableHead>
+                    <TableHead className="text-right">期末残高</TableHead>
+                    <TableHead className="text-right">件数</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAccounts.map((acc) => {
+                    const isExpanded = expandedAccounts.has(acc.code);
+                    const trans = transactions.get(acc.code);
+                    const isLoadingTrans = loadingTransactions.has(acc.code);
+
+                    return (
+                      <>
+                        <TableRow
+                          key={acc.code}
+                          className={`cursor-pointer transition-colors ${getCategoryColor(
+                            acc.category
+                          )}`}
+                          onClick={() => toggleAccountExpand(acc.code)}
+                        >
+                          <TableCell>
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {acc.code}
+                          </TableCell>
+                          <TableCell>{acc.name}</TableCell>
+                          <TableCell>
+                            <span className="px-2 py-1 rounded-full text-xs bg-white border">
+                              {acc.category}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-gray-500">
+                            {fmt(acc.openingBalance)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {fmt(acc.debitTotal)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {fmt(acc.creditTotal)}
+                          </TableCell>
+                          <TableCell className="text-right font-bold">
+                            {fmt(acc.closingBalance)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {acc.transactionCount}
+                          </TableCell>
+                        </TableRow>
+
+                        {/* 展開時の取引明細 */}
+                        {isExpanded && (
+                          <TableRow className="bg-slate-50 hover:bg-slate-50">
+                            <TableCell colSpan={9} className="p-4">
+                              <div className="pl-4 border-l-4 border-slate-300">
+                                <h4 className="mb-2 text-sm font-bold text-slate-700">
+                                  {acc.name} - 取引明細 ({currentMonth})
+                                </h4>
+                                {isLoadingTrans ? (
+                                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    読み込み中...
+                                  </div>
+                                ) : trans && trans.length > 0 ? (
+                                  <div className="overflow-x-auto">
+                                    <Table className="bg-white border text-sm">
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>日付</TableHead>
+                                          <TableHead>相手科目</TableHead>
+                                          <TableHead>摘要</TableHead>
+                                          <TableHead className="text-right">
+                                            借方
+                                          </TableHead>
+                                          <TableHead className="text-right">
+                                            貸方
+                                          </TableHead>
+                                          <TableHead className="text-right">
+                                            残高
+                                          </TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {trans.map((t, idx) => (
+                                          <TableRow key={idx}>
+                                            <TableCell className="whitespace-nowrap">
+                                              {t.date}
+                                            </TableCell>
+                                            <TableCell>
+                                              {t.counterAccount}
+                                            </TableCell>
+                                            <TableCell className="max-w-[300px] truncate" title={t.description}>
+                                              {t.description}
+                                            </TableCell>
+                                            <TableCell className="text-right text-blue-600">
+                                              {t.debit > 0
+                                                ? fmt(t.debit)
+                                                : "-"}
+                                            </TableCell>
+                                            <TableCell className="text-right text-red-600">
+                                              {t.credit > 0
+                                                ? fmt(t.credit)
+                                                : "-"}
+                                            </TableCell>
+                                            <TableCell className="text-right font-medium">
+                                              {fmt(t.balance)}
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                    {trans.length >= 100 && (
+                                      <p className="text-xs text-gray-500 mt-2 text-right">
+                                        ※ 最大100件まで表示しています
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-gray-500">
+                                    取引データがありません
+                                  </p>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* インポートモーダル */}
+      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>データのインポート</DialogTitle>
+            <DialogDescription>
+              総勘定元帳のCSV/TXTファイルを選択してください。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">対象月</label>
+              <Input
                 type="month"
                 value={importMonth}
                 onChange={(e) => setImportMonth(e.target.value)}
-                className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={handleImport}
-                disabled={!importMonth}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
-              >
-                インポート
-              </button>
-              <button
-                onClick={() => {
-                  setShowImportModal(false);
-                  setImportFile(null);
-                }}
-                className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-              >
-                キャンセル
-              </button>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">ファイル選択</label>
+              <Input
+                type="file"
+                accept=".csv,.txt"
+                onChange={(e) =>
+                  setImportFile(e.target.files ? e.target.files[0] : null)
+                }
+              />
             </div>
           </div>
-        </div>
-      )}
-
-      <header className="bg-gray-800 text-white py-4 px-6 shadow-lg">
-        <div className="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">試算表ビューアー</h1>
-            <p className="text-gray-300 text-sm">科目クリックで取引明細を展開</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 rounded text-gray-800"
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsImportModalOpen(false)}
             >
-              {availableMonths.length === 0 && <option value="">データなし</option>}
-              {availableMonths.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-            <label className="px-4 py-2 bg-green-600 rounded cursor-pointer hover:bg-green-700 text-sm">
-              {uploading ? 'アップロード中...' : '📁 インポート'}
-              <input
-                type="file"
-                accept=".txt,.csv"
-                onChange={handleFileSelect}
-                className="hidden"
-                disabled={uploading}
+              キャンセル
+            </Button>
+            <Button onClick={handleImport} disabled={isImporting}>
+              {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              インポート実行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 削除確認モーダル */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              データの削除
+            </DialogTitle>
+            <DialogDescription>
+              以下の月のデータを完全に削除します。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">削除対象月</label>
+              <Input
+                type="month"
+                value={deleteMonth}
+                onChange={(e) => setDeleteMonth(e.target.value)}
               />
-            </label>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto py-6 px-4">
-        {message && (
-          <div
-            className={`mb-4 p-3 rounded ${
-              message.type === 'success'
-                ? 'bg-green-100 text-green-800 border border-green-300'
-                : 'bg-red-100 text-red-800 border border-red-300'
-            }`}
-          >
-            {message.text}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="text-center py-12 text-gray-500">読み込み中...</div>
-        ) : accounts.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
-            <p className="text-lg mb-2">データがありません</p>
-            <p className="text-sm mb-4">総勘定元帳ファイル（.txt または .csv）をインポートしてください</p>
-            <label className="inline-block px-6 py-3 bg-green-600 text-white rounded cursor-pointer hover:bg-green-700">
-              {uploading ? 'アップロード中...' : '📁 ファイルを選択してインポート'}
-              <input
-                type="file"
-                accept=".txt,.csv"
-                onChange={handleFileSelect}
-                className="hidden"
-                disabled={uploading}
-              />
-            </label>
-          </div>
-        ) : (
-          <>
-            <div className="bg-white rounded-lg shadow mb-6">
-              <div className="flex border-b overflow-x-auto">
-                {[
-                  { id: 'summary', label: 'サマリー' },
-                  { id: 'bs', label: '貸借対照表' },
-                  { id: 'pl', label: '損益計算書' },
-                  { id: 'all', label: '全科目' },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as 'summary' | 'bs' | 'pl' | 'all')}
-                    className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${
-                      activeTab === tab.id
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="p-6">
-                {activeTab === 'summary' && summary && (
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="p-4 rounded-lg border-2 border-blue-300 bg-blue-50">
-                      <h3 className="font-bold text-lg mb-3">貸借対照表</h3>
-                      <div className="space-y-2">
-                        <div className="flex justify-between py-1 border-b">
-                          <span>資産合計</span>
-                          <span className="font-mono font-semibold">¥{formatAmount(summary.totalAssets)}</span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b">
-                          <span>負債合計</span>
-                          <span className="font-mono font-semibold">¥{formatAmount(summary.totalLiabilities)}</span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b">
-                          <span>純資産合計</span>
-                          <span className="font-mono font-semibold">¥{formatAmount(summary.totalEquity)}</span>
-                        </div>
-                        <div className="flex justify-between py-1">
-                          <span>差額（A-L-E）</span>
-                          <span className={`font-mono font-semibold ${summary.bsBalance !== 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            ¥{formatAmount(summary.bsBalance)}{summary.bsBalance === 0 && ' ✓'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-4 rounded-lg border-2 border-green-300 bg-green-50">
-                      <h3 className="font-bold text-lg mb-3">損益計算書</h3>
-                      <div className="space-y-2">
-                        <div className="flex justify-between py-1 border-b">
-                          <span>収益合計</span>
-                          <span className="font-mono font-semibold">¥{formatAmount(summary.totalRevenues)}</span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b">
-                          <span>費用合計</span>
-                          <span className="font-mono font-semibold">¥{formatAmount(summary.totalExpenses)}</span>
-                        </div>
-                        <div className="flex justify-between py-1">
-                          <span>当期純利益</span>
-                          <span className={`font-mono font-semibold ${summary.netIncome < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            ¥{formatAmount(summary.netIncome)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'bs' && (
-                  <>
-                    <AccountTable title="資産" categories={['資産']} />
-                    <AccountTable title="負債" categories={['負債']} />
-                    <AccountTable title="純資産" categories={['純資産']} />
-                  </>
-                )}
-
-                {activeTab === 'pl' && (
-                  <>
-                    <AccountTable title="収益" categories={['収益']} />
-                    <AccountTable title="費用" categories={['費用']} />
-                  </>
-                )}
-
-                {activeTab === 'all' && (
-                  <AccountTable
-                    title="全勘定科目"
-                    categories={['資産', '負債', '純資産', '収益', '費用', 'その他']}
-                  />
-                )}
-              </div>
             </div>
-
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
-              <p className="font-semibold text-yellow-800">💡 使い方</p>
-              <p className="text-yellow-700 mt-1">
-                各勘定科目の行をクリックすると、その科目の取引明細が展開されます。
-              </p>
+            <div className="p-4 bg-red-50 text-red-700 text-sm rounded-md">
+              <p className="font-bold mb-1">⚠️ 警告</p>
+              この操作は取り消せません。
+              <br />
+              対象月のすべての「仕訳データ」と「月次残高データ」が削除されます。
             </div>
-          </>
-        )}
-      </main>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteModalOpen(false)}
+            >
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting || !deleteMonth}
+            >
+              {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              削除を実行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
