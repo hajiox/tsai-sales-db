@@ -1,4 +1,4 @@
-// app/finance/trial-balance/page.tsx ver.5
+// app/finance/trial-balance/page.tsx ver.6
 "use client";
 
 import { useState, useEffect } from "react";
@@ -31,7 +31,7 @@ import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  Sparkles, // AIアイコンを追加
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -73,7 +73,6 @@ interface Transaction {
   rowNo: number;
 }
 
-// AI分析結果の型定義
 interface Anomaly {
   code: string;
   name: string;
@@ -90,42 +89,30 @@ interface AnalysisResult {
 
 // --- メインコンポーネント ---
 export default function TrialBalancePage() {
-  // 状態管理
   const [currentMonth, setCurrentMonth] = useState<string>("");
   const [data, setData] = useState<TrialBalanceResponse | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // AI分析の状態
   const [analysisData, setAnalysisData] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
-  // タブ管理（PL特化）
   const [tab, setTab] = useState<"pl" | "all">("pl");
   
-  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(
-    new Set()
-  );
-  const [transactions, setTransactions] = useState<Map<string, Transaction[]>>(
-    new Map()
-  );
-  const [loadingTransactions, setLoadingTransactions] = useState<Set<string>>(
-    new Set()
-  );
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
+  const [transactions, setTransactions] = useState<Map<string, Transaction[]>>(new Map());
+  const [loadingTransactions, setLoadingTransactions] = useState<Set<string>>(new Set());
 
-  // モーダル状態
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importMonth, setImportMonth] = useState("");
   const [isImporting, setIsImporting] = useState(false);
 
-  // 削除モーダル状態
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteMonth, setDeleteMonth] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { toast } = useToast();
 
-  // 初期化：現在の年月を設定
   useEffect(() => {
     const now = new Date();
     const yyyy = now.getFullYear();
@@ -133,11 +120,9 @@ export default function TrialBalancePage() {
     setCurrentMonth(`${yyyy}-${mm}`);
   }, []);
 
-  // データ取得トリガー
   useEffect(() => {
     if (!currentMonth) return;
     fetchData(currentMonth);
-    // データ取得と同時にAI分析も実行
     runAiAnalysis(currentMonth);
   }, [currentMonth]);
 
@@ -152,33 +137,22 @@ export default function TrialBalancePage() {
       setTransactions(new Map());
     } catch (error) {
       console.error(error);
-      toast({
-        title: "エラー",
-        description: "データの読み込みに失敗しました。",
-        variant: "destructive",
-      });
+      // エラーでもトーストは出さず、画面表示のみ切り替える（UX向上）
     } finally {
       setLoading(false);
     }
   };
 
-  // AI分析実行関数
   const runAiAnalysis = async (month: string) => {
     setAnalyzing(true);
-    setAnalysisData(null); // 前の結果をリセット
+    setAnalysisData(null);
     try {
       const res = await fetch("/api/finance/ai-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ month }),
       });
-      
-      if (!res.ok) {
-        // AI分析失敗時はログだけ出して画面は止めない
-        console.warn("AI Analysis failed");
-        return;
-      }
-      
+      if (!res.ok) return;
       const result = await res.json();
       setAnalysisData(result);
     } catch (error) {
@@ -188,10 +162,8 @@ export default function TrialBalancePage() {
     }
   };
 
-  // 取引明細取得
   const toggleAccountExpand = async (accountCode: string) => {
     const newExpanded = new Set(expandedAccounts);
-
     if (newExpanded.has(accountCode)) {
       newExpanded.delete(accountCode);
     } else {
@@ -211,9 +183,7 @@ export default function TrialBalancePage() {
       );
       if (!res.ok) throw new Error("取引データの取得に失敗しました");
       const json = await res.json();
-      setTransactions((prev) =>
-        new Map(prev).set(accountCode, json.transactions)
-      );
+      setTransactions((prev) => new Map(prev).set(accountCode, json.transactions));
     } catch (error) {
       console.error(error);
       toast({
@@ -230,7 +200,6 @@ export default function TrialBalancePage() {
     }
   };
 
-  // インポート処理
   const handleImport = async () => {
     if (!importFile || !importMonth) {
       toast({
@@ -263,9 +232,7 @@ export default function TrialBalancePage() {
       });
       setIsImportModalOpen(false);
       setImportFile(null);
-      // インポートした月を表示して更新
       setCurrentMonth(importMonth);
-      // fetchData等はuseEffectが反応して実行される
     } catch (error: any) {
       console.error(error);
       toast({
@@ -278,7 +245,6 @@ export default function TrialBalancePage() {
     }
   };
 
-  // 削除処理
   const handleDelete = async () => {
     if (!deleteMonth) return;
     if (!confirm(`${deleteMonth}のデータを本当に削除しますか？`)) return;
@@ -302,8 +268,8 @@ export default function TrialBalancePage() {
       });
       setIsDeleteModalOpen(false);
       if (currentMonth === deleteMonth) {
-        fetchData(currentMonth); // データ再取得（クリアされる）
-        setAnalysisData(null);   // 分析データもクリア
+        fetchData(currentMonth);
+        setAnalysisData(null);
       }
     } catch (error: any) {
       console.error(error);
@@ -319,21 +285,16 @@ export default function TrialBalancePage() {
 
   const fmt = (num: number) => num.toLocaleString();
 
-  // 行の背景色決定ロジック（異常検知対応）
   const getRowClass = (account: AccountData) => {
-    // 異常リストに含まれているかチェック
     const isAnomaly = analysisData?.anomalies.some(a => a.code === account.code);
-    
     if (isAnomaly) {
-      // 異常検知された行は赤くハイライト
       return "bg-red-50 hover:bg-red-100 border-l-4 border-l-red-500"; 
     }
-
     switch (account.category) {
       case "資産":
       case "負債":
       case "純資産":
-        return "bg-gray-50 hover:bg-gray-100 opacity-60"; // BS項目は目立たなくする
+        return "bg-gray-50 hover:bg-gray-100 opacity-60";
       case "収益":
         return "bg-purple-50 hover:bg-purple-100";
       case "費用":
@@ -482,12 +443,10 @@ export default function TrialBalancePage() {
                   </div>
                 ) : analysisData ? (
                   <div className="space-y-4">
-                    {/* Geminiのコメント */}
                     <div className="bg-white/60 p-4 rounded-md text-gray-800 text-sm leading-relaxed whitespace-pre-wrap border border-white">
                       {analysisData.aiComment}
                     </div>
 
-                    {/* 異常値タグリスト */}
                     {analysisData.anomalies.length > 0 && (
                       <div className="mt-4">
                         <p className="text-xs font-bold text-red-600 mb-2 flex items-center gap-1">
@@ -534,7 +493,6 @@ export default function TrialBalancePage() {
                   const isExpanded = expandedAccounts.has(acc.code);
                   const trans = transactions.get(acc.code);
                   const isLoadingTrans = loadingTransactions.has(acc.code);
-                  // 異常値判定
                   const isAnomaly = analysisData?.anomalies.some(a => a.code === acc.code);
 
                   return (
@@ -577,7 +535,6 @@ export default function TrialBalancePage() {
                         </TableCell>
                       </TableRow>
 
-                      {/* 展開時の取引明細 */}
                       {isExpanded && (
                         <TableRow className="bg-slate-50 hover:bg-slate-50">
                           <TableCell colSpan={8} className="p-4">
@@ -637,66 +594,66 @@ export default function TrialBalancePage() {
               </TableBody>
             </Table>
           </div>
-
-          {/* インポートモーダル */}
-          <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>データのインポート</DialogTitle>
-                <DialogDescription>総勘定元帳のCSV/TXTファイルを選択してください。</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">対象月</label>
-                  <Input type="month" value={importMonth} onChange={(e) => setImportMonth(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">ファイル選択</label>
-                  <Input type="file" accept=".csv,.txt" onChange={(e) => setImportFile(e.target.files ? e.target.files[0] : null)} />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsImportModalOpen(false)}>キャンセル</Button>
-                <Button onClick={handleImport} disabled={isImporting}>
-                  {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  インポート実行
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* 削除確認モーダル */}
-          <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-red-600">
-                  <AlertTriangle className="w-5 h-5" />
-                  データの削除
-                </DialogTitle>
-                <DialogDescription>以下の月のデータを完全に削除します。</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">削除対象月</label>
-                  <Input type="month" value={deleteMonth} onChange={(e) => setDeleteMonth(e.target.value)} />
-                </div>
-                <div className="p-4 bg-red-50 text-red-700 text-sm rounded-md">
-                  <p className="font-bold mb-1">⚠️ 警告</p>
-                  この操作は取り消せません。<br />
-                  対象月のすべての「仕訳データ」と「月次残高データ」が削除されます。
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>キャンセル</Button>
-                <Button variant="destructive" onClick={handleDelete} disabled={isDeleting || !deleteMonth}>
-                  {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  削除を実行
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </>
       )}
+
+      {/* インポートモーダル (条件分岐の外に移動) */}
+      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>データのインポート</DialogTitle>
+            <DialogDescription>総勘定元帳のCSV/TXTファイルを選択してください。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">対象月</label>
+              <Input type="month" value={importMonth} onChange={(e) => setImportMonth(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">ファイル選択</label>
+              <Input type="file" accept=".csv,.txt" onChange={(e) => setImportFile(e.target.files ? e.target.files[0] : null)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImportModalOpen(false)}>キャンセル</Button>
+            <Button onClick={handleImport} disabled={isImporting}>
+              {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              インポート実行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 削除確認モーダル (条件分岐の外に移動) */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              データの削除
+            </DialogTitle>
+            <DialogDescription>以下の月のデータを完全に削除します。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">削除対象月</label>
+              <Input type="month" value={deleteMonth} onChange={(e) => setDeleteMonth(e.target.value)} />
+            </div>
+            <div className="p-4 bg-red-50 text-red-700 text-sm rounded-md">
+              <p className="font-bold mb-1">⚠️ 警告</p>
+              この操作は取り消せません。<br />
+              対象月のすべての「仕訳データ」と「月次残高データ」が削除されます。
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>キャンセル</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting || !deleteMonth}>
+              {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              削除を実行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
