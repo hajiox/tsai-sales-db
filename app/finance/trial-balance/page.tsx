@@ -56,6 +56,8 @@ export default function TrialBalancePage() {
   const [loading, setLoading] = useState(false);
   const [loadingTx, setLoadingTx] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'bs' | 'pl' | 'all'>('summary');
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const fetchAvailableMonths = useCallback(async () => {
     try {
@@ -110,6 +112,56 @@ export default function TrialBalancePage() {
     } else {
       setExpandedAccount(code);
       await fetchTransactions(code);
+    }
+  };
+
+  // ファイルアップロード処理
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // 月を入力させる
+    const month = prompt('対象月を入力してください（例: 2025-08）', selectedMonth || '2025-08');
+    if (!month) return;
+
+    // フォーマット確認
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      setMessage({ type: 'error', text: '月の形式が正しくありません（例: 2025-08）' });
+      return;
+    }
+
+    setUploading(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('reportMonth', month);
+
+      const res = await fetch('/api/general-ledger/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setMessage({ 
+          type: 'success', 
+          text: `インポート完了: ${data.accountCount || '?'}科目、${data.transactionCount || '?'}件の取引` 
+        });
+        // 月リストを更新して、インポートした月を選択
+        await fetchAvailableMonths();
+        setSelectedMonth(month);
+        await fetchTrialBalance(month);
+      } else {
+        setMessage({ type: 'error', text: data.error || 'インポートに失敗しました' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'アップロード中にエラーが発生しました' });
+    } finally {
+      setUploading(false);
+      event.target.value = '';
     }
   };
 
@@ -262,12 +314,12 @@ export default function TrialBalancePage() {
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-gray-800 text-white py-4 px-6 shadow-lg">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
+        <div className="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold">試算表ビューアー</h1>
             <p className="text-gray-300 text-sm">科目クリックで取引明細を展開</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
@@ -278,23 +330,50 @@ export default function TrialBalancePage() {
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
-            <a href="/finance" className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">
-              データ管理
-            </a>
+            <label className="px-4 py-2 bg-green-600 rounded cursor-pointer hover:bg-green-700 text-sm">
+              {uploading ? 'アップロード中...' : '📁 インポート'}
+              <input
+                type="file"
+                accept=".txt,.csv"
+                onChange={handleFileUpload}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto py-6 px-4">
+        {/* メッセージ表示 */}
+        {message && (
+          <div
+            className={`mb-4 p-3 rounded ${
+              message.type === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-300'
+                : 'bg-red-100 text-red-800 border border-red-300'
+            }`}
+          >
+            {message.text}
+          </div>
+        )}
+
         {loading ? (
           <div className="text-center py-12 text-gray-500">読み込み中...</div>
         ) : accounts.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
             <p className="text-lg mb-2">データがありません</p>
-            <p className="text-sm">
-              <a href="/finance" className="text-blue-600 underline">データ管理ページ</a>
-              からインポートしてください
-            </p>
+            <p className="text-sm mb-4">総勘定元帳ファイル（.txt または .csv）をインポートしてください</p>
+            <label className="inline-block px-6 py-3 bg-green-600 text-white rounded cursor-pointer hover:bg-green-700">
+              {uploading ? 'アップロード中...' : '📁 ファイルを選択してインポート'}
+              <input
+                type="file"
+                accept=".txt,.csv"
+                onChange={handleFileUpload}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
           </div>
         ) : (
           <>
@@ -396,6 +475,7 @@ export default function TrialBalancePage() {
               <p className="font-semibold text-yellow-800">💡 使い方</p>
               <p className="text-yellow-700 mt-1">
                 各勘定科目の行をクリックすると、その科目の取引明細が展開されます。
+                新しいデータをインポートするには右上の「インポート」ボタンから総勘定元帳ファイルを選択してください。
               </p>
             </div>
           </>
