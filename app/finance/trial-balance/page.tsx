@@ -1,4 +1,4 @@
-// /app/finance/trial-balance/page.tsx ver.2
+// /app/finance/trial-balance/page.tsx ver.3
 "use client";
 
 import { useState, useEffect } from "react";
@@ -55,7 +55,7 @@ interface SummaryData {
 
 interface TrialBalanceResponse {
   accounts: AccountData[];
-  summary: SummaryData;
+  summary: SummaryData; // APIによってはここがnullになる可能性がある
   month: string;
 }
 
@@ -364,7 +364,8 @@ export default function TrialBalancePage() {
         <div className="flex justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
         </div>
-      ) : !data ? (
+      ) : !data || !data.summary ? (
+        /* 修正箇所: dataが存在してもsummaryがnullの場合は「データなし」を表示 */
         <div className="text-center py-20 text-gray-500">
           データがありません。対象月を選択するかインポートしてください。
         </div>
