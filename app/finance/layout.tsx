@@ -1,5 +1,4 @@
-// app/finance/layout.tsx ver.2
-// ナビゲーションバーを削除し、コンテンツのみを表示するシンプルなレイアウトに変更
+// app/finance/layout.tsx ver.3
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -14,9 +13,9 @@ export default function FinanceLayout({
 }) {
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
-      {/* 旧ナビゲーションバー（Home, Overview...）を削除しました。
-        サイドバーは親の layout.tsx で管理されているため、ここでは
-        コンテンツ領域のラッパーのみを提供します。
+      {/* 旧ナビゲーションバーを削除しました。
+        サイドバーは親レイアウトで管理されているため、
+        ここはコンテンツ領域のラッパーのみとなります。
       */}
       <main className="flex-1 w-full max-w-[1600px] mx-auto">
         {children}
