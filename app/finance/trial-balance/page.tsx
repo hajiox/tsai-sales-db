@@ -1,4 +1,4 @@
-// /app/finance/trial-balance/page.tsx ver.4
+// app/finance/trial-balance/page.tsx ver.5
 "use client";
 
 import { useState, useEffect } from "react";
@@ -31,6 +31,7 @@ import {
   TrendingUp,
   TrendingDown,
   DollarSign,
+  Sparkles, // AIアイコンを追加
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -72,6 +73,21 @@ interface Transaction {
   rowNo: number;
 }
 
+// AI分析結果の型定義
+interface Anomaly {
+  code: string;
+  name: string;
+  current: number;
+  average: number;
+  diff: number;
+  ratio: number;
+}
+
+interface AnalysisResult {
+  anomalies: Anomaly[];
+  aiComment: string;
+}
+
 // --- メインコンポーネント ---
 export default function TrialBalancePage() {
   // 状態管理
@@ -79,7 +95,11 @@ export default function TrialBalancePage() {
   const [data, setData] = useState<TrialBalanceResponse | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // タブは「損益計算書(PL)」と「全科目」のみにする
+  // AI分析の状態
+  const [analysisData, setAnalysisData] = useState<AnalysisResult | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // タブ管理（PL特化）
   const [tab, setTab] = useState<"pl" | "all">("pl");
   
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(
@@ -113,10 +133,12 @@ export default function TrialBalancePage() {
     setCurrentMonth(`${yyyy}-${mm}`);
   }, []);
 
-  // データ取得
+  // データ取得トリガー
   useEffect(() => {
     if (!currentMonth) return;
     fetchData(currentMonth);
+    // データ取得と同時にAI分析も実行
+    runAiAnalysis(currentMonth);
   }, [currentMonth]);
 
   const fetchData = async (month: string) => {
@@ -126,7 +148,6 @@ export default function TrialBalancePage() {
       if (!res.ok) throw new Error("データの取得に失敗しました");
       const jsonData = await res.json();
       setData(jsonData);
-      // 月が変わったら展開状態と取引データをリセット
       setExpandedAccounts(new Set());
       setTransactions(new Map());
     } catch (error) {
@@ -138,6 +159,32 @@ export default function TrialBalancePage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // AI分析実行関数
+  const runAiAnalysis = async (month: string) => {
+    setAnalyzing(true);
+    setAnalysisData(null); // 前の結果をリセット
+    try {
+      const res = await fetch("/api/finance/ai-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month }),
+      });
+      
+      if (!res.ok) {
+        // AI分析失敗時はログだけ出して画面は止めない
+        console.warn("AI Analysis failed");
+        return;
+      }
+      
+      const result = await res.json();
+      setAnalysisData(result);
+    } catch (error) {
+      console.error("AI Analysis Error:", error);
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -218,7 +265,7 @@ export default function TrialBalancePage() {
       setImportFile(null);
       // インポートした月を表示して更新
       setCurrentMonth(importMonth);
-      fetchData(importMonth);
+      // fetchData等はuseEffectが反応して実行される
     } catch (error: any) {
       console.error(error);
       toast({
@@ -234,16 +281,13 @@ export default function TrialBalancePage() {
   // 削除処理
   const handleDelete = async () => {
     if (!deleteMonth) return;
-
     if (!confirm(`${deleteMonth}のデータを本当に削除しますか？`)) return;
 
     setIsDeleting(true);
     try {
       const res = await fetch("/api/finance/trial-balance/delete", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ month: deleteMonth }),
       });
 
@@ -257,9 +301,9 @@ export default function TrialBalancePage() {
         description: `${deleteMonth}のデータを削除しました。`,
       });
       setIsDeleteModalOpen(false);
-      // データを再取得（削除されているのでクリアされるはず）
       if (currentMonth === deleteMonth) {
-        fetchData(currentMonth);
+        fetchData(currentMonth); // データ再取得（クリアされる）
+        setAnalysisData(null);   // 分析データもクリア
       }
     } catch (error: any) {
       console.error(error);
@@ -273,12 +317,19 @@ export default function TrialBalancePage() {
     }
   };
 
-  // 金額フォーマット
   const fmt = (num: number) => num.toLocaleString();
 
-  // カテゴリごとの背景色
-  const getCategoryColor = (category: string) => {
-    switch (category) {
+  // 行の背景色決定ロジック（異常検知対応）
+  const getRowClass = (account: AccountData) => {
+    // 異常リストに含まれているかチェック
+    const isAnomaly = analysisData?.anomalies.some(a => a.code === account.code);
+    
+    if (isAnomaly) {
+      // 異常検知された行は赤くハイライト
+      return "bg-red-50 hover:bg-red-100 border-l-4 border-l-red-500"; 
+    }
+
+    switch (account.category) {
       case "資産":
       case "負債":
       case "純資産":
@@ -292,11 +343,9 @@ export default function TrialBalancePage() {
     }
   };
 
-  // 表示データのフィルタリング
   const filteredAccounts =
     data?.accounts.filter((acc) => {
       if (tab === "all") return true;
-      // PLタブは収益と費用のみ表示
       if (tab === "pl") return ["収益", "費用"].includes(acc.category);
       return false;
     }) || [];
@@ -308,7 +357,7 @@ export default function TrialBalancePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">損益分析ビューアー</h1>
           <p className="text-sm text-gray-500">
-            当月の収支状況を確認します (貸借対照表は非表示)
+            当月の収支と、AIによるコスト異常検知を行います
           </p>
         </div>
 
@@ -336,7 +385,7 @@ export default function TrialBalancePage() {
               setDeleteMonth(currentMonth);
               setIsDeleteModalOpen(true);
             }}
-            title="表示中の月のデータを削除"
+            title="削除"
           >
             <Trash2 className="w-4 h-4" />
           </Button>
@@ -371,55 +420,102 @@ export default function TrialBalancePage() {
         </div>
       ) : (
         <>
-          {/* PLタブ選択時のトップサマリー */}
+          {/* PLサマリー & AI分析エリア */}
           {tab === "pl" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="border-t-4 border-t-purple-500">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-purple-500" />
-                    収益合計 (売上など)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-purple-700">
-                    ¥{fmt(data.summary.totalRevenues)}
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="space-y-6">
+              {/* 基本数値カード */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="border-t-4 border-t-purple-500">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-purple-500" />
+                      収益合計
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-purple-700">
+                      ¥{fmt(data.summary.totalRevenues)}
+                    </div>
+                  </CardContent>
+                </Card>
 
-              <Card className="border-t-4 border-t-orange-500">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                    <TrendingDown className="w-4 h-4 text-orange-500" />
-                    費用合計 (経費など)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-orange-700">
-                    ¥{fmt(data.summary.totalExpenses)}
-                  </div>
-                </CardContent>
-              </Card>
+                <Card className="border-t-4 border-t-orange-500">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <TrendingDown className="w-4 h-4 text-orange-500" />
+                      費用合計
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-orange-700">
+                      ¥{fmt(data.summary.totalExpenses)}
+                    </div>
+                  </CardContent>
+                </Card>
 
-              <Card className={`border-t-4 ${data.summary.netIncome >= 0 ? "border-t-green-500" : "border-t-red-500"}`}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-gray-500" />
-                    当期純利益 (収益 - 費用)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${data.summary.netIncome >= 0 ? "text-green-700" : "text-red-600"}`}>
-                    ¥{fmt(data.summary.netIncome)}
+                <Card className={`border-t-4 ${data.summary.netIncome >= 0 ? "border-t-green-500" : "border-t-red-500"}`}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-gray-500" />
+                      当期純利益
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={`text-2xl font-bold ${data.summary.netIncome >= 0 ? "text-green-700" : "text-red-600"}`}>
+                      ¥{fmt(data.summary.netIncome)}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* AI分析レポートエリア */}
+              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg p-6 shadow-sm">
+                <h3 className="flex items-center gap-2 text-lg font-bold text-indigo-800 mb-3">
+                  <Sparkles className="w-5 h-5 text-indigo-600" />
+                  AI コスト分析レポート
+                </h3>
+                
+                {analyzing ? (
+                  <div className="flex items-center gap-2 text-indigo-600 py-4">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-sm">Geminiが直近3ヶ月のデータを比較分析中...</span>
                   </div>
-                </CardContent>
-              </Card>
+                ) : analysisData ? (
+                  <div className="space-y-4">
+                    {/* Geminiのコメント */}
+                    <div className="bg-white/60 p-4 rounded-md text-gray-800 text-sm leading-relaxed whitespace-pre-wrap border border-white">
+                      {analysisData.aiComment}
+                    </div>
+
+                    {/* 異常値タグリスト */}
+                    {analysisData.anomalies.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-xs font-bold text-red-600 mb-2 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3"/> 
+                          急増アラート (3ヶ月平均比 +20%以上 かつ +5万円以上)
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {analysisData.anomalies.map((anom, idx) => (
+                            <span key={idx} className="inline-flex items-center gap-2 px-3 py-1 bg-white border border-red-200 text-red-700 rounded-full text-xs shadow-sm">
+                              <span className="font-bold">{anom.name}</span>
+                              <span>+{fmt(anom.diff)}円 ({anom.ratio}%)</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    分析データがありません。過去のデータが不足している可能性があります。
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
           {/* 科目一覧テーブル */}
-          <div className="border rounded-lg overflow-hidden">
+          <div className="border rounded-lg overflow-hidden mt-6">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -427,7 +523,6 @@ export default function TrialBalancePage() {
                   <TableHead>コード</TableHead>
                   <TableHead>科目名</TableHead>
                   <TableHead>分類</TableHead>
-                  {/* B/S関連の残高列は全科目タブでのみ重要だが、PLでも期末残高＝当月の動きの蓄積として表示して問題ない */}
                   <TableHead className="text-right">借方合計</TableHead>
                   <TableHead className="text-right">貸方合計</TableHead>
                   <TableHead className="text-right">差引残高</TableHead>
@@ -439,18 +534,14 @@ export default function TrialBalancePage() {
                   const isExpanded = expandedAccounts.has(acc.code);
                   const trans = transactions.get(acc.code);
                   const isLoadingTrans = loadingTransactions.has(acc.code);
-                  
-                  // PL科目において、期末残高は必ずしも重要ではないが、
-                  // 収益は貸方、費用は借方に残高が残るのが基本。
-                  // ここではシンプルに計算上の期末残高を表示する。
+                  // 異常値判定
+                  const isAnomaly = analysisData?.anomalies.some(a => a.code === acc.code);
 
                   return (
                     <>
                       <TableRow
                         key={acc.code}
-                        className={`cursor-pointer transition-colors ${getCategoryColor(
-                          acc.category
-                        )}`}
+                        className={`cursor-pointer transition-colors ${getRowClass(acc)}`}
                         onClick={() => toggleAccountExpand(acc.code)}
                       >
                         <TableCell>
@@ -463,7 +554,10 @@ export default function TrialBalancePage() {
                         <TableCell className="font-medium">
                           {acc.code}
                         </TableCell>
-                        <TableCell>{acc.name}</TableCell>
+                        <TableCell className="flex items-center gap-2">
+                          {acc.name}
+                          {isAnomaly && <AlertTriangle className="w-4 h-4 text-red-500" />}
+                        </TableCell>
                         <TableCell>
                           <span className="px-2 py-1 rounded-full text-xs bg-white border">
                             {acc.category}
@@ -504,56 +598,34 @@ export default function TrialBalancePage() {
                                         <TableHead>日付</TableHead>
                                         <TableHead>相手科目</TableHead>
                                         <TableHead>摘要</TableHead>
-                                        <TableHead className="text-right">
-                                          借方
-                                        </TableHead>
-                                        <TableHead className="text-right">
-                                          貸方
-                                        </TableHead>
-                                        <TableHead className="text-right">
-                                          残高
-                                        </TableHead>
+                                        <TableHead className="text-right">借方</TableHead>
+                                        <TableHead className="text-right">貸方</TableHead>
+                                        <TableHead className="text-right">残高</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                       {trans.map((t, idx) => (
                                         <TableRow key={idx}>
-                                          <TableCell className="whitespace-nowrap">
-                                            {t.date}
-                                          </TableCell>
-                                          <TableCell>
-                                            {t.counterAccount}
-                                          </TableCell>
-                                          <TableCell className="max-w-[300px] truncate" title={t.description}>
-                                            {t.description}
-                                          </TableCell>
+                                          <TableCell className="whitespace-nowrap">{t.date}</TableCell>
+                                          <TableCell>{t.counterAccount}</TableCell>
+                                          <TableCell className="max-w-[300px] truncate" title={t.description}>{t.description}</TableCell>
                                           <TableCell className="text-right text-blue-600">
-                                            {t.debit > 0
-                                              ? fmt(t.debit)
-                                              : "-"}
+                                            {t.debit > 0 ? fmt(t.debit) : "-"}
                                           </TableCell>
                                           <TableCell className="text-right text-red-600">
-                                            {t.credit > 0
-                                              ? fmt(t.credit)
-                                              : "-"}
+                                            {t.credit > 0 ? fmt(t.credit) : "-"}
                                           </TableCell>
-                                          <TableCell className="text-right font-medium">
-                                            {fmt(t.balance)}
-                                          </TableCell>
+                                          <TableCell className="text-right font-medium">{fmt(t.balance)}</TableCell>
                                         </TableRow>
                                       ))}
                                     </TableBody>
                                   </Table>
                                   {trans.length >= 100 && (
-                                    <p className="text-xs text-gray-500 mt-2 text-right">
-                                      ※ 最大100件まで表示しています
-                                    </p>
+                                    <p className="text-xs text-gray-500 mt-2 text-right">※ 最大100件まで表示しています</p>
                                   )}
                                 </div>
                               ) : (
-                                <p className="text-sm text-gray-500">
-                                  取引データがありません
-                                </p>
+                                <p className="text-sm text-gray-500">取引データがありません</p>
                               )}
                             </div>
                           </TableCell>
@@ -565,99 +637,66 @@ export default function TrialBalancePage() {
               </TableBody>
             </Table>
           </div>
+
+          {/* インポートモーダル */}
+          <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>データのインポート</DialogTitle>
+                <DialogDescription>総勘定元帳のCSV/TXTファイルを選択してください。</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">対象月</label>
+                  <Input type="month" value={importMonth} onChange={(e) => setImportMonth(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">ファイル選択</label>
+                  <Input type="file" accept=".csv,.txt" onChange={(e) => setImportFile(e.target.files ? e.target.files[0] : null)} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsImportModalOpen(false)}>キャンセル</Button>
+                <Button onClick={handleImport} disabled={isImporting}>
+                  {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  インポート実行
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* 削除確認モーダル */}
+          <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-600">
+                  <AlertTriangle className="w-5 h-5" />
+                  データの削除
+                </DialogTitle>
+                <DialogDescription>以下の月のデータを完全に削除します。</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">削除対象月</label>
+                  <Input type="month" value={deleteMonth} onChange={(e) => setDeleteMonth(e.target.value)} />
+                </div>
+                <div className="p-4 bg-red-50 text-red-700 text-sm rounded-md">
+                  <p className="font-bold mb-1">⚠️ 警告</p>
+                  この操作は取り消せません。<br />
+                  対象月のすべての「仕訳データ」と「月次残高データ」が削除されます。
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>キャンセル</Button>
+                <Button variant="destructive" onClick={handleDelete} disabled={isDeleting || !deleteMonth}>
+                  {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  削除を実行
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
-
-      {/* インポートモーダル */}
-      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>データのインポート</DialogTitle>
-            <DialogDescription>
-              総勘定元帳のCSV/TXTファイルを選択してください。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">対象月</label>
-              <Input
-                type="month"
-                value={importMonth}
-                onChange={(e) => setImportMonth(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">ファイル選択</label>
-              <Input
-                type="file"
-                accept=".csv,.txt"
-                onChange={(e) =>
-                  setImportFile(e.target.files ? e.target.files[0] : null)
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsImportModalOpen(false)}
-            >
-              キャンセル
-            </Button>
-            <Button onClick={handleImport} disabled={isImporting}>
-              {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              インポート実行
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 削除確認モーダル */}
-      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="w-5 h-5" />
-              データの削除
-            </DialogTitle>
-            <DialogDescription>
-              以下の月のデータを完全に削除します。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">削除対象月</label>
-              <Input
-                type="month"
-                value={deleteMonth}
-                onChange={(e) => setDeleteMonth(e.target.value)}
-              />
-            </div>
-            <div className="p-4 bg-red-50 text-red-700 text-sm rounded-md">
-              <p className="font-bold mb-1">⚠️ 警告</p>
-              この操作は取り消せません。
-              <br />
-              対象月のすべての「仕訳データ」と「月次残高データ」が削除されます。
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteModalOpen(false)}
-            >
-              キャンセル
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isDeleting || !deleteMonth}
-            >
-              {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              削除を実行
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
