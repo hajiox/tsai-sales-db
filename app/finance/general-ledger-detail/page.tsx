@@ -1,8 +1,5 @@
-// ver.2 (2025-08-19 JST) - split to ClientGLDetail; avoid SSR and prerender
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-export const revalidate = 0;
-
+'use client';
+// ver.3 (2026-01-27) - Client Component for Next.js 16 compatibility
 import nextDynamic from 'next/dynamic';
 const ClientGLDetail = nextDynamic(() => import('./ClientGLDetail'), { ssr: false });
 
