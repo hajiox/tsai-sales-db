@@ -18,9 +18,16 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // PUT: 更新
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } | Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await Promise.resolve(params);
+    if (!id) {
+      return NextResponse.json(
+        { error: 'IDが指定されていません' },
+        { status: 400 }
+      );
+    }
     const body = await request.json();
     const { url, name, login_method, account, password, memo, ai_description } = body;
 
@@ -35,7 +42,7 @@ export async function PUT(
         memo,
         ai_description
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -54,13 +61,20 @@ export async function PUT(
 // DELETE: 削除
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } | Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await Promise.resolve(params);
+    if (!id) {
+      return NextResponse.json(
+        { error: 'IDが指定されていません' },
+        { status: 400 }
+      );
+    }
     const { error } = await supabase
       .from('ai_tools')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) throw error;
 
