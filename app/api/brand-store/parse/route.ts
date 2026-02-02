@@ -1,8 +1,14 @@
-// /app/api/brand-store/parse/route.ts ver.4 (エラー修正版)
+// /app/api/brand-store/parse/route.ts ver.5 (Next.js 15対応版)
 import { NextRequest, NextResponse } from 'next/server'
 import Papa from 'papaparse'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set") })(),
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set") })()
+)
 
 interface ParsedData {
   productName: string
@@ -49,8 +55,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSVファイルにデータがありません' }, { status: 400 })
     }
 
-    const supabase = createRouteHandlerClient({ cookies })
-
     // マスターデータを取得（商品名照合用）
     const { data: productMaster, error: productError } = await supabase
       .from('product_master')
@@ -61,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // product_name_aliases テーブルが存在する場合のみ取得
-    let productAliases = []
+    let productAliases: any[] = []
     try {
       const { data: aliases, error: aliasError } = await supabase
         .from('product_name_aliases')
