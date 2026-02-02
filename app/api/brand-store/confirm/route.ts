@@ -1,7 +1,13 @@
-// /app/api/brand-store/confirm/route.ts ver.2 (新商品自動マスター登録版)
+// /app/api/brand-store/confirm/route.ts ver.3 (Next.js 15対応版)
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set") })(),
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set") })()
+)
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +17,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'データが不正です' }, { status: 400 })
     }
 
-    const supabase = createRouteHandlerClient({ cookies })
     const reportMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
 
     // 既存の売上データを削除（月次上書き）
@@ -39,7 +44,7 @@ export async function POST(request: NextRequest) {
     const existingCategoryNames = new Set(existingCategories?.map(c => c.category_name) || [])
 
     // 新商品と新カテゴリーを検出
-    const newProducts = []
+    const newProducts: any[] = []
     const newCategories = new Set<string>()
     
     for (const item of data) {
@@ -101,7 +106,7 @@ export async function POST(request: NextRequest) {
     if (newProducts.length > 0) {
       // カテゴリーIDを最新の情報で更新
       const updatedNewProducts = newProducts.map(product => {
-        const item = data.find(d => d.productName === product.product_name)
+        const item = data.find((d: any) => d.productName === product.product_name)
         return {
           ...product,
           category_id: item?.category ? categoryNameToIdMap.get(item.category) || null : null
@@ -120,7 +125,7 @@ export async function POST(request: NextRequest) {
     }
 
     // データを整形して保存
-    const formattedData = data.map(item => ({
+    const formattedData = data.map((item: any) => ({
       product_name: item.productName,
       category: item.category,
       tax_type: item.taxType,
