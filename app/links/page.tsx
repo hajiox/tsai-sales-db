@@ -1,10 +1,10 @@
-// /app/links/page.tsx ver.6
+// /app/links/page.tsx ver.7
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown } from "lucide-react"
+import { Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Upload } from "lucide-react"
 
 interface CompanyLink {
   id: string
@@ -31,6 +31,8 @@ export default function LinksPage() {
   const [formSortOrder, setFormSortOrder] = useState(0)
   const [fetchingOgp, setFetchingOgp] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchLinks = async () => {
     try {
@@ -99,6 +101,50 @@ export default function LinksPage() {
     setFormMemo(link.memo || "")
     setFormSortOrder(link.sort_order)
     setShowModal(true)
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // ファイルサイズチェック (5MB制限)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("ファイルサイズは5MB以下にしてください")
+      return
+    }
+
+    // 画像ファイルかチェック
+    if (!file.type.startsWith("image/")) {
+      alert("画像ファイルを選択してください")
+      return
+    }
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const res = await fetch("/api/links/upload-image", {
+        method: "POST",
+        body: formData,
+      })
+
+      const json = await res.json()
+      if (json.success && json.url) {
+        setFormOgImage(json.url)
+      } else {
+        alert(json.error || "アップロードに失敗しました")
+      }
+    } catch (error) {
+      console.error("アップロードエラー:", error)
+      alert("アップロードに失敗しました")
+    } finally {
+      setUploading(false)
+      // ファイル入力をリセット
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
   }
 
   const handleSave = async () => {
@@ -309,8 +355,32 @@ export default function LinksPage() {
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">OGP画像URL</label>
-                <Input value={formOgImage} onChange={(e) => setFormOgImage(e.target.value)} placeholder="https://example.com/image.jpg" />
+                <label className="block text-sm font-medium mb-1">OGP画像</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={formOgImage}
+                    onChange={(e) => setFormOgImage(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    className="flex-1"
+                  />
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    <span className="ml-1">アップロード</span>
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">URLを入力するか、画像をアップロードしてください（5MB以下）</p>
                 {formOgImage && (
                   <div className="mt-2 w-32 h-20 bg-gray-100 rounded overflow-hidden">
                     <img src={formOgImage} alt="プレビュー" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
