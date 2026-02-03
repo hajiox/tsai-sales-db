@@ -10,13 +10,32 @@ const supabase = createClient(
 // リンク更新
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  // 1. Log raw props to see what we're receiving
+  console.log('[API PUT] Raw props:', JSON.stringify(props, null, 2))
+
+  const params = await props.params;
+  console.log('[API PUT] Resolved params:', JSON.stringify(params, null, 2))
+
   try {
     const { id } = params
+    console.log(`[API PUT] Extracted ID: "${id}", typeof: ${typeof id}`)
+
+    if (!id || id === 'undefined' || id.trim() === 'undefined') {
+      console.error(`[API PUT] Invalid ID caught: "${id}"`)
+      return NextResponse.json(
+        { error: '無効なIDです (undefined)' },
+        { status: 400 }
+      )
+    }
+
     const body = await request.json()
+    console.log('[API PUT] Request body:', JSON.stringify(body, null, 2))
+
     const { url, title, description, og_image, memo, sort_order } = body
 
+    console.log(`[API PUT] About to update with ID: "${id}"`)
     const { data, error } = await supabase
       .from('company_links')
       .update({
@@ -53,8 +72,9 @@ export async function PUT(
 // リンク削除
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
     const { id } = params
 

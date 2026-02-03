@@ -117,8 +117,17 @@ export default function LinksPage() {
         sort_order: formSortOrder,
       }
 
+      console.log("Saving link...", { editingLink, payload })
+
       let res
       if (editingLink) {
+        if (!editingLink.id || editingLink.id === 'undefined') {
+          console.error("Link ID is missing or 'undefined'", editingLink)
+          alert("リンクIDが不正です。再読み込みしてください。")
+          setSaving(false)
+          return
+        }
+        console.log(`Updating link ${editingLink.id}`)
         res = await fetch(`/api/links/${editingLink.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -136,7 +145,9 @@ export default function LinksPage() {
         setShowModal(false)
         fetchLinks()
       } else {
-        alert("保存に失敗しました")
+        const errorData = await res.json()
+        console.error("Save failed response:", errorData)
+        alert(`保存に失敗しました: ${errorData.error || res.statusText}`)
       }
     } catch (error) {
       console.error("保存エラー:", error)
