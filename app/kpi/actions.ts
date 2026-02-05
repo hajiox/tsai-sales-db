@@ -51,6 +51,34 @@ function generateMonths(fy: number): string[] {
   return months;
 }
 
+// Helper to fetch ALL rows (pagination)
+async function fetchAll(supabase: any, table: string, queryModifier?: (query: any) => any, schema?: string) {
+  let allData: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    let query = schema
+      ? supabase.schema(schema).from(table).select('*')
+      : supabase.from(table).select('*');
+
+    if (queryModifier) {
+      query = queryModifier(query);
+    }
+
+    // Add pagination
+    const { data, error } = await query.range(page * pageSize, (page + 1) * pageSize - 1);
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    allData = allData.concat(data);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  return allData;
+}
+
 // ----------------------------------------------------------------------
 // Server Actions
 // ----------------------------------------------------------------------
@@ -134,31 +162,6 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
 export async function saveKpiTarget(data: { channel: string, month: string, amount: number }) {
   const supabase = getSupabase();
 
-  // Custom Upsert Logic since we need to match (metric, channel_code, month)
-  // Check if exists
-  const { data: existing } = await supabase
-    .from('kpi.kpi_manual_entries_v1') // Assuming access via schema prefix might be tricky with client
-    // Actually, Supabase Client usually accesses public schema by default.
-    // If the table is in 'kpi' schema, we might need to configure the client or use RPC.
-    // However, existing code suggests `kpi.kpi_manual_entries_v1` is the table name used in SQL. 
-    // In Supabase client, we just use the table name if it's exposed.
-    // If 'kpi' is a schema, we should check if it's exposed in the API.
-    // We'll trust the plan for now, but falling back to SQL might be safer if schema is involved.
-    // Wait, earlier SQL `create table if not exists kpi.kpi_manual_entries_v1`
-    // Supabase client might not access `kpi` schema directly unless configured.
-    // Let's assume the table is accessible or use RPC.
-
-    // For simplicity with Server Role Key: we can use the `kpi_manual_entries_v1` if it's in public?
-    // No, it's in `kpi` schema.
-    // We can try `supabase.schema('kpi').from('kpi_manual_entries_v1')`.
-    .schema('kpi')
-    .from('kpi_manual_entries_v1')
-    .select('metric')
-    .eq('metric', 'target')
-    .eq('channel_code', data.channel)
-    .eq('month', data.month)
-    .single();
-
   const { error } = await supabase
     .schema('kpi')
     .from('kpi_manual_entries_v1')
@@ -178,36 +181,28 @@ export async function saveKpiTarget(data: { channel: string, month: string, amou
 }
 
 // ----------------------------------------------------------------------
-// Fetchers (Supabase + JS Aggregation)
+// Fetchers (Supabase + JS Aggregation + Pagination)
 // ----------------------------------------------------------------------
 
 async function fetchWebSales(start: string, end: string) {
   const supabase = getSupabase();
 
-  // 1. Fetch Products
-  const { data: products } = await supabase
-    .from('products')
-    .select('id, price');
+  // 1. Fetch ALL Products (to ensure price map is complete)
+  const products = await fetchAll(supabase, 'products', (q) => q.select('id, price'));
+  const priceMap = new Map(products.map((p: any) => [p.id, p.price || 0]));
 
-  if (!products) return [];
-  const priceMap = new Map(products.map(p => [p.id, p.price || 0]));
-
-  // 2. Fetch Summary
-  // We need to fetch all rows in date range because we can't join-multiply-sum easily
-  // Batching might be needed if huge, but let's assume it fits in memory (3 years ~ 3600 rows max if 100 products)
-  const { data: summary } = await supabase
-    .from('web_sales_summary')
-    .select('report_month, product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count, tiktok_count')
-    .gte('report_month', start)
-    .lt('report_month', end);
-
-  if (!summary) return [];
+  // 2. Fetch ALL Summary
+  const summary = await fetchAll(supabase, 'web_sales_summary', (q) =>
+    q.select('report_month, product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count, tiktok_count')
+      .gte('report_month', start)
+      .lt('report_month', end)
+  );
 
   // 3. Aggregate
   const monthMap = new Map<string, number>();
 
-  summary.forEach(row => {
-    const month = row.report_month.substring(0, 7) + '-01'; // Ensure YYYY-MM-01
+  summary.forEach((row: any) => {
+    const month = row.report_month.substring(0, 7) + '-01';
     const price = priceMap.get(row.product_id) || 0;
     const count = (row.amazon_count || 0) +
       (row.rakuten_count || 0) +
@@ -227,31 +222,29 @@ async function fetchWebSales(start: string, end: string) {
 async function fetchWholesaleSales(start: string, end: string) {
   const supabase = getSupabase();
 
-  // Wholesale (quantity * unit_price)
-  const { data: wholesale } = await supabase
-    .from('wholesale_sales')
-    .select('sale_date, quantity, unit_price')
-    .gte('sale_date', start)
-    .lt('sale_date', end);
+  // Wholesale: Fetch ALL
+  const wholesale = await fetchAll(supabase, 'wholesale_sales', (q) =>
+    q.select('sale_date, quantity, unit_price')
+      .gte('sale_date', start)
+      .lt('sale_date', end)
+  );
 
-  // OEM (amount)
-  const { data: oem } = await supabase
-    .from('oem_sales')
-    .select('sale_date, amount')
-    .gte('sale_date', start)
-    .lt('sale_date', end);
+  // OEM: Fetch ALL
+  const oem = await fetchAll(supabase, 'oem_sales', (q) =>
+    q.select('sale_date, amount')
+      .gte('sale_date', start)
+      .lt('sale_date', end)
+  );
 
   const monthMap = new Map<string, number>();
 
-  // Aggregate Wholesale
-  wholesale?.forEach(row => {
+  wholesale.forEach((row: any) => {
     const month = row.sale_date.substring(0, 7) + '-01';
     const amount = (row.quantity || 0) * (row.unit_price || 0);
     monthMap.set(month, (monthMap.get(month) || 0) + amount);
   });
 
-  // Aggregate OEM
-  oem?.forEach(row => {
+  oem.forEach((row: any) => {
     const month = row.sale_date.substring(0, 7) + '-01';
     const amount = row.amount || 0;
     monthMap.set(month, (monthMap.get(month) || 0) + amount);
@@ -263,28 +256,27 @@ async function fetchWholesaleSales(start: string, end: string) {
 async function fetchStoreSales(start: string, end: string) {
   const supabase = getSupabase();
 
-  // Sales
-  const { data: sales } = await supabase
-    .from('brand_store_sales')
-    .select('report_month, total_sales')
-    .gte('report_month', start)
-    .lt('report_month', end);
+  // Store Sales (Usually small, but good to use fetchAll for consistency)
+  const sales = await fetchAll(supabase, 'brand_store_sales', (q) =>
+    q.select('report_month, total_sales')
+      .gte('report_month', start)
+      .lt('report_month', end)
+  );
 
-  // Adjustments
-  const { data: adjustments } = await supabase
-    .from('brand_store_sales_adjustments')
-    .select('report_month, adjustment_amount')
-    .gte('report_month', start)
-    .lt('report_month', end);
+  const adjustments = await fetchAll(supabase, 'brand_store_sales_adjustments', (q) =>
+    q.select('report_month, adjustment_amount')
+      .gte('report_month', start)
+      .lt('report_month', end)
+  );
 
   const monthMap = new Map<string, number>();
 
-  sales?.forEach(row => {
+  sales.forEach((row: any) => {
     const month = row.report_month.substring(0, 7) + '-01';
     monthMap.set(month, (monthMap.get(month) || 0) + (row.total_sales || 0));
   });
 
-  adjustments?.forEach(row => {
+  adjustments.forEach((row: any) => {
     const month = row.report_month.substring(0, 7) + '-01';
     monthMap.set(month, (monthMap.get(month) || 0) + (row.adjustment_amount || 0));
   });
@@ -295,15 +287,15 @@ async function fetchStoreSales(start: string, end: string) {
 async function fetchShokuSales(start: string, end: string) {
   const supabase = getSupabase();
 
-  const { data: sales } = await supabase
-    .from('food_store_sales')
-    .select('report_month, total_sales')
-    .gte('report_month', start)
-    .lt('report_month', end);
+  const sales = await fetchAll(supabase, 'food_store_sales', (q) =>
+    q.select('report_month, total_sales')
+      .gte('report_month', start)
+      .lt('report_month', end)
+  );
 
   const monthMap = new Map<string, number>();
 
-  sales?.forEach(row => {
+  sales.forEach((row: any) => {
     const month = row.report_month.substring(0, 7) + '-01';
     monthMap.set(month, (monthMap.get(month) || 0) + (row.total_sales || 0));
   });
@@ -314,18 +306,17 @@ async function fetchShokuSales(start: string, end: string) {
 async function fetchTargets(start: string, end: string) {
   const supabase = getSupabase();
 
-  const { data: targets } = await supabase
-    .schema('kpi')
-    .from('kpi_manual_entries_v1')
-    .select('channel_code, month, amount')
-    .eq('metric', 'target')
-    .gte('month', start)
-    .lt('month', end);
+  const targets = await fetchAll(supabase, 'kpi_manual_entries_v1', (q) =>
+    q.select('channel_code, month, amount')
+      .eq('metric', 'target')
+      .gte('month', start)
+      .lt('month', end),
+    'kpi'
+  );
 
-  // Format: { channel, month, amount }
-  return targets?.map(t => ({
+  return targets.map((t: any) => ({
     channel: t.channel_code,
     month: t.month.substring(0, 7) + '-01',
     amount: t.amount
-  })) || [];
+  }));
 }
