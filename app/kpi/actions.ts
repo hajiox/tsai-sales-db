@@ -125,9 +125,15 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
       channels: resultChannels,
       total
     };
-  } catch (error) {
-    console.error('Data Fetch Error:', error);
-    throw new Error('データの取得に失敗しました');
+  } catch (error: any) {
+    console.error('Data Fetch Error Details:', {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+      fullUser: error
+    });
+    throw new Error(`データの取得に失敗しました: ${error?.message || '不明なエラー'}`);
   }
 }
 
