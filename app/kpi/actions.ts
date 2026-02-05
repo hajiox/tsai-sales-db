@@ -141,7 +141,6 @@ export async function saveKpiTarget(data: { channel: string, month: string, amou
   const supabase = getSupabase();
 
   const { error } = await supabase
-    .schema('kpi')
     .from('kpi_manual_entries_v1')
     .upsert({
       metric: 'target',
@@ -202,24 +201,19 @@ async function fetchShokuSalesRPC(start: string, end: string) {
   return (data as { month: string, amount: number }[]) || [];
 }
 
-// Targets - still small, so direct fetch is fine. But use recursive helper just in case.
-// Actually, targets are extremely small (12 mos * 4 channels * 3 years = 144 rows), no pagination needed.
 async function fetchTargets(start: string, end: string) {
   const supabase = getSupabase();
 
-  const { data: targets, error } = await supabase
-    .schema('kpi')
-    .from('kpi_manual_entries_v1')
-    .select('channel_code, month, amount')
-    .eq('metric', 'target')
-    .gte('month', start)
-    .lt('month', end);
+  const { data, error } = await supabase.rpc('get_kpi_targets', {
+    start_date: start,
+    end_date: end
+  });
 
   if (error) throw error;
 
-  return targets?.map(t => ({
+  return (data as { channel_code: string, month: string, amount: number }[]).map(t => ({
     channel: t.channel_code,
-    month: t.month.substring(0, 7) + '-01',
+    month: t.month,
     amount: t.amount
   })) || [];
 }
