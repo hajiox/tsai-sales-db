@@ -1,13 +1,29 @@
 
-// /app/api/food-store/import/route.ts ver.6
+// /app/api/food-store/import/route.ts ver.7
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+import { getToken } from 'next-auth/jwt'
 
 export async function POST(request: NextRequest) {
   console.log('API Route called: /api/food-store/import')
 
   try {
+    // 1. Next-Authによる認証チェック
+    console.log('Checking NextAuth session...')
+    const token = await getToken({ req: request })
+
+    // middleware.tsのロジックに合わせる (email check is optional if middleware enforces it, but good for safety)
+    const isAuthenticated = !!token
+
+    if (!isAuthenticated) {
+      console.error('NextAuth token missing')
+      return NextResponse.json(
+        { error: '認証エラーが発生しました', details: 'No valid session' },
+        { status: 401 }
+      )
+    }
+    console.log('User authenticated via NextAuth:', token.email)
+
     const body = await request.json()
     console.log('Request body received with length:', body.data?.length)
 
@@ -20,41 +36,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('Initializing Supabase client...')
-    const cookieStore = await cookies()
-
-    const supabase = createServerClient(
+    console.log('Initializing Supabase Admin client...')
+    // Adminクライアント (Service Role) を使用してDB操作を行う (RLSをバイパス)
+    const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch (error) {
-              // Ignored in Route Handlers
-            }
-          },
-        },
-      }
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
-
-    // 認証状態を確認
-    console.log('Checking auth user...')
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      console.error('Auth error or no user:', authError)
-      return NextResponse.json(
-        { error: '認証エラーが発生しました', details: authError?.message },
-        { status: 401 }
-      )
-    }
 
     // report_monthを最初のデータから取得
     const reportMonth = data[0]?.report_month
@@ -139,23 +126,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) { try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch { } }
-      }
-    }
-  )
-  const { data: { user } } = await supabase.auth.getUser()
-
+export async function GET(request: NextRequest) {
+  const token = await getToken({ req: request })
   return NextResponse.json({
-    message: 'Food Store Import API is working',
-    authenticated: !!user,
+    message: 'Food Store Import API is working (NextAuth Mode)',
+    authenticated: !!token,
+    user: token?.email,
     timestamp: new Date().toISOString()
   })
 }
