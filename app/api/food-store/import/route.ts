@@ -1,17 +1,15 @@
-// /app/api/food-store/import/route.ts ver.5
+
+// /app/api/food-store/import/route.ts ver.6
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export async function POST(request: NextRequest) {
-  console.log('API Route called')
-  
+  console.log('API Route called: /api/food-store/import')
+
   try {
     const body = await request.json()
-    console.log('Request body received:', { 
-      dataLength: body.data?.length,
-      firstItem: body.data?.[0]
-    })
+    console.log('Request body received with length:', body.data?.length)
 
     const { data } = body
 
@@ -22,14 +20,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createRouteHandlerClient({ cookies })
+    console.log('Initializing Supabase client...')
+    const cookieStore = await cookies()
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch (error) {
+              // Ignored in Route Handlers
+            }
+          },
+        },
+      }
+    )
 
     // 認証状態を確認
-    const { data: { session }, error: authError } = await supabase.auth.getSession()
-    if (authError) {
-      console.error('Auth error:', authError)
+    console.log('Checking auth user...')
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      console.error('Auth error or no user:', authError)
       return NextResponse.json(
-        { error: '認証エラーが発生しました', details: authError.message },
+        { error: '認証エラーが発生しました', details: authError?.message },
         { status: 401 }
       )
     }
@@ -53,7 +75,6 @@ export async function POST(request: NextRequest) {
 
     if (checkError) {
       console.error('Check error:', checkError)
-      // エラーがあっても続行を試みる
     }
 
     if (existingData && existingData.length > 0) {
@@ -64,64 +85,52 @@ export async function POST(request: NextRequest) {
         .eq('report_month', reportMonth)
 
       if (deleteError) {
-        console.error('Delete error details:', {
-          message: deleteError.message,
-          details: deleteError.details,
-          hint: deleteError.hint,
-          code: deleteError.code
-        })
-        
-        // 削除エラーでも新規挿入を試みる
-        console.log('Delete failed, but attempting to continue with insert...')
+        console.error('Delete error details:', deleteError)
       }
     }
 
-    // 新規データの挿入（category_idを含む）
+    // 新規データの挿入
     console.log('Inserting new data:', data.length, 'records')
-    
-    // データを小さなバッチに分割して挿入（大量データ対策）
+
+    // バッチ処理
     const batchSize = 100
     let insertedCount = 0
-    
+
     for (let i = 0; i < data.length; i += batchSize) {
       const batch = data.slice(i, i + batchSize)
+      console.log(`Inserting batch ${i} - ${i + batch.length}`)
+
       const { error: insertError } = await supabase
         .from('food_store_sales')
         .insert(batch)
 
       if (insertError) {
-        console.error('Insert error at batch', i / batchSize, ':', {
-          message: insertError.message,
-          details: insertError.details,
-          hint: insertError.hint,
-          code: insertError.code
-        })
-        
+        console.error('Insert error at batch', i, ':', insertError)
         return NextResponse.json(
-          { 
-            error: 'データの登録に失敗しました', 
+          {
+            error: 'データの登録に失敗しました',
             details: insertError.message,
-            insertedCount: insertedCount 
+            insertedCount: insertedCount
           },
           { status: 500 }
         )
       }
-      
+
       insertedCount += batch.length
     }
 
     console.log('Successfully inserted', insertedCount, 'records')
 
-    return NextResponse.json({ 
-      success: true, 
-      count: insertedCount 
+    return NextResponse.json({
+      success: true,
+      count: insertedCount
     })
 
   } catch (error: any) {
-    console.error('Import error:', error)
+    console.error('Import error (Critical):', error)
     return NextResponse.json(
-      { 
-        error: 'サーバーエラーが発生しました', 
+      {
+        error: 'サーバーエラーが発生しました',
         details: error?.message || 'Unknown error',
         stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined
       },
@@ -130,14 +139,23 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// デバッグ用にGETメソッドも追加
 export async function GET() {
-  const supabase = createRouteHandlerClient({ cookies })
-  const { data: { session } } = await supabase.auth.getSession()
-  
-  return NextResponse.json({ 
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) { try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch { } }
+      }
+    }
+  )
+  const { data: { user } } = await supabase.auth.getUser()
+
+  return NextResponse.json({
     message: 'Food Store Import API is working',
-    authenticated: !!session,
+    authenticated: !!user,
     timestamp: new Date().toISOString()
   })
 }
