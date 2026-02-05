@@ -56,12 +56,7 @@ export async function GET() {
         oem AS (
           SELECT 
             to_char(sale_date, 'YYYY-MM-01') as m,
-            SUM(amount) as a 
-            -- Note: 'amount' column in oem_sales. Checking my previous query it was 'amount'.
-            -- Let's verify 'oem_sales' schema if possible. Step 77 showed 'wholesale_sales' columns.
-            -- I'll assume 'amount' for now based on implementation plan/previous code. 
-            -- But wait, previous code used 'amount'.
-            -- Safer to use 'amount' if valid.
+            SUM(oem_sales.amount) as a 
           FROM oem_sales
           WHERE sale_date >= CAST(start_date AS DATE) AND sale_date < CAST(end_date AS DATE)
           GROUP BY m
