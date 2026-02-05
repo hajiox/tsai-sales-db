@@ -88,5 +88,25 @@ npm run dev
 *   **データ同期**: ローカル環境の `.env.local` は本番環境と同じSupabaseプロジェクトを参照しています。そのため、**ローカルでのデータ操作（CRUD）は即座に本番データベースに反映されます**。テストデータの投入や削除には十分注意してください。
 *   **VS Code設定**: `.vscode` フォルダ内に推奨拡張機能 (`extensions.json`) とデバッグ設定 (`launch.json`) を追加しました。VS Codeでの開発を推奨します。
 
+## 5. 自社リンク集 - 画像アップロード機能（2026/02/03追加）
+
+### 5.1. 機能概要
+自社リンク集（`/links`）にOGP画像のアップロード機能を追加しました。これにより、OGP自動取得が使えないローカルサイト（Shopeeボット等）に対しても、手動で画像を設定できるようになりました。
+
+### 5.2. 実装内容
+*   **フロントエンド** (`app/links/page.tsx`): 
+    *   OGP画像欄に「アップロード」ボタンを追加
+    *   ファイル選択後、自動でSupabase Storageへアップロード
+    *   5MB以下の画像ファイルのみ対応
+*   **バックエンド** (`app/api/links/upload-image/route.ts`): 
+    *   画像を受け取りSupabase Storageに保存
+    *   公開URLを返却
+
+### 5.3. Supabase Storage設定
+画像アップロードにはSupabase Storageのバケットが必要です。
+*   **バケット名**: `link-images`
+*   **アクセス**: Public（公開）
+*   **設定場所**: Supabase Dashboard > Storage > New bucket
+
 ---
 *作成日: 2026/02/02 / 最終更新日: 2026/02/03*
