@@ -30,6 +30,12 @@ export interface KpiSummary {
     target: number;
     actual: number;
   }[];
+  manufacturing: {
+    month: string;
+    target: number;
+    actual: number;
+    lastYear: number;
+  }[];
 }
 
 // ----------------------------------------------------------------------
@@ -84,11 +90,14 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
     const storeMap = new Map(storeRows.map(r => [r.month, Number(r.amount)]));
     const shokuMap = new Map(shokuRows.map(r => [r.month, Number(r.amount)]));
 
-    // Lookup Maps - Manual Entries (Targets & Acquisition)
-    // Filter manualRows by metric
+    // Lookup Maps - Manual Entries (Targets, Acquisition, Manufacturing)
     const targetMap = new Map();
     const acquisitionTargetMap = new Map();
     const acquisitionActualMap = new Map();
+    // Manufacturing
+    const manufacturingTargetMap = new Map();
+    const manufacturingActualMap = new Map();
+
 
     manualRows.forEach(r => {
       if (r.metric === 'target') {
@@ -97,6 +106,10 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
         acquisitionTargetMap.set(r.month, r.amount);
       } else if (r.metric === 'acquisition_actual') {
         acquisitionActualMap.set(r.month, r.amount);
+      } else if (r.metric === 'manufacturing_target') {
+        manufacturingTargetMap.set(r.month, r.amount);
+      } else if (r.metric === 'manufacturing_actual') {
+        manufacturingActualMap.set(r.month, r.amount);
       }
     });
 
@@ -145,12 +158,23 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
       actual: acquisitionActualMap.get(month) || 0
     }));
 
+    const manufacturing = fyMonths.map(month => {
+      const lastYearMonth = format(subYears(parseISO(month), 1), 'yyyy-MM-01');
+      return {
+        month,
+        target: manufacturingTargetMap.get(month) || 0,
+        actual: manufacturingActualMap.get(month) || 0,
+        lastYear: manufacturingActualMap.get(lastYearMonth) || 0
+      };
+    });
+
     return {
       fiscalYear,
       months: fyMonths,
       channels: resultChannels,
       total,
-      salesActivity
+      salesActivity,
+      manufacturing
     };
   } catch (error: any) {
     console.error('Data Fetch Error Details:', {

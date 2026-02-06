@@ -48,18 +48,17 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
                     newForm[key] = initialData[key] ? initialData[key].toString() : '';
                 });
             });
-            // Acquisition
+            // Acquisition & Manufacturing
             months.forEach(m => {
-                // We need to fetch acquisition data?
-                // `initialData` comes from props. `KpiPageClient` passes it.
-                // We need to ensure `KpiPageClient` passes the full map including acquisitions.
-                // Assuming `initialData` will contain keys like "acquisition_target_2025-08-01".
-                // I need to update KpiPageClient to pass this data.
-                // For now, let's assume it does.
-                const targetKey = `acquisition_target_${m}`;
-                const actualKey = `acquisition_actual_${m}`;
-                newForm[targetKey] = initialData[targetKey] ? initialData[targetKey].toString() : '';
-                newForm[actualKey] = initialData[actualKey] ? initialData[actualKey].toString() : '';
+                const acqTargetKey = `acquisition_target_${m}`;
+                const acqActualKey = `acquisition_actual_${m}`;
+                newForm[acqTargetKey] = initialData[acqTargetKey] ? initialData[acqTargetKey].toString() : '';
+                newForm[acqActualKey] = initialData[acqActualKey] ? initialData[acqActualKey].toString() : '';
+
+                const manTargetKey = `manufacturing_target_${m}`;
+                const manActualKey = `manufacturing_actual_${m}`;
+                newForm[manTargetKey] = initialData[manTargetKey] ? initialData[manTargetKey].toString() : '';
+                newForm[manActualKey] = initialData[manActualKey] ? initialData[manActualKey].toString() : '';
             });
 
             setFormData(newForm);
@@ -77,12 +76,7 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
         try {
             const promises = [];
             for (const [key, value] of Object.entries(formData)) {
-                const parts = key.split('_');
-                // Format: channel_month OR 'acquisition' (metric)_metricType_month
-                // Actually my logic for key generation below needs to be consistent.
-                // Let's use:
-                // Channel sales: "WEB_2025-08-01"
-                // Sales Activity: "acquisition_target_2025-08-01" or "acquisition_actual_2025-08-01"
+                // key: channel_month OR metric_type_month
 
                 let metric = 'target';
                 let channel = '';
@@ -90,13 +84,6 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
                 let amount = value ? parseInt(value) : 0;
 
                 if (key.startsWith('acquisition')) {
-                    // key: acquisition_target_2025-08-01
-                    const [_, type, m] = key.split('_'); // this split is unsafe if date has hyphens...
-                    // Better split:
-                    // acquisition_target_yyyy-mm-01
-                    const mIndex = key.lastIndexOf('_', key.lastIndexOf('_') - 1); // Not quite right.
-
-                    // Actually, let's stick to explicit parsing.
                     if (key.startsWith('acquisition_target_')) {
                         metric = 'acquisition_target';
                         month = key.replace('acquisition_target_', '');
@@ -105,6 +92,16 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
                         metric = 'acquisition_actual';
                         month = key.replace('acquisition_actual_', '');
                         channel = 'SALES_TEAM';
+                    }
+                } else if (key.startsWith('manufacturing')) {
+                    if (key.startsWith('manufacturing_target_')) {
+                        metric = 'manufacturing_target';
+                        month = key.replace('manufacturing_target_', '');
+                        channel = 'FACTORY';
+                    } else if (key.startsWith('manufacturing_actual_')) {
+                        metric = 'manufacturing_actual';
+                        month = key.replace('manufacturing_actual_', '');
+                        channel = 'FACTORY';
                     }
                 } else {
                     // standard channel sales
@@ -177,6 +174,7 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
                         {/* 2. Sales Activities (Acquisition) */}
                         <div className="rounded-md border mt-8">
                             <div className="p-2 bg-gray-100 font-bold text-sm">営業活動（新規・OEM獲得数）</div>
+                            {/* ... existing table code ... */}
                             <table className="w-full border-collapse">
                                 <thead>
                                     <tr>
@@ -213,6 +211,46 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* 3. Product Manufacturing */}
+                        <div className="rounded-md border mt-8">
+                            <div className="p-2 bg-gray-100 font-bold text-sm">商品製造数</div>
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr>
+                                        <th className="p-2 border text-left bg-gray-50 font-medium text-sm min-w-[150px]">月</th>
+                                        <th className="p-2 border text-left bg-gray-50 font-medium text-sm">製造目標</th>
+                                        <th className="p-2 border text-left bg-gray-50 font-medium text-sm">製造実績</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {months.map(month => {
+                                        const dateLabel = format(new Date(month), 'yyyy年M月');
+                                        return (
+                                            <tr key={month}>
+                                                <td className="p-2 border bg-gray-50 text-sm font-medium">{dateLabel}</td>
+                                                <td className="p-2 border">
+                                                    <Input
+                                                        className="h-8 text-right"
+                                                        value={formData[`manufacturing_target_${month}`] || ''}
+                                                        onChange={(e) => handleChange(`manufacturing_target_${month}`, e.target.value)}
+                                                        placeholder="0"
+                                                    />
+                                                </td>
+                                                <td className="p-2 border">
+                                                    <Input
+                                                        className="h-8 text-right"
+                                                        value={formData[`manufacturing_actual_${month}`] || ''}
+                                                        onChange={(e) => handleChange(`manufacturing_actual_${month}`, e.target.value)}
+                                                        placeholder="0"
+                                                    />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -224,7 +262,7 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
                     </Button>
                 </DialogFooter>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 }
 
