@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -176,7 +175,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-100 text-gray-700 font-semibold">
                             <tr>
-                                <th className="p-3 min-w-[120px]">部門 / 月</th>
+                                <th className="p-3 min-w-[200px]">部門 / 月</th>
                                 {data.months.map(m => (
                                     <th key={m} className="p-3 text-right bg-white min-w-[100px] border-l">
                                         {new Date(m).getMonth() + 1}月
@@ -185,55 +184,186 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                 <th className="p-3 text-right bg-gray-50 border-l min-w-[120px]">合計</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y">
-                            {/* Channels */}
+                        <tbody className="divide-y divide-gray-300">
+                            {/* Channels Loop */}
                             {(['WEB', 'WHOLESALE', 'STORE', 'SHOKU'] as ChannelCode[]).map(channel => {
                                 const label = channel === 'WEB' ? 'Web販売' :
                                     channel === 'WHOLESALE' ? '卸・OEM' :
                                         channel === 'STORE' ? '会津ブランド館' : '食のブランド館';
                                 const rowData = data.channels[channel];
-                                const channelTotal = rowData.reduce((sum, r) => sum + r.actual, 0);
+
+                                // Totals
+                                const totalActual = rowData.reduce((sum, r) => sum + r.actual, 0);
+                                const totalTarget = rowData.reduce((sum, r) => sum + r.target, 0);
+                                const totalLastYear = rowData.reduce((sum, r) => sum + r.lastYear, 0);
 
                                 return (
-                                    <tr key={channel} className="hover:bg-gray-50/50">
-                                        <td className="p-3 font-medium border-r bg-gray-50/30">{label}</td>
-                                        {rowData.map(r => (
-                                            <td key={r.month} className="p-3 text-right border-l tabular-nums">
-                                                {r.actual.toLocaleString()}
+                                    <React.Fragment key={channel}>
+                                        {/* Channel Header Row (merged visually by first col) */}
+                                        <tr className="bg-gray-50/50">
+                                            <td className="p-3 font-bold border-r bg-gray-100" rowSpan={5} style={{ verticalAlign: 'top' }}>
+                                                {label}
                                             </td>
-                                        ))}
-                                        <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
-                                            {channelTotal.toLocaleString()}
-                                        </td>
-                                    </tr>
+                                        </tr>
+
+                                        {/* 1. Last Year Actual */}
+                                        <tr className="hover:bg-gray-50/30">
+                                            <td className="p-2 border-r text-gray-500 text-xs">前年度実績</td>
+                                            {rowData.map(r => (
+                                                <td key={`ly-${r.month}`} className="p-2 text-right border-l tabular-nums text-gray-500">
+                                                    {r.lastYear.toLocaleString()}
+                                                </td>
+                                            ))}
+                                            <td className="p-2 text-right border-l tabular-nums font-medium text-gray-500">
+                                                {totalLastYear.toLocaleString()}
+                                            </td>
+                                        </tr>
+
+                                        {/* 2. Target */}
+                                        <tr className="hover:bg-gray-50/30">
+                                            <td className="p-2 border-r text-blue-600 font-medium">今年度目標</td>
+                                            {rowData.map(r => (
+                                                <td key={`target-${r.month}`} className="p-2 text-right border-l tabular-nums text-blue-600">
+                                                    {r.target > 0 ? r.target.toLocaleString() : '-'}
+                                                </td>
+                                            ))}
+                                            <td className="p-2 text-right border-l tabular-nums font-bold text-blue-600">
+                                                {totalTarget.toLocaleString()}
+                                            </td>
+                                        </tr>
+
+                                        {/* 3. Actual */}
+                                        <tr className="hover:bg-gray-50/30">
+                                            <td className="p-2 border-r font-bold">実績</td>
+                                            {rowData.map(r => (
+                                                <td key={`actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold">
+                                                    {r.actual.toLocaleString()}
+                                                </td>
+                                            ))}
+                                            <td className="p-2 text-right border-l tabular-nums font-bold">
+                                                {totalActual.toLocaleString()}
+                                            </td>
+                                        </tr>
+
+                                        {/* 4. Achievement Rate */}
+                                        <tr className="hover:bg-gray-50/30">
+                                            <td className="p-2 border-r text-xs">目標達成率 (%)</td>
+                                            {rowData.map(r => {
+                                                const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
+                                                return (
+                                                    <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${rate >= 100 ? 'text-green-600 font-bold' : ''}`}>
+                                                        {r.target > 0 ? formatPercent(rate) : '-'}
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="p-2 text-right border-l tabular-nums text-xs font-bold">
+                                                {totalTarget > 0 ? formatPercent((totalActual / totalTarget) * 100) : '-'}
+                                            </td>
+                                        </tr>
+
+                                        {/* 5. YoY Growth */}
+                                        <tr className="border-b-2 border-gray-300 hover:bg-gray-50/30">
+                                            <td className="p-2 border-r text-xs">前年度対比 (%)</td>
+                                            {rowData.map(r => {
+                                                const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
+                                                // Only show if actual > 0 (to avoid 0% when data not yet in)
+                                                return (
+                                                    <td key={`yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
+                                                        {r.actual > 0 && r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="p-2 text-right border-l tabular-nums text-xs font-bold">
+                                                {totalLastYear > 0 ? formatPercent((totalActual / totalLastYear) * 100) : '-'}
+                                            </td>
+                                        </tr>
+                                    </React.Fragment>
                                 );
                             })}
 
-                            {/* Total Row */}
-                            <tr className="bg-gray-100/50 font-bold border-t-2 border-gray-200">
-                                <td className="p-3 border-r">合計</td>
-                                {data.total.map(r => (
-                                    <td key={r.month} className="p-3 text-right border-l tabular-nums">
-                                        {r.actual.toLocaleString()}
-                                    </td>
-                                ))}
-                                <td className="p-3 text-right border-l tabular-nums">
-                                    {summaryMetrics.totalActual.toLocaleString()}
-                                </td>
-                            </tr>
+                            {/* Grand Total Block */}
+                            {(() => {
+                                const totalRowData = data.total;
+                                const grandTotalActual = totalRowData.reduce((sum, r) => sum + r.actual, 0);
+                                const grandTotalTarget = totalRowData.reduce((sum, r) => sum + r.target, 0);
+                                const grandTotalLastYear = totalRowData.reduce((sum, r) => sum + r.lastYear, 0);
 
-                            {/* Target Row */}
-                            <tr className="text-gray-500 text-xs">
-                                <td className="p-3 border-r bg-gray-50/30">目標</td>
-                                {data.total.map(r => (
-                                    <td key={r.month} className="p-3 text-right border-l tabular-nums">
-                                        {r.target > 0 ? r.target.toLocaleString() : '-'}
-                                    </td>
-                                ))}
-                                <td className="p-3 text-right border-l tabular-nums">
-                                    {summaryMetrics.totalTarget.toLocaleString()}
-                                </td>
-                            </tr>
+                                return (
+                                    <React.Fragment key="total">
+                                        <tr className="bg-gray-100 border-t-2 border-gray-400">
+                                            <td className="p-3 font-bold border-r bg-gray-200" rowSpan={5} style={{ verticalAlign: 'top' }}>
+                                                総合計
+                                            </td>
+                                        </tr>
+                                        {/* 1. Last Year */}
+                                        <tr className="bg-gray-50/50">
+                                            <td className="p-2 border-r text-gray-500 text-xs text-right">前年度実績</td>
+                                            {totalRowData.map(r => (
+                                                <td key={`total-ly-${r.month}`} className="p-2 text-right border-l tabular-nums text-gray-500 font-medium">
+                                                    {r.lastYear.toLocaleString()}
+                                                </td>
+                                            ))}
+                                            <td className="p-2 text-right border-l tabular-nums font-bold text-gray-500">
+                                                {grandTotalLastYear.toLocaleString()}
+                                            </td>
+                                        </tr>
+                                        {/* 2. Target */}
+                                        <tr className="bg-gray-50/50">
+                                            <td className="p-2 border-r text-blue-800 font-medium text-right">今年度目標</td>
+                                            {totalRowData.map(r => (
+                                                <td key={`total-target-${r.month}`} className="p-2 text-right border-l tabular-nums text-blue-800 font-bold">
+                                                    {r.target.toLocaleString()}
+                                                </td>
+                                            ))}
+                                            <td className="p-2 text-right border-l tabular-nums font-bold text-blue-800">
+                                                {grandTotalTarget.toLocaleString()}
+                                            </td>
+                                        </tr>
+                                        {/* 3. Actual */}
+                                        <tr className="bg-gray-100/50">
+                                            <td className="p-2 border-r font-bold text-right">実績</td>
+                                            {totalRowData.map(r => (
+                                                <td key={`total-actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold text-lg">
+                                                    {r.actual.toLocaleString()}
+                                                </td>
+                                            ))}
+                                            <td className="p-2 text-right border-l tabular-nums font-bold text-lg">
+                                                {grandTotalActual.toLocaleString()}
+                                            </td>
+                                        </tr>
+                                        {/* 4. Rate */}
+                                        <tr className="bg-gray-50/50">
+                                            <td className="p-2 border-r text-xs text-right">目標達成率 (%)</td>
+                                            {totalRowData.map(r => {
+                                                const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
+                                                return (
+                                                    <td key={`total-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${rate >= 100 ? 'text-green-700 font-bold' : ''}`}>
+                                                        {r.target > 0 ? formatPercent(rate) : '-'}
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="p-2 text-right border-l tabular-nums text-xs font-bold">
+                                                {grandTotalTarget > 0 ? formatPercent((grandTotalActual / grandTotalTarget) * 100) : '-'}
+                                            </td>
+                                        </tr>
+                                        {/* 5. YoY */}
+                                        <tr className="border-b-4 border-double border-gray-400 bg-gray-50/50">
+                                            <td className="p-2 border-r text-xs text-right">前年度対比 (%)</td>
+                                            {totalRowData.map(r => {
+                                                const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
+                                                return (
+                                                    <td key={`total-yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
+                                                        {r.actual > 0 && r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="p-2 text-right border-l tabular-nums text-xs font-bold">
+                                                {grandTotalLastYear > 0 ? formatPercent((grandTotalActual / grandTotalLastYear) * 100) : '-'}
+                                            </td>
+                                        </tr>
+                                    </React.Fragment>
+                                );
+                            })()}
                         </tbody>
                     </table>
                 </div>

@@ -20,28 +20,61 @@ try {
     log('Row 1: ' + JSON.stringify(data[1]));
     log('Row 2: ' + JSON.stringify(data[2]));
 
-    // Find Manufacturing
-    log('--- Manufacturing Rows ---');
+    // Find "Sales Activity"
+    log('--- Sales Activity Rows ---');
     data.forEach((row: any, index: number) => {
         const rowStr = JSON.stringify(row);
-        if (rowStr.includes('商品製造')) {
-            log(`Row ${index} [Index]: ${rowStr}`);
-            // Print next few rows
-            for (let i = 1; i <= 5; i++) {
-                log(`Row ${index + i} [+${i}]: ${JSON.stringify(data[index + i])}`);
-            }
-        }
-        // Find Sales Activity if present
-        if (rowStr.includes('営業活動') || rowStr.includes('獲得')) {
-            log(`Row ${index} [SalesActivity]: ${rowStr}`);
-            for (let i = 1; i <= 3; i++) {
+        if (rowStr.includes('営業活動')) {
+            log(`Row ${index} [SalesActivity Start]: ${rowStr}`);
+            for (let i = 1; i <= 10; i++) {
                 log(`Row ${index + i} [+${i}]: ${JSON.stringify(data[index + i])}`);
             }
         }
     });
 
-    fs.writeFileSync('analysis_output.txt', output);
-    console.log('Analysis written to analysis_output.txt');
+    // Find Main Table Structure (look for channel names)
+    const channels = ['通販', '卸', '会津ブランド館', '食のブランド館'];
+    log('--- Main Table Structure ---');
+    data.forEach((row: any, index: number) => {
+        const rowStr = JSON.stringify(row);
+        for (const c of channels) {
+            if (rowStr.includes(c)) {
+                log(`[Channel Found: ${c}] Row ${index}: ${rowStr}`);
+                // Print next 5 rows to see metric structure (Target, Actual, Last Year)
+                for (let i = 1; i <= 5; i++) {
+                    log(`Row ${index + i} [+${i}]: ${JSON.stringify(data[index + i])}`);
+                }
+            }
+        }
+    });
+
+    // Dump rows 19-25 to find Wholesale
+    log('--- Wholesale Verification (Rows 19-25) ---');
+    for (let i = 19; i <= 25; i++) {
+        if (data[i]) {
+            log(`Row ${i}: ${JSON.stringify(data[i])}`);
+        }
+    }
+
+    // Dump rows 30-70 to find Sales Activity and Wholesale
+    log('--- Rows 30-70 Dump ---');
+    for (let i = 30; i < 70; i++) {
+        if (data[i]) {
+            log(`Row ${i}: ${JSON.stringify(data[i])}`);
+        }
+    }
+
+    // Explicit search for Wholesale
+    log('--- Wholesale Search ---');
+    data.forEach((row: any, index: number) => {
+        const rowStr = JSON.stringify(row);
+        if (rowStr.includes('卸')) {
+            log(`[Wholesale Found] Row ${index}: ${rowStr}`);
+        }
+    });
+
+    fs.writeFileSync('analysis_output_debug.txt', output);
+    console.log('Analysis written to analysis_output_debug.txt');
 
 } catch (error) {
     console.error(error);

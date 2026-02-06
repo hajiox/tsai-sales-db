@@ -90,13 +90,14 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
     const storeMap = new Map(storeRows.map(r => [r.month, Number(r.amount)]));
     const shokuMap = new Map(shokuRows.map(r => [r.month, Number(r.amount)]));
 
-    // Lookup Maps - Manual Entries (Targets, Acquisition, Manufacturing)
+    // Lookup Maps - Manual Entries (Targets, Acquisition, Manufacturing, Historical)
     const targetMap = new Map();
     const acquisitionTargetMap = new Map();
     const acquisitionActualMap = new Map();
     // Manufacturing
     const manufacturingTargetMap = new Map();
     const manufacturingActualMap = new Map();
+    const historicalActualMap = new Map(); // key: channel_month
 
 
     manualRows.forEach(r => {
@@ -110,6 +111,8 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
         manufacturingTargetMap.set(r.month, r.amount);
       } else if (r.metric === 'manufacturing_actual') {
         manufacturingActualMap.set(r.month, r.amount);
+      } else if (r.metric === 'historical_actual') {
+        historicalActualMap.set(`${r.channel}_${r.month}`, r.amount);
       }
     });
 
@@ -131,11 +134,15 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
         const lastYearMonth = format(subYears(parseISO(month), 1), 'yyyy-MM-01');
         const twoYearsAgoMonth = format(subYears(parseISO(month), 2), 'yyyy-MM-01');
 
+        // Priority: Seeded historical data > Calculated from sales_v1
+        const seededHist = historicalActualMap.get(`${channel}_${lastYearMonth}`);
+        const lastYearAmount = seededHist !== undefined ? seededHist : getAmount(channel, lastYearMonth);
+
         return {
           month,
           actual: getAmount(channel, month),
           target: targetMap.get(`${channel}_${month}`) || 0,
-          lastYear: getAmount(channel, lastYearMonth),
+          lastYear: lastYearAmount,
           twoYearsAgo: getAmount(channel, twoYearsAgoMonth),
         };
       });
