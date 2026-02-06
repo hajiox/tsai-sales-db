@@ -117,7 +117,7 @@ export function KpiChannelChart({ data, fiscalYear }: KpiChartsProps) {
                             <Legend />
                             <Bar stackId="a" dataKey="WEB" name="Web" fill="#8b5cf6" />
                             <Bar stackId="a" dataKey="WHOLESALE" name="卸・OEM" fill="#f59e0b" />
-                            <Bar stackId="a" dataKey="STORE" name="店舗" fill="#ec4899" />
+                            <Bar stackId="a" dataKey="STORE" name="会津ブランド館" fill="#ec4899" />
                             <Bar stackId="a" dataKey="SHOKU" name="食のブランド館" fill="#06b6d4" />
                         </BarChart>
                     </ResponsiveContainer>

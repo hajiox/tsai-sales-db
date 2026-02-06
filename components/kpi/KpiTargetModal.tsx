@@ -20,7 +20,7 @@ interface KpiTargetModalProps {
 const CHANNELS = [
     { code: 'WEB', label: 'WEB販売' },
     { code: 'WHOLESALE', label: '卸・OEM' },
-    { code: 'STORE', label: '店舗（会津）' },
+    { code: 'STORE', label: '会津ブランド館' },
     { code: 'SHOKU', label: '道の駅（食）' },
 ];
 
@@ -41,20 +41,35 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
         if (isOpen) {
             // Initialize form data from initialData
             const newForm: any = {};
+            // Channel Sales
             CHANNELS.forEach(c => {
                 months.forEach(m => {
                     const key = `${c.code}_${m}`;
                     newForm[key] = initialData[key] ? initialData[key].toString() : '';
                 });
             });
+            // Acquisition
+            months.forEach(m => {
+                // We need to fetch acquisition data?
+                // `initialData` comes from props. `KpiPageClient` passes it.
+                // We need to ensure `KpiPageClient` passes the full map including acquisitions.
+                // Assuming `initialData` will contain keys like "acquisition_target_2025-08-01".
+                // I need to update KpiPageClient to pass this data.
+                // For now, let's assume it does.
+                const targetKey = `acquisition_target_${m}`;
+                const actualKey = `acquisition_actual_${m}`;
+                newForm[targetKey] = initialData[targetKey] ? initialData[targetKey].toString() : '';
+                newForm[actualKey] = initialData[actualKey] ? initialData[actualKey].toString() : '';
+            });
+
             setFormData(newForm);
         }
     }, [isOpen, fiscalYear, initialData]);
 
-    const handleChange = (channel: string, month: string, value: string) => {
+    const handleChange = (key: string, value: string) => {
         // Allow only numbers
         if (value && !/^\d*$/.test(value)) return;
-        setFormData(prev => ({ ...prev, [`${channel}_${month}`]: value }));
+        setFormData(prev => ({ ...prev, [key]: value }));
     };
 
     const handleSave = async () => {
@@ -62,17 +77,44 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
         try {
             const promises = [];
             for (const [key, value] of Object.entries(formData)) {
-                const [channel, month] = key.split('_');
-                const amount = value ? parseInt(value) : 0;
+                const parts = key.split('_');
+                // Format: channel_month OR 'acquisition' (metric)_metricType_month
+                // Actually my logic for key generation below needs to be consistent.
+                // Let's use:
+                // Channel sales: "WEB_2025-08-01"
+                // Sales Activity: "acquisition_target_2025-08-01" or "acquisition_actual_2025-08-01"
 
-                // Only save if different from initial or valid amount
-                // But for simplicity, we save all non-empty or if it overwrites validation
-                // Actually, we should just save everything that looks like a number
+                let metric = 'target';
+                let channel = '';
+                let month = '';
+                let amount = value ? parseInt(value) : 0;
 
-                // Optimize: Check if changed? 
-                // For now, let's just save all non-empty entries to ensure consistency
+                if (key.startsWith('acquisition')) {
+                    // key: acquisition_target_2025-08-01
+                    const [_, type, m] = key.split('_'); // this split is unsafe if date has hyphens...
+                    // Better split:
+                    // acquisition_target_yyyy-mm-01
+                    const mIndex = key.lastIndexOf('_', key.lastIndexOf('_') - 1); // Not quite right.
+
+                    // Actually, let's stick to explicit parsing.
+                    if (key.startsWith('acquisition_target_')) {
+                        metric = 'acquisition_target';
+                        month = key.replace('acquisition_target_', '');
+                        channel = 'SALES_TEAM';
+                    } else if (key.startsWith('acquisition_actual_')) {
+                        metric = 'acquisition_actual';
+                        month = key.replace('acquisition_actual_', '');
+                        channel = 'SALES_TEAM';
+                    }
+                } else {
+                    // standard channel sales
+                    const [c, m] = key.split('_');
+                    channel = c;
+                    month = m;
+                }
+
                 if (value !== '') {
-                    promises.push(saveKpiTarget({ channel, month, amount }));
+                    promises.push(saveKpiTarget({ metric, channel, month, amount }));
                 }
             }
 
@@ -95,38 +137,83 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
                 </DialogHeader>
 
                 <div className="flex-1 overflow-auto py-4">
-                    <table className="w-full border-collapse">
-                        <thead className="sticky top-0 bg-white z-10 shadow-sm">
-                            <tr>
-                                <th className="p-2 border text-left bg-gray-50 font-medium text-sm min-w-[150px]">月</th>
-                                {CHANNELS.map(c => (
-                                    <th key={c.code} className="p-2 border text-left bg-gray-50 font-medium text-sm min-w-[120px]">
-                                        {c.label}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {months.map(month => {
-                                const dateLabel = format(new Date(month), 'yyyy年M月');
-                                return (
-                                    <tr key={month}>
-                                        <td className="p-2 border bg-gray-50 text-sm font-medium">{dateLabel}</td>
+                    <div className="space-y-4">
+                        {/* 1. Sales Targets */}
+                        <div className="rounded-md border">
+                            <table className="w-full border-collapse">
+                                <thead className="sticky top-0 bg-white z-10 shadow-sm">
+                                    <tr>
+                                        <th className="p-2 border text-left bg-gray-50 font-medium text-sm min-w-[150px]">月（売上目標）</th>
                                         {CHANNELS.map(c => (
-                                            <td key={`${c.code}_${month}`} className="p-2 border">
-                                                <Input
-                                                    className="h-8 text-right"
-                                                    value={formData[`${c.code}_${month}`] || ''}
-                                                    onChange={(e) => handleChange(c.code, month, e.target.value)}
-                                                    placeholder="0"
-                                                />
-                                            </td>
+                                            <th key={c.code} className="p-2 border text-left bg-gray-50 font-medium text-sm min-w-[120px]">
+                                                {c.label}
+                                            </th>
                                         ))}
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                </thead>
+                                <tbody>
+                                    {months.map(month => {
+                                        const dateLabel = format(new Date(month), 'yyyy年M月');
+                                        return (
+                                            <tr key={month}>
+                                                <td className="p-2 border bg-gray-50 text-sm font-medium">{dateLabel}</td>
+                                                {CHANNELS.map(c => (
+                                                    <td key={`${c.code}_${month}`} className="p-2 border">
+                                                        <Input
+                                                            className="h-8 text-right"
+                                                            value={formData[`${c.code}_${month}`] || ''}
+                                                            onChange={(e) => handleChange(`${c.code}_${month}`, e.target.value)}
+                                                            placeholder="0"
+                                                        />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* 2. Sales Activities (Acquisition) */}
+                        <div className="rounded-md border mt-8">
+                            <div className="p-2 bg-gray-100 font-bold text-sm">営業活動（新規・OEM獲得数）</div>
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr>
+                                        <th className="p-2 border text-left bg-gray-50 font-medium text-sm min-w-[150px]">月</th>
+                                        <th className="p-2 border text-left bg-gray-50 font-medium text-sm">目標件数</th>
+                                        <th className="p-2 border text-left bg-gray-50 font-medium text-sm">実績件数</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {months.map(month => {
+                                        const dateLabel = format(new Date(month), 'yyyy年M月');
+                                        return (
+                                            <tr key={month}>
+                                                <td className="p-2 border bg-gray-50 text-sm font-medium">{dateLabel}</td>
+                                                <td className="p-2 border">
+                                                    <Input
+                                                        className="h-8 text-right"
+                                                        value={formData[`acquisition_target_${month}`] || ''}
+                                                        onChange={(e) => handleChange(`acquisition_target_${month}`, e.target.value)}
+                                                        placeholder="0"
+                                                    />
+                                                </td>
+                                                <td className="p-2 border">
+                                                    <Input
+                                                        className="h-8 text-right"
+                                                        value={formData[`acquisition_actual_${month}`] || ''}
+                                                        onChange={(e) => handleChange(`acquisition_actual_${month}`, e.target.value)}
+                                                        placeholder="0"
+                                                    />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <DialogFooter>
@@ -140,3 +227,4 @@ export default function KpiTargetModal({ isOpen, onClose, fiscalYear, initialDat
         </Dialog>
     );
 }
+

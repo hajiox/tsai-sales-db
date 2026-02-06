@@ -124,10 +124,11 @@ export async function GET() {
       $$ LANGUAGE plpgsql SECURITY DEFINER;
     `);
 
-    // 5. Targets Fetching (SECURITY DEFINER to bypass kpi schema restrictions)
+    // 5. Manual Entries Fetching (Targets & Acquisitions)
     await client.query(`
-      CREATE OR REPLACE FUNCTION get_kpi_targets(start_date text, end_date text)
+      CREATE OR REPLACE FUNCTION get_kpi_manual_entries(start_date text, end_date text)
       RETURNS TABLE (
+        metric text,
         channel_code text,
         month text,
         amount numeric
@@ -135,12 +136,12 @@ export async function GET() {
       BEGIN
         RETURN QUERY
         SELECT 
+          k.metric,
           k.channel_code,
           to_char(k.month, 'YYYY-MM-01')::text as month,
           COALESCE(k.amount, 0)::numeric as amount
         FROM kpi_manual_entries_v1 k
-        WHERE k.metric = 'target'
-          AND k.month >= CAST(start_date AS DATE) 
+        WHERE k.month >= CAST(start_date AS DATE) 
           AND k.month < CAST(end_date AS DATE);
       END;
       $$ LANGUAGE plpgsql SECURITY DEFINER;

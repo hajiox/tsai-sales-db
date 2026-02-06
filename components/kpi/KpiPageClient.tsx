@@ -41,17 +41,26 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
 
     // Prepare initial data for modal
     const modalInitialData: { [key: string]: number } = {};
+
+    // 1. Channel Sales Targets
     data.total.forEach(row => {
-        // We need to iterate channels. data.channels has the data.
         const channels: ChannelCode[] = ['WEB', 'WHOLESALE', 'STORE', 'SHOKU'];
         channels.forEach(c => {
-            // Find the row for this month in the channel data
             const channelRow = data.channels[c].find(r => r.month === row.month);
             if (channelRow) {
                 modalInitialData[`${c}_${row.month}`] = channelRow.target;
             }
         });
     });
+
+    // 2. Sales Activity (Acquisition)
+    // We expect data.salesActivity to be present (it was added to KpiSummary interface)
+    if (data.salesActivity) {
+        data.salesActivity.forEach(row => {
+            modalInitialData[`acquisition_target_${row.month}`] = row.target;
+            modalInitialData[`acquisition_actual_${row.month}`] = row.actual;
+        });
+    }
 
     return (
         <div className="space-y-4">
@@ -173,7 +182,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                             {(['WEB', 'WHOLESALE', 'STORE', 'SHOKU'] as ChannelCode[]).map(channel => {
                                 const label = channel === 'WEB' ? 'Web販売' :
                                     channel === 'WHOLESALE' ? '卸・OEM' :
-                                        channel === 'STORE' ? '店舗' : '食のブランド館';
+                                        channel === 'STORE' ? '会津ブランド館' : '食のブランド館';
                                 const rowData = data.channels[channel];
                                 const channelTotal = rowData.reduce((sum, r) => sum + r.actual, 0);
 
@@ -221,6 +230,54 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                     </table>
                 </div>
             </div>
+
+            {/* Sales Activity Table */}
+            {data.salesActivity && data.salesActivity.length > 0 && (
+                <div className="mt-8">
+                    <h3 className="text-lg font-medium mb-4">営業活動実績（新規・OEM獲得数）</h3>
+                    <div className="overflow-x-auto border rounded-md">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-orange-50 text-gray-700 font-semibold">
+                                <tr>
+                                    <th className="p-3 min-w-[120px]">項目 / 月</th>
+                                    {data.months.map(m => (
+                                        <th key={m} className="p-3 text-right bg-white min-w-[100px] border-l">
+                                            {new Date(m).getMonth() + 1}月
+                                        </th>
+                                    ))}
+                                    <th className="p-3 text-right bg-orange-50 border-l min-w-[120px]">合計</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {/* Target Row */}
+                                <tr className="hover:bg-gray-50/50">
+                                    <td className="p-3 font-medium border-r bg-gray-50/30">新規・OEM 目標件数</td>
+                                    {data.salesActivity.map(r => (
+                                        <td key={`target-${r.month}`} className="p-3 text-right border-l tabular-nums text-blue-600">
+                                            {r.target > 0 ? r.target : '-'}
+                                        </td>
+                                    ))}
+                                    <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
+                                        {data.salesActivity.reduce((sum, r) => sum + r.target, 0)}
+                                    </td>
+                                </tr>
+                                {/* Actual Row */}
+                                <tr className="hover:bg-gray-50/50">
+                                    <td className="p-3 font-medium border-r bg-gray-50/30">実績</td>
+                                    {data.salesActivity.map(r => (
+                                        <td key={`actual-${r.month}`} className="p-3 text-right border-l tabular-nums font-bold">
+                                            {r.actual}
+                                        </td>
+                                    ))}
+                                    <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
+                                        {data.salesActivity.reduce((sum, r) => sum + r.actual, 0)}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

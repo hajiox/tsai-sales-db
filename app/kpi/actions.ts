@@ -25,6 +25,11 @@ export interface KpiSummary {
     [key in ChannelCode]: MonthlyKpiData[];
   };
   total: MonthlyKpiData[];
+  salesActivity: {
+    month: string;
+    target: number;
+    actual: number;
+  }[];
 }
 
 // ----------------------------------------------------------------------
@@ -65,7 +70,7 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
   const queryEnd = endCurrent;
 
   try {
-    const [webRows, wholesaleRows, storeRows, shokuRows, targetRows] = await Promise.all([
+    const [webRows, wholesaleRows, storeRows, shokuRows, manualRows] = await Promise.all([
       fetchWebSalesRPC(queryStart, queryEnd),
       fetchWholesaleSalesRPC(queryStart, queryEnd),
       fetchStoreSalesRPC(queryStart, queryEnd),
@@ -73,12 +78,27 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
       fetchTargets(queryStart, queryEnd)
     ]);
 
-    // Lookup Maps
+    // Lookup Maps - Sales
     const webMap = new Map(webRows.map(r => [r.month, Number(r.amount)]));
     const wholesaleMap = new Map(wholesaleRows.map(r => [r.month, Number(r.amount)]));
     const storeMap = new Map(storeRows.map(r => [r.month, Number(r.amount)]));
     const shokuMap = new Map(shokuRows.map(r => [r.month, Number(r.amount)]));
-    const targetMap = new Map(targetRows.map(r => [`${r.channel}_${r.month}`, r.amount]));
+
+    // Lookup Maps - Manual Entries (Targets & Acquisition)
+    // Filter manualRows by metric
+    const targetMap = new Map();
+    const acquisitionTargetMap = new Map();
+    const acquisitionActualMap = new Map();
+
+    manualRows.forEach(r => {
+      if (r.metric === 'target') {
+        targetMap.set(`${r.channel}_${r.month}`, r.amount);
+      } else if (r.metric === 'acquisition_target') {
+        acquisitionTargetMap.set(r.month, r.amount);
+      } else if (r.metric === 'acquisition_actual') {
+        acquisitionActualMap.set(r.month, r.amount);
+      }
+    });
 
     const getAmount = (channel: ChannelCode, month: string) => {
       switch (channel) {
@@ -119,11 +139,18 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
       };
     });
 
+    const salesActivity = fyMonths.map(month => ({
+      month,
+      target: acquisitionTargetMap.get(month) || 0,
+      actual: acquisitionActualMap.get(month) || 0
+    }));
+
     return {
       fiscalYear,
       months: fyMonths,
       channels: resultChannels,
-      total
+      total,
+      salesActivity
     };
   } catch (error: any) {
     console.error('Data Fetch Error Details:', {
@@ -137,13 +164,13 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
   }
 }
 
-export async function saveKpiTarget(data: { channel: string, month: string, amount: number }) {
+export async function saveKpiTarget(data: { metric?: string, channel: string, month: string, amount: number }) {
   const supabase = getSupabase();
 
   const { error } = await supabase
     .from('kpi_manual_entries_v1')
     .upsert({
-      metric: 'target',
+      metric: data.metric || 'target',
       channel_code: data.channel,
       month: data.month,
       amount: data.amount,
@@ -204,14 +231,15 @@ async function fetchShokuSalesRPC(start: string, end: string) {
 async function fetchTargets(start: string, end: string) {
   const supabase = getSupabase();
 
-  const { data, error } = await supabase.rpc('get_kpi_targets', {
+  const { data, error } = await supabase.rpc('get_kpi_manual_entries', {
     start_date: start,
     end_date: end
   });
 
   if (error) throw error;
 
-  return (data as { channel_code: string, month: string, amount: number }[]).map(t => ({
+  return (data as { metric: string, channel_code: string, month: string, amount: number }[]).map(t => ({
+    metric: t.metric,
     channel: t.channel_code,
     month: t.month,
     amount: t.amount
