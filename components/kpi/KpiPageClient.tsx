@@ -1,13 +1,93 @@
+
 'use client';
 
-import { useRouter } from "next/navigation";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import KpiTargetModal from "./KpiTargetModal";
-import { KpiSummary, ChannelCode } from "@/app/kpi/actions";
+import { KpiSummary, ChannelCode, updateKpiEntry } from "@/app/kpi/actions";
+import { formatCurrency, formatPercent } from '@/lib/utils';
+
+// Inline Editable Component
+function EditableCell({
+    value,
+    type,
+    onSave
+}: {
+    value: number,
+    type: 'currency' | 'number',
+    onSave: (val: number) => Promise<void>
+}) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [localValue, setLocalValue] = useState(value.toString());
+    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        setLocalValue(value.toString());
+    }, [value]);
+
+    const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            await save();
+        } else if (e.key === 'Escape') {
+            setIsEditing(false);
+            setLocalValue(value.toString());
+        }
+    };
+
+    const save = async () => {
+        const newVal = parseFloat(localValue);
+        if (isNaN(newVal)) {
+            setLocalValue(value.toString());
+            setIsEditing(false);
+            return;
+        }
+
+        if (newVal === value) {
+            setIsEditing(false);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            await onSave(newVal);
+            setIsEditing(false);
+        } catch (error) {
+            console.error('Failed to save', error);
+            // Revert on error
+            setLocalValue(value.toString());
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    if (isEditing) {
+        return (
+            <input
+                type="number"
+                className="w-20 p-1 text-right border rounded text-sm"
+                value={localValue}
+                onChange={(e) => setLocalValue(e.target.value)}
+                onBlur={save}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                disabled={isLoading}
+            />
+        );
+    }
+
+    return (
+        <div
+            onClick={() => setIsEditing(true)}
+            className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-right ${isLoading ? 'opacity-50' : ''}`}
+        >
+            {type === 'currency' ? value.toLocaleString() : value}
+        </div>
+    );
+}
 
 interface KpiPageClientProps {
     fiscalYear: number;
@@ -26,16 +106,12 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
     const router = useRouter();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const formatCurrency = (val: number) => {
-        return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(val);
-    };
-
-    const formatPercent = (val: number) => {
-        return new Intl.NumberFormat('ja-JP', { style: 'percent', maximumFractionDigits: 1 }).format(val / 100);
-    };
-
     const handleYearChange = (val: string) => {
         router.push(`/kpi?year=${val}`);
+    };
+
+    const handleUpdate = async (channel: string, metric: string, month: string, amount: number) => {
+        await updateKpiEntry(channel, metric, month, amount);
     };
 
     // Prepare initial data for modal
@@ -52,8 +128,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
         });
     });
 
-    // 2. Sales Activity (Acquisition)
-    // We expect data.salesActivity to be present (it was added to KpiSummary interface)
+    // 2. Sales Activity
     if (data.salesActivity) {
         data.salesActivity.forEach(row => {
             modalInitialData[`acquisition_target_${row.month}`] = row.target;
@@ -109,18 +184,6 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">目標達成率</CardTitle>
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            className="h-4 w-4 text-muted-foreground"
-                        >
-                            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                        </svg>
                     </CardHeader>
                     <CardContent>
                         <div className={`text-2xl font-bold ${summaryMetrics.achievementRate >= 100 ? 'text-green-600' : 'text-yellow-600'}`}>
@@ -144,21 +207,6 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                         </p>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">前々年比</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-gray-700">
-                            {summaryMetrics.totalTwoYearsAgo > 0
-                                ? formatPercent((summaryMetrics.totalActual - summaryMetrics.totalTwoYearsAgo) / summaryMetrics.totalTwoYearsAgo * 100)
-                                : '-'}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            前々年実績: {formatCurrency(summaryMetrics.totalTwoYearsAgo)}
-                        </p>
-                    </CardContent>
-                </Card>
             </div>
 
             <KpiTargetModal
@@ -169,19 +217,21 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                 onSuccess={() => router.refresh()}
             />
 
-            <div className="mt-8">
-                <h3 className="text-lg font-medium mb-4">月次・部門別集計表</h3>
-                <div className="overflow-x-auto border rounded-md">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-100 text-gray-700 font-semibold">
+            {/* Main Table: Monthly/Departmental */}
+            <div>
+                <h2 className="text-xl font-bold mb-4">月次・部門別集計</h2>
+                <div className="overflow-x-auto border rounded-md shadow-sm">
+                    <table className="w-full text-sm text-left border-collapse">
+                        <thead className="bg-gray-100/80 text-gray-700 font-semibold sticky top-0">
                             <tr>
-                                <th className="p-3 min-w-[200px]">部門 / 月</th>
+                                <th className="p-3 border-r min-w-[200px] z-10 bg-gray-100/80 sticky left-0">部門 / 項目</th>
+                                <th className="p-3 border-r w-[100px] bg-gray-100/80">内訳</th>
                                 {data.months.map(m => (
-                                    <th key={m} className="p-3 text-right bg-white min-w-[100px] border-l">
+                                    <th key={m} className="p-3 text-right border-l bg-white min-w-[100px]">
                                         {new Date(m).getMonth() + 1}月
                                     </th>
                                 ))}
-                                <th className="p-3 text-right bg-gray-50 border-l min-w-[120px]">合計</th>
+                                <th className="p-3 text-right border-l bg-gray-100/80 min-w-[120px]">合計</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-300">
@@ -225,7 +275,11 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             <td className="p-2 border-r text-blue-600 font-medium text-right">今年度目標</td>
                                             {rowData.map(r => (
                                                 <td key={`target-${r.month}`} className="p-2 text-right border-l tabular-nums text-blue-600">
-                                                    {r.target > 0 ? r.target.toLocaleString() : '-'}
+                                                    <EditableCell
+                                                        value={r.target}
+                                                        type="currency"
+                                                        onSave={(val) => handleUpdate(channel, 'target', r.month, val)}
+                                                    />
                                                 </td>
                                             ))}
                                             <td className="p-2 text-right border-l tabular-nums font-bold text-blue-600">
@@ -238,7 +292,11 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             <td className="p-2 border-r font-bold text-right">実績</td>
                                             {rowData.map(r => (
                                                 <td key={`actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold">
-                                                    {r.actual.toLocaleString()}
+                                                    <EditableCell
+                                                        value={r.actual}
+                                                        type="currency"
+                                                        onSave={(val) => handleUpdate(channel, 'actual', r.month, val)}
+                                                    />
                                                 </td>
                                             ))}
                                             <td className="p-2 text-right border-l tabular-nums font-bold">

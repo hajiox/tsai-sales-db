@@ -276,3 +276,34 @@ async function fetchTargets(start: string, end: string) {
     amount: t.amount
   })) || [];
 }
+
+export async function updateKpiEntry(
+  channelCode: string,
+  metric: string,
+  month: string,
+  amount: number
+) {
+  const supabase = getSupabase(); // Use the existing helper
+
+  // 2. Upsert the entry
+  const { error } = await supabase
+    .from('kpi_manual_entries_v1')
+    .upsert({
+      channel_code: channelCode,
+      metric: metric,
+      month: month,
+      amount: amount,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'metric,channel_code,month'
+    });
+
+  if (error) {
+    console.error('Error updating KPI entry:', error);
+    throw new Error('Failed to update entry');
+  }
+
+  // 3. Revalidate cache
+  revalidatePath('/kpi');
+  return { success: true };
+}
