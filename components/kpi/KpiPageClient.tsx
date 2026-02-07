@@ -451,7 +451,11 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     <td className="p-3 font-medium border-r bg-gray-50/30 text-right">新規・OEM 目標件数</td>
                                     {data.salesActivity.map(r => (
                                         <td key={`target-${r.month}`} className="p-3 text-right border-l tabular-nums text-blue-600">
-                                            {r.target > 0 ? r.target : '-'}
+                                            <EditableCell
+                                                value={r.target}
+                                                type="number"
+                                                onSave={(val) => handleUpdate('SALES_TEAM', 'acquisition_target', r.month, val)}
+                                            />
                                         </td>
                                     ))}
                                     <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
@@ -463,7 +467,11 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     <td className="p-3 font-medium border-r bg-gray-50/30 text-right">実績</td>
                                     {data.salesActivity.map(r => (
                                         <td key={`actual-${r.month}`} className="p-3 text-right border-l tabular-nums font-bold">
-                                            {r.actual}
+                                            <EditableCell
+                                                value={r.actual}
+                                                type="number"
+                                                onSave={(val) => handleUpdate('SALES_TEAM', 'acquisition_actual', r.month, val)}
+                                            />
                                         </td>
                                     ))}
                                     <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
@@ -531,7 +539,11 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     <td className="p-3 font-medium border-r bg-gray-50/30 text-right">製造目標</td>
                                     {data.manufacturing.map(r => (
                                         <td key={`man-target-${r.month}`} className="p-3 text-right border-l tabular-nums text-blue-600">
-                                            {r.target > 0 ? r.target.toLocaleString() : '-'}
+                                            <EditableCell
+                                                value={r.target}
+                                                type="number"
+                                                onSave={(val) => handleUpdate('FACTORY', 'manufacturing_target', r.month, val)}
+                                            />
                                         </td>
                                     ))}
                                     <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
@@ -543,7 +555,11 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     <td className="p-3 font-medium border-r bg-gray-50/30 text-right">製造実績</td>
                                     {data.manufacturing.map(r => (
                                         <td key={`man-actual-${r.month}`} className="p-3 text-right border-l tabular-nums font-bold">
-                                            {r.actual.toLocaleString()}
+                                            <EditableCell
+                                                value={r.actual}
+                                                type="number"
+                                                onSave={(val) => handleUpdate('FACTORY', 'manufacturing_actual', r.month, val)}
+                                            />
                                         </td>
                                     ))}
                                     <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
