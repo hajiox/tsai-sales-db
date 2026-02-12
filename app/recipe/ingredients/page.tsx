@@ -148,7 +148,16 @@ export default function IngredientsPage() {
     const handleKeyDown = (e: React.KeyboardEvent, id: string, field: string) => {
         if (e.key === 'Enter' || e.key === 'Tab') {
             e.preventDefault();
-            setEditingCell(null);
+            const fields = activeTab === "food"
+                ? ['name', 'unit_quantity', 'price_incl_tax', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium', 'supplier']
+                : ['name', 'unit_quantity', 'price_incl_tax', 'supplier'];
+
+            const currentIndex = fields.indexOf(field);
+            if (currentIndex >= 0 && currentIndex < fields.length - 1) {
+                setEditingCell({ id, field: fields[currentIndex + 1] });
+            } else {
+                setEditingCell(null);
+            }
         }
         if (e.key === 'Escape') {
             setEditingCell(null);
@@ -301,7 +310,7 @@ export default function IngredientsPage() {
         return (
             <div
                 className={`${width} px-2 py-1 cursor-pointer hover:bg-blue-50 rounded ${ing.isModified ? 'bg-yellow-50' : ''}`}
-                onDoubleClick={() => handleCellDoubleClick(ing.id, field)}
+                onClick={() => handleCellDoubleClick(ing.id, field)}
             >
                 {displayValue || <span className="text-gray-300">-</span>}
             </div>

@@ -165,6 +165,8 @@ export default function RecipeDetailPage() {
                     .from('recipe_items')
                     .update({
                         item_name: item.item_name,
+                        unit_quantity: item.unit_quantity,
+                        unit_price: item.unit_price,
                         usage_amount: item.usage_amount,
                         cost: item.cost,
                     })
