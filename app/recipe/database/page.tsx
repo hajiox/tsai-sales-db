@@ -104,9 +104,23 @@ export default function DatabasePage() {
 
     const handleCellChange = async (id: string, field: string, value: string, type: "ingredient" | "material") => {
         const numericFields = ['unit_quantity', 'price', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
-        const parsedValue = numericFields.includes(field)
-            ? (value === '' ? null : parseFloat(value))
-            : value;
+        let parsedValue: any = value;
+
+        if (numericFields.includes(field)) {
+            if (value === '' || value === null) {
+                parsedValue = null;
+            } else {
+                const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
+                parsedValue = isNaN(num) ? null : num;
+            }
+        }
+
+        // 現在の値と比較して変更がなければスキップ
+        const currentList = type === "ingredient" ? ingredients : materials;
+        const currentItem = currentList.find(i => i.id === id);
+        if (currentItem && (currentItem as any)[field] === parsedValue) {
+            return;
+        }
 
         // 1. UI更新 (Optimistic)
         if (type === "ingredient") {
@@ -136,9 +150,15 @@ export default function DatabasePage() {
         setEditingCell(null);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent, id: string, field: string, type: "ingredient" | "material") => {
-        if (e.key === 'Enter' || e.key === 'Tab') {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, id: string, field: string, type: "ingredient" | "material") => {
+        if (e.key === 'Enter') {
             e.preventDefault();
+            const value = e.currentTarget.value;
+            handleCellChange(id, field, value, type);
+            setEditingCell(null);
+        }
+        if (e.key === 'Tab') {
+            // Tabは自然な挙動に任せるか、あるいはBlurと同様に処理
             setEditingCell(null);
         }
         if (e.key === 'Escape') {
@@ -251,10 +271,10 @@ export default function DatabasePage() {
                     defaultValue={displayValue}
                     onBlur={(e) => {
                         handleCellChange(item.id, field, e.target.value, type);
-                        handleCellBlur();
+                        setEditingCell(null);
                     }}
                     onKeyDown={(e) => handleKeyDown(e, item.id, field, type)}
-                    className={`${width} px-2 py-1 border border-blue-500 rounded text-sm focus:outline-none`}
+                    className="w-full h-full px-2 py-1 border border-blue-500 rounded text-sm focus:outline-none bg-white"
                 />
             );
         }
@@ -262,8 +282,8 @@ export default function DatabasePage() {
         const isModified = 'isModified' in item && item.isModified;
         return (
             <div
-                className={`${width} px-2 py-1 cursor-pointer hover:bg-blue-50 rounded ${isModified ? 'bg-yellow-50' : ''}`}
-                onClick={() => handleCellDoubleClick(item.id, field)}
+                className="w-full h-full px-2 py-1 cursor-pointer hover:bg-blue-50 rounded min-h-[1.5rem]"
+                onClick={() => setEditingCell({ id: item.id, field })}
             >
                 {displayValue || <span className="text-gray-300">-</span>}
             </div>
