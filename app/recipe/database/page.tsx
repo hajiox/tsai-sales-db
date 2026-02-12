@@ -1,5 +1,5 @@
 // app/recipe/database/page.tsx
-// 材料データベースページ（食材/資材/中間部品）
+// 材料データベースページ（食材/資材/中間部品） - Updated at 2026-02-12 15:28
 
 "use client";
 
