@@ -1,0 +1,8 @@
+﻿
+> my-v0-project@0.1.0 build
+> next build
+
+笆ｲ Next.js 16.1.5 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...

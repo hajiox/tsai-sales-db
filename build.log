@@ -1,0 +1,146 @@
+﻿
+> my-v0-project@0.1.0 build
+> next build
+
+node.exe : 笞 `eslint` config
+uration in next.config.mjs is
+ no longer supported. See mor
+e info here: https://nextjs.o
+rg/docs/app/api-reference/cli
+/next#next-lint-options
+発生場所 C:\Program Files\nodejs\
+npm.ps1:29 文字:3
++   & $NODE_EXE $NPM_CLI_JS $
+args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~
+    + CategoryInfo           
+   : NotSpecified: (笞 `esl  
+  int` con...xt-lint-optio   
+ ns:String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+笞 Invalid next.config.mjs op
+tions detected: 
+笞     Unrecognized key(s) in
+ object: 'eslint'
+笞 See more info here: https:
+//nextjs.org/docs/messages/in
+valid-next-config
+笆ｲ Next.js 16.1.5 (Turbopack)
+- Environments: .env.local
+
+笞 The "middleware" file conv
+ention is deprecated. Please 
+use "proxy" instead. Learn mo
+re: https://nextjs.org/docs/m
+essages/middleware-to-proxy
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed
+ with 1 errors:
+./app/recipe/import/page.tsx:
+10:1
+Module not found: Can't resol
+ve '@/components/ui/progress'
+[0m [90m  8 |[39m [36mimp
+ort[39m { [33mButton[39m }
+ [36mfrom[39m [32m"@/compo
+nents/ui/button"[39m[33m;[
+39m
+ [90m  9 |[39m [36mimport
+[39m { [33mCard[39m[33m,[
+39m [33mCardContent[39m[33
+m,[39m [33mCardHeader[39m
+[33m,[39m [33mCardTitle[39
+m } [36mfrom[39m [32m"@/co
+mponents/ui/card"[39m[33m;
+[39m
+[31m[1m>[22m[39m[90m 10 
+|[39m [36mimport[39m { [3
+3mProgress[39m } [36mfrom[
+39m [32m"@/components/ui/pro
+gress"[39m[33m;[39m
+ [90m    |[39m [31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m[31m[
+1m^[22m[39m
+ [90m 11 |[39m [36mimport
+[39m { [33mArrowLeft[39m[3
+3m,[39m [33mUpload[39m[33
+m,[39m [33mFileSpreadsheet
+[39m[33m,[39m [33mCheckCir
+cle[39m[33m,[39m [33mXCir
+cle[39m[33m,[39m [33mAler
+tCircle[39m } [36mfrom[39m
+ [32m"lucide-react"[39m[33
+m;[39m
+ [90m 12 |[39m
+ [90m 13 |[39m [36minterfa
+ce[39m [33mImportResult[39
+m {[0m
+
+Import map: aliased to relati
+ve './components/ui/progress'
+ inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./app/recipe/import/page.
+tsx [Client Component Browser
+]
+    ./app/recipe/import/page.
+tsx [Server Component]
+
+  Client Component SSR:
+    ./app/recipe/import/page.
+tsx [Client Component SSR]
+    ./app/recipe/import/page.
+tsx [Server Component]
+
+https://nextjs.org/docs/messa
+ges/module-not-found
+
+
+    at <unknown> (./app/recip
+e/import/page.tsx:10:1)
+    at <unknown> (https://nex
+tjs.org/docs/messages/module-
+not-found)
