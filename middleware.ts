@@ -9,7 +9,6 @@ const KPI_PASS_COOKIE = "kpi_pass_ok";
 export async function middleware(req: NextRequest) {
   const token = await getToken({ req });
   const isLoggedIn = token && token.email === "aizubrandhall@gmail.com";
-
   // ① まずは既存のログイン要件
   if (!isLoggedIn) {
     const loginUrl = new URL("/login", req.url);

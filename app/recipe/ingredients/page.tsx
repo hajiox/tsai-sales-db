@@ -192,7 +192,6 @@ export default function IngredientsPage() {
             name: "新規項目",
             category_id: defaultCategory?.id || null,
             unit_quantity: 1000,
-            item_type: activeTab,
         };
 
         const { data, error } = await supabase
