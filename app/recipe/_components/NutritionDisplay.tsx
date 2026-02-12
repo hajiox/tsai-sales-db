@@ -80,45 +80,15 @@ export default function NutritionDisplay({ items }: NutritionDisplayProps) {
             </CardHeader>
             <CardContent className="pt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* 1食あたり */}
+                    {/* 100gあたり (重要) */}
                     <div className="bg-slate-50 p-4 rounded-lg">
-                        <h4 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2 flex justify-between">
-                            <span>1食あたり</span>
-                            <span className="text-xs font-normal text-slate-500">総重量: 約{formatVal(totalRecipeWeight)}g</span>
-                        </h4>
-                        <dl className="space-y-2 text-sm">
-                            <div className="flex justify-between items-center">
-                                <dt className="text-slate-600">エネルギー</dt>
-                                <dd className="font-bold text-slate-900 text-lg">{formatVal(totalNutrition.calories)} <span className="text-xs font-normal text-slate-500">kcal</span></dd>
-                            </div>
-                            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
-                                <dt className="text-slate-600">タンパク質</dt>
-                                <dd className="font-medium text-slate-900">{formatVal(totalNutrition.protein)} <span className="text-xs font-normal text-slate-500">g</span></dd>
-                            </div>
-                            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
-                                <dt className="text-slate-600">脂質</dt>
-                                <dd className="font-medium text-slate-900">{formatVal(totalNutrition.fat)} <span className="text-xs font-normal text-slate-500">g</span></dd>
-                            </div>
-                            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
-                                <dt className="text-slate-600">炭水化物</dt>
-                                <dd className="font-medium text-slate-900">{formatVal(totalNutrition.carbohydrate)} <span className="text-xs font-normal text-slate-500">g</span></dd>
-                            </div>
-                            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
-                                <dt className="text-slate-600">食塩相当量</dt>
-                                <dd className="font-medium text-slate-900">{formatVal(totalNutrition.sodium)} <span className="text-xs font-normal text-slate-500">g</span></dd>
-                            </div>
-                        </dl>
-                    </div>
-
-                    {/* 100gあたり */}
-                    <div className="bg-white border p-4 rounded-lg">
                         <h4 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2">
                             100g あたり
                         </h4>
                         <dl className="space-y-2 text-sm">
                             <div className="flex justify-between items-center">
                                 <dt className="text-slate-600">エネルギー</dt>
-                                <dd className="font-bold text-slate-900">{totalRecipeWeight ? formatVal(totalNutrition.calories / totalRecipeWeight * 100) : 0} <span className="text-xs font-normal text-slate-500">kcal</span></dd>
+                                <dd className="font-bold text-slate-900 text-lg">{totalRecipeWeight ? formatVal(totalNutrition.calories / totalRecipeWeight * 100) : 0} <span className="text-xs font-normal text-slate-500">kcal</span></dd>
                             </div>
                             <div className="flex justify-between items-center border-t border-slate-100 pt-2">
                                 <dt className="text-slate-600">タンパク質</dt>
@@ -135,6 +105,36 @@ export default function NutritionDisplay({ items }: NutritionDisplayProps) {
                             <div className="flex justify-between items-center border-t border-slate-100 pt-2">
                                 <dt className="text-slate-600">食塩相当量</dt>
                                 <dd className="font-medium text-slate-900">{totalRecipeWeight ? formatVal(totalNutrition.sodium / totalRecipeWeight * 100) : 0} <span className="text-xs font-normal text-slate-500">g</span></dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    {/* 1食あたり */}
+                    <div className="bg-white border p-4 rounded-lg">
+                        <h4 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2 flex justify-between">
+                            <span>1食あたり</span>
+                            <span className="text-xs font-normal text-slate-500">総重量: 約{formatVal(totalRecipeWeight)}g</span>
+                        </h4>
+                        <dl className="space-y-2 text-sm">
+                            <div className="flex justify-between items-center">
+                                <dt className="text-slate-600">エネルギー</dt>
+                                <dd className="font-bold text-slate-900">{formatVal(totalNutrition.calories)} <span className="text-xs font-normal text-slate-500">kcal</span></dd>
+                            </div>
+                            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+                                <dt className="text-slate-600">タンパク質</dt>
+                                <dd className="font-medium text-slate-900">{formatVal(totalNutrition.protein)} <span className="text-xs font-normal text-slate-500">g</span></dd>
+                            </div>
+                            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+                                <dt className="text-slate-600">脂質</dt>
+                                <dd className="font-medium text-slate-900">{formatVal(totalNutrition.fat)} <span className="text-xs font-normal text-slate-500">g</span></dd>
+                            </div>
+                            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+                                <dt className="text-slate-600">炭水化物</dt>
+                                <dd className="font-medium text-slate-900">{formatVal(totalNutrition.carbohydrate)} <span className="text-xs font-normal text-slate-500">g</span></dd>
+                            </div>
+                            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+                                <dt className="text-slate-600">食塩相当量</dt>
+                                <dd className="font-medium text-slate-900">{formatVal(totalNutrition.sodium)} <span className="text-xs font-normal text-slate-500">g</span></dd>
                             </div>
                         </dl>
                     </div>
