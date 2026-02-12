@@ -13,20 +13,24 @@ try {
             const key = match[1].trim();
             const value = match[2].trim().replace(/^["']|["']$/g, '');
             process.env[key] = value;
+            console.log("Loaded key:", key);
         }
     });
 } catch (e) {
     console.log('Could not load .env.local', e);
 }
 
+console.log("DB URL (masked):", process.env.DATABASE_URL?.replace(/:[^:]*@/, ':***@'));
+
+
 // Inline db connection to avoid import issues
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('sslmode=disable') ? undefined : { rejectUnauthorized: false },
+    ssl: false,
 });
 
 async function main() {
-    const tables = ['wholesale_sales', 'oem_sales', 'brand_store_sales', 'food_store_sales', 'web_sales_summary'];
+    const tables = ['ingredients', 'ingredient_categories'];
 
     try {
         for (const table of tables) {

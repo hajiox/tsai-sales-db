@@ -102,38 +102,41 @@ export default function DatabasePage() {
         setEditingCell({ id, field });
     };
 
-    const handleCellChange = (id: string, field: string, value: string, type: "ingredient" | "material") => {
+    const handleCellChange = async (id: string, field: string, value: string, type: "ingredient" | "material") => {
+        const numericFields = ['unit_quantity', 'price', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
+        const parsedValue = numericFields.includes(field)
+            ? (value === '' ? null : parseFloat(value))
+            : value;
+
+        // 1. UI更新 (Optimistic)
         if (type === "ingredient") {
-            setIngredients(prev => prev.map(item => {
-                if (item.id === id) {
-                    const numericFields = ['unit_quantity', 'price', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
-                    const newValue = numericFields.includes(field)
-                        ? (value === '' ? null : parseFloat(value))
-                        : value;
-                    return { ...item, [field]: newValue, isModified: true };
-                }
-                return item;
-            }));
+            setIngredients(prev => prev.map(item =>
+                item.id === id ? { ...item, [field]: parsedValue } : item
+            ));
         } else {
-            setMaterials(prev => prev.map(item => {
-                if (item.id === id) {
-                    const numericFields = ['price'];
-                    const newValue = numericFields.includes(field)
-                        ? (value === '' ? null : parseFloat(value))
-                        : value;
-                    return { ...item, [field]: newValue, isModified: true };
-                }
-                return item;
-            }));
+            setMaterials(prev => prev.map(item =>
+                item.id === id ? { ...item, [field]: parsedValue } : item
+            ));
         }
-        setHasChanges(true);
+
+        // 2. DB更新
+        const table = type === "ingredient" ? "ingredients" : "materials";
+        const { error } = await supabase
+            .from(table)
+            .update({ [field]: parsedValue })
+            .eq('id', id);
+
+        if (error) {
+            console.error(`Update failed for ${table}:`, error);
+            toast.error(`保存失敗: ${error.message}`);
+        }
     };
 
     const handleCellBlur = () => {
         setEditingCell(null);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent, id: string, field: string, type: "ingredient" | "material") => {
         if (e.key === 'Enter' || e.key === 'Tab') {
             e.preventDefault();
             setEditingCell(null);
@@ -143,39 +146,49 @@ export default function DatabasePage() {
         }
     };
 
-    const addNewIngredient = () => {
-        const newItem: Ingredient = {
-            id: `new-${Date.now()}`,
-            name: "",
+    const addNewIngredient = async () => {
+        const newData = {
+            name: "新規項目",
             unit_quantity: 1000,
-            price: null,
-            calories: null,
-            protein: null,
-            fat: null,
-            carbohydrate: null,
-            sodium: null,
-            isNew: true,
-            isModified: true,
+            price: 0,
         };
-        setIngredients(prev => [newItem, ...prev]);
-        setHasChanges(true);
-        setEditingCell({ id: newItem.id, field: 'name' });
+
+        const { data, error } = await supabase
+            .from('ingredients')
+            .insert(newData)
+            .select()
+            .single();
+
+        if (error || !data) {
+            console.error("Add ingredient failed:", error);
+            toast.error(`追加失敗: ${error?.message || 'Unknown'}`);
+            return;
+        }
+
+        setIngredients(prev => [{ ...data, isNew: true }, ...prev]);
+        setEditingCell({ id: data.id, field: 'name' });
     };
 
-    const addNewMaterial = () => {
-        const newItem: Material = {
-            id: `new-${Date.now()}`,
-            name: "",
-            unit_quantity: null,
-            price: null,
-            supplier: null,
-            notes: null,
-            isNew: true,
-            isModified: true,
+    const addNewMaterial = async () => {
+        const newData = {
+            name: "新規資材",
+            price: 0,
         };
-        setMaterials(prev => [newItem, ...prev]);
-        setHasChanges(true);
-        setEditingCell({ id: newItem.id, field: 'name' });
+
+        const { data, error } = await supabase
+            .from('materials')
+            .insert(newData)
+            .select()
+            .single();
+
+        if (error || !data) {
+            console.error("Add material failed:", error);
+            toast.error(`追加失敗: ${error?.message || 'Unknown'}`);
+            return;
+        }
+
+        setMaterials(prev => [{ ...data, isNew: true }, ...prev]);
+        setEditingCell({ id: data.id, field: 'name' });
     };
 
     const deleteIngredient = async (id: string) => {
@@ -202,65 +215,8 @@ export default function DatabasePage() {
         }
     };
 
-    const saveChanges = async () => {
-        // 食材の保存
-        const modifiedIngredients = ingredients.filter(i => i.isModified);
-        for (const ing of modifiedIngredients) {
-            const data = {
-                name: ing.name,
-                unit_quantity: ing.unit_quantity,
-                price: ing.price,
-                calories: ing.calories,
-                protein: ing.protein,
-                fat: ing.fat,
-                carbohydrate: ing.carbohydrate,
-                sodium: ing.sodium,
-            };
-
-            if (ing.isNew) {
-                const { data: newData } = await supabase.from('ingredients').insert(data).select().single();
-                if (newData) {
-                    setIngredients(prev => prev.map(i =>
-                        i.id === ing.id ? { ...i, id: newData.id, isNew: false, isModified: false } : i
-                    ));
-                }
-            } else {
-                await supabase.from('ingredients').update(data).eq('id', ing.id);
-                setIngredients(prev => prev.map(i =>
-                    i.id === ing.id ? { ...i, isModified: false } : i
-                ));
-            }
-        }
-
-        // 資材の保存
-        const modifiedMaterials = materials.filter(m => m.isModified);
-        for (const mat of modifiedMaterials) {
-            const data = {
-                name: mat.name,
-                unit_quantity: mat.unit_quantity,
-                price: mat.price,
-                supplier: mat.supplier,
-                notes: mat.notes,
-            };
-
-            if (mat.isNew) {
-                const { data: newData } = await supabase.from('materials').insert(data).select().single();
-                if (newData) {
-                    setMaterials(prev => prev.map(m =>
-                        m.id === mat.id ? { ...m, id: newData.id, isNew: false, isModified: false } : m
-                    ));
-                }
-            } else {
-                await supabase.from('materials').update(data).eq('id', mat.id);
-                setMaterials(prev => prev.map(m =>
-                    m.id === mat.id ? { ...m, isModified: false } : m
-                ));
-            }
-        }
-
-        setHasChanges(false);
-        toast.success('保存しました');
-    };
+    // saveChanges logic is removed in favor of auto-save
+    const saveChanges = async () => { };
 
     // フィルタリング
     const filteredIngredients = ingredients.filter(i =>
@@ -297,7 +253,7 @@ export default function DatabasePage() {
                         handleCellChange(item.id, field, e.target.value, type);
                         handleCellBlur();
                     }}
-                    onKeyDown={handleKeyDown}
+                    onKeyDown={(e) => handleKeyDown(e, item.id, field, type)}
                     className={`${width} px-2 py-1 border border-blue-500 rounded text-sm focus:outline-none`}
                 />
             );
@@ -307,7 +263,7 @@ export default function DatabasePage() {
         return (
             <div
                 className={`${width} px-2 py-1 cursor-pointer hover:bg-blue-50 rounded ${isModified ? 'bg-yellow-50' : ''}`}
-                onDoubleClick={() => handleCellDoubleClick(item.id, field)}
+                onClick={() => handleCellDoubleClick(item.id, field)}
             >
                 {displayValue || <span className="text-gray-300">-</span>}
             </div>
@@ -344,12 +300,6 @@ export default function DatabasePage() {
                             新規追加
                         </Button>
                     )}
-                    {hasChanges && (
-                        <Button onClick={saveChanges}>
-                            <Save className="w-4 h-4 mr-2" />
-                            変更を保存
-                        </Button>
-                    )}
                 </div>
             </div>
 
@@ -365,8 +315,8 @@ export default function DatabasePage() {
                                 setSearchTerm("");
                             }}
                             className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-t border-l border-r rounded-t-lg -mb-px transition ${activeTab === tab.key
-                                    ? "bg-white border-gray-300 text-gray-900"
-                                    : "bg-gray-100 border-transparent text-gray-500 hover:text-gray-700"
+                                ? "bg-white border-gray-300 text-gray-900"
+                                : "bg-gray-100 border-transparent text-gray-500 hover:text-gray-700"
                                 }`}
                         >
                             <Icon className="w-4 h-4" />
