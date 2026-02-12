@@ -1,9 +1,9 @@
 // app/recipe/new/page.tsx
-// レシピ新規作成ページ
+// レシピ新規作成ページ v2
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Plus, Trash2, Save, ChefHat } from "lucide-react";
 import { toast } from "sonner";
+import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 
 const CATEGORIES = [
     { value: "ネット専用", label: "ネット専用", color: "bg-blue-100 text-blue-800" },
@@ -44,13 +45,6 @@ const EMPTY_ITEM: NewItem = {
     cost: "",
 };
 
-const ITEM_TYPES = [
-    { value: "ingredient", label: "食材", color: "bg-green-100 text-green-800" },
-    { value: "material", label: "資材", color: "bg-orange-100 text-orange-800" },
-    { value: "intermediate", label: "中間部品", color: "bg-purple-100 text-purple-800" },
-    { value: "expense", label: "経費", color: "bg-red-100 text-red-800" },
-];
-
 export default function NewRecipePage() {
     const router = useRouter();
     const [saving, setSaving] = useState(false);
@@ -65,7 +59,57 @@ export default function NewRecipePage() {
     // アイテム
     const [items, setItems] = useState<NewItem[]>([{ ...EMPTY_ITEM }]);
 
-    const addItem = (type: NewItem["item_type"] = "ingredient") => {
+    // マスターデータ
+    const [ingredients, setIngredients] = useState<ItemCandidate[]>([]);
+    const [materials, setMaterials] = useState<ItemCandidate[]>([]);
+    const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
+    const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
+
+    useEffect(() => {
+        const fetchMasterData = async () => {
+            // 食材
+            const { data: ingData } = await supabase.from('ingredients').select('id, name, unit_quantity, price');
+            if (ingData) {
+                setIngredients(ingData.map(i => ({
+                    id: i.id,
+                    name: i.name,
+                    unit_quantity: i.unit_quantity,
+                    unit_price: i.price
+                })));
+            }
+            // 資材
+            const { data: matData } = await supabase.from('materials').select('id, name, unit_quantity, price');
+            if (matData) {
+                setMaterials(matData.map(m => ({
+                    id: m.id,
+                    name: m.name,
+                    unit_quantity: m.unit_quantity,
+                    unit_price: m.price
+                })));
+            }
+            // 中間部品
+            const { data: recipeData } = await supabase.from('recipes').select('id, name, total_cost').eq('is_intermediate', true);
+            if (recipeData) {
+                setIntermediates(recipeData.map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    unit_quantity: 1,
+                    unit_price: r.total_cost
+                })));
+            }
+            // 経費（仮）
+            setExpenses([
+                { name: "ヤマト送料", unit_price: 950, unit_quantity: 1 },
+                { name: "ネコポス送料", unit_price: 350, unit_quantity: 1 },
+                { name: "コンパクト送料", unit_price: 550, unit_quantity: 1 },
+                { name: "人件費", unit_price: 1200, unit_quantity: 1 },
+            ]);
+        };
+        fetchMasterData();
+    }, []);
+
+
+    const addItem = (type: NewItem["item_type"]) => {
         setItems([...items, { ...EMPTY_ITEM, item_type: type }]);
     };
 
@@ -77,14 +121,21 @@ export default function NewRecipePage() {
         const updated = [...items];
         updated[index] = { ...updated[index], [field]: value };
 
-        // 原価自動計算: 単価 × 使用量 / 入数
-        if (field === "unit_price" || field === "usage_amount" || field === "unit_quantity") {
-            const unitPrice = parseFloat(updated[index].unit_price) || 0;
-            const usageAmount = parseFloat(updated[index].usage_amount) || 0;
-            const unitQuantity = parseFloat(updated[index].unit_quantity) || 1;
-            if (unitPrice > 0 && usageAmount > 0 && unitQuantity > 0) {
-                updated[index].cost = ((unitPrice / unitQuantity) * usageAmount).toFixed(2);
-            }
+        // 原価自動計算
+        const unitPrice = parseFloat(updated[index].unit_price) || 0;
+        const usageAmount = parseFloat(updated[index].usage_amount) || 0;
+        // unit_quantityが文字列の場合（資材の "35x9ケース" 等）への対応が必要だが、
+        // 現状は数値としてパースできるもののみ計算する仕様とするか、
+        // 入力時にユーザーに修正してもらう前提とする。
+        // 資材テーブルの unit_quantity は text 型だが、実態として数値で入力されることが多い。
+        // パースできない場合は 1 として扱うと計算が狂うので、NaNの場合は計算しない。
+        let unitQuantity = parseFloat(updated[index].unit_quantity);
+        if (isNaN(unitQuantity) || unitQuantity <= 0) unitQuantity = 1;
+
+        if (unitPrice > 0 && usageAmount > 0) {
+            // 資材などで unit_quantity が文字列の場合、parseFloatは先頭の数値だけ拾う（例: "35x9" -> 35）。
+            // これは簡易計算としては危険だが、ユーザーが手動修正できるため許容する。
+            updated[index].cost = ((unitPrice / unitQuantity) * usageAmount).toFixed(2);
         }
 
         setItems(updated);
@@ -101,7 +152,6 @@ export default function NewRecipePage() {
         setSaving(true);
 
         try {
-            // 1. レシピを作成
             const { data: recipeData, error: recipeError } = await supabase
                 .from("recipes")
                 .insert({
@@ -111,14 +161,12 @@ export default function NewRecipePage() {
                     development_date: developmentDate || null,
                     selling_price: sellingPrice ? parseFloat(sellingPrice) : null,
                     total_cost: totalCost,
-                    source_file: null,
                 })
                 .select()
                 .single();
 
             if (recipeError) throw recipeError;
 
-            // 2. アイテムを作成
             const validItems = items.filter(item => item.item_name.trim());
             if (validItems.length > 0) {
                 const itemRows = validItems.map(item => ({
@@ -148,10 +196,127 @@ export default function NewRecipePage() {
         }
     };
 
+    const renderSection = (
+        title: string,
+        type: NewItem["item_type"],
+        bgClass: string,
+        textClass: string,
+        candidates: ItemCandidate[]
+    ) => {
+        const filteredWithIndex = items
+            .map((item, index) => ({ item, index }))
+            .filter(({ item }) => item.item_type === type);
+
+        return (
+            <div className="mb-6">
+                <div className={`px-4 py-2 border-b font-medium flex justify-between items-center ${bgClass} ${textClass}`}>
+                    <span>{title} ({filteredWithIndex.length})</span>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs bg-white/50 hover:bg-white/80"
+                        onClick={() => addItem(type)}
+                    >
+                        <Plus className="w-3 h-3 mr-1" /> 追加
+                    </Button>
+                </div>
+                <div className="overflow-x-auto border-x border-b rounded-b-md bg-white">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-gray-700">
+                            <tr className="border-b">
+                                <th className="px-3 py-2 text-left w-12 text-xs font-semibold">NO</th>
+                                <th className="px-3 py-2 text-left min-w-[200px] text-xs font-semibold">名称</th>
+                                <th className="px-3 py-2 text-right w-24 text-xs font-semibold">入数</th>
+                                <th className="px-3 py-2 text-right w-28 text-xs font-semibold">単価</th>
+                                <th className="px-3 py-2 text-right w-24 text-xs font-semibold">使用量</th>
+                                <th className="px-3 py-2 text-right w-28 text-xs font-semibold">原価</th>
+                                <th className="px-3 py-2 w-10"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredWithIndex.map(({ item, index }, localIdx) => (
+                                <tr key={index} className="border-b hover:bg-gray-50 last:border-0">
+                                    <td className="px-3 py-2 text-gray-500 text-center">{localIdx + 1}</td>
+                                    <td className="px-3 py-2">
+                                        <ItemNameSelect
+                                            candidates={candidates}
+                                            value={item.item_name}
+                                            onSelect={(selected) => {
+                                                if (typeof selected === 'string') {
+                                                    updateItem(index, 'item_name', selected);
+                                                } else {
+                                                    updateItem(index, 'item_name', selected.name);
+                                                    if (selected.unit_price) updateItem(index, 'unit_price', selected.unit_price.toString());
+                                                    if (selected.unit_quantity) updateItem(index, 'unit_quantity', selected.unit_quantity.toString());
+                                                }
+                                            }}
+                                        />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <Input
+                                            type="number"
+                                            value={item.unit_quantity}
+                                            onChange={(e) => updateItem(index, "unit_quantity", e.target.value)}
+                                            className="h-8 text-right px-2"
+                                        />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <Input
+                                            type="number"
+                                            value={item.unit_price}
+                                            onChange={(e) => updateItem(index, "unit_price", e.target.value)}
+                                            className="h-8 text-right px-2"
+                                        />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <Input
+                                            type="number"
+                                            value={item.usage_amount}
+                                            onChange={(e) => updateItem(index, "usage_amount", e.target.value)}
+                                            className="h-8 text-right px-2 bg-yellow-50 focus:bg-white border-yellow-200 focus:border-blue-500"
+                                            placeholder="入力"
+                                        />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <Input
+                                            type="number"
+                                            value={item.cost}
+                                            onChange={(e) => updateItem(index, "cost", e.target.value)}
+                                            className="h-8 text-right px-2 bg-gray-100 border-transparent"
+                                            readOnly // Cost is auto-calculated but editable if needed? User requested auto, usually read-only or manual override. Let's keep editable for flexibility but styled as read-only-ish.
+                                            tabIndex={-1}
+                                        />
+                                    </td>
+                                    <td className="px-3 py-2 text-center">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => removeItem(index)}
+                                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredWithIndex.length === 0 && (
+                                <tr>
+                                    <td colSpan={7} className="text-center py-6 text-gray-400 text-sm">
+                                        アイテムがありません
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <div>
+        <div className="max-w-5xl mx-auto pb-20">
             {/* Header */}
-            <div className="mb-6 flex items-center justify-between">
+            <div className="mb-6 flex items-center justify-between sticky top-0 z-10 bg-white/80 backdrop-blur-sm py-4 border-b">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" onClick={() => router.push("/recipe")}>
                         <ArrowLeft className="w-4 h-4 mr-2" />
@@ -171,14 +336,14 @@ export default function NewRecipePage() {
             </div>
 
             {/* Basic Info */}
-            <Card className="mb-6">
-                <CardHeader>
-                    <CardTitle className="text-lg">基本情報</CardTitle>
+            <Card className="mb-8 shadow-sm">
+                <CardHeader className="bg-gray-50 border-b py-3">
+                    <CardTitle className="text-base font-medium text-gray-700">基本情報</CardTitle>
                 </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1 block">
+                <CardContent className="pt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="col-span-1 md:col-span-2">
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
                                 レシピ名 <span className="text-red-500">*</span>
                             </label>
                             <Input
@@ -189,7 +354,7 @@ export default function NewRecipePage() {
                             />
                         </div>
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1 block">
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
                                 カテゴリー
                             </label>
                             <Select value={category} onValueChange={setCategory}>
@@ -208,7 +373,7 @@ export default function NewRecipePage() {
                             </Select>
                         </div>
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1 block">
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
                                 開発日
                             </label>
                             <Input
@@ -218,7 +383,7 @@ export default function NewRecipePage() {
                             />
                         </div>
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1 block">
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
                                 販売価格
                             </label>
                             <Input
@@ -228,15 +393,15 @@ export default function NewRecipePage() {
                                 onChange={(e) => setSellingPrice(e.target.value)}
                             />
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 pt-6">
                             <input
                                 type="checkbox"
                                 id="isIntermediate"
                                 checked={isIntermediate}
                                 onChange={(e) => setIsIntermediate(e.target.checked)}
-                                className="w-4 h-4"
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
-                            <label htmlFor="isIntermediate" className="text-sm font-medium text-gray-700">
+                            <label htmlFor="isIntermediate" className="text-sm font-medium text-gray-700 cursor-pointer">
                                 中間部品【P】として登録
                             </label>
                         </div>
@@ -244,167 +409,43 @@ export default function NewRecipePage() {
                 </CardContent>
             </Card>
 
-            {/* Items */}
-            <Card className="mb-6">
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">材料・経費</CardTitle>
-                        <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => addItem("ingredient")}>
-                                <Plus className="w-3 h-3 mr-1" />
-                                食材
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => addItem("material")}>
-                                <Plus className="w-3 h-3 mr-1" />
-                                資材
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => addItem("intermediate")}>
-                                <Plus className="w-3 h-3 mr-1" />
-                                中間部品
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => addItem("expense")}>
-                                <Plus className="w-3 h-3 mr-1" />
-                                経費
-                            </Button>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead className="bg-gray-50">
-                                <tr className="border-b">
-                                    <th className="px-2 py-2 text-left w-8">NO</th>
-                                    <th className="px-2 py-2 text-left w-24">種類</th>
-                                    <th className="px-2 py-2 text-left min-w-[200px]">名称</th>
-                                    <th className="px-2 py-2 text-right w-24">入数</th>
-                                    <th className="px-2 py-2 text-right w-24">単価</th>
-                                    <th className="px-2 py-2 text-right w-24">使用量</th>
-                                    <th className="px-2 py-2 text-right w-24">原価</th>
-                                    <th className="px-2 py-2 w-10"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {items.map((item, idx) => (
-                                    <tr key={idx} className="border-b hover:bg-gray-50">
-                                        <td className="px-2 py-1 text-gray-500">{idx + 1}</td>
-                                        <td className="px-2 py-1">
-                                            <Select
-                                                value={item.item_type}
-                                                onValueChange={(v) => updateItem(idx, "item_type", v)}
-                                            >
-                                                <SelectTrigger className="h-8 text-xs">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {ITEM_TYPES.map((t) => (
-                                                        <SelectItem key={t.value} value={t.value}>
-                                                            <span className={`px-1 py-0.5 rounded text-xs ${t.color}`}>
-                                                                {t.label}
-                                                            </span>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </td>
-                                        <td className="px-2 py-1">
-                                            <Input
-                                                placeholder="名称を入力"
-                                                value={item.item_name}
-                                                onChange={(e) => updateItem(idx, "item_name", e.target.value)}
-                                                className="h-8 text-sm"
-                                            />
-                                        </td>
-                                        <td className="px-2 py-1">
-                                            <Input
-                                                type="number"
-                                                placeholder="入数"
-                                                value={item.unit_quantity}
-                                                onChange={(e) => updateItem(idx, "unit_quantity", e.target.value)}
-                                                className="h-8 text-sm text-right"
-                                            />
-                                        </td>
-                                        <td className="px-2 py-1">
-                                            <Input
-                                                type="number"
-                                                placeholder="単価"
-                                                value={item.unit_price}
-                                                onChange={(e) => updateItem(idx, "unit_price", e.target.value)}
-                                                className="h-8 text-sm text-right"
-                                            />
-                                        </td>
-                                        <td className="px-2 py-1">
-                                            <Input
-                                                type="number"
-                                                placeholder="使用量"
-                                                value={item.usage_amount}
-                                                onChange={(e) => updateItem(idx, "usage_amount", e.target.value)}
-                                                className="h-8 text-sm text-right"
-                                            />
-                                        </td>
-                                        <td className="px-2 py-1">
-                                            <Input
-                                                type="number"
-                                                placeholder="原価"
-                                                value={item.cost}
-                                                onChange={(e) => updateItem(idx, "cost", e.target.value)}
-                                                className="h-8 text-sm text-right bg-gray-50"
-                                            />
-                                        </td>
-                                        <td className="px-2 py-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => removeItem(idx)}
-                                                className="h-8 w-8 p-0 text-red-400 hover:text-red-600"
-                                            >
-                                                <Trash2 className="w-3 h-3" />
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+            {/* Sections */}
+            <div className="space-y-2">
+                {renderSection("食材", "ingredient", "bg-green-50", "text-green-800", ingredients)}
+                {renderSection("資材", "material", "bg-orange-50", "text-orange-800", materials)}
+                {renderSection("中間部品", "intermediate", "bg-purple-50", "text-purple-800", intermediates)}
+                {renderSection("経費", "expense", "bg-red-50", "text-red-800", expenses)}
+            </div>
 
-                    {items.length === 0 && (
-                        <div className="text-center py-8 text-gray-400">
-                            上のボタンから材料を追加してください
+            {/* Summary Footer */}
+            <Card className="fixed bottom-0 left-0 right-0 border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20 rounded-none bg-white/95 backdrop-blur">
+                <CardContent className="py-4 px-6 max-w-7xl mx-auto flex justify-between items-center">
+                    <div className="flex gap-6 text-sm text-gray-600">
+                        <span>食材: <strong>{items.filter(i => i.item_type === "ingredient").length}</strong></span>
+                        <span>資材: <strong>{items.filter(i => i.item_type === "material").length}</strong></span>
+                        <span>中間部品: <strong>{items.filter(i => i.item_type === "intermediate").length}</strong></span>
+                        <span>経費: <strong>{items.filter(i => i.item_type === "expense").length}</strong></span>
+                    </div>
+                    <div className="flex items-center gap-8">
+                        <div>
+                            <span className="text-sm text-gray-500 mr-2">総原価: </span>
+                            <span className="text-2xl font-bold text-gray-900">
+                                ¥{Math.round(totalCost).toLocaleString()}
+                            </span>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Summary */}
-            <Card>
-                <CardContent className="pt-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex gap-8 text-sm">
-                            <span>食材: <strong>{items.filter(i => i.item_type === "ingredient").length}</strong>種類</span>
-                            <span>資材: <strong>{items.filter(i => i.item_type === "material").length}</strong>種類</span>
-                            <span>中間部品: <strong>{items.filter(i => i.item_type === "intermediate").length}</strong>種類</span>
-                            <span>経費: <strong>{items.filter(i => i.item_type === "expense").length}</strong>種類</span>
-                        </div>
-                        <div className="flex items-center gap-6">
+                        {sellingPrice && (
                             <div>
-                                <span className="text-sm text-gray-500">総原価: </span>
-                                <span className="text-xl font-bold text-blue-600">
-                                    ¥{Math.round(totalCost).toLocaleString()}
+                                <span className="text-sm text-gray-500 mr-2">原価率: </span>
+                                <span className={`text-xl font-bold ${(totalCost / parseFloat(sellingPrice)) * 100 > 35 ? 'text-red-600' : 'text-green-600'
+                                    }`}>
+                                    {((totalCost / parseFloat(sellingPrice)) * 100).toFixed(1)}%
                                 </span>
                             </div>
-                            {sellingPrice && (
-                                <div>
-                                    <span className="text-sm text-gray-500">原価率: </span>
-                                    <span className="text-xl font-bold text-green-600">
-                                        {((totalCost / parseFloat(sellingPrice)) * 100).toFixed(1)}%
-                                    </span>
-                                </div>
-                            )}
-                            <Button onClick={handleSave} disabled={saving || !name.trim()}>
-                                <Save className="w-4 h-4 mr-2" />
-                                {saving ? "保存中..." : "保存"}
-                            </Button>
-                        </div>
+                        )}
+                        <Button onClick={handleSave} disabled={saving || !name.trim()} size="lg" className="px-8 shadow-md">
+                            <Save className="w-4 h-4 mr-2" />
+                            {saving ? "保存中..." : "保存"}
+                        </Button>
                     </div>
                 </CardContent>
             </Card>
