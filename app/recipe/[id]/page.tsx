@@ -127,16 +127,31 @@ export default function RecipeDetailPage() {
         setLoading(false);
     };
 
-    const handleItemChange = (index: number, field: string, value: string) => {
+    const handleItemChange = (itemId: string, field: string, value: string) => {
         const numericFields = ['unit_quantity', 'unit_price', 'usage_amount', 'cost'];
         const newValue = numericFields.includes(field)
-            ? (value === '' ? null : parseFloat(value))
+            ? (value === '' ? 0 : parseFloat(value))
             : value;
 
-        const newItems = [...items];
-        (newItems[index] as any)[field] = newValue;
+        setItems(prevItems => prevItems.map(item => {
+            if (item.id === itemId) {
+                const updatedItem = { ...item, [field]: newValue };
 
-        setItems(newItems);
+                // 原価再計算が必要な場合（経費以外）
+                // 使用量、入数、単価のいずれかが変更されたら再計算
+                if (['usage_amount', 'unit_quantity', 'unit_price'].includes(field) && item.item_type !== 'expense') {
+                    const usage = typeof updatedItem.usage_amount === 'number' ? updatedItem.usage_amount : 0;
+                    const qty = typeof updatedItem.unit_quantity === 'number' ? updatedItem.unit_quantity : 0;
+                    const price = typeof updatedItem.unit_price === 'number' ? updatedItem.unit_price : 0;
+
+                    if (qty !== 0) {
+                        updatedItem.cost = Math.round(usage * (price / qty));
+                    }
+                }
+                return updatedItem;
+            }
+            return item;
+        }));
         setHasChanges(true);
     };
 
@@ -363,9 +378,42 @@ export default function RecipeDetailPage() {
                                             <tr key={item.id} className="border-b hover:bg-gray-50">
                                                 <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
                                                 <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                                <td className="px-3 py-2 text-right">{formatNumber(item.unit_quantity, 0)}</td>
-                                                <td className="px-3 py-2 text-right">{formatCurrency(item.unit_price)}</td>
-                                                <td className="px-3 py-2 text-right">{formatNumber(item.usage_amount, 1)}</td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.unit_quantity || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'unit_quantity', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatNumber(item.unit_quantity, 0)
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.unit_price || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatCurrency(item.unit_price)
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.usage_amount || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatNumber(item.usage_amount, 1)
+                                                    )}
+                                                </td>
                                                 <td className="px-3 py-2 text-right">{formatCurrency(item.cost)}</td>
                                             </tr>
                                         ))}
@@ -396,9 +444,42 @@ export default function RecipeDetailPage() {
                                             <tr key={item.id} className="border-b hover:bg-gray-50">
                                                 <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
                                                 <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                                <td className="px-3 py-2 text-right">{formatNumber(item.unit_quantity, 0)}</td>
-                                                <td className="px-3 py-2 text-right">{formatCurrency(item.unit_price)}</td>
-                                                <td className="px-3 py-2 text-right">{formatNumber(item.usage_amount, 1)}</td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.unit_quantity || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'unit_quantity', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatNumber(item.unit_quantity, 0)
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.unit_price || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatCurrency(item.unit_price)
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.usage_amount || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatNumber(item.usage_amount, 1)
+                                                    )}
+                                                </td>
                                                 <td className="px-3 py-2 text-right">{formatCurrency(item.cost)}</td>
                                             </tr>
                                         ))}
@@ -429,9 +510,42 @@ export default function RecipeDetailPage() {
                                             <tr key={item.id} className="border-b hover:bg-gray-50">
                                                 <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
                                                 <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                                <td className="px-3 py-2 text-right">{formatNumber(item.unit_quantity, 0)}</td>
-                                                <td className="px-3 py-2 text-right">{formatCurrency(item.unit_price)}</td>
-                                                <td className="px-3 py-2 text-right">{formatNumber(item.usage_amount, 1)}</td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.unit_quantity || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'unit_quantity', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatNumber(item.unit_quantity, 0)
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.unit_price || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatCurrency(item.unit_price)
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.usage_amount || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatNumber(item.usage_amount, 1)
+                                                    )}
+                                                </td>
                                                 <td className="px-3 py-2 text-right">{formatCurrency(item.cost)}</td>
                                             </tr>
                                         ))}
@@ -459,7 +573,18 @@ export default function RecipeDetailPage() {
                                             <tr key={item.id} className="border-b hover:bg-gray-50">
                                                 <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
                                                 <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                                <td className="px-3 py-2 text-right">{formatCurrency(item.cost)}</td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.cost || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'cost', e.target.value)}
+                                                            className="w-24 text-right h-8 ml-auto"
+                                                        />
+                                                    ) : (
+                                                        formatCurrency(item.cost)
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
