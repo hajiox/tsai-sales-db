@@ -118,27 +118,46 @@ export default function IngredientsPage() {
         setEditingCell({ id, field });
     };
 
-    const handleCellChange = (id: string, field: string, value: string) => {
+    const handleCellChange = async (id: string, field: string, value: string) => {
+        const numericFields = ['unit_quantity', 'price_incl_tax', 'price_excl_tax', 'price_per_gram', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
+        const parsedValue = numericFields.includes(field)
+            ? (value === '' ? null : parseFloat(value))
+            : value;
+
+        // 計算用: 現在の状態を取得
+        const currentIng = ingredients.find(i => i.id === id);
+        let updates: any = { [field]: parsedValue };
+
+        if (currentIng) {
+            // 単価・入数変更時のg単価計算
+            if (field === 'price_incl_tax') {
+                const qty = currentIng.unit_quantity;
+                updates.price_per_gram = (parsedValue && qty) ? (parsedValue as number) / qty : null;
+            }
+            if (field === 'unit_quantity') {
+                const price = currentIng.price_incl_tax;
+                updates.price_per_gram = (price && parsedValue) ? price / (parsedValue as number) : null;
+            }
+        }
+
+        // 1. UI更新 (Optimistic)
         setIngredients(prev => prev.map(ing => {
             if (ing.id === id) {
-                const numericFields = ['unit_quantity', 'price_incl_tax', 'price_excl_tax', 'price_per_gram', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
-                const newValue = numericFields.includes(field)
-                    ? (value === '' ? null : parseFloat(value))
-                    : value;
-
-                let updates: any = { [field]: newValue, isModified: true };
-                if (field === 'price_incl_tax' && ing.unit_quantity) {
-                    updates.price_per_gram = newValue ? (newValue as number) / ing.unit_quantity : null;
-                }
-                if (field === 'unit_quantity' && ing.price_incl_tax) {
-                    updates.price_per_gram = newValue ? ing.price_incl_tax / (newValue as number) : null;
-                }
-
                 return { ...ing, ...updates };
             }
             return ing;
         }));
-        setHasChanges(true);
+
+        // 2. DB更新
+        const { error } = await supabase
+            .from('ingredients')
+            .update(updates)
+            .eq('id', id);
+
+        if (error) {
+            toast.error("保存に失敗しました");
+            console.error(error);
+        }
     };
 
     const handleCellBlur = () => {
@@ -164,32 +183,37 @@ export default function IngredientsPage() {
         }
     };
 
-    const addNewRow = () => {
-        // タブに応じたデフォルトカテゴリを選択
+    const addNewRow = async () => {
         const defaultCategoryName = activeTab === "food" ? "その他" : "資材";
         const defaultCategory = categories.find(c => c.name === defaultCategoryName);
 
-        const newIngredient: Ingredient = {
-            id: `new-${Date.now()}`,
-            name: "",
+        // 即時DB登録
+        const newIngredientData = {
+            name: "新規項目",
             category_id: defaultCategory?.id || null,
-            category_name: defaultCategoryName,
             unit_quantity: 1000,
-            price_incl_tax: null,
-            price_excl_tax: null,
-            price_per_gram: null,
-            calories: null,
-            protein: null,
-            fat: null,
-            carbohydrate: null,
-            sodium: null,
-            supplier: null,
             item_type: activeTab,
-            isNew: true,
-            isModified: true,
         };
+
+        const { data, error } = await supabase
+            .from('ingredients')
+            .insert(newIngredientData)
+            .select()
+            .single();
+
+        if (error || !data) {
+            toast.error("追加に失敗しました");
+            return;
+        }
+
+        const newIngredient: Ingredient = {
+            ...data,
+            category_name: defaultCategoryName,
+            isNew: true,
+        };
+
         setIngredients(prev => [newIngredient, ...prev]);
-        setHasChanges(true);
+        // 名前入力欄にフォーカス
         setEditingCell({ id: newIngredient.id, field: 'name' });
     };
 
@@ -209,60 +233,7 @@ export default function IngredientsPage() {
         }
     };
 
-    const saveChanges = async () => {
-        const modifiedItems = ingredients.filter(ing => ing.isModified);
 
-        for (const ing of modifiedItems) {
-            const data = {
-                name: ing.name,
-                category_id: ing.category_id,
-                unit_quantity: ing.unit_quantity,
-                price_incl_tax: ing.price_incl_tax,
-                price_excl_tax: ing.price_excl_tax,
-                price_per_gram: ing.price_per_gram,
-                calories: ing.calories,
-                protein: ing.protein,
-                fat: ing.fat,
-                carbohydrate: ing.carbohydrate,
-                sodium: ing.sodium,
-                supplier: ing.supplier,
-            };
-
-            if (ing.isNew) {
-                const { data: newData, error } = await supabase
-                    .from('ingredients')
-                    .insert(data)
-                    .select()
-                    .single();
-
-                if (error) {
-                    toast.error(`${ing.name}: 保存エラー`);
-                    continue;
-                }
-
-                setIngredients(prev => prev.map(i =>
-                    i.id === ing.id ? { ...i, id: newData.id, isNew: false, isModified: false } : i
-                ));
-            } else {
-                const { error } = await supabase
-                    .from('ingredients')
-                    .update(data)
-                    .eq('id', ing.id);
-
-                if (error) {
-                    toast.error(`${ing.name}: 更新エラー`);
-                    continue;
-                }
-
-                setIngredients(prev => prev.map(i =>
-                    i.id === ing.id ? { ...i, isModified: false } : i
-                ));
-            }
-        }
-
-        setHasChanges(false);
-        toast.success('保存しました');
-    };
 
     // 現在のタブとフィルタに基づいてフィルタリング
     const filteredIngredients = ingredients.filter(ing => {
@@ -344,12 +315,7 @@ export default function IngredientsPage() {
                         <Plus className="w-4 h-4 mr-2" />
                         新規追加
                     </Button>
-                    {hasChanges && (
-                        <Button onClick={saveChanges}>
-                            <Save className="w-4 h-4 mr-2" />
-                            変更を保存
-                        </Button>
-                    )}
+
                 </div>
             </div>
 
