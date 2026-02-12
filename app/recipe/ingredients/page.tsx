@@ -21,19 +21,20 @@ import { toast } from "sonner";
 interface Ingredient {
     id: string;
     name: string;
-    category_id: string | null;
+    category_id?: string | null;
     category_name?: string;
     unit_quantity: number;
-    price_incl_tax: number | null;
-    price_excl_tax: number | null;
-    price_per_gram: number | null;
+    price: number | null; // DB上のフィールド
+    price_incl_tax?: number | null; // UI表示用
+    price_excl_tax?: number | null;
+    price_per_gram?: number | null;
     calories: number | null;
     protein: number | null;
     fat: number | null;
     carbohydrate: number | null;
     sodium: number | null;
-    supplier: string | null;
-    item_type: "food" | "material"; // 食材 or 資材
+    supplier?: string | null;
+    item_type: "food" | "material"; // UIでのタブ分けに使用
     isNew?: boolean;
     isModified?: boolean;
 }
@@ -75,41 +76,44 @@ export default function IngredientsPage() {
     }, [editingCell]);
 
     const fetchCategories = async () => {
-        const { data } = await supabase
-            .from("ingredient_categories")
-            .select("*")
-            .order("name");
-        if (data) setCategories(data);
+        try {
+            const { data, error } = await supabase
+                .from("ingredient_categories")
+                .select("*")
+                .order("name");
+            if (data && !error) setCategories(data);
+        } catch (e) {
+            console.warn("Categories table not found, using legacy mode.");
+        }
     };
 
     const fetchIngredients = async () => {
         setLoading(true);
+        // DBに存在しない結合を避けるため select("*") に
         const { data, error } = await supabase
             .from("ingredients")
-            .select(`
-        *,
-        category:ingredient_categories(name)
-      `)
+            .select("*")
             .order("name");
 
         if (!error && data) {
             setIngredients(data.map((ing: any) => {
-                const categoryName = ing.category?.name || "";
-                // 資材カテゴリに属するかどうかで判定
-                const isMaterial = MATERIAL_CATEGORIES.includes(categoryName) ||
-                    ing.name?.includes("袋") ||
-                    ing.name?.includes("容器") ||
-                    ing.name?.includes("パック") ||
-                    ing.name?.includes("ラベル") ||
-                    ing.name?.includes("シール") ||
-                    ing.name?.includes("箱") ||
-                    ing.name?.includes("カップ");
+                // UI表示用の擬似実体を作成
+                const price_incl_tax = ing.price;
+
+                // 名前から資材かどうか判定
+                const MATERIAL_KEYWORDS = ["袋", "容器", "パック", "ラベル", "シール", "箱", "カップ", "ボトル", "フタ", "キャップ", "トレイ", "ケース"];
+                const isMaterial = MATERIAL_KEYWORDS.some(kw => ing.name?.includes(kw)) ||
+                    /\d+[×x]\d+/.test(ing.name || "");
+
                 return {
                     ...ing,
-                    category_name: categoryName,
+                    price_incl_tax,
                     item_type: isMaterial ? "material" : "food",
                 };
             }));
+        } else if (error) {
+            console.error("Fetch error:", error);
+            toast.error("データの取得に失敗しました");
         }
         setLoading(false);
     };
@@ -149,9 +153,20 @@ export default function IngredientsPage() {
         }));
 
         // 2. DB更新
+        // DB上のフィールド名（price）にマッピング
+        let dbUpdates = { ...updates };
+        if (dbUpdates.price_incl_tax !== undefined) {
+            dbUpdates.price = dbUpdates.price_incl_tax;
+            delete dbUpdates.price_incl_tax;
+        }
+
+        // DBに存在しないフィールドを除外
+        const skipFields = ['category_id', 'updated_at', 'item_type', 'category_name', 'isNew', 'isModified'];
+        skipFields.forEach(f => delete dbUpdates[f]);
+
         const { error } = await supabase
             .from('ingredients')
-            .update(updates)
+            .update(dbUpdates)
             .eq('id', id);
 
         if (error) {
@@ -190,7 +205,7 @@ export default function IngredientsPage() {
         // 即時DB登録
         const newIngredientData = {
             name: "新規項目",
-            category_id: defaultCategory?.id || null,
+            // category_id: defaultCategory?.id || null, // 一旦外す
             unit_quantity: 1000,
         };
 
@@ -208,7 +223,8 @@ export default function IngredientsPage() {
 
         const newIngredient: Ingredient = {
             ...data,
-            category_name: defaultCategoryName,
+            price_incl_tax: data.price,
+            item_type: activeTab,
             isNew: true,
         };
 
