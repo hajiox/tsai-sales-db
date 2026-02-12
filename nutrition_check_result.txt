@@ -1,0 +1,127 @@
+Data found (Not Null Calories):
+[
+  {
+    "name": "鶏の唐揚げミンチ",
+    "calories": 303,
+    "protein": 13.8,
+    "fat": 24.52,
+    "carbohydrate": 3.92,
+    "sodium": 1.21
+  },
+  {
+    "name": "豚背脂10ｋｇ",
+    "calories": 691,
+    "protein": 2.5,
+    "fat": 74.5,
+    "carbohydrate": 2.6,
+    "sodium": 0.04
+  },
+  {
+    "name": "国産若鶏脂",
+    "calories": 474,
+    "protein": 6.6,
+    "fat": 51.6,
+    "carbohydrate": 0,
+    "sodium": 0
+  },
+  {
+    "name": "豚挽き肉",
+    "calories": 221,
+    "protein": 18.6,
+    "fat": 15.1,
+    "carbohydrate": 0,
+    "sodium": 0.1
+  },
+  {
+    "name": "鶏むね挽肉",
+    "calories": 191,
+    "protein": 19.5,
+    "fat": 11.6,
+    "carbohydrate": 0,
+    "sodium": 0.1
+  },
+  {
+    "name": "馬肉切り出し",
+    "calories": 109,
+    "protein": 20.1,
+    "fat": 2.5,
+    "carbohydrate": 0.3,
+    "sodium": 0.1
+  },
+  {
+    "name": "【自社チャーシュー】豚バラ肉",
+    "calories": 450,
+    "protein": 23,
+    "fat": 38,
+    "carbohydrate": 4,
+    "sodium": 2.2
+  },
+  {
+    "name": "アメリカ産牛ショートプレート",
+    "calories": 470,
+    "protein": 12.2,
+    "fat": 44.4,
+    "carbohydrate": 0.3,
+    "sodium": 0.2
+  },
+  {
+    "name": "国産若鶏手羽元",
+    "calories": 197,
+    "protein": 18.2,
+    "fat": 12.8,
+    "carbohydrate": 0,
+    "sodium": 0.2
+  },
+  {
+    "name": "国産若鶏手羽先",
+    "calories": 197,
+    "protein": 18.2,
+    "fat": 12.8,
+    "carbohydrate": 0,
+    "sodium": 0.2
+  }
+]
+
+Ingredients with NULL calories (Total: 41):
+[
+  {
+    "name": "セロリーソルト",
+    "calories": null
+  },
+  {
+    "name": "【商品】みしらず柿",
+    "calories": null
+  },
+  {
+    "name": "【商品】おくや豆",
+    "calories": null
+  },
+  {
+    "name": "【商品】ウマカレー丼",
+    "calories": null
+  },
+  {
+    "name": "【商品】ウマーボー丼",
+    "calories": null
+  },
+  {
+    "name": "【商品】業務用じゅうねんドレッシング",
+    "calories": null
+  },
+  {
+    "name": "【商品】業務用トマトドレッシング",
+    "calories": null
+  },
+  {
+    "name": "【商品】ももの葉茶",
+    "calories": null
+  },
+  {
+    "name": "【商品】もも茶",
+    "calories": null
+  },
+  {
+    "name": "【商品】りんご茶",
+    "calories": null
+  }
+]

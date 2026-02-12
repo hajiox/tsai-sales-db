@@ -19,12 +19,15 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 
+import { NutritionData } from "./NutritionDisplay";
+
 export interface ItemCandidate {
     id?: string
     name: string
     unit_quantity?: number | string
     unit_price?: number
     cost?: number | string // for intermediate
+    nutrition?: NutritionData;
 }
 
 interface ItemNameSelectProps {

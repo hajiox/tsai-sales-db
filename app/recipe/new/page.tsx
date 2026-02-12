@@ -19,6 +19,7 @@ import {
 import { ArrowLeft, Plus, Trash2, Save, ChefHat } from "lucide-react";
 import { toast } from "sonner";
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
+import NutritionDisplay from "../_components/NutritionDisplay";
 
 const CATEGORIES = [
     { value: "ネット専用", label: "ネット専用", color: "bg-blue-100 text-blue-800" },
@@ -68,13 +69,22 @@ export default function NewRecipePage() {
     useEffect(() => {
         const fetchMasterData = async () => {
             // 食材
-            const { data: ingData } = await supabase.from('ingredients').select('id, name, unit_quantity, price');
+            const { data: ingData } = await supabase
+                .from('ingredients')
+                .select('id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium');
             if (ingData) {
                 setIngredients(ingData.map(i => ({
                     id: i.id,
                     name: i.name,
                     unit_quantity: i.unit_quantity,
-                    unit_price: i.price
+                    unit_price: i.price,
+                    nutrition: {
+                        calories: i.calories,
+                        protein: i.protein,
+                        fat: i.fat,
+                        carbohydrate: i.carbohydrate,
+                        sodium: i.sodium,
+                    }
                 })));
             }
             // 資材
@@ -313,8 +323,19 @@ export default function NewRecipePage() {
         );
     };
 
+    const itemsWithNutrition = items.map(item => {
+        // 食材マスターから栄養成分を取得
+        const matchingIngredient = ingredients.find(ing => ing.name === item.item_name);
+        return {
+            item_name: item.item_name,
+            item_type: item.item_type,
+            usage_amount: parseFloat(item.usage_amount) || 0,
+            nutrition: matchingIngredient?.nutrition
+        };
+    });
+
     return (
-        <div className="max-w-5xl mx-auto pb-20">
+        <div className="max-w-5xl mx-auto pb-40">
             {/* Header */}
             <div className="mb-6 flex items-center justify-between sticky top-0 z-10 bg-white/80 backdrop-blur-sm py-4 border-b">
                 <div className="flex items-center gap-4">
@@ -416,6 +437,9 @@ export default function NewRecipePage() {
                 {renderSection("中間部品", "intermediate", "bg-purple-50", "text-purple-800", intermediates)}
                 {renderSection("経費", "expense", "bg-red-50", "text-red-800", expenses)}
             </div>
+
+            {/* Nutrition Display */}
+            <NutritionDisplay items={itemsWithNutrition} />
 
             {/* Summary Footer */}
             <Card className="fixed bottom-0 left-0 right-0 border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20 rounded-none bg-white/95 backdrop-blur">

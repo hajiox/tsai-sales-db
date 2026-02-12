@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Edit, Save, ChefHat, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import NutritionDisplay, { NutritionData } from "../_components/NutritionDisplay";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -60,6 +61,7 @@ export default function RecipeDetailPage() {
     const [activeTab, setActiveTab] = useState<TabType>("items");
     const [isEditing, setIsEditing] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
+    const [nutritionMap, setNutritionMap] = useState<Record<string, NutritionData>>({});
 
     useEffect(() => {
         if (params.id) {
@@ -94,6 +96,32 @@ export default function RecipeDetailPage() {
 
         if (itemsData) {
             setItems(itemsData);
+
+            // 栄養成分データの取得
+            const ingredientNames = itemsData
+                .filter(i => i.item_type === 'ingredient' || i.item_type === 'intermediate')
+                .map(i => i.item_name);
+
+            if (ingredientNames.length > 0) {
+                const { data: nutritionData } = await supabase
+                    .from('ingredients')
+                    .select('name, calories, protein, fat, carbohydrate, sodium')
+                    .in('name', ingredientNames);
+
+                if (nutritionData) {
+                    const map: Record<string, NutritionData> = {};
+                    nutritionData.forEach(n => {
+                        map[n.name] = {
+                            calories: n.calories,
+                            protein: n.protein,
+                            fat: n.fat,
+                            carbohydrate: n.carbohydrate,
+                            sodium: n.sodium,
+                        };
+                    });
+                    setNutritionMap(map);
+                }
+            }
         }
 
         setLoading(false);
@@ -303,6 +331,16 @@ export default function RecipeDetailPage() {
             <div className="flex-1 bg-white border border-gray-300 border-t-0 rounded-b-lg overflow-auto">
                 {activeTab === "items" && (
                     <div>
+                        {/* Nutrition Display */}
+                        <div className="px-4">
+                            <NutritionDisplay items={items.map(item => ({
+                                item_name: item.item_name,
+                                item_type: item.item_type,
+                                usage_amount: item.usage_amount,
+                                nutrition: nutritionMap[item.item_name]
+                            }))} />
+                        </div>
+
                         {/* 食材セクション */}
                         {groupedItems.ingredient.length > 0 && (
                             <div className="mb-4">
