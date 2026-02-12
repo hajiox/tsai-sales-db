@@ -1,0 +1,15 @@
+﻿=== Materials table columns ===
+  id (uuid)
+  name (text)
+  unit_quantity (text)
+  price (numeric)
+  supplier (text)
+  notes (text)
+  created_at (timestamp with time zone)
+
+=== Sample rows ===
+{"id":"30406330-119e-4f74-b966-aecb8172b12b","name":"繧ｸ繝｣繝逕ｨ荳ｸ逑ｶC-140ST・医え繝槭Λ繝ｼ逑ｶ・牙､ｧ荳ｸ逑ｶ","unit_quantity":"35ﾃ・9繧ｱ繝ｼ繧ｹ","price":"53.24","supplier":"陦幄陸","notes":"隕狗ｩ阪ｂ繧・,"created_at":"2026-02-09T04:50:54.621Z"}
+{"id":"3ad74968-3fb1-42d5-a063-b07d2f62fa90","name":"繧ｸ繝｣繝逕ｨ荳ｸ逑ｶC-100ST・医ヵ繝ｫ繝ｼ繝・ヰ繧ｿ繝ｼ逑ｶ・牙ｰ丈ｸｸ逑ｶ","unit_quantity":"35ﾃ・9繧ｱ繝ｼ繧ｹ","price":"45.98","supplier":"陦幄陸","notes":"隕狗ｩ阪ｂ繧・,"created_at":"2026-02-09T04:50:54.710Z"}
+{"id":"411ce6c2-2615-40ce-b7a0-228c5add5450","name":"63RTS-D驫辟｡蝨ｰ逋ｺ豕｡・井ｸｸ逑ｶ・牙・逕ｨ繧ｭ繝｣繝・・","unit_quantity":"2,200ﾃ・繧ｱ繝ｼ繧ｹ","price":"13.53","supplier":"陦幄陸","notes":"隕狗ｩ阪ｂ繧・,"created_at":"2026-02-09T04:50:54.794Z"}
+
+Total: 186

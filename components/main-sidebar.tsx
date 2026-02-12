@@ -14,6 +14,7 @@ type Module =
   | "food-store"
   | "finance"
   | "kpi"
+  | "recipe"
   | "links"
   | "ai-tools";
 
@@ -32,6 +33,7 @@ export default function MainSidebar() {
     else if (pathname.startsWith("/food-store-analysis")) setActiveModule("food-store");
     else if (pathname.startsWith("/finance")) setActiveModule("finance");
     else if (pathname.startsWith("/kpi")) setActiveModule("kpi");
+    else if (pathname.startsWith("/recipe")) setActiveModule("recipe");
     else if (pathname.startsWith("/links")) setActiveModule("links");
     else if (pathname.startsWith("/ai-tools")) setActiveModule("ai-tools");
     else setActiveModule("sales");
@@ -47,6 +49,7 @@ export default function MainSidebar() {
       "food-store": "/food-store-analysis",
       finance: "/finance/trial-balance",
       kpi: "/kpi",
+      recipe: "/recipe",
       links: "/links",
       "ai-tools": "/ai-tools",
     } as const;
@@ -111,6 +114,14 @@ export default function MainSidebar() {
           onClick={() => goto("finance")}
         >
           財務分析システム
+        </Button>
+
+        <Button
+          variant={activeVariant("recipe")}
+          className={baseBtn}
+          onClick={() => goto("recipe")}
+        >
+          レシピシステム
         </Button>
 
         <Button

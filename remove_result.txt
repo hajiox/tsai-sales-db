@@ -1,0 +1,21 @@
+﻿=== Removing Person Names ===
+
+  Materials table total: 186
+  Materials with person names: 16
+    笶・菴占陸譎ｺ蜩・    笶・螟ｧ蟾晏次鮗ｻ陦｣蟄・    笶・螳怜ワ縺ｿ縺ｪ縺ｿ
+    笶・螻ｱ蜿｣蜈牙ｭ・    笶・譛ｬ蜷崎恭蟄・    笶・譚ｾ蟠取ｭ｣諱ｵ
+    笶・譽ｮ邨占歓
+    笶・貂｡驛ｨ迸ｳ
+    笶・貂｡驛ｨ邏礼泙鬥・    笶・迪ｪ菫｣蠖ｩ
+    笶・逡台ｸｭ鄒朱ｦ・    笶・遏ｳ莠慕憎蟄｣
+    笶・闃ｳ雉蜉蜊怜ｭ・    笶・闃ｳ雉鄒取椌
+    笶・闕帝未逕ｱ雋ｴ
+    笶・驤ｴ譛ｨ蛛･荵・
+  Recipe items with person names: 0
+
+  笨・Deleted 16 person names from materials table
+
+  Recalculating recipe totals...
+  笨・326 recipe totals recalculated
+
+=== Done ===

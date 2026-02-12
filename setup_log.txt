@@ -1,0 +1,36 @@
+﻿=== Setting Up Revised Schema ===
+
+1. Creating tables...
+  笨・Tables created
+
+2. Importing ingredients from 鬟滓攝邱丞粋繝・・繧ｿ繝吶・繧ｹ...
+node : TypeError: XLSX
+.readFile is not a fun
+ction
+発生場所 行:1 文字:1
++ node scripts/setup-r
+evised-schema.mjs 2>&1
+ | Out-File -FilePath 
+setup ...
++ ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (TypeError:   
+  XLSX... not a fu    
+nction:String) []    ,
+ RemoteException
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+    at main (file:///C
+:/Users/ts/OneDrive/De
+sktop/%E4%BD%9C%E6%A5%
+AD%E7%94%A8/tsai-sales
+-db/scripts/setup-revi
+sed-schema.mjs:99:31)
+    at process.process
+TicksAndRejections (no
+de:internal/process/ta
+sk_queues:105:5)

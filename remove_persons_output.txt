@@ -1,0 +1,58 @@
+﻿=== Removing Person Names ===
+
+node.exe : error: colu
+mn "unit_price" does n
+ot exist
+発生場所 C:\Program Files\
+nodejs\npx.ps1:29 文字:3
++   & $NODE_EXE $NPX_C
+LI_JS $args
++   ~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (error: col   
+ umn "... does not    
+ exist:String) []    ,
+ RemoteException
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+    at C:\Users\ts\One
+Drive\Desktop\菴懈･ｭ逕ｨ\t
+sai-sales-db\node_modu
+les\pg\lib\client.js:6
+24:17
+    at process.process
+TicksAndRejections (no
+de:internal/process/ta
+sk_queues:105:5)
+    at async main (C:\
+Users\ts\OneDrive\Desk
+top\菴懈･ｭ逕ｨ\tsai-sales-
+db\scripts\remove-pers
+on-names.ts:26:23) {
+  length: 110,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '18',
+  internalPosition: un
+defined,
+  internalQuery: undef
+ined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefine
+d,
+  file: 'parse_relatio
+n.c',
+  line: '3716',
+  routine: 'errorMissi
+ngColumn'
+}

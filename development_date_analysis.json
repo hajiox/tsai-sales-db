@@ -1,0 +1,702 @@
+[
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】チャーシュー訳あり1kg→800",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】チャーシュー訳あり1kg→800",
+    "cell": "D3",
+    "value": 45061,
+    "formatted": "2023-05-15"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "チャーシュースライス（カット済み）800→700",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "チャーシュースライス（カット済み）800→700",
+    "cell": "D3",
+    "value": 44028,
+    "formatted": "2020-07-16"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】極厚レトルトチャーシュー8枚SET",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】極厚レトルトチャーシュー8枚SET",
+    "cell": "D3",
+    "value": 45066,
+    "formatted": "2023-05-20"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】中厚レトルトチャーシュー（小）12枚SET",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】中厚レトルトチャーシュー（小）12枚SET",
+    "cell": "D3",
+    "value": 45107,
+    "formatted": "2023-06-30"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】国産チャーシュー1kg",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】国産チャーシュー1kg",
+    "cell": "D3",
+    "value": 45850,
+    "formatted": "2025-07-12"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】国産チャーシュー500g",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】国産チャーシュー500g",
+    "cell": "D3",
+    "value": 45850,
+    "formatted": "2025-07-12"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】国産チャーシュー贈答用",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】国産チャーシュー贈答用",
+    "cell": "D3",
+    "value": 45850,
+    "formatted": "2025-07-12"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】チャーシューたれ（小）",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】チャーシューたれ（小）",
+    "cell": "D3",
+    "value": 45073,
+    "formatted": "2023-05-27"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】チャーシューたれ（大)",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】チャーシューたれ（大)",
+    "cell": "D3",
+    "value": 45073,
+    "formatted": "2023-05-27"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】チャーシューたれ3個",
+    "cell": "C2",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】チャーシューたれ3個",
+    "cell": "D2",
+    "value": 45325,
+    "formatted": "2024-02-03"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】BUTA1食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】BUTA1食",
+    "cell": "D3",
+    "value": 45083,
+    "formatted": "2023-06-06"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【楽天マート】パーフェクトラーメン【S】BUTA1食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【楽天マート】パーフェクトラーメン【S】BUTA1食",
+    "cell": "D3",
+    "value": 45083,
+    "formatted": "2023-06-06"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】BUTA2食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】BUTA2食",
+    "cell": "D3",
+    "value": 45112,
+    "formatted": "2023-07-05"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】BUTA6食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】BUTA6食",
+    "cell": "D3",
+    "value": 45364,
+    "formatted": "2024-03-13"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】スープのみBUTA5食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】スープのみBUTA5食",
+    "cell": "D3",
+    "value": 45469,
+    "formatted": "2024-06-26"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】オーション麺4食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】オーション麺4食",
+    "cell": "D3",
+    "value": 44951,
+    "formatted": "2023-01-25"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】オーション麺50食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】オーション麺50食",
+    "cell": "D3",
+    "value": 44951,
+    "formatted": "2023-01-25"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープ（BUTA）MIX",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープ（BUTA）MIX",
+    "cell": "D3",
+    "value": 43956,
+    "formatted": "2020-05-05"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】豚背脂",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】豚背脂",
+    "cell": "D3",
+    "value": 45067,
+    "formatted": "2023-05-21"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】豚背脂1kg",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】豚背脂1kg",
+    "cell": "D3",
+    "value": 45067,
+    "formatted": "2023-05-21"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】豚背脂個包装8食",
+    "cell": "C2",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】豚背脂個包装8食",
+    "cell": "D2",
+    "value": 45858,
+    "formatted": "2025-07-20"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】豚背脂個包装24食",
+    "cell": "C2",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】豚背脂個包装24食",
+    "cell": "D2",
+    "value": 45858,
+    "formatted": "2025-07-20"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方1食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方1食",
+    "cell": "D3",
+    "value": 45094,
+    "formatted": "2023-06-17"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【楽天マート】パーフェクトラーメン【S】喜多方1食 ",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【楽天マート】パーフェクトラーメン【S】喜多方1食 ",
+    "cell": "D3",
+    "value": 45094,
+    "formatted": "2023-06-17"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方3食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方3食",
+    "cell": "D3",
+    "value": 45112,
+    "formatted": "2023-07-05"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方9食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方9食",
+    "cell": "D3",
+    "value": 45364,
+    "formatted": "2024-03-13"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方背脂2食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方背脂2食",
+    "cell": "D3",
+    "value": 45112,
+    "formatted": "2023-07-05"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方背脂6食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】喜多方背脂6食",
+    "cell": "D3",
+    "value": 45112,
+    "formatted": "2023-07-05"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】完全再現スープ醤油（背脂）5食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】完全再現スープ醤油（背脂）5食",
+    "cell": "D3",
+    "value": 44021,
+    "formatted": "2020-07-09"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】喜多方ラーメン麺のみ6食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】喜多方ラーメン麺のみ6食",
+    "cell": "D3",
+    "value": 44951,
+    "formatted": "2023-01-25"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】喜多方ラーメン麺のみ18食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】喜多方ラーメン麺のみ18食",
+    "cell": "D3",
+    "value": 44951,
+    "formatted": "2023-01-25"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】喜多方ラーメン麺のみ50食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】喜多方ラーメン麺のみ50食",
+    "cell": "D3",
+    "value": 44951,
+    "formatted": "2023-01-25"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】ストレート麺のみ4食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】ストレート麺のみ4食",
+    "cell": "D3",
+    "value": 45169,
+    "formatted": "2023-08-31"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】喜多方ラーメン麺のみ6食 (細麺)",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】喜多方ラーメン麺のみ6食 (細麺)",
+    "cell": "D3",
+    "value": 45444,
+    "formatted": "2024-06-01"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】完全再現スープ醤油（煮干し）8食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】完全再現スープ醤油（煮干し）8食",
+    "cell": "D3",
+    "value": 44021,
+    "formatted": "2020-07-09"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープ（醤油）煮干",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープ（醤油）煮干",
+    "cell": "D3",
+    "value": 43956,
+    "formatted": "2020-05-05"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープ（醤油）鶏油 ",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープ（醤油）鶏油 ",
+    "cell": "D3",
+    "value": 46027,
+    "formatted": "2026-01-05"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープ（背脂醤油） ",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープ（背脂醤油） ",
+    "cell": "D3",
+    "value": 45870,
+    "formatted": "2025-08-01"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】煮干し油",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】煮干し油",
+    "cell": "D3",
+    "value": 43861,
+    "formatted": "2020-01-31"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】極厚レトルトチャーシュー1枚",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】極厚レトルトチャーシュー1枚",
+    "cell": "D3",
+    "value": 45066,
+    "formatted": "2023-05-20"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】中厚レトルトチャーシュー（小）1枚",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】中厚レトルトチャーシュー（小）1枚",
+    "cell": "D3",
+    "value": 45084,
+    "formatted": "2023-06-07"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】SIO1食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】SIO1食",
+    "cell": "D3",
+    "value": 45094,
+    "formatted": "2023-06-17"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【楽天マート】パーフェクトラーメン【S】SIO1食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【楽天マート】パーフェクトラーメン【S】SIO1食",
+    "cell": "D3",
+    "value": 45094,
+    "formatted": "2023-06-17"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】SIO3食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】SIO3食",
+    "cell": "D3",
+    "value": 45094,
+    "formatted": "2023-06-17"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】SIO9食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】SIO9食",
+    "cell": "D3",
+    "value": 45364,
+    "formatted": "2024-03-13"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】完全再現スープSIOのみ8食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】完全再現スープSIOのみ8食",
+    "cell": "D3",
+    "value": 44199,
+    "formatted": "2021-01-03"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープSIO",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】完全再現スープSIO",
+    "cell": "D3",
+    "value": 44116,
+    "formatted": "2020-10-12"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】ネギ油",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【P】ネギ油",
+    "cell": "D3",
+    "value": 44116,
+    "formatted": "2020-10-12"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】IE-K1食",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【商品】パーフェクトラーメン【S】IE-K1食",
+    "cell": "D3",
+    "value": 45117,
+    "formatted": "2023-07-10"
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【楽天マート】IE-K1食 （卸不可)",
+    "cell": "C3",
+    "value": "開発日",
+    "formatted": null
+  },
+  {
+    "file": "ネット専用",
+    "sheet": "【楽天マート】IE-K1食 （卸不可)",
+    "cell": "D3",
+    "value": 45117,
+    "formatted": "2023-07-10"
+  }
+]

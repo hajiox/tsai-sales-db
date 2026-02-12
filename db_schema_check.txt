@@ -1,0 +1,32 @@
+
+=== Table: ingredients ===
+  id (uuid)
+  name (text)
+  unit_quantity (numeric)
+  price (numeric)
+  calories (numeric)
+  protein (numeric)
+  fat (numeric)
+  carbohydrate (numeric)
+  sodium (numeric)
+  created_at (timestamp with time zone)
+
+=== Table: materials ===
+  id (uuid)
+  name (text)
+  unit_quantity (text)
+  price (numeric)
+  supplier (text)
+  notes (text)
+  created_at (timestamp with time zone)
+
+=== Table: recipes ===
+  id (uuid)
+  name (text)
+  category (text)
+  is_intermediate (boolean)
+  development_date (date)
+  selling_price (numeric)
+  total_cost (numeric)
+  source_file (text)
+  created_at (timestamp with time zone)

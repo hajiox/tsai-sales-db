@@ -21,7 +21,7 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <Providers>
           <MainDashboard>
             {children}
