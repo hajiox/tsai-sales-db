@@ -201,7 +201,8 @@ export default function IngredientsPage() {
             .single();
 
         if (error || !data) {
-            toast.error("追加に失敗しました");
+            console.error("Add failed:", error);
+            toast.error(`追加失敗: ${error?.message || 'Unknown'}`);
             return;
         }
 
