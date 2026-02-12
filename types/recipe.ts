@@ -38,6 +38,9 @@ export interface Recipe {
     category_id?: string;
     name: string;
     development_date?: string;
+    manufacturing_notes?: string;
+    filling_quantity?: number;
+    storage_method?: string;
     selling_price_incl_tax?: number;
     selling_price_excl_tax?: number;
     production_quantity: number;

@@ -34,6 +34,9 @@ interface Recipe {
     category: string;
     is_intermediate: boolean;
     development_date: string | null;
+    manufacturing_notes: string | null;
+    filling_quantity: number | null;
+    storage_method: string | null;
     selling_price: number | null;
     total_cost: number | null;
     source_file: string | null;
@@ -175,9 +178,17 @@ export default function RecipeDetailPage() {
 
             // 総コスト計算して更新
             const totalCost = items.reduce((sum, item) => sum + (item.cost || 0), 0);
+
+            // レシピ情報を更新
             await supabase
                 .from('recipes')
-                .update({ total_cost: totalCost })
+                .update({
+                    total_cost: totalCost,
+                    manufacturing_notes: recipe.manufacturing_notes,
+                    filling_quantity: recipe.filling_quantity,
+                    storage_method: recipe.storage_method,
+                    development_date: recipe.development_date
+                })
                 .eq('id', recipe.id);
 
             toast.success('保存しました');
@@ -651,16 +662,105 @@ export default function RecipeDetailPage() {
                 {activeTab === "info" && (
                     <div className="p-4">
                         <h3 className="font-bold mb-4">基本情報</h3>
-                        <div className="grid grid-cols-2 gap-4 max-w-lg text-sm">
-                            <div><span className="text-gray-500">商品名:</span> {recipe.name}</div>
-                            <div><span className="text-gray-500">カテゴリ:</span> {recipe.category}</div>
-                            <div><span className="text-gray-500">開発日:</span> {recipe.development_date || '-'}</div>
-                            <div><span className="text-gray-500">中間部品:</span> {recipe.is_intermediate ? 'はい' : 'いいえ'}</div>
-                            {recipe.source_file && (
-                                <div className="col-span-2">
-                                    <span className="text-gray-500">ソースファイル:</span> {recipe.source_file.replace("【重要】【製造】総合管理（新型）", "")}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl text-sm">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-gray-500 mb-1">商品名</label>
+                                    <div className="font-medium h-8 flex items-center">{recipe.name}</div>
                                 </div>
-                            )}
+
+                                <div>
+                                    <label className="block text-gray-500 mb-1">カテゴリ</label>
+                                    <div className="font-medium h-8 flex items-center">{recipe.category}</div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-gray-500 mb-1">開発日</label>
+                                    {isEditing ? (
+                                        <Input
+                                            type="date"
+                                            value={recipe.development_date || ''}
+                                            onChange={(e) => {
+                                                setRecipe({ ...recipe, development_date: e.target.value });
+                                                setHasChanges(true);
+                                            }}
+                                        />
+                                    ) : (
+                                        <div className="font-medium h-8 flex items-center">{recipe.development_date || '-'}</div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-gray-500 mb-1">保存方法</label>
+                                    {isEditing ? (
+                                        <Select
+                                            value={recipe.storage_method || ''}
+                                            onValueChange={(val) => {
+                                                setRecipe({ ...recipe, storage_method: val });
+                                                setHasChanges(true);
+                                            }}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="選択してください" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="常温">常温</SelectItem>
+                                                <SelectItem value="冷蔵">冷蔵</SelectItem>
+                                                <SelectItem value="冷凍">冷凍</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <div className="font-medium h-8 flex items-center">{recipe.storage_method || '-'}</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-gray-500 mb-1">充填量 (g)</label>
+                                    {isEditing ? (
+                                        <Input
+                                            type="number"
+                                            value={recipe.filling_quantity || ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value ? parseFloat(e.target.value) : null;
+                                                setRecipe({ ...recipe, filling_quantity: val });
+                                                setHasChanges(true);
+                                            }}
+                                        />
+                                    ) : (
+                                        <div className="font-medium h-8 flex items-center">{recipe.filling_quantity ? `${recipe.filling_quantity}g` : '-'}</div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-gray-500 mb-1">製造メモ</label>
+                                    {isEditing ? (
+                                        <textarea
+                                            className="w-full min-h-[100px] p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            value={recipe.manufacturing_notes || ''}
+                                            onChange={(e) => {
+                                                setRecipe({ ...recipe, manufacturing_notes: e.target.value });
+                                                setHasChanges(true);
+                                            }}
+                                            placeholder="製造手順や注意事項などを入力"
+                                        />
+                                    ) : (
+                                        <div className="whitespace-pre-wrap p-2 bg-gray-50 rounded min-h-[100px]">
+                                            {recipe.manufacturing_notes || 'なし'}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {recipe.source_file && (
+                                    <div>
+                                        <span className="block text-gray-500 mb-1">ソースファイル</span>
+                                        <div className="text-gray-700 truncate">
+                                            {recipe.source_file.replace("【重要】【製造】総合管理（新型）", "")}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
