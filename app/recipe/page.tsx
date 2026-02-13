@@ -73,32 +73,58 @@ export default function RecipePage() {
     }, [activeTab, recipes]);
 
     const fetchIntermediateUsage = async () => {
-        const intermediateNames = recipes.filter(r => r.is_intermediate).map(r => r.name);
-        if (intermediateNames.length === 0) return;
-
-        // Find which recipes use these intermediates
-        // Since we can't do complex joins or `in` with large arrays easily if names are distinct
-        // We might just fetch all recipe_items that are intermediate type or matching names
-        // But for efficiency, let's just fetch ALL recipe_items that are 'intermediate' type
-        // and map them back. BUT item_name in recipe_items is just a string.
-
-        const { data: usageItems, error } = await supabase
+        // Fetch ALL items to ensure we catch fuzzy matches
+        // Optimization: We could filter but for correctness vs fuzzy, fetching all is safer
+        const { data: allItems, error } = await supabase
             .from('recipe_items')
-            .select('item_name, recipe_id, recipes:recipe_id(name)')
-            .in('item_name', intermediateNames);
+            .select('item_name, recipe_id, recipes!inner(name)');
 
-        if (error || !usageItems) return;
+        if (error || !allItems) {
+            console.error("Error fetching usage items:", error);
+            return;
+        }
 
+        const intermediates = recipes.filter(r => r.is_intermediate);
         const map: Record<string, string[]> = {};
-        usageItems.forEach((item: any) => {
-            if (!map[item.item_name]) map[item.item_name] = [];
-            // item.recipes might be an object or array depending on relation
-            // Assuming simplified distinct list
-            const parentName = item.recipes?.name;
-            if (parentName && !map[item.item_name].includes(parentName)) {
-                map[item.item_name].push(parentName);
-            }
+
+        const normalize = (s: string) => s.replace(/【.*?】|\[.*?\]/g, '').replace(/\s+/g, '').trim();
+        const stripParens = (s: string) => s.replace(/[（()）]/g, '');
+        const stripNo = (s: string) => s.replace(/の/g, '');
+
+        intermediates.forEach(inter => {
+            const interName = inter.name;
+            const normInter = normalize(interName);
+            const interNoParens = stripParens(normInter);
+            const interNoNo = stripNo(interNoParens);
+
+            // Find matching items
+            const matches = allItems.filter(item => {
+                const iName = item.item_name;
+                const normItem = normalize(iName);
+
+                // 1. Exact match (normalized)
+                if (normItem === normInter) return true;
+
+                // 2. Parens agnostic (e.g. "Foo(Bar)" vs "FooBar")
+                const itemNoParens = stripParens(normItem);
+                if (itemNoParens === interNoParens) return true;
+
+                // 3. 'No' agnostic (e.g. "FooNoBar" vs "FooBar")
+                const itemNoNo = stripNo(itemNoParens);
+                if (itemNoNo === interNoNo && itemNoNo.length > 2) return true;
+
+                return false;
+            });
+
+            matches.forEach(m => {
+                const parentName = (m.recipes as any)?.name;
+                if (parentName) {
+                    if (!map[interName]) map[interName] = [];
+                    if (!map[interName].includes(parentName)) map[interName].push(parentName);
+                }
+            });
         });
+
         setUsageMap(map);
     };
 
