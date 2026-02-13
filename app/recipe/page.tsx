@@ -64,6 +64,43 @@ export default function RecipePage() {
         ingredients: 0,
         materials: 0,
     });
+    const [usageMap, setUsageMap] = useState<Record<string, string[]>>({});
+
+    useEffect(() => {
+        if (activeTab === "中間部品") {
+            fetchIntermediateUsage();
+        }
+    }, [activeTab, recipes]);
+
+    const fetchIntermediateUsage = async () => {
+        const intermediateNames = recipes.filter(r => r.is_intermediate).map(r => r.name);
+        if (intermediateNames.length === 0) return;
+
+        // Find which recipes use these intermediates
+        // Since we can't do complex joins or `in` with large arrays easily if names are distinct
+        // We might just fetch all recipe_items that are intermediate type or matching names
+        // But for efficiency, let's just fetch ALL recipe_items that are 'intermediate' type
+        // and map them back. BUT item_name in recipe_items is just a string.
+
+        const { data: usageItems, error } = await supabase
+            .from('recipe_items')
+            .select('item_name, recipe_id, recipes:recipe_id(name)')
+            .in('item_name', intermediateNames);
+
+        if (error || !usageItems) return;
+
+        const map: Record<string, string[]> = {};
+        usageItems.forEach((item: any) => {
+            if (!map[item.item_name]) map[item.item_name] = [];
+            // item.recipes might be an object or array depending on relation
+            // Assuming simplified distinct list
+            const parentName = item.recipes?.name;
+            if (parentName && !map[item.item_name].includes(parentName)) {
+                map[item.item_name].push(parentName);
+            }
+        });
+        setUsageMap(map);
+    };
 
     useEffect(() => {
         fetchRecipes();
@@ -330,6 +367,7 @@ export default function RecipePage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>商品名</TableHead>
+                            {activeTab === "中間部品" && <TableHead>使用されている商品</TableHead>}
                             <TableHead>カテゴリ</TableHead>
                             <TableHead>開発日</TableHead>
                             <TableHead className="text-right">販売価格</TableHead>
@@ -364,6 +402,17 @@ export default function RecipePage() {
                                         )}
                                         {recipe.name}
                                     </TableCell>
+                                    {activeTab === "中間部品" && (
+                                        <TableCell>
+                                            <div className="flex flex-wrap gap-1">
+                                                {usageMap[recipe.name]?.map((parent, i) => (
+                                                    <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs border border-gray-200">
+                                                        {parent}
+                                                    </span>
+                                                )) || <span className="text-gray-400 text-xs">-</span>}
+                                            </div>
+                                        </TableCell>
+                                    )}
                                     <TableCell onClick={(e) => e.stopPropagation()}>
                                         <Select
                                             value={recipe.category}

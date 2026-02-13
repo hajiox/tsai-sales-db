@@ -70,6 +70,7 @@ export default function RecipeDetailPage() {
     const [ingredients, setIngredients] = useState<ItemCandidate[]>([]);
     const [materials, setMaterials] = useState<ItemCandidate[]>([]);
     const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
+    const [products, setProducts] = useState<ItemCandidate[]>([]);
     const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
 
     // Batch calculation states
@@ -121,6 +122,19 @@ export default function RecipeDetailPage() {
                 name: r.name,
                 unit_quantity: 1,
                 unit_price: r.total_cost
+            })));
+        }
+        // Products (Set Components) - Recipes that are NOT intermediate
+        // Note: Excluding current recipe to avoid recursion is good but not strictly necessary if handled carefully
+        const { data: prodData } = await supabase.from('recipes')
+            .select('id, name, total_cost')
+            .eq('is_intermediate', false);
+        if (prodData) {
+            setProducts(prodData.map(r => ({
+                id: r.id,
+                name: r.name,
+                unit_quantity: 1,
+                unit_price: r.total_cost // Or selling_price? Usually internal transfer is cost.
             })));
         }
         // Expenses (Hardcoded for now)
@@ -386,6 +400,7 @@ export default function RecipeDetailPage() {
 
     // Group items for display
     const groupedItems = [
+        { title: "セット内容（商品）", type: 'product', items: items.filter(i => i.item_type === 'product'), color: "bg-indigo-50 text-indigo-700 border-indigo-100", candidates: products },
         { title: "原材料", type: 'ingredient', items: items.filter(i => i.item_type === 'ingredient'), color: "bg-green-50 text-green-700 border-green-100", candidates: ingredients },
         { title: "中間加工品", type: 'intermediate', items: items.filter(i => i.item_type === 'intermediate'), color: "bg-purple-50 text-purple-700 border-purple-100", candidates: intermediates },
         { title: "資材・包材", type: 'material', items: items.filter(i => i.item_type === 'material'), color: "bg-orange-50 text-orange-700 border-orange-100", candidates: materials },
@@ -597,7 +612,8 @@ export default function RecipeDetailPage() {
                                                                     <>
                                                                         {item.item_name}
                                                                         <div className="text-[10px] text-gray-400 font-normal">
-                                                                            {unitQty > 0 && !isMaterialGroup ? `(${formatNumber(unitQty, 0)}g/pk)` : ''}
+                                                                            {unitQty > 0 && !isMaterialGroup && group.type !== 'product' ? `(${formatNumber(unitQty, 0)}g/pk)` : ''}
+                                                                            {group.type === 'product' && <span className="ml-1 text-[10px] bg-indigo-100 text-indigo-700 px-1 rounded">商品</span>}
                                                                         </div>
                                                                     </>
                                                                 )}
@@ -616,7 +632,7 @@ export default function RecipeDetailPage() {
                                                                     ) : (
                                                                         <>
                                                                             <span className="font-bold">{formatNumber(unitUsage, 1)}</span>
-                                                                            <span className="text-[10px] text-gray-400 block">g</span>
+                                                                            <span className="text-[10px] text-gray-400 block">{group.type === 'product' ? '個' : 'g'}</span>
                                                                         </>
                                                                     )
                                                                 ) : (
@@ -628,8 +644,8 @@ export default function RecipeDetailPage() {
                                                             <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
                                                                 {!isMaterialGroup ? (
                                                                     <>
-                                                                        <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
-                                                                        {b1Bags > 0 && item.item_type !== 'expense' && (
+                                                                        <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">{group.type === 'product' ? '個' : 'g'}</span></div>
+                                                                        {b1Bags > 0 && item.item_type !== 'expense' && group.type !== 'product' && (
                                                                             <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
                                                                                 {formatNumber(b1Bags, 2)} <span className="font-normal opacity-70">pk</span>
                                                                             </div>
@@ -689,18 +705,18 @@ export default function RecipeDetailPage() {
                                                 <tr>
                                                     <td colSpan={2} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Total</td>
                                                     <td className="py-2 text-right font-mono font-bold text-gray-700 bg-gray-50/50">
-                                                        {group.type === 'ingredient' || group.type === 'intermediate' ?
-                                                            formatNumber(group.items.reduce((sum, i) => sum + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + 'g'
+                                                        {group.type === 'ingredient' || group.type === 'intermediate' || group.type === 'product' ?
+                                                            formatNumber(group.items.reduce((sum, i) => sum + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '個' : 'g')
                                                             : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">
-                                                        {group.type === 'ingredient' || group.type === 'intermediate' ?
-                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + 'g'
+                                                        {group.type === 'ingredient' || group.type === 'intermediate' || group.type === 'product' ?
+                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '個' : 'g')
                                                             : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-purple-700 bg-purple-50/30 border-l border-gray-50">
-                                                        {group.type === 'ingredient' || group.type === 'intermediate' ?
-                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + 'g'
+                                                        {group.type === 'ingredient' || group.type === 'intermediate' || group.type === 'product' ?
+                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '個' : 'g')
                                                             : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-gray-900">
