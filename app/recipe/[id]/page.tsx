@@ -310,22 +310,22 @@ export default function RecipeDetailPage() {
                 {/* Specs Grid */}
                 <div className="grid grid-cols-4 gap-4 mb-8">
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">販売価格</div>
-                        <div className="font-bold text-lg">{formatCurrency(recipe.selling_price)}</div>
+                        <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">販売価格</div>
+                        <div className="font-bold text-xl">{formatCurrency(recipe.selling_price)}</div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">粗利益</div>
-                        <div className={`font-bold text-lg ${profit > 0 ? 'text-gray-900' : 'text-red-600'}`}>
+                        <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">粗利益</div>
+                        <div className={`font-bold text-xl ${profit > 0 ? 'text-gray-900' : 'text-red-600'}`}>
                             {formatCurrency(profit)}
                         </div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">充填量 (g)</div>
-                        <div className="font-bold text-lg flex items-center gap-2">
+                        <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">充填量 (g)</div>
+                        <div className="font-bold text-xl flex items-center gap-2">
                             <Input
                                 type="number"
                                 value={recipe.filling_quantity || ''}
-                                className="h-6 w-20 px-1 py-0 text-right bg-transparent border-none focus:ring-0 p-0 shadow-none font-bold text-lg -mr-2"
+                                className="h-6 w-20 px-1 py-0 text-right bg-transparent border-none focus:ring-0 p-0 shadow-none font-bold text-xl -mr-2"
                                 onChange={(e) => {
                                     const val = e.target.value ? parseFloat(e.target.value) : null;
                                     handleRecipeChange('filling_quantity', val);
@@ -336,9 +336,9 @@ export default function RecipeDetailPage() {
                         </div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">保存方法</div>
+                        <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">保存方法</div>
                         <Select value={recipe.storage_method || ''} onValueChange={(val) => handleRecipeChange('storage_method', val)}>
-                            <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-lg">
+                            <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-xl">
                                 <SelectValue placeholder="-" />
                             </SelectTrigger>
                             <SelectContent>
@@ -354,7 +354,7 @@ export default function RecipeDetailPage() {
                     {/* Left Column: Ingredients (8 cols) -> Now Expanded or Scrollable */}
                     <div className="col-span-12 print:col-span-12">
                         <div className="flex justify-between items-center mb-4 border-b pb-2">
-                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">製造計画（材料表）</h2>
+                            <h2 className="text-base font-bold text-gray-900 uppercase tracking-wider">製造計画（材料表）</h2>
                             <div className="flex items-center gap-4 text-xs">
                                 <span className="font-mono text-gray-400">{items.length} FILES</span>
                             </div>
@@ -390,28 +390,28 @@ export default function RecipeDetailPage() {
                                     <div className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded mb-2 border ${group.color}`}>
                                         {group.title}
                                     </div>
-                                    <table className="w-full text-xs table-fixed">
+                                    <table className="w-full text-sm table-fixed">
                                         <thead>
                                             <tr className="border-b border-gray-200 text-gray-500">
-                                                <th className="text-left py-1 w-6 font-normal">#</th>
-                                                <th className="text-left py-1 w-32 font-normal">原材料名</th>
+                                                <th className="text-left py-1 w-8 font-normal">#</th>
+                                                <th className="text-left py-1 w-40 font-normal">原材料名</th>
                                                 {/* Unit Quantity (Hidden mostly but useful for ref) */}
 
                                                 {/* 1 Unit */}
-                                                <th className="text-right py-1 w-16 font-bold text-gray-800 bg-gray-50">基本(1)</th>
+                                                <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">基本(1)</th>
 
                                                 {/* Batch 1 */}
-                                                <th className="text-right py-1 w-24 font-bold text-blue-700 bg-blue-50 border-l border-white">
-                                                    {batchSize1}個分 <br /><span className="text-[10px] font-normal text-gray-500">使用量 | 袋数</span>
+                                                <th className="text-right py-1 w-28 font-bold text-blue-700 bg-blue-50 border-l border-white">
+                                                    {batchSize1}個分 <br /><span className="text-xs font-normal text-gray-500">使用量 | 袋数</span>
                                                 </th>
 
                                                 {/* Batch 2 */}
-                                                <th className="text-right py-1 w-24 font-bold text-purple-700 bg-purple-50 border-l border-white">
-                                                    {batchSize2}個分 <br /><span className="text-[10px] font-normal text-gray-500">使用量 | 袋数</span>
+                                                <th className="text-right py-1 w-28 font-bold text-purple-700 bg-purple-50 border-l border-white">
+                                                    {batchSize2}個分 <br /><span className="text-xs font-normal text-gray-500">使用量 | 袋数</span>
                                                 </th>
 
                                                 {/* Cost */}
-                                                <th className="text-right py-1 w-16 font-normal text-gray-400">原価(1)</th>
+                                                <th className="text-right py-1 w-20 font-normal text-gray-400">原価(1)</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50">
@@ -511,12 +511,12 @@ export default function RecipeDetailPage() {
                     <div className="col-span-12 md:col-span-7 print:col-span-7">
                         {/* Manufacturing Notes */}
                         <div className="break-inside-avoid bg-gray-50 p-4 rounded border border-gray-100 print:bg-white print:border-l-2 print:border-gray-200 print:border-t-0 print:border-r-0 print:border-b-0 print:rounded-none h-full">
-                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                <Edit className="w-3 h-3" />
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Edit className="w-4 h-4" />
                                 製造メモ
                             </h3>
                             <textarea
-                                className="w-full h-full min-h-[150px] text-xs leading-relaxed bg-transparent border-none resize-none p-0 focus:ring-0 text-gray-700 placeholder:text-gray-300"
+                                className="w-full h-full min-h-[150px] text-sm leading-relaxed bg-transparent border-none resize-none p-0 focus:ring-0 text-gray-700 placeholder:text-gray-300"
                                 value={recipe.manufacturing_notes || ''}
                                 onChange={(e) => setRecipe({ ...recipe, manufacturing_notes: e.target.value })}
                                 onBlur={(e) => handleRecipeChange('manufacturing_notes', e.target.value)}
