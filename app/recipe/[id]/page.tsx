@@ -299,7 +299,7 @@ export default function RecipeDetailPage() {
                         </div>
                     </div>
                     <div className="text-right">
-                        <div className="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-1">Total Cost</div>
+                        <div className="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-1">原価合計 (1単位)</div>
                         <div className="text-3xl font-bold text-gray-900 tracking-tight">{formatCurrency(totals.cost)}</div>
                         <div className="text-xs text-gray-500 mt-1">
                             原価率: {recipe.selling_price && totals.cost ? ((totals.cost / recipe.selling_price) * 100).toFixed(1) : '-'}%
@@ -354,7 +354,7 @@ export default function RecipeDetailPage() {
                     {/* Left Column: Ingredients (8 cols) -> Now Expanded or Scrollable */}
                     <div className="col-span-12 print:col-span-12">
                         <div className="flex justify-between items-center mb-4 border-b pb-2">
-                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Manufacturing Plan (Bill of Materials)</h2>
+                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">製造計画（材料表）</h2>
                             <div className="flex items-center gap-4 text-xs">
                                 <span className="font-mono text-gray-400">{items.length} FILES</span>
                             </div>
@@ -363,7 +363,7 @@ export default function RecipeDetailPage() {
                         {/* Batch Settings (Only visible in edit/interact mode, but printed values persist) */}
                         <div className="flex gap-4 mb-4 bg-gray-50 p-2 rounded print:hidden">
                             <div className="flex items-center gap-2">
-                                <label className="text-xs font-bold text-gray-500">Batch A</label>
+                                <label className="text-xs font-bold text-gray-500">製造数 A</label>
                                 <Input
                                     type="number"
                                     value={batchSize1}
@@ -373,7 +373,7 @@ export default function RecipeDetailPage() {
                                 <span className="text-xs text-gray-500">個</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <label className="text-xs font-bold text-gray-500">Batch B</label>
+                                <label className="text-xs font-bold text-gray-500">製造数 B</label>
                                 <Input
                                     type="number"
                                     value={batchSize2}
@@ -394,24 +394,24 @@ export default function RecipeDetailPage() {
                                         <thead>
                                             <tr className="border-b border-gray-200 text-gray-500">
                                                 <th className="text-left py-1 w-6 font-normal">#</th>
-                                                <th className="text-left py-1 w-32 font-normal">Item Name</th>
+                                                <th className="text-left py-1 w-32 font-normal">原材料名</th>
                                                 {/* Unit Quantity (Hidden mostly but useful for ref) */}
 
                                                 {/* 1 Unit */}
-                                                <th className="text-right py-1 w-16 font-bold text-gray-800 bg-gray-50">1 Unit</th>
+                                                <th className="text-right py-1 w-16 font-bold text-gray-800 bg-gray-50">基本(1)</th>
 
                                                 {/* Batch 1 */}
                                                 <th className="text-right py-1 w-24 font-bold text-blue-700 bg-blue-50 border-l border-white">
-                                                    {batchSize1} Units <br /><span className="text-[10px] font-normal text-gray-500">Usage | Bags</span>
+                                                    {batchSize1}個分 <br /><span className="text-[10px] font-normal text-gray-500">使用量 | 袋数</span>
                                                 </th>
 
                                                 {/* Batch 2 */}
                                                 <th className="text-right py-1 w-24 font-bold text-purple-700 bg-purple-50 border-l border-white">
-                                                    {batchSize2} Units <br /><span className="text-[10px] font-normal text-gray-500">Usage | Bags</span>
+                                                    {batchSize2}個分 <br /><span className="text-[10px] font-normal text-gray-500">使用量 | 袋数</span>
                                                 </th>
 
                                                 {/* Cost */}
-                                                <th className="text-right py-1 w-16 font-normal text-gray-400">Cost (1u)</th>
+                                                <th className="text-right py-1 w-16 font-normal text-gray-400">原価(1)</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50">
@@ -513,7 +513,7 @@ export default function RecipeDetailPage() {
                         <div className="break-inside-avoid bg-gray-50 p-4 rounded border border-gray-100 print:bg-white print:border-l-2 print:border-gray-200 print:border-t-0 print:border-r-0 print:border-b-0 print:rounded-none h-full">
                             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                                 <Edit className="w-3 h-3" />
-                                Manufacturing Notes
+                                製造メモ
                             </h3>
                             <textarea
                                 className="w-full h-full min-h-[150px] text-xs leading-relaxed bg-transparent border-none resize-none p-0 focus:ring-0 text-gray-700 placeholder:text-gray-300"
@@ -528,7 +528,7 @@ export default function RecipeDetailPage() {
                     <div className="col-span-12 md:col-span-5 print:col-span-5">
                         {/* Nutrition */}
                         <div className="break-inside-avoid">
-                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">Nutrition (per 100g)</h3>
+                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">栄養成分表示 (100gあたり)</h3>
                             <NutritionDisplay items={items.map(item => ({
                                 item_name: item.item_name,
                                 item_type: item.item_type,
