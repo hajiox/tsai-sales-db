@@ -62,6 +62,10 @@ export default function RecipeDetailPage() {
     const [hasChanges, setHasChanges] = useState(false);
     const [nutritionMap, setNutritionMap] = useState<Record<string, NutritionData>>({});
 
+    // Batch calculation states
+    const [batchSize1, setBatchSize1] = useState(100);
+    const [batchSize2, setBatchSize2] = useState(400);
+
     useEffect(() => {
         if (params.id) {
             fetchRecipe(params.id as string);
@@ -207,9 +211,9 @@ export default function RecipeDetailPage() {
         }
     };
 
-    const formatNumber = (value?: number | null, decimals = 1) => {
+    const formatNumber = (value?: number | null, decimals = 1, suffix = '') => {
         if (value === undefined || value === null) return "-";
-        return value.toFixed(decimals);
+        return `${value.toLocaleString(undefined, { maximumFractionDigits: decimals })}${suffix}`;
     };
 
     const formatCurrency = (value?: number | null) => {
@@ -347,11 +351,37 @@ export default function RecipeDetailPage() {
                 </div>
 
                 <div className="grid grid-cols-12 gap-8">
-                    {/* Left Column: Ingredients (8 cols) */}
-                    <div className="col-span-12 md:col-span-8 print:col-span-8">
+                    {/* Left Column: Ingredients (8 cols) -> Now Expanded or Scrollable */}
+                    <div className="col-span-12 print:col-span-12">
                         <div className="flex justify-between items-center mb-4 border-b pb-2">
-                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Bill of Materials</h2>
-                            <span className="text-xs font-mono text-gray-400">{items.length} FILES</span>
+                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Manufacturing Plan (Bill of Materials)</h2>
+                            <div className="flex items-center gap-4 text-xs">
+                                <span className="font-mono text-gray-400">{items.length} FILES</span>
+                            </div>
+                        </div>
+
+                        {/* Batch Settings (Only visible in edit/interact mode, but printed values persist) */}
+                        <div className="flex gap-4 mb-4 bg-gray-50 p-2 rounded print:hidden">
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-bold text-gray-500">Batch A</label>
+                                <Input
+                                    type="number"
+                                    value={batchSize1}
+                                    onChange={(e) => setBatchSize1(parseInt(e.target.value) || 0)}
+                                    className="h-8 w-20 bg-white"
+                                />
+                                <span className="text-xs text-gray-500">個</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-bold text-gray-500">Batch B</label>
+                                <Input
+                                    type="number"
+                                    value={batchSize2}
+                                    onChange={(e) => setBatchSize2(parseInt(e.target.value) || 0)}
+                                    className="h-8 w-20 bg-white"
+                                />
+                                <span className="text-xs text-gray-500">個</span>
+                            </div>
                         </div>
 
                         <div className="space-y-6">
@@ -360,43 +390,109 @@ export default function RecipeDetailPage() {
                                     <div className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded mb-2 border ${group.color}`}>
                                         {group.title}
                                     </div>
-                                    <table className="w-full text-xs">
+                                    <table className="w-full text-xs table-fixed">
                                         <thead>
-                                            <tr className="border-b border-gray-100 text-gray-400">
-                                                <th className="text-left py-1 w-8 font-normal">#</th>
-                                                <th className="text-left py-1 font-normal">Item Name</th>
-                                                <th className="text-right py-1 w-20 font-normal">Usage</th>
-                                                <th className="text-right py-1 w-20 font-normal">Cost</th>
+                                            <tr className="border-b border-gray-200 text-gray-500">
+                                                <th className="text-left py-1 w-6 font-normal">#</th>
+                                                <th className="text-left py-1 w-32 font-normal">Item Name</th>
+                                                {/* Unit Quantity (Hidden mostly but useful for ref) */}
+
+                                                {/* 1 Unit */}
+                                                <th className="text-right py-1 w-16 font-bold text-gray-800 bg-gray-50">1 Unit</th>
+
+                                                {/* Batch 1 */}
+                                                <th className="text-right py-1 w-24 font-bold text-blue-700 bg-blue-50 border-l border-white">
+                                                    {batchSize1} Units <br /><span className="text-[10px] font-normal text-gray-500">Usage | Bags</span>
+                                                </th>
+
+                                                {/* Batch 2 */}
+                                                <th className="text-right py-1 w-24 font-bold text-purple-700 bg-purple-50 border-l border-white">
+                                                    {batchSize2} Units <br /><span className="text-[10px] font-normal text-gray-500">Usage | Bags</span>
+                                                </th>
+
+                                                {/* Cost */}
+                                                <th className="text-right py-1 w-16 font-normal text-gray-400">Cost (1u)</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50">
-                                            {group.items.map((item, idx) => (
-                                                <tr key={item.id} className="group">
-                                                    <td className="py-1.5 text-gray-300">{idx + 1}</td>
-                                                    <td className="py-1.5 font-medium text-gray-700">{item.item_name}</td>
-                                                    <td className="py-1.5 text-right font-mono text-gray-600">
-                                                        {isEditing ? (
-                                                            <input
-                                                                type="number"
-                                                                className="w-12 text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                                                                value={item.usage_amount || ''}
-                                                                onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
-                                                            />
-                                                        ) : (
-                                                            formatNumber(item.usage_amount, 1)
-                                                        )}
-                                                    </td>
-                                                    <td className="py-1.5 text-right font-mono font-medium text-gray-900 group-hover:bg-gray-50 rounded-r">
-                                                        {formatCurrency(item.cost)}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {group.items.map((item, idx) => {
+                                                const unitUsage = item.usage_amount || 0;
+                                                const unitQty = item.unit_quantity || 0;
+
+                                                // Batch 1 Calcs
+                                                const b1Usage = unitUsage * batchSize1;
+                                                const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
+
+                                                // Batch 2 Calcs
+                                                const b2Usage = unitUsage * batchSize2;
+                                                const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
+
+                                                return (
+                                                    <tr key={item.id} className="group hover:bg-gray-50/50">
+                                                        <td className="py-2 text-gray-300 align-top">{idx + 1}</td>
+                                                        <td className="py-2 font-medium text-gray-700 align-top pr-2">
+                                                            {item.item_name}
+                                                            <div className="text-[10px] text-gray-400 font-normal">
+                                                                {unitQty > 0 ? `(${formatNumber(unitQty, 0)}g/pk)` : ''}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* 1 Unit Usage */}
+                                                        <td className="py-2 text-right font-mono text-gray-800 bg-gray-50/30 align-top">
+                                                            {isEditing ? (
+                                                                <input
+                                                                    type="number"
+                                                                    className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
+                                                                    value={item.usage_amount || ''}
+                                                                    onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
+                                                                />
+                                                            ) : (
+                                                                <span className="font-bold">{formatNumber(item.usage_amount, 1)}</span>
+                                                            )}
+                                                            <span className="text-[10px] text-gray-400 block">g</span>
+                                                        </td>
+
+                                                        {/* Batch 1 */}
+                                                        <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
+                                                            <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
+                                                            {b1Bags > 0 && item.item_type !== 'expense' && (
+                                                                <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
+                                                                    {formatNumber(b1Bags, 2)} <span className="font-normal opacity-70">pk</span>
+                                                                </div>
+                                                            )}
+                                                        </td>
+
+                                                        {/* Batch 2 */}
+                                                        <td className="py-2 text-right font-mono text-purple-700 bg-purple-50/30 border-l border-gray-50 align-top">
+                                                            <div className="font-bold">{formatNumber(b2Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
+                                                            {b2Bags > 0 && item.item_type !== 'expense' && (
+                                                                <div className="text-[10px] text-purple-500 mt-0.5 font-bold">
+                                                                    {formatNumber(b2Bags, 2)} <span className="font-normal opacity-70">pk</span>
+                                                                </div>
+                                                            )}
+                                                        </td>
+
+                                                        <td className="py-2 text-right font-mono text-gray-400 align-top">
+                                                            {formatCurrency(item.cost)}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                         {/* Group Subtotal */}
                                         <tfoot className="border-t border-gray-100">
                                             <tr>
-                                                <td colSpan={3} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Subtotal</td>
-                                                <td className="py-2 text-right font-mono font-bold text-gray-700">
+                                                <td colSpan={2} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Total Usage</td>
+                                                <td className="py-2 text-right font-mono font-bold text-gray-700 bg-gray-50/50">
+                                                    {formatNumber(group.items.reduce((sum, i) => sum + (i.usage_amount || 0), 0), 0)}g
+                                                </td>
+                                                <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">
+                                                    {formatNumber(group.items.reduce((sum, i) => sum + ((i.usage_amount || 0) * batchSize1), 0), 0)}g
+                                                </td>
+                                                <td className="py-2 text-right font-mono font-bold text-purple-700 bg-purple-50/30 border-l border-gray-50">
+                                                    {formatNumber(group.items.reduce((sum, i) => sum + ((i.usage_amount || 0) * batchSize2), 0), 0)}g
+                                                </td>
+                                                <td className="py-2 text-right font-mono font-bold text-gray-900">
                                                     {formatCurrency(group.items.reduce((sum, i) => sum + (i.cost || 0), 0))}
                                                 </td>
                                             </tr>
@@ -406,24 +502,30 @@ export default function RecipeDetailPage() {
                             ))}
                         </div>
                     </div>
+                </div>
 
-                    {/* Right Column: Notes & Nutrition (4 cols) */}
-                    <div className="col-span-12 md:col-span-4 print:col-span-4 flex flex-col gap-8">
+                <div className="grid grid-cols-12 gap-8 mt-8 border-t pt-8">
+                    {/* Bottom Section: Notes & Nutrition (Now Full Width split or separate) */}
+                    {/* Since table is wide, we move these to bottom */}
+
+                    <div className="col-span-12 md:col-span-7 print:col-span-7">
                         {/* Manufacturing Notes */}
-                        <div className="break-inside-avoid bg-gray-50 p-4 rounded border border-gray-100 print:bg-white print:border-l-2 print:border-gray-200 print:border-t-0 print:border-r-0 print:border-b-0 print:rounded-none">
+                        <div className="break-inside-avoid bg-gray-50 p-4 rounded border border-gray-100 print:bg-white print:border-l-2 print:border-gray-200 print:border-t-0 print:border-r-0 print:border-b-0 print:rounded-none h-full">
                             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                                 <Edit className="w-3 h-3" />
                                 Manufacturing Notes
                             </h3>
                             <textarea
-                                className="w-full min-h-[200px] text-xs leading-relaxed bg-transparent border-none resize-none p-0 focus:ring-0 text-gray-700 placeholder:text-gray-300"
+                                className="w-full h-full min-h-[150px] text-xs leading-relaxed bg-transparent border-none resize-none p-0 focus:ring-0 text-gray-700 placeholder:text-gray-300"
                                 value={recipe.manufacturing_notes || ''}
                                 onChange={(e) => setRecipe({ ...recipe, manufacturing_notes: e.target.value })}
                                 onBlur={(e) => handleRecipeChange('manufacturing_notes', e.target.value)}
                                 placeholder="製造プロセスや注意点を記載..."
                             />
                         </div>
+                    </div>
 
+                    <div className="col-span-12 md:col-span-5 print:col-span-5">
                         {/* Nutrition */}
                         <div className="break-inside-avoid">
                             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">Nutrition (per 100g)</h3>
@@ -448,13 +550,6 @@ export default function RecipeDetailPage() {
                         -webkit-print-color-adjust: exact;
                         print-color-adjust: exact;
                         background: white;
-                    }
-                    /* Ensure grid columns maintain layout in print */
-                    .md\\:col-span-8 {
-                        grid-column: span 8 / span 12 !important;
-                    }
-                    .md\\:col-span-4 {
-                        grid-column: span 4 / span 12 !important;
                     }
                 }
             `}</style>
