@@ -1,0 +1,27 @@
+--- BROKEN LINK ANALYSIS V4 ---
+Total Items: 2505
+Strict Links to Intermediates: 34
+Fuzzy Links (Recoverable via normalization): 10
+Potential Broken Links (Looks like intermediate but no match): 107
+
+--- SAMPLE BROKEN LINKS ---
+ - "ブレンド醤油スープ"
+ - "【P】自社製造ラー油（出来高2/3）"
+ - "粉粉豚骨スープ（煮詰め）70％"
+ - "ラミSP L-1015H　醤油ラーメンスープ・メンマナルト用"
+ - "ホタテ塩スープ"
+ - "星醸造醤油スープ（小袋）"
+ - "鶏白湯スープ"
+ - "粉粉豚骨スープ"
+ - "えちご家用スープ（小袋）"
+ - "山塩スープ（小袋）"
+ - "シャンガオタンスープ"
+ - "【P】自社製造ラー油（固形あり）"
+ - "【仕入】味噌スープ"
+ - "【仕入】SIOスープ"
+ - "【仕入】醤油スープ小袋"
+ - "【P】完全再現スープ　醤油"
+ - "【P】完全再現スープ 醤油（背脂）"
+ - "【スープ袋大】HLV-1318"
+ - "山塩スープ"
+ - "【P】完全再現スープ（IE-K）MIX改良版"

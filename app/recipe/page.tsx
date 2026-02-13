@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus } from "lucide-react";
+import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
 
 // カテゴリー一覧
@@ -77,7 +77,7 @@ export default function RecipePage() {
         // Optimization: We could filter but for correctness vs fuzzy, fetching all is safer
         const { data: allItems, error } = await supabase
             .from('recipe_items')
-            .select('item_name, recipe_id, recipes!inner(name)');
+            .select('item_name, intermediate_recipe_id, recipe_id, recipes!inner(name)');
 
         if (error || !allItems) {
             console.error("Error fetching usage items:", error);
@@ -93,12 +93,16 @@ export default function RecipePage() {
 
         intermediates.forEach(inter => {
             const interName = inter.name;
+            const interId = inter.id;
             const normInter = normalize(interName);
             const interNoParens = stripParens(normInter);
             const interNoNo = stripNo(interNoParens);
 
             // Find matching items
             const matches = allItems.filter(item => {
+                // 0. Exact ID match (Best)
+                if (item.intermediate_recipe_id && item.intermediate_recipe_id === interId) return true;
+
                 const iName = item.item_name;
                 const normItem = normalize(iName);
 
@@ -369,6 +373,11 @@ export default function RecipePage() {
                             />
                         </div>
                     </div>
+
+                    <Button variant="outline" onClick={() => router.push("/recipe/integration")}>
+                        <LinkIcon className="w-4 h-4 mr-2" />
+                        データ統合
+                    </Button>
 
                     <Button variant="outline" onClick={() => router.push("/recipe/database")}>
                         <Package className="w-4 h-4 mr-2" />

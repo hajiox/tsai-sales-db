@@ -1,0 +1,6 @@
+--- BROKEN LINK ANALYSIS ---
+Total items checked: 1000
+Items strictly matching intermediate names: 12
+Items matching intermediate names ONLY via loose fuzzy logic: 0
+
+Sample of Fuzzy Matches (These are what breaks without fuzzy logic):

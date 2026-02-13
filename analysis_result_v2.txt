@@ -1,0 +1,13 @@
+
+--- RESULTS ---
+Total: 1000
+Linked Items (Exact or Norm Match): 1000 (100.0%)
+Unlinked Items (String Only):       0 (0.0%)
+
+--- UNLINKED BY DECLARED TYPE ---
+
+--- POTENTIAL BROKEN INTERMEDIATES (Top 20 Samples) ---
+
+--- SUMMARY ---
+The system currently relies on string matching. 0 rows are "floating" strings that do not strictly match any master record.
+Even with fuzzy matching logic, reliability is compromised.
