@@ -158,6 +158,26 @@ export default function RecipeDetailPage() {
         setHasChanges(true);
     };
 
+    const handleRecipeChange = async (field: keyof Recipe, value: any) => {
+        if (!recipe) return;
+
+        const updatedRecipe = { ...recipe, [field]: value };
+        setRecipe(updatedRecipe);
+
+        try {
+            const { error } = await supabase
+                .from('recipes')
+                .update({ [field]: value })
+                .eq('id', recipe.id);
+
+            if (error) throw error;
+            toast.success('更新しました', { duration: 1000 });
+        } catch (error) {
+            console.error('Update error:', error);
+            toast.error('更新に失敗しました');
+        }
+    };
+
     const saveChanges = async () => {
         if (!recipe) return;
 
@@ -202,20 +222,7 @@ export default function RecipeDetailPage() {
     // カテゴリー変更
     const handleCategoryChange = async (newCategory: string) => {
         if (!recipe) return;
-
-        try {
-            const { error } = await supabase
-                .from('recipes')
-                .update({ category: newCategory })
-                .eq('id', recipe.id);
-
-            if (error) throw error;
-
-            setRecipe({ ...recipe, category: newCategory });
-            toast.success(`カテゴリーを「${newCategory}」に変更しました`);
-        } catch (error) {
-            toast.error('カテゴリー変更に失敗しました');
-        }
+        handleRecipeChange('category', newCategory);
     };
 
     const formatNumber = (value?: number | null, decimals = 2) => {
@@ -676,80 +683,58 @@ export default function RecipeDetailPage() {
 
                                 <div>
                                     <label className="block text-gray-500 mb-1">開発日</label>
-                                    {isEditing ? (
-                                        <Input
-                                            type="date"
-                                            value={recipe.development_date || ''}
-                                            onChange={(e) => {
-                                                setRecipe({ ...recipe, development_date: e.target.value });
-                                                setHasChanges(true);
-                                            }}
-                                        />
-                                    ) : (
-                                        <div className="font-medium h-8 flex items-center">{recipe.development_date || '-'}</div>
-                                    )}
+                                    <Input
+                                        type="date"
+                                        value={recipe.development_date || ''}
+                                        onChange={(e) => handleRecipeChange('development_date', e.target.value)}
+                                        className="h-9"
+                                    />
                                 </div>
 
                                 <div>
                                     <label className="block text-gray-500 mb-1">保存方法</label>
-                                    {isEditing ? (
-                                        <Select
-                                            value={recipe.storage_method || ''}
-                                            onValueChange={(val) => {
-                                                setRecipe({ ...recipe, storage_method: val });
-                                                setHasChanges(true);
-                                            }}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="選択してください" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="常温">常温</SelectItem>
-                                                <SelectItem value="冷蔵">冷蔵</SelectItem>
-                                                <SelectItem value="冷凍">冷凍</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    ) : (
-                                        <div className="font-medium h-8 flex items-center">{recipe.storage_method || '-'}</div>
-                                    )}
+                                    <Select
+                                        value={recipe.storage_method || ''}
+                                        onValueChange={(val) => handleRecipeChange('storage_method', val)}
+                                    >
+                                        <SelectTrigger className="h-9">
+                                            <SelectValue placeholder="選択してください" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="常温">常温</SelectItem>
+                                            <SelectItem value="冷蔵">冷蔵</SelectItem>
+                                            <SelectItem value="冷凍">冷凍</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </div>
 
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-gray-500 mb-1">充填量 (g)</label>
-                                    {isEditing ? (
-                                        <Input
-                                            type="number"
-                                            value={recipe.filling_quantity || ''}
-                                            onChange={(e) => {
-                                                const val = e.target.value ? parseFloat(e.target.value) : null;
-                                                setRecipe({ ...recipe, filling_quantity: val });
-                                                setHasChanges(true);
-                                            }}
-                                        />
-                                    ) : (
-                                        <div className="font-medium h-8 flex items-center">{recipe.filling_quantity ? `${recipe.filling_quantity}g` : '-'}</div>
-                                    )}
+                                    <Input
+                                        type="number"
+                                        value={recipe.filling_quantity || ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value ? parseFloat(e.target.value) : null;
+                                            handleRecipeChange('filling_quantity', val);
+                                        }}
+                                        className="h-9"
+                                        placeholder="例: 180"
+                                    />
                                 </div>
 
                                 <div>
                                     <label className="block text-gray-500 mb-1">製造メモ</label>
-                                    {isEditing ? (
-                                        <textarea
-                                            className="w-full min-h-[100px] p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            value={recipe.manufacturing_notes || ''}
-                                            onChange={(e) => {
-                                                setRecipe({ ...recipe, manufacturing_notes: e.target.value });
-                                                setHasChanges(true);
-                                            }}
-                                            placeholder="製造手順や注意事項などを入力"
-                                        />
-                                    ) : (
-                                        <div className="whitespace-pre-wrap p-2 bg-gray-50 rounded min-h-[100px]">
-                                            {recipe.manufacturing_notes || 'なし'}
-                                        </div>
-                                    )}
+                                    <textarea
+                                        className="w-full min-h-[120px] p-3 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                        value={recipe.manufacturing_notes || ''}
+                                        onChange={(e) => {
+                                            setRecipe({ ...recipe, manufacturing_notes: e.target.value });
+                                        }}
+                                        onBlur={(e) => handleRecipeChange('manufacturing_notes', e.target.value)}
+                                        placeholder="製造手順や注意事項などを入力してください。入力すると自動的に保存されます。"
+                                    />
                                 </div>
 
                                 {recipe.source_file && (
