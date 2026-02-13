@@ -17,18 +17,20 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
       setActiveModule('sales')
     }
   }, [pathname])
-  
+
   return (
     // これが最終的なレイアウト構成です。
     // サイドバーとメインコンテンツのみをシンプルに横に並べます。
-    <div className="flex h-screen bg-gray-100">
-      
-      <MainSidebar />
-      
-      <main className="flex-grow p-6 overflow-auto">
+    <div className="flex h-screen bg-gray-100 print:h-auto print:block">
+
+      <div className="print:hidden">
+        <MainSidebar />
+      </div>
+
+      <main className="flex-grow p-6 overflow-auto print:p-0 print:overflow-visible">
         {children}
       </main>
-      
+
     </div>
   )
 }

@@ -310,17 +310,17 @@ export default function RecipeDetailPage() {
                 {/* Specs Grid */}
                 <div className="grid grid-cols-4 gap-4 mb-8">
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Selling Price</div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">販売価格</div>
                         <div className="font-bold text-lg">{formatCurrency(recipe.selling_price)}</div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Gross Profit</div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">粗利益</div>
                         <div className={`font-bold text-lg ${profit > 0 ? 'text-gray-900' : 'text-red-600'}`}>
                             {formatCurrency(profit)}
                         </div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Filling (g)</div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">充填量 (g)</div>
                         <div className="font-bold text-lg flex items-center gap-2">
                             <Input
                                 type="number"
@@ -336,7 +336,7 @@ export default function RecipeDetailPage() {
                         </div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Storage</div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">保存方法</div>
                         <Select value={recipe.storage_method || ''} onValueChange={(val) => handleRecipeChange('storage_method', val)}>
                             <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-lg">
                                 <SelectValue placeholder="-" />
