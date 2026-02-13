@@ -15,9 +15,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, Printer } from "lucide-react";
+import { ArrowLeft, Edit, Save, Printer, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, { NutritionData } from "../_components/NutritionDisplay";
+import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -62,6 +63,15 @@ export default function RecipeDetailPage() {
     const [hasChanges, setHasChanges] = useState(false);
     const [nutritionMap, setNutritionMap] = useState<Record<string, NutritionData>>({});
 
+    // Deletion tracking
+    const [deletedItemIds, setDeletedItemIds] = useState<Set<string>>(new Set());
+
+    // Master Data
+    const [ingredients, setIngredients] = useState<ItemCandidate[]>([]);
+    const [materials, setMaterials] = useState<ItemCandidate[]>([]);
+    const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
+    const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
+
     // Batch calculation states
     const [batchSize1, setBatchSize1] = useState(100);
     const [batchSize2, setBatchSize2] = useState(400);
@@ -69,8 +79,58 @@ export default function RecipeDetailPage() {
     useEffect(() => {
         if (params.id) {
             fetchRecipe(params.id as string);
+            fetchMasterData();
         }
     }, [params.id]);
+
+    const fetchMasterData = async () => {
+        // Ingredients
+        const { data: ingData } = await supabase
+            .from('ingredients')
+            .select('id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium');
+        if (ingData) {
+            setIngredients(ingData.map(i => ({
+                id: i.id,
+                name: i.name,
+                unit_quantity: i.unit_quantity,
+                unit_price: i.price,
+                nutrition: {
+                    calories: i.calories,
+                    protein: i.protein,
+                    fat: i.fat,
+                    carbohydrate: i.carbohydrate,
+                    sodium: i.sodium,
+                }
+            })));
+        }
+        // Materials
+        const { data: matData } = await supabase.from('materials').select('id, name, unit_quantity, price');
+        if (matData) {
+            setMaterials(matData.map(m => ({
+                id: m.id,
+                name: m.name,
+                unit_quantity: m.unit_quantity,
+                unit_price: m.price
+            })));
+        }
+        // Intermediates
+        const { data: recipeData } = await supabase.from('recipes').select('id, name, total_cost').eq('is_intermediate', true);
+        if (recipeData) {
+            setIntermediates(recipeData.map(r => ({
+                id: r.id,
+                name: r.name,
+                unit_quantity: 1,
+                unit_price: r.total_cost
+            })));
+        }
+        // Expenses (Hardcoded for now)
+        setExpenses([
+            { name: "ヤマト送料", unit_price: 950, unit_quantity: 1 },
+            { name: "ネコポス送料", unit_price: 350, unit_quantity: 1 },
+            { name: "コンパクト送料", unit_price: 550, unit_quantity: 1 },
+            { name: "人件費", unit_price: 1200, unit_quantity: 1 },
+        ]);
+    };
 
     const fetchRecipe = async (id: string) => {
         setLoading(true);
@@ -153,6 +213,55 @@ export default function RecipeDetailPage() {
         setHasChanges(true);
     };
 
+    const addItem = (type: string) => {
+        if (!recipe) return;
+        const newItem: RecipeItem = {
+            id: `temp-${Date.now()}-${Math.random()}`,
+            recipe_id: recipe.id,
+            item_name: "",
+            item_type: type,
+            unit_quantity: 0,
+            unit_price: 0,
+            usage_amount: 0,
+            cost: 0,
+        };
+        setItems(prev => [...prev, newItem]);
+        setIsEditing(true);
+        setHasChanges(true);
+    };
+
+    const deleteItem = (itemId: string) => {
+        if (!itemId.startsWith('temp-')) {
+            setDeletedItemIds(prev => {
+                const next = new Set(prev);
+                next.add(itemId);
+                return next;
+            });
+        }
+        setItems(prev => prev.filter(i => i.id !== itemId));
+        setHasChanges(true);
+    };
+
+    const handleItemSelect = (itemId: string, selected: ItemCandidate | string) => {
+        setItems(prevItems => prevItems.map(item => {
+            if (item.id === itemId) {
+                let updates: Partial<RecipeItem> = {};
+                if (typeof selected === 'string') {
+                    updates = { item_name: selected };
+                } else {
+                    updates = {
+                        item_name: selected.name,
+                        unit_price: selected.unit_price || 0,
+                        unit_quantity: typeof selected.unit_quantity === 'number' ? selected.unit_quantity : parseFloat(String(selected.unit_quantity)) || 0,
+                    };
+                }
+                return { ...item, ...updates };
+            }
+            return item;
+        }));
+        setHasChanges(true);
+    };
+
     const handleRecipeChange = async (field: keyof Recipe, value: any) => {
         if (!recipe) return;
 
@@ -177,8 +286,39 @@ export default function RecipeDetailPage() {
         if (!recipe) return;
 
         try {
-            for (const item of items) {
-                await supabase
+            // 1. Delete removed items
+            if (deletedItemIds.size > 0) {
+                const { error: delError } = await supabase
+                    .from('recipe_items')
+                    .delete()
+                    .in('id', Array.from(deletedItemIds));
+                if (delError) throw delError;
+                setDeletedItemIds(new Set());
+            }
+
+            // 2. Process updates and inserts
+            const newItems = items.filter(i => i.id.startsWith('temp-'));
+            const existingItems = items.filter(i => !i.id.startsWith('temp-'));
+
+            // Inserts
+            if (newItems.length > 0) {
+                const { error: insError } = await supabase.from('recipe_items').insert(
+                    newItems.map(item => ({
+                        recipe_id: recipe.id,
+                        item_name: item.item_name,
+                        item_type: item.item_type,
+                        unit_quantity: item.unit_quantity,
+                        unit_price: item.unit_price,
+                        usage_amount: item.usage_amount,
+                        cost: item.cost,
+                    }))
+                );
+                if (insError) throw insError;
+            }
+
+            // Updates
+            for (const item of existingItems) {
+                const { error: updError } = await supabase
                     .from('recipe_items')
                     .update({
                         item_name: item.item_name,
@@ -188,6 +328,7 @@ export default function RecipeDetailPage() {
                         cost: item.cost,
                     })
                     .eq('id', item.id);
+                if (updError) throw updError;
             }
 
             const totalCost = items.reduce((sum, item) => sum + (item.cost || 0), 0);
@@ -206,7 +347,11 @@ export default function RecipeDetailPage() {
             toast.success('保存しました');
             setHasChanges(false);
             setIsEditing(false);
+
+            // Reload to get real IDs
+            fetchRecipe(recipe.id);
         } catch (error) {
+            console.error(error);
             toast.error('保存に失敗しました');
         }
     };
@@ -241,11 +386,11 @@ export default function RecipeDetailPage() {
 
     // Group items for display
     const groupedItems = [
-        { title: "原材料", items: items.filter(i => i.item_type === 'ingredient'), color: "bg-green-50 text-green-700 border-green-100" },
-        { title: "中間加工品", items: items.filter(i => i.item_type === 'intermediate'), color: "bg-purple-50 text-purple-700 border-purple-100" },
-        { title: "資材・包材", items: items.filter(i => i.item_type === 'material'), color: "bg-orange-50 text-orange-700 border-orange-100" },
-        { title: "諸経費", items: items.filter(i => i.item_type === 'expense'), color: "bg-red-50 text-red-700 border-red-100" },
-    ].filter(g => g.items.length > 0);
+        { title: "原材料", type: 'ingredient', items: items.filter(i => i.item_type === 'ingredient'), color: "bg-green-50 text-green-700 border-green-100", candidates: ingredients },
+        { title: "中間加工品", type: 'intermediate', items: items.filter(i => i.item_type === 'intermediate'), color: "bg-purple-50 text-purple-700 border-purple-100", candidates: intermediates },
+        { title: "資材・包材", type: 'material', items: items.filter(i => i.item_type === 'material'), color: "bg-orange-50 text-orange-700 border-orange-100", candidates: materials },
+        { title: "諸経費", type: 'expense', items: items.filter(i => i.item_type === 'expense'), color: "bg-red-50 text-red-700 border-red-100", candidates: expenses },
+    ];
 
     return (
         <div className="min-h-screen bg-white text-gray-800 font-sans print:p-0">
@@ -384,120 +529,157 @@ export default function RecipeDetailPage() {
                             </div>
                         </div>
 
-                        <div className="space-y-6">
+                        <div className="space-y-8">
                             {groupedItems.map((group, gIdx) => (
                                 <div key={gIdx} className="break-inside-avoid">
-                                    <div className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded mb-2 border ${group.color}`}>
-                                        {group.title}
+                                    <div className="flex justify-between items-center mb-2">
+                                        <div className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded border ${group.color}`}>
+                                            {group.title}
+                                        </div>
+                                        {isEditing && (
+                                            <Button size="sm" variant="ghost" className="h-6 text-xs text-gray-500 hover:text-blue-600" onClick={() => addItem(group.type)}>
+                                                <Plus className="w-3 h-3 mr-1" /> 追加
+                                            </Button>
+                                        )}
                                     </div>
-                                    <table className="w-full text-sm table-fixed">
-                                        <thead>
-                                            <tr className="border-b border-gray-200 text-gray-500">
-                                                <th className="text-left py-1 w-8 font-normal">#</th>
-                                                <th className="text-left py-1 w-40 font-normal">原材料名</th>
-                                                {/* Unit Quantity (Hidden mostly but useful for ref) */}
 
-                                                {/* 1 Unit */}
-                                                <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">基本(1)</th>
+                                    {group.items.length > 0 ? (
+                                        <table className="w-full text-sm table-fixed">
+                                            <thead>
+                                                <tr className="border-b border-gray-200 text-gray-500">
+                                                    <th className="text-left py-1 w-8 font-normal">#</th>
+                                                    <th className="text-left py-1 w-40 font-normal">名称</th>
 
-                                                {/* Batch 1 */}
-                                                <th className="text-right py-1 w-28 font-bold text-blue-700 bg-blue-50 border-l border-white">
-                                                    {batchSize1}個分 <br /><span className="text-xs font-normal text-gray-500">使用量 | 袋数</span>
-                                                </th>
+                                                    {/* 1 Unit */}
+                                                    <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">基本(1)</th>
 
-                                                {/* Batch 2 */}
-                                                <th className="text-right py-1 w-28 font-bold text-purple-700 bg-purple-50 border-l border-white">
-                                                    {batchSize2}個分 <br /><span className="text-xs font-normal text-gray-500">使用量 | 袋数</span>
-                                                </th>
+                                                    {/* Batch 1 */}
+                                                    <th className="text-right py-1 w-28 font-bold text-blue-700 bg-blue-50 border-l border-white">
+                                                        {batchSize1}個分 <br /><span className="text-xs font-normal text-gray-500">使用量 | 袋数</span>
+                                                    </th>
 
-                                                {/* Cost */}
-                                                <th className="text-right py-1 w-20 font-normal text-gray-400">原価(1)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {group.items.map((item, idx) => {
-                                                const unitUsage = item.usage_amount || 0;
-                                                const unitQty = item.unit_quantity || 0;
+                                                    {/* Batch 2 */}
+                                                    <th className="text-right py-1 w-28 font-bold text-purple-700 bg-purple-50 border-l border-white">
+                                                        {batchSize2}個分 <br /><span className="text-xs font-normal text-gray-500">使用量 | 袋数</span>
+                                                    </th>
 
-                                                // Batch 1 Calcs
-                                                const b1Usage = unitUsage * batchSize1;
-                                                const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
+                                                    {/* Cost */}
+                                                    <th className="text-right py-1 w-20 font-normal text-gray-400">原価(1)</th>
+                                                    {isEditing && <th className="w-8"></th>}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {group.items.map((item, idx) => {
+                                                    const unitUsage = item.usage_amount || 0;
+                                                    const unitQty = item.unit_quantity || 0;
 
-                                                // Batch 2 Calcs
-                                                const b2Usage = unitUsage * batchSize2;
-                                                const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
+                                                    // Batch 1 Calcs
+                                                    const b1Usage = unitUsage * batchSize1;
+                                                    const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
 
-                                                return (
-                                                    <tr key={item.id} className="group hover:bg-gray-50/50">
-                                                        <td className="py-2 text-gray-300 align-top">{idx + 1}</td>
-                                                        <td className="py-2 font-medium text-gray-700 align-top pr-2">
-                                                            {item.item_name}
-                                                            <div className="text-[10px] text-gray-400 font-normal">
-                                                                {unitQty > 0 ? `(${formatNumber(unitQty, 0)}g/pk)` : ''}
-                                                            </div>
-                                                        </td>
+                                                    // Batch 2 Calcs
+                                                    const b2Usage = unitUsage * batchSize2;
+                                                    const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
 
-                                                        {/* 1 Unit Usage */}
-                                                        <td className="py-2 text-right font-mono text-gray-800 bg-gray-50/30 align-top">
-                                                            {isEditing ? (
-                                                                <input
-                                                                    type="number"
-                                                                    className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                                                                    value={item.usage_amount || ''}
-                                                                    onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
-                                                                />
-                                                            ) : (
-                                                                <span className="font-bold">{formatNumber(item.usage_amount, 1)}</span>
+                                                    return (
+                                                        <tr key={item.id} className="group hover:bg-gray-50/50">
+                                                            <td className="py-2 text-gray-300 align-top">{idx + 1}</td>
+                                                            <td className="py-2 font-medium text-gray-700 align-top pr-2">
+                                                                {isEditing ? (
+                                                                    <ItemNameSelect
+                                                                        candidates={group.candidates}
+                                                                        value={item.item_name}
+                                                                        onSelect={(val) => handleItemSelect(item.id, val)}
+                                                                    />
+                                                                ) : (
+                                                                    <>
+                                                                        {item.item_name}
+                                                                        <div className="text-[10px] text-gray-400 font-normal">
+                                                                            {unitQty > 0 ? `(${formatNumber(unitQty, 0)}g/pk)` : ''}
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </td>
+
+                                                            {/* 1 Unit Usage */}
+                                                            <td className="py-2 text-right font-mono text-gray-800 bg-gray-50/30 align-top">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        type="number"
+                                                                        className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
+                                                                        value={item.usage_amount || ''}
+                                                                        onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
+                                                                    />
+                                                                ) : (
+                                                                    <span className="font-bold">{formatNumber(item.usage_amount, 1)}</span>
+                                                                )}
+                                                                <span className="text-[10px] text-gray-400 block">g</span>
+                                                            </td>
+
+                                                            {/* Batch 1 */}
+                                                            <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
+                                                                <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
+                                                                {b1Bags > 0 && item.item_type !== 'expense' && (
+                                                                    <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
+                                                                        {formatNumber(b1Bags, 2)} <span className="font-normal opacity-70">pk</span>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+
+                                                            {/* Batch 2 */}
+                                                            <td className="py-2 text-right font-mono text-purple-700 bg-purple-50/30 border-l border-gray-50 align-top">
+                                                                <div className="font-bold">{formatNumber(b2Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
+                                                                {b2Bags > 0 && item.item_type !== 'expense' && (
+                                                                    <div className="text-[10px] text-purple-500 mt-0.5 font-bold">
+                                                                        {formatNumber(b2Bags, 2)} <span className="font-normal opacity-70">pk</span>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+
+                                                            <td className="py-2 text-right font-mono text-gray-400 align-top">
+                                                                {formatCurrency(item.cost)}
+                                                            </td>
+
+                                                            {isEditing && (
+                                                                <td className="py-2 text-center align-top">
+                                                                    <button
+                                                                        onClick={() => deleteItem(item.id)}
+                                                                        className="text-gray-400 hover:text-red-500 p-1"
+                                                                        title="削除"
+                                                                    >
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </button>
+                                                                </td>
                                                             )}
-                                                            <span className="text-[10px] text-gray-400 block">g</span>
-                                                        </td>
-
-                                                        {/* Batch 1 */}
-                                                        <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
-                                                            <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
-                                                            {b1Bags > 0 && item.item_type !== 'expense' && (
-                                                                <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
-                                                                    {formatNumber(b1Bags, 2)} <span className="font-normal opacity-70">pk</span>
-                                                                </div>
-                                                            )}
-                                                        </td>
-
-                                                        {/* Batch 2 */}
-                                                        <td className="py-2 text-right font-mono text-purple-700 bg-purple-50/30 border-l border-gray-50 align-top">
-                                                            <div className="font-bold">{formatNumber(b2Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
-                                                            {b2Bags > 0 && item.item_type !== 'expense' && (
-                                                                <div className="text-[10px] text-purple-500 mt-0.5 font-bold">
-                                                                    {formatNumber(b2Bags, 2)} <span className="font-normal opacity-70">pk</span>
-                                                                </div>
-                                                            )}
-                                                        </td>
-
-                                                        <td className="py-2 text-right font-mono text-gray-400 align-top">
-                                                            {formatCurrency(item.cost)}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                        {/* Group Subtotal */}
-                                        <tfoot className="border-t border-gray-100">
-                                            <tr>
-                                                <td colSpan={2} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Total Usage</td>
-                                                <td className="py-2 text-right font-mono font-bold text-gray-700 bg-gray-50/50">
-                                                    {formatNumber(group.items.reduce((sum, i) => sum + (i.usage_amount || 0), 0), 0)}g
-                                                </td>
-                                                <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">
-                                                    {formatNumber(group.items.reduce((sum, i) => sum + ((i.usage_amount || 0) * batchSize1), 0), 0)}g
-                                                </td>
-                                                <td className="py-2 text-right font-mono font-bold text-purple-700 bg-purple-50/30 border-l border-gray-50">
-                                                    {formatNumber(group.items.reduce((sum, i) => sum + ((i.usage_amount || 0) * batchSize2), 0), 0)}g
-                                                </td>
-                                                <td className="py-2 text-right font-mono font-bold text-gray-900">
-                                                    {formatCurrency(group.items.reduce((sum, i) => sum + (i.cost || 0), 0))}
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                            {/* Group Subtotal */}
+                                            <tfoot className="border-t border-gray-100">
+                                                <tr>
+                                                    <td colSpan={2} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Total Usage</td>
+                                                    <td className="py-2 text-right font-mono font-bold text-gray-700 bg-gray-50/50">
+                                                        {formatNumber(group.items.reduce((sum, i) => sum + (i.usage_amount || 0), 0), 0)}g
+                                                    </td>
+                                                    <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">
+                                                        {formatNumber(group.items.reduce((sum, i) => sum + ((i.usage_amount || 0) * batchSize1), 0), 0)}g
+                                                    </td>
+                                                    <td className="py-2 text-right font-mono font-bold text-purple-700 bg-purple-50/30 border-l border-gray-50">
+                                                        {formatNumber(group.items.reduce((sum, i) => sum + ((i.usage_amount || 0) * batchSize2), 0), 0)}g
+                                                    </td>
+                                                    <td className="py-2 text-right font-mono font-bold text-gray-900">
+                                                        {formatCurrency(group.items.reduce((sum, i) => sum + (i.cost || 0), 0))}
+                                                    </td>
+                                                    {isEditing && <td></td>}
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    ) : (
+                                        <div className="text-sm text-gray-300 py-4 text-center border border-dashed rounded bg-gray-50/50">
+                                            アイテムがありません
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
