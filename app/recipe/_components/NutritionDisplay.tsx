@@ -1,3 +1,4 @@
+// app/recipe/_components/NutritionDisplay.tsx
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,9 +21,10 @@ export interface ItemWithNutrition {
 
 interface NutritionDisplayProps {
     items: ItemWithNutrition[];
+    compact?: boolean;
 }
 
-export default function NutritionDisplay({ items }: NutritionDisplayProps) {
+export default function NutritionDisplay({ items, compact = false }: NutritionDisplayProps) {
     if (!items || items.length === 0) return null;
 
     // 食材(ingredient)のみ対象にする（中間部品はデータがないため一旦除外、将来的に対応必要）
@@ -31,14 +33,6 @@ export default function NutritionDisplay({ items }: NutritionDisplayProps) {
     );
 
     if (targetItems.length === 0) return null;
-
-    // 総重量 (g) - water lossなどは考慮せず単純合計
-    // 中間部品が含まれる場合、総重量には加算すべきだが栄養成分がないので、
-    // 正確な「100gあたり」が出せない。
-    // ここでは「計算対象となった食材の総重量」を分母にするか、「レシピ全体の総重量」を分母にするか。
-    // ユーザーにとって重要なのは「成果物の100gあたり」なので、本来は全重量で割るべき。
-    // しかし分子（栄養素）が足りないので、値が薄まってしまう。
-    // 注釈をつけるのがベスト。
 
     // 全体の重量（栄養成分不明なものも含める）
     const totalRecipeWeight = items.reduce((sum, item) => {
@@ -62,6 +56,41 @@ export default function NutritionDisplay({ items }: NutritionDisplayProps) {
     }, { calories: 0, protein: 0, fat: 0, carbohydrate: 0, sodium: 0 });
 
     const formatVal = (val: number) => val.toLocaleString(undefined, { maximumFractionDigits: 1 });
+
+    const per100g = {
+        calories: totalRecipeWeight ? totalNutrition.calories / totalRecipeWeight * 100 : 0,
+        protein: totalRecipeWeight ? totalNutrition.protein / totalRecipeWeight * 100 : 0,
+        fat: totalRecipeWeight ? totalNutrition.fat / totalRecipeWeight * 100 : 0,
+        carbohydrate: totalRecipeWeight ? totalNutrition.carbohydrate / totalRecipeWeight * 100 : 0,
+        sodium: totalRecipeWeight ? totalNutrition.sodium / totalRecipeWeight * 100 : 0,
+    };
+
+    if (compact) {
+        return (
+            <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-600">
+                <div className="flex justify-between border-b pb-1">
+                    <span>エネルギー</span>
+                    <span className="font-bold">{formatVal(per100g.calories)} kcal</span>
+                </div>
+                <div className="flex justify-between border-b pb-1">
+                    <span>タンパク質</span>
+                    <span className="font-bold">{formatVal(per100g.protein)} g</span>
+                </div>
+                <div className="flex justify-between border-b pb-1">
+                    <span>脂質</span>
+                    <span className="font-bold">{formatVal(per100g.fat)} g</span>
+                </div>
+                <div className="flex justify-between border-b pb-1">
+                    <span>炭水化物</span>
+                    <span className="font-bold">{formatVal(per100g.carbohydrate)} g</span>
+                </div>
+                <div className="flex justify-between border-b pb-1 col-span-2">
+                    <span>食塩相当量</span>
+                    <span className="font-bold">{formatVal(per100g.sodium)} g</span>
+                </div>
+            </div>
+        );
+    }
 
     // 中間部品が含まれているかチェック
     const hasIntermediate = items.some(i => i.item_type === 'intermediate');
@@ -88,23 +117,23 @@ export default function NutritionDisplay({ items }: NutritionDisplayProps) {
                         <dl className="space-y-2 text-sm">
                             <div className="flex justify-between items-center">
                                 <dt className="text-slate-600">エネルギー</dt>
-                                <dd className="font-bold text-slate-900 text-lg">{totalRecipeWeight ? formatVal(totalNutrition.calories / totalRecipeWeight * 100) : 0} <span className="text-xs font-normal text-slate-500">kcal</span></dd>
+                                <dd className="font-bold text-slate-900 text-lg">{formatVal(per100g.calories)} <span className="text-xs font-normal text-slate-500">kcal</span></dd>
                             </div>
                             <div className="flex justify-between items-center border-t border-slate-100 pt-2">
                                 <dt className="text-slate-600">タンパク質</dt>
-                                <dd className="font-medium text-slate-900">{totalRecipeWeight ? formatVal(totalNutrition.protein / totalRecipeWeight * 100) : 0} <span className="text-xs font-normal text-slate-500">g</span></dd>
+                                <dd className="font-medium text-slate-900">{formatVal(per100g.protein)} <span className="text-xs font-normal text-slate-500">g</span></dd>
                             </div>
                             <div className="flex justify-between items-center border-t border-slate-100 pt-2">
                                 <dt className="text-slate-600">脂質</dt>
-                                <dd className="font-medium text-slate-900">{totalRecipeWeight ? formatVal(totalNutrition.fat / totalRecipeWeight * 100) : 0} <span className="text-xs font-normal text-slate-500">g</span></dd>
+                                <dd className="font-medium text-slate-900">{formatVal(per100g.fat)} <span className="text-xs font-normal text-slate-500">g</span></dd>
                             </div>
                             <div className="flex justify-between items-center border-t border-slate-100 pt-2">
                                 <dt className="text-slate-600">炭水化物</dt>
-                                <dd className="font-medium text-slate-900">{totalRecipeWeight ? formatVal(totalNutrition.carbohydrate / totalRecipeWeight * 100) : 0} <span className="text-xs font-normal text-slate-500">g</span></dd>
+                                <dd className="font-medium text-slate-900">{formatVal(per100g.carbohydrate)} <span className="text-xs font-normal text-slate-500">g</span></dd>
                             </div>
                             <div className="flex justify-between items-center border-t border-slate-100 pt-2">
                                 <dt className="text-slate-600">食塩相当量</dt>
-                                <dd className="font-medium text-slate-900">{totalRecipeWeight ? formatVal(totalNutrition.sodium / totalRecipeWeight * 100) : 0} <span className="text-xs font-normal text-slate-500">g</span></dd>
+                                <dd className="font-medium text-slate-900">{formatVal(per100g.sodium)} <span className="text-xs font-normal text-slate-500">g</span></dd>
                             </div>
                         </dl>
                     </div>

@@ -1,5 +1,5 @@
 // app/recipe/[id]/page.tsx
-// レシピ詳細ページ - 新スキーマ対応版
+// レシピ詳細ページ - シングルページレイアウト & 印刷対応
 
 "use client";
 
@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
     Select,
@@ -16,16 +15,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, ChefHat, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit, Save, Printer } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, { NutritionData } from "../_components/NutritionDisplay";
 
 // カテゴリー一覧
 const CATEGORIES = [
-    { value: "ネット専用", label: "ネット専用", color: "bg-blue-100 text-blue-800" },
-    { value: "自社", label: "自社", color: "bg-green-100 text-green-800" },
-    { value: "OEM", label: "OEM", color: "bg-orange-100 text-orange-800" },
-    { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800" },
+    { value: "ネット専用", label: "ネット", color: "bg-blue-100 text-blue-800 border-blue-200" },
+    { value: "自社", label: "自社", color: "bg-green-100 text-green-800 border-green-200" },
+    { value: "OEM", label: "OEM", color: "bg-orange-100 text-orange-800 border-orange-200" },
+    { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800 border-pink-200" },
 ];
 
 interface Recipe {
@@ -53,15 +52,12 @@ interface RecipeItem {
     cost: number | null;
 }
 
-type TabType = "items" | "cost" | "info";
-
 export default function RecipeDetailPage() {
     const params = useParams();
     const router = useRouter();
     const [recipe, setRecipe] = useState<Recipe | null>(null);
     const [items, setItems] = useState<RecipeItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<TabType>("items");
     const [isEditing, setIsEditing] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
     const [nutritionMap, setNutritionMap] = useState<Record<string, NutritionData>>({});
@@ -75,7 +71,6 @@ export default function RecipeDetailPage() {
     const fetchRecipe = async (id: string) => {
         setLoading(true);
 
-        // レシピ本体
         const { data: recipeData, error: recipeError } = await supabase
             .from("recipes")
             .select("*")
@@ -90,7 +85,6 @@ export default function RecipeDetailPage() {
 
         setRecipe(recipeData);
 
-        // レシピ材料
         const { data: itemsData } = await supabase
             .from("recipe_items")
             .select("*")
@@ -100,7 +94,6 @@ export default function RecipeDetailPage() {
         if (itemsData) {
             setItems(itemsData);
 
-            // 栄養成分データの取得
             const ingredientNames = itemsData
                 .filter(i => i.item_type === 'ingredient' || i.item_type === 'intermediate')
                 .map(i => i.item_name);
@@ -140,8 +133,6 @@ export default function RecipeDetailPage() {
             if (item.id === itemId) {
                 const updatedItem = { ...item, [field]: newValue };
 
-                // 原価再計算が必要な場合（経費以外）
-                // 使用量、入数、単価のいずれかが変更されたら再計算
                 if (['usage_amount', 'unit_quantity', 'unit_price'].includes(field) && item.item_type !== 'expense') {
                     const usage = typeof updatedItem.usage_amount === 'number' ? updatedItem.usage_amount : 0;
                     const qty = typeof updatedItem.unit_quantity === 'number' ? updatedItem.unit_quantity : 0;
@@ -182,7 +173,6 @@ export default function RecipeDetailPage() {
         if (!recipe) return;
 
         try {
-            // レシピ材料を更新
             for (const item of items) {
                 await supabase
                     .from('recipe_items')
@@ -196,10 +186,8 @@ export default function RecipeDetailPage() {
                     .eq('id', item.id);
             }
 
-            // 総コスト計算して更新
             const totalCost = items.reduce((sum, item) => sum + (item.cost || 0), 0);
 
-            // レシピ情報を更新
             await supabase
                 .from('recipes')
                 .update({
@@ -219,14 +207,8 @@ export default function RecipeDetailPage() {
         }
     };
 
-    // カテゴリー変更
-    const handleCategoryChange = async (newCategory: string) => {
-        if (!recipe) return;
-        handleRecipeChange('category', newCategory);
-    };
-
-    const formatNumber = (value?: number | null, decimals = 2) => {
-        if (value === undefined || value === null) return "";
+    const formatNumber = (value?: number | null, decimals = 1) => {
+        if (value === undefined || value === null) return "-";
         return value.toFixed(decimals);
     };
 
@@ -235,7 +217,6 @@ export default function RecipeDetailPage() {
         return `¥${Math.round(value).toLocaleString()}`;
     };
 
-    // 合計計算
     const getTotals = () => {
         return {
             usage: items.reduce((sum, item) => sum + (item.usage_amount || 0), 0),
@@ -243,513 +224,240 @@ export default function RecipeDetailPage() {
         };
     };
 
-    // アイテムタイプ別にグループ化
-    const groupedItems = {
-        ingredient: items.filter(i => i.item_type === 'ingredient'),
-        material: items.filter(i => i.item_type === 'material'),
-        intermediate: items.filter(i => i.item_type === 'intermediate'),
-        expense: items.filter(i => i.item_type === 'expense'),
+    const handlePrint = () => {
+        window.print();
     };
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-gray-500">読み込み中...</div>
-            </div>
-        );
-    }
-
-    if (!recipe) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-gray-500">レシピが見つかりません</div>
-            </div>
-        );
-    }
+    if (loading) return <div className="flex justify-center items-center h-screen text-gray-400">読み込み中...</div>;
+    if (!recipe) return <div className="flex justify-center items-center h-screen text-gray-400">レシピが見つかりません</div>;
 
     const totals = getTotals();
+    const profit = (recipe.selling_price || 0) - totals.cost;
+    const profitRate = recipe.selling_price ? (profit / recipe.selling_price) * 100 : 0;
 
-    const tabs: { key: TabType; label: string }[] = [
-        { key: "items", label: "材料一覧" },
-        { key: "cost", label: "原価計算" },
-        { key: "info", label: "基本情報" },
-    ];
+    // Group items for display
+    const groupedItems = [
+        { title: "原材料", items: items.filter(i => i.item_type === 'ingredient'), color: "bg-green-50 text-green-700 border-green-100" },
+        { title: "中間加工品", items: items.filter(i => i.item_type === 'intermediate'), color: "bg-purple-50 text-purple-700 border-purple-100" },
+        { title: "資材・包材", items: items.filter(i => i.item_type === 'material'), color: "bg-orange-50 text-orange-700 border-orange-100" },
+        { title: "諸経費", items: items.filter(i => i.item_type === 'expense'), color: "bg-red-50 text-red-700 border-red-100" },
+    ].filter(g => g.items.length > 0);
 
     return (
-        <div className="h-full flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
+        <div className="min-h-screen bg-white text-gray-800 font-sans print:p-0">
+            {/* Control Bar */}
+            <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b px-6 py-3 flex justify-between items-center print:hidden">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" onClick={() => router.push("/recipe")}>
+                    <Button variant="ghost" size="sm" onClick={() => router.push("/recipe")} className="text-gray-500 hover:text-gray-900">
                         <ArrowLeft className="w-4 h-4 mr-2" />
-                        戻る
+                        レシピ一覧
                     </Button>
-                    <div>
-                        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                            <ChefHat className="w-5 h-5" />
-                            {recipe.is_intermediate && (
-                                <span className="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs mr-1">P</span>
-                            )}
-                            {recipe.name}
-                        </h1>
-                        <div className="flex items-center gap-4 text-sm text-gray-500">
-                            <Select value={recipe.category} onValueChange={handleCategoryChange}>
-                                <SelectTrigger className="w-[140px] h-7">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {CATEGORIES.map((cat) => (
-                                        <SelectItem key={cat.value} value={cat.value}>
-                                            <span className={`px-2 py-0.5 rounded ${cat.color}`}>
-                                                {cat.label}
-                                            </span>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <span>開発日: {recipe.development_date || "-"}</span>
-                        </div>
-                    </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-3">
+                    <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2">
+                        <Printer className="w-4 h-4" />
+                        A4印刷
+                    </Button>
                     {hasChanges ? (
-                        <Button onClick={saveChanges}>
-                            <Save className="w-4 h-4 mr-2" />
-                            変更を保存
+                        <Button size="sm" onClick={saveChanges} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+                            <Save className="w-4 h-4" />
+                            保存
                         </Button>
                     ) : (
-                        <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
-                            <Edit className="w-4 h-4 mr-2" />
-                            {isEditing ? "編集終了" : "編集モード"}
+                        <Button variant="ghost" size="sm" onClick={() => setIsEditing(!isEditing)} className="gap-2 text-gray-600">
+                            <Edit className="w-4 h-4" />
+                            {isEditing ? "編集完了" : "編集"}
                         </Button>
                     )}
                 </div>
-            </div>
+            </header>
 
-            {/* Quick Stats Bar */}
-            <div className="grid grid-cols-4 gap-4 mb-4">
-                <Card className="p-3">
-                    <div className="text-xs text-gray-500">販売価格</div>
-                    <div className="text-lg font-bold">{formatCurrency(recipe.selling_price)}</div>
-                </Card>
-                <Card className="p-3">
-                    <div className="text-xs text-gray-500">総原価</div>
-                    <div className="text-lg font-bold text-blue-600">{formatCurrency(totals.cost)}</div>
-                </Card>
-                <Card className="p-3">
-                    <div className="text-xs text-gray-500">材料数</div>
-                    <div className="text-lg font-bold">{items.length}種類</div>
-                </Card>
-                <Card className="p-3">
-                    <div className="text-xs text-gray-500">総使用量</div>
-                    <div className="text-lg font-bold">{totals.usage.toFixed(0)}g</div>
-                </Card>
-            </div>
-
-            {/* Excel-style Tabs */}
-            <div className="flex border-b border-gray-300 mb-0">
-                {tabs.map((tab) => (
-                    <button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`px-4 py-2 text-sm font-medium border-t border-l border-r rounded-t-lg -mb-px transition ${activeTab === tab.key
-                            ? "bg-white border-gray-300 text-gray-900"
-                            : "bg-gray-100 border-transparent text-gray-500 hover:text-gray-700"
-                            }`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* Tab Content */}
-            <div className="flex-1 bg-white border border-gray-300 border-t-0 rounded-b-lg overflow-auto">
-                {activeTab === "items" && (
+            {/* Main Content - A4 Optimized Layout */}
+            <main className="max-w-[210mm] mx-auto p-8 print:p-0 print:m-0 print:w-full">
+                {/* Header Section */}
+                <div className="border-b-2 border-gray-800 pb-4 mb-6 flex justify-between items-end">
                     <div>
-                        {/* Nutrition Display */}
-                        <div className="px-4">
+                        <div className="flex gap-2 mb-2">
+                            <span className={`px-2 py-0.5 text-[10px] font-bold border rounded uppercase tracking-wider ${CATEGORIES.find(c => c.value === recipe.category)?.color || 'border-gray-200 text-gray-500'}`}>
+                                {recipe.category}
+                            </span>
+                            {recipe.is_intermediate && (
+                                <span className="px-2 py-0.5 text-[10px] font-bold border border-purple-300 text-purple-700 rounded uppercase tracking-wider">
+                                    Middle
+                                </span>
+                            )}
+                        </div>
+                        <h1 className="text-3xl font-extrabold text-gray-900 leading-tight">{recipe.name}</h1>
+                        <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono">
+                            <span>ID: {recipe.id.split('-')[0]}</span>
+                            <span>DEV: {recipe.development_date || '----/--/--'}</span>
+                            <span>UPD: {new Date().toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-1">Total Cost</div>
+                        <div className="text-3xl font-bold text-gray-900 tracking-tight">{formatCurrency(totals.cost)}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            原価率: {recipe.selling_price && totals.cost ? ((totals.cost / recipe.selling_price) * 100).toFixed(1) : '-'}%
+                        </div>
+                    </div>
+                </div>
+
+                {/* Specs Grid */}
+                <div className="grid grid-cols-4 gap-4 mb-8">
+                    <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Selling Price</div>
+                        <div className="font-bold text-lg">{formatCurrency(recipe.selling_price)}</div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Gross Profit</div>
+                        <div className={`font-bold text-lg ${profit > 0 ? 'text-gray-900' : 'text-red-600'}`}>
+                            {formatCurrency(profit)}
+                        </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Filling (g)</div>
+                        <div className="font-bold text-lg flex items-center gap-2">
+                            <Input
+                                type="number"
+                                value={recipe.filling_quantity || ''}
+                                className="h-6 w-20 px-1 py-0 text-right bg-transparent border-none focus:ring-0 p-0 shadow-none font-bold text-lg -mr-2"
+                                onChange={(e) => {
+                                    const val = e.target.value ? parseFloat(e.target.value) : null;
+                                    handleRecipeChange('filling_quantity', val);
+                                }}
+                                placeholder="-"
+                            />
+                            <span className="text-sm font-normal text-gray-500">g</span>
+                        </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Storage</div>
+                        <Select value={recipe.storage_method || ''} onValueChange={(val) => handleRecipeChange('storage_method', val)}>
+                            <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-lg">
+                                <SelectValue placeholder="-" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="常温">常温</SelectItem>
+                                <SelectItem value="冷蔵">冷蔵</SelectItem>
+                                <SelectItem value="冷凍">冷凍</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-12 gap-8">
+                    {/* Left Column: Ingredients (8 cols) */}
+                    <div className="col-span-12 md:col-span-8 print:col-span-8">
+                        <div className="flex justify-between items-center mb-4 border-b pb-2">
+                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Bill of Materials</h2>
+                            <span className="text-xs font-mono text-gray-400">{items.length} FILES</span>
+                        </div>
+
+                        <div className="space-y-6">
+                            {groupedItems.map((group, gIdx) => (
+                                <div key={gIdx} className="break-inside-avoid">
+                                    <div className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded mb-2 border ${group.color}`}>
+                                        {group.title}
+                                    </div>
+                                    <table className="w-full text-xs">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 text-gray-400">
+                                                <th className="text-left py-1 w-8 font-normal">#</th>
+                                                <th className="text-left py-1 font-normal">Item Name</th>
+                                                <th className="text-right py-1 w-20 font-normal">Usage</th>
+                                                <th className="text-right py-1 w-20 font-normal">Cost</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {group.items.map((item, idx) => (
+                                                <tr key={item.id} className="group">
+                                                    <td className="py-1.5 text-gray-300">{idx + 1}</td>
+                                                    <td className="py-1.5 font-medium text-gray-700">{item.item_name}</td>
+                                                    <td className="py-1.5 text-right font-mono text-gray-600">
+                                                        {isEditing ? (
+                                                            <input
+                                                                type="number"
+                                                                className="w-12 text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
+                                                                value={item.usage_amount || ''}
+                                                                onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
+                                                            />
+                                                        ) : (
+                                                            formatNumber(item.usage_amount, 1)
+                                                        )}
+                                                    </td>
+                                                    <td className="py-1.5 text-right font-mono font-medium text-gray-900 group-hover:bg-gray-50 rounded-r">
+                                                        {formatCurrency(item.cost)}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        {/* Group Subtotal */}
+                                        <tfoot className="border-t border-gray-100">
+                                            <tr>
+                                                <td colSpan={3} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Subtotal</td>
+                                                <td className="py-2 text-right font-mono font-bold text-gray-700">
+                                                    {formatCurrency(group.items.reduce((sum, i) => sum + (i.cost || 0), 0))}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Right Column: Notes & Nutrition (4 cols) */}
+                    <div className="col-span-12 md:col-span-4 print:col-span-4 flex flex-col gap-8">
+                        {/* Manufacturing Notes */}
+                        <div className="break-inside-avoid bg-gray-50 p-4 rounded border border-gray-100 print:bg-white print:border-l-2 print:border-gray-200 print:border-t-0 print:border-r-0 print:border-b-0 print:rounded-none">
+                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Edit className="w-3 h-3" />
+                                Manufacturing Notes
+                            </h3>
+                            <textarea
+                                className="w-full min-h-[200px] text-xs leading-relaxed bg-transparent border-none resize-none p-0 focus:ring-0 text-gray-700 placeholder:text-gray-300"
+                                value={recipe.manufacturing_notes || ''}
+                                onChange={(e) => setRecipe({ ...recipe, manufacturing_notes: e.target.value })}
+                                onBlur={(e) => handleRecipeChange('manufacturing_notes', e.target.value)}
+                                placeholder="製造プロセスや注意点を記載..."
+                            />
+                        </div>
+
+                        {/* Nutrition */}
+                        <div className="break-inside-avoid">
+                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">Nutrition (per 100g)</h3>
                             <NutritionDisplay items={items.map(item => ({
                                 item_name: item.item_name,
                                 item_type: item.item_type,
                                 usage_amount: item.usage_amount,
                                 nutrition: nutritionMap[item.item_name]
-                            }))} />
-                        </div>
-
-                        {/* 食材セクション */}
-                        {groupedItems.ingredient.length > 0 && (
-                            <div className="mb-4">
-                                <div className="px-3 py-2 bg-green-50 border-b font-medium text-green-800">
-                                    食材 ({groupedItems.ingredient.length}種類)
-                                </div>
-                                <table className="w-full text-sm">
-                                    <thead className="bg-gray-50">
-                                        <tr className="border-b">
-                                            <th className="px-3 py-2 text-left w-12">NO</th>
-                                            <th className="px-3 py-2 text-left min-w-[200px]">材料名</th>
-                                            <th className="px-3 py-2 text-right w-24">入数</th>
-                                            <th className="px-3 py-2 text-right w-24">単価</th>
-                                            <th className="px-3 py-2 text-right w-24">使用量(g)</th>
-                                            <th className="px-3 py-2 text-right w-24">原価</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {groupedItems.ingredient.map((item, idx) => (
-                                            <tr key={item.id} className="border-b hover:bg-gray-50">
-                                                <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
-                                                <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.unit_quantity || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'unit_quantity', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatNumber(item.unit_quantity, 0)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.unit_price || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatCurrency(item.unit_price)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.usage_amount || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatNumber(item.usage_amount, 1)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">{formatCurrency(item.cost)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {/* 中間部品セクション */}
-                        {groupedItems.intermediate.length > 0 && (
-                            <div className="mb-4">
-                                <div className="px-3 py-2 bg-purple-50 border-b font-medium text-purple-800">
-                                    中間部品【P】 ({groupedItems.intermediate.length}種類)
-                                </div>
-                                <table className="w-full text-sm">
-                                    <thead className="bg-gray-50">
-                                        <tr className="border-b">
-                                            <th className="px-3 py-2 text-left w-12">NO</th>
-                                            <th className="px-3 py-2 text-left min-w-[200px]">部品名</th>
-                                            <th className="px-3 py-2 text-right w-24">入数</th>
-                                            <th className="px-3 py-2 text-right w-24">単価</th>
-                                            <th className="px-3 py-2 text-right w-24">使用量(g)</th>
-                                            <th className="px-3 py-2 text-right w-24">原価</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {groupedItems.intermediate.map((item, idx) => (
-                                            <tr key={item.id} className="border-b hover:bg-gray-50">
-                                                <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
-                                                <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.unit_quantity || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'unit_quantity', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatNumber(item.unit_quantity, 0)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.unit_price || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatCurrency(item.unit_price)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.usage_amount || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatNumber(item.usage_amount, 1)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">{formatCurrency(item.cost)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {/* 資材セクション */}
-                        {groupedItems.material.length > 0 && (
-                            <div className="mb-4">
-                                <div className="px-3 py-2 bg-orange-50 border-b font-medium text-orange-800">
-                                    資材 ({groupedItems.material.length}種類)
-                                </div>
-                                <table className="w-full text-sm">
-                                    <thead className="bg-gray-50">
-                                        <tr className="border-b">
-                                            <th className="px-3 py-2 text-left w-12">NO</th>
-                                            <th className="px-3 py-2 text-left min-w-[200px]">資材名</th>
-                                            <th className="px-3 py-2 text-right w-24">入数</th>
-                                            <th className="px-3 py-2 text-right w-24">単価</th>
-                                            <th className="px-3 py-2 text-right w-24">使用量</th>
-                                            <th className="px-3 py-2 text-right w-24">原価</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {groupedItems.material.map((item, idx) => (
-                                            <tr key={item.id} className="border-b hover:bg-gray-50">
-                                                <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
-                                                <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.unit_quantity || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'unit_quantity', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatNumber(item.unit_quantity, 0)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.unit_price || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'unit_price', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatCurrency(item.unit_price)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.usage_amount || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatNumber(item.usage_amount, 1)
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">{formatCurrency(item.cost)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {/* 経費セクション */}
-                        {groupedItems.expense.length > 0 && (
-                            <div className="mb-4">
-                                <div className="px-3 py-2 bg-red-50 border-b font-medium text-red-800">
-                                    経費（送料・人件費・光熱費など） ({groupedItems.expense.length}種類)
-                                </div>
-                                <table className="w-full text-sm">
-                                    <thead className="bg-gray-50">
-                                        <tr className="border-b">
-                                            <th className="px-3 py-2 text-left w-12">NO</th>
-                                            <th className="px-3 py-2 text-left min-w-[200px]">経費項目</th>
-                                            <th className="px-3 py-2 text-right w-24">金額</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {groupedItems.expense.map((item, idx) => (
-                                            <tr key={item.id} className="border-b hover:bg-gray-50">
-                                                <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
-                                                <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                                <td className="px-3 py-2 text-right">
-                                                    {isEditing ? (
-                                                        <Input
-                                                            type="number"
-                                                            value={item.cost || ''}
-                                                            onChange={(e) => handleItemChange(item.id, 'cost', e.target.value)}
-                                                            className="w-24 text-right h-8 ml-auto"
-                                                        />
-                                                    ) : (
-                                                        formatCurrency(item.cost)
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {/* 合計行 */}
-                        <div className="border-t-2 bg-gray-100 px-3 py-3">
-                            <div className="flex justify-between items-center max-w-2xl">
-                                <span className="font-bold">合計</span>
-                                <div className="flex gap-8">
-                                    <span>使用量: <strong>{totals.usage.toFixed(0)}g</strong></span>
-                                    <span>原価: <strong className="text-blue-600">{formatCurrency(totals.cost)}</strong></span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {items.length === 0 && (
-                            <div className="text-center py-8 text-gray-500">
-                                材料データがありません
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {activeTab === "cost" && (
-                    <div className="p-4">
-                        <h3 className="font-bold mb-4">原価計算</h3>
-                        <div className="grid grid-cols-2 gap-4 max-w-lg">
-                            <Card className="p-4">
-                                <div className="text-sm text-gray-500">総原価</div>
-                                <div className="text-2xl font-bold text-blue-600">{formatCurrency(totals.cost)}</div>
-                            </Card>
-                            <Card className="p-4">
-                                <div className="text-sm text-gray-500">販売価格</div>
-                                <div className="text-2xl font-bold text-green-600">{formatCurrency(recipe.selling_price)}</div>
-                            </Card>
-                        </div>
-                        {recipe.selling_price && totals.cost > 0 && (
-                            <div className="mt-6 p-4 bg-gray-50 rounded-lg max-w-lg">
-                                <div className="text-sm text-gray-500 mb-2">利益分析</div>
-                                <div className="flex justify-between items-center">
-                                    <span className="font-medium">粗利</span>
-                                    <span className="text-lg font-bold">
-                                        {formatCurrency(recipe.selling_price - totals.cost)}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between items-center mt-2">
-                                    <span className="font-medium">利益率</span>
-                                    <span className={`text-lg font-bold ${((recipe.selling_price - totals.cost) / recipe.selling_price * 100) >= 40
-                                        ? 'text-green-600' : 'text-red-600'
-                                        }`}>
-                                        {(((recipe.selling_price - totals.cost) / recipe.selling_price) * 100).toFixed(1)}%
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {activeTab === "info" && (
-                    <div className="p-4">
-                        <h3 className="font-bold mb-4">基本情報</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl text-sm">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-500 mb-1">商品名</label>
-                                    <div className="font-medium h-8 flex items-center">{recipe.name}</div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-gray-500 mb-1">カテゴリ</label>
-                                    <div className="font-medium h-8 flex items-center">{recipe.category}</div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-gray-500 mb-1">開発日</label>
-                                    <Input
-                                        type="date"
-                                        value={recipe.development_date || ''}
-                                        onChange={(e) => handleRecipeChange('development_date', e.target.value)}
-                                        className="h-9"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-gray-500 mb-1">保存方法</label>
-                                    <Select
-                                        value={recipe.storage_method || ''}
-                                        onValueChange={(val) => handleRecipeChange('storage_method', val)}
-                                    >
-                                        <SelectTrigger className="h-9">
-                                            <SelectValue placeholder="選択してください" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="常温">常温</SelectItem>
-                                            <SelectItem value="冷蔵">冷蔵</SelectItem>
-                                            <SelectItem value="冷凍">冷凍</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-500 mb-1">充填量 (g)</label>
-                                    <Input
-                                        type="number"
-                                        value={recipe.filling_quantity || ''}
-                                        onChange={(e) => {
-                                            const val = e.target.value ? parseFloat(e.target.value) : null;
-                                            handleRecipeChange('filling_quantity', val);
-                                        }}
-                                        className="h-9"
-                                        placeholder="例: 180"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-gray-500 mb-1">製造メモ</label>
-                                    <textarea
-                                        className="w-full min-h-[120px] p-3 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                                        value={recipe.manufacturing_notes || ''}
-                                        onChange={(e) => {
-                                            setRecipe({ ...recipe, manufacturing_notes: e.target.value });
-                                        }}
-                                        onBlur={(e) => handleRecipeChange('manufacturing_notes', e.target.value)}
-                                        placeholder="製造手順や注意事項などを入力してください。入力すると自動的に保存されます。"
-                                    />
-                                </div>
-
-                                {recipe.source_file && (
-                                    <div>
-                                        <span className="block text-gray-500 mb-1">ソースファイル</span>
-                                        <div className="text-gray-700 truncate">
-                                            {recipe.source_file.replace("【重要】【製造】総合管理（新型）", "")}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                            }))} compact={true} />
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            </main>
+
+            <style jsx global>{`
+                @media print {
+                    @page {
+                        size: A4;
+                        margin: 10mm;
+                    }
+                    body {
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                        background: white;
+                    }
+                    /* Ensure grid columns maintain layout in print */
+                    .md\\:col-span-8 {
+                        grid-column: span 8 / span 12 !important;
+                    }
+                    .md\\:col-span-4 {
+                        grid-column: span 4 / span 12 !important;
+                    }
+                }
+            `}</style>
         </div>
     );
 }
