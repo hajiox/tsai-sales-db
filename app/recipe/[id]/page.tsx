@@ -47,10 +47,10 @@ interface RecipeItem {
     recipe_id: string;
     item_name: string;
     item_type: string;
-    unit_quantity: number | null;
-    unit_price: number | null;
-    usage_amount: number | null;
-    cost: number | null;
+    unit_quantity: number | string | null;
+    unit_price: number | string | null;
+    usage_amount: number | string | null;
+    cost: number | string | null;
 }
 
 export default function RecipeDetailPage() {
@@ -188,19 +188,19 @@ export default function RecipeDetailPage() {
     };
 
     const handleItemChange = (itemId: string, field: string, value: string) => {
-        const numericFields = ['unit_quantity', 'unit_price', 'usage_amount', 'cost'];
-        const newValue = numericFields.includes(field)
-            ? (value === '' ? 0 : parseFloat(value))
-            : value;
+        // Allow decimal input by not forcing parseFloat immediately if the value allows it
+        // We update the state with the raw string value (or parsed number)
 
         setItems(prevItems => prevItems.map(item => {
             if (item.id === itemId) {
-                const updatedItem = { ...item, [field]: newValue };
+                // If it's a numeric field, we allow string during editing to support "0." etc.
+                const updatedItem = { ...item, [field]: value };
 
-                if (['usage_amount', 'unit_quantity', 'unit_price'].includes(field) && item.item_type !== 'expense') {
-                    const usage = typeof updatedItem.usage_amount === 'number' ? updatedItem.usage_amount : 0;
-                    const qty = typeof updatedItem.unit_quantity === 'number' ? updatedItem.unit_quantity : 0;
-                    const price = typeof updatedItem.unit_price === 'number' ? updatedItem.unit_price : 0;
+                // Auto-calculate cost for ingredients/intermediates if usage/price/qty changes
+                if (['usage_amount', 'unit_quantity', 'unit_price'].includes(field) && (item.item_type === 'ingredient' || item.item_type === 'intermediate')) {
+                    const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
+                    const qty = parseFloat(String(updatedItem.unit_quantity)) || 0;
+                    const price = parseFloat(String(updatedItem.unit_price)) || 0;
 
                     if (qty !== 0) {
                         updatedItem.cost = Math.round(usage * (price / qty));
@@ -368,8 +368,8 @@ export default function RecipeDetailPage() {
 
     const getTotals = () => {
         return {
-            usage: items.reduce((sum, item) => sum + (item.usage_amount || 0), 0),
-            cost: items.reduce((sum, item) => sum + (item.cost || 0), 0),
+            usage: items.reduce((sum, item) => sum + (parseFloat(String(item.usage_amount)) || 0), 0),
+            cost: items.reduce((sum, item) => sum + (parseFloat(String(item.cost)) || 0), 0),
         };
     };
 
@@ -570,8 +570,10 @@ export default function RecipeDetailPage() {
                                             </thead>
                                             <tbody className="divide-y divide-gray-50">
                                                 {group.items.map((item, idx) => {
-                                                    const unitUsage = item.usage_amount || 0;
-                                                    const unitQty = item.unit_quantity || 0;
+                                                    const unitUsage = parseFloat(String(item.usage_amount)) || 0;
+                                                    const unitQty = parseFloat(String(item.unit_quantity)) || 0;
+                                                    const itemCost = parseFloat(String(item.cost)) || 0;
+                                                    const isMaterialGroup = group.type === 'material' || group.type === 'expense';
 
                                                     // Batch 1 Calcs
                                                     const b1Usage = unitUsage * batchSize1;
@@ -595,7 +597,7 @@ export default function RecipeDetailPage() {
                                                                     <>
                                                                         {item.item_name}
                                                                         <div className="text-[10px] text-gray-400 font-normal">
-                                                                            {unitQty > 0 ? `(${formatNumber(unitQty, 0)}g/pk)` : ''}
+                                                                            {unitQty > 0 && !isMaterialGroup ? `(${formatNumber(unitQty, 0)}g/pk)` : ''}
                                                                         </div>
                                                                     </>
                                                                 )}
@@ -603,41 +605,68 @@ export default function RecipeDetailPage() {
 
                                                             {/* 1 Unit Usage */}
                                                             <td className="py-2 text-right font-mono text-gray-800 bg-gray-50/30 align-top">
-                                                                {isEditing ? (
-                                                                    <input
-                                                                        type="number"
-                                                                        className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                                                                        value={item.usage_amount || ''}
-                                                                        onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
-                                                                    />
+                                                                {!isMaterialGroup ? (
+                                                                    isEditing ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
+                                                                            value={item.usage_amount || ''}
+                                                                            onChange={(e) => handleItemChange(item.id, 'usage_amount', e.target.value)}
+                                                                        />
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="font-bold">{formatNumber(unitUsage, 1)}</span>
+                                                                            <span className="text-[10px] text-gray-400 block">g</span>
+                                                                        </>
+                                                                    )
                                                                 ) : (
-                                                                    <span className="font-bold">{formatNumber(item.usage_amount, 1)}</span>
+                                                                    <span className="text-gray-300">-</span>
                                                                 )}
-                                                                <span className="text-[10px] text-gray-400 block">g</span>
                                                             </td>
 
                                                             {/* Batch 1 */}
                                                             <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
-                                                                <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
-                                                                {b1Bags > 0 && item.item_type !== 'expense' && (
-                                                                    <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
-                                                                        {formatNumber(b1Bags, 2)} <span className="font-normal opacity-70">pk</span>
-                                                                    </div>
+                                                                {!isMaterialGroup ? (
+                                                                    <>
+                                                                        <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
+                                                                        {b1Bags > 0 && item.item_type !== 'expense' && (
+                                                                            <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
+                                                                                {formatNumber(b1Bags, 2)} <span className="font-normal opacity-70">pk</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-gray-300">-</span>
                                                                 )}
                                                             </td>
 
                                                             {/* Batch 2 */}
                                                             <td className="py-2 text-right font-mono text-purple-700 bg-purple-50/30 border-l border-gray-50 align-top">
-                                                                <div className="font-bold">{formatNumber(b2Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
-                                                                {b2Bags > 0 && item.item_type !== 'expense' && (
-                                                                    <div className="text-[10px] text-purple-500 mt-0.5 font-bold">
-                                                                        {formatNumber(b2Bags, 2)} <span className="font-normal opacity-70">pk</span>
-                                                                    </div>
+                                                                {!isMaterialGroup ? (
+                                                                    <>
+                                                                        <div className="font-bold">{formatNumber(b2Usage, 0)}<span className="text-[10px] font-normal ml-0.5">g</span></div>
+                                                                        {b2Bags > 0 && item.item_type !== 'expense' && (
+                                                                            <div className="text-[10px] text-purple-500 mt-0.5 font-bold">
+                                                                                {formatNumber(b2Bags, 2)} <span className="font-normal opacity-70">pk</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-gray-300">-</span>
                                                                 )}
                                                             </td>
 
                                                             <td className="py-2 text-right font-mono text-gray-400 align-top">
-                                                                {formatCurrency(item.cost)}
+                                                                {isMaterialGroup && isEditing ? (
+                                                                    <input
+                                                                        type="number"
+                                                                        className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
+                                                                        value={item.cost || ''}
+                                                                        onChange={(e) => handleItemChange(item.id, 'cost', e.target.value)}
+                                                                    />
+                                                                ) : (
+                                                                    formatCurrency(itemCost)
+                                                                )}
                                                             </td>
 
                                                             {isEditing && (
@@ -658,18 +687,24 @@ export default function RecipeDetailPage() {
                                             {/* Group Subtotal */}
                                             <tfoot className="border-t border-gray-100">
                                                 <tr>
-                                                    <td colSpan={2} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Total Usage</td>
+                                                    <td colSpan={2} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Total</td>
                                                     <td className="py-2 text-right font-mono font-bold text-gray-700 bg-gray-50/50">
-                                                        {formatNumber(group.items.reduce((sum, i) => sum + (i.usage_amount || 0), 0), 0)}g
+                                                        {group.type === 'ingredient' || group.type === 'intermediate' ?
+                                                            formatNumber(group.items.reduce((sum, i) => sum + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + 'g'
+                                                            : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">
-                                                        {formatNumber(group.items.reduce((sum, i) => sum + ((i.usage_amount || 0) * batchSize1), 0), 0)}g
+                                                        {group.type === 'ingredient' || group.type === 'intermediate' ?
+                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + 'g'
+                                                            : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-purple-700 bg-purple-50/30 border-l border-gray-50">
-                                                        {formatNumber(group.items.reduce((sum, i) => sum + ((i.usage_amount || 0) * batchSize2), 0), 0)}g
+                                                        {group.type === 'ingredient' || group.type === 'intermediate' ?
+                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + 'g'
+                                                            : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-gray-900">
-                                                        {formatCurrency(group.items.reduce((sum, i) => sum + (i.cost || 0), 0))}
+                                                        {formatCurrency(group.items.reduce((sum, i) => sum + (parseFloat(String(i.cost)) || 0), 0))}
                                                     </td>
                                                     {isEditing && <td></td>}
                                                 </tr>
@@ -714,7 +749,7 @@ export default function RecipeDetailPage() {
                             <NutritionDisplay items={items.map(item => ({
                                 item_name: item.item_name,
                                 item_type: item.item_type,
-                                usage_amount: item.usage_amount,
+                                usage_amount: parseFloat(String(item.usage_amount)) || 0,
                                 nutrition: nutritionMap[item.item_name]
                             }))} compact={true} />
                         </div>
