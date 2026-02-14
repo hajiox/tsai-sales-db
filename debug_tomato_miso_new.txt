@@ -1,9 +1,0 @@
-Analyzing file: C:\Users\ts\OneDrive\Desktop\作業用\レシピ\【重要】【製造】総合管理（新型）ネット専用.xlsx
-Found Sheet: 【OB】トマト味噌
-Found keyword "製造手順メモ" at Row 42, Col 5
-   Candidate below (R43, C5) is empty. val=
-Found keyword "手順" at Row 42, Col 5
-   Candidate below (R43, C5) is empty. val=
-Found keyword "備考" at Row 53, Col 4
-   Candidate below (R54, C4) is empty. val=
-[Not Found] Notes for 【OB】トマト味噌
