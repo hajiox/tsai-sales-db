@@ -1,0 +1,16 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: 翌・・backup and recover secrets: https://dotenvx.com/ops
+Checking Recipes columns...
+Columns: [
+  'id',
+  'name',
+  'category',
+  'is_intermediate',
+  'development_date',
+  'selling_price',
+  'total_cost',
+  'source_file',
+  'created_at',
+  'manufacturing_notes',
+  'filling_quantity',
+  'storage_method'
+]

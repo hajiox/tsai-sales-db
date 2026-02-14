@@ -82,12 +82,12 @@ export default function IntegrationPage() {
             const [ingRes, matRes, recRes] = await Promise.all([
                 supabase.from('ingredients').select('id, name, price_excl_tax'),
                 supabase.from('materials').select('id, name, price_excl_tax'),
-                supabase.from('recipes').select('id, name, is_intermediate, unit_cost')
+                supabase.from('recipes').select('id, name, is_intermediate, total_cost')
             ]);
 
             const masterList: MasterItem[] = [];
             // Prioritize Recipes (Intermediates/Products) at the top of the list if user cares about them most
-            if (recRes.data) masterList.push(...recRes.data.map(r => ({ id: r.id, name: r.name, type: (r.is_intermediate ? 'recipe' : 'product') as MasterType, price: r.unit_cost })));
+            if (recRes.data) masterList.push(...recRes.data.map(r => ({ id: r.id, name: r.name, type: (r.is_intermediate ? 'recipe' : 'product') as MasterType, price: r.total_cost || 0 })));
             if (ingRes.data) masterList.push(...ingRes.data.map(i => ({ id: i.id, name: i.name, type: 'ingredient' as MasterType, price: i.price_excl_tax })));
             if (matRes.data) masterList.push(...matRes.data.map(m => ({ id: m.id, name: m.name, type: 'material' as MasterType, price: m.price_excl_tax })));
 
