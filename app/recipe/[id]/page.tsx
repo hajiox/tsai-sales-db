@@ -75,8 +75,8 @@ export default function RecipeDetailPage() {
     const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
 
     // Batch calculation states
-    const [batchSize1, setBatchSize1] = useState(400);
-    const [batchSize2, setBatchSize2] = useState(800);
+    const [batchSize1, setBatchSize1] = useState(100);
+    const [batchSize2, setBatchSize2] = useState(400);
 
     useEffect(() => {
         if (params.id) {
