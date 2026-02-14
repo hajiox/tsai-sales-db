@@ -1,4 +1,6 @@
 // app/recipe/[id]/page.tsx
+// Deployment trigger: Amazon Fee & Enhanced Sync Update
+
 // レシピ詳細ページ - シングルページレイアウト & 印刷対応
 
 "use client";
