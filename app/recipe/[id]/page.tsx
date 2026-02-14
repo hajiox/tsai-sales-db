@@ -75,8 +75,8 @@ export default function RecipeDetailPage() {
     const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
 
     // Batch calculation states
-    const [batchSize1, setBatchSize1] = useState(400);
-    const [batchSize2, setBatchSize2] = useState(800);
+    const [batchSize1, setBatchSize1] = useState(100);
+    const [batchSize2, setBatchSize2] = useState(400);
 
     useEffect(() => {
         if (params.id) {
@@ -797,7 +797,7 @@ export default function RecipeDetailPage() {
                         </div>
                     </div>
 
-                    <div className="col-span-12 md:col-span-5 print:col-span-5">
+                    <div className="col-span-12 md:col-span-5 print:hidden">
                         {/* Nutrition */}
                         <div className="break-inside-avoid">
                             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">栄養成分表示 (100gあたり)</h3>
@@ -815,7 +815,7 @@ export default function RecipeDetailPage() {
             <style jsx global>{`
                 @media print {
                     @page {
-                        size: A4;
+                        size: A4 landscape;
                         margin: 10mm;
                     }
                     body {
@@ -823,6 +823,11 @@ export default function RecipeDetailPage() {
                         print-color-adjust: exact;
                         background: white;
                     }
+                    /* Ensure table headers repeat on new pages if needed (though usually avoided in React without specific CSS) */
+                    thead { display: table-header-group; }
+                    
+                    /* Hide scrollbars */
+                    ::-webkit-scrollbar { display: none; }
                 }
             `}</style>
         </div>
