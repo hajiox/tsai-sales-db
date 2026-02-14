@@ -1,6 +1,4 @@
 // app/recipe/[id]/page.tsx
-// Deployment trigger: Amazon Fee & Enhanced Sync Update
-
 // レシピ詳細ページ - シングルページレイアウト & 印刷対応
 
 "use client";
@@ -77,8 +75,8 @@ export default function RecipeDetailPage() {
     const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
 
     // Batch calculation states
-    const [batchSize1, setBatchSize1] = useState(100);
-    const [batchSize2, setBatchSize2] = useState(400);
+    const [batchSize1, setBatchSize1] = useState(400);
+    const [batchSize2, setBatchSize2] = useState(800);
 
     useEffect(() => {
         if (params.id) {
