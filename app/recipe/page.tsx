@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon } from "lucide-react";
+import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
 
 // カテゴリー一覧
@@ -193,6 +193,50 @@ export default function RecipePage() {
         }
     };
 
+    // 商品名変更
+    const handleRenameRecipe = async (recipeId: string, currentName: string) => {
+        const newName = window.prompt("新しい商品名を入力してください:", currentName);
+        if (!newName || newName === currentName) return;
+
+        try {
+            const { error } = await supabase
+                .from('recipes')
+                .update({ name: newName })
+                .eq('id', recipeId);
+
+            if (error) throw error;
+
+            setRecipes(prev => prev.map(r =>
+                r.id === recipeId ? { ...r, name: newName } : r
+            ));
+            toast.success('商品名を変更しました');
+        } catch (error) {
+            toast.error('商品名の変更に失敗しました');
+        }
+    };
+
+    // レシピ削除
+    const handleDeleteRecipe = async (recipeId: string, recipeName: string) => {
+        const ok = window.confirm(`「${recipeName}」を削除してもよろしいですか？\nこの操作は取り消せません。`);
+        if (!ok) return;
+
+        try {
+            const { error } = await supabase
+                .from('recipes')
+                .delete()
+                .eq('id', recipeId);
+
+            if (error) throw error;
+
+            setRecipes(prev => prev.filter(r => r.id !== recipeId));
+            toast.success('レシピを削除しました');
+            fetchStats();
+        } catch (error) {
+            console.error(error);
+            toast.error('削除に失敗しました');
+        }
+    };
+
     const fetchStats = async () => {
         // レシピ総数
         const { count: recipeCount } = await supabase
@@ -351,20 +395,6 @@ export default function RecipePage() {
                         </div>
                     </CardContent>
                 </Card>
-
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-600">
-                            試作
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-2">
-                            <ChefHat className="w-5 h-5 text-gray-500" />
-                            <span className="text-2xl font-bold">{stats.試作}</span>
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
 
             {/* Category Tabs */}
@@ -434,23 +464,25 @@ export default function RecipePage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>商品名</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
                             {activeTab === "中間部品" && <TableHead>使用されている商品</TableHead>}
                             <TableHead>カテゴリ</TableHead>
                             <TableHead>開発日</TableHead>
                             <TableHead className="text-right">販売価格</TableHead>
                             <TableHead>ソースファイル</TableHead>
+                            <TableHead className="text-right">操作</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center py-8">
+                                <TableCell colSpan={8} className="text-center py-8">
                                     読み込み中...
                                 </TableCell>
                             </TableRow>
                         ) : filteredRecipes.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                                     レシピがありません
                                 </TableCell>
                             </TableRow>
@@ -468,6 +500,17 @@ export default function RecipePage() {
                                             </span>
                                         )}
                                         {recipe.name}
+                                    </TableCell>
+                                    <TableCell onClick={(e) => e.stopPropagation()}>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                            onClick={() => handleRenameRecipe(recipe.id, recipe.name)}
+                                        >
+                                            <Edit className="w-3 h-3 mr-1" />
+                                            変更
+                                        </Button>
                                     </TableCell>
                                     {activeTab === "中間部品" && (
                                         <TableCell>
@@ -510,8 +553,18 @@ export default function RecipePage() {
                                     <TableCell className="text-right">
                                         {formatCurrency(recipe.selling_price)}
                                     </TableCell>
-                                    <TableCell className="text-xs text-gray-500 max-w-[200px] truncate">
+                                    <TableCell className="text-xs text-gray-500 max-w-[150px] truncate">
                                         {recipe.source_file?.replace("【重要】【製造】総合管理（新型）", "").replace(".xlsx", "") || "-"}
+                                    </TableCell>
+                                    <TableCell onClick={(e) => e.stopPropagation()} className="text-right">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                                            onClick={() => handleDeleteRecipe(recipe.id, recipe.name)}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
                                     </TableCell>
                                 </TableRow>
                             ))
