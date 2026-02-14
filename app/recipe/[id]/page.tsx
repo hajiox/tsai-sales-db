@@ -585,7 +585,7 @@ export default function RecipeDetailPage() {
 
                         <div className="space-y-8">
                             {groupedItems.map((group, gIdx) => (
-                                <div key={gIdx} className="break-inside-avoid">
+                                <div key={gIdx} className={`break-inside-avoid ${group.type === 'expense' ? 'print:hidden' : ''}`}>
                                     <div className="flex justify-between items-center mb-2">
                                         <div className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded border ${group.color}`}>
                                             {group.title}
@@ -810,7 +810,7 @@ export default function RecipeDetailPage() {
                         </div>
                     </div>
                 </div>
-            </main>
+            </main >
 
             <style jsx global>{`
                 @media print {
@@ -830,6 +830,6 @@ export default function RecipeDetailPage() {
                     ::-webkit-scrollbar { display: none; }
                 }
             `}</style>
-        </div>
+        </div >
     );
 }
