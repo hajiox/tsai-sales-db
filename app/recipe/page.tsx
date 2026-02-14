@@ -54,7 +54,7 @@ export default function RecipePage() {
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
-    const [activeTab, setActiveTab] = useState<TabType>("all");
+    const [activeTab, setActiveTab] = useState<TabType>("ネット専用");
     const [stats, setStats] = useState({
         total: 0,
         ネット専用: 0,
@@ -260,13 +260,13 @@ export default function RecipePage() {
     };
 
     const tabs = [
-        { key: "all" as TabType, label: "全て", icon: FileSpreadsheet, count: stats.total },
         { key: "ネット専用" as TabType, label: "ネット専用", icon: ShoppingBag, count: stats.ネット専用 },
         { key: "自社" as TabType, label: "自社", icon: Building, count: stats.自社 },
         { key: "OEM" as TabType, label: "OEM", icon: Truck, count: stats.OEM },
         { key: "試作" as TabType, label: "試作", icon: ChefHat, count: stats.試作 },
         { key: "Shopee" as TabType, label: "Shopee", icon: Globe, count: stats.Shopee },
         { key: "中間部品" as TabType, label: "中間部品【P】", icon: Package, count: stats.中間部品 },
+        { key: "all" as TabType, label: "全て", icon: FileSpreadsheet, count: stats.total },
     ];
 
     return (

@@ -346,7 +346,7 @@ export default function RecipeDetailPage() {
                 if (updError) throw updError;
             }
 
-            const totalCost = items.reduce((sum, item) => sum + (item.cost || 0), 0);
+            const totalCost = items.reduce((sum, item) => sum + (parseFloat(String(item.cost)) || 0), 0);
 
             await supabase
                 .from('recipes')
@@ -452,7 +452,11 @@ export default function RecipeDetailPage() {
                                 </span>
                             )}
                         </div>
-                        <h1 className="text-3xl font-extrabold text-gray-900 leading-tight">{recipe.name}</h1>
+                        <Input
+                            value={recipe.name}
+                            onChange={(e) => handleRecipeChange('name', e.target.value)}
+                            className="text-3xl font-extrabold text-gray-900 leading-tight bg-transparent border-none focus-visible:ring-0 p-0 h-auto shadow-none w-full"
+                        />
                         <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono">
                             <span>ID: {recipe.id.split('-')[0]}</span>
                             <span>DEV: {recipe.development_date || '----/--/--'}</span>
@@ -472,12 +476,24 @@ export default function RecipeDetailPage() {
                 <div className="grid grid-cols-4 gap-4 mb-8">
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
                         <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">販売価格</div>
-                        <div className="font-bold text-xl">{formatCurrency(recipe.selling_price)}</div>
+                        <div className="font-bold text-xl flex items-center">
+                            <span className="text-gray-400 mr-1 text-base">¥</span>
+                            <Input
+                                type="number"
+                                value={recipe.selling_price || ''}
+                                onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
+                                className="h-7 w-24 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-xl"
+                                placeholder="-"
+                            />
+                        </div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
                         <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">粗利益</div>
-                        <div className={`font-bold text-xl ${profit > 0 ? 'text-gray-900' : 'text-red-600'}`}>
+                        <div className={`font-bold text-xl ${profit > 0 ? 'text-gray-900' : 'text-red-600'} flex items-baseline gap-2`}>
                             {formatCurrency(profit)}
+                            <span className="text-xs font-normal text-gray-500">
+                                ({recipe.selling_price ? profitRate.toFixed(1) : '-'}%)
+                            </span>
                         </div>
                     </div>
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
