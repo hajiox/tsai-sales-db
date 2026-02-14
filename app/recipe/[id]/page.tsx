@@ -144,6 +144,7 @@ export default function RecipeDetailPage() {
             { name: "ネコポス送料", unit_price: 350, unit_quantity: 1 },
             { name: "コンパクト送料", unit_price: 550, unit_quantity: 1 },
             { name: "人件費", unit_price: 1200, unit_quantity: 1 },
+            { name: "Amazon手数料", unit_price: 0, unit_quantity: 1 },
         ]);
     };
 
@@ -269,6 +270,12 @@ export default function RecipeDetailPage() {
                         unit_price: selected.unit_price || 0,
                         unit_quantity: typeof selected.unit_quantity === 'number' ? selected.unit_quantity : parseFloat(String(selected.unit_quantity)) || 0,
                     };
+
+                    if (selected.name === 'Amazon手数料' && recipe?.selling_price) {
+                        updates.cost = Math.round(recipe.selling_price * 0.1);
+                        updates.usage_amount = 1;
+                        updates.unit_price = updates.cost;
+                    }
                 }
                 return { ...item, ...updates };
             }
@@ -282,6 +289,21 @@ export default function RecipeDetailPage() {
 
         const updatedRecipe = { ...recipe, [field]: value };
         setRecipe(updatedRecipe);
+
+        if (field === 'selling_price') {
+            const newPrice = typeof value === 'number' ? value : parseFloat(value) || 0;
+            const feeItem = items.find(i => i.item_name === 'Amazon手数料');
+            if (feeItem && newPrice > 0) {
+                const newFee = Math.round(newPrice * 0.1);
+                setItems(prev => prev.map(i => {
+                    if (i.item_name === 'Amazon手数料') {
+                        return { ...i, cost: newFee, unit_price: newFee, usage_amount: 1 };
+                    }
+                    return i;
+                }));
+                setHasChanges(true);
+            }
+        }
 
         try {
             const { error } = await supabase
