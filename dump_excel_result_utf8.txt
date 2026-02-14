@@ -1,0 +1,37 @@
+﻿
+Scanning file: c:/Users/ts/OneDrive/Desktop/菴懈･ｭ逕ｨ/繝ｬ繧ｷ繝・縲宣㍾隕√代占｣ｽ騾縲醍ｷ丞粋邂｡逅・ｼ域眠蝙具ｼ芽・遉ｾ.xlsx
+Total sheets: 45
+
+Scanning file: c:/Users/ts/OneDrive/Desktop/菴懈･ｭ逕ｨ/繝ｬ繧ｷ繝・縲宣㍾隕√代占｣ｽ騾縲醍ｷ丞粋邂｡逅・ｼ域眠蝙具ｼ峨ロ繝・ヨ蟆ら畑.xlsx
+Total sheets: 160
+** FOUND TARGET SHEET: 縲仙膚蜩√第･ｵ螟ｪ鮗ｺ辟ｼ縺阪◎縺ｰ・・た繝ｼ繧ｹ4鬟・ **
+Sheet structure example (first 10 rows):
+Row 0: []
+Row 1: [null,null,"蝠・刀蜷・,"讌ｵ螟ｪ鮗ｺ辟ｼ縺阪◎縺ｰ・・た繝ｼ繧ｹ4鬟・,null,null,null,null,"遞手ｾｼ縺ｿ雋ｩ螢ｲ萓｡譬ｼ",1000,1000]
+Row 2: [null,null,"髢狗匱譌･",45172,null,null,null,null,"遞取栢縺・]
+Row 3: [null,null,"鬟滓攝",null,null,null,null,null,null,null,null,null,null,null,"辭ｱ驥・kcal)",null,"繧ｿ繝ｳ繝代け(g)",null,"閼りｳｪ(g)",null,"轤ｭ豌ｴ蛹也黄(g)",null,"鬟溷｡ｩ逶ｸ蠖・g)"]
+Row 4: ["NO",null,"譚先侭蜷・,"譚先侭蜈･謨ｰ","蜊倅ｾ｡・育ｨ手ｾｼ縺ｿ・・,"・托ｽ・腰萓｡","1譛ｬ菴ｿ逕ｨ驥・,"1譛ｬ蜴滉ｾ｡","陬ｽ騾謨ｰ400","蛟区焚","ﾃ暦ｼ・,"蛟区焚","邱城㍼","・・,"蜈・､","蛟､","蜈・､","蛟､","蜈・､","蛟､","蜈・､","蛟､","蜈・､","蛟､"]
+Row 5: [1,"笆｡","螟ｪ鮗ｺ辟ｼ縺阪◎縺ｰ・育音豕ｨ・・,150,64.26,0.42840000000000006,600,257.04,240000,1600,null,null,680,88.23529411764706,158,139.41176470588235,5.5,4.852941176470588,1.8,1.588235294117647,30.1,26.558823529411764,0.13,0.11470588235294117]
+Row 6: [2,"笆｡","荳逡ｪ鬟溷刀縲辟ｼ縺阪◎縺ｰ繧ｽ繝ｼ繧ｹ・亥ｰ剰｢具ｼ・,20,16.632,0.8316000000000001,80,66.528,32000,1600,null,null,680,11.76470588235294,133,15.64705882352941,1.7,0.19999999999999996,0.1,0.011764705882352941,31.4,3.694117647058823,6.6,0.776470588235294]
+Row 7: [3,"笆｡","遨ｺ逋ｽ",1,0,0,null,0,0,0,null,null,680,0,0,0,0,0,0,0,0,0,0,0]
+Row 8: [4,"笆｡","遨ｺ逋ｽ",1,0,0,null,0,0,0,null,null,680,0,0,0,0,0,0,0,0,0,0,0]
+Row 9: [5,"笆｡","遨ｺ逋ｽ",1,0,0,null,0,0,0,null,null,680,0,0,0,0,0,0,0,0,0,0,0]
+
+Items attempt:
+Row 5: Name="螟ｪ鮗ｺ辟ｼ縺阪◎縺ｰ・育音豕ｨ・・, Usage=600, UnitPrice=64.26
+Row 6: Name="荳逡ｪ鬟溷刀縲辟ｼ縺阪◎縺ｰ繧ｽ繝ｼ繧ｹ・亥ｰ剰｢具ｼ・, Usage=80, UnitPrice=16.632
+Row 38: Name="蜈・｡ｫ驥・, Usage=680, UnitPrice=・・Row 39: Name="陦ｨ險倬㍼", Usage=1蛟狗ｷ城㍼, UnitPrice=・・Row 40: Name="菫晏ｭ俶婿豕・, Usage=undefined, UnitPrice=undefined
+Row 52: Name="雉・攝繝ｻ莠ｺ莉ｶ雋ｻ", Usage=undefined, UnitPrice=undefined
+Row 53: Name="雉・攝蜷・, Usage=undefined, UnitPrice=蛯呵・Row 54: Name="縲舌け繝ｪ繧ｹ繧ｿ繝ｫ繝代ャ繧ｯ縲全26-40・磯ｺｺ縺ｮ縺ｿ6鬟溘↑縺ｩ・・, Usage=蜊ｸ縺・.5謗帙￠, UnitPrice=undefined
+Row 55: Name="繝悶Λ繝ｳ繝蛾､ｨ繝ｭ繧ｴ繧ｷ繝ｼ繝ｫ・磯ｻ抵ｼ・, Usage=蜊ｸ縺・謗帙￠, UnitPrice=undefined
+Row 56: Name="蜴滓攝譁吶す繝ｼ繝ｫ・・L-800繝ｭ繝ｼ繝ｫ・・, Usage=蜴滉ｾ｡蜷郁ｨ・ UnitPrice=undefined
+Row 64: Name="縲千匱騾∫畑繝繝ｳ繝懊・繝ｫ縲代ロ繧ｳ繝昴せ", Usage=undefined, UnitPrice=undefined
+Row 65: Name="繝阪さ繝昴せ騾∵侭", Usage=undefined, UnitPrice=undefined
+Row 66: Name="邱丞粋繝阪ャ繝育匱騾∽ｺｺ莉ｶ雋ｻ・・023蟷ｴ4譛育｢ｺ隱搾ｼ・, Usage=undefined, UnitPrice=undefined
+Row 68: Name="蜷郁ｨ・, Usage=undefined, UnitPrice=undefined
+
+Scanning file: c:/Users/ts/OneDrive/Desktop/菴懈･ｭ逕ｨ/繝ｬ繧ｷ繝・縲宣㍾隕√代占｣ｽ騾縲醍ｷ丞粋邂｡逅・ｼ域眠蝙具ｼ唄hopee蜿ｰ貉ｾ.xlsx
+Total sheets: 7
+
+Scanning file: c:/Users/ts/OneDrive/Desktop/菴懈･ｭ逕ｨ/繝ｬ繧ｷ繝・縲宣㍾隕√代占｣ｽ騾縲醍ｷ丞粋邂｡逅・ｼ域眠蝙具ｼ碓EM.xlsx
+Total sheets: 25

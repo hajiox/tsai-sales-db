@@ -1,0 +1,40 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: 笞呻ｸ・ enable debug logging with { debug: true }
+Checking recipe: 縲仙膚蜩√第･ｵ螟ｪ鮗ｺ辟ｼ縺阪◎縺ｰ・・た繝ｼ繧ｹ4鬟・Found 2 recipes.
+Recipe ID: caa3b27f-14bd-4ddf-beb8-b568a31d3e31
+Recipe Name: 縲仙膚蜩√第･ｵ螟ｪ鮗ｺ辟ｼ縺阪◎縺ｰ・・た繝ｼ繧ｹ4鬟・
+Category: 繝阪ャ繝亥ｰら畑
+Selling Price: 1000
+Total Cost: 590.54
+Source File: 縲宣㍾隕√代占｣ｽ騾縲醍ｷ丞粋邂｡逅・ｼ域眠蝙具ｼ峨ロ繝・ヨ蟆ら畑.xlsx
+
+Items (7):
+1. [ingredient] 螟ｪ鮗ｺ辟ｼ縺阪◎縺ｰ・育音豕ｨ・・   Usage Amount: 600
+   Unit Quantity: 150
+   Cost: 257.04
+   Unit Price: 64.26
+2. [material] 荳逡ｪ鬟溷刀縲辟ｼ縺阪◎縺ｰ繧ｽ繝ｼ繧ｹ・亥ｰ剰｢具ｼ・   Usage Amount: 1
+   Unit Quantity: 1
+   Cost: 20
+   Unit Price: 20
+3. [material] 縲舌け繝ｪ繧ｹ繧ｿ繝ｫ繝代ャ繧ｯ縲全26-40・磯ｺｺ縺ｮ縺ｿ6鬟溘↑縺ｩ・・   Usage Amount: 1
+   Unit Quantity: 1
+   Cost: 10.01
+   Unit Price: 10.01
+4. [material] 繝悶Λ繝ｳ繝蛾､ｨ繝ｭ繧ｴ繧ｷ繝ｼ繝ｫ・磯ｻ抵ｼ・   Usage Amount: 1
+   Unit Quantity: 1
+   Cost: 1.37
+   Unit Price: 1.37
+5. [material] 蜴滓攝譁吶す繝ｼ繝ｫ・・L-800繝ｭ繝ｼ繝ｫ・・   Usage Amount: 1
+   Unit Quantity: 1
+   Cost: 0.7197
+   Unit Price: 0.7197
+6. [expense] 繝阪さ繝昴せ騾∵侭
+   Usage Amount: 1
+   Unit Quantity: 1
+   Cost: 209
+   Unit Price: null
+7. [expense] 繝阪ャ繝育匱騾∽ｺｺ莉ｶ雋ｻ
+   Usage Amount: 1
+   Unit Quantity: 1
+   Cost: 92.4022
+   Unit Price: null
