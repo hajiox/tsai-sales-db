@@ -1,0 +1,13 @@
+
+# メンテナンス
+- scripts/migrate_db.js
+- scripts/migrate_db.ts
+- analysis_result.txt
+- analysis_result_utf8.txt
+- analysis_result_v2.txt
+- analysis_v3.txt
+- analysis_v4.txt
+- migration_output.txt
+- migration_output_utf8.txt
+- types/supabase.ts
+- types/supabase_utf8.ts

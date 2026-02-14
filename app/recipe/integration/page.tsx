@@ -55,10 +55,30 @@ export default function IntegrationPage() {
         try {
             // 1. Fetch Unlinked Items
             const res = await fetch('/api/recipe/integration');
-            const unlinked = await res.json();
-            setUnlinkedGroups(unlinked);
+            const unlinked: UnlinkedGroup[] = await res.json();
+
+            // Filter: Only show items that look like intermediates or products
+            // User requested "Only 【P】 or 【Product】 basically"
+            // We'll keep items where dominantType is 'intermediate' OR name implies product/intermediate
+            const targetItems = unlinked.filter(g => {
+                const n = g.name;
+                const t = g.dominantType;
+                // If explicitly typed as intermediate/product (rarely happens with unlinked string data unless we guess it)
+                if (t === 'intermediate' || t === 'product') return true;
+
+                // Name check
+                if (n.includes('【P】') || n.includes('【商品】') || n.includes('スープ') || n.includes('たれ')) return true;
+                // Exclude obvious ingredients if they don't match above
+                if (t === 'ingredient' || t === 'material') return false;
+
+                // Default: Include if we aren't sure, but user said "Ingredients mixed is hard to see", so maybe be strict.
+                return false;
+            });
+
+            setUnlinkedGroups(targetItems);
 
             // 2. Fetch Masters
+            // We need to ensure we have data. Use anon client (imported supabase) which should work given RLS check passed.
             const [ingRes, matRes, recRes] = await Promise.all([
                 supabase.from('ingredients').select('id, name, price_excl_tax'),
                 supabase.from('materials').select('id, name, price_excl_tax'),
@@ -66,9 +86,10 @@ export default function IntegrationPage() {
             ]);
 
             const masterList: MasterItem[] = [];
+            // Prioritize Recipes (Intermediates/Products) at the top of the list if user cares about them most
+            if (recRes.data) masterList.push(...recRes.data.map(r => ({ id: r.id, name: r.name, type: (r.is_intermediate ? 'recipe' : 'product') as MasterType, price: r.unit_cost })));
             if (ingRes.data) masterList.push(...ingRes.data.map(i => ({ id: i.id, name: i.name, type: 'ingredient' as MasterType, price: i.price_excl_tax })));
             if (matRes.data) masterList.push(...matRes.data.map(m => ({ id: m.id, name: m.name, type: 'material' as MasterType, price: m.price_excl_tax })));
-            if (recRes.data) masterList.push(...recRes.data.map(r => ({ id: r.id, name: r.name, type: (r.is_intermediate ? 'recipe' : 'product') as MasterType, price: r.unit_cost })));
 
             setMasters(masterList);
         } catch (error) {
