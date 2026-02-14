@@ -32,6 +32,7 @@ const CATEGORIES = [
     { value: "ネット専用", label: "ネット専用", color: "bg-blue-100 text-blue-800" },
     { value: "自社", label: "自社", color: "bg-green-100 text-green-800" },
     { value: "OEM", label: "OEM", color: "bg-orange-100 text-orange-800" },
+    { value: "試作", label: "試作", color: "bg-gray-100 text-gray-800" },
     { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800" },
 ];
 
@@ -46,7 +47,7 @@ interface Recipe {
     source_file: string | null;
 }
 
-type TabType = "all" | "ネット専用" | "自社" | "OEM" | "Shopee" | "中間部品";
+type TabType = "all" | "ネット専用" | "自社" | "OEM" | "Shopee" | "中間部品" | "試作";
 
 export default function RecipePage() {
     const router = useRouter();
@@ -59,6 +60,7 @@ export default function RecipePage() {
         ネット専用: 0,
         自社: 0,
         OEM: 0,
+        試作: 0,
         Shopee: 0,
         中間部品: 0,
         ingredients: 0,
@@ -198,7 +200,7 @@ export default function RecipePage() {
             .select("*", { count: "exact", head: true });
 
         // カテゴリ別カウント
-        const categories: TabType[] = ["ネット専用", "自社", "OEM", "Shopee"];
+        const categories: string[] = ["ネット専用", "自社", "OEM", "試作", "Shopee"];
         const categoryCounts: Record<string, number> = {};
 
         for (const cat of categories) {
@@ -230,6 +232,7 @@ export default function RecipePage() {
             ネット専用: categoryCounts["ネット専用"] || 0,
             自社: categoryCounts["自社"] || 0,
             OEM: categoryCounts["OEM"] || 0,
+            試作: categoryCounts["試作"] || 0,
             Shopee: categoryCounts["Shopee"] || 0,
             中間部品: intermediateCount || 0,
             ingredients: ingredientCount || 0,
@@ -257,11 +260,12 @@ export default function RecipePage() {
     };
 
     const tabs = [
-        { key: "all" as TabType, label: "全て", icon: ChefHat, count: stats.total },
-        { key: "ネット専用" as TabType, label: "ネット専用", icon: Globe, count: stats.ネット専用 },
+        { key: "all" as TabType, label: "全て", icon: FileSpreadsheet, count: stats.total },
+        { key: "ネット専用" as TabType, label: "ネット専用", icon: ShoppingBag, count: stats.ネット専用 },
         { key: "自社" as TabType, label: "自社", icon: Building, count: stats.自社 },
         { key: "OEM" as TabType, label: "OEM", icon: Truck, count: stats.OEM },
-        { key: "Shopee" as TabType, label: "Shopee", icon: ShoppingBag, count: stats.Shopee },
+        { key: "試作" as TabType, label: "試作", icon: ChefHat, count: stats.試作 },
+        { key: "Shopee" as TabType, label: "Shopee", icon: Globe, count: stats.Shopee },
         { key: "中間部品" as TabType, label: "中間部品【P】", icon: Package, count: stats.中間部品 },
     ];
 
@@ -330,6 +334,34 @@ export default function RecipePage() {
                         <div className="flex items-center gap-2">
                             <Package className="w-5 h-5 text-purple-500" />
                             <span className="text-2xl font-bold">{stats.中間部品}</span>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-600">
+                            試作
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-2">
+                            <ChefHat className="w-5 h-5 text-gray-500" />
+                            <span className="text-2xl font-bold">{stats.試作}</span>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-600">
+                            試作
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-2">
+                            <ChefHat className="w-5 h-5 text-gray-500" />
+                            <span className="text-2xl font-bold">{stats.試作}</span>
                         </div>
                     </CardContent>
                 </Card>

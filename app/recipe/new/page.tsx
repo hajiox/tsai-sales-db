@@ -25,6 +25,7 @@ const CATEGORIES = [
     { value: "ネット専用", label: "ネット専用", color: "bg-blue-100 text-blue-800" },
     { value: "自社", label: "自社", color: "bg-green-100 text-green-800" },
     { value: "OEM", label: "OEM", color: "bg-orange-100 text-orange-800" },
+    { value: "試作", label: "試作", color: "bg-gray-100 text-gray-800" },
     { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800" },
 ];
 

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Link as LinkIcon, ArrowRight, Check } from "lucide-react";
+import { Search, Link as LinkIcon, ArrowRight, Check, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import {
     Command,
@@ -134,6 +134,9 @@ export default function IntegrationPage() {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="mb-8">
                 <h1 className="text-3xl font-bold flex items-center gap-3">
+                    <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
+                        <ArrowLeft className="w-6 h-6" />
+                    </Button>
                     <LinkIcon className="w-8 h-8 text-blue-600" />
                     データ統合・クレンジング
                 </h1>
