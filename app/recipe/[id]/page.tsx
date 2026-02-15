@@ -517,12 +517,12 @@ export default function RecipeDetailPage() {
                                         <span className="text-sm font-normal text-gray-500">g</span>
                                     </div>
                                 </div>
-                                <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                                <div className="p-3 bg-gray-50 rounded border border-gray-100 z-10 relative">
                                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">表記量</div>
                                     <Input
                                         value={recipe.label_quantity || ''}
                                         onChange={(e) => handleRecipeChange('label_quantity', e.target.value)}
-                                        className="h-7 w-full bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-xl"
+                                        className="h-8 w-full bg-transparent border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 rounded px-2 shadow-sm font-bold text-xl text-gray-900"
                                         placeholder="例: 100g"
                                     />
                                 </div>
@@ -604,14 +604,16 @@ export default function RecipeDetailPage() {
                                 </div>
                             </div>
 
-                            <div className="flex items-end justify-end mb-6">
-                                <span className="text-xl font-bold text-gray-500 mr-2 mb-4">税込</span>
-                                <span className="text-4xl font-medium text-gray-400 mr-2 mb-2">¥</span>
+                            <div className="flex items-center justify-end mb-6">
+                                <div className="flex items-baseline text-gray-500 mr-2">
+                                    <span className="text-xl font-bold mr-2">税込</span>
+                                    <span className="text-4xl font-medium text-gray-400">¥</span>
+                                </div>
                                 <Input
                                     type="number"
                                     value={recipe.selling_price || ''}
                                     onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
-                                    className="h-32 w-fit text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-9xl tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700"
+                                    className="h-32 w-auto min-w-[200px] text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-9xl tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700"
                                     placeholder="0"
                                 />
                             </div>
