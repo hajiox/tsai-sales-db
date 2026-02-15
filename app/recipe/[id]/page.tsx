@@ -426,8 +426,11 @@ export default function RecipeDetailPage() {
     if (!recipe) return <div className="flex justify-center items-center h-screen text-gray-400">レシピが見つかりません</div>;
 
     const totals = getTotals();
-    const profit = (recipe.selling_price || 0) - totals.cost;
-    const profitRate = recipe.selling_price ? (profit / recipe.selling_price) * 100 : 0;
+
+    // Calculate profit based on tax-excluded price (Standard accounting practice)
+    const sellingPriceExTax = recipe.selling_price ? Math.round(recipe.selling_price / 1.08) : 0;
+    const profit = sellingPriceExTax - totals.cost;
+    const profitRate = sellingPriceExTax ? (profit / sellingPriceExTax) * 100 : 0;
 
     // Group items for display
     const groupedItems = [
@@ -604,17 +607,18 @@ export default function RecipeDetailPage() {
                             <div className="flex justify-between items-start mb-2">
                                 <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">販売価格 (Selling Price)</div>
                                 <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300">
-                                    税抜: {formatCurrency(recipe.selling_price ? recipe.selling_price / 1.08 : 0)}
+                                    税抜: {formatCurrency(sellingPriceExTax)}
                                 </div>
                             </div>
 
                             <div className="flex items-baseline justify-end mb-6">
+                                <span className="text-lg font-bold text-gray-500 mr-2 self-end mb-4">税込</span>
                                 <span className="text-2xl font-medium text-gray-400 mr-2">¥</span>
                                 <Input
                                     type="number"
                                     value={recipe.selling_price || ''}
                                     onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
-                                    className="h-20 w-full text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-7xl tracking-tight text-white placeholder:text-gray-700 selection:bg-gray-700"
+                                    className="h-20 w-fit text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-7xl tracking-tight text-white placeholder:text-gray-700 selection:bg-gray-700"
                                     placeholder="-"
                                 />
                             </div>
@@ -625,7 +629,7 @@ export default function RecipeDetailPage() {
                                     <div className="text-xl font-bold flex items-baseline gap-2">
                                         {formatCurrency(totals.cost)}
                                         <span className="text-xs font-normal text-gray-500">
-                                            ({recipe.selling_price && totals.cost ? ((totals.cost / recipe.selling_price) * 100).toFixed(1) : '-'}%)
+                                            ({sellingPriceExTax && totals.cost ? ((totals.cost / sellingPriceExTax) * 100).toFixed(1) : '-'}%)
                                         </span>
                                     </div>
                                 </div>
@@ -634,7 +638,7 @@ export default function RecipeDetailPage() {
                                     <div className={`text-xl font-bold flex items-baseline justify-end gap-2 ${profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                         {formatCurrency(profit)}
                                         <span className="text-xs font-normal text-gray-500">
-                                            ({recipe.selling_price ? (100 - ((totals.cost / recipe.selling_price) * 100)).toFixed(1) : '-'}%)
+                                            ({sellingPriceExTax ? profitRate.toFixed(1) : '-'}%)
                                         </span>
                                     </div>
                                 </div>
@@ -646,9 +650,13 @@ export default function RecipeDetailPage() {
                             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">卸価格シミュレーション</h3>
                             <div className="space-y-3">
                                 {[0.65, 0.7].map(rate => {
-                                    const wholesalePrice = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
-                                    const wholesaleProfit = wholesalePrice - totals.cost;
-                                    const wholesaleMargin = wholesalePrice ? (wholesaleProfit / wholesalePrice) * 100 : 0;
+                                    // Calculate wholesale price (Tax Included)
+                                    const wholesalePriceTaxIn = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
+                                    // Calculate tax-excluded wholesale price for profit calculation
+                                    const wholesalePriceExTax = Math.round(wholesalePriceTaxIn / 1.08);
+
+                                    const wholesaleProfit = wholesalePriceExTax - totals.cost;
+                                    const wholesaleMargin = wholesalePriceExTax ? (wholesaleProfit / wholesalePriceExTax) * 100 : 0;
 
                                     return (
                                         <div key={rate} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg hover:border-gray-300 transition-colors">
@@ -657,7 +665,7 @@ export default function RecipeDetailPage() {
                                                     {Math.round(rate * 100)}%
                                                 </div>
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    卸値: {formatCurrency(wholesalePrice)}
+                                                    卸値(税込): {formatCurrency(wholesalePriceTaxIn)}
                                                 </div>
                                             </div>
                                             <div className={`text-sm font-bold ${wholesaleProfit > 0 ? 'text-gray-700' : 'text-red-600'}`}>
