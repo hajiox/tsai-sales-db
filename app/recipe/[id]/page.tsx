@@ -463,8 +463,8 @@ export default function RecipeDetailPage() {
                 </div>
             </header>
 
-            {/* Main Content - A4 Optimized Layout */}
-            <main className="max-w-[210mm] mx-auto p-8 print:p-0 print:m-0 print:w-full">
+            {/* Main Content - Screen Only */}
+            <main className="max-w-[210mm] mx-auto p-8 print:hidden">
                 {/* Header Section */}
                 {/* Header Section (Recipe Name & Pricing Card) */}
                 <div className="border-b-2 border-gray-800 pb-4 mb-6 flex justify-between items-end">
@@ -604,14 +604,15 @@ export default function RecipeDetailPage() {
                                 </div>
                             </div>
 
-                            <div className="flex items-end justify-end mb-6">
-                                <span className="text-xl font-bold text-gray-500 mr-2 mb-4">税込</span>
-                                <span className="text-4xl font-medium text-gray-400 mr-2 mb-2">¥</span>
-                                <Input
+                            <div className="flex items-baseline justify-end mb-4">
+                                <span className="text-xs font-bold text-gray-500 mr-1" style={{ alignSelf: 'flex-end', marginBottom: '8px' }}>税込</span>
+                                <span className="font-medium text-gray-400 mr-1" style={{ fontSize: '24px', alignSelf: 'flex-end', marginBottom: '4px' }}>¥</span>
+                                <input
                                     type="number"
                                     value={recipe.selling_price || ''}
                                     onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
-                                    className="h-32 w-fit text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-9xl tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700"
+                                    style={{ fontSize: '48px', lineHeight: '1.1', height: '56px' }}
+                                    className="bg-transparent border-none outline-none p-0 font-bold tracking-tight text-white text-right w-full max-w-[220px]"
                                     placeholder="0"
                                 />
                             </div>
@@ -934,21 +935,163 @@ export default function RecipeDetailPage() {
                 </div>
             </main>
 
+            {/* ====== Print-Only Layout ====== */}
+            <div className="hidden print:block p-0 m-0 w-full text-black text-sm">
+                {/* Print Header */}
+                <div className="border-b-2 border-black pb-2 mb-4">
+                    <h1 className="text-2xl font-bold">{recipe.name}</h1>
+                    <div className="flex gap-6 mt-1 text-xs text-gray-600">
+                        <span>カテゴリ: {recipe.category}</span>
+                        <span>開発日: {recipe.development_date || '-'}</span>
+                        <span>ID: {recipe.id.split('-')[0]}</span>
+                    </div>
+                </div>
+
+                {/* Print Specs Row */}
+                <div className="flex gap-8 mb-4 text-sm">
+                    <div className="border border-gray-400 rounded px-3 py-2">
+                        <div className="text-xs font-bold text-gray-500 mb-0.5">充填量</div>
+                        <div className="text-lg font-bold">{recipe.filling_quantity ?? '-'} g</div>
+                    </div>
+                    <div className="border border-gray-400 rounded px-3 py-2">
+                        <div className="text-xs font-bold text-gray-500 mb-0.5">表記量</div>
+                        <div className="text-lg font-bold">{recipe.label_quantity || '-'}</div>
+                    </div>
+                    <div className="border border-gray-400 rounded px-3 py-2">
+                        <div className="text-xs font-bold text-gray-500 mb-0.5">保存方法</div>
+                        <div className="text-lg font-bold">{recipe.storage_method || '-'}</div>
+                    </div>
+                    {recipe.sterilization_method && (
+                        <div className="border border-gray-400 rounded px-3 py-2">
+                            <div className="text-xs font-bold text-gray-500 mb-0.5">殺菌</div>
+                            <div className="text-lg font-bold">
+                                {recipe.sterilization_method}
+                                {recipe.sterilization_temperature && ` ${recipe.sterilization_temperature}℃`}
+                                {recipe.sterilization_time && ` ${recipe.sterilization_time}分`}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Print Manufacturing Plan Table */}
+                <div className="mb-3">
+                    <h2 className="text-base font-bold border-b border-black pb-1 mb-2">製造計画（材料表）</h2>
+                    <div className="flex gap-4 mb-2 text-xs text-gray-600">
+                        <span>製造数 A: <strong className="text-black">{batchSize1}個</strong></span>
+                        <span>製造数 B: <strong className="text-black">{batchSize2}個</strong></span>
+                    </div>
+                </div>
+
+                {groupedItems.map((group, gIdx) => (
+                    group.items.length > 0 && (
+                        <div key={gIdx} className="mb-3">
+                            <div className="text-xs font-bold bg-gray-100 px-2 py-0.5 inline-block rounded mb-1">
+                                {group.title}
+                            </div>
+                            <table className="w-full text-xs border-collapse">
+                                <thead>
+                                    <tr className="border-b border-gray-400 text-gray-600">
+                                        <th className="text-left py-1 w-6">#</th>
+                                        <th className="text-left py-1">名称</th>
+                                        <th className="text-right py-1 w-20">基本(1)</th>
+                                        <th className="text-right py-1 w-24 bg-gray-50">{batchSize1}個分</th>
+                                        <th className="text-right py-1 w-24 bg-gray-50">{batchSize2}個分</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {group.items.map((item, idx) => {
+                                        const unitUsage = parseFloat(String(item.usage_amount)) || 0;
+                                        const unitQty = parseFloat(String(item.unit_quantity)) || 0;
+                                        const isMaterialGroup = group.type === 'material' || group.type === 'expense';
+                                        const b1Usage = unitUsage * batchSize1;
+                                        const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
+                                        const b2Usage = unitUsage * batchSize2;
+                                        const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
+                                        const unit = group.type === 'product' ? '個' : 'g';
+
+                                        return (
+                                            <tr key={item.id} className="border-b border-gray-200">
+                                                <td className="py-1 text-gray-400">{idx + 1}</td>
+                                                <td className="py-1 font-medium">
+                                                    {item.item_name}
+                                                    {unitQty > 0 && !isMaterialGroup && group.type !== 'product' && (
+                                                        <span className="text-gray-400 ml-1">({formatNumber(unitQty, 0)}g/pk)</span>
+                                                    )}
+                                                </td>
+                                                <td className="py-1 text-right font-mono">
+                                                    {!isMaterialGroup ? `${formatNumber(unitUsage, 1)}${unit}` : '-'}
+                                                </td>
+                                                <td className="py-1 text-right font-mono bg-gray-50">
+                                                    {!isMaterialGroup ? (
+                                                        <>
+                                                            {formatNumber(b1Usage, 0)}{unit}
+                                                            {b1Bags > 0 && item.item_type !== 'expense' && group.type !== 'product' && (
+                                                                <span className="text-gray-500 ml-1">({formatNumber(b1Bags, 2)}pk)</span>
+                                                            )}
+                                                        </>
+                                                    ) : '-'}
+                                                </td>
+                                                <td className="py-1 text-right font-mono bg-gray-50">
+                                                    {!isMaterialGroup ? (
+                                                        <>
+                                                            {formatNumber(b2Usage, 0)}{unit}
+                                                            {b2Bags > 0 && item.item_type !== 'expense' && (
+                                                                <span className="text-gray-500 ml-1">({formatNumber(b2Bags, 2)}pk)</span>
+                                                            )}
+                                                        </>
+                                                    ) : '-'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="border-t border-gray-400 font-bold">
+                                        <td colSpan={2} className="py-1 text-right text-gray-500">計</td>
+                                        <td className="py-1 text-right font-mono">
+                                            {group.type !== 'material' && group.type !== 'expense'
+                                                ? formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '個' : 'g')
+                                                : '-'}
+                                        </td>
+                                        <td className="py-1 text-right font-mono bg-gray-50">
+                                            {group.type !== 'material' && group.type !== 'expense'
+                                                ? formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '個' : 'g')
+                                                : '-'}
+                                        </td>
+                                        <td className="py-1 text-right font-mono bg-gray-50">
+                                            {group.type !== 'material' && group.type !== 'expense'
+                                                ? formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '個' : 'g')
+                                                : '-'}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    )
+                ))}
+
+                {/* Print Notes */}
+                {recipe.manufacturing_notes && (
+                    <div className="mt-4 border-t border-gray-300 pt-2">
+                        <h3 className="text-xs font-bold text-gray-500 mb-1">製造メモ</h3>
+                        <p className="text-xs whitespace-pre-wrap">{recipe.manufacturing_notes}</p>
+                    </div>
+                )}
+            </div>
+
             <style jsx global>{`
                 @media print {
                     @page {
-                        size: A4 landscape;
-                        margin: 10mm;
+                        size: A4 portrait;
+                        margin: 8mm;
                     }
                     body {
                         -webkit-print-color-adjust: exact;
                         print-color-adjust: exact;
                         background: white;
+                        font-size: 11px;
                     }
-                    /* Ensure table headers repeat on new pages if needed (though usually avoided in React without specific CSS) */
                     thead { display: table-header-group; }
-                    
-                    /* Hide scrollbars */
                     ::-webkit-scrollbar { display: none; }
                 }
             `}</style>
