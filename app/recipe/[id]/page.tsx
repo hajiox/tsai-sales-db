@@ -982,7 +982,7 @@ export default function RecipeDetailPage() {
                     </div>
                 </div>
 
-                {groupedItems.map((group, gIdx) => (
+                {groupedItems.filter(g => g.type !== 'material' && g.type !== 'expense').map((group, gIdx) => (
                     group.items.length > 0 && (
                         <div key={gIdx} className="mb-3">
                             <div className="text-xs font-bold bg-gray-100 px-2 py-0.5 inline-block rounded mb-1">
