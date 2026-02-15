@@ -470,6 +470,7 @@ export default function RecipeDetailPage() {
             {/* Main Content - A4 Optimized Layout */}
             <main className="max-w-[210mm] mx-auto p-8 print:p-0 print:m-0 print:w-full">
                 {/* Header Section */}
+                {/* Header Section (Recipe Name & Pricing Card) */}
                 <div className="border-b-2 border-gray-800 pb-4 mb-6 flex justify-between items-end">
                     <div>
                         <div className="flex gap-2 mb-2">
@@ -493,9 +494,8 @@ export default function RecipeDetailPage() {
                             <span>UPD: {new Date().toLocaleDateString()}</span>
                         </div>
                     </div>
-                    <div className="text-right hidden">
-                        {/* Hidden on desktop as it is moved to the card below */}
-                    </div>
+                    {/* Hide old pricing display */}
+                    <div className="text-right hidden"></div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
@@ -603,7 +603,9 @@ export default function RecipeDetailPage() {
                         <div className="bg-gray-900 rounded-xl p-6 text-white mb-6 shadow-lg">
                             <div className="flex justify-between items-start mb-2">
                                 <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">販売価格 (Selling Price)</div>
-                                <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300">税込 (参考)</div>
+                                <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300">
+                                    税抜: {formatCurrency(recipe.selling_price ? recipe.selling_price / 1.08 : 0)}
+                                </div>
                             </div>
 
                             <div className="flex items-baseline justify-end mb-6">
@@ -643,7 +645,7 @@ export default function RecipeDetailPage() {
                         <div>
                             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">卸価格シミュレーション</h3>
                             <div className="space-y-3">
-                                {[0.6, 0.65, 0.7].map(rate => {
+                                {[0.65, 0.7].map(rate => {
                                     const wholesalePrice = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
                                     const wholesaleProfit = wholesalePrice - totals.cost;
                                     const wholesaleMargin = wholesalePrice ? (wholesaleProfit / wholesalePrice) * 100 : 0;
