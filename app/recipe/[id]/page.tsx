@@ -982,7 +982,7 @@ export default function RecipeDetailPage() {
                     </div>
                 </div>
 
-                {groupedItems.map((group, gIdx) => (
+                {groupedItems.filter(g => g.type !== 'material' && g.type !== 'expense').map((group, gIdx) => (
                     group.items.length > 0 && (
                         <div key={gIdx} className="mb-3">
                             <div className="text-xs font-bold bg-gray-100 px-2 py-0.5 inline-block rounded mb-1">
@@ -994,15 +994,14 @@ export default function RecipeDetailPage() {
                                         <th className="text-left py-1 w-6">#</th>
                                         <th className="text-left py-1">名称</th>
                                         <th className="text-right py-1 w-20">基本(1)</th>
-                                        <th className="text-right py-1 w-24 bg-gray-50">{batchSize1}個分</th>
-                                        <th className="text-right py-1 w-24 bg-gray-50">{batchSize2}個分</th>
+                                        <th className="text-right py-1 w-28 bg-gray-50">×{batchSize1} (A)</th>
+                                        <th className="text-right py-1 w-28 bg-gray-50">×{batchSize2} (B)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {group.items.map((item, idx) => {
                                         const unitUsage = parseFloat(String(item.usage_amount)) || 0;
                                         const unitQty = parseFloat(String(item.unit_quantity)) || 0;
-                                        const isMaterialGroup = group.type === 'material' || group.type === 'expense';
                                         const b1Usage = unitUsage * batchSize1;
                                         const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
                                         const b2Usage = unitUsage * batchSize2;
@@ -1014,32 +1013,24 @@ export default function RecipeDetailPage() {
                                                 <td className="py-1 text-gray-400">{idx + 1}</td>
                                                 <td className="py-1 font-medium">
                                                     {item.item_name}
-                                                    {unitQty > 0 && !isMaterialGroup && group.type !== 'product' && (
+                                                    {unitQty > 0 && group.type !== 'product' && (
                                                         <span className="text-gray-400 ml-1">({formatNumber(unitQty, 0)}g/pk)</span>
                                                     )}
                                                 </td>
                                                 <td className="py-1 text-right font-mono">
-                                                    {!isMaterialGroup ? `${formatNumber(unitUsage, 1)}${unit}` : '-'}
+                                                    {formatNumber(unitUsage, 1)}{unit}
                                                 </td>
                                                 <td className="py-1 text-right font-mono bg-gray-50">
-                                                    {!isMaterialGroup ? (
-                                                        <>
-                                                            {formatNumber(b1Usage, 0)}{unit}
-                                                            {b1Bags > 0 && item.item_type !== 'expense' && group.type !== 'product' && (
-                                                                <span className="text-gray-500 ml-1">({formatNumber(b1Bags, 2)}pk)</span>
-                                                            )}
-                                                        </>
-                                                    ) : '-'}
+                                                    <span className="font-bold">{formatNumber(b1Usage, 0)}{unit}</span>
+                                                    {b1Bags > 0 && group.type !== 'product' && (
+                                                        <span className="text-gray-500 ml-1">({formatNumber(b1Bags, 2)}pk)</span>
+                                                    )}
                                                 </td>
                                                 <td className="py-1 text-right font-mono bg-gray-50">
-                                                    {!isMaterialGroup ? (
-                                                        <>
-                                                            {formatNumber(b2Usage, 0)}{unit}
-                                                            {b2Bags > 0 && item.item_type !== 'expense' && (
-                                                                <span className="text-gray-500 ml-1">({formatNumber(b2Bags, 2)}pk)</span>
-                                                            )}
-                                                        </>
-                                                    ) : '-'}
+                                                    <span className="font-bold">{formatNumber(b2Usage, 0)}{unit}</span>
+                                                    {b2Bags > 0 && group.type !== 'product' && (
+                                                        <span className="text-gray-500 ml-1">({formatNumber(b2Bags, 2)}pk)</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
@@ -1049,19 +1040,13 @@ export default function RecipeDetailPage() {
                                     <tr className="border-t border-gray-400 font-bold">
                                         <td colSpan={2} className="py-1 text-right text-gray-500">計</td>
                                         <td className="py-1 text-right font-mono">
-                                            {group.type !== 'material' && group.type !== 'expense'
-                                                ? formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '個' : 'g')
-                                                : '-'}
+                                            {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '個' : 'g')}
                                         </td>
                                         <td className="py-1 text-right font-mono bg-gray-50">
-                                            {group.type !== 'material' && group.type !== 'expense'
-                                                ? formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '個' : 'g')
-                                                : '-'}
+                                            {formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '個' : 'g')}
                                         </td>
                                         <td className="py-1 text-right font-mono bg-gray-50">
-                                            {group.type !== 'material' && group.type !== 'expense'
-                                                ? formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '個' : 'g')
-                                                : '-'}
+                                            {formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '個' : 'g')}
                                         </td>
                                     </tr>
                                 </tfoot>
