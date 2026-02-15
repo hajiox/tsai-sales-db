@@ -493,157 +493,183 @@ export default function RecipeDetailPage() {
                             <span>UPD: {new Date().toLocaleDateString()}</span>
                         </div>
                     </div>
-                    <div className="text-right">
-                        <div className="flex items-end justify-end gap-2 mb-1">
-                            <span className="text-xl font-bold text-gray-300 pb-2">¥</span>
-                            <Input
-                                type="number"
-                                value={recipe.selling_price || ''}
-                                onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
-                                className="h-16 w-48 text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-extrabold text-6xl tracking-tighter text-gray-900 placeholder:text-gray-200"
-                                placeholder="-"
-                            />
-                        </div>
-                        <div className="flex justify-end items-center gap-6 text-sm text-gray-500 font-medium">
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">原価</span>
-                                <span className="text-lg text-gray-700 font-bold">{formatCurrency(totals.cost)}</span>
-                                <span className="text-xs text-gray-400">({recipe.selling_price && totals.cost ? ((totals.cost / recipe.selling_price) * 100).toFixed(1) : '-'}%)</span>
-                            </div>
-                            <div className="w-px h-4 bg-gray-200"></div>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">粗利</span>
-                                <span className={`text-lg font-bold ${profit > 0 ? 'text-gray-700' : 'text-red-500'}`}>{formatCurrency(profit)}</span>
-                                <span className="text-xs text-gray-400">({recipe.selling_price ? (100 - ((totals.cost / recipe.selling_price) * 100)).toFixed(1) : '-'}%)</span>
-                            </div>
-                        </div>
+                    <div className="text-right hidden">
+                        {/* Hidden on desktop as it is moved to the card below */}
                     </div>
                 </div>
 
-                {/* Specs Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    {/* Product Specs */}
-                    <div className="space-y-4">
-                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1">製品仕様</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">充填量 (g)</div>
-                                <div className="font-bold text-xl flex items-center gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
+                    {/* Specs Grid (Left) */}
+                    <div className="space-y-6">
+                        {/* Product Specs */}
+                        <div>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">製品仕様</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">充填量 (g)</div>
+                                    <div className="font-bold text-xl flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            value={recipe.filling_quantity || ''}
+                                            className="h-6 w-20 px-1 py-0 text-right bg-transparent border-none focus:ring-0 p-0 shadow-none font-bold text-xl -mr-2"
+                                            onChange={(e) => {
+                                                const val = e.target.value ? parseFloat(e.target.value) : null;
+                                                handleRecipeChange('filling_quantity', val);
+                                            }}
+                                            placeholder="-"
+                                        />
+                                        <span className="text-sm font-normal text-gray-500">g</span>
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">表記量</div>
                                     <Input
-                                        type="number"
-                                        value={recipe.filling_quantity || ''}
-                                        className="h-6 w-20 px-1 py-0 text-right bg-transparent border-none focus:ring-0 p-0 shadow-none font-bold text-xl -mr-2"
-                                        onChange={(e) => {
-                                            const val = e.target.value ? parseFloat(e.target.value) : null;
-                                            handleRecipeChange('filling_quantity', val);
-                                        }}
-                                        placeholder="-"
+                                        value={recipe.label_quantity || ''}
+                                        onChange={(e) => handleRecipeChange('label_quantity', e.target.value)}
+                                        className="h-7 w-full bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-xl"
+                                        placeholder="例: 100g"
                                     />
-                                    <span className="text-sm font-normal text-gray-500">g</span>
+                                </div>
+                                <div className="p-3 bg-gray-50 rounded border border-gray-100 col-span-2">
+                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">保存方法</div>
+                                    <Select value={recipe.storage_method || ''} onValueChange={(val) => handleRecipeChange('storage_method', val)}>
+                                        <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-xl">
+                                            <SelectValue placeholder="-" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="常温">常温</SelectItem>
+                                            <SelectItem value="冷蔵">冷蔵</SelectItem>
+                                            <SelectItem value="冷凍">冷凍</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </div>
-                            <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">表記量</div>
+                        </div>
+
+                        {/* Manufacturing Specs */}
+                        <div>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">製造条件</h3>
+                            <div className="bg-gray-50 p-3 rounded border border-gray-100">
+                                <div className="mb-3">
+                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">殺菌・加熱工程</div>
+                                    <Select value={recipe.sterilization_method || ''} onValueChange={(val) => handleRecipeChange('sterilization_method', val)}>
+                                        <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-lg">
+                                            <SelectValue placeholder="選択してください" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="レトルト">レトルト</SelectItem>
+                                            <SelectItem value="乾燥機">乾燥機</SelectItem>
+                                            <SelectItem value="ホット充填">ホット充填</SelectItem>
+                                            <SelectItem value="殺菌なし">殺菌なし</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {(recipe.sterilization_method === 'レトルト' || recipe.sterilization_method === '乾燥機') && (
+                                    <div className="flex gap-4 border-t pt-2 border-gray-200">
+                                        <div className="w-1/2">
+                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">温度</div>
+                                            <div className="flex items-center">
+                                                <Input
+                                                    value={recipe.sterilization_temperature || ''}
+                                                    onChange={(e) => handleRecipeChange('sterilization_temperature', e.target.value)}
+                                                    className="h-7 w-20 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-lg"
+                                                    placeholder="120"
+                                                />
+                                                <span className="text-sm text-gray-500 ml-1">℃</span>
+                                            </div>
+                                        </div>
+                                        <div className="w-1/2">
+                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">時間</div>
+                                            <div className="flex items-center">
+                                                <Input
+                                                    value={recipe.sterilization_time || ''}
+                                                    onChange={(e) => handleRecipeChange('sterilization_time', e.target.value)}
+                                                    className="h-7 w-20 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-lg"
+                                                    placeholder="30"
+                                                />
+                                                <span className="text-sm text-gray-500 ml-1">分</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Pricing & Simulation */}
+                    <div>
+                        {/* Pricing Header Card */}
+                        <div className="bg-gray-900 rounded-xl p-6 text-white mb-6 shadow-lg">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">販売価格 (Selling Price)</div>
+                                <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300">税込 (参考)</div>
+                            </div>
+
+                            <div className="flex items-baseline justify-end mb-6">
+                                <span className="text-2xl font-medium text-gray-400 mr-2">¥</span>
                                 <Input
-                                    value={recipe.label_quantity || ''}
-                                    onChange={(e) => handleRecipeChange('label_quantity', e.target.value)}
-                                    className="h-7 w-full bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-xl"
-                                    placeholder="例: 100g"
+                                    type="number"
+                                    value={recipe.selling_price || ''}
+                                    onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
+                                    className="h-20 w-full text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-7xl tracking-tight text-white placeholder:text-gray-700 selection:bg-gray-700"
+                                    placeholder="-"
                                 />
                             </div>
-                            <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">保存方法</div>
-                                <Select value={recipe.storage_method || ''} onValueChange={(val) => handleRecipeChange('storage_method', val)}>
-                                    <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-xl">
-                                        <SelectValue placeholder="-" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="常温">常温</SelectItem>
-                                        <SelectItem value="冷蔵">冷蔵</SelectItem>
-                                        <SelectItem value="冷凍">冷凍</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                    </div>
 
-                    {/* Manufacturing Specs */}
-                    <div className="space-y-4">
-                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1">製造条件</h3>
-                        <div className="bg-gray-50 p-3 rounded border border-gray-100 h-full">
-                            <div className="mb-3">
-                                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">殺菌・加熱工程</div>
-                                <Select value={recipe.sterilization_method || ''} onValueChange={(val) => handleRecipeChange('sterilization_method', val)}>
-                                    <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-lg">
-                                        <SelectValue placeholder="選択してください" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="レトルト">レトルト</SelectItem>
-                                        <SelectItem value="乾燥機">乾燥機</SelectItem>
-                                        <SelectItem value="ホット充填">ホット充填</SelectItem>
-                                        <SelectItem value="殺菌なし">殺菌なし</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {(recipe.sterilization_method === 'レトルト' || recipe.sterilization_method === '乾燥機') && (
-                                <div className="flex gap-4 border-t pt-2 border-gray-200">
-                                    <div className="w-1/2">
-                                        <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">温度</div>
-                                        <div className="flex items-center">
-                                            <Input
-                                                value={recipe.sterilization_temperature || ''}
-                                                onChange={(e) => handleRecipeChange('sterilization_temperature', e.target.value)}
-                                                className="h-7 w-20 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-lg"
-                                                placeholder="120"
-                                            />
-                                            <span className="text-sm text-gray-500 ml-1">℃</span>
-                                        </div>
-                                    </div>
-                                    <div className="w-1/2">
-                                        <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">時間</div>
-                                        <div className="flex items-center">
-                                            <Input
-                                                value={recipe.sterilization_time || ''}
-                                                onChange={(e) => handleRecipeChange('sterilization_time', e.target.value)}
-                                                className="h-7 w-20 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-lg"
-                                                placeholder="30"
-                                            />
-                                            <span className="text-sm text-gray-500 ml-1">分</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Wholesale Simulation */}
-                <div className="grid grid-cols-3 gap-4 mb-8 print:hidden">
-                    {[0.6, 0.65, 0.7].map(rate => {
-                        const wholesalePrice = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
-                        const wholesaleProfit = wholesalePrice - totals.cost;
-                        const wholesaleMargin = wholesalePrice ? (wholesaleProfit / wholesalePrice) * 100 : 0;
-
-                        return (
-                            <div key={rate} className="p-3 bg-slate-50 rounded border border-slate-100 flex flex-col justify-between">
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                    卸 {rate * 10}掛け ({Math.round(rate * 100)}%)
-                                </div>
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
                                 <div>
-                                    <div className="text-sm text-slate-500 mb-1">
-                                        卸値: {formatCurrency(wholesalePrice)}
+                                    <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">原価 (Cost)</div>
+                                    <div className="text-xl font-bold flex items-baseline gap-2">
+                                        {formatCurrency(totals.cost)}
+                                        <span className="text-xs font-normal text-gray-500">
+                                            ({recipe.selling_price && totals.cost ? ((totals.cost / recipe.selling_price) * 100).toFixed(1) : '-'}%)
+                                        </span>
                                     </div>
-                                    <div className={`font-bold text-lg ${wholesaleProfit > 0 ? 'text-slate-700' : 'text-red-600'} flex items-baseline gap-2`}>
-                                        {formatCurrency(wholesaleProfit)}
-                                        <span className="text-xs font-normal text-slate-400">
-                                            (利益率 {wholesaleMargin.toFixed(1)}%)
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">粗利益 (Profit)</div>
+                                    <div className={`text-xl font-bold flex items-baseline justify-end gap-2 ${profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {formatCurrency(profit)}
+                                        <span className="text-xs font-normal text-gray-500">
+                                            ({recipe.selling_price ? (100 - ((totals.cost / recipe.selling_price) * 100)).toFixed(1) : '-'}%)
                                         </span>
                                     </div>
                                 </div>
                             </div>
-                        );
-                    })}
+                        </div>
+
+                        {/* Wholesale Simulation */}
+                        <div>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">卸価格シミュレーション</h3>
+                            <div className="space-y-3">
+                                {[0.6, 0.65, 0.7].map(rate => {
+                                    const wholesalePrice = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
+                                    const wholesaleProfit = wholesalePrice - totals.cost;
+                                    const wholesaleMargin = wholesalePrice ? (wholesaleProfit / wholesalePrice) * 100 : 0;
+
+                                    return (
+                                        <div key={rate} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg hover:border-gray-300 transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">
+                                                    {Math.round(rate * 100)}%
+                                                </div>
+                                                <div className="text-sm font-medium text-gray-900">
+                                                    卸値: {formatCurrency(wholesalePrice)}
+                                                </div>
+                                            </div>
+                                            <div className={`text-sm font-bold ${wholesaleProfit > 0 ? 'text-gray-700' : 'text-red-600'}`}>
+                                                利益: {formatCurrency(wholesaleProfit)}
+                                                <span className="text-xs font-normal text-gray-400 ml-1">
+                                                    ({wholesaleMargin.toFixed(1)}%)
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-12 gap-8">
