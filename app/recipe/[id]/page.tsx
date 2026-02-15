@@ -64,7 +64,7 @@ export default function RecipeDetailPage() {
     const [recipe, setRecipe] = useState<Recipe | null>(null);
     const [items, setItems] = useState<RecipeItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(true);
     const [hasChanges, setHasChanges] = useState(false);
     const [nutritionMap, setNutritionMap] = useState<Record<string, NutritionData>>({});
 
@@ -389,9 +389,8 @@ export default function RecipeDetailPage() {
                 })
                 .eq('id', recipe.id);
 
-            toast.success('保存しました');
             setHasChanges(false);
-            setIsEditing(false);
+            // Keep editing mode active
 
             // Reload to get real IDs
             fetchRecipe(recipe.id);
@@ -426,7 +425,6 @@ export default function RecipeDetailPage() {
     if (!recipe) return <div className="flex justify-center items-center h-screen text-gray-400">レシピが見つかりません</div>;
 
     const totals = getTotals();
-
     // Calculate profit based on tax-excluded price (Standard accounting practice)
     const sellingPriceExTax = recipe.selling_price ? Math.round(recipe.selling_price / 1.08) : 0;
     const profit = sellingPriceExTax - totals.cost;
@@ -456,15 +454,10 @@ export default function RecipeDetailPage() {
                         <Printer className="w-4 h-4" />
                         A4印刷
                     </Button>
-                    {hasChanges ? (
+                    {hasChanges && (
                         <Button size="sm" onClick={saveChanges} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
                             <Save className="w-4 h-4" />
                             保存
-                        </Button>
-                    ) : (
-                        <Button variant="ghost" size="sm" onClick={() => setIsEditing(!isEditing)} className="gap-2 text-gray-600">
-                            <Edit className="w-4 h-4" />
-                            {isEditing ? "編集完了" : "編集"}
                         </Button>
                     )}
                 </div>
@@ -611,15 +604,15 @@ export default function RecipeDetailPage() {
                                 </div>
                             </div>
 
-                            <div className="flex items-baseline justify-end mb-6">
-                                <span className="text-lg font-bold text-gray-500 mr-2 self-end mb-4">税込</span>
-                                <span className="text-2xl font-medium text-gray-400 mr-2">¥</span>
+                            <div className="flex items-end justify-end mb-6">
+                                <span className="text-xl font-bold text-gray-500 mr-2 mb-4">税込</span>
+                                <span className="text-4xl font-medium text-gray-400 mr-2 mb-2">¥</span>
                                 <Input
                                     type="number"
                                     value={recipe.selling_price || ''}
                                     onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
-                                    className="h-20 w-fit text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-7xl tracking-tight text-white placeholder:text-gray-700 selection:bg-gray-700"
-                                    placeholder="-"
+                                    className="h-32 w-fit text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-9xl tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700"
+                                    placeholder="0"
                                 />
                             </div>
 
@@ -650,13 +643,9 @@ export default function RecipeDetailPage() {
                             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">卸価格シミュレーション</h3>
                             <div className="space-y-3">
                                 {[0.65, 0.7].map(rate => {
-                                    // Calculate wholesale price (Tax Included)
-                                    const wholesalePriceTaxIn = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
-                                    // Calculate tax-excluded wholesale price for profit calculation
-                                    const wholesalePriceExTax = Math.round(wholesalePriceTaxIn / 1.08);
-
-                                    const wholesaleProfit = wholesalePriceExTax - totals.cost;
-                                    const wholesaleMargin = wholesalePriceExTax ? (wholesaleProfit / wholesalePriceExTax) * 100 : 0;
+                                    const wholesalePrice = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
+                                    const wholesaleProfit = wholesalePrice - totals.cost;
+                                    const wholesaleMargin = wholesalePrice ? (wholesaleProfit / wholesalePrice) * 100 : 0;
 
                                     return (
                                         <div key={rate} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg hover:border-gray-300 transition-colors">
@@ -665,7 +654,7 @@ export default function RecipeDetailPage() {
                                                     {Math.round(rate * 100)}%
                                                 </div>
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    卸値(税込): {formatCurrency(wholesalePriceTaxIn)}
+                                                    卸値: {formatCurrency(wholesalePrice)}
                                                 </div>
                                             </div>
                                             <div className={`text-sm font-bold ${wholesaleProfit > 0 ? 'text-gray-700' : 'text-red-600'}`}>
