@@ -517,12 +517,12 @@ export default function RecipeDetailPage() {
                                         <span className="text-sm font-normal text-gray-500">g</span>
                                     </div>
                                 </div>
-                                <div className="p-3 bg-gray-50 rounded border border-gray-100 relative z-10">
+                                <div className="p-3 bg-gray-50 rounded border border-gray-100">
                                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">表記量</div>
                                     <Input
                                         value={recipe.label_quantity || ''}
                                         onChange={(e) => handleRecipeChange('label_quantity', e.target.value)}
-                                        className="h-8 w-full bg-transparent border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 rounded px-2 shadow-sm font-bold text-xl text-gray-900"
+                                        className="h-7 w-full bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-xl"
                                         placeholder="例: 100g"
                                     />
                                 </div>
@@ -604,16 +604,19 @@ export default function RecipeDetailPage() {
                                 </div>
                             </div>
 
-                            <div className="flex items-end justify-end mb-2">
-                                <span className="text-xl font-bold text-gray-500 mr-4 mb-8">税込</span>
-                                <span className="text-6xl font-medium text-gray-400 mr-4 mb-4">¥</span>
-                                <Input
-                                    type="number"
-                                    value={recipe.selling_price || ''}
-                                    onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
-                                    className="h-48 w-auto min-w-[300px] text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-[10rem] leading-none tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700"
-                                    placeholder="0"
-                                />
+                            <div className="flex flex-col items-end mb-6">
+                                <div className="flex items-center justify-end w-full">
+                                    <span className="text-4xl font-medium text-gray-500 mr-4 mb-8">¥</span>
+                                    <input
+                                        type="number"
+                                        value={recipe.selling_price || ''}
+                                        onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
+                                        className="text-right bg-transparent border-none p-0 focus:ring-0 font-bold tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700 w-full"
+                                        style={{ fontSize: '180px', lineHeight: '1', height: '180px' }}
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <span className="text-sm font-bold text-gray-400 uppercase tracking-wider -mt-4 mr-2">税込価格 (Tax Included)</span>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
