@@ -1,0 +1,18 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: 売 add secrets lifecycle management: https://dotenvx.com/ops
+Searching for recipe...
+Recipe: 繧､繧ｫ莠ｺ蜿ゅ・繧翫°縺・(75cf8ee4-4159-4611-ac56-5a691af83ad0)
+Found 1 potential cap items.
+--- Cap Item Details ---
+ID: acb6e421-0e76-4bcf-a1de-e2bb8d639d8f
+Name: 43RTS-D鮟抵ｼ郁ｧ偵・繧翫°縺代・蜻ｳ蝎鯉ｼ峨く繝｣繝・・
+Type: material
+Unit Qty: 10.67 (raw: number 10.67)
+Unit Price: null (raw: object null)
+Usage Amount: null (raw: object null)
+Cost: 529.2 (raw: number 529.2)
+
+Master Data for "43RTS-D鮟抵ｼ郁ｧ偵・繧翫°縺代・蜻ｳ蝎鯉ｼ峨く繝｣繝・・":
+  Name: 43RTS-D鮟抵ｼ郁ｧ偵・繧翫°縺代・蜻ｳ蝎鯉ｼ峨く繝｣繝・・
+  Price: 10.67
+  Unit Qty: 1200ﾃ・繧ｱ繝ｼ繧ｹ
+  Should be Cost: 11
