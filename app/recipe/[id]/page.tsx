@@ -604,19 +604,16 @@ export default function RecipeDetailPage() {
                                 </div>
                             </div>
 
-                            <div className="flex flex-col items-end mb-6">
-                                <div className="flex items-center justify-end w-full">
-                                    <span className="text-4xl font-medium text-gray-500 mr-4 mb-8">¥</span>
-                                    <input
-                                        type="number"
-                                        value={recipe.selling_price || ''}
-                                        onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
-                                        className="text-right bg-transparent border-none p-0 focus:ring-0 font-bold tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700 w-full"
-                                        style={{ fontSize: '180px', lineHeight: '1', height: '180px' }}
-                                        placeholder="0"
-                                    />
-                                </div>
-                                <span className="text-sm font-bold text-gray-400 uppercase tracking-wider -mt-4 mr-2">税込価格 (Tax Included)</span>
+                            <div className="flex items-baseline justify-end mb-6">
+                                <span className="text-sm font-bold text-gray-400 mr-2 mb-2">税込</span>
+                                <span className="text-2xl font-medium text-gray-400 mr-2">¥</span>
+                                <Input
+                                    type="number"
+                                    value={recipe.selling_price || ''}
+                                    onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
+                                    className="h-24 w-fit text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-7xl tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700"
+                                    placeholder="0"
+                                />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
