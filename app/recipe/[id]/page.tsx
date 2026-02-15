@@ -604,14 +604,15 @@ export default function RecipeDetailPage() {
                                 </div>
                             </div>
 
-                            <div className="flex items-end justify-end mb-6">
-                                <span className="text-xl font-bold text-gray-500 mr-2 mb-4">税込</span>
-                                <span className="text-4xl font-medium text-gray-400 mr-2 mb-2">¥</span>
-                                <Input
+                            <div className="flex items-baseline justify-end mb-4">
+                                <span className="text-xs font-bold text-gray-500 self-end mb-2 mr-1">税込</span>
+                                <span className="font-medium text-gray-400 self-end mr-1" style={{ fontSize: '24px', marginBottom: '4px' }}>¥</span>
+                                <input
                                     type="number"
                                     value={recipe.selling_price || ''}
                                     onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
-                                    className="h-32 w-fit text-right bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-9xl tracking-tighter text-white placeholder:text-gray-800 selection:bg-gray-700"
+                                    style={{ fontSize: '48px', lineHeight: '1.1', height: '56px' }}
+                                    className="bg-transparent border-none outline-none p-0 font-bold tracking-tight text-white text-right w-full max-w-[220px]"
                                     placeholder="0"
                                 />
                             </div>
