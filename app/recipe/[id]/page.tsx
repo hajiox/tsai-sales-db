@@ -549,6 +549,34 @@ export default function RecipeDetailPage() {
                     </div>
                 </div>
 
+                {/* Wholesale Simulation (Screen Only) */}
+                <div className="grid grid-cols-3 gap-4 mb-8 print:hidden">
+                    {[0.6, 0.65, 0.7].map(rate => {
+                        const wholesalePrice = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
+                        const wholesaleProfit = wholesalePrice - totals.cost;
+                        const wholesaleMargin = wholesalePrice ? (wholesaleProfit / wholesalePrice) * 100 : 0;
+
+                        return (
+                            <div key={rate} className="p-3 bg-slate-50 rounded border border-slate-100 flex flex-col justify-between">
+                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                    卸 {rate * 10}掛け ({Math.round(rate * 100)}%)
+                                </div>
+                                <div>
+                                    <div className="text-sm text-slate-500 mb-1">
+                                        卸値: {formatCurrency(wholesalePrice)}
+                                    </div>
+                                    <div className={`font-bold text-lg ${wholesaleProfit > 0 ? 'text-slate-700' : 'text-red-600'} flex items-baseline gap-2`}>
+                                        {formatCurrency(wholesaleProfit)}
+                                        <span className="text-xs font-normal text-slate-400">
+                                            (利益率 {wholesaleMargin.toFixed(1)}%)
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
                 <div className="grid grid-cols-12 gap-8">
                     {/* Left Column: Ingredients (8 cols) -> Now Expanded or Scrollable */}
                     <div className="col-span-12 print:col-span-12">
