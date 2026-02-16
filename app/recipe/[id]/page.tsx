@@ -749,7 +749,49 @@ export default function RecipeDetailPage() {
                                                     <th className="text-left py-1 w-40 font-normal">名称</th>
 
                                                     {/* 1 Unit */}
-                                                    <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">基本(1)</th>
+                                                    {/* 1 Unit */}
+                                                    <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">
+                                                        基本(1)
+                                                        {isEditing && (
+                                                            <div className="flex justify-end mt-1 print:hidden">
+                                                                <InlineEdit
+                                                                    type="number"
+                                                                    value={null} placeholder="%"
+                                                                    onSave={(val) => {
+                                                                        const percent = parseFloat(String(val)); if (val === "") return;
+                                                                        if (percent && percent > 0) {
+                                                                            const scale = percent / 100;
+                                                                            setItems(prev => prev.map(item => {
+                                                                                // Only update if item belongs to this group
+                                                                                if (item.item_type === group.type) {
+                                                                                    const currentUsage = parseFloat(String(item.usage_amount)) || 0;
+                                                                                    const newUsage = currentUsage * scale;
+
+                                                                                    // Recalculate cost if consistent with handleItemChange logic
+                                                                                    let updates: Partial<RecipeItem> = { usage_amount: newUsage };
+                                                                                    if (['ingredient', 'intermediate'].includes(item.item_type)) {
+                                                                                        const qty = parseFloat(String(item.unit_quantity)) || 0;
+                                                                                        const price = parseFloat(String(item.unit_price)) || 0;
+                                                                                        if (qty !== 0) {
+                                                                                            updates.cost = Math.round(newUsage * (price / qty));
+                                                                                        }
+                                                                                    }
+                                                                                    return { ...item, ...updates };
+                                                                                }
+                                                                                return item;
+                                                                            }));
+                                                                            setHasChanges(true);
+                                                                            toast.success(`${group.title}の使用量を${percent}%に変更しました`);
+                                                                        }
+                                                                    }}
+                                                                    className="w-12 text-right bg-white border border-gray-200 rounded px-1 text-xs font-normal"
+                                                                    inputClassName="w-12 text-right text-xs"
+                                                                    placeholder="%"
+                                                                    suffix="%"
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </th>
 
                                                     {/* Batch 1 */}
                                                     <th className="text-right py-1 w-28 font-bold text-blue-700 bg-blue-50 border-l border-white">
