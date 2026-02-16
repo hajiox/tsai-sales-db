@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon } from "lucide-react";
+import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Edit, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 // カテゴリー一覧
@@ -517,6 +517,109 @@ export default function RecipePage() {
                                     </TableCell>
                                     <TableCell className="text-xs text-gray-500 max-w-[200px] truncate">
                                         {recipe.source_file?.replace("【重要】【製造】総合管理（新型）", "").replace(".xlsx", "") || "-"}
+                                    </TableCell>
+                                    <TableCell onClick={(e) => e.stopPropagation()}>
+                                        <div className="flex justify-end gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 text-gray-400 hover:text-blue-500"
+                                                title="名称変更"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const newName = window.prompt("新しいレシピ名を入力してください", recipe.name);
+                                                    if (newName && newName !== recipe.name) {
+                                                        const confirm = window.confirm(`「${recipe.name}」を「${newName}」に変更しますか？`);
+                                                        if (confirm) {
+                                                            supabase.from('recipes').update({ name: newName }).eq('id', recipe.id).then(({ error }) => {
+                                                                if (!error) {
+                                                                    setRecipes(prev => prev.map(r => r.id === recipe.id ? { ...r, name: newName } : r));
+                                                                    toast.success("名称を変更しました");
+                                                                } else {
+                                                                    toast.error("変更に失敗しました");
+                                                                }
+                                                            });
+                                                        }
+                                                    }
+                                                }}
+                                            >
+                                                <Edit className="w-4 h-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 text-gray-400 hover:text-green-500"
+                                                title="複製"
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    if (!window.confirm(`「${recipe.name}」を複製しますか？`)) return;
+
+                                                    try {
+                                                        // 1. Get original recipe
+                                                        const { data: original, error: fetchError } = await supabase
+                                                            .from('recipes')
+                                                            .select('*')
+                                                            .eq('id', recipe.id)
+                                                            .single();
+
+                                                        if (fetchError) throw fetchError;
+
+                                                        // 2. Create new recipe
+                                                        const { id, created_at, updated_at, ...rest } = original;
+                                                        const { data: newRecipe, error: createError } = await supabase
+                                                            .from('recipes')
+                                                            .insert({ ...rest, name: `${original.name} (コピー)` })
+                                                            .select()
+                                                            .single();
+
+                                                        if (createError) throw createError;
+
+                                                        // 3. Copy items
+                                                        const { data: items } = await supabase
+                                                            .from('recipe_items')
+                                                            .select('*')
+                                                            .eq('recipe_id', recipe.id);
+
+                                                        if (items && items.length > 0) {
+                                                            const newItems = items.map(item => {
+                                                                const { id, recipe_id, created_at, ...itemRest } = item;
+                                                                return { ...itemRest, recipe_id: newRecipe.id };
+                                                            });
+                                                            await supabase.from('recipe_items').insert(newItems);
+                                                        }
+
+                                                        toast.success("レシピを複製しました");
+                                                        fetchRecipes();
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                        toast.error("複製に失敗しました");
+                                                    }
+                                                }}
+                                            >
+                                                <Copy className="w-4 h-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 text-gray-400 hover:text-red-500"
+                                                title="削除"
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    if (window.confirm(`本当に「${recipe.name}」を削除しますか？\nこの操作は取り消せません。`)) {
+                                                        const { error } = await supabase.from('recipes').delete().eq('id', recipe.id);
+                                                        if (!error) {
+                                                            setRecipes(prev => prev.filter(r => r.id !== recipe.id));
+                                                            toast.success("レシピを削除しました");
+                                                            fetchStats();
+                                                        } else {
+                                                            toast.error("削除に失敗しました");
+                                                        }
+                                                    }
+                                                }}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
