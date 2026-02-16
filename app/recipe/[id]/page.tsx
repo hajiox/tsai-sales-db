@@ -19,6 +19,7 @@ import { ArrowLeft, Edit, Save, Printer, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, { NutritionData } from "../_components/NutritionDisplay";
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
+import InlineEdit from "../_components/InlineEdit";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -479,10 +480,11 @@ export default function RecipeDetailPage() {
                                 </span>
                             )}
                         </div>
-                        <Input
+                        <InlineEdit
                             value={recipe.name}
-                            onChange={(e) => handleRecipeChange('name', e.target.value)}
-                            className="text-3xl font-extrabold text-gray-900 leading-tight bg-transparent border-none focus-visible:ring-0 p-0 h-auto shadow-none w-full"
+                            onSave={(val) => handleRecipeChange('name', val)}
+                            className="text-3xl font-extrabold text-gray-900 leading-tight w-full hover:bg-gray-50 rounded px-1 -ml-1 transition-colors"
+                            inputClassName="text-3xl font-extrabold text-gray-900 leading-tight"
                         />
                         <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono">
                             <span>ID: {recipe.id.split('-')[0]}</span>
@@ -504,26 +506,27 @@ export default function RecipeDetailPage() {
                                 <div className="p-3 bg-gray-50 rounded border border-gray-100">
                                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">充填量 (g)</div>
                                     <div className="font-bold text-xl flex items-center gap-2">
-                                        <Input
+                                        <InlineEdit
                                             type="number"
-                                            value={recipe.filling_quantity || ''}
-                                            className="h-6 w-20 px-1 py-0 text-right bg-transparent border-none focus:ring-0 p-0 shadow-none font-bold text-xl -mr-2"
-                                            onChange={(e) => {
-                                                const val = e.target.value ? parseFloat(e.target.value) : null;
-                                                handleRecipeChange('filling_quantity', val);
-                                            }}
+                                            value={recipe.filling_quantity}
+                                            onSave={(val) => handleRecipeChange('filling_quantity', val)}
+                                            className="text-right font-bold text-xl min-w-[3rem] justify-end"
+                                            inputClassName="text-right font-bold text-xl w-20"
                                             placeholder="-"
+                                            suffix="g"
                                         />
-                                        <span className="text-sm font-normal text-gray-500">g</span>
                                     </div>
                                 </div>
                                 <div className="p-3 bg-gray-50 rounded border border-gray-100">
                                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">表記量</div>
-                                    <Input
-                                        value={recipe.label_quantity || ''}
-                                        onChange={(e) => handleRecipeChange('label_quantity', e.target.value)}
-                                        className="h-7 w-full bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-xl"
-                                        placeholder="例: 100g"
+                                    <InlineEdit
+                                        type="number"
+                                        value={recipe.label_quantity}
+                                        onSave={(val) => handleRecipeChange('label_quantity', String(val))}
+                                        className="font-bold text-xl w-full"
+                                        inputClassName="font-bold text-xl w-full"
+                                        placeholder="-"
+                                        suffix="g"
                                     />
                                 </div>
                                 <div className="p-3 bg-gray-50 rounded border border-gray-100 col-span-2">
@@ -566,11 +569,13 @@ export default function RecipeDetailPage() {
                                         <div className="w-1/2">
                                             <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">温度</div>
                                             <div className="flex items-center">
-                                                <Input
-                                                    value={recipe.sterilization_temperature || ''}
-                                                    onChange={(e) => handleRecipeChange('sterilization_temperature', e.target.value)}
-                                                    className="h-7 w-20 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-lg"
+                                                <InlineEdit
+                                                    value={recipe.sterilization_temperature}
+                                                    onSave={(val) => handleRecipeChange('sterilization_temperature', val)}
+                                                    className="font-bold text-lg min-w-[3rem]"
+                                                    inputClassName="font-bold text-lg w-20"
                                                     placeholder="120"
+                                                    type="number"
                                                 />
                                                 <span className="text-sm text-gray-500 ml-1">℃</span>
                                             </div>
@@ -578,11 +583,13 @@ export default function RecipeDetailPage() {
                                         <div className="w-1/2">
                                             <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">時間</div>
                                             <div className="flex items-center">
-                                                <Input
-                                                    value={recipe.sterilization_time || ''}
-                                                    onChange={(e) => handleRecipeChange('sterilization_time', e.target.value)}
-                                                    className="h-7 w-20 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-lg"
+                                                <InlineEdit
+                                                    value={recipe.sterilization_time}
+                                                    onSave={(val) => handleRecipeChange('sterilization_time', val)}
+                                                    className="font-bold text-lg min-w-[3rem]"
+                                                    inputClassName="font-bold text-lg w-20"
                                                     placeholder="30"
+                                                    type="number"
                                                 />
                                                 <span className="text-sm text-gray-500 ml-1">分</span>
                                             </div>
@@ -607,12 +614,13 @@ export default function RecipeDetailPage() {
                             <div className="flex items-baseline justify-end mb-4">
                                 <span className="text-xs font-bold text-gray-500 mr-1" style={{ alignSelf: 'flex-end', marginBottom: '8px' }}>税込</span>
                                 <span className="font-medium text-gray-400 mr-1" style={{ fontSize: '24px', alignSelf: 'flex-end', marginBottom: '4px' }}>¥</span>
-                                <input
+                                <InlineEdit
                                     type="number"
-                                    value={recipe.selling_price || ''}
-                                    onChange={(e) => handleRecipeChange('selling_price', e.target.value ? parseInt(e.target.value) : null)}
+                                    value={recipe.selling_price}
+                                    onSave={(val) => handleRecipeChange('selling_price', val)}
                                     style={{ fontSize: '48px', lineHeight: '1.1', height: '56px' }}
-                                    className="bg-transparent border-none outline-none p-0 font-bold tracking-tight text-white text-right w-full max-w-[220px]"
+                                    className="font-bold tracking-tight text-white text-right w-full max-w-[220px] justify-end"
+                                    inputClassName="bg-gray-800 text-white border-none text-right px-2"
                                     placeholder="0"
                                 />
                             </div>
