@@ -1,6 +1,5 @@
 // app/recipe/[id]/page.tsx
-// レシピ詳細ページ - シングルページレイアウト & 印刷対応
-
+// 繝ｬ繧ｷ繝碑ｩｳ邏ｰ繝壹・繧ｸ - 繧ｷ繝ｳ繧ｰ繝ｫ繝壹・繧ｸ繝ｬ繧､繧｢繧ｦ繝・& 蜊ｰ蛻ｷ蟇ｾ蠢・
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,12 +19,12 @@ import { toast } from "sonner";
 import NutritionDisplay, { NutritionData } from "../_components/NutritionDisplay";
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 
-// カテゴリー一覧
+// 繧ｫ繝・ざ繝ｪ繝ｼ荳隕ｧ
 const CATEGORIES = [
-    { value: "ネット専用", label: "ネット", color: "bg-blue-100 text-blue-800 border-blue-200" },
-    { value: "自社", label: "自社", color: "bg-green-100 text-green-800 border-green-200" },
+    { value: "繝阪ャ繝亥ｰら畑", label: "繝阪ャ繝・, color: "bg-blue-100 text-blue-800 border-blue-200" },
+    { value: "閾ｪ遉ｾ", label: "閾ｪ遉ｾ", color: "bg-green-100 text-green-800 border-green-200" },
     { value: "OEM", label: "OEM", color: "bg-orange-100 text-orange-800 border-orange-200" },
-    { value: "試作", label: "試作", color: "bg-gray-100 text-gray-800 border-gray-200" },
+    { value: "隧ｦ菴・, label: "隧ｦ菴・, color: "bg-gray-100 text-gray-800 border-gray-200" },
     { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800 border-pink-200" },
 ];
 
@@ -144,11 +143,11 @@ export default function RecipeDetailPage() {
         }
         // Expenses (Hardcoded for now)
         setExpenses([
-            { name: "ヤマト送料", unit_price: 950, unit_quantity: 1 },
-            { name: "ネコポス送料", unit_price: 350, unit_quantity: 1 },
-            { name: "コンパクト送料", unit_price: 550, unit_quantity: 1 },
-            { name: "人件費", unit_price: 1200, unit_quantity: 1 },
-            { name: "Amazon手数料", unit_price: 0, unit_quantity: 1 },
+            { name: "繝､繝槭ヨ騾∵侭", unit_price: 950, unit_quantity: 1 },
+            { name: "繝阪さ繝昴せ騾∵侭", unit_price: 350, unit_quantity: 1 },
+            { name: "繧ｳ繝ｳ繝代け繝磯∵侭", unit_price: 550, unit_quantity: 1 },
+            { name: "莠ｺ莉ｶ雋ｻ", unit_price: 1200, unit_quantity: 1 },
+            { name: "Amazon謇区焚譁・, unit_price: 0, unit_quantity: 1 },
         ]);
     };
 
@@ -275,7 +274,7 @@ export default function RecipeDetailPage() {
                         unit_quantity: typeof selected.unit_quantity === 'number' ? selected.unit_quantity : parseFloat(String(selected.unit_quantity)) || 0,
                     };
 
-                    if (selected.name === 'Amazon手数料' && recipe?.selling_price) {
+                    if (selected.name === 'Amazon謇区焚譁・ && recipe?.selling_price) {
                         updates.cost = Math.round(recipe.selling_price * 0.1);
                         updates.usage_amount = 1;
                         updates.unit_price = updates.cost;
@@ -296,11 +295,11 @@ export default function RecipeDetailPage() {
 
         if (field === 'selling_price') {
             const newPrice = typeof value === 'number' ? value : parseFloat(value) || 0;
-            const feeItem = items.find(i => i.item_name === 'Amazon手数料');
+            const feeItem = items.find(i => i.item_name === 'Amazon謇区焚譁・);
             if (feeItem && newPrice > 0) {
                 const newFee = Math.round(newPrice * 0.1);
                 setItems(prev => prev.map(i => {
-                    if (i.item_name === 'Amazon手数料') {
+                    if (i.item_name === 'Amazon謇区焚譁・) {
                         return { ...i, cost: newFee, unit_price: newFee, usage_amount: 1 };
                     }
                     return i;
@@ -316,10 +315,10 @@ export default function RecipeDetailPage() {
                 .eq('id', recipe.id);
 
             if (error) throw error;
-            toast.success('更新しました', { duration: 1000 });
+            toast.success('譖ｴ譁ｰ縺励∪縺励◆', { duration: 1000 });
         } catch (error) {
             console.error('Update error:', error);
-            toast.error('更新に失敗しました');
+            toast.error('譖ｴ譁ｰ縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
         }
     };
 
@@ -396,7 +395,7 @@ export default function RecipeDetailPage() {
             fetchRecipe(recipe.id);
         } catch (error) {
             console.error(error);
-            toast.error('保存に失敗しました');
+            toast.error('菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆');
         }
     };
 
@@ -407,7 +406,7 @@ export default function RecipeDetailPage() {
 
     const formatCurrency = (value?: number | null) => {
         if (value === undefined || value === null) return "-";
-        return `¥${Math.round(value).toLocaleString()}`;
+        return `ﾂ･${Math.round(value).toLocaleString()}`;
     };
 
     const getTotals = () => {
@@ -421,8 +420,8 @@ export default function RecipeDetailPage() {
         window.print();
     };
 
-    if (loading) return <div className="flex justify-center items-center h-screen text-gray-400">読み込み中...</div>;
-    if (!recipe) return <div className="flex justify-center items-center h-screen text-gray-400">レシピが見つかりません</div>;
+    if (loading) return <div className="flex justify-center items-center h-screen text-gray-400">隱ｭ縺ｿ霎ｼ縺ｿ荳ｭ...</div>;
+    if (!recipe) return <div className="flex justify-center items-center h-screen text-gray-400">繝ｬ繧ｷ繝斐′隕九▽縺九ｊ縺ｾ縺帙ｓ</div>;
 
     const totals = getTotals();
     // Calculate profit based on tax-excluded price (Standard accounting practice)
@@ -432,11 +431,11 @@ export default function RecipeDetailPage() {
 
     // Group items for display
     const groupedItems = [
-        { title: "セット内容（商品）", type: 'product', items: items.filter(i => i.item_type === 'product'), color: "bg-indigo-50 text-indigo-700 border-indigo-100", candidates: products },
-        { title: "原材料", type: 'ingredient', items: items.filter(i => i.item_type === 'ingredient'), color: "bg-green-50 text-green-700 border-green-100", candidates: ingredients },
-        { title: "中間加工品", type: 'intermediate', items: items.filter(i => i.item_type === 'intermediate'), color: "bg-purple-50 text-purple-700 border-purple-100", candidates: intermediates },
-        { title: "資材・包材", type: 'material', items: items.filter(i => i.item_type === 'material'), color: "bg-orange-50 text-orange-700 border-orange-100", candidates: materials },
-        { title: "諸経費", type: 'expense', items: items.filter(i => i.item_type === 'expense'), color: "bg-red-50 text-red-700 border-red-100", candidates: expenses },
+        { title: "繧ｻ繝・ヨ蜀・ｮｹ・亥膚蜩・ｼ・, type: 'product', items: items.filter(i => i.item_type === 'product'), color: "bg-indigo-50 text-indigo-700 border-indigo-100", candidates: products },
+        { title: "蜴滓攝譁・, type: 'ingredient', items: items.filter(i => i.item_type === 'ingredient'), color: "bg-green-50 text-green-700 border-green-100", candidates: ingredients },
+        { title: "荳ｭ髢灘刈蟾･蜩・, type: 'intermediate', items: items.filter(i => i.item_type === 'intermediate'), color: "bg-purple-50 text-purple-700 border-purple-100", candidates: intermediates },
+        { title: "雉・攝繝ｻ蛹・攝", type: 'material', items: items.filter(i => i.item_type === 'material'), color: "bg-orange-50 text-orange-700 border-orange-100", candidates: materials },
+        { title: "隲ｸ邨瑚ｲｻ", type: 'expense', items: items.filter(i => i.item_type === 'expense'), color: "bg-red-50 text-red-700 border-red-100", candidates: expenses },
     ];
 
     return (
@@ -446,19 +445,18 @@ export default function RecipeDetailPage() {
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="sm" onClick={() => router.push("/recipe")} className="text-gray-500 hover:text-gray-900">
                         <ArrowLeft className="w-4 h-4 mr-2" />
-                        レシピ一覧
+                        繝ｬ繧ｷ繝比ｸ隕ｧ
                     </Button>
                 </div>
                 <div className="flex items-center gap-3">
                     <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2">
                         <Printer className="w-4 h-4" />
-                        A4印刷
+                        A4蜊ｰ蛻ｷ
                     </Button>
                     {hasChanges && (
                         <Button size="sm" onClick={saveChanges} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
                             <Save className="w-4 h-4" />
-                            保存
-                        </Button>
+                            菫晏ｭ・                        </Button>
                     )}
                 </div>
             </header>
@@ -499,10 +497,10 @@ export default function RecipeDetailPage() {
                     <div className="space-y-6">
                         {/* Product Specs */}
                         <div>
-                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">製品仕様</h3>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">陬ｽ蜩∽ｻ墓ｧ・/h3>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">充填量 (g)</div>
+                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">蜈・｡ｫ驥・(g)</div>
                                     <div className="font-bold text-xl flex items-center gap-2">
                                         <Input
                                             type="number"
@@ -518,24 +516,24 @@ export default function RecipeDetailPage() {
                                     </div>
                                 </div>
                                 <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">表記量</div>
+                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">陦ｨ險倬㍼</div>
                                     <Input
                                         value={recipe.label_quantity || ''}
                                         onChange={(e) => handleRecipeChange('label_quantity', e.target.value)}
                                         className="h-7 w-full bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-xl"
-                                        placeholder="例: 100g"
+                                        placeholder="萓・ 100g"
                                     />
                                 </div>
                                 <div className="p-3 bg-gray-50 rounded border border-gray-100 col-span-2">
-                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">保存方法</div>
+                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">菫晏ｭ俶婿豕・/div>
                                     <Select value={recipe.storage_method || ''} onValueChange={(val) => handleRecipeChange('storage_method', val)}>
                                         <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-xl">
                                             <SelectValue placeholder="-" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="常温">常温</SelectItem>
-                                            <SelectItem value="冷蔵">冷蔵</SelectItem>
-                                            <SelectItem value="冷凍">冷凍</SelectItem>
+                                            <SelectItem value="蟶ｸ貂ｩ">蟶ｸ貂ｩ</SelectItem>
+                                            <SelectItem value="蜀ｷ阡ｵ">蜀ｷ阡ｵ</SelectItem>
+                                            <SelectItem value="蜀ｷ蜃・>蜀ｷ蜃・/SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -544,27 +542,27 @@ export default function RecipeDetailPage() {
 
                         {/* Manufacturing Specs */}
                         <div>
-                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">製造条件</h3>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">陬ｽ騾譚｡莉ｶ</h3>
                             <div className="bg-gray-50 p-3 rounded border border-gray-100">
                                 <div className="mb-3">
-                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">殺菌・加熱工程</div>
+                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">谿ｺ闖後・蜉辭ｱ蟾･遞・/div>
                                     <Select value={recipe.sterilization_method || ''} onValueChange={(val) => handleRecipeChange('sterilization_method', val)}>
                                         <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-lg">
-                                            <SelectValue placeholder="選択してください" />
+                                            <SelectValue placeholder="驕ｸ謚槭＠縺ｦ縺上□縺輔＞" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="レトルト">レトルト</SelectItem>
-                                            <SelectItem value="乾燥機">乾燥機</SelectItem>
-                                            <SelectItem value="ホット充填">ホット充填</SelectItem>
-                                            <SelectItem value="殺菌なし">殺菌なし</SelectItem>
+                                            <SelectItem value="繝ｬ繝医Ν繝・>繝ｬ繝医Ν繝・/SelectItem>
+                                            <SelectItem value="荵ｾ辯･讖・>荵ｾ辯･讖・/SelectItem>
+                                            <SelectItem value="繝帙ャ繝亥・蝪ｫ">繝帙ャ繝亥・蝪ｫ</SelectItem>
+                                            <SelectItem value="谿ｺ闖後↑縺・>谿ｺ闖後↑縺・/SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
 
-                                {(recipe.sterilization_method === 'レトルト' || recipe.sterilization_method === '乾燥機') && (
+                                {(recipe.sterilization_method === '繝ｬ繝医Ν繝・ || recipe.sterilization_method === '荵ｾ辯･讖・) && (
                                     <div className="flex gap-4 border-t pt-2 border-gray-200">
                                         <div className="w-1/2">
-                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">温度</div>
+                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">貂ｩ蠎ｦ</div>
                                             <div className="flex items-center">
                                                 <Input
                                                     value={recipe.sterilization_temperature || ''}
@@ -572,11 +570,11 @@ export default function RecipeDetailPage() {
                                                     className="h-7 w-20 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-lg"
                                                     placeholder="120"
                                                 />
-                                                <span className="text-sm text-gray-500 ml-1">℃</span>
+                                                <span className="text-sm text-gray-500 ml-1">邃・/span>
                                             </div>
                                         </div>
                                         <div className="w-1/2">
-                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">時間</div>
+                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">譎る俣</div>
                                             <div className="flex items-center">
                                                 <Input
                                                     value={recipe.sterilization_time || ''}
@@ -584,7 +582,7 @@ export default function RecipeDetailPage() {
                                                     className="h-7 w-20 bg-transparent border-none focus-visible:ring-0 p-0 shadow-none font-bold text-lg"
                                                     placeholder="30"
                                                 />
-                                                <span className="text-sm text-gray-500 ml-1">分</span>
+                                                <span className="text-sm text-gray-500 ml-1">蛻・/span>
                                             </div>
                                         </div>
                                     </div>
@@ -598,15 +596,15 @@ export default function RecipeDetailPage() {
                         {/* Pricing Header Card */}
                         <div className="bg-gray-900 rounded-xl p-6 text-white mb-6 shadow-lg">
                             <div className="flex justify-between items-start mb-2">
-                                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">販売価格 (Selling Price)</div>
+                                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">雋ｩ螢ｲ萓｡譬ｼ (Selling Price)</div>
                                 <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300">
-                                    税抜: {formatCurrency(sellingPriceExTax)}
+                                    遞取栢: {formatCurrency(sellingPriceExTax)}
                                 </div>
                             </div>
 
                             <div className="flex items-baseline justify-end mb-4">
-                                <span className="text-xs font-bold text-gray-500 mr-1" style={{ alignSelf: 'flex-end', marginBottom: '8px' }}>税込</span>
-                                <span className="font-medium text-gray-400 mr-1" style={{ fontSize: '24px', alignSelf: 'flex-end', marginBottom: '4px' }}>¥</span>
+                                <span className="text-xs font-bold text-gray-500 mr-1" style={{ alignSelf: 'flex-end', marginBottom: '8px' }}>遞手ｾｼ</span>
+                                <span className="font-medium text-gray-400 mr-1" style={{ fontSize: '24px', alignSelf: 'flex-end', marginBottom: '4px' }}>ﾂ･</span>
                                 <input
                                     type="number"
                                     value={recipe.selling_price || ''}
@@ -619,7 +617,7 @@ export default function RecipeDetailPage() {
 
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
                                 <div>
-                                    <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">原価 (Cost)</div>
+                                    <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">蜴滉ｾ｡ (Cost)</div>
                                     <div className="text-xl font-bold flex items-baseline gap-2">
                                         {formatCurrency(totals.cost)}
                                         <span className="text-xs font-normal text-gray-500">
@@ -628,7 +626,7 @@ export default function RecipeDetailPage() {
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">粗利益 (Profit)</div>
+                                    <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">邊怜茜逶・(Profit)</div>
                                     <div className={`text-xl font-bold flex items-baseline justify-end gap-2 ${profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                         {formatCurrency(profit)}
                                         <span className="text-xs font-normal text-gray-500">
@@ -641,7 +639,7 @@ export default function RecipeDetailPage() {
 
                         {/* Wholesale Simulation */}
                         <div>
-                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">卸価格シミュレーション</h3>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">蜊ｸ萓｡譬ｼ繧ｷ繝溘Η繝ｬ繝ｼ繧ｷ繝ｧ繝ｳ</h3>
                             <div className="space-y-3">
                                 {[0.65, 0.7].map(rate => {
                                     const wholesalePrice = recipe.selling_price ? Math.round(recipe.selling_price * rate) : 0;
@@ -655,11 +653,11 @@ export default function RecipeDetailPage() {
                                                     {Math.round(rate * 100)}%
                                                 </div>
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    卸値: {formatCurrency(wholesalePrice)}
+                                                    蜊ｸ蛟､: {formatCurrency(wholesalePrice)}
                                                 </div>
                                             </div>
                                             <div className={`text-sm font-bold ${wholesaleProfit > 0 ? 'text-gray-700' : 'text-red-600'}`}>
-                                                利益: {formatCurrency(wholesaleProfit)}
+                                                蛻ｩ逶・ {formatCurrency(wholesaleProfit)}
                                                 <span className="text-xs font-normal text-gray-400 ml-1">
                                                     ({wholesaleMargin.toFixed(1)}%)
                                                 </span>
@@ -676,7 +674,7 @@ export default function RecipeDetailPage() {
                     {/* Left Column: Ingredients (8 cols) -> Now Expanded or Scrollable */}
                     <div className="col-span-12 print:col-span-12">
                         <div className="flex justify-between items-center mb-4 border-b pb-2">
-                            <h2 className="text-base font-bold text-gray-900 uppercase tracking-wider">製造計画（材料表）</h2>
+                            <h2 className="text-base font-bold text-gray-900 uppercase tracking-wider">陬ｽ騾險育判・域攝譁呵｡ｨ・・/h2>
                             <div className="flex items-center gap-4 text-xs">
                                 <span className="font-mono text-gray-400">{items.length} FILES</span>
                             </div>
@@ -685,24 +683,24 @@ export default function RecipeDetailPage() {
                         {/* Batch Settings (Only visible in edit/interact mode, but printed values persist) */}
                         <div className="flex gap-4 mb-4 bg-gray-50 p-2 rounded print:hidden">
                             <div className="flex items-center gap-2">
-                                <label className="text-xs font-bold text-gray-500">製造数 A</label>
+                                <label className="text-xs font-bold text-gray-500">陬ｽ騾謨ｰ A</label>
                                 <Input
                                     type="number"
                                     value={batchSize1}
                                     onChange={(e) => setBatchSize1(parseInt(e.target.value) || 0)}
                                     className="h-8 w-20 bg-white"
                                 />
-                                <span className="text-xs text-gray-500">個</span>
+                                <span className="text-xs text-gray-500">蛟・/span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <label className="text-xs font-bold text-gray-500">製造数 B</label>
+                                <label className="text-xs font-bold text-gray-500">陬ｽ騾謨ｰ B</label>
                                 <Input
                                     type="number"
                                     value={batchSize2}
                                     onChange={(e) => setBatchSize2(parseInt(e.target.value) || 0)}
                                     className="h-8 w-20 bg-white"
                                 />
-                                <span className="text-xs text-gray-500">個</span>
+                                <span className="text-xs text-gray-500">蛟・/span>
                             </div>
                         </div>
 
@@ -715,7 +713,7 @@ export default function RecipeDetailPage() {
                                         </div>
                                         {isEditing && (
                                             <Button size="sm" variant="ghost" className="h-6 text-xs text-gray-500 hover:text-blue-600" onClick={() => addItem(group.type)}>
-                                                <Plus className="w-3 h-3 mr-1" /> 追加
+                                                <Plus className="w-3 h-3 mr-1" /> 霑ｽ蜉
                                             </Button>
                                         )}
                                     </div>
@@ -725,23 +723,23 @@ export default function RecipeDetailPage() {
                                             <thead>
                                                 <tr className="border-b border-gray-200 text-gray-500">
                                                     <th className="text-left py-1 w-8 font-normal">#</th>
-                                                    <th className="text-left py-1 w-40 font-normal">名称</th>
+                                                    <th className="text-left py-1 w-40 font-normal">蜷咲ｧｰ</th>
 
                                                     {/* 1 Unit */}
-                                                    <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">基本(1)</th>
+                                                    <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">蝓ｺ譛ｬ(1)</th>
 
                                                     {/* Batch 1 */}
                                                     <th className="text-right py-1 w-28 font-bold text-blue-700 bg-blue-50 border-l border-white">
-                                                        {batchSize1}個分 <br /><span className="text-xs font-normal text-gray-500">使用量 | 袋数</span>
+                                                        {batchSize1}蛟句・ <br /><span className="text-xs font-normal text-gray-500">菴ｿ逕ｨ驥・| 陲区焚</span>
                                                     </th>
 
                                                     {/* Batch 2 */}
                                                     <th className="text-right py-1 w-28 font-bold text-purple-700 bg-purple-50 border-l border-white">
-                                                        {batchSize2}個分 <br /><span className="text-xs font-normal text-gray-500">使用量 | 袋数</span>
+                                                        {batchSize2}蛟句・ <br /><span className="text-xs font-normal text-gray-500">菴ｿ逕ｨ驥・| 陲区焚</span>
                                                     </th>
 
                                                     {/* Cost */}
-                                                    <th className="text-right py-1 w-20 font-normal text-gray-400">原価(1)</th>
+                                                    <th className="text-right py-1 w-20 font-normal text-gray-400">蜴滉ｾ｡(1)</th>
                                                     {isEditing && <th className="w-8"></th>}
                                                 </tr>
                                             </thead>
@@ -775,7 +773,7 @@ export default function RecipeDetailPage() {
                                                                         {item.item_name}
                                                                         <div className="text-[10px] text-gray-400 font-normal">
                                                                             {unitQty > 0 && !isMaterialGroup && group.type !== 'product' ? `(${formatNumber(unitQty, 0)}g/pk)` : ''}
-                                                                            {group.type === 'product' && <span className="ml-1 text-[10px] bg-indigo-100 text-indigo-700 px-1 rounded">商品</span>}
+                                                                            {group.type === 'product' && <span className="ml-1 text-[10px] bg-indigo-100 text-indigo-700 px-1 rounded">蝠・刀</span>}
                                                                         </div>
                                                                     </>
                                                                 )}
@@ -794,7 +792,7 @@ export default function RecipeDetailPage() {
                                                                     ) : (
                                                                         <>
                                                                             <span className="font-bold">{formatNumber(unitUsage, 1)}</span>
-                                                                            <span className="text-[10px] text-gray-400 block">{group.type === 'product' ? '個' : 'g'}</span>
+                                                                            <span className="text-[10px] text-gray-400 block">{group.type === 'product' ? '蛟・ : 'g'}</span>
                                                                         </>
                                                                     )
                                                                 ) : (
@@ -806,7 +804,7 @@ export default function RecipeDetailPage() {
                                                             <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
                                                                 {!isMaterialGroup ? (
                                                                     <>
-                                                                        <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">{group.type === 'product' ? '個' : 'g'}</span></div>
+                                                                        <div className="font-bold">{formatNumber(b1Usage, 0)}<span className="text-[10px] font-normal ml-0.5">{group.type === 'product' ? '蛟・ : 'g'}</span></div>
                                                                         {b1Bags > 0 && item.item_type !== 'expense' && group.type !== 'product' && (
                                                                             <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
                                                                                 {formatNumber(b1Bags, 2)} <span className="font-normal opacity-70">pk</span>
@@ -852,7 +850,7 @@ export default function RecipeDetailPage() {
                                                                     <button
                                                                         onClick={() => deleteItem(item.id)}
                                                                         className="text-gray-400 hover:text-red-500 p-1"
-                                                                        title="削除"
+                                                                        title="蜑企勁"
                                                                     >
                                                                         <Trash2 className="w-4 h-4" />
                                                                     </button>
@@ -868,17 +866,17 @@ export default function RecipeDetailPage() {
                                                     <td colSpan={2} className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider">Total</td>
                                                     <td className="py-2 text-right font-mono font-bold text-gray-700 bg-gray-50/50">
                                                         {group.type === 'ingredient' || group.type === 'intermediate' || group.type === 'product' ?
-                                                            formatNumber(group.items.reduce((sum, i) => sum + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '個' : 'g')
+                                                            formatNumber(group.items.reduce((sum, i) => sum + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '蛟・ : 'g')
                                                             : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">
                                                         {group.type === 'ingredient' || group.type === 'intermediate' || group.type === 'product' ?
-                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '個' : 'g')
+                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '蛟・ : 'g')
                                                             : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-purple-700 bg-purple-50/30 border-l border-gray-50">
                                                         {group.type === 'ingredient' || group.type === 'intermediate' || group.type === 'product' ?
-                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '個' : 'g')
+                                                            formatNumber(group.items.reduce((sum, i) => sum + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '蛟・ : 'g')
                                                             : '-'}
                                                     </td>
                                                     <td className="py-2 text-right font-mono font-bold text-gray-900">
@@ -890,7 +888,7 @@ export default function RecipeDetailPage() {
                                         </table>
                                     ) : (
                                         <div className="text-sm text-gray-300 py-4 text-center border border-dashed rounded bg-gray-50/50">
-                                            アイテムがありません
+                                            繧｢繧､繝・Β縺後≠繧翫∪縺帙ｓ
                                         </div>
                                     )}
                                 </div>
@@ -908,14 +906,14 @@ export default function RecipeDetailPage() {
                         <div className="break-inside-avoid bg-gray-50 p-4 rounded border border-gray-100 print:bg-white print:border-l-2 print:border-gray-200 print:border-t-0 print:border-r-0 print:border-b-0 print:rounded-none h-full">
                             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                                 <Edit className="w-4 h-4" />
-                                製造メモ
+                                陬ｽ騾繝｡繝｢
                             </h3>
                             <textarea
                                 className="w-full h-full min-h-[150px] text-sm leading-relaxed bg-transparent border-none resize-none p-0 focus:ring-0 text-gray-700 placeholder:text-gray-300"
                                 value={recipe.manufacturing_notes || ''}
                                 onChange={(e) => setRecipe({ ...recipe, manufacturing_notes: e.target.value })}
                                 onBlur={(e) => handleRecipeChange('manufacturing_notes', e.target.value)}
-                                placeholder="製造プロセスや注意点を記載..."
+                                placeholder="陬ｽ騾繝励Ο繧ｻ繧ｹ繧・ｳｨ諢冗せ繧定ｨ倩ｼ・.."
                             />
                         </div>
                     </div>
@@ -923,7 +921,7 @@ export default function RecipeDetailPage() {
                     <div className="col-span-12 md:col-span-5 print:hidden">
                         {/* Nutrition */}
                         <div className="break-inside-avoid">
-                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">栄養成分表示 (100gあたり)</h3>
+                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">譬・､頑・蛻・｡ｨ遉ｺ (100g縺ゅ◆繧・</h3>
                             <NutritionDisplay items={items.map(item => ({
                                 item_name: item.item_name,
                                 item_type: item.item_type,
@@ -945,16 +943,16 @@ export default function RecipeDetailPage() {
                             <span>{recipe.category}</span>
                             <span>{recipe.development_date || '-'}</span>
                             <span>ID:{recipe.id.split('-')[0]}</span>
-                            <span>充填:{recipe.filling_quantity ?? '-'}g</span>
-                            <span>表記:{recipe.label_quantity || '-'}</span>
+                            <span>蜈・｡ｫ:{recipe.filling_quantity ?? '-'}g</span>
+                            <span>陦ｨ險・{recipe.label_quantity || '-'}</span>
                             <span>{recipe.storage_method || '-'}</span>
                             {recipe.sterilization_method && <span>{recipe.sterilization_method}{recipe.sterilization_temperature && ` ${recipe.sterilization_temperature}`}</span>}
                         </div>
                     </div>
                     <div className="text-right text-[9px] text-gray-600">
-                        <span className="font-bold text-black">A:{batchSize1}個</span>
+                        <span className="font-bold text-black">A:{batchSize1}蛟・/span>
                         <span className="mx-1">/</span>
-                        <span className="font-bold text-black">B:{batchSize2}個</span>
+                        <span className="font-bold text-black">B:{batchSize2}蛟・/span>
                     </div>
                 </div>
                 {groupedItems.filter(g => g.type !== 'material' && g.type !== 'expense').map((group, gIdx) => (
@@ -967,10 +965,10 @@ export default function RecipeDetailPage() {
                                 <thead>
                                     <tr className="border-b border-gray-400 text-gray-600">
                                         <th className="text-left py-0 w-4 text-[10px]">#</th>
-                                        <th className="text-left py-0 text-[10px]">名称</th>
-                                        <th className="text-right py-0 w-16 text-[10px]">基本(1)</th>
-                                        <th className="text-right py-1 w-28 bg-gray-50">×{batchSize1} (A)</th>
-                                        <th className="text-right py-1 w-28 bg-gray-50">×{batchSize2} (B)</th>
+                                        <th className="text-left py-0 text-[10px]">蜷咲ｧｰ</th>
+                                        <th className="text-right py-0 w-16 text-[10px]">蝓ｺ譛ｬ(1)</th>
+                                        <th className="text-right py-1 w-28 bg-gray-50">ﾃ養batchSize1} (A)</th>
+                                        <th className="text-right py-1 w-28 bg-gray-50">ﾃ養batchSize2} (B)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -981,7 +979,7 @@ export default function RecipeDetailPage() {
                                         const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
                                         const b2Usage = unitUsage * batchSize2;
                                         const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
-                                        const unit = group.type === 'product' ? '個' : 'g';
+                                        const unit = group.type === 'product' ? '蛟・ : 'g';
 
                                         return (
                                             <tr key={item.id} className="border-b border-gray-100">
@@ -1013,15 +1011,15 @@ export default function RecipeDetailPage() {
                                 </tbody>
                                 <tfoot>
                                     <tr className="border-t border-gray-300 font-bold text-[10px]">
-                                        <td colSpan={2} className="py-1 text-right text-gray-500">計</td>
+                                        <td colSpan={2} className="py-1 text-right text-gray-500">險・/td>
                                         <td className="py-0 text-right font-mono text-[10px] leading-tight">
-                                            {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '個' : 'g')}
+                                            {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '蛟・ : 'g')}
                                         </td>
                                         <td className="py-0 text-right font-mono text-[10px] leading-tight">
-                                            {formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '個' : 'g')}
+                                            {formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '蛟・ : 'g')}
                                         </td>
                                         <td className="py-0 text-right font-mono text-[10px] leading-tight">
-                                            {formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '個' : 'g')}
+                                            {formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '蛟・ : 'g')}
                                         </td>
                                     </tr>
                                 </tfoot>
@@ -1033,7 +1031,7 @@ export default function RecipeDetailPage() {
                 {/* Print Notes */}
                 {recipe.manufacturing_notes && (
                     <div className="mt-1 border-t border-gray-300 pt-0">
-                        <h3 className="text-[10px] font-bold text-gray-500 mb-0">製造メモ</h3>
+                        <h3 className="text-[10px] font-bold text-gray-500 mb-0">陬ｽ騾繝｡繝｢</h3>
                         <p className="text-[10px] whitespace-pre-wrap leading-tight">{recipe.manufacturing_notes}</p>
                     </div>
                 )}
