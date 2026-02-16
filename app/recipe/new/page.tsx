@@ -25,6 +25,8 @@ const CATEGORIES = [
     { value: "ネット専用", label: "ネット専用", color: "bg-blue-100 text-blue-800" },
     { value: "自社", label: "自社", color: "bg-green-100 text-green-800" },
     { value: "OEM", label: "OEM", color: "bg-orange-100 text-orange-800" },
+    { value: "中間部品", label: "中間部品", color: "bg-purple-100 text-purple-800" },
+    { value: "終売", label: "終売", color: "bg-gray-500 text-white" },
     { value: "試作", label: "試作", color: "bg-gray-100 text-gray-800" },
     { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800" },
 ];
@@ -57,6 +59,22 @@ export default function NewRecipePage() {
     const [isIntermediate, setIsIntermediate] = useState(false);
     const [developmentDate, setDevelopmentDate] = useState("");
     const [sellingPrice, setSellingPrice] = useState("");
+
+    const handleCategoryChange = (val: string) => {
+        setCategory(val);
+        if (val === "中間部品") {
+            setIsIntermediate(true);
+        }
+    };
+
+    const handleIsIntermediateChange = (checked: boolean) => {
+        setIsIntermediate(checked);
+        if (checked) {
+            setCategory("中間部品");
+        } else if (category === "中間部品") {
+            setCategory("ネット専用");
+        }
+    };
 
     // アイテム
     const [items, setItems] = useState<NewItem[]>([{ ...EMPTY_ITEM }]);
@@ -379,7 +397,7 @@ export default function NewRecipePage() {
                             <label className="text-sm font-medium text-gray-700 mb-1.5 block">
                                 カテゴリー
                             </label>
-                            <Select value={category} onValueChange={setCategory}>
+                            <Select value={category} onValueChange={handleCategoryChange}>
                                 <SelectTrigger>
                                     <SelectValue />
                                 </SelectTrigger>
@@ -420,7 +438,7 @@ export default function NewRecipePage() {
                                 type="checkbox"
                                 id="isIntermediate"
                                 checked={isIntermediate}
-                                onChange={(e) => setIsIntermediate(e.target.checked)}
+                                onChange={(e) => handleIsIntermediateChange(e.target.checked)}
                                 className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
                             <label htmlFor="isIntermediate" className="text-sm font-medium text-gray-700 cursor-pointer">
