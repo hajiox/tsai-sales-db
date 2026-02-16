@@ -937,51 +937,26 @@ export default function RecipeDetailPage() {
 
             {/* ====== Print-Only Layout ====== */}
             <div className="hidden print:block p-0 m-0 w-full text-black text-sm">
-                {/* Print Header */}
-                <div className="border-b border-black pb-0 mb-0">
-                    <h1 className="text-base font-bold leading-tight">{recipe.name}</h1>
-                    <div className="flex gap-4 text-[10px] text-gray-600">
-                        <span>カテゴリ: {recipe.category}</span>
-                        <span>開発日: {recipe.development_date || '-'}</span>
-                        <span>ID: {recipe.id.split('-')[0]}</span>
-                    </div>
-                </div>
-
-                {/* Print Specs Row */}
-                <div className="flex gap-2 mb-0 text-xs">
-                    <div className="border border-gray-400 rounded px-2 py-0.5">
-                        <div className="text-[9px] font-bold text-gray-500 mb-0">充填量</div>
-                        <div className="text-sm font-bold leading-tight">{recipe.filling_quantity ?? '-'} g</div>
-                    </div>
-                    <div className="border border-gray-400 rounded px-2 py-0.5">
-                        <div className="text-[9px] font-bold text-gray-500 mb-0">表記量</div>
-                        <div className="text-sm font-bold leading-tight">{recipe.label_quantity || '-'}</div>
-                    </div>
-                    <div className="border border-gray-400 rounded px-2 py-0.5">
-                        <div className="text-[9px] font-bold text-gray-500 mb-0">保存方法</div>
-                        <div className="text-sm font-bold leading-tight">{recipe.storage_method || '-'}</div>
-                    </div>
-                    {recipe.sterilization_method && (
-                        <div className="border border-gray-400 rounded px-2 py-0.5">
-                            <div className="text-[9px] font-bold text-gray-500 mb-0">殺菌</div>
-                            <div className="text-lg font-bold">
-                                {recipe.sterilization_method}
-                                {recipe.sterilization_temperature && ` ${recipe.sterilization_temperature}℃`}
-                                {recipe.sterilization_time && ` ${recipe.sterilization_time}分`}
-                            </div>
+                {/* Print Header - ultra compact */}
+                <div className="flex justify-between items-center border-b border-black pb-0 mb-0">
+                    <div>
+                        <h1 className="text-sm font-bold leading-none">{recipe.name}</h1>
+                        <div className="flex gap-3 text-[9px] text-gray-500">
+                            <span>{recipe.category}</span>
+                            <span>{recipe.development_date || '-'}</span>
+                            <span>ID:{recipe.id.split('-')[0]}</span>
+                            <span>充填:{recipe.filling_quantity ?? '-'}g</span>
+                            <span>表記:{recipe.label_quantity || '-'}</span>
+                            <span>{recipe.storage_method || '-'}</span>
+                            {recipe.sterilization_method && <span>{recipe.sterilization_method}{recipe.sterilization_temperature && ` ${recipe.sterilization_temperature}`}</span>}
                         </div>
-                    )}
-                </div>
-
-                {/* Print Manufacturing Plan Table */}
-                <div className="mb-3">
-                    <h2 className="text-xs font-bold border-b border-black pb-0 mb-0">製造計画（材料表）</h2>
-                    <div className="flex gap-4 mb-0 text-[10px] text-gray-600">
-                        <span>製造数 A: <strong className="text-black">{batchSize1}個</strong></span>
-                        <span>製造数 B: <strong className="text-black">{batchSize2}個</strong></span>
+                    </div>
+                    <div className="text-right text-[9px] text-gray-600">
+                        <span className="font-bold text-black">A:{batchSize1}個</span>
+                        <span className="mx-1">/</span>
+                        <span className="font-bold text-black">B:{batchSize2}個</span>
                     </div>
                 </div>
-
                 {groupedItems.filter(g => g.type !== 'material' && g.type !== 'expense').map((group, gIdx) => (
                     group.items.length > 0 && (
                         <div key={gIdx} className="mb-1">
