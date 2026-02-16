@@ -69,26 +69,31 @@ export default function NutritionDisplay({ items, compact = false, fillingQuanti
     if (compact) {
         return (
             <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-600">
-                    <div className="flex justify-between border-b pb-1">
-                        <span>エネルギー</span>
-                        <span className="font-bold">{formatVal(per100g.calories)} kcal</span>
-                    </div>
-                    <div className="flex justify-between border-b pb-1">
-                        <span>タンパク質</span>
-                        <span className="font-bold">{formatVal(per100g.protein)} g</span>
-                    </div>
-                    <div className="flex justify-between border-b pb-1">
-                        <span>脂質</span>
-                        <span className="font-bold">{formatVal(per100g.fat)} g</span>
-                    </div>
-                    <div className="flex justify-between border-b pb-1">
-                        <span>炭水化物</span>
-                        <span className="font-bold">{formatVal(per100g.carbohydrate)} g</span>
-                    </div>
-                    <div className="flex justify-between border-b pb-1 col-span-2">
-                        <span>食塩相当量</span>
-                        <span className="font-bold">{formatVal(per100g.sodium)} g</span>
+                <div>
+                    <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
+                        100g あたり
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-600">
+                        <div className="flex justify-between border-b pb-1">
+                            <span>エネルギー</span>
+                            <span className="font-bold">{formatVal(per100g.calories)} kcal</span>
+                        </div>
+                        <div className="flex justify-between border-b pb-1">
+                            <span>タンパク質</span>
+                            <span className="font-bold">{formatVal(per100g.protein)} g</span>
+                        </div>
+                        <div className="flex justify-between border-b pb-1">
+                            <span>脂質</span>
+                            <span className="font-bold">{formatVal(per100g.fat)} g</span>
+                        </div>
+                        <div className="flex justify-between border-b pb-1">
+                            <span>炭水化物</span>
+                            <span className="font-bold">{formatVal(per100g.carbohydrate)} g</span>
+                        </div>
+                        <div className="flex justify-between border-b pb-1 col-span-2">
+                            <span>食塩相当量</span>
+                            <span className="font-bold">{formatVal(per100g.sodium)} g</span>
+                        </div>
                     </div>
                 </div>
 
