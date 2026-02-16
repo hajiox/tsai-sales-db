@@ -158,16 +158,20 @@ export default function RecipePage() {
     // カテゴリー変更
     const handleCategoryChange = async (recipeId: string, newCategory: string) => {
         try {
+            const isIntermediate = newCategory === '中間部品';
             const { error } = await supabase
                 .from('recipes')
-                .update({ category: newCategory })
+                .update({
+                    category: newCategory,
+                    is_intermediate: isIntermediate
+                })
                 .eq('id', recipeId);
 
             if (error) throw error;
 
             // ローカルステートを更新
             setRecipes(prev => prev.map(r =>
-                r.id === recipeId ? { ...r, category: newCategory } : r
+                r.id === recipeId ? { ...r, category: newCategory, is_intermediate: isIntermediate } : r
             ));
             toast.success(`カテゴリーを「${newCategory}」に変更しました`);
             fetchStats(); // 統計を更新
@@ -203,23 +207,16 @@ export default function RecipePage() {
             .select("*", { count: "exact", head: true });
 
         // カテゴリ別カウント
-        const categories: string[] = ["ネット専用", "自社", "OEM", "試作", "Shopee", "終売"];
+        const categories: string[] = ["ネット専用", "自社", "OEM", "試作", "Shopee", "終売", "中間部品"];
         const categoryCounts: Record<string, number> = {};
 
         for (const cat of categories) {
             const { count } = await supabase
                 .from("recipes")
                 .select("*", { count: "exact", head: true })
-                .eq("category", cat)
-                .eq("is_intermediate", false);
+                .eq("category", cat);
             categoryCounts[cat] = count || 0;
         }
-
-        // 中間部品カウント
-        const { count: intermediateCount } = await supabase
-            .from("recipes")
-            .select("*", { count: "exact", head: true })
-            .eq("is_intermediate", true);
 
         // 食材・資材カウント
         const { count: ingredientCount } = await supabase
@@ -237,7 +234,7 @@ export default function RecipePage() {
             OEM: categoryCounts["OEM"] || 0,
             試作: categoryCounts["試作"] || 0,
             Shopee: categoryCounts["Shopee"] || 0,
-            中間部品: intermediateCount || 0,
+            中間部品: categoryCounts["中間部品"] || 0,
             終売: categoryCounts["終売"] || 0,
             ingredients: ingredientCount || 0,
             materials: materialCount || 0,
@@ -247,10 +244,8 @@ export default function RecipePage() {
     // タブとフィルタ
     const filteredRecipes = recipes.filter((r) => {
         const matchesSearch = r.name.toLowerCase().includes(searchTerm.toLowerCase());
-
         if (activeTab === "all") return matchesSearch;
-        if (activeTab === "中間部品") return r.is_intermediate && matchesSearch;
-        return r.category === activeTab && !r.is_intermediate && matchesSearch;
+        return r.category === activeTab && matchesSearch;
     });
 
     const formatCurrency = (value: number | null) => {
