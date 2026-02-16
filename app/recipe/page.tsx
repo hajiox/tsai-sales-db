@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Copy, Trash2 } from "lucide-react";
+import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
 
 // カテゴリー一覧
@@ -32,6 +32,8 @@ const CATEGORIES = [
     { value: "ネット専用", label: "ネット専用", color: "bg-blue-100 text-blue-800" },
     { value: "自社", label: "自社", color: "bg-green-100 text-green-800" },
     { value: "OEM", label: "OEM", color: "bg-orange-100 text-orange-800" },
+    { value: "中間部品", label: "中間部品", color: "bg-purple-100 text-purple-800" },
+    { value: "終売", label: "終売", color: "bg-gray-500 text-white" },
     { value: "試作", label: "試作", color: "bg-gray-100 text-gray-800" },
     { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800" },
 ];
@@ -47,7 +49,7 @@ interface Recipe {
     source_file: string | null;
 }
 
-type TabType = "all" | "ネット専用" | "自社" | "OEM" | "Shopee" | "中間部品" | "試作";
+type TabType = "all" | "ネット専用" | "自社" | "OEM" | "Shopee" | "中間部品" | "試作" | "終売";
 
 export default function RecipePage() {
     const router = useRouter();
@@ -63,6 +65,7 @@ export default function RecipePage() {
         試作: 0,
         Shopee: 0,
         中間部品: 0,
+        終売: 0,
         ingredients: 0,
         materials: 0,
     });
@@ -193,81 +196,6 @@ export default function RecipePage() {
         }
     };
 
-    // レシピの複製
-    const handleDuplicate = async (recipe: Recipe) => {
-        if (!confirm(`「${recipe.name}」をコピーしてもよろしいですか？`)) return;
-
-        try {
-            // 1. レシピ情報のコピー
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { id, ...recipeData } = recipe; // IDを除外
-
-            const { data: newRecipe, error: recipeError } = await supabase
-                .from('recipes')
-                .insert({
-                    ...recipeData,
-                    name: `${recipe.name} のコピー`,
-                })
-                .select()
-                .single();
-
-            if (recipeError) throw recipeError;
-
-            // 2. アイテムのコピー
-            const { data: items, error: itemsFetchError } = await supabase
-                .from('recipe_items')
-                .select('*')
-                .eq('recipe_id', recipe.id);
-
-            if (itemsFetchError) throw itemsFetchError;
-
-            if (items && items.length > 0) {
-                const newItems = items.map(item => {
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    const { id, recipe_id, created_at, ...itemData } = item;
-                    return {
-                        ...itemData,
-                        recipe_id: newRecipe.id
-                    };
-                });
-
-                const { error: itemsInsertError } = await supabase
-                    .from('recipe_items')
-                    .insert(newItems);
-
-                if (itemsInsertError) throw itemsInsertError;
-            }
-
-            toast.success("レシピをコピーしました");
-            fetchRecipes();
-            fetchStats();
-        } catch (error) {
-            console.error(error);
-            toast.error("コピーに失敗しました");
-        }
-    };
-
-    // レシピの削除
-    const handleDelete = async (recipe: Recipe) => {
-        if (!confirm(`「${recipe.name}」を削除してもよろしいですか？\nこの操作は取り消せません。`)) return;
-
-        try {
-            // アイテム削除 (Cascade設定がない場合の保険)
-            await supabase.from('recipe_items').delete().eq('recipe_id', recipe.id);
-
-            // レシピ削除
-            const { error } = await supabase.from('recipes').delete().eq('id', recipe.id);
-            if (error) throw error;
-
-            toast.success("レシピを削除しました");
-            fetchRecipes();
-            fetchStats();
-        } catch (error) {
-            console.error(error);
-            toast.error("削除に失敗しました");
-        }
-    };
-
     const fetchStats = async () => {
         // レシピ総数
         const { count: recipeCount } = await supabase
@@ -275,7 +203,7 @@ export default function RecipePage() {
             .select("*", { count: "exact", head: true });
 
         // カテゴリ別カウント
-        const categories: string[] = ["ネット専用", "自社", "OEM", "試作", "Shopee"];
+        const categories: string[] = ["ネット専用", "自社", "OEM", "試作", "Shopee", "終売"];
         const categoryCounts: Record<string, number> = {};
 
         for (const cat of categories) {
@@ -310,6 +238,7 @@ export default function RecipePage() {
             試作: categoryCounts["試作"] || 0,
             Shopee: categoryCounts["Shopee"] || 0,
             中間部品: intermediateCount || 0,
+            終売: categoryCounts["終売"] || 0,
             ingredients: ingredientCount || 0,
             materials: materialCount || 0,
         });
@@ -341,6 +270,7 @@ export default function RecipePage() {
         { key: "試作" as TabType, label: "試作", icon: ChefHat, count: stats.試作 },
         { key: "Shopee" as TabType, label: "Shopee", icon: Globe, count: stats.Shopee },
         { key: "中間部品" as TabType, label: "中間部品【P】", icon: Package, count: stats.中間部品 },
+        { key: "終売" as TabType, label: "終売", icon: FileSpreadsheet, count: stats.終売 },
         { key: "all" as TabType, label: "全て", icon: FileSpreadsheet, count: stats.total },
     ];
 
@@ -355,9 +285,9 @@ export default function RecipePage() {
                 <p className="text-gray-600 mt-1">製造レシピの一元管理・原価計算</p>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <Card>
+            {/* Stats Cards - Updated to single row layout */}
+            <div className="flex flex-wrap gap-4 mb-6">
+                <Card className="min-w-[140px] flex-1">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">
                             総レシピ数
@@ -371,7 +301,7 @@ export default function RecipePage() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="min-w-[140px] flex-1">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">
                             食材マスター
@@ -385,7 +315,7 @@ export default function RecipePage() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="min-w-[140px] flex-1">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">
                             資材マスター
@@ -399,7 +329,7 @@ export default function RecipePage() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="min-w-[140px] flex-1">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">
                             中間部品【P】
@@ -413,7 +343,7 @@ export default function RecipePage() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="min-w-[140px] flex-1">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">
                             試作
@@ -427,16 +357,16 @@ export default function RecipePage() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="min-w-[140px] flex-1">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-600">
-                            試作
+                            終売
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
-                            <ChefHat className="w-5 h-5 text-gray-500" />
-                            <span className="text-2xl font-bold">{stats.試作}</span>
+                            <FileSpreadsheet className="w-5 h-5 text-gray-400" />
+                            <span className="text-2xl font-bold">{stats.終売}</span>
                         </div>
                     </CardContent>
                 </Card>
@@ -514,7 +444,6 @@ export default function RecipePage() {
                             <TableHead>開発日</TableHead>
                             <TableHead className="text-right">販売価格</TableHead>
                             <TableHead>ソースファイル</TableHead>
-                            <TableHead className="text-right">操作</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -588,34 +517,6 @@ export default function RecipePage() {
                                     </TableCell>
                                     <TableCell className="text-xs text-gray-500 max-w-[200px] truncate">
                                         {recipe.source_file?.replace("【重要】【製造】総合管理（新型）", "").replace(".xlsx", "") || "-"}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-gray-500 hover:text-blue-600"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleDuplicate(recipe);
-                                                }}
-                                                title="コピーして新規作成"
-                                            >
-                                                <Copy className="h-4 w-4" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-gray-500 hover:text-red-600"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleDelete(recipe);
-                                                }}
-                                                title="削除"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
