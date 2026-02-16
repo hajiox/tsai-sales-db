@@ -785,8 +785,8 @@ export default function RecipeDetailPage() {
                                                                         }
                                                                     }}
                                                                     className="w-12 text-right bg-white border border-gray-200 rounded px-1 text-xs font-normal"
-                                                                    inputClassName="w-12 text-right text-xs"
-                                                                    placeholder="%"
+                                                                    inputClassName="w-12 text-right text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                    placeholder=""
                                                                     suffix="%"
                                                                 />
                                                             </div>
