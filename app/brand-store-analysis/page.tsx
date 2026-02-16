@@ -22,6 +22,17 @@ import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianG
 import ClientOnly from '@/components/common/ClientOnly' // ver.10 (2025-08-19 JST) - client-only charts
 import { useSearchParams, useRouter } from 'next/navigation'
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <BrandStoreAnalysisContent />
+    </Suspense>
+  );
+}
+
 function BrandStoreAnalysisContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -500,19 +511,5 @@ function BrandStoreAnalysisContent() {
       )}
       */}
     </div>
-  )
-}
-
-export default function BrandStoreAnalysisPage() {
-  return (
-    <Suspense fallback={
-      <div className="p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">読み込み中...</div>
-        </div>
-      </div>
-    }>
-      <BrandStoreAnalysisContent />
-    </Suspense>
   )
 }
