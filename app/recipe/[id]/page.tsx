@@ -26,6 +26,8 @@ const CATEGORIES = [
     { value: "ネット専用", label: "ネット", color: "bg-blue-100 text-blue-800 border-blue-200" },
     { value: "自社", label: "自社", color: "bg-green-100 text-green-800 border-green-200" },
     { value: "OEM", label: "OEM", color: "bg-orange-100 text-orange-800 border-orange-200" },
+    { value: "中間部品", label: "中間部品", color: "bg-purple-100 text-purple-800 border-purple-200" },
+    { value: "終売", label: "終売", color: "bg-gray-500 text-white border-gray-600" },
     { value: "試作", label: "試作", color: "bg-gray-100 text-gray-800 border-gray-200" },
     { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800 border-pink-200" },
 ];
@@ -310,6 +312,28 @@ export default function RecipeDetailPage() {
             }
         }
 
+        if (field === 'category') {
+            const isIntermediate = value === '中間部品';
+            try {
+                const { error } = await supabase
+                    .from('recipes')
+                    .update({
+                        category: value,
+                        is_intermediate: isIntermediate
+                    })
+                    .eq('id', recipe.id);
+
+                if (error) throw error;
+                // Update local state
+                setRecipe(prev => prev ? { ...prev, category: String(value), is_intermediate: isIntermediate } : null);
+                toast.success('カテゴリーを更新しました');
+            } catch (error) {
+                console.error('Update error:', error);
+                toast.error('カテゴリーの更新に失敗しました');
+            }
+            return;
+        }
+
         try {
             const { error } = await supabase
                 .from('recipes')
@@ -471,9 +495,20 @@ export default function RecipeDetailPage() {
                 <div className="border-b-2 border-gray-800 pb-4 mb-6 flex justify-between items-end">
                     <div>
                         <div className="flex gap-2 mb-2">
-                            <span className={`px-2 py-0.5 text-[10px] font-bold border rounded uppercase tracking-wider ${CATEGORIES.find(c => c.value === recipe.category)?.color || 'border-gray-200 text-gray-500'}`}>
-                                {recipe.category}
-                            </span>
+                            <Select value={recipe.category} onValueChange={(val) => handleRecipeChange('category', val)}>
+                                <SelectTrigger className={`h-6 px-2 py-0 border rounded uppercase tracking-wider text-[10px] font-bold w-auto inline-flex items-center gap-1 ${CATEGORIES.find(c => c.value === recipe.category)?.color || 'border-gray-200 text-gray-500'}`}>
+                                    <SelectValue>{recipe.category}</SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {CATEGORIES.map((cat) => (
+                                        <SelectItem key={cat.value} value={cat.value}>
+                                            <span className={`px-2 py-0.5 rounded ${cat.color}`}>
+                                                {cat.label}
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                             {recipe.is_intermediate && (
                                 <span className="px-2 py-0.5 text-[10px] font-bold border border-purple-300 text-purple-700 rounded uppercase tracking-wider">
                                     Middle
@@ -786,7 +821,6 @@ export default function RecipeDetailPage() {
                                                                     }}
                                                                     className="w-12 text-right bg-white border border-gray-200 rounded px-1 text-xs font-normal"
                                                                     inputClassName="w-12 text-right text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                                    placeholder=""
                                                                     suffix="%"
                                                                 />
                                                             </div>
