@@ -923,13 +923,13 @@ export default function RecipeDetailPage() {
                     <div className="col-span-12 md:col-span-5 print:hidden">
                         {/* Nutrition */}
                         <div className="break-inside-avoid">
-                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">栄養成分表示 (100gあたり)</h3>
+                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">栄養成分表示</h3>
                             <NutritionDisplay items={items.map(item => ({
                                 item_name: item.item_name,
                                 item_type: item.item_type,
                                 usage_amount: parseFloat(String(item.usage_amount)) || 0,
                                 nutrition: nutritionMap[item.item_name]
-                            }))} compact={true} />
+                            }))} compact={true} fillingQuantity={Number(recipe.filling_quantity)} />
                         </div>
                     </div>
                 </div>
