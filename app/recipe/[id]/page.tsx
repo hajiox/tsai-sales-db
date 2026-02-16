@@ -606,8 +606,21 @@ export default function RecipeDetailPage() {
                         <div className="bg-gray-900 rounded-xl p-6 text-white mb-6 shadow-lg">
                             <div className="flex justify-between items-start mb-2">
                                 <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">販売価格 (Selling Price)</div>
-                                <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300">
-                                    税抜: {formatCurrency(sellingPriceExTax)}
+                                <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300 flex items-center gap-1">
+                                    <span className="text-gray-400">税抜:</span>
+                                    <span className="font-bold">¥</span>
+                                    <InlineEdit
+                                        type="number"
+                                        value={sellingPriceExTax}
+                                        onSave={(val) => {
+                                            const taxExcluded = typeof val === 'string' ? parseFloat(val) : val;
+                                            const taxIncluded = Math.round(taxExcluded * 1.08);
+                                            handleRecipeChange('selling_price', isNaN(taxIncluded) ? 0 : taxIncluded);
+                                        }}
+                                        className="font-bold min-w-[30px] justify-end"
+                                        inputClassName="bg-gray-700 text-white border-none w-16 text-right px-1 h-5 text-xs"
+                                        placeholder="0"
+                                    />
                                 </div>
                             </div>
 
