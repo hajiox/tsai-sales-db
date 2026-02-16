@@ -938,9 +938,9 @@ export default function RecipeDetailPage() {
             {/* ====== Print-Only Layout ====== */}
             <div className="hidden print:block p-0 m-0 w-full text-black text-sm">
                 {/* Print Header */}
-                <div className="border-b-2 border-black pb-1 mb-1">
-                    <h1 className="text-xl font-bold">{recipe.name}</h1>
-                    <div className="flex gap-6 mt-0 text-xs text-gray-600">
+                <div className="border-b border-black pb-0 mb-0">
+                    <h1 className="text-base font-bold leading-tight">{recipe.name}</h1>
+                    <div className="flex gap-4 text-[10px] text-gray-600">
                         <span>カテゴリ: {recipe.category}</span>
                         <span>開発日: {recipe.development_date || '-'}</span>
                         <span>ID: {recipe.id.split('-')[0]}</span>
@@ -948,22 +948,22 @@ export default function RecipeDetailPage() {
                 </div>
 
                 {/* Print Specs Row */}
-                <div className="flex gap-4 mb-1 text-sm">
-                    <div className="border border-gray-400 rounded px-3 py-2">
-                        <div className="text-xs font-bold text-gray-500 mb-0.5">充填量</div>
-                        <div className="text-base font-bold">{recipe.filling_quantity ?? '-'} g</div>
+                <div className="flex gap-2 mb-0 text-xs">
+                    <div className="border border-gray-400 rounded px-2 py-0.5">
+                        <div className="text-[9px] font-bold text-gray-500 mb-0">充填量</div>
+                        <div className="text-sm font-bold leading-tight">{recipe.filling_quantity ?? '-'} g</div>
                     </div>
-                    <div className="border border-gray-400 rounded px-3 py-2">
-                        <div className="text-xs font-bold text-gray-500 mb-0.5">表記量</div>
-                        <div className="text-base font-bold">{recipe.label_quantity || '-'}</div>
+                    <div className="border border-gray-400 rounded px-2 py-0.5">
+                        <div className="text-[9px] font-bold text-gray-500 mb-0">表記量</div>
+                        <div className="text-sm font-bold leading-tight">{recipe.label_quantity || '-'}</div>
                     </div>
-                    <div className="border border-gray-400 rounded px-3 py-2">
-                        <div className="text-xs font-bold text-gray-500 mb-0.5">保存方法</div>
-                        <div className="text-base font-bold">{recipe.storage_method || '-'}</div>
+                    <div className="border border-gray-400 rounded px-2 py-0.5">
+                        <div className="text-[9px] font-bold text-gray-500 mb-0">保存方法</div>
+                        <div className="text-sm font-bold leading-tight">{recipe.storage_method || '-'}</div>
                     </div>
                     {recipe.sterilization_method && (
-                        <div className="border border-gray-400 rounded px-3 py-2">
-                            <div className="text-xs font-bold text-gray-500 mb-0.5">殺菌</div>
+                        <div className="border border-gray-400 rounded px-2 py-0.5">
+                            <div className="text-[9px] font-bold text-gray-500 mb-0">殺菌</div>
                             <div className="text-lg font-bold">
                                 {recipe.sterilization_method}
                                 {recipe.sterilization_temperature && ` ${recipe.sterilization_temperature}℃`}
@@ -975,8 +975,8 @@ export default function RecipeDetailPage() {
 
                 {/* Print Manufacturing Plan Table */}
                 <div className="mb-3">
-                    <h2 className="text-sm font-bold border-b border-black pb-0.5 mb-1">製造計画（材料表）</h2>
-                    <div className="flex gap-4 mb-1 text-xs text-gray-600">
+                    <h2 className="text-xs font-bold border-b border-black pb-0 mb-0">製造計画（材料表）</h2>
+                    <div className="flex gap-4 mb-0 text-[10px] text-gray-600">
                         <span>製造数 A: <strong className="text-black">{batchSize1}個</strong></span>
                         <span>製造数 B: <strong className="text-black">{batchSize2}個</strong></span>
                     </div>
@@ -984,16 +984,16 @@ export default function RecipeDetailPage() {
 
                 {groupedItems.filter(g => g.type !== 'material' && g.type !== 'expense').map((group, gIdx) => (
                     group.items.length > 0 && (
-                        <div key={gIdx} className="mb-3">
-                            <div className="text-xs font-bold bg-gray-100 px-2 py-0.5 inline-block rounded mb-1">
+                        <div key={gIdx} className="mb-1">
+                            <div className="text-[10px] font-bold bg-gray-100 px-1 py-0 inline-block rounded mb-0">
                                 {group.title}
                             </div>
                             <table className="w-full text-xs border-collapse">
                                 <thead>
                                     <tr className="border-b border-gray-400 text-gray-600">
-                                        <th className="text-left py-1 w-6">#</th>
-                                        <th className="text-left py-1">名称</th>
-                                        <th className="text-right py-1 w-20">基本(1)</th>
+                                        <th className="text-left py-0 w-4 text-[10px]">#</th>
+                                        <th className="text-left py-0 text-[10px]">名称</th>
+                                        <th className="text-right py-0 w-16 text-[10px]">基本(1)</th>
                                         <th className="text-right py-1 w-28 bg-gray-50">×{batchSize1} (A)</th>
                                         <th className="text-right py-1 w-28 bg-gray-50">×{batchSize2} (B)</th>
                                     </tr>
@@ -1009,24 +1009,24 @@ export default function RecipeDetailPage() {
                                         const unit = group.type === 'product' ? '個' : 'g';
 
                                         return (
-                                            <tr key={item.id} className="border-b border-gray-200 leading-tight">
-                                                <td className="py-0.5 text-gray-400">{idx + 1}</td>
-                                                <td className="py-0.5 font-medium">
+                                            <tr key={item.id} className="border-b border-gray-100">
+                                                <td className="py-0 text-gray-400 text-[10px]">{idx + 1}</td>
+                                                <td className="py-0 font-medium text-[10px] leading-tight">
                                                     {item.item_name}
                                                     {unitQty > 0 && group.type !== 'product' && (
                                                         <span className="text-gray-400 ml-1">({formatNumber(unitQty, 0)}g/pk)</span>
                                                     )}
                                                 </td>
-                                                <td className="py-0.5 text-right font-mono">
+                                                <td className="py-0 text-right font-mono text-[10px] leading-tight">
                                                     {formatNumber(unitUsage, 1)}{unit}
                                                 </td>
-                                                <td className="py-0.5 text-right font-mono">
+                                                <td className="py-0 text-right font-mono text-[10px] leading-tight">
                                                     <span className="font-bold">{formatNumber(b1Usage, 0)}{unit}</span>
                                                     {b1Bags > 0 && group.type !== 'product' && (
                                                         <span className="text-gray-500 ml-1">({formatNumber(b1Bags, 2)}pk)</span>
                                                     )}
                                                 </td>
-                                                <td className="py-0.5 text-right font-mono">
+                                                <td className="py-0 text-right font-mono text-[10px] leading-tight">
                                                     <span className="font-bold">{formatNumber(b2Usage, 0)}{unit}</span>
                                                     {b2Bags > 0 && group.type !== 'product' && (
                                                         <span className="text-gray-500 ml-1">({formatNumber(b2Bags, 2)}pk)</span>
@@ -1037,15 +1037,15 @@ export default function RecipeDetailPage() {
                                     })}
                                 </tbody>
                                 <tfoot>
-                                    <tr className="border-t border-gray-400 font-bold">
+                                    <tr className="border-t border-gray-300 font-bold text-[10px]">
                                         <td colSpan={2} className="py-1 text-right text-gray-500">計</td>
-                                        <td className="py-0.5 text-right font-mono">
+                                        <td className="py-0 text-right font-mono text-[10px] leading-tight">
                                             {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), 0) + (group.type === 'product' ? '個' : 'g')}
                                         </td>
-                                        <td className="py-0.5 text-right font-mono">
+                                        <td className="py-0 text-right font-mono text-[10px] leading-tight">
                                             {formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize1), 0), 0) + (group.type === 'product' ? '個' : 'g')}
                                         </td>
-                                        <td className="py-0.5 text-right font-mono">
+                                        <td className="py-0 text-right font-mono text-[10px] leading-tight">
                                             {formatNumber(group.items.reduce((s, i) => s + ((parseFloat(String(i.usage_amount)) || 0) * batchSize2), 0), 0) + (group.type === 'product' ? '個' : 'g')}
                                         </td>
                                     </tr>
@@ -1057,9 +1057,9 @@ export default function RecipeDetailPage() {
 
                 {/* Print Notes */}
                 {recipe.manufacturing_notes && (
-                    <div className="mt-4 border-t border-gray-300 pt-2">
-                        <h3 className="text-xs font-bold text-gray-500 mb-1">製造メモ</h3>
-                        <p className="text-xs whitespace-pre-wrap">{recipe.manufacturing_notes}</p>
+                    <div className="mt-1 border-t border-gray-300 pt-0">
+                        <h3 className="text-[10px] font-bold text-gray-500 mb-0">製造メモ</h3>
+                        <p className="text-[10px] whitespace-pre-wrap leading-tight">{recipe.manufacturing_notes}</p>
                     </div>
                 )}
             </div>
