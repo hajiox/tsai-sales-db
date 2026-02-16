@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon } from "lucide-react";
+import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 // カテゴリー一覧
@@ -190,6 +190,81 @@ export default function RecipePage() {
             toast.success('開発日を更新しました');
         } catch (error) {
             toast.error('開発日の更新に失敗しました');
+        }
+    };
+
+    // レシピの複製
+    const handleDuplicate = async (recipe: Recipe) => {
+        if (!confirm(`「${recipe.name}」をコピーしてもよろしいですか？`)) return;
+
+        try {
+            // 1. レシピ情報のコピー
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { id, ...recipeData } = recipe; // IDを除外
+
+            const { data: newRecipe, error: recipeError } = await supabase
+                .from('recipes')
+                .insert({
+                    ...recipeData,
+                    name: `${recipe.name} のコピー`,
+                })
+                .select()
+                .single();
+
+            if (recipeError) throw recipeError;
+
+            // 2. アイテムのコピー
+            const { data: items, error: itemsFetchError } = await supabase
+                .from('recipe_items')
+                .select('*')
+                .eq('recipe_id', recipe.id);
+
+            if (itemsFetchError) throw itemsFetchError;
+
+            if (items && items.length > 0) {
+                const newItems = items.map(item => {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { id, recipe_id, created_at, ...itemData } = item;
+                    return {
+                        ...itemData,
+                        recipe_id: newRecipe.id
+                    };
+                });
+
+                const { error: itemsInsertError } = await supabase
+                    .from('recipe_items')
+                    .insert(newItems);
+
+                if (itemsInsertError) throw itemsInsertError;
+            }
+
+            toast.success("レシピをコピーしました");
+            fetchRecipes();
+            fetchStats();
+        } catch (error) {
+            console.error(error);
+            toast.error("コピーに失敗しました");
+        }
+    };
+
+    // レシピの削除
+    const handleDelete = async (recipe: Recipe) => {
+        if (!confirm(`「${recipe.name}」を削除してもよろしいですか？\nこの操作は取り消せません。`)) return;
+
+        try {
+            // アイテム削除 (Cascade設定がない場合の保険)
+            await supabase.from('recipe_items').delete().eq('recipe_id', recipe.id);
+
+            // レシピ削除
+            const { error } = await supabase.from('recipes').delete().eq('id', recipe.id);
+            if (error) throw error;
+
+            toast.success("レシピを削除しました");
+            fetchRecipes();
+            fetchStats();
+        } catch (error) {
+            console.error(error);
+            toast.error("削除に失敗しました");
         }
     };
 
@@ -439,6 +514,7 @@ export default function RecipePage() {
                             <TableHead>開発日</TableHead>
                             <TableHead className="text-right">販売価格</TableHead>
                             <TableHead>ソースファイル</TableHead>
+                            <TableHead className="text-right">操作</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -512,6 +588,34 @@ export default function RecipePage() {
                                     </TableCell>
                                     <TableCell className="text-xs text-gray-500 max-w-[200px] truncate">
                                         {recipe.source_file?.replace("【重要】【製造】総合管理（新型）", "").replace(".xlsx", "") || "-"}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-gray-500 hover:text-blue-600"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDuplicate(recipe);
+                                                }}
+                                                title="コピーして新規作成"
+                                            >
+                                                <Copy className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-gray-500 hover:text-red-600"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDelete(recipe);
+                                                }}
+                                                title="削除"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
