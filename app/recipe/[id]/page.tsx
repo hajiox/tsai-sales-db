@@ -994,8 +994,8 @@ export default function RecipeDetailPage() {
                                         <th className="text-left py-0 w-4 text-[10px]">#</th>
                                         <th className="text-left py-0 text-[10px]">名称</th>
                                         <th className="text-right py-0 w-16 text-[10px]">基本(1)</th>
-                                        <th className="text-right py-1 w-28 bg-gray-50">×{batchSize1} (A)</th>
-                                        <th className="text-right py-1 w-28 bg-gray-50">×{batchSize2} (B)</th>
+                                        <th className="text-right py-1 w-28">A ({batchSize1})</th>
+                                        <th className="text-right py-1 w-28">B ({batchSize2})</th>
                                     </tr>
                                 </thead>
                                 <tbody>
