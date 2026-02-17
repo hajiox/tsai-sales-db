@@ -21,6 +21,7 @@ interface Ingredient {
     fat: number | null;
     carbohydrate: number | null;
     sodium: number | null;
+    tax_included?: boolean;
     isNew?: boolean;
     isModified?: boolean;
 }
@@ -32,6 +33,7 @@ interface Material {
     price: number | null;
     supplier: string | null;
     notes: string | null;
+    tax_included?: boolean;
     isNew?: boolean;
     isModified?: boolean;
 }
@@ -56,7 +58,30 @@ export default function DatabasePage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [hasChanges, setHasChanges] = useState(false);
     const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
+
+    const [taxRates, setTaxRates] = useState({
+        ingredient: 8,
+        material: 10
+    });
+
     const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const saved = localStorage.getItem('global_tax_settings');
+        if (saved) {
+            try {
+                setTaxRates(JSON.parse(saved));
+            } catch (e) {
+                console.error("Failed to load tax settings", e);
+            }
+        }
+    }, []);
+
+    const saveTaxRates = (newRates: typeof taxRates) => {
+        setTaxRates(newRates);
+        localStorage.setItem('global_tax_settings', JSON.stringify(newRates));
+        toast.success("税率設定を保存しました（ブラウザ保存）");
+    };
 
     useEffect(() => {
         fetchData();
@@ -77,14 +102,18 @@ export default function DatabasePage() {
             .from("ingredients")
             .select("*")
             .order("name");
-        if (ingData) setIngredients(ingData);
+        if (ingData) {
+            setIngredients(ingData.map(i => ({ ...i, tax_included: i.tax_included ?? true })));
+        }
 
         // 資材
         const { data: matData } = await supabase
             .from("materials")
             .select("*")
             .order("name");
-        if (matData) setMaterials(matData);
+        if (matData) {
+            setMaterials(matData.map(m => ({ ...m, tax_included: m.tax_included ?? true })));
+        }
 
         // 中間部品
         const { data: intData } = await supabase
@@ -95,6 +124,32 @@ export default function DatabasePage() {
         if (intData) setIntermediates(intData);
 
         setLoading(false);
+    };
+
+    const handleTaxToggle = async (id: string, current: boolean, type: "ingredient" | "material") => {
+        const next = !current;
+        const table = type === "ingredient" ? "ingredients" : "materials";
+
+        // Optimistic UI update
+        if (type === "ingredient") {
+            setIngredients(prev => prev.map(i => i.id === id ? { ...i, tax_included: next } : i));
+        } else {
+            setMaterials(prev => prev.map(m => m.id === id ? { ...m, tax_included: next } : m));
+        }
+
+        const { error } = await supabase
+            .from(table)
+            .update({ tax_included: next })
+            .eq('id', id);
+
+        if (error) {
+            console.error(error);
+            if (error.code === '42703') {
+                toast.error("DBに 'tax_included' カラムがありません。SQLを実行してください。");
+            } else {
+                toast.error(`保存失敗: ${error.message}`);
+            }
+        }
     };
 
     const handleCellDoubleClick = (id: string, field: string) => {
@@ -323,6 +378,85 @@ export default function DatabasePage() {
                 </div>
             </div>
 
+            {/* Global Tax Settings */}
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-wrap gap-8 items-center">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-blue-800">一括税率設定:</span>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600">食材 (軽減税率)</span>
+                        <div className="flex items-center gap-1">
+                            <Input
+                                type="number"
+                                value={taxRates.ingredient}
+                                onChange={(e) => setTaxRates({ ...taxRates, ingredient: parseInt(e.target.value) || 0 })}
+                                className="w-16 h-8 text-right bg-white"
+                            />
+                            <span className="text-sm text-gray-500">%</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600">資材・包材</span>
+                        <div className="flex items-center gap-1">
+                            <Input
+                                type="number"
+                                value={taxRates.material}
+                                onChange={(e) => setTaxRates({ ...taxRates, material: parseInt(e.target.value) || 0 })}
+                                className="w-16 h-8 text-right bg-white"
+                            />
+                            <span className="text-sm text-gray-500">%</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4 border-l pl-4 border-blue-200">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="bg-white text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-100"
+                            onClick={async () => {
+                                if (!confirm(`${activeTab === 'ingredients' ? '食材' : '資材'}を全て「税込」に一括設定しますか？`)) return;
+                                const table = activeTab === 'ingredients' ? 'ingredients' : 'materials';
+                                const { error } = await supabase.from(table).update({ tax_included: true }).is('tax_included', null);
+                                const { error: error2 } = await supabase.from(table).update({ tax_included: true }).neq('tax_included', true);
+                                if (error || error2) toast.error("一括更新に失敗しました");
+                                else {
+                                    toast.success("全て税込に設定しました");
+                                    fetchData();
+                                }
+                            }}
+                        >
+                            全て税込
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="bg-white text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-100"
+                            onClick={async () => {
+                                if (!confirm(`${activeTab === 'ingredients' ? '食材' : '資材'}を全て「税抜」に一括設定しますか？`)) return;
+                                const table = activeTab === 'ingredients' ? 'ingredients' : 'materials';
+                                const { error } = await supabase.from(table).update({ tax_included: false }).is('tax_included', null);
+                                const { error: error2 } = await supabase.from(table).update({ tax_included: false }).neq('tax_included', false);
+                                if (error || error2) toast.error("一括更新に失敗しました");
+                                else {
+                                    toast.success("全て税抜に設定しました");
+                                    fetchData();
+                                }
+                            }}
+                        >
+                            全て税抜
+                        </Button>
+                    </div>
+                    <Button size="sm" onClick={() => saveTaxRates(taxRates)} className="bg-blue-600 hover:bg-blue-700 h-8 ml-auto">
+                        <Save className="w-3 h-3 mr-1" />
+                        保存
+                    </Button>
+                </div>
+                <div className="text-[10px] text-blue-500 max-w-sm">
+                    ※ これらの値は全てのレシピの原価計算に使用されます。<br />
+                    ※ Amazon手数料、人件費、中間部品などは自動的に対象外となります。
+                </div>
+            </div>
+
             {/* Tabs */}
             <div className="flex border-b border-gray-300 mb-4">
                 {tabs.map((tab) => {
@@ -373,8 +507,9 @@ export default function DatabasePage() {
                             <tr className="border-b">
                                 <th className="px-2 py-2 text-left w-10">NO</th>
                                 <th className="px-2 py-2 text-left min-w-[200px]">食材名</th>
+                                <th className="px-2 py-2 text-center w-20">税込設定</th>
                                 <th className="px-2 py-2 text-right w-24">入数(g)</th>
-                                <th className="px-2 py-2 text-right w-24">価格</th>
+                                <th className="px-2 py-2 text-right w-24">単価(税込)</th>
                                 <th className="px-2 py-2 text-right w-20">熱量</th>
                                 <th className="px-2 py-2 text-right w-20">タンパク</th>
                                 <th className="px-2 py-2 text-right w-20">脂質</th>
@@ -385,12 +520,20 @@ export default function DatabasePage() {
                         </thead>
                         <tbody>
                             {filteredIngredients.length === 0 ? (
-                                <tr><td colSpan={10} className="text-center py-8 text-gray-500">データがありません</td></tr>
+                                <tr><td colSpan={11} className="text-center py-8 text-gray-500">データがありません</td></tr>
                             ) : (
                                 filteredIngredients.map((ing, index) => (
                                     <tr key={ing.id} className={`border-b hover:bg-gray-50 ${ing.isNew ? 'bg-green-50' : ''} ${ing.isModified && !ing.isNew ? 'bg-yellow-50' : ''}`}>
                                         <td className="px-2 py-1 text-gray-500">{index + 1}</td>
                                         <td className="px-0 py-1">{renderEditableCell(ing, 'name', ing.name, 'ingredient', 'min-w-[180px]')}</td>
+                                        <td className="px-2 py-1 text-center">
+                                            <button
+                                                onClick={() => handleTaxToggle(ing.id, !!ing.tax_included, 'ingredient')}
+                                                className={`text-[10px] px-2 py-0.5 rounded font-bold transition ${ing.tax_included ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-400 border border-gray-200'}`}
+                                            >
+                                                {ing.tax_included ? '税込' : '税抜'}
+                                            </button>
+                                        </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'unit_quantity', formatNumber(ing.unit_quantity, 0), 'ingredient')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'price', formatNumber(ing.price, 0), 'ingredient')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'calories', formatNumber(ing.calories, 1), 'ingredient')}</td>
@@ -414,8 +557,9 @@ export default function DatabasePage() {
                             <tr className="border-b">
                                 <th className="px-2 py-2 text-left w-10">NO</th>
                                 <th className="px-2 py-2 text-left min-w-[250px]">資材名</th>
+                                <th className="px-2 py-2 text-center w-20">税込設定</th>
                                 <th className="px-2 py-2 text-left w-40">入数</th>
-                                <th className="px-2 py-2 text-right w-24">価格</th>
+                                <th className="px-2 py-2 text-right w-24">単価(税込)</th>
                                 <th className="px-2 py-2 text-left w-28">仕入先</th>
                                 <th className="px-2 py-2 text-left w-40">備考</th>
                                 <th className="px-2 py-2 w-10"></th>
@@ -423,12 +567,20 @@ export default function DatabasePage() {
                         </thead>
                         <tbody>
                             {filteredMaterials.length === 0 ? (
-                                <tr><td colSpan={7} className="text-center py-8 text-gray-500">データがありません</td></tr>
+                                <tr><td colSpan={8} className="text-center py-8 text-gray-500">データがありません</td></tr>
                             ) : (
                                 filteredMaterials.map((mat, index) => (
                                     <tr key={mat.id} className={`border-b hover:bg-gray-50 ${mat.isNew ? 'bg-green-50' : ''} ${mat.isModified && !mat.isNew ? 'bg-yellow-50' : ''}`}>
                                         <td className="px-2 py-1 text-gray-500">{index + 1}</td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'name', mat.name, 'material', 'min-w-[230px]')}</td>
+                                        <td className="px-2 py-1 text-center">
+                                            <button
+                                                onClick={() => handleTaxToggle(mat.id, !!mat.tax_included, 'material')}
+                                                className={`text-[10px] px-2 py-0.5 rounded font-bold transition ${mat.tax_included ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-400 border border-gray-200'}`}
+                                            >
+                                                {mat.tax_included ? '税込' : '税抜'}
+                                            </button>
+                                        </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'unit_quantity', mat.unit_quantity || '', 'material', 'w-36')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(mat, 'price', formatNumber(mat.price, 0), 'material')}</td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'supplier', mat.supplier || '', 'material', 'w-24')}</td>

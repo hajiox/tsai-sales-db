@@ -38,6 +38,7 @@ interface NewItem {
     unit_price: string;
     usage_amount: string;
     cost: string;
+    tax_included?: boolean;
 }
 
 const EMPTY_ITEM: NewItem = {
@@ -47,11 +48,24 @@ const EMPTY_ITEM: NewItem = {
     unit_price: "",
     usage_amount: "",
     cost: "",
+    tax_included: true,
 };
 
 export default function NewRecipePage() {
     const router = useRouter();
     const [saving, setSaving] = useState(false);
+    const [taxRates, setTaxRates] = useState({ ingredient: 8, material: 10 });
+
+    useEffect(() => {
+        const saved = localStorage.getItem('global_tax_settings');
+        if (saved) {
+            try {
+                setTaxRates(JSON.parse(saved));
+            } catch (e) {
+                console.error("Failed to load tax settings", e);
+            }
+        }
+    }, []);
 
     // レシピ基本情報
     const [name, setName] = useState("");
@@ -90,13 +104,14 @@ export default function NewRecipePage() {
             // 食材
             const { data: ingData } = await supabase
                 .from('ingredients')
-                .select('id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium');
+                .select('id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, tax_included');
             if (ingData) {
                 setIngredients(ingData.map(i => ({
                     id: i.id,
                     name: i.name,
                     unit_quantity: i.unit_quantity,
                     unit_price: i.price,
+                    tax_included: i.tax_included !== false,
                     nutrition: {
                         calories: i.calories,
                         protein: i.protein,
@@ -107,13 +122,14 @@ export default function NewRecipePage() {
                 })));
             }
             // 資材
-            const { data: matData } = await supabase.from('materials').select('id, name, unit_quantity, price');
+            const { data: matData } = await supabase.from('materials').select('id, name, unit_quantity, price, tax_included');
             if (matData) {
                 setMaterials(matData.map(m => ({
                     id: m.id,
                     name: m.name,
                     unit_quantity: m.unit_quantity,
-                    unit_price: m.price
+                    unit_price: m.price,
+                    tax_included: m.tax_included !== false
                 })));
             }
             // 中間部品
@@ -146,25 +162,26 @@ export default function NewRecipePage() {
         setItems(items.filter((_, i) => i !== index));
     };
 
-    const updateItem = (index: number, field: keyof NewItem, value: string) => {
+    const updateItem = (index: number, field: string, value: any) => {
         const updated = [...items];
         updated[index] = { ...updated[index], [field]: value };
 
         // 原価自動計算
         const unitPrice = parseFloat(updated[index].unit_price) || 0;
         const usageAmount = parseFloat(updated[index].usage_amount) || 0;
-        // unit_quantityが文字列の場合（資材の "35x9ケース" 等）への対応が必要だが、
-        // 現状は数値としてパースできるもののみ計算する仕様とするか、
-        // 入力時にユーザーに修正してもらう前提とする。
-        // 資材テーブルの unit_quantity は text 型だが、実態として数値で入力されることが多い。
-        // パースできない場合は 1 として扱うと計算が狂うので、NaNの場合は計算しない。
         let unitQuantity = parseFloat(updated[index].unit_quantity);
         if (isNaN(unitQuantity) || unitQuantity <= 0) unitQuantity = 1;
 
         if (unitPrice > 0 && usageAmount > 0) {
-            // 資材などで unit_quantity が文字列の場合、parseFloatは先頭の数値だけ拾う（例: "35x9" -> 35）。
-            // これは簡易計算としては危険だが、ユーザーが手動修正できるため許容する。
-            updated[index].cost = ((unitPrice / unitQuantity) * usageAmount).toFixed(2);
+            // Apply tax rate if not included
+            const rate =
+                updated[index].item_type === "ingredient" && !updated[index].tax_included
+                    ? (1 + (taxRates.ingredient / 100))
+                    : updated[index].item_type === "material" && !updated[index].tax_included
+                        ? (1 + (taxRates.material / 100))
+                        : 1.0;
+
+            updated[index].cost = ((unitPrice / unitQuantity) * usageAmount * rate).toFixed(2);
         }
 
         setItems(updated);
@@ -206,6 +223,7 @@ export default function NewRecipePage() {
                     unit_price: item.unit_price ? parseFloat(item.unit_price) : null,
                     usage_amount: item.usage_amount ? parseFloat(item.usage_amount) : null,
                     cost: item.cost ? parseFloat(item.cost) : null,
+                    tax_included: item.tax_included ?? true
                 }));
 
                 const { error: itemsError } = await supabase
@@ -267,19 +285,50 @@ export default function NewRecipePage() {
                                 <tr key={index} className="border-b hover:bg-gray-50 last:border-0">
                                     <td className="px-3 py-2 text-gray-500 text-center">{localIdx + 1}</td>
                                     <td className="px-3 py-2">
-                                        <ItemNameSelect
-                                            candidates={candidates}
-                                            value={item.item_name}
-                                            onSelect={(selected) => {
-                                                if (typeof selected === 'string') {
-                                                    updateItem(index, 'item_name', selected);
-                                                } else {
-                                                    updateItem(index, 'item_name', selected.name);
-                                                    if (selected.unit_price) updateItem(index, 'unit_price', selected.unit_price.toString());
-                                                    if (selected.unit_quantity) updateItem(index, 'unit_quantity', selected.unit_quantity.toString());
-                                                }
-                                            }}
-                                        />
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1">
+                                                <ItemNameSelect
+                                                    candidates={candidates}
+                                                    value={item.item_name}
+                                                    onSelect={(selected) => {
+                                                        if (typeof selected === 'string') {
+                                                            updateItem(index, 'item_name', selected);
+                                                        } else {
+                                                            const updates: any = {
+                                                                item_name: selected.name,
+                                                                unit_price: selected.unit_price?.toString() || "",
+                                                                unit_quantity: selected.unit_quantity?.toString() || "",
+                                                                tax_included: (selected as any).tax_included !== false
+                                                            };
+                                                            // We need to update multiple fields at once, so let's modify updateItem to accept multiple or just call it multiple times.
+                                                            // Actually updateItem currently takes field and value. Let's do a quick hack.
+                                                            const updatedList = [...items];
+                                                            updatedList[index] = { ...updatedList[index], ...updates };
+
+                                                            // Recalculate cost
+                                                            const uPrice = parseFloat(updates.unit_price) || 0;
+                                                            const uUsage = parseFloat(updatedList[index].usage_amount) || 0;
+                                                            let uQty = parseFloat(updates.unit_quantity);
+                                                            if (isNaN(uQty) || uQty <= 0) uQty = 1;
+                                                            const rate = (updates.item_type || type) === "ingredient" && updates.tax_included === false ? (1 + (taxRates.ingredient / 100)) : (updates.item_type || type) === "material" && updates.tax_included === false ? (1 + (taxRates.material / 100)) : 1.0;
+                                                            if (uPrice > 0 && uUsage > 0) {
+                                                                updatedList[index].cost = ((uPrice / uQty) * uUsage * rate).toFixed(2);
+                                                            }
+                                                            setItems(updatedList);
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                            {['ingredient', 'material'].includes(type) && (
+                                                <button
+                                                    onClick={() => updateItem(index, 'tax_included', !item.tax_included)}
+                                                    className={`text-[10px] px-1.5 py-0.5 rounded font-bold border transition shrink-0 ${item.tax_included !== false ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}
+                                                    title={item.tax_included !== false ? '税込 (クリックで税抜)' : '税抜 (クリックで税込)'}
+                                                >
+                                                    {item.tax_included !== false ? '込' : '抜'}
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-3 py-2">
                                         <Input

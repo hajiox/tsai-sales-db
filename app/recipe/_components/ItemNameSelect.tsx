@@ -26,6 +26,7 @@ export interface ItemCandidate {
     name: string
     unit_quantity?: number | string
     unit_price?: number
+    tax_included?: boolean
     cost?: number | string // for intermediate
     nutrition?: NutritionData;
 }
