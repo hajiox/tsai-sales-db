@@ -718,7 +718,7 @@ export default function RecipeDetailPage() {
       <main className="max-w-[1400px] mx-auto p-8 print:hidden">
         {/* Header Section */}
         {/* Header Section (Recipe Name & Pricing Card) */}
-        <div className="border-b-2 border-gray-800 pb-4 mb-6 flex justify-between items-end">
+        <div className="border-b-2 border-gray-800 pb-4 mb-6">
           <div>
             <div className="flex gap-2 mb-2">
               <Select
@@ -760,8 +760,6 @@ export default function RecipeDetailPage() {
               <span>UPD: {new Date().toLocaleDateString()}</span>
             </div>
           </div>
-          {/* Hide old pricing display */}
-          <div className="text-right hidden"></div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
           {/* Specs Grid (Left) */}
