@@ -46,15 +46,25 @@ export default function ItemNameSelect({
     placeholder = "入力または選択...",
 }: ItemNameSelectProps) {
     const [open, setOpen] = React.useState(false)
-    const [inputValue, setInputValue] = React.useState(value)
+    const [inputValue, setInputValue] = React.useState("")
 
-    // 外部からのvalue変更に追従
+    // 外部からのvalue変更に追従（ポップアップが閉じている時のみ）
     React.useEffect(() => {
-        setInputValue(value)
-    }, [value])
+        if (!open) {
+            setInputValue("")
+        }
+    }, [value, open])
+
+    // ポップアップが開いたら検索ボックスをクリアして全候補を表示
+    const handleOpenChange = (isOpen: boolean) => {
+        setOpen(isOpen)
+        if (isOpen) {
+            setInputValue("")
+        }
+    }
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={handleOpenChange}>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
@@ -75,6 +85,7 @@ export default function ItemNameSelect({
                             setInputValue(val)
                         }}
                     />
+
                     <CommandList>
                         <CommandEmpty className="py-2 px-2 text-sm text-gray-500">
                             候補なし。
