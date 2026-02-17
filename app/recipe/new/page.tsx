@@ -36,6 +36,7 @@ interface NewItem {
     item_type: "ingredient" | "material" | "intermediate" | "expense";
     unit_quantity: string;
     unit_price: string;
+    unit_weight?: number;
     usage_amount: string;
     cost: string;
     tax_included?: boolean;
@@ -46,6 +47,7 @@ const EMPTY_ITEM: NewItem = {
     item_type: "ingredient",
     unit_quantity: "",
     unit_price: "",
+    unit_weight: 0,
     usage_amount: "",
     cost: "",
     tax_included: true,
@@ -133,12 +135,13 @@ export default function NewRecipePage() {
                 })));
             }
             // 中間部品
-            const { data: recipeData } = await supabase.from('recipes').select('id, name, total_cost').eq('is_intermediate', true);
+            const { data: recipeData } = await supabase.from('recipes').select('id, name, total_cost, total_weight').eq('is_intermediate', true);
             if (recipeData) {
                 setIntermediates(recipeData.map(r => ({
                     id: r.id,
                     name: r.name,
                     unit_quantity: 1,
+                    unit_weight: r.total_weight ?? 0,
                     unit_price: r.total_cost
                 })));
             }
@@ -207,6 +210,13 @@ export default function NewRecipePage() {
                     development_date: developmentDate || null,
                     selling_price: sellingPrice ? parseFloat(sellingPrice) : null,
                     total_cost: totalCost,
+                    total_weight: items.reduce((sum, item) => {
+                        if (["ingredient", "intermediate"].includes(item.item_type)) {
+                            const usage = parseFloat(item.usage_amount) || 0;
+                            return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
+                        }
+                        return sum;
+                    }, 0),
                 })
                 .select()
                 .single();
@@ -221,6 +231,7 @@ export default function NewRecipePage() {
                     item_type: item.item_type,
                     unit_quantity: item.unit_quantity ? parseFloat(item.unit_quantity) : null,
                     unit_price: item.unit_price ? parseFloat(item.unit_price) : null,
+                    unit_weight: item.unit_weight ? item.unit_weight : null,
                     usage_amount: item.usage_amount ? parseFloat(item.usage_amount) : null,
                     cost: item.cost ? parseFloat(item.cost) : null,
                     tax_included: item.tax_included ?? true
@@ -298,6 +309,7 @@ export default function NewRecipePage() {
                                                                 item_name: selected.name,
                                                                 unit_price: selected.unit_price?.toString() || "",
                                                                 unit_quantity: selected.unit_quantity?.toString() || "",
+                                                                unit_weight: selected.unit_weight || 0,
                                                                 tax_included: (selected as any).tax_included !== false
                                                             };
                                                             // We need to update multiple fields at once, so let's modify updateItem to accept multiple or just call it multiple times.
@@ -314,6 +326,7 @@ export default function NewRecipePage() {
                                                             if (uPrice > 0 && uUsage > 0) {
                                                                 updatedList[index].cost = ((uPrice / uQty) * uUsage * rate).toFixed(2);
                                                             }
+                                                            updatedList[index].unit_weight = updates.unit_weight;
                                                             setItems(updatedList);
                                                         }
                                                     }}
@@ -347,13 +360,18 @@ export default function NewRecipePage() {
                                         />
                                     </td>
                                     <td className="px-3 py-2">
-                                        <Input
-                                            type="number"
-                                            value={item.usage_amount}
-                                            onChange={(e) => updateItem(index, "usage_amount", e.target.value)}
-                                            className="h-8 text-right px-2 bg-yellow-50 focus:bg-white border-yellow-200 focus:border-blue-500"
-                                            placeholder="入力"
-                                        />
+                                        <div className="flex items-center gap-1">
+                                            <Input
+                                                type="number"
+                                                value={item.usage_amount}
+                                                onChange={(e) => updateItem(index, "usage_amount", e.target.value)}
+                                                className="h-8 text-right px-2 bg-yellow-50 focus:bg-white border-yellow-200 focus:border-blue-500"
+                                                placeholder="入力"
+                                            />
+                                            <span className="text-xs text-gray-400 w-4">
+                                                {type === "intermediate" ? "個" : "g"}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td className="px-3 py-2">
                                         <Input
@@ -519,6 +537,18 @@ export default function NewRecipePage() {
                         <span>経費: <strong>{items.filter(i => i.item_type === "expense").length}</strong></span>
                     </div>
                     <div className="flex items-center gap-8">
+                        <div>
+                            <span className="text-sm text-gray-500 mr-2">全体重量: </span>
+                            <span className="text-xl font-bold text-gray-800">
+                                {items.reduce((sum, item) => {
+                                    if (["ingredient", "intermediate"].includes(item.item_type)) {
+                                        const usage = parseFloat(item.usage_amount) || 0;
+                                        return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
+                                    }
+                                    return sum;
+                                }, 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}g
+                            </span>
+                        </div>
                         <div>
                             <span className="text-sm text-gray-500 mr-2">総原価: </span>
                             <span className="text-2xl font-bold text-gray-900">

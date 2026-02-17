@@ -77,6 +77,7 @@ interface Recipe {
   sterilization_time: string | null;
   selling_price: number | null;
   total_cost: number | null;
+  total_weight: number | null;
   source_file: string | null;
 }
 
@@ -87,6 +88,7 @@ interface RecipeItem {
   item_type: string;
   unit_quantity: number | string | null;
   unit_price: number | string | null;
+  unit_weight: number | null;
   usage_amount: number | string | null;
   cost: number | string | null;
   tax_included?: boolean;
@@ -187,7 +189,7 @@ export default function RecipeDetailPage() {
     // Intermediates
     const { data: recipeData } = await supabase
       .from("recipes")
-      .select("id, name, total_cost")
+      .select("id, name, total_cost, total_weight")
       .eq("is_intermediate", true);
     if (recipeData) {
       setIntermediates(
@@ -195,6 +197,7 @@ export default function RecipeDetailPage() {
           id: r.id,
           name: r.name,
           unit_quantity: 1,
+          unit_weight: r.total_weight ?? undefined,
           unit_price: r.total_cost ?? undefined,
         })),
       );
@@ -202,7 +205,7 @@ export default function RecipeDetailPage() {
     // Products (Set Components) - Recipes that are NOT intermediate
     const { data: prodData } = await supabase
       .from("recipes")
-      .select("id, name, total_cost")
+      .select("id, name, total_cost, total_weight")
       .eq("is_intermediate", false);
     if (prodData) {
       setProducts(
@@ -210,6 +213,7 @@ export default function RecipeDetailPage() {
           id: r.id,
           name: r.name,
           unit_quantity: 1,
+          unit_weight: r.total_weight ?? undefined,
           unit_price: r.total_cost ?? undefined,
         })),
       );
@@ -327,6 +331,7 @@ export default function RecipeDetailPage() {
       item_type: type,
       unit_quantity: 0,
       unit_price: 0,
+      unit_weight: 0,
       usage_amount: 0,
       cost: 0,
       tax_included: true,
@@ -362,6 +367,7 @@ export default function RecipeDetailPage() {
             updates = {
               item_name: selected.name,
               unit_price: selected.unit_price || 0,
+              unit_weight: selected.unit_weight || 0,
               unit_quantity:
                 typeof selected.unit_quantity === "number"
                   ? selected.unit_quantity
@@ -507,6 +513,7 @@ export default function RecipeDetailPage() {
             item_type: item.item_type,
             unit_quantity: item.unit_quantity,
             unit_price: item.unit_price,
+            unit_weight: item.unit_weight,
             usage_amount: item.usage_amount,
             cost: item.cost,
             tax_included: item.tax_included ?? true
@@ -523,6 +530,7 @@ export default function RecipeDetailPage() {
             item_name: item.item_name,
             unit_quantity: item.unit_quantity,
             unit_price: item.unit_price,
+            unit_weight: item.unit_weight,
             usage_amount: item.usage_amount,
             cost: item.cost,
             tax_included: item.tax_included ?? true
@@ -536,10 +544,26 @@ export default function RecipeDetailPage() {
         0,
       );
 
+      const totalWeight = items.reduce((sum, item) => {
+        // Items that contribute weight
+        if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+          const usage = parseFloat(String(item.usage_amount)) || 0;
+          if (item.item_type === "ingredient") {
+            return sum + usage;
+          } else {
+            // intermediate or product
+            const unitWeight = item.unit_weight || 0;
+            return sum + (usage * unitWeight);
+          }
+        }
+        return sum;
+      }, 0);
+
       await supabase
         .from("recipes")
         .update({
           total_cost: totalCost,
+          total_weight: totalWeight,
           manufacturing_notes: recipe.manufacturing_notes,
           filling_quantity: recipe.filling_quantity,
           storage_method: recipe.storage_method,
@@ -1256,7 +1280,7 @@ Now Expanded or Scrollable */}
                                         {formatNumber(unitUsage, 1)}
                                       </span>
                                       <span className="text-[10px] text-gray-400 block">
-                                        {group.type === "product" ? "個" : "g"}
+                                        {group.type === "product" || group.type === "intermediate" ? "個" : "g"}
                                       </span>
                                     </>
                                   )
@@ -1271,7 +1295,7 @@ Now Expanded or Scrollable */}
                                     <div className="font-bold">
                                       {formatNumber(b1Usage, 0)}
                                       <span className="text-[10px] font-normal ml-0.5">
-                                        {group.type === "product" ? "個" : "g"}
+                                        {group.type === "product" || group.type === "intermediate" ? "個" : "g"}
                                       </span>
                                     </div>
                                     {b1Bags > 0 &&
@@ -1367,7 +1391,7 @@ Now Expanded or Scrollable */}
                                   0,
                                 ),
                                 0,
-                              ) + (group.type === "product" ? "個" : "g")
+                              ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
                               : "-"}
                           </td>
                           <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">
@@ -1384,7 +1408,7 @@ Now Expanded or Scrollable */}
                                   0,
                                 ),
                                 0,
-                              ) + (group.type === "product" ? "個" : "g")
+                              ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
                               : "-"}
                           </td>
                           <td className="py-2 text-right font-mono font-bold text-purple-700 bg-purple-50/30 border-l border-gray-50">
@@ -1401,7 +1425,7 @@ Now Expanded or Scrollable */}
                                   0,
                                 ),
                                 0,
-                              ) + (group.type === "product" ? "個" : "g")
+                              ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
                               : "-"}
                           </td>
                           <td className="py-2 text-right font-mono font-bold text-gray-900">
@@ -1424,6 +1448,52 @@ Now Expanded or Scrollable */}
                   )}
                 </div>
               ))}
+              {/* Overall Total Weight Summary */}
+              <div className="mt-4 border-t-2 border-double border-gray-200 pt-4 px-2">
+                <div className="flex justify-start items-center gap-8">
+                  <div className="text-sm font-bold text-gray-600">全体重量 (原材料 + 中間加工品)</div>
+                  <div className="flex gap-12">
+                    <div className="text-right">
+                      <div className="text-[10px] text-gray-400 uppercase">基本(1)</div>
+                      <div className="font-mono font-bold text-lg text-gray-800">
+                        {formatNumber(items.reduce((sum, item) => {
+                          if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                            const usage = parseFloat(String(item.usage_amount)) || 0;
+                            return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
+                          }
+                          return sum;
+                        }, 0), 1)}g
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-blue-400 uppercase">{batchSize1}個分</div>
+                      <div className="font-mono font-bold text-lg text-blue-700">
+                        {formatNumber(items.reduce((sum, item) => {
+                          if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                            const usage = parseFloat(String(item.usage_amount)) || 0;
+                            const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
+                            return sum + (weight * batchSize1);
+                          }
+                          return sum;
+                        }, 0), 0)}g
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-purple-400 uppercase">{batchSize2}個分</div>
+                      <div className="font-mono font-bold text-lg text-purple-700">
+                        {formatNumber(items.reduce((sum, item) => {
+                          if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                            const usage = parseFloat(String(item.usage_amount)) || 0;
+                            const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
+                            return sum + (weight * batchSize2);
+                          }
+                          return sum;
+                        }, 0), 0)}g
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1571,7 +1641,7 @@ Now Expanded or Scrollable */}
                         const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
                         const b2Usage = unitUsage * batchSize2;
                         const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
-                        const unit = group.type === "product" ? "個" : "g";
+                        const unit = (group.type === "product" || group.type === "intermediate") ? "個" : "g";
 
                         return (
                           <tr
@@ -1583,7 +1653,7 @@ Now Expanded or Scrollable */}
                             </td>
                             <td className="py-0 font-medium text-[10px] leading-tight">
                               {item.item_name}
-                              {unitQty > 0 && group.type !== "product" && (
+                              {unitQty > 0 && group.type !== "product" && group.type !== "intermediate" && (
                                 <span className="text-gray-400 ml-1">
                                   ({formatNumber(unitQty, 0)}g/pk)
                                 </span>
@@ -1598,7 +1668,7 @@ Now Expanded or Scrollable */}
                                 {formatNumber(b1Usage, 0)}
                                 {unit}
                               </span>
-                              {b1Bags > 0 && group.type !== "product" && (
+                              {b1Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
                                 <span className="text-gray-500 ml-1">
                                   ({formatNumber(b1Bags, 2)}pk)
                                 </span>
@@ -1609,7 +1679,7 @@ Now Expanded or Scrollable */}
                                 {formatNumber(b2Usage, 0)}
                                 {unit}
                               </span>
-                              {b2Bags > 0 && group.type !== "product" && (
+                              {b2Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
                                 <span className="text-gray-500 ml-1">
                                   ({formatNumber(b2Bags, 2)}pk)
                                 </span>
@@ -1635,7 +1705,7 @@ Now Expanded or Scrollable */}
                               0,
                             ),
                             0,
-                          ) + (group.type === "product" ? "個" : "g")}
+                          ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
                         </td>
                         <td className="py-0 text-right font-mono">
                           {formatNumber(
@@ -1647,7 +1717,7 @@ Now Expanded or Scrollable */}
                               0,
                             ),
                             0,
-                          ) + (group.type === "product" ? "個" : "g")}
+                          ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
                         </td>
                         <td className="py-0 text-right font-mono">
                           {formatNumber(
@@ -1659,14 +1729,60 @@ Now Expanded or Scrollable */}
                               0,
                             ),
                             0,
-                          ) + (group.type === "product" ? "個" : "g")}
+                          ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
                         </td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
-              ),
+              )
           )}
+        {/* Print Overall Weight Summary */}
+        <div className="mt-2 border-t border-black pt-1">
+          <div className="flex justify-between items-center px-1">
+            <div className="text-[10px] font-bold">全体重量 (原材料 + 中間加工品)</div>
+            <div className="flex gap-4">
+              <div className="text-right">
+                <span className="text-[8px] text-gray-500 mr-1 uppercase">基本(1)</span>
+                <span className="font-mono font-bold text-[10px]">
+                  {formatNumber(items.reduce((sum, item) => {
+                    if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                      const usage = parseFloat(String(item.usage_amount)) || 0;
+                      return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
+                    }
+                    return sum;
+                  }, 0), 1)}g
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[8px] text-gray-500 mr-1 uppercase">A ({batchSize1})</span>
+                <span className="font-mono font-bold text-[10px]">
+                  {formatNumber(items.reduce((sum, item) => {
+                    if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                      const usage = parseFloat(String(item.usage_amount)) || 0;
+                      const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
+                      return sum + (weight * batchSize1);
+                    }
+                    return sum;
+                  }, 0), 0)}g
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[8px] text-gray-500 mr-1 uppercase">B ({batchSize2})</span>
+                <span className="font-mono font-bold text-[10px]">
+                  {formatNumber(items.reduce((sum, item) => {
+                    if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                      const usage = parseFloat(String(item.usage_amount)) || 0;
+                      const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
+                      return sum + (weight * batchSize2);
+                    }
+                    return sum;
+                  }, 0), 0)}g
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Print Notes */}
         {recipe.manufacturing_notes && (
