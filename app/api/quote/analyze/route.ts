@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         const mimeType = file.type;
 
         // 3. Prompt Gemini
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         const prompt = `
 あなたは財務・購買管理の専門家です。提供された「見積書」の画像またはPDFを解析し、商品の名称と価格（単価）を正確に抽出してください。

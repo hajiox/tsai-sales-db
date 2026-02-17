@@ -42,12 +42,12 @@ export async function POST(request: Request) {
       .lte("report_month", `${month}-01`);
 
     if (error) throw error;
-    
+
     // データがない場合の早期リターン
     if (!records || records.length === 0) {
-      return NextResponse.json({ 
-        anomalies: [], 
-        aiComment: "データが不足しているため分析できませんでした。" 
+      return NextResponse.json({
+        anomalies: [],
+        aiComment: "データが不足しているため分析できませんでした。"
       });
     }
 
@@ -57,14 +57,14 @@ export async function POST(request: Request) {
 
     records.forEach((r: any) => {
       // 費用の残高 = 借方(total_debit) を使用
-      const amount = r.total_debit; 
+      const amount = r.total_debit;
       const isCurrentMonth = r.report_month === `${month}-01`;
       const name = r.account_master?.account_name || "不明な科目";
-      
+
       // 簡易的な分類チェック: コード400未満（資産・負債・純資産）は分析対象外とする
       // ※より厳密にするなら account_type も参照すべきですが、今回はコードで簡易判定します
       const codeNum = parseInt(r.account_code);
-      if (isNaN(codeNum) || codeNum < 400) return; 
+      if (isNaN(codeNum) || codeNum < 400) return;
 
       if (!accountStats[r.account_code]) {
         accountStats[r.account_code] = { current: 0, pastSum: 0, pastCount: 0, name };
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       if (stat.pastCount === 0) continue;
 
       const avg = stat.pastSum / stat.pastCount;
-      
+
       // ノイズ除去: 当月の金額が5万円未満なら無視
       if (stat.current < 50000) continue;
 
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
     if (anomalies.length > 0) {
       // トークン節約のため上位5件のみをAIに渡す
       const topAnomalies = anomalies.slice(0, 5);
-      
+
       const prompt = `
         あなたはプロの財務分析官です。以下の経費データは、直近3ヶ月の平均と比較して急増した科目です。
         経営者に向けて、簡潔な日本語で以下の点を含めてレポートしてください。
@@ -140,15 +140,15 @@ export async function POST(request: Request) {
         3. 想定されるリスクや、現場に確認すべき質問（例：「〇〇の購入がありましたか？」など）
         
         【異常データリスト】
-        ${topAnomalies.map(a => 
-          `- ${a.name}: 今月${a.current.toLocaleString()}円 (平均比 +${a.ratio}%, +${a.diff.toLocaleString()}円)`
-        ).join("\n")}
+        ${topAnomalies.map(a =>
+        `- ${a.name}: 今月${a.current.toLocaleString()}円 (平均比 +${a.ratio}%, +${a.diff.toLocaleString()}円)`
+      ).join("\n")}
         
         回答はMarkdown形式を使わず、プレーンテキストで、300文字以内で簡潔にまとめてください。
       `;
 
       try {
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
