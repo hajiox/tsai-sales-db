@@ -715,7 +715,7 @@ export default function RecipeDetailPage() {
         </div>
       </header>
       {/* Main Content - Screen Only */}
-      <main className="max-w-[210mm] mx-auto p-8 print:hidden">
+      <main className="max-w-[1400px] mx-auto p-8 print:hidden">
         {/* Header Section */}
         {/* Header Section (Recipe Name & Pricing Card) */}
         <div className="border-b-2 border-gray-800 pb-4 mb-6 flex justify-between items-end">
@@ -1098,11 +1098,11 @@ Now Expanded or Scrollable */}
                     )}
                   </div>
                   {group.items.length > 0 ? (
-                    <table className="w-full text-sm table-fixed">
+                    <table className="w-full text-sm table-auto">
                       <thead>
                         <tr className="border-b border-gray-200 text-gray-500">
                           <th className="text-left py-1 w-8 font-normal">#</th>
-                          <th className="text-left py-1 w-40 font-normal">
+                          <th className="text-left py-1 min-w-[320px] font-normal">
                             名称
                           </th>
                           {/* 1 Unit */}
