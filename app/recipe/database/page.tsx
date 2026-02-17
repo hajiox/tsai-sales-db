@@ -7,7 +7,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers } from "lucide-react";
+import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -405,6 +405,10 @@ export default function DatabasePage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <Button onClick={() => router.push("/recipe/database/quote-import")} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
+                        <FileText className="w-4 h-4 mr-2" />
+                        見積書から自動更新 (AI)
+                    </Button>
                     {activeTab !== "intermediate" && (
                         <Button onClick={activeTab === "ingredients" ? addNewIngredient : addNewMaterial} variant="outline">
                             <Plus className="w-4 h-4 mr-2" />
