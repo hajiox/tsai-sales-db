@@ -1446,54 +1446,55 @@ Now Expanded or Scrollable */}
                       アイテムがありません
                     </div>
                   )}
+                  {group.type === "intermediate" && (
+                    <div className="mt-4 mb-8 border-t-2 border-double border-gray-200 pt-4 px-2">
+                      <div className="flex justify-start items-center gap-8">
+                        <div className="text-sm font-bold text-gray-600">全体重量 (原材料 + 中間加工品)</div>
+                        <div className="flex gap-12">
+                          <div className="text-right">
+                            <div className="text-[10px] text-gray-400 uppercase">基本(1)</div>
+                            <div className="font-mono font-bold text-lg text-gray-800">
+                              {formatNumber(items.reduce((sum, item) => {
+                                if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                                  const usage = parseFloat(String(item.usage_amount)) || 0;
+                                  return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
+                                }
+                                return sum;
+                              }, 0), 1)}g
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] text-blue-400 uppercase">{batchSize1}個分</div>
+                            <div className="font-mono font-bold text-lg text-blue-700">
+                              {formatNumber(items.reduce((sum, item) => {
+                                if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                                  const usage = parseFloat(String(item.usage_amount)) || 0;
+                                  const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
+                                  return sum + (weight * batchSize1);
+                                }
+                                return sum;
+                              }, 0), 0)}g
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] text-purple-400 uppercase">{batchSize2}個分</div>
+                            <div className="font-mono font-bold text-lg text-purple-700">
+                              {formatNumber(items.reduce((sum, item) => {
+                                if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                                  const usage = parseFloat(String(item.usage_amount)) || 0;
+                                  const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
+                                  return sum + (weight * batchSize2);
+                                }
+                                return sum;
+                              }, 0), 0)}g
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
-              {/* Overall Total Weight Summary */}
-              <div className="mt-4 border-t-2 border-double border-gray-200 pt-4 px-2">
-                <div className="flex justify-start items-center gap-8">
-                  <div className="text-sm font-bold text-gray-600">全体重量 (原材料 + 中間加工品)</div>
-                  <div className="flex gap-12">
-                    <div className="text-right">
-                      <div className="text-[10px] text-gray-400 uppercase">基本(1)</div>
-                      <div className="font-mono font-bold text-lg text-gray-800">
-                        {formatNumber(items.reduce((sum, item) => {
-                          if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
-                            const usage = parseFloat(String(item.usage_amount)) || 0;
-                            return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
-                          }
-                          return sum;
-                        }, 0), 1)}g
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-[10px] text-blue-400 uppercase">{batchSize1}個分</div>
-                      <div className="font-mono font-bold text-lg text-blue-700">
-                        {formatNumber(items.reduce((sum, item) => {
-                          if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
-                            const usage = parseFloat(String(item.usage_amount)) || 0;
-                            const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
-                            return sum + (weight * batchSize1);
-                          }
-                          return sum;
-                        }, 0), 0)}g
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-[10px] text-purple-400 uppercase">{batchSize2}個分</div>
-                      <div className="font-mono font-bold text-lg text-purple-700">
-                        {formatNumber(items.reduce((sum, item) => {
-                          if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
-                            const usage = parseFloat(String(item.usage_amount)) || 0;
-                            const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
-                            return sum + (weight * batchSize2);
-                          }
-                          return sum;
-                        }, 0), 0)}g
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1734,55 +1735,56 @@ Now Expanded or Scrollable */}
                       </tr>
                     </tfoot>
                   </table>
+                  {group.type === "intermediate" && (
+                    <div className="mt-1 mb-2 border-t border-black pt-1">
+                      <div className="flex justify-between items-center px-1">
+                        <div className="text-[10px] font-bold">全体重量 (原材料 + 中間加工品)</div>
+                        <div className="flex gap-4">
+                          <div className="text-right">
+                            <span className="text-[8px] text-gray-500 mr-1 uppercase">基本(1)</span>
+                            <span className="font-mono font-bold text-[10px]">
+                              {formatNumber(items.reduce((sum, item) => {
+                                if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                                  const usage = parseFloat(String(item.usage_amount)) || 0;
+                                  return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
+                                }
+                                return sum;
+                              }, 0), 1)}g
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[8px] text-gray-500 mr-1 uppercase">A ({batchSize1})</span>
+                            <span className="font-mono font-bold text-[10px]">
+                              {formatNumber(items.reduce((sum, item) => {
+                                if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                                  const usage = parseFloat(String(item.usage_amount)) || 0;
+                                  const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
+                                  return sum + (weight * batchSize1);
+                                }
+                                return sum;
+                              }, 0), 0)}g
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[8px] text-gray-500 mr-1 uppercase">B ({batchSize2})</span>
+                            <span className="font-mono font-bold text-[10px]">
+                              {formatNumber(items.reduce((sum, item) => {
+                                if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                                  const usage = parseFloat(String(item.usage_amount)) || 0;
+                                  const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
+                                  return sum + (weight * batchSize2);
+                                }
+                                return sum;
+                              }, 0), 0)}g
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
           )}
-        {/* Print Overall Weight Summary */}
-        <div className="mt-2 border-t border-black pt-1">
-          <div className="flex justify-between items-center px-1">
-            <div className="text-[10px] font-bold">全体重量 (原材料 + 中間加工品)</div>
-            <div className="flex gap-4">
-              <div className="text-right">
-                <span className="text-[8px] text-gray-500 mr-1 uppercase">基本(1)</span>
-                <span className="font-mono font-bold text-[10px]">
-                  {formatNumber(items.reduce((sum, item) => {
-                    if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
-                      const usage = parseFloat(String(item.usage_amount)) || 0;
-                      return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
-                    }
-                    return sum;
-                  }, 0), 1)}g
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[8px] text-gray-500 mr-1 uppercase">A ({batchSize1})</span>
-                <span className="font-mono font-bold text-[10px]">
-                  {formatNumber(items.reduce((sum, item) => {
-                    if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
-                      const usage = parseFloat(String(item.usage_amount)) || 0;
-                      const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
-                      return sum + (weight * batchSize1);
-                    }
-                    return sum;
-                  }, 0), 0)}g
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[8px] text-gray-500 mr-1 uppercase">B ({batchSize2})</span>
-                <span className="font-mono font-bold text-[10px]">
-                  {formatNumber(items.reduce((sum, item) => {
-                    if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
-                      const usage = parseFloat(String(item.usage_amount)) || 0;
-                      const weight = item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0);
-                      return sum + (weight * batchSize2);
-                    }
-                    return sum;
-                  }, 0), 0)}g
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Print Notes */}
         {recipe.manufacturing_notes && (
