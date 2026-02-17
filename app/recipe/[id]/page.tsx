@@ -102,6 +102,7 @@ export default function RecipeDetailPage() {
   const [taxRates, setTaxRates] = useState({
     ingredient: 1.08,
     material: 1.1,
+    amazon_fee: 10,
   });
 
   useEffect(() => {
@@ -112,6 +113,7 @@ export default function RecipeDetailPage() {
         setTaxRates({
           ingredient: 1 + parsed.ingredient / 100,
           material: 1 + parsed.material / 100,
+          amazon_fee: parsed.amazon_fee || 10,
         });
       } catch (e) {
         console.error("Failed to parse tax settings", e);
@@ -218,19 +220,21 @@ export default function RecipeDetailPage() {
         })),
       );
     }
-    // Expenses (Hardcoded for now)
-    setExpenses([
-      { id: "exp-1", name: "ヤマト送料", unit_price: 950, unit_quantity: 1 },
-      { id: "exp-2", name: "ネコポス送料", unit_price: 350, unit_quantity: 1 },
-      {
-        id: "exp-3",
-        name: "コンパクト送料",
-        unit_price: 550,
-        unit_quantity: 1,
-      },
-      { id: "exp-4", name: "人件費", unit_price: 1200, unit_quantity: 1 },
-      { id: "exp-5", name: "Amazon手数料", unit_price: 0, unit_quantity: 1 },
-    ]);
+    // Expenses
+    const { data: expData } = await supabase
+      .from("expenses")
+      .select("id, name, unit_price, unit_quantity, tax_included");
+    if (expData) {
+      setExpenses(
+        expData.map((e) => ({
+          id: e.id,
+          name: e.name,
+          unit_price: e.unit_price ? parseFloat(e.unit_price as any) : 0,
+          unit_quantity: e.unit_quantity ? parseFloat(e.unit_quantity as any) : 1,
+          tax_included: e.tax_included ?? false,
+        })),
+      );
+    }
   };
 
   const fetchRecipe = async (id: string) => {
@@ -376,7 +380,7 @@ export default function RecipeDetailPage() {
             };
 
             if (selected.name === "Amazon手数料" && recipe?.selling_price) {
-              updates.cost = Math.round(recipe.selling_price * 0.1);
+              updates.cost = Math.round(recipe.selling_price * (taxRates.amazon_fee / 100));
               updates.usage_amount = 1;
               updates.unit_price = updates.cost;
             }
@@ -424,7 +428,7 @@ export default function RecipeDetailPage() {
         typeof value === "number" ? value : parseFloat(value) || 0;
       const feeItem = items.find((i) => i.item_name === "Amazon手数料");
       if (feeItem && newPrice > 0) {
-        const newFee = Math.round(newPrice * 0.1);
+        const newFee = Math.round(newPrice * (taxRates.amazon_fee / 100));
         setItems((prev) =>
           prev.map((i) => {
             if (i.item_name === "Amazon手数料") {

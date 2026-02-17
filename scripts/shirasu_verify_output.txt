@@ -1,0 +1,25 @@
+=== 修正後確認 ===
+
+【なみえ】しらすふりかけ のアイテム:
+  [ingredient] "グラニュー糖" cost=1.2528
+  [material] "原材料シール（QL-800ロール）" cost=0.7197
+  [ingredient] "ハイミー" cost=0.6566
+  [ingredient] "焼き刻み海苔100ｇ" cost=8.1000
+  [ingredient] "理研　素材力だし　鶏おだし" cost=5.2920
+  [ingredient] "ブラックペッパー" cost=0.6860
+  [material] "シリカゲル10ｇ" cost=10.2300
+  [material] "63RTS用（丸瓶）共用シュリンク" cost=3.9600
+  [material] "HS-カク180STビン（ふりかけ角瓶）大角瓶" cost=48.2900
+  [ingredient] "業務用顆粒塩（エンリッチ）15ｋｇ" cost=1.5120
+  [material] "【ラベル】ふりかけ用角瓶130*50" cost=7.4600
+  [ingredient] "焦がし醤油パウダー" cost=3.2612
+  [expense] "OEM手数料" cost=180.0000
+  [ingredient] "乾燥しらす（ちりめん）提供" cost=0.0000
+  [ingredient] "かつお節" cost=7.6680
+  [material] "53RTS-Dブロンズ（角ふりかけ・味噌）キャップ" cost=18.4800
+  [ingredient] "煮干し片口（でがらし）" cost=6.9677
+  [ingredient] "いりごま（黒）" cost=18.0576
+
+total_cost: 322.59
+
+残存する問題キーワード: なし ✓

@@ -56,13 +56,18 @@ const EMPTY_ITEM: NewItem = {
 export default function NewRecipePage() {
     const router = useRouter();
     const [saving, setSaving] = useState(false);
-    const [taxRates, setTaxRates] = useState({ ingredient: 8, material: 10 });
+    const [taxRates, setTaxRates] = useState({ ingredient: 8, material: 10, amazon_fee: 10 });
 
     useEffect(() => {
         const saved = localStorage.getItem('global_tax_settings');
         if (saved) {
             try {
-                setTaxRates(JSON.parse(saved));
+                const parsed = JSON.parse(saved);
+                setTaxRates({
+                    ingredient: parsed.ingredient || 8,
+                    material: parsed.material || 10,
+                    amazon_fee: parsed.amazon_fee || 10
+                });
             } catch (e) {
                 console.error("Failed to load tax settings", e);
             }
@@ -75,6 +80,25 @@ export default function NewRecipePage() {
     const [isIntermediate, setIsIntermediate] = useState(false);
     const [developmentDate, setDevelopmentDate] = useState("");
     const [sellingPrice, setSellingPrice] = useState("");
+
+    useEffect(() => {
+        const price = parseFloat(sellingPrice);
+        if (price > 0) {
+            setItems(prev => prev.map(item => {
+                if (item.item_name === "Amazon手数料") {
+                    const fee = Math.round(price * (taxRates.amazon_fee / 100));
+                    return {
+                        ...item,
+                        unit_price: fee.toString(),
+                        unit_quantity: "1",
+                        usage_amount: "1",
+                        cost: fee.toFixed(2)
+                    };
+                }
+                return item;
+            }));
+        }
+    }, [sellingPrice, taxRates.amazon_fee]);
 
     const handleCategoryChange = (val: string) => {
         setCategory(val);
@@ -145,13 +169,17 @@ export default function NewRecipePage() {
                     unit_price: r.total_cost
                 })));
             }
-            // 経費（仮）
-            setExpenses([
-                { name: "ヤマト送料", unit_price: 950, unit_quantity: 1 },
-                { name: "ネコポス送料", unit_price: 350, unit_quantity: 1 },
-                { name: "コンパクト送料", unit_price: 550, unit_quantity: 1 },
-                { name: "人件費", unit_price: 1200, unit_quantity: 1 },
-            ]);
+            // 経費
+            const { data: expData } = await supabase.from('expenses').select('id, name, unit_price, unit_quantity, tax_included');
+            if (expData) {
+                setExpenses(expData.map(e => ({
+                    id: e.id,
+                    name: e.name,
+                    unit_price: e.unit_price,
+                    unit_quantity: e.unit_quantity,
+                    tax_included: e.tax_included !== false
+                })));
+            }
         };
         fetchMasterData();
     }, []);
@@ -315,6 +343,13 @@ export default function NewRecipePage() {
                                                             // We need to update multiple fields at once, so let's modify updateItem to accept multiple or just call it multiple times.
                                                             // Actually updateItem currently takes field and value. Let's do a quick hack.
                                                             const updatedList = [...items];
+                                                            if (selected.name === "Amazon手数料" && sellingPrice) {
+                                                                const sPrice = parseFloat(sellingPrice) || 0;
+                                                                const fee = Math.round(sPrice * (taxRates.amazon_fee / 100));
+                                                                updates.unit_price = fee.toString();
+                                                                updates.unit_quantity = "1";
+                                                                updates.usage_amount = "1";
+                                                            }
                                                             updatedList[index] = { ...updatedList[index], ...updates };
 
                                                             // Recalculate cost

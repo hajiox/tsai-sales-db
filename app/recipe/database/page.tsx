@@ -46,7 +46,17 @@ interface IntermediateProduct {
     source_file: string | null;
 }
 
-type TabType = "ingredients" | "materials" | "intermediate";
+interface Expense {
+    id: string;
+    name: string;
+    unit_price: number | null;
+    unit_quantity: number | null;
+    notes: string | null;
+    tax_included?: boolean;
+    isNew?: boolean;
+}
+
+type TabType = "ingredients" | "materials" | "intermediate" | "expense";
 
 export default function DatabasePage() {
     const router = useRouter();
@@ -54,6 +64,7 @@ export default function DatabasePage() {
     const [ingredients, setIngredients] = useState<Ingredient[]>([]);
     const [materials, setMaterials] = useState<Material[]>([]);
     const [intermediates, setIntermediates] = useState<IntermediateProduct[]>([]);
+    const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [hasChanges, setHasChanges] = useState(false);
@@ -61,7 +72,8 @@ export default function DatabasePage() {
 
     const [taxRates, setTaxRates] = useState({
         ingredient: 8,
-        material: 10
+        material: 10,
+        amazon_fee: 10
     });
 
     const inputRef = useRef<HTMLInputElement>(null);
@@ -123,18 +135,32 @@ export default function DatabasePage() {
             .order("name");
         if (intData) setIntermediates(intData);
 
+        // 諸経費
+        const { data: expData } = await supabase
+            .from("expenses")
+            .select("*")
+            .order("name");
+        if (expData) {
+            setExpenses(expData.map(e => ({ ...e, tax_included: e.tax_included ?? false })));
+        }
+
         setLoading(false);
     };
 
-    const handleTaxToggle = async (id: string, current: boolean, type: "ingredient" | "material") => {
+    const handleTaxToggle = async (id: string, current: boolean, type: "ingredient" | "material" | "expense") => {
         const next = !current;
-        const table = type === "ingredient" ? "ingredients" : "materials";
+        let table = "";
+        if (type === "ingredient") table = "ingredients";
+        else if (type === "material") table = "materials";
+        else table = "expenses";
 
         // Optimistic UI update
         if (type === "ingredient") {
             setIngredients(prev => prev.map(i => i.id === id ? { ...i, tax_included: next } : i));
-        } else {
+        } else if (type === "material") {
             setMaterials(prev => prev.map(m => m.id === id ? { ...m, tax_included: next } : m));
+        } else {
+            setExpenses(prev => prev.map(e => e.id === id ? { ...e, tax_included: next } : e));
         }
 
         const { error } = await supabase
@@ -157,7 +183,7 @@ export default function DatabasePage() {
         setEditingCell({ id, field });
     };
 
-    const handleCellChange = async (id: string, field: string, value: string, type: "ingredient" | "material") => {
+    const handleCellChange = async (id: string, field: string, value: string, type: "ingredient" | "material" | "expense") => {
         const numericFields = ['unit_quantity', 'price', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
         let parsedValue: any = value;
 
@@ -171,7 +197,7 @@ export default function DatabasePage() {
         }
 
         // 現在の値と比較して変更がなければスキップ
-        const currentList = type === "ingredient" ? ingredients : materials;
+        const currentList = type === "ingredient" ? ingredients : type === "material" ? materials : expenses;
         const currentItem = currentList.find(i => i.id === id);
         if (currentItem && (currentItem as any)[field] === parsedValue) {
             return;
@@ -182,14 +208,21 @@ export default function DatabasePage() {
             setIngredients(prev => prev.map(item =>
                 item.id === id ? { ...item, [field]: parsedValue } : item
             ));
-        } else {
+        } else if (type === "material") {
             setMaterials(prev => prev.map(item =>
+                item.id === id ? { ...item, [field]: parsedValue } : item
+            ));
+        } else {
+            setExpenses(prev => prev.map(item =>
                 item.id === id ? { ...item, [field]: parsedValue } : item
             ));
         }
 
         // 2. DB更新
-        const table = type === "ingredient" ? "ingredients" : "materials";
+        let table = "";
+        if (type === "ingredient") table = "ingredients";
+        else if (type === "material") table = "materials";
+        else table = "expenses";
         const { error } = await supabase
             .from(table)
             .update({ [field]: parsedValue })
@@ -205,7 +238,7 @@ export default function DatabasePage() {
         setEditingCell(null);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, id: string, field: string, type: "ingredient" | "material") => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, id: string, field: string, type: "ingredient" | "material" | "expense") => {
         if (e.key === 'Enter') {
             e.preventDefault();
             const value = e.currentTarget.value;
@@ -303,6 +336,9 @@ export default function DatabasePage() {
     const filteredIntermediates = intermediates.filter(i =>
         i.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+    const filteredExpenses = expenses.filter(e =>
+        e.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     const formatNumber = (value: number | null, decimals = 2) => {
         if (value === null || value === undefined) return '';
@@ -310,10 +346,10 @@ export default function DatabasePage() {
     };
 
     const renderEditableCell = (
-        item: Ingredient | Material,
+        item: Ingredient | Material | Expense,
         field: string,
         displayValue: string,
-        type: "ingredient" | "material",
+        type: "ingredient" | "material" | "expense",
         width: string = 'w-24'
     ) => {
         const isEditing = editingCell?.id === item.id && editingCell?.field === field;
@@ -334,7 +370,6 @@ export default function DatabasePage() {
             );
         }
 
-        const isModified = 'isModified' in item && item.isModified;
         return (
             <div
                 className="w-full h-full px-2 py-1 cursor-pointer hover:bg-blue-50 rounded min-h-[1.5rem]"
@@ -349,6 +384,7 @@ export default function DatabasePage() {
         { key: "ingredients" as TabType, label: "食材", icon: Apple, count: ingredients.length },
         { key: "materials" as TabType, label: "資材", icon: Box, count: materials.length },
         { key: "intermediate" as TabType, label: "中間部品【P】", icon: Layers, count: intermediates.length },
+        { key: "expense" as TabType, label: "諸経費", icon: Search, count: expenses.length },
     ];
 
     return (
@@ -403,6 +439,18 @@ export default function DatabasePage() {
                                 type="number"
                                 value={taxRates.material}
                                 onChange={(e) => setTaxRates({ ...taxRates, material: parseInt(e.target.value) || 0 })}
+                                className="w-16 h-8 text-right bg-white"
+                            />
+                            <span className="text-sm text-gray-500">%</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 border-l pl-4 border-blue-200">
+                        <span className="text-xs text-gray-600">Amazon手数料</span>
+                        <div className="flex items-center gap-1">
+                            <Input
+                                type="number"
+                                value={taxRates.amazon_fee}
+                                onChange={(e) => setTaxRates({ ...taxRates, amazon_fee: parseInt(e.target.value) || 0 })}
                                 className="w-16 h-8 text-right bg-white"
                             />
                             <span className="text-sm text-gray-500">%</span>
@@ -589,6 +637,43 @@ export default function DatabasePage() {
                                             <Button variant="ghost" size="sm" onClick={() => deleteMaterial(mat.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
                                                 <Trash2 className="w-3 h-3" />
                                             </Button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                ) : activeTab === "expense" ? (
+                    <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-gray-100 z-10">
+                            <tr className="border-b">
+                                <th className="px-2 py-2 text-left w-10">NO</th>
+                                <th className="px-2 py-2 text-left min-w-[250px]">経費名</th>
+                                <th className="px-2 py-2 text-center w-20">税込設定</th>
+                                <th className="px-2 py-2 text-right w-24">単価</th>
+                                <th className="px-2 py-2 text-left w-40">備考</th>
+                                <th className="px-2 py-2 w-10"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredExpenses.length === 0 ? (
+                                <tr><td colSpan={6} className="text-center py-8 text-gray-500">データがありません</td></tr>
+                            ) : (
+                                filteredExpenses.map((exp, index) => (
+                                    <tr key={exp.id} className="border-b hover:bg-gray-50">
+                                        <td className="px-2 py-1 text-gray-500">{index + 1}</td>
+                                        <td className="px-0 py-1">{renderEditableCell(exp, 'name', exp.name, 'expense', 'min-w-[230px]')}</td>
+                                        <td className="px-2 py-1 text-center">
+                                            <button
+                                                onClick={() => handleTaxToggle(exp.id, !!exp.tax_included, 'expense')}
+                                                className={`text-[10px] px-2 py-0.5 rounded font-bold transition ${exp.tax_included ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-400 border border-gray-200'}`}
+                                            >
+                                                {exp.tax_included ? '税込' : '税抜'}
+                                            </button>
+                                        </td>
+                                        <td className="px-0 py-1 text-right">{renderEditableCell(exp, 'unit_price', formatNumber(exp.unit_price, 0), 'expense')}</td>
+                                        <td className="px-0 py-1">{renderEditableCell(exp, 'notes', exp.notes || '', 'expense', 'w-36')}</td>
+                                        <td className="px-2 py-1">
                                         </td>
                                     </tr>
                                 ))
