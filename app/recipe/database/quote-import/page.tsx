@@ -106,6 +106,16 @@ export default function QuoteImportPage() {
         }
     };
 
+    const toggleSuggestionType = (index: number) => {
+        setSuggestions(prev => prev.map((s, i) => {
+            if (i !== index) return s;
+            const newType = s.suggestion_type === "update" ? "create" : "update";
+            // マッチ商品がない場合は新規作成固定
+            if (!s.matched_id && newType === "update") return s;
+            return { ...s, suggestion_type: newType };
+        }));
+    };
+
     return (
         <div className="max-w-6xl mx-auto p-6 space-y-6">
             <div className="flex items-center justify-between">
@@ -247,15 +257,29 @@ export default function QuoteImportPage() {
                                             ¥{s.final_suggestion_price?.toLocaleString()}
                                         </td>
                                         <td className="p-3">
-                                            {s.suggestion_type === 'update' && (
-                                                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">価格更新</Badge>
-                                            )}
-                                            {s.suggestion_type === 'create' && (
-                                                <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">新規登録</Badge>
-                                            )}
-                                            <p className="text-[10px] text-gray-500 mt-1 max-w-[200px] leading-tight">
-                                                {s.reason}
-                                            </p>
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    {s.suggestion_type === 'update' && (
+                                                        <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">価格更新</Badge>
+                                                    )}
+                                                    {s.suggestion_type === 'create' && (
+                                                        <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">新規登録</Badge>
+                                                    )}
+                                                    {s.matched_id && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 text-[10px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-2 py-0"
+                                                            onClick={() => toggleSuggestionType(idx)}
+                                                        >
+                                                            {s.suggestion_type === 'update' ? '新規として登録' : '更新に戻す'}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                <p className="text-[10px] text-gray-500 mt-1 max-w-[200px] leading-tight">
+                                                    {s.reason}
+                                                </p>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
