@@ -11,10 +11,12 @@ import { supabase } from "@/lib/supabase";
 
 interface Suggestion {
     original_name: string;
-    extracted_price: number;
+    extracted_tax_exclusive_price: number;
+    final_suggestion_price: number;
     matched_id: string | null;
     matched_name: string | null;
-    current_price: number | null;
+    current_db_price: number | null;
+    is_db_tax_included: boolean;
     suggestion_type: "update" | "create" | "ignore";
     category: "ingredient" | "material";
     confidence: number;
@@ -183,9 +185,10 @@ export default function QuoteImportPage() {
                                     <th className="p-3 text-left">見積書項目名</th>
                                     <th className="p-3 text-left">DB照合先項目</th>
                                     <th className="p-3 text-left">区分</th>
-                                    <th className="p-3 text-right">旧価格</th>
+                                    <th className="p-3 text-right">旧価格 (DB)</th>
                                     <th className="p-3 text-left w-12 text-center"></th>
-                                    <th className="p-3 text-right">新価格 (見積)</th>
+                                    <th className="p-3 text-right">見積価格 (税別)</th>
+                                    <th className="p-3 text-right">反映価格</th>
                                     <th className="p-3 text-left">AI提案</th>
                                 </tr>
                             </thead>
@@ -203,7 +206,7 @@ export default function QuoteImportPage() {
                                         <td className="p-3">
                                             <div className="font-medium text-gray-900">{s.original_name}</div>
                                             <div className="text-[10px] text-gray-500 flex items-center gap-1 mt-0.5">
-                                                <Badge variant="outline" className="px-1 py-0 text-[9px] font-normal">確信度 {Math.round(s.confidence * 100)}%</Badge>
+                                                <Badge variant="outline" className="px-1 py-0 text-[10px] font-normal">確信度 {Math.round(s.confidence * 100)}%</Badge>
                                             </div>
                                         </td>
                                         <td className="p-3">
@@ -220,18 +223,28 @@ export default function QuoteImportPage() {
                                             )}
                                         </td>
                                         <td className="p-3">
-                                            <Badge className={s.category === 'ingredient' ? 'bg-green-100 text-green-700 hover:bg-green-100' : 'bg-orange-100 text-orange-700 hover:bg-orange-100'}>
-                                                {s.category === 'ingredient' ? '食材' : '資材'}
-                                            </Badge>
+                                            <div className="flex flex-col gap-1">
+                                                <Badge className={s.category === 'ingredient' ? 'bg-green-100 text-green-700 hover:bg-green-100' : 'bg-orange-100 text-orange-700 hover:bg-orange-100'}>
+                                                    {s.category === 'ingredient' ? '食材' : '資材'}
+                                                </Badge>
+                                                {s.matched_id && (
+                                                    <span className={`text-[10px] px-1 py-0.5 rounded text-center border ${s.is_db_tax_included ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
+                                                        {s.is_db_tax_included ? 'DB:税込' : 'DB:税別'}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="p-3 text-right text-gray-500">
-                                            {s.current_price ? `¥${s.current_price.toLocaleString()}` : '-'}
+                                            {s.current_db_price ? `¥${s.current_db_price.toLocaleString()}` : '-'}
                                         </td>
                                         <td className="p-3 text-center">
                                             <ArrowRight className="w-3 h-3 text-gray-300 inline" />
                                         </td>
+                                        <td className="p-3 text-right text-gray-600">
+                                            ¥{s.extracted_tax_exclusive_price?.toLocaleString()}
+                                        </td>
                                         <td className="p-3 text-right font-bold text-blue-700">
-                                            ¥{s.extracted_price?.toLocaleString()}
+                                            ¥{s.final_suggestion_price?.toLocaleString()}
                                         </td>
                                         <td className="p-3">
                                             {s.suggestion_type === 'update' && (

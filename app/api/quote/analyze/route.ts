@@ -21,13 +21,13 @@ export async function POST(request: Request) {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         const [ingredientsRes, materialsRes] = await Promise.all([
-            supabase.from("ingredients").select("id, name, price"),
-            supabase.from("materials").select("id, name, price")
+            supabase.from("ingredients").select("id, name, price, tax_included"),
+            supabase.from("materials").select("id, name, price, tax_included")
         ]);
 
         const existingItems = [
-            ...(ingredientsRes.data || []).map(i => ({ ...i, type: 'ingredient' })),
-            ...(materialsRes.data || []).map(m => ({ ...m, type: 'material' }))
+            ...(ingredientsRes.data || []).map(i => ({ ...i, type: 'ingredient', db_tax_included: i.tax_included })),
+            ...(materialsRes.data || []).map(m => ({ ...m, type: 'material', db_tax_included: m.tax_included }))
         ];
 
         // 2. Prepare file for Gemini
@@ -42,30 +42,37 @@ export async function POST(request: Request) {
 あなたは財務・購買管理の専門家です。提供された「見積書」の画像またはPDFを解析し、商品の名称と価格（単価）を正確に抽出してください。
 ※重要：画像がFAXのスキャンデータなどでノイズが多い、または文字が潰れている可能性があります。前後の文脈や、既存データベースの名称リストを参考に、正解と思われる名称を推測・復元してください。
 
-さらに、抽出した商品を以下の既存データベース内の項目と照合（名寄せ）し、価格の更新が必要かどうかを判断してください。
-
 【既存データベース項目リスト】
 ${JSON.stringify(existingItems)}
 
+【税金に関する重要な指示】
+1. 見積書の価格は原則として「税抜き（税別）」で表示されています。
+2. データベース側（db_tax_included）が true の場合、その項目の保管価格は「税込み」です。
+3. 比較および更新案を作成する際は、必ず同じ基準で比較してください。
+   - 食材（ingredient）の税率は 8%、資材（material）の税率は 10% とします。
+   - DBが「税込み」設定（db_tax_included: true）の場合、見積書の税抜き価格に税を加えてから DB価格と比較し、「更新後の税込み価格」を算出してください。
+   - DBが「税抜き」設定（db_tax_included: false）の場合、そのまま見積書の価格と比較してください。
+
 【解析と照合のルール】
 1. 見積書に記載されている各行（アイテム）について：
-   - 商品名と単価を抽出してください。
-   - 既存リストに似た名前のものがあれば、その ID を紐付けてください。名称の揺らぎ（例：「キャベツ」と「ｷｬﾍﾞﾂ」、「A社 砂糖」と「ｻﾄｳ」など）や、FAX特有の誤字（「1」が「I」に見える等）を賢く補正してください。
+   - 商品名と単価（税抜き）を抽出してください。
+   - 既存リストに似た名称のものがあれば、その ID を紐付けてください。名称の揺らぎやFAX特有の誤字を補正してください。
    - 既存リストに該当するものがない、または全く新しい商品の場合は、新規作成(create)として提案してください。
-   - 「食材」か「資材」かの判別を行ってください。調味料、生鮮品、加工食品などは「食材」、容器、ラベル、テープ、梱包材などは「資材」です。
 
-2. 出力は必ず以下の形式の純粋な JSON 配列のみで返してください。余計な説明文は一切含めないでください。
+2. 出力は必ず以下の形式の純粋な JSON 配列のみで返してください。
 [
   {
-    "original_name": "見積書から抽出・推測された名称",
-    "extracted_price": 1000,
-    "matched_id": "DB内のUUIDまたはnull",
-    "matched_name": "DB内の現在の名称またはnull",
-    "current_price": 950,
+    "original_name": "見積書から抽出された名称",
+    "extracted_tax_exclusive_price": 1000,
+    "final_suggestion_price": 1080, // DB設定が税込みなら1080、税抜きなら1000
+    "matched_id": "UUID または null",
+    "matched_name": "DB内の名称",
+    "current_db_price": 950, // DBの現在の値
+    "is_db_tax_included": true,
     "suggestion_type": "update" | "create" | "ignore",
     "category": "ingredient" | "material",
     "confidence": 0.95,
-    "reason": "照合の理由（例：名称の揺らぎを補正して合致、新商品と判断など）"
+    "reason": "照合と価格算出の理由（例：DBが税込のため8%加算して比較）"
   }
 ]
 `;

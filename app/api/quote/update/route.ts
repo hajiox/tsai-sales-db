@@ -20,7 +20,7 @@ export async function POST(request: Request) {
                 const table = update.category === "ingredient" ? "ingredients" : "materials";
                 const { data, error } = await supabase
                     .from(table)
-                    .update({ price: update.extracted_price })
+                    .update({ price: update.final_suggestion_price })
                     .eq("id", update.matched_id)
                     .select();
 
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
                 const table = update.category === "ingredient" ? "ingredients" : "materials";
                 const newRecord = {
                     name: update.original_name,
-                    price: update.extracted_price,
+                    price: update.final_suggestion_price,
                     unit_quantity: 1 // Default
                 };
                 const { data, error } = await supabase
