@@ -79,6 +79,7 @@ interface Recipe {
   total_cost: number | null;
   total_weight: number | null;
   source_file: string | null;
+  amazon_fee_enabled: boolean;
 }
 
 interface RecipeItem {
@@ -252,7 +253,10 @@ export default function RecipeDetailPage() {
       return;
     }
 
-    setRecipe(recipeData);
+    setRecipe({
+      ...recipeData,
+      amazon_fee_enabled: recipeData.amazon_fee_enabled ?? false,
+    });
 
     const { data: itemsData } = await supabase
       .from("recipe_items")
@@ -423,27 +427,14 @@ export default function RecipeDetailPage() {
     const updatedRecipe = { ...recipe, [field]: value };
     setRecipe(updatedRecipe);
 
+    // amazon_fee_enabled の変更時は即座にDB保存
+    if (field === "amazon_fee_enabled") {
+      setHasChanges(true);
+    }
+
     if (field === "selling_price") {
-      const newPrice =
-        typeof value === "number" ? value : parseFloat(value) || 0;
-      const feeItem = items.find((i) => i.item_name === "Amazon手数料");
-      if (feeItem && newPrice > 0) {
-        const newFee = Math.round(newPrice * (taxRates.amazon_fee / 100));
-        setItems((prev) =>
-          prev.map((i) => {
-            if (i.item_name === "Amazon手数料") {
-              return {
-                ...i,
-                cost: newFee,
-                unit_price: newFee,
-                usage_amount: 1,
-              };
-            }
-            return i;
-          }),
-        );
-        setHasChanges(true);
-      }
+      // Amazon手数料は自動計算されるので、items内のAmazon手数料は更新不要
+      setHasChanges(true);
     }
 
     if (field === "category") {
@@ -543,10 +534,18 @@ export default function RecipeDetailPage() {
         if (updError) throw updError;
       }
 
-      const totalCost = items.reduce(
+      // Amazon手数料をitems内の expense から除外して計算し、フラグベースで加算
+      const itemsWithoutAmazonFee = items.filter(
+        (i) => !(i.item_type === "expense" && i.item_name === "Amazon手数料")
+      );
+      const baseCost = itemsWithoutAmazonFee.reduce(
         (sum, item) => sum + (parseFloat(String(item.cost)) || 0),
         0,
       );
+      const savedAmazonFee = (recipe.amazon_fee_enabled && recipe.selling_price)
+        ? Math.round(recipe.selling_price * (taxRates.amazon_fee / 100))
+        : 0;
+      const totalCost = baseCost + savedAmazonFee;
 
       const totalWeight = items.reduce((sum, item) => {
         // Items that contribute weight
@@ -576,6 +575,7 @@ export default function RecipeDetailPage() {
           sterilization_temperature: recipe.sterilization_temperature,
           sterilization_time: recipe.sterilization_time,
           development_date: recipe.development_date,
+          amazon_fee_enabled: recipe.amazon_fee_enabled,
         })
         .eq("id", recipe.id);
 
@@ -600,16 +600,29 @@ export default function RecipeDetailPage() {
     return `¥${Math.round(value).toLocaleString()}`;
   };
 
+  // Amazon手数料の計算（販売価格 × 手数料率%）
+  const amazonFee = (recipe?.amazon_fee_enabled && recipe?.selling_price)
+    ? Math.round(recipe.selling_price * (taxRates.amazon_fee / 100))
+    : 0;
+
   const getTotals = () => {
+    // items内の「Amazon手数料」という名前のexpenseを除外して計算
+    const itemsWithoutAmazonFee = items.filter(
+      (i) => !(i.item_type === "expense" && i.item_name === "Amazon手数料")
+    );
     return {
-      usage: items.reduce(
+      usage: itemsWithoutAmazonFee.reduce(
         (sum, item) => sum + (parseFloat(String(item.usage_amount)) || 0),
         0,
       ),
-      cost: items.reduce(
+      costWithoutAmazon: itemsWithoutAmazonFee.reduce(
         (sum, item) => sum + (parseFloat(String(item.cost)) || 0),
         0,
       ),
+      cost: itemsWithoutAmazonFee.reduce(
+        (sum, item) => sum + (parseFloat(String(item.cost)) || 0),
+        0,
+      ) + amazonFee,
     };
   };
 
@@ -957,10 +970,51 @@ export default function RecipeDetailPage() {
                   placeholder="0"
                 />
               </div>
+              {/* Amazon手数料 チェックボックス */}
+              <div className="pt-3 pb-1 border-t border-gray-800">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={recipe.amazon_fee_enabled || false}
+                      onChange={(e) => handleRecipeChange("amazon_fee_enabled", e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 bg-gray-700 rounded-full peer-checked:bg-orange-500 transition-colors" />
+                    <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-gray-400 rounded-full transition-transform peer-checked:translate-x-5 peer-checked:bg-white" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-300 group-hover:text-white transition-colors">
+                      Amazon手数料
+                    </span>
+                    <span className="text-xs bg-gray-800 text-orange-400 px-2 py-0.5 rounded font-mono">
+                      {taxRates.amazon_fee}%
+                    </span>
+                  </div>
+                  {recipe.amazon_fee_enabled && recipe.selling_price ? (
+                    <span className="ml-auto text-sm font-bold text-orange-400">
+                      {formatCurrency(amazonFee)}
+                    </span>
+                  ) : null}
+                </label>
+              </div>
+              {/* 原価内訳 */}
+              {recipe.amazon_fee_enabled && amazonFee > 0 && (
+                <div className="pb-2 text-xs text-gray-500 space-y-1">
+                  <div className="flex justify-between">
+                    <span>材料・資材・経費</span>
+                    <span className="font-mono">{formatCurrency(totals.costWithoutAmazon)}</span>
+                  </div>
+                  <div className="flex justify-between text-orange-400">
+                    <span>Amazon手数料 ({taxRates.amazon_fee}%)</span>
+                    <span className="font-mono">{formatCurrency(amazonFee)}</span>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
                 <div>
                   <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">
-                    原価 (Cost)
+                    原価合計 (Total Cost)
                   </div>
                   <div className="text-xl font-bold flex items-baseline gap-2">
                     {formatCurrency(totals.cost)}
