@@ -33,7 +33,7 @@ const CATEGORIES = [
 
 interface NewItem {
     item_name: string;
-    item_type: "ingredient" | "material" | "intermediate" | "expense";
+    item_type: "ingredient" | "material" | "intermediate" | "product" | "expense";
     unit_quantity: string;
     unit_price: string;
     unit_weight?: number;
@@ -123,6 +123,7 @@ export default function NewRecipePage() {
     const [ingredients, setIngredients] = useState<ItemCandidate[]>([]);
     const [materials, setMaterials] = useState<ItemCandidate[]>([]);
     const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
+    const [products, setProducts] = useState<ItemCandidate[]>([]);
     const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
 
     useEffect(() => {
@@ -162,6 +163,17 @@ export default function NewRecipePage() {
             const { data: recipeData } = await supabase.from('recipes').select('id, name, total_cost, total_weight').eq('is_intermediate', true);
             if (recipeData) {
                 setIntermediates(recipeData.map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    unit_quantity: 1,
+                    unit_weight: r.total_weight ?? 0,
+                    unit_price: r.total_cost
+                })));
+            }
+            // 完成品（セット商品用）
+            const { data: prodData } = await supabase.from('recipes').select('id, name, total_cost, total_weight').eq('is_intermediate', false);
+            if (prodData) {
+                setProducts(prodData.map(r => ({
                     id: r.id,
                     name: r.name,
                     unit_quantity: 1,
@@ -239,7 +251,7 @@ export default function NewRecipePage() {
                     selling_price: sellingPrice ? parseFloat(sellingPrice) : null,
                     total_cost: totalCost,
                     total_weight: items.reduce((sum, item) => {
-                        if (["ingredient", "intermediate"].includes(item.item_type)) {
+                        if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
                             const usage = parseFloat(item.usage_amount) || 0;
                             return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
                         }
@@ -404,7 +416,7 @@ export default function NewRecipePage() {
                                                 placeholder="入力"
                                             />
                                             <span className="text-xs text-gray-400 w-4">
-                                                {type === "intermediate" ? "個" : "g"}
+                                                {["intermediate", "product"].includes(type) ? "個" : "g"}
                                             </span>
                                         </div>
                                     </td>
@@ -553,6 +565,7 @@ export default function NewRecipePage() {
 
             {/* Sections */}
             <div className="space-y-2">
+                {renderSection("セット内容（商品）", "product", "bg-indigo-50", "text-indigo-800", products)}
                 {renderSection("食材", "ingredient", "bg-green-50", "text-green-800", ingredients)}
                 {renderSection("資材", "material", "bg-orange-50", "text-orange-800", materials)}
                 {renderSection("中間部品", "intermediate", "bg-purple-50", "text-purple-800", intermediates)}
@@ -566,6 +579,7 @@ export default function NewRecipePage() {
             <Card className="fixed bottom-0 left-0 right-0 border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20 rounded-none bg-white/95 backdrop-blur">
                 <CardContent className="py-4 px-6 max-w-7xl mx-auto flex justify-between items-center">
                     <div className="flex gap-6 text-sm text-gray-600">
+                        <span>商品: <strong>{items.filter(i => i.item_type === "product").length}</strong></span>
                         <span>食材: <strong>{items.filter(i => i.item_type === "ingredient").length}</strong></span>
                         <span>資材: <strong>{items.filter(i => i.item_type === "material").length}</strong></span>
                         <span>中間部品: <strong>{items.filter(i => i.item_type === "intermediate").length}</strong></span>
@@ -576,7 +590,7 @@ export default function NewRecipePage() {
                             <span className="text-sm text-gray-500 mr-2">全体重量: </span>
                             <span className="text-xl font-bold text-gray-800">
                                 {items.reduce((sum, item) => {
-                                    if (["ingredient", "intermediate"].includes(item.item_type)) {
+                                    if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
                                         const usage = parseFloat(item.usage_amount) || 0;
                                         return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
                                     }
