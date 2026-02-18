@@ -35,3 +35,11 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 - マッチングロジック改善: 部分一致使用済みID除外で重複回避
 - DB上の全レシピの材料数がExcelとほぼ完全一致
 
+
+### 2026-02-18 17:34:00 Amazon手数料の諸経費からの分離
+- recipesテーブルに`amazon_fee_enabled`カラム（BOOLEAN, DEFAULT false）を追加
+- レシピ詳細ページにAmazon手数料のON/OFFトグルスイッチを追加
+- ON時: 販売価格 x Amazon手数料率(%)が自動計算され原価に加算
+- 原価内訳表示（材料資材経費 / Amazon手数料）を追加
+- 諸経費に含まれていた旧「Amazon手数料」アイテムを計算から除外するロジック追加
+- 保存時にamazon_fee_enabledフラグをDBに保存

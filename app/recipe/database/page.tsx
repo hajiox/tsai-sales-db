@@ -407,7 +407,11 @@ export default function DatabasePage() {
                 <div className="flex gap-2">
                     <Button onClick={() => router.push("/recipe/database/quote-import")} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
                         <FileText className="w-4 h-4 mr-2" />
-                        見積書から自動更新 (AI)
+                        見積書AI取込
+                    </Button>
+                    <Button onClick={() => router.push("/recipe/database/label-import")} variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50">
+                        <FileText className="w-4 h-4 mr-2" />
+                        ラベルAI取込
                     </Button>
                     {activeTab !== "intermediate" && (
                         <Button onClick={activeTab === "ingredients" ? addNewIngredient : addNewMaterial} variant="outline">
