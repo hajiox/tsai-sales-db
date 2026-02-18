@@ -225,13 +225,16 @@ function LabelImportContent() {
         setSelectedCandidate(candidate);
         setActionMode("update");
 
-        // Auto-select fields: check all, but mark with arrows for changed fields
+        // Auto-select fields: check fields that are empty in DB or have different values
         const data = dataToCompare || editedData;
         const newSelectedFields: Record<string, boolean> = {};
         for (const key of Object.keys(data)) {
             const currentValue = candidate.current_data ? (candidate.current_data as any)[key] : null;
-            // Auto-select fields that are empty in DB or different from extracted
-            newSelectedFields[key] = currentValue === null || currentValue === undefined || currentValue === "";
+            const extractedValue = data[key];
+            const isEmpty = currentValue === null || currentValue === undefined || currentValue === "";
+            const isDifferent = !isEmpty && String(currentValue) !== String(extractedValue);
+            // Auto-select fields that are empty in DB OR different from extracted
+            newSelectedFields[key] = isEmpty || isDifferent;
         }
         setSelectedFields(newSelectedFields);
     };
