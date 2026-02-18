@@ -12,9 +12,7 @@ export async function POST(request: Request) {
     try {
         const formData = await request.formData();
         const files = formData.getAll("files") as File[];
-        const types = formData.getAll("types") as string[]; // "front_label" | "ingredients_label" | "nutrition_label"
-        const targetId = formData.get("target_id") as string | null;
-        const targetName = formData.get("target_name") as string | null;
+        const types = formData.getAll("types") as string[];
 
         if (!files.length) {
             return NextResponse.json({ error: "ファイルが必要です" }, { status: 400 });
@@ -34,6 +32,18 @@ export async function POST(request: Request) {
             })
         );
 
+        // Fetch ALL existing ingredients for matching
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const { data: existingIngredients } = await supabase
+            .from("ingredients")
+            .select("id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, salt, raw_materials, allergens, origin, manufacturer, product_description, nutrition_per");
+
+        const existingNames = (existingIngredients || []).map((i) => ({
+            id: i.id,
+            name: i.name,
+            unit_quantity: i.unit_quantity,
+        }));
+
         // Build type context
         const typeDescriptions = types.map((t, i) => {
             const labels: Record<string, string> = {
@@ -44,33 +54,22 @@ export async function POST(request: Request) {
             return `画像${i + 1}: ${labels[t] || t}`;
         }).join("\n");
 
-        // Fetch existing item data if target_id is provided
-        let existingData = null;
-        if (targetId) {
-            const supabase = createClient(supabaseUrl, supabaseServiceKey);
-            const { data } = await supabase
-                .from("ingredients")
-                .select("*")
-                .eq("id", targetId)
-                .single();
-            existingData = data;
-        }
-
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         const prompt = `
 あなたは食品表示の専門家です。提供された食品ラベルの画像を解析し、情報を正確に抽出してください。
+さらに、既存のデータベースと照合し、更新すべき候補を提案してください。
 
 【画像の種類】
 ${typeDescriptions}
 
-${targetName ? `【対象商品】\n商品名: ${targetName}` : ""}
-${existingData ? `\n【既存DBデータ（参考）】\n${JSON.stringify(existingData, null, 2)}` : ""}
+【既存データベースの食材リスト（照合用）】
+${JSON.stringify(existingNames)}
 
 【抽出ルール】
 1. **表ラベル（front_label）から抽出する情報**:
    - product_description: 商品名・ブランド名・キャッチコピーなど表面に記載の情報
-   - unit_quantity: 内容量（グラム数。数値のみ。例: 1000）
+   - unit_quantity: 内容量（グラム数。数値のみ。例: 1000。mlの場合もgに換算せずそのまま数値で）
    - manufacturer: メーカー名（表面に記載がある場合）
 
 2. **原材料表示（ingredients_label）から抽出する情報**:
@@ -88,6 +87,12 @@ ${existingData ? `\n【既存DBデータ（参考）】\n${JSON.stringify(existi
    - sodium: ナトリウム（mg、数値のみ。食塩相当量(g)から計算する場合: 食塩g × 393.4 = ナトリウムmg）
    - salt: 食塩相当量（g、数値のみ）
 
+【DB照合ルール】
+- ラベルから読み取った商品名と、既存データベースの name を比較してください
+- 同一商品と思われるもの、または類似商品を候補として返してください（最大5件）
+- 名称の揺らぎ（略称、メーカー名の有無、容量違い等）も考慮してください
+- 完全一致がなくても、部分一致や類似名があれば候補に含めてください
+
 【重要な注意事項】
 - 画像が不鮮明な場合でも、文脈から推測して最善の結果を返してください
 - 読み取れない項目は null としてください
@@ -95,23 +100,35 @@ ${existingData ? `\n【既存DBデータ（参考）】\n${JSON.stringify(existi
 - 原材料表示は省略せず、ラベルに記載されている通りに全文を転記してください
 
 【出力形式】
-以下の形式の純粋なJSON（1つのオブジェクト）のみで返してください。解析できた項目のみ含めてください。
+以下の形式の純粋なJSON（1つのオブジェクト）のみで返してください。
 {
-  "product_description": "商品名・説明",
-  "unit_quantity": 1000,
-  "raw_materials": "原材料名の全文",
-  "allergens": "アレルギー表示",
-  "origin": "原産国",
-  "manufacturer": "製造者情報",
-  "nutrition_per": "100gあたり",
-  "calories": 350,
-  "protein": 10.5,
-  "fat": 5.2,
-  "carbohydrate": 60.3,
-  "sodium": 800,
-  "salt": 2.03,
-  "name": "商品名（表ラベルから読み取れた場合）"
+  "extracted": {
+    "name": "商品名（ラベルから読み取った正式名称）",
+    "product_description": "商品説明",
+    "unit_quantity": 1000,
+    "raw_materials": "原材料名の全文",
+    "allergens": "アレルギー表示",
+    "origin": "原産国",
+    "manufacturer": "製造者情報",
+    "nutrition_per": "100gあたり",
+    "calories": 350,
+    "protein": 10.5,
+    "fat": 5.2,
+    "carbohydrate": 60.3,
+    "sodium": 800,
+    "salt": 2.03
+  },
+  "candidates": [
+    {
+      "id": "UUID",
+      "name": "DB内の名称",
+      "confidence": 0.95,
+      "reason": "照合理由（例：商品名が一致、容量違いの同一商品）"
+    }
+  ]
 }
+
+candidatesは該当なしの場合は空配列[]としてください。
 `;
 
         const result = await model.generateContent([prompt, ...imageParts]);
@@ -122,8 +139,21 @@ ${existingData ? `\n【既存DBデータ（参考）】\n${JSON.stringify(existi
         text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
         try {
-            const extracted = JSON.parse(text);
-            return NextResponse.json({ extracted, raw: text });
+            const parsed = JSON.parse(text);
+
+            // Enrich candidates with full DB data
+            const enrichedCandidates = (parsed.candidates || []).map((c: any) => {
+                const dbItem = (existingIngredients || []).find((i) => i.id === c.id);
+                return {
+                    ...c,
+                    current_data: dbItem || null,
+                };
+            });
+
+            return NextResponse.json({
+                extracted: parsed.extracted || parsed,
+                candidates: enrichedCandidates,
+            });
         } catch (parseError) {
             console.error("JSON Parse Error:", text);
             return NextResponse.json(
