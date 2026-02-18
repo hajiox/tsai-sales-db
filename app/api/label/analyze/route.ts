@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         const { data: existingIngredients } = await supabase
             .from("ingredients")
-            .select("id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, salt, raw_materials, allergens, origin, manufacturer, product_description, nutrition_per");
+            .select("id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, raw_materials, allergens, origin, manufacturer, product_description, nutrition_per");
 
         const existingNames = (existingIngredients || []).map((i) => ({
             id: i.id,
@@ -84,8 +84,7 @@ ${JSON.stringify(existingNames)}
    - protein: たんぱく質（g、数値のみ）
    - fat: 脂質（g、数値のみ）
    - carbohydrate: 炭水化物（g、数値のみ）
-   - sodium: ナトリウム（mg、数値のみ。食塩相当量(g)から計算する場合: 食塩g × 393.4 = ナトリウムmg）
-   - salt: 食塩相当量（g、数値のみ）
+   - sodium: 食塩相当量（g、数値のみ）
 
 【DB照合ルール】
 - ラベルから読み取った商品名と、既存データベースの name を比較してください
@@ -115,8 +114,7 @@ ${JSON.stringify(existingNames)}
     "protein": 10.5,
     "fat": 5.2,
     "carbohydrate": 60.3,
-    "sodium": 800,
-    "salt": 2.03
+    "sodium": 2.03
   },
   "candidates": [
     {

@@ -32,7 +32,6 @@ interface Ingredient {
     fat: number | null;
     carbohydrate: number | null;
     sodium: number | null;
-    salt: number | null;
     raw_materials: string | null;
     allergens: string | null;
     origin: string | null;
@@ -98,8 +97,7 @@ const FIELD_LABELS: Record<string, string> = {
     protein: "たんぱく質(g)",
     fat: "脂質(g)",
     carbohydrate: "炭水化物(g)",
-    sodium: "ナトリウム(mg)",
-    salt: "食塩相当量(g)",
+    sodium: "食塩相当量(g)",
 };
 
 type ActionMode = "select" | "update" | "create";
@@ -142,7 +140,7 @@ function LabelImportContent() {
     const fetchAllIngredients = async () => {
         const { data } = await supabase
             .from("ingredients")
-            .select("id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, salt, raw_materials, allergens, origin, manufacturer, product_description, nutrition_per")
+            .select("id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, raw_materials, allergens, origin, manufacturer, product_description, nutrition_per")
             .order("name");
         setAllIngredients(data || []);
     };
@@ -383,8 +381,8 @@ function LabelImportContent() {
                                     <div
                                         key={type}
                                         className={`relative border-2 border-dashed rounded-xl p-4 transition-all ${existing
-                                                ? "border-green-300 bg-green-50/50"
-                                                : "border-gray-200 hover:border-gray-400 bg-gray-50/30"
+                                            ? "border-green-300 bg-green-50/50"
+                                            : "border-gray-200 hover:border-gray-400 bg-gray-50/30"
                                             }`}
                                     >
                                         {existing && (
@@ -513,8 +511,8 @@ function LabelImportContent() {
                                         key={c.id}
                                         onClick={() => selectCandidateForUpdate(c)}
                                         className={`w-full text-left p-3 rounded-lg border-2 transition-all ${selectedCandidate?.id === c.id && actionMode === "update"
-                                                ? "border-blue-500 bg-blue-50"
-                                                : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
+                                            ? "border-blue-500 bg-blue-50"
+                                            : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
                                             }`}
                                     >
                                         <div className="flex items-center justify-between">

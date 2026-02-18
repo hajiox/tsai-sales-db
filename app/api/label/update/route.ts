@@ -13,7 +13,6 @@ const ALLOWED_FIELDS = [
     "fat",
     "carbohydrate",
     "sodium",
-    "salt",
     "raw_materials",
     "allergens",
     "origin",
