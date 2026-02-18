@@ -46,22 +46,22 @@ export default function ItemNameSelect({
     placeholder = "入力または選択...",
 }: ItemNameSelectProps) {
     const [open, setOpen] = React.useState(false)
-    const [inputValue, setInputValue] = React.useState("")
+    const [search, setSearch] = React.useState("")
 
-    // 外部からのvalue変更に追従（ポップアップが閉じている時のみ）
-    React.useEffect(() => {
-        if (!open) {
-            setInputValue("")
-        }
-    }, [value, open])
-
-    // ポップアップが開いたら検索ボックスをクリアして全候補を表示
+    // ポップアップが開いたら検索をクリア
     const handleOpenChange = (isOpen: boolean) => {
         setOpen(isOpen)
         if (isOpen) {
-            setInputValue("")
+            setSearch("")
         }
     }
+
+    // 検索でフィルタリングした候補
+    const filtered = React.useMemo(() => {
+        if (!search) return candidates
+        const q = search.toLowerCase()
+        return candidates.filter(c => c.name.toLowerCase().includes(q))
+    }, [candidates, search])
 
     return (
         <Popover open={open} onOpenChange={handleOpenChange}>
@@ -77,54 +77,52 @@ export default function ItemNameSelect({
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[300px] p-0" align="start">
-                <Command>
+                <Command shouldFilter={false}>
                     <CommandInput
                         placeholder={placeholder}
-                        value={inputValue}
-                        onValueChange={(val) => {
-                            setInputValue(val)
-                        }}
+                        value={search}
+                        onValueChange={setSearch}
                     />
-
                     <CommandList>
-                        <CommandEmpty className="py-2 px-2 text-sm text-gray-500">
-                            候補なし。
-                            <Button
-                                variant="ghost"
-                                className="w-full justify-start text-blue-600 h-8 mt-1"
-                                onClick={() => {
-                                    onSelect(inputValue)
-                                    setOpen(false)
-                                }}
-                            >
-                                "{inputValue}" を使用
-                            </Button>
-                        </CommandEmpty>
-                        <CommandGroup>
-                            {candidates.map((item, idx) => (
-                                <CommandItem
-                                    key={(item.id || "idx-" + idx) + item.name}
-                                    value={item.name}
-                                    onSelect={(currentValue) => {
-                                        const selected = candidates.find(c => c.name.toLowerCase() === currentValue.toLowerCase())
-                                        // 選択されたらそのアイテムオブジェクトを渡す
-                                        onSelect(selected || currentValue)
+                        {filtered.length === 0 && search ? (
+                            <CommandEmpty className="py-2 px-2 text-sm text-gray-500">
+                                候補なし。
+                                <Button
+                                    variant="ghost"
+                                    className="w-full justify-start text-blue-600 h-8 mt-1"
+                                    onClick={() => {
+                                        onSelect(search)
                                         setOpen(false)
                                     }}
                                 >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            value === item.name ? "opacity-100" : "opacity-0"
-                                        )}
-                                    />
-                                    {item.name}
-                                    <span className="ml-auto text-xs text-gray-400">
-                                        {item.unit_price ? `¥${item.unit_price}` : ''}
-                                    </span>
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
+                                    &quot;{search}&quot; を使用
+                                </Button>
+                            </CommandEmpty>
+                        ) : (
+                            <CommandGroup>
+                                {filtered.map((item, idx) => (
+                                    <CommandItem
+                                        key={(item.id || "idx-" + idx) + item.name}
+                                        value={item.name}
+                                        onSelect={() => {
+                                            onSelect(item)
+                                            setOpen(false)
+                                        }}
+                                    >
+                                        <Check
+                                            className={cn(
+                                                "mr-2 h-4 w-4",
+                                                value === item.name ? "opacity-100" : "opacity-0"
+                                            )}
+                                        />
+                                        {item.name}
+                                        <span className="ml-auto text-xs text-gray-400">
+                                            {item.unit_price ? `¥${item.unit_price}` : ''}
+                                        </span>
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        )}
                     </CommandList>
                 </Command>
             </PopoverContent>
