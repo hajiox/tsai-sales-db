@@ -1,18 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown, Search } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from "@/components/ui/command"
 import {
     Popover,
     PopoverContent,
@@ -47,12 +39,14 @@ export default function ItemNameSelect({
 }: ItemNameSelectProps) {
     const [open, setOpen] = React.useState(false)
     const [search, setSearch] = React.useState("")
+    const inputRef = React.useRef<HTMLInputElement>(null)
 
-    // ポップアップが開いたら検索をクリア
+    // ポップアップが開いたら検索をクリアしてフォーカス
     const handleOpenChange = (isOpen: boolean) => {
         setOpen(isOpen)
         if (isOpen) {
             setSearch("")
+            setTimeout(() => inputRef.current?.focus(), 50)
         }
     }
 
@@ -62,6 +56,11 @@ export default function ItemNameSelect({
         const q = search.toLowerCase()
         return candidates.filter(c => c.name.toLowerCase().includes(q))
     }, [candidates, search])
+
+    const handleSelect = (item: ItemCandidate) => {
+        onSelect(item)
+        setOpen(false)
+    }
 
     return (
         <Popover open={open} onOpenChange={handleOpenChange}>
@@ -76,55 +75,63 @@ export default function ItemNameSelect({
                     <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[300px] p-0" align="start">
-                <Command shouldFilter={false}>
-                    <CommandInput
-                        placeholder={placeholder}
+            <PopoverContent className="w-[320px] p-0" align="start">
+                {/* 検索入力 */}
+                <div className="flex items-center border-b px-3">
+                    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                    <input
+                        ref={inputRef}
+                        type="text"
                         value={search}
-                        onValueChange={setSearch}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder={placeholder}
+                        className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-gray-400"
                     />
-                    <CommandList>
-                        {filtered.length === 0 && search ? (
-                            <CommandEmpty className="py-2 px-2 text-sm text-gray-500">
-                                候補なし。
-                                <Button
-                                    variant="ghost"
-                                    className="w-full justify-start text-blue-600 h-8 mt-1"
+                </div>
+                {/* 候補リスト */}
+                <div className="max-h-[300px] overflow-y-auto p-1">
+                    {filtered.length === 0 ? (
+                        <div className="py-3 px-2 text-sm text-gray-500">
+                            候補なし。
+                            {search && (
+                                <button
+                                    type="button"
+                                    className="w-full text-left text-blue-600 hover:bg-blue-50 rounded px-2 py-1.5 mt-1 text-sm"
                                     onClick={() => {
                                         onSelect(search)
                                         setOpen(false)
                                     }}
                                 >
                                     &quot;{search}&quot; を使用
-                                </Button>
-                            </CommandEmpty>
-                        ) : (
-                            <CommandGroup>
-                                {filtered.map((item, idx) => (
-                                    <CommandItem
-                                        key={(item.id || "idx-" + idx) + item.name}
-                                        value={item.name}
-                                        onSelect={() => {
-                                            onSelect(item)
-                                            setOpen(false)
-                                        }}
-                                    >
-                                        <Check
-                                            className={cn(
-                                                "mr-2 h-4 w-4",
-                                                value === item.name ? "opacity-100" : "opacity-0"
-                                            )}
-                                        />
-                                        {item.name}
-                                        <span className="ml-auto text-xs text-gray-400">
-                                            {item.unit_price ? `¥${item.unit_price}` : ''}
-                                        </span>
-                                    </CommandItem>
-                                ))}
-                            </CommandGroup>
-                        )}
-                    </CommandList>
-                </Command>
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        filtered.map((item, idx) => (
+                            <button
+                                key={(item.id || "idx-" + idx) + item.name}
+                                type="button"
+                                onClick={() => handleSelect(item)}
+                                className={cn(
+                                    "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none",
+                                    "hover:bg-gray-100 active:bg-gray-200 transition-colors",
+                                    value === item.name && "bg-gray-50"
+                                )}
+                            >
+                                <Check
+                                    className={cn(
+                                        "mr-2 h-4 w-4 shrink-0",
+                                        value === item.name ? "opacity-100 text-blue-600" : "opacity-0"
+                                    )}
+                                />
+                                <span className="truncate">{item.name}</span>
+                                <span className="ml-auto text-xs text-gray-400 shrink-0 pl-2">
+                                    {item.unit_price ? `¥${item.unit_price}` : ''}
+                                </span>
+                            </button>
+                        ))
+                    )}
+                </div>
             </PopoverContent>
         </Popover>
     )
