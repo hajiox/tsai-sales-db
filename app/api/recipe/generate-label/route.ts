@@ -59,13 +59,46 @@ export async function POST(request: Request) {
             .select("name, raw_materials, allergens")
             .in("name", ingredientNames);
 
-        // 名前を正規化する関数（スペース・全角半角・容量表記を除去）
+        // 名前を正規化する関数（スペース・全角半角・容量表記・商品種類名を除去してブランド名ベースに）
         const normalize = (s: string) =>
             s.replace(/\s+/g, "")
                 .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
                 .replace(/\d+[gGmlMLkKlL]+/g, "")
                 .replace(/徳用|お徳用|業務用|大容量/g, "")
                 .replace(/【P】/g, "");
+
+        // 濁点・半濁点を除去して正規化
+        const removeDakuten = (s: string) => {
+            const map: Record<string, string> = { 'ガ': 'カ', 'ギ': 'キ', 'グ': 'ク', 'ゲ': 'ケ', 'ゴ': 'コ', 'ザ': 'サ', 'ジ': 'シ', 'ズ': 'ス', 'ゼ': 'セ', 'ゾ': 'ソ', 'ダ': 'タ', 'ヂ': 'チ', 'ヅ': 'ツ', 'デ': 'テ', 'ド': 'ト', 'バ': 'ハ', 'ビ': 'ヒ', 'ブ': 'フ', 'ベ': 'ヘ', 'ボ': 'ホ', 'パ': 'ハ', 'ピ': 'ヒ', 'プ': 'フ', 'ペ': 'ヘ', 'ポ': 'ホ', 'が': 'か', 'ぎ': 'き', 'ぐ': 'く', 'げ': 'け', 'ご': 'こ', 'ざ': 'さ', 'じ': 'し', 'ず': 'す', 'ぜ': 'せ', 'ぞ': 'そ', 'だ': 'た', 'ぢ': 'ち', 'づ': 'つ', 'で': 'て', 'ど': 'と', 'ば': 'は', 'び': 'ひ', 'ぶ': 'ふ', 'べ': 'へ', 'ぼ': 'ほ', 'ぱ': 'は', 'ぴ': 'ひ', 'ぷ': 'ふ', 'ぺ': 'へ', 'ぽ': 'ほ' };
+            return s.split('').map(c => map[c] || c).join('');
+        };
+
+        // ブランド名抽出用（商品種類名を除去 + 濁点正規化）
+        const extractBrand = (s: string) =>
+            removeDakuten(normalize(s)
+                .replace(/カレー|フレーク|ルウ|ルー|ソース|ペースト|だし|スープ|ドレッシング|マヨネーズ|ケチャップ|タレ|たれ/g, ""));
+
+        // 共通部分文字列の長さを求める
+        const lcsLength = (a: string, b: string): number => {
+            const m = a.length, n = b.length;
+            if (m === 0 || n === 0) return 0;
+            let prev = new Array(n + 1).fill(0);
+            let curr = new Array(n + 1).fill(0);
+            let maxLen = 0;
+            for (let i = 1; i <= m; i++) {
+                for (let j = 1; j <= n; j++) {
+                    if (a[i - 1] === b[j - 1]) {
+                        curr[j] = prev[j - 1] + 1;
+                        if (curr[j] > maxLen) maxLen = curr[j];
+                    } else {
+                        curr[j] = 0;
+                    }
+                }
+                [prev, curr] = [curr, prev];
+                curr.fill(0);
+            }
+            return maxLen;
+        };
 
         const ingredientMap: Record<string, { raw_materials: string | null; allergens: string | null }> = {};
 
@@ -79,16 +112,28 @@ export async function POST(request: Request) {
             if (ingredientMap[itemName]?.raw_materials) continue; // 既にraw_materialsがある
 
             const normName = normalize(itemName);
+            const brandName = extractBrand(itemName);
             let bestMatch: { name: string; raw_materials: string | null; allergens: string | null } | null = null;
             let bestScore = 0;
 
             for (const master of (allIngredients || [])) {
                 const normMaster = normalize(master.name);
-                // 正規化後の一致
+                const brandMaster = extractBrand(master.name);
+
+                // 正規化後の完全一致
                 if (normName === normMaster) {
                     bestMatch = master;
                     bestScore = 100;
                     break;
+                }
+                // ブランド名一致（例: ジャワカレー → ジャワフレーク、どちらも brandName = "ジャワ"）
+                if (brandName.length >= 2 && brandName === brandMaster) {
+                    const score = 90;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMatch = master;
+                    }
+                    continue;
                 }
                 // 部分一致（短い方が長い方に含まれる）
                 if (normName.includes(normMaster) || normMaster.includes(normName)) {
@@ -97,6 +142,14 @@ export async function POST(request: Request) {
                         bestScore = score;
                         bestMatch = master;
                     }
+                    continue;
+                }
+                // 共通部分文字列による類似度
+                const lcs = lcsLength(normName, normMaster);
+                const similarity = lcs / Math.max(normName.length, normMaster.length) * 70;
+                if (lcs >= 3 && similarity > bestScore) {
+                    bestScore = similarity;
+                    bestMatch = master;
                 }
             }
 
