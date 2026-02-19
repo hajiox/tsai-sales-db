@@ -7,7 +7,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical } from "lucide-react";
+import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -22,6 +22,11 @@ interface Ingredient {
     carbohydrate: number | null;
     sodium: number | null;
     raw_materials?: string | null;
+    allergens?: string | null;
+    origin?: string | null;
+    manufacturer?: string | null;
+    product_description?: string | null;
+    nutrition_per?: string | null;
     tax_included?: boolean;
     isNew?: boolean;
     isModified?: boolean;
@@ -70,6 +75,8 @@ export default function DatabasePage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [hasChanges, setHasChanges] = useState(false);
     const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
+    const [editModal, setEditModal] = useState<Ingredient | null>(null);
+    const [editForm, setEditForm] = useState<Record<string, string>>({});
 
     const [taxRates, setTaxRates] = useState({
         ingredient: 8,
@@ -326,6 +333,37 @@ export default function DatabasePage() {
 
     // saveChanges logic is removed in favor of auto-save
     const saveChanges = async () => { };
+
+    // 食材編集モーダルを開く
+    const openEditModal = (ing: Ingredient) => {
+        setEditModal(ing);
+        setEditForm({
+            raw_materials: ing.raw_materials || '',
+            allergens: ing.allergens || '',
+            origin: ing.origin || '',
+            manufacturer: ing.manufacturer || '',
+            product_description: ing.product_description || '',
+            nutrition_per: ing.nutrition_per || '',
+        });
+    };
+
+    // 食材編集保存
+    const saveEditModal = async () => {
+        if (!editModal) return;
+        const updates: Record<string, string | null> = {};
+        for (const [key, val] of Object.entries(editForm)) {
+            updates[key] = val.trim() || null;
+        }
+        const { error } = await supabase.from('ingredients').update(updates).eq('id', editModal.id);
+        if (error) {
+            toast.error('保存に失敗しました');
+            console.error(error);
+        } else {
+            toast.success('保存しました');
+            setIngredients(prev => prev.map(i => i.id === editModal.id ? { ...i, ...updates } : i));
+            setEditModal(null);
+        }
+    };
 
     // フィルタリング
     const filteredIngredients = ingredients.filter(i =>
@@ -609,9 +647,14 @@ export default function DatabasePage() {
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'carbohydrate', formatNumber(ing.carbohydrate, 1), 'ingredient')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'sodium', formatNumber(ing.sodium, 2), 'ingredient')}</td>
                                         <td className="px-2 py-1">
-                                            <Button variant="ghost" size="sm" onClick={() => deleteIngredient(ing.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
-                                                <Trash2 className="w-3 h-3" />
-                                            </Button>
+                                            <div className="flex items-center gap-0.5">
+                                                <Button variant="ghost" size="sm" onClick={() => openEditModal(ing)} className="h-6 w-6 p-0 text-gray-400 hover:text-blue-500">
+                                                    <Pencil className="w-3 h-3" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => deleteIngredient(ing.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
+                                                    <Trash2 className="w-3 h-3" />
+                                                </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -740,6 +783,61 @@ export default function DatabasePage() {
                     </table>
                 )}
             </div>
+
+            {/* 食材編集モーダル */}
+            {editModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditModal(null)}>
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 rounded-t-xl">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">{editModal.name}</h3>
+                                <p className="text-xs text-gray-500">食材詳細編集</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setEditModal(null)} className="h-8 w-8 p-0">
+                                <X className="w-4 h-4" />
+                            </Button>
+                        </div>
+                        <div className="px-6 py-4 space-y-4">
+                            {[
+                                { key: 'raw_materials', label: '原材料', rows: 4 },
+                                { key: 'allergens', label: 'アレルゲン', rows: 2 },
+                                { key: 'origin', label: '原産地', rows: 1 },
+                                { key: 'manufacturer', label: '製造者', rows: 1 },
+                                { key: 'product_description', label: '商品説明', rows: 2 },
+                                { key: 'nutrition_per', label: '栄養成分基準量', rows: 1 },
+                            ].map(({ key, label, rows }) => (
+                                <div key={key}>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                                    {rows > 1 ? (
+                                        <textarea
+                                            value={editForm[key] || ''}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, [key]: e.target.value }))}
+                                            rows={rows}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                            placeholder={`${label}を入力...`}
+                                        />
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            value={editForm[key] || ''}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, [key]: e.target.value }))}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder={`${label}を入力...`}
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t bg-gray-50 rounded-b-xl">
+                            <Button variant="outline" onClick={() => setEditModal(null)}>キャンセル</Button>
+                            <Button onClick={saveEditModal} className="bg-blue-600 hover:bg-blue-700 text-white">
+                                <Save className="w-4 h-4 mr-2" />
+                                保存
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
