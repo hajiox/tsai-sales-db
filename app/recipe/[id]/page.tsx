@@ -800,12 +800,12 @@ export default function RecipeDetailPage() {
                     <span className="text-[11px] font-bold text-gray-700">原材料名</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    {labelText && (
+                    {!labelEditing && labelText && (
                       <button
-                        onClick={() => setLabelEditing(!labelEditing)}
+                        onClick={() => setLabelEditing(true)}
                         className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
                       >
-                        {labelEditing ? '✓ 確定' : '✎ 編集'}
+                        ✎ 編集
                       </button>
                     )}
                     <button
@@ -827,13 +827,9 @@ export default function RecipeDetailPage() {
                             setLabelText(data.label || '');
                             setLabelWarnings(data.warnings || []);
                             setLabelMissing(data.missing_info || []);
-                            setRecipe(prev => prev ? { ...prev, ingredient_label: data.label } : prev);
-                            // 自動保存
-                            await supabase
-                              .from('recipes')
-                              .update({ ingredient_label: data.label || null })
-                              .eq('id', recipe.id);
-                            toast.success('原材料表示を生成・保存しました');
+                            // 自動保存せず、編集モードにして確認させる
+                            setLabelEditing(true);
+                            toast.success('原材料表示を生成しました。内容を確認して保存してください。');
                           }
                         } catch (err: any) {
                           toast.error('生成に失敗しました: ' + err.message);
@@ -863,7 +859,17 @@ export default function RecipeDetailPage() {
                         className="w-full px-2 py-1.5 border border-gray-300 rounded text-[11px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono leading-relaxed"
                         placeholder="原材料を入力..."
                       />
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-2">
+                         <button
+                          onClick={() => {
+                            setLabelEditing(false);
+                            // キャンセル時は元の値に戻す
+                            setLabelText(recipe?.ingredient_label || "");
+                          }}
+                          className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200"
+                        >
+                          キャンセル
+                        </button>
                         <button
                           onClick={async () => {
                             if (!recipe) return;
@@ -894,28 +900,32 @@ export default function RecipeDetailPage() {
                       「AI生成」で原材料表示を自動生成
                     </div>
                   )}
-                  {/* 警告・不足データ（コンパクト表示） */}
-                  {labelWarnings.length > 0 && (
-                    <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-1.5">
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <AlertTriangle className="w-3 h-3 text-yellow-600" />
-                        <span className="text-[10px] font-bold text-yellow-800">注意</span>
-                      </div>
-                      <ul className="text-[10px] text-yellow-700 space-y-0.5">
-                        {labelWarnings.map((w, i) => <li key={i}>• {w}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                  {labelMissing.length > 0 && (
-                    <div className="mt-2 bg-red-50 border border-red-200 rounded p-1.5">
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <AlertTriangle className="w-3 h-3 text-red-600" />
-                        <span className="text-[10px] font-bold text-red-800">不足</span>
-                      </div>
-                      <ul className="text-[10px] text-red-700 space-y-0.5">
-                        {labelMissing.map((m, i) => <li key={i}>• {m}</li>)}
-                      </ul>
-                    </div>
+                  {/* 警告・不足データ（通常表示） */}
+                  {(labelEditing || labelText) && (
+                    <>
+                      {labelWarnings.length > 0 && (
+                        <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <AlertTriangle className="w-3 h-3 text-yellow-600" />
+                            <span className="text-[10px] font-bold text-yellow-800">注意</span>
+                          </div>
+                          <ul className="text-[10px] text-yellow-700 space-y-0.5">
+                            {labelWarnings.map((w, i) => <li key={i}>• {w}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {labelMissing.length > 0 && (
+                        <div className="mt-2 bg-red-50 border border-red-200 rounded p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <AlertTriangle className="w-3 h-3 text-red-600" />
+                            <span className="text-[10px] font-bold text-red-800">不足</span>
+                          </div>
+                          <ul className="text-[10px] text-red-700 space-y-0.5">
+                            {labelMissing.map((m, i) => <li key={i}>• {m}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
