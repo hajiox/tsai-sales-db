@@ -801,12 +801,37 @@ export default function RecipeDetailPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     {!labelEditing && labelText && (
-                      <button
-                        onClick={() => setLabelEditing(true)}
-                        className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
-                      >
-                        ✎ 編集
-                      </button>
+                      <>
+                        <button
+                          onClick={async () => {
+                            if (!confirm('原材料表示を削除してもよろしいですか？')) return;
+                            if (!recipe) return;
+                            const { error } = await supabase
+                              .from('recipes')
+                              .update({ ingredient_label: null })
+                              .eq('id', recipe.id);
+                            if (error) {
+                              toast.error('削除に失敗しました');
+                            } else {
+                              toast.success('削除しました');
+                              setRecipe(prev => prev ? { ...prev, ingredient_label: null } : prev);
+                              setLabelText("");
+                              setLabelWarnings([]);
+                              setLabelMissing([]);
+                            }
+                          }}
+                          className="text-[10px] text-red-600 hover:text-red-800 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 flex items-center gap-0.5"
+                          title="削除"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => setLabelEditing(true)}
+                          className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
+                        >
+                          ✎ 編集
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={async () => {
@@ -860,7 +885,7 @@ export default function RecipeDetailPage() {
                         placeholder="原材料を入力..."
                       />
                       <div className="flex justify-end gap-2">
-                         <button
+                        <button
                           onClick={() => {
                             setLabelEditing(false);
                             // キャンセル時は元の値に戻す
