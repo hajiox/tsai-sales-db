@@ -42,20 +42,69 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "レシピにアイテムがありません" }, { status: 400 });
         }
 
-        // 3. 食材マスターから raw_materials を取得
+        // 3. 食材マスターから raw_materials を取得（あいまいマッチング対応）
         const ingredientNames = recipeItems
             .filter(i => ["ingredient", "intermediate"].includes(i.item_type))
             .map(i => i.item_name);
 
-        const { data: ingredientMaster } = await supabase
+        // raw_materialsが登録されている全食材を取得
+        const { data: allIngredients } = await supabase
+            .from("ingredients")
+            .select("name, raw_materials, allergens")
+            .not("raw_materials", "is", null);
+
+        // 完全一致の食材も取得
+        const { data: exactIngredients } = await supabase
             .from("ingredients")
             .select("name, raw_materials, allergens")
             .in("name", ingredientNames);
 
+        // 名前を正規化する関数（スペース・全角半角・容量表記を除去）
+        const normalize = (s: string) =>
+            s.replace(/\s+/g, "")
+                .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+                .replace(/\d+[gGmlMLkKlL]+/g, "")
+                .replace(/徳用|お徳用|業務用|大容量/g, "")
+                .replace(/【P】/g, "");
+
         const ingredientMap: Record<string, { raw_materials: string | null; allergens: string | null }> = {};
-        (ingredientMaster || []).forEach(i => {
+
+        // まず完全一致を登録
+        (exactIngredients || []).forEach(i => {
             ingredientMap[i.name] = { raw_materials: i.raw_materials, allergens: i.allergens };
         });
+
+        // 完全一致がなかった食材に対してあいまいマッチング
+        for (const itemName of ingredientNames) {
+            if (ingredientMap[itemName]?.raw_materials) continue; // 既にraw_materialsがある
+
+            const normName = normalize(itemName);
+            let bestMatch: { name: string; raw_materials: string | null; allergens: string | null } | null = null;
+            let bestScore = 0;
+
+            for (const master of (allIngredients || [])) {
+                const normMaster = normalize(master.name);
+                // 正規化後の一致
+                if (normName === normMaster) {
+                    bestMatch = master;
+                    bestScore = 100;
+                    break;
+                }
+                // 部分一致（短い方が長い方に含まれる）
+                if (normName.includes(normMaster) || normMaster.includes(normName)) {
+                    const score = Math.min(normName.length, normMaster.length) / Math.max(normName.length, normMaster.length) * 80;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMatch = master;
+                    }
+                }
+            }
+
+            if (bestMatch && bestScore >= 40) {
+                ingredientMap[itemName] = { raw_materials: bestMatch.raw_materials, allergens: bestMatch.allergens };
+                console.log(`[fuzzy match] "${itemName}" → "${bestMatch.name}" (score: ${bestScore.toFixed(0)})`);
+            }
+        }
 
         // 4. 中間部品（【P】）のレシピからサブ食材を取得
         const intermediateItems = recipeItems.filter(i => i.item_type === "intermediate");
