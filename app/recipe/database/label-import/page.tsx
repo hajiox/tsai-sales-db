@@ -229,6 +229,11 @@ function LabelImportContent() {
         const data = dataToCompare || editedData;
         const newSelectedFields: Record<string, boolean> = {};
         for (const key of Object.keys(data)) {
+            // 更新モードではnameを自動選択しない（既存食材の名前を上書きしてしまうため）
+            if (key === "name") {
+                newSelectedFields[key] = false;
+                continue;
+            }
             const currentValue = candidate.current_data ? (candidate.current_data as any)[key] : null;
             const extractedValue = data[key];
             const isEmpty = currentValue === null || currentValue === undefined || currentValue === "";
