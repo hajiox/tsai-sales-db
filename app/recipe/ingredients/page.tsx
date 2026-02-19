@@ -14,7 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box } from "lucide-react";
+import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, FlaskConical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -34,6 +34,7 @@ interface Ingredient {
     carbohydrate: number | null;
     sodium: number | null;
     supplier?: string | null;
+    raw_materials?: string | null; // 原材料情報
     item_type: "food" | "material"; // UIでのタブ分けに使用
     isNew?: boolean;
     isModified?: boolean;
@@ -430,7 +431,17 @@ export default function IngredientsPage() {
                                     className={`border-b hover:bg-gray-50 ${ing.isNew ? 'bg-green-50' : ''} ${ing.isModified && !ing.isNew ? 'bg-yellow-50' : ''}`}
                                 >
                                     <td className="px-2 py-1 text-gray-500">{index + 1}</td>
-                                    <td className="px-0 py-1">{renderCell(ing, 'name', ing.name, 'min-w-[180px]')}</td>
+                                    <td className="px-0 py-1">
+                                        <div className="flex items-center gap-1.5">
+                                            {renderCell(ing, 'name', ing.name, 'min-w-[180px]')}
+                                            {ing.raw_materials && (
+                                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700 whitespace-nowrap" title={`原材料: ${ing.raw_materials}`}>
+                                                    <FlaskConical className="w-3 h-3" />
+                                                    原材料済
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="px-2 py-1">
                                         <Select
                                             value={ing.category_id || ''}

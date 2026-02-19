@@ -7,7 +7,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText } from "lucide-react";
+import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ interface Ingredient {
     fat: number | null;
     carbohydrate: number | null;
     sodium: number | null;
+    raw_materials?: string | null;
     tax_included?: boolean;
     isNew?: boolean;
     isModified?: boolean;
@@ -581,7 +582,17 @@ export default function DatabasePage() {
                                 filteredIngredients.map((ing, index) => (
                                     <tr key={ing.id} className={`border-b hover:bg-gray-50 ${ing.isNew ? 'bg-green-50' : ''} ${ing.isModified && !ing.isNew ? 'bg-yellow-50' : ''}`}>
                                         <td className="px-2 py-1 text-gray-500">{index + 1}</td>
-                                        <td className="px-0 py-1">{renderEditableCell(ing, 'name', ing.name, 'ingredient', 'min-w-[180px]')}</td>
+                                        <td className="px-0 py-1">
+                                            <div className="flex items-center gap-1.5">
+                                                {renderEditableCell(ing, 'name', ing.name, 'ingredient', 'min-w-[180px]')}
+                                                {ing.raw_materials && (
+                                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700 whitespace-nowrap" title={`原材料: ${ing.raw_materials}`}>
+                                                        <FlaskConical className="w-3 h-3" />
+                                                        原材料済
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="px-2 py-1 text-center">
                                             <button
                                                 onClick={() => handleTaxToggle(ing.id, !!ing.tax_included, 'ingredient')}
