@@ -644,12 +644,12 @@ export default function RecipeDetailPage() {
     );
 
   const totals = getTotals();
-  // Calculate profit based on tax-excluded price (Standard accounting practice)
+  // Calculate profit: selling price (tax included) - cost (tax included)
   const sellingPriceExTax = recipe.selling_price
     ? Math.round(recipe.selling_price / 1.08)
     : 0;
-  const profit = sellingPriceExTax - totals.cost;
-  const profitRate = sellingPriceExTax ? (profit / sellingPriceExTax) * 100 : 0;
+  const profit = (recipe.selling_price || 0) - totals.cost;
+  const profitRate = recipe.selling_price ? (profit / recipe.selling_price) * 100 : 0;
 
   // Group items for display
   const groupedItems = [
@@ -1020,8 +1020,8 @@ export default function RecipeDetailPage() {
                     {formatCurrency(totals.cost)}
                     <span className="text-xs font-normal text-gray-500">
                       (
-                      {sellingPriceExTax && totals.cost
-                        ? ((totals.cost / sellingPriceExTax) * 100).toFixed(1)
+                      {recipe.selling_price && totals.cost
+                        ? ((totals.cost / recipe.selling_price) * 100).toFixed(1)
                         : "-"}
                       %)
                     </span>
@@ -1037,7 +1037,7 @@ export default function RecipeDetailPage() {
                   >
                     {formatCurrency(profit)}
                     <span className="text-xs font-normal text-gray-500">
-                      ({sellingPriceExTax ? profitRate.toFixed(1) : "-"}%)
+                      ({recipe.selling_price ? profitRate.toFixed(1) : "-"}%)
                     </span>
                   </div>
                 </div>
