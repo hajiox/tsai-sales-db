@@ -212,6 +212,9 @@ export async function POST(request: Request) {
                 "みりん", "味噌", "醤油", "ウスター", "中濃", "とんかつ",
                 "オイスター", "豆板醤", "甜麺醤", "コチュジャン",
                 "ブイヨン", "コンソメ", "鶏ガラ", "デミグラス",
+                "麺", "パスタ", "パン", "ハム", "ベーコン", "ソーセージ", "チーズ", "バター",
+                "餃子", "焼売", "春巻", "ワンタン", "練り物", "ちくわ", "かまぼこ",
+                "即席", "レトルト", "冷凍", "ミックス", "粉", "の素",
             ].some(kw => item.item_name.includes(kw));
 
             if (isLikelyCompound && (!master || !master.raw_materials) && item.item_type !== "intermediate") {
@@ -227,7 +230,10 @@ export async function POST(request: Request) {
                 let info = `- ${i.item_name} (使用量: ${i.usage_amount}g, 原価: ¥${i.cost})`;
                 if (master?.raw_materials) {
                     info += `\n  → 原材料: ${master.raw_materials}`;
+                } else if (missingData.includes(i.item_name)) {
+                    info += `\n  → 【注意】原材料データ未登録`;
                 }
+
                 if (i.item_type === "intermediate") {
                     const cleanName = i.item_name.replace("【P】", "");
                     const subItems = intermediateData[cleanName];
@@ -273,8 +279,10 @@ ${itemsInfo}
 【重要な注意事項】
 - 実在する食材データに基づいて正確に生成してください
 - 複合原材料のraw_materialsデータがある場合は、そのデータを優先的に使用してください
-- raw_materialsデータがない複合原材料は、一般的な原材料構成をAIの知識で推定してください
-- 添加物の判定もAIの知識で行ってください
+- raw_materialsデータがない複合原材料は、**絶対にAIの知識で推測して補完しないでください**。
+- データがない場合は、代わりに「【要確認: 〇〇】」とそのまま出力してください。
+- 正確なデータに基づかない生成は食品事故につながるため禁止します。
+- 添加物の判定は、提供された原材料データに基づいて行ってください。
 - 「原材料名」の欄に記載するテキストのみを出力してください（「原材料名:」というラベルは不要）
 
 【出力形式】
