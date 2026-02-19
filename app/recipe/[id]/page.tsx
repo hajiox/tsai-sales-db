@@ -158,6 +158,13 @@ export default function RecipeDetailPage() {
     }
   }, [params.id]);
 
+  // 原材料表示テキストをレシピデータから初期化
+  useEffect(() => {
+    if (recipe?.ingredient_label) {
+      setLabelText(recipe.ingredient_label);
+    }
+  }, [recipe?.ingredient_label]);
+
   const fetchMasterData = async () => {
     // Ingredients
     const { data: ingData } = await supabase
@@ -783,23 +790,135 @@ export default function RecipeDetailPage() {
                 <span>UPD: {new Date().toLocaleDateString()}</span>
               </div>
             </div>
-            {/* 原材料表示ボタン */}
-            <div className="ml-4 flex-shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setLabelText(recipe.ingredient_label || "");
-                  setLabelEditing(false);
-                  setLabelWarnings([]);
-                  setLabelMissing([]);
-                  setLabelModalOpen(true);
-                }}
-                className={`gap-2 ${recipe.ingredient_label ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50' : 'border-amber-300 text-amber-700 hover:bg-amber-50'}`}
-              >
-                <FlaskConical className="w-4 h-4" />
-                {recipe.ingredient_label ? '原材料表示' : '原材料表示を生成'}
-              </Button>
+            {/* 原材料表示（インライン） */}
+            <div className="ml-4 flex-shrink-0 w-[420px]">
+              <div className="border border-gray-200 rounded-lg bg-gray-50/50">
+                {/* ヘッダー */}
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                  <div className="flex items-center gap-1.5">
+                    <FlaskConical className="w-3 h-3 text-emerald-600" />
+                    <span className="text-[11px] font-bold text-gray-700">原材料名</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {labelText && (
+                      <button
+                        onClick={() => setLabelEditing(!labelEditing)}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
+                      >
+                        {labelEditing ? '✓ 確定' : '✎ 編集'}
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        if (!recipe) return;
+                        setLabelGenerating(true);
+                        setLabelWarnings([]);
+                        setLabelMissing([]);
+                        try {
+                          const res = await fetch('/api/recipe/generate-label', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ recipeId: recipe.id }),
+                          });
+                          const data = await res.json();
+                          if (data.error) {
+                            toast.error(data.error);
+                          } else {
+                            setLabelText(data.label || '');
+                            setLabelWarnings(data.warnings || []);
+                            setLabelMissing(data.missing_info || []);
+                            setRecipe(prev => prev ? { ...prev, ingredient_label: data.label } : prev);
+                            // 自動保存
+                            await supabase
+                              .from('recipes')
+                              .update({ ingredient_label: data.label || null })
+                              .eq('id', recipe.id);
+                            toast.success('原材料表示を生成・保存しました');
+                          }
+                        } catch (err: any) {
+                          toast.error('生成に失敗しました: ' + err.message);
+                        } finally {
+                          setLabelGenerating(false);
+                        }
+                      }}
+                      disabled={labelGenerating}
+                      className="text-[10px] text-emerald-600 hover:text-emerald-800 font-medium px-1.5 py-0.5 rounded hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-0.5"
+                    >
+                      {labelGenerating ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" />生成中</>
+                      ) : (
+                        <><FlaskConical className="w-3 h-3" />{labelText ? '再生成' : 'AI生成'}</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                {/* コンテンツ */}
+                <div className="px-3 py-2">
+                  {labelEditing ? (
+                    <div className="space-y-1.5">
+                      <textarea
+                        value={labelText}
+                        onChange={(e) => setLabelText(e.target.value)}
+                        rows={5}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-[11px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono leading-relaxed"
+                        placeholder="原材料を入力..."
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          onClick={async () => {
+                            if (!recipe) return;
+                            const { error } = await supabase
+                              .from('recipes')
+                              .update({ ingredient_label: labelText || null })
+                              .eq('id', recipe.id);
+                            if (error) {
+                              toast.error('保存に失敗しました');
+                            } else {
+                              toast.success('保存しました');
+                              setRecipe(prev => prev ? { ...prev, ingredient_label: labelText || null } : prev);
+                              setLabelEditing(false);
+                            }
+                          }}
+                          className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center gap-1"
+                        >
+                          <Save className="w-3 h-3" />保存
+                        </button>
+                      </div>
+                    </div>
+                  ) : labelText ? (
+                    <div className="text-[11px] leading-relaxed text-gray-700 whitespace-pre-wrap">
+                      {labelText}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-gray-400 text-center py-3">
+                      「AI生成」で原材料表示を自動生成
+                    </div>
+                  )}
+                  {/* 警告・不足データ（コンパクト表示） */}
+                  {labelWarnings.length > 0 && (
+                    <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-1.5">
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <AlertTriangle className="w-3 h-3 text-yellow-600" />
+                        <span className="text-[10px] font-bold text-yellow-800">注意</span>
+                      </div>
+                      <ul className="text-[10px] text-yellow-700 space-y-0.5">
+                        {labelWarnings.map((w, i) => <li key={i}>• {w}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {labelMissing.length > 0 && (
+                    <div className="mt-2 bg-red-50 border border-red-200 rounded p-1.5">
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <AlertTriangle className="w-3 h-3 text-red-600" />
+                        <span className="text-[10px] font-bold text-red-800">不足</span>
+                      </div>
+                      <ul className="text-[10px] text-red-700 space-y-0.5">
+                        {labelMissing.map((m, i) => <li key={i}>• {m}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1906,152 +2025,7 @@ Now Expanded or Scrollable */}
         `}
       </style>
 
-      {/* 原材料表示モーダル */}
-      {labelModalOpen && recipe && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print:hidden" onClick={() => setLabelModalOpen(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 rounded-t-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <FlaskConical className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">原材料表示</h3>
-                  <p className="text-xs text-gray-500">{recipe.name}</p>
-                </div>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => setLabelModalOpen(false)} className="h-8 w-8 p-0">
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
 
-            {/* Body */}
-            <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
-              {/* 原材料テキスト */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-bold text-gray-700">原材料名</label>
-                  <button
-                    onClick={() => setLabelEditing(!labelEditing)}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    {labelEditing ? '✓ プレビュー' : '✎ 編集'}
-                  </button>
-                </div>
-                {labelEditing ? (
-                  <textarea
-                    value={labelText}
-                    onChange={(e) => setLabelText(e.target.value)}
-                    rows={8}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono"
-                    placeholder="AIで生成するか、手動で入力してください..."
-                  />
-                ) : labelText ? (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm leading-relaxed whitespace-pre-wrap">
-                    {labelText}
-                  </div>
-                ) : (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-700 text-center">
-                    原材料表示がまだ生成されていません。下の「AI生成」ボタンで生成してください。
-                  </div>
-                )}
-              </div>
-
-              {/* 警告メッセージ */}
-              {labelWarnings.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <AlertTriangle className="w-4 h-4 text-yellow-600" />
-                    <span className="text-sm font-bold text-yellow-800">注意事項</span>
-                  </div>
-                  <ul className="text-xs text-yellow-700 space-y-1">
-                    {labelWarnings.map((w, i) => <li key={i}>• {w}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {/* 不足データ */}
-              {labelMissing.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <AlertTriangle className="w-4 h-4 text-red-600" />
-                    <span className="text-sm font-bold text-red-800">不足データ</span>
-                  </div>
-                  <ul className="text-xs text-red-700 space-y-1">
-                    {labelMissing.map((m, i) => <li key={i}>• {m}</li>)}
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex justify-between items-center gap-2 px-6 py-4 border-t bg-gray-50 rounded-b-xl">
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (!recipe) return;
-                  setLabelGenerating(true);
-                  setLabelWarnings([]);
-                  setLabelMissing([]);
-                  try {
-                    const res = await fetch('/api/recipe/generate-label', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ recipeId: recipe.id }),
-                    });
-                    const data = await res.json();
-                    if (data.error) {
-                      toast.error(data.error);
-                    } else {
-                      setLabelText(data.label || '');
-                      setLabelWarnings(data.warnings || []);
-                      setLabelMissing(data.missing_info || []);
-                      setRecipe(prev => prev ? { ...prev, ingredient_label: data.label } : prev);
-                      toast.success('原材料表示を生成しました');
-                    }
-                  } catch (err: any) {
-                    toast.error('生成に失敗しました: ' + err.message);
-                  } finally {
-                    setLabelGenerating(false);
-                  }
-                }}
-                disabled={labelGenerating}
-                className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
-              >
-                {labelGenerating ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" />AI生成中...</>
-                ) : (
-                  <><FlaskConical className="w-4 h-4" />{labelText ? '再生成' : 'AI生成'}</>
-                )}
-              </Button>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setLabelModalOpen(false)}>閉じる</Button>
-                <Button
-                  onClick={async () => {
-                    if (!recipe) return;
-                    const { error } = await supabase
-                      .from('recipes')
-                      .update({ ingredient_label: labelText || null })
-                      .eq('id', recipe.id);
-                    if (error) {
-                      toast.error('保存に失敗しました');
-                    } else {
-                      toast.success('原材料表示を保存しました');
-                      setRecipe(prev => prev ? { ...prev, ingredient_label: labelText || null } : prev);
-                      setLabelModalOpen(false);
-                    }
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  保存
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
