@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, Printer, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -80,6 +80,7 @@ interface Recipe {
   total_weight: number | null;
   source_file: string | null;
   amazon_fee_enabled: boolean;
+  ingredient_label?: string | null;
 }
 
 interface RecipeItem {
@@ -141,6 +142,14 @@ export default function RecipeDetailPage() {
   // Batch calculation states
   const [batchSize1, setBatchSize1] = useState(400);
   const [batchSize2, setBatchSize2] = useState(800);
+
+  // 原材料表示モーダル
+  const [labelModalOpen, setLabelModalOpen] = useState(false);
+  const [labelText, setLabelText] = useState("");
+  const [labelGenerating, setLabelGenerating] = useState(false);
+  const [labelWarnings, setLabelWarnings] = useState<string[]>([]);
+  const [labelMissing, setLabelMissing] = useState<string[]>([]);
+  const [labelEditing, setLabelEditing] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -732,45 +741,65 @@ export default function RecipeDetailPage() {
         {/* Header Section */}
         {/* Header Section (Recipe Name & Pricing Card) */}
         <div className="border-b-2 border-gray-800 pb-4 mb-6">
-          <div>
-            <div className="flex gap-2 mb-2">
-              <Select
-                value={recipe.category}
-                onValueChange={(val) => handleRecipeChange("category", val)}
-              >
-                <SelectTrigger
-                  className={`h-6 px-2 py-0 border rounded uppercase tracking-wider text-[10px] font-bold w-auto inline-flex items-center gap-1 ${CATEGORIES.find((c) => c.value === recipe.category)
-                    ?.color || "border-gray-200 text-gray-500"
-                    }`}
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <div className="flex gap-2 mb-2">
+                <Select
+                  value={recipe.category}
+                  onValueChange={(val) => handleRecipeChange("category", val)}
                 >
-                  <SelectValue>{recipe.category}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      <span className={`px-2 py-0.5 rounded ${cat.color}`}>
-                        {cat.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {recipe.is_intermediate && (
-                <span className="px-2 py-0.5 text-[10px] font-bold border border-purple-300 text-purple-700 rounded uppercase tracking-wider">
-                  Middle
-                </span>
-              )}
+                  <SelectTrigger
+                    className={`h-6 px-2 py-0 border rounded uppercase tracking-wider text-[10px] font-bold w-auto inline-flex items-center gap-1 ${CATEGORIES.find((c) => c.value === recipe.category)
+                      ?.color || "border-gray-200 text-gray-500"
+                      }`}
+                  >
+                    <SelectValue>{recipe.category}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        <span className={`px-2 py-0.5 rounded ${cat.color}`}>
+                          {cat.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {recipe.is_intermediate && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold border border-purple-300 text-purple-700 rounded uppercase tracking-wider">
+                    Middle
+                  </span>
+                )}
+              </div>
+              <InlineEdit
+                value={recipe.name}
+                onSave={(val) => handleRecipeChange("name", val)}
+                className="text-3xl font-extrabold text-gray-900 leading-tight w-full hover:bg-gray-50 rounded px-1 -ml-1 transition-colors"
+                inputClassName="text-3xl font-extrabold text-gray-900 leading-tight"
+              />
+              <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono">
+                <span>ID: {recipe.id.split("-")[0]}</span>
+                <span>DEV: {recipe.development_date || "----/--/--"}</span>
+                <span>UPD: {new Date().toLocaleDateString()}</span>
+              </div>
             </div>
-            <InlineEdit
-              value={recipe.name}
-              onSave={(val) => handleRecipeChange("name", val)}
-              className="text-3xl font-extrabold text-gray-900 leading-tight w-full hover:bg-gray-50 rounded px-1 -ml-1 transition-colors"
-              inputClassName="text-3xl font-extrabold text-gray-900 leading-tight"
-            />
-            <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono">
-              <span>ID: {recipe.id.split("-")[0]}</span>
-              <span>DEV: {recipe.development_date || "----/--/--"}</span>
-              <span>UPD: {new Date().toLocaleDateString()}</span>
+            {/* 原材料表示ボタン */}
+            <div className="ml-4 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLabelText(recipe.ingredient_label || "");
+                  setLabelEditing(false);
+                  setLabelWarnings([]);
+                  setLabelMissing([]);
+                  setLabelModalOpen(true);
+                }}
+                className={`gap-2 ${recipe.ingredient_label ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50' : 'border-amber-300 text-amber-700 hover:bg-amber-50'}`}
+              >
+                <FlaskConical className="w-4 h-4" />
+                {recipe.ingredient_label ? '原材料表示' : '原材料表示を生成'}
+              </Button>
             </div>
           </div>
         </div>
@@ -1876,6 +1905,153 @@ Now Expanded or Scrollable */}
           }
         `}
       </style>
+
+      {/* 原材料表示モーダル */}
+      {labelModalOpen && recipe && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print:hidden" onClick={() => setLabelModalOpen(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 rounded-t-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <FlaskConical className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">原材料表示</h3>
+                  <p className="text-xs text-gray-500">{recipe.name}</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setLabelModalOpen(false)} className="h-8 w-8 p-0">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+              {/* 原材料テキスト */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-gray-700">原材料名</label>
+                  <button
+                    onClick={() => setLabelEditing(!labelEditing)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    {labelEditing ? '✓ プレビュー' : '✎ 編集'}
+                  </button>
+                </div>
+                {labelEditing ? (
+                  <textarea
+                    value={labelText}
+                    onChange={(e) => setLabelText(e.target.value)}
+                    rows={8}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono"
+                    placeholder="AIで生成するか、手動で入力してください..."
+                  />
+                ) : labelText ? (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                    {labelText}
+                  </div>
+                ) : (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-700 text-center">
+                    原材料表示がまだ生成されていません。下の「AI生成」ボタンで生成してください。
+                  </div>
+                )}
+              </div>
+
+              {/* 警告メッセージ */}
+              {labelWarnings.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                    <span className="text-sm font-bold text-yellow-800">注意事項</span>
+                  </div>
+                  <ul className="text-xs text-yellow-700 space-y-1">
+                    {labelWarnings.map((w, i) => <li key={i}>• {w}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {/* 不足データ */}
+              {labelMissing.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                    <span className="text-sm font-bold text-red-800">不足データ</span>
+                  </div>
+                  <ul className="text-xs text-red-700 space-y-1">
+                    {labelMissing.map((m, i) => <li key={i}>• {m}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-between items-center gap-2 px-6 py-4 border-t bg-gray-50 rounded-b-xl">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!recipe) return;
+                  setLabelGenerating(true);
+                  setLabelWarnings([]);
+                  setLabelMissing([]);
+                  try {
+                    const res = await fetch('/api/recipe/generate-label', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ recipeId: recipe.id }),
+                    });
+                    const data = await res.json();
+                    if (data.error) {
+                      toast.error(data.error);
+                    } else {
+                      setLabelText(data.label || '');
+                      setLabelWarnings(data.warnings || []);
+                      setLabelMissing(data.missing_info || []);
+                      setRecipe(prev => prev ? { ...prev, ingredient_label: data.label } : prev);
+                      toast.success('原材料表示を生成しました');
+                    }
+                  } catch (err: any) {
+                    toast.error('生成に失敗しました: ' + err.message);
+                  } finally {
+                    setLabelGenerating(false);
+                  }
+                }}
+                disabled={labelGenerating}
+                className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+              >
+                {labelGenerating ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" />AI生成中...</>
+                ) : (
+                  <><FlaskConical className="w-4 h-4" />{labelText ? '再生成' : 'AI生成'}</>
+                )}
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setLabelModalOpen(false)}>閉じる</Button>
+                <Button
+                  onClick={async () => {
+                    if (!recipe) return;
+                    const { error } = await supabase
+                      .from('recipes')
+                      .update({ ingredient_label: labelText || null })
+                      .eq('id', recipe.id);
+                    if (error) {
+                      toast.error('保存に失敗しました');
+                    } else {
+                      toast.success('原材料表示を保存しました');
+                      setRecipe(prev => prev ? { ...prev, ingredient_label: labelText || null } : prev);
+                      setLabelModalOpen(false);
+                    }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  保存
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
