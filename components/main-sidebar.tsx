@@ -56,10 +56,12 @@ export default function MainSidebar() {
     router.push(map[module]);
   };
 
-  const baseBtn =
-    "w-full justify-start text-white hover:bg-slate-700 transition";
-  const activeVariant = (m: Module) =>
-    activeModule === m ? "secondary" : "ghost";
+  const baseBtn = (m: Module) =>
+    `w-full justify-start transition ${activeModule === m
+      ? "bg-slate-600 text-white hover:bg-slate-500 font-semibold"
+      : "text-slate-200 hover:bg-slate-700 hover:text-white"
+    }`;
+  const activeVariant = (_m: Module) => "ghost" as const;
 
   return (
     <div className="w-64 bg-slate-800 text-white flex flex-col">
@@ -70,7 +72,7 @@ export default function MainSidebar() {
       <nav className="flex-1 p-4 space-y-2">
         <Button
           variant={activeVariant("sales")}
-          className={baseBtn}
+          className={baseBtn("sales")}
           onClick={() => goto("sales")}
         >
           売上報告システム
@@ -78,7 +80,7 @@ export default function MainSidebar() {
 
         <Button
           variant={activeVariant("web")}
-          className={baseBtn}
+          className={baseBtn("web")}
           onClick={() => goto("web")}
         >
           WEB販売管理システム
@@ -86,7 +88,7 @@ export default function MainSidebar() {
 
         <Button
           variant={activeVariant("wholesale")}
-          className={baseBtn}
+          className={baseBtn("wholesale")}
           onClick={() => goto("wholesale")}
         >
           卸販売管理システム
@@ -94,7 +96,7 @@ export default function MainSidebar() {
 
         <Button
           variant={activeVariant("brand-store")}
-          className={baseBtn}
+          className={baseBtn("brand-store")}
           onClick={() => goto("brand-store")}
         >
           ブランド館店舗分析
@@ -102,7 +104,7 @@ export default function MainSidebar() {
 
         <Button
           variant={activeVariant("food-store")}
-          className={baseBtn}
+          className={baseBtn("food-store")}
           onClick={() => goto("food-store")}
         >
           食のブランド館分析
@@ -110,7 +112,7 @@ export default function MainSidebar() {
 
         <Button
           variant={activeVariant("finance")}
-          className={baseBtn}
+          className={baseBtn("finance")}
           onClick={() => goto("finance")}
         >
           財務分析システム
@@ -118,7 +120,7 @@ export default function MainSidebar() {
 
         <Button
           variant={activeVariant("recipe")}
-          className={baseBtn}
+          className={baseBtn("recipe")}
           onClick={() => goto("recipe")}
         >
           レシピシステム
@@ -126,7 +128,7 @@ export default function MainSidebar() {
 
         <Button
           variant={activeVariant("kpi")}
-          className={baseBtn}
+          className={baseBtn("kpi")}
           onClick={() => goto("kpi")}
         >
           売上KPIダッシュボード
@@ -135,7 +137,7 @@ export default function MainSidebar() {
         <div className="border-t border-slate-700 my-2 pt-2">
           <Button
             variant={activeVariant("links")}
-            className={baseBtn}
+            className={baseBtn("links")}
             onClick={() => goto("links")}
           >
             自社リンク集
@@ -143,7 +145,7 @@ export default function MainSidebar() {
 
           <Button
             variant={activeVariant("ai-tools")}
-            className={baseBtn}
+            className={baseBtn("ai-tools")}
             onClick={() => goto("ai-tools")}
           >
             使用可能AI

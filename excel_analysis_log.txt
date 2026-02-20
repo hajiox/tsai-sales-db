@@ -1,0 +1,44 @@
+﻿node : file:///C:/%E4%BD%9C%E
+6%A5%AD%E7%94%A8/tsai-sales-d
+b/analyze_excel.mjs:113
+発生場所 行:1 文字:59
++ ... g = [System.Text.Encodi
+ng]::UTF8; node analyze_excel
+.mjs 2>&1 | Out-F ...
++                            
+           ~~~~~~~~~~~~~~~~~~
+~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (file://  
+  /C:/%E4%...e_excel.mjs:1   
+ 13:String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+                const labelCe
+ll = ws[XLSX.utils.encode_cel
+l({ r, c - 1 })];
+                             
+                             
+         ^
+
+SyntaxError: Unexpected token
+ '-'
+    at compileSourceTextModul
+e (node:internal/modules/esm/
+utils:344:16)
+    at ModuleLoader.moduleStr
+ategy (node:internal/modules/
+esm/translators:105:18)
+    at #translate (node:inter
+nal/modules/esm/loader:534:12
+)
+    at ModuleLoader.loadAndTr
+anslate (node:internal/module
+s/esm/loader:581:27)
+    at async ModuleJob._link 
+(node:internal/modules/esm/mo
+dule_job:116:19)
+
+Node.js v22.15.1

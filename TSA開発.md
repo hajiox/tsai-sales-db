@@ -43,3 +43,62 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 - 原価内訳表示（材料資材経費 / Amazon手数料）を追加
 - 諸経費に含まれていた旧「Amazon手数料」アイテムを計算から除外するロジック追加
 - 保存時にamazon_fee_enabledフラグをDBに保存
+
+
+### 2026-02-19 17:14:00 原材料ラベルAI生成機能の実装
+- 商品詳細ページに「原材料名」インライン表示エリアを追加（幅420px）
+- Gemini AIによる原材料表示テキストの自動生成（重量順、複合原材料、添加物、アレルゲン）
+- 生成結果の編集・保存・削除機能（ゴミ箱アイコン）
+- レシピ内食材名とDB正式名の「表記ゆれ」に対応するため、正規化とファジーマッチングを導入
+- **更新時の誤操作防止:** ラベルインポート機能において、既存データの名前（Name）を上書きしないようデフォルト選択解除
+
+
+### 2026-02-19 17:55:00 安全性強化：AI推測補完の禁止
+- レシピ内に原材料データ未登録の複合原材料（例: 「二郎麺」「～ソース」）が含まれる場合、AIが勝手に成分を推測して出力する事故を防ぐため、プロンプトを厳格化
+- **「推測禁止」** と明記し、代わりに `【要確認: 〇〇】` というプレースホルダーを出力
+- 麺、パン、ハム、ソース等のキーワードに基づき、データ不足を検知して警告を表示
+- 食品表示事故（正しいアレルゲンが表示されない等）の防止を最優先
+
+
+### 2026-02-20 08:21:00 開発ドキュメント更新・完了
+- 全体開発.md および TSA開発.md を最新の状況に合わせて更新
+- 機能追加および修正点の記録完了
+
+
+### 2026-02-20 10:00:00 Excel vs DB 全数データ検証・修正
+- 全5Excelファイル（282シート）と DB全366レシピ（4,709アイテム）を完全照合
+- Supabase API 1000件制限をページネーションで回避し、全データを正確に取得
+- **修正済みバグ（計5件）:**
+  1. **南会津産トマトと赤ワインのキーマカレー（通常版）**: 全16材料のusage_amountが1kg業務用版の値（5.7倍）になっていた → Excel正値に修正
+  2. **南会津産トマトと赤ワインのキーマカレー（1kg版）**: 全16材料のusage_amountが初期値1のままだった → Excel正値に修正
+  3. **桃バター 香料（桃）**: usage_amountが10倍ズレ（1.1→0.11） → 修正
+  4. **つけ麺スープ / つけ麺スープ（極にぼ）**: 3材料（粉粉豚骨、ヤマヒデ本ぶし粉、煮干しパウダー）のデータが2レシピ間で入れ替わっていた → 修正
+  5. **喜多方背脂2食**: 6食版の値が入っていた → 修正（前回対応済み）
+- **配合差異の修正（15件）:** なみえ豚カレー、辛すぎInspire零、ももの葉茶4個セット、えちご家3個、ウニふりかけ、豚角煮、蕎麦ふりかけ等のusage_amountをExcel値に統一
+- total_weightも連動して再計算・更新
+
+
+### 2026-02-20 10:15:00 サイドバーのアクティブ状態視認性修正
+- **問題:** 選択中のシステム名が白背景＋白文字で読めなかった（shadcn/ui `variant="secondary"` + `text-white` クラスの競合）
+- **修正:** `variant="secondary"` を廃止し、アクティブ時は `bg-slate-600 text-white font-semibold`、非アクティブ時は `text-slate-200` で明確に区別
+- **ファイル:** `components/main-sidebar.tsx`
+
+
+### 2026-02-20 17:00:00 WEB販売ダッシュボード ホバーツールチップ修正
+- **問題1（サマリーカード）:** 総合計・ECサイト別・シリーズ別カードのホバーツールチップにトレンドデータが表示されなかった
+  - **原因:** `get_total_trend_data`, `get_site_trend_data`, `get_series_trend_data` の各DB関数が `generate_series` と `LEFT JOIN` + `WHERE` で実質 `INNER JOIN` になっていた。また `tiktok_count` カラムが9月以前のデータで `NULL` のまま → `SUM` が全体 `NULL` に
+  - **修正:** 全3関数を `months` CTE + 純粋な `LEFT JOIN` に再構築、`COALESCE(ws.tiktok_count, 0)` 追加。古い3143行の `tiktok_count = NULL` を `0` に `UPDATE`
+- **問題2（データテーブル・ECサイト別セル）:** ECサイトセルのホバーでRPCエラー
+  - **原因1:** `getCurrentMonth()` が `"YYYY-MM-01"` を返すが、DB関数 `get_product_site_trend_data(text)` が内部で `|| '-01'` → `"YYYY-MM-01-01"` で日付パースエラー
+  - **原因2:** フロントエンドが `site.key`（`"amazon_count"`）をそのままDB関数に渡すが、DB関数が内部で `|| '_count'` → `"amazon_count_count"` という不正カラム名
+  - **修正:** `_count` をRPC呼び出し前に除去、`target_month` を `"YYYY-MM"` 形式に統一
+- **問題3（データテーブル・ECサイト別セル - stateキー不一致）:** ツールチップに「- undefined」が表示
+  - **原因:** `hoveredSiteCell` = `"uuid-amazon_count"` だが `siteTrendData` のキーが `"uuid-amazon"` で不一致
+  - **修正:** `fetchSiteTrendData` 内部でstateキーを `siteKey`（`_count`付き）で統一し、RPCにのみ除去した値を渡す
+- **問題4（データテーブル・商品名）:** 商品名ホバーでツールチップが表示されない
+  - **原因:** `get_product_trend_data` が `date` 型引数を受け取るが、フロントから文字列を渡しておりSupabase RPC型不一致でサイレントエラー
+  - **修正:** DB関数を `text` 型引数に変更（他の関数と統一）、`getCurrentMonth()` を `"YYYY-MM"` 形式に変更
+- **ファイル:**
+  - `components/WebSalesDataTable.tsx` — フロント側のホバー処理・RPC呼び出し修正
+  - `components/websales-summary-cards.tsx` — サマリーカードのトレンド取得
+  - DB関数: `get_total_trend_data`, `get_site_trend_data`, `get_series_trend_data`, `get_product_trend_data`, `get_product_site_trend_data`

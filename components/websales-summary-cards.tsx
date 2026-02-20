@@ -17,26 +17,26 @@ const SITES = [
 ]
 
 // 型定義
-type Totals = Record<string, { 
-  count: number; 
-  amount: number; 
-  profit: number; 
+type Totals = Record<string, {
+  count: number;
+  amount: number;
+  profit: number;
   adCost: number;
   finalProfit: number;
 }>
-type SeriesSummary = { 
-  seriesName: string; 
+type SeriesSummary = {
+  seriesName: string;
   seriesCode: number;
-  count: number; 
-  sales: number; 
-  profit: number; 
+  count: number;
+  sales: number;
+  profit: number;
   adCost: number;
   finalProfit: number;
 }
-type TrendData = { 
-  month_label: string; 
-  sales: number; 
-  profit: number; 
+type TrendData = {
+  month_label: string;
+  sales: number;
+  profit: number;
   ad_cost: number;
   final_profit: number;
 }
@@ -54,11 +54,11 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const [totals, setTotals] = useState<Totals | null>(null);
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [hoveredItem, setHoveredItem] = useState<HoveredItem | null>(null);
   const [trendData, setTrendData] = useState<Record<string, TrendData[]>>({});
   const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({});
-  
+
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -92,7 +92,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
       const { data, error } = await supabase.rpc(rpcName, rpcParams);
       if (error) throw error;
-      
+
       const formattedData = data.map((d: any) => ({
         month_label: d.month_label,
         sales: d.sales ?? d.series_amount ?? 0,
@@ -125,61 +125,61 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
         const financialData = financialRes.data;
         if (financialData && financialData.length > 0) {
-            const financial = financialData[0];
-            const siteTotals: Totals = {};
-            SITES.forEach(s => {
-                siteTotals[s.key] = {
-                    count: financial[`${s.key}_count`] ?? 0,
-                    amount: financial[`${s.key}_amount`] ?? 0,
-                    profit: financial[`${s.key}_profit`] ?? 0,
-                    adCost: financial[`${s.key}_ad_cost`] ?? 0,
-                    finalProfit: financial[`${s.key}_final_profit`] ?? 0,
-                }
-            });
-            setTotals(siteTotals);
+          const financial = financialData[0];
+          const siteTotals: Totals = {};
+          SITES.forEach(s => {
+            siteTotals[s.key] = {
+              count: financial[`${s.key}_count`] ?? 0,
+              amount: financial[`${s.key}_amount`] ?? 0,
+              profit: financial[`${s.key}_profit`] ?? 0,
+              adCost: financial[`${s.key}_ad_cost`] ?? 0,
+              finalProfit: financial[`${s.key}_final_profit`] ?? 0,
+            }
+          });
+          setTotals(siteTotals);
         } else {
-            const siteTotals: Totals = {};
-            SITES.forEach(s => { 
-              siteTotals[s.key] = { 
-                count: 0, 
-                amount: 0, 
-                profit: 0, 
-                adCost: 0,
-                finalProfit: 0
-              }; 
-            });
-            setTotals(siteTotals);
+          const siteTotals: Totals = {};
+          SITES.forEach(s => {
+            siteTotals[s.key] = {
+              count: 0,
+              amount: 0,
+              profit: 0,
+              adCost: 0,
+              finalProfit: 0
+            };
+          });
+          setTotals(siteTotals);
         }
 
         const seriesData = seriesRes.data;
         if (seriesData && seriesData.length > 0) {
-            const seriesSummaryData = seriesData
-              .map((s: any) => ({
-                seriesName: s.series_name || '未分類',
-                seriesCode: s.series_code || 0,
-                count: s.series_count || 0,
-                sales: s.series_amount || 0,
-                profit: s.series_profit || 0,
-                adCost: s.series_ad_cost || 0,
-                finalProfit: s.series_final_profit || 0,
-              }))
-              .sort((a, b) => b.sales - a.sales);
-            setSeriesSummary(seriesSummaryData);
+          const seriesSummaryData = seriesData
+            .map((s: any) => ({
+              seriesName: s.series_name || '未分類',
+              seriesCode: s.series_code || 0,
+              count: s.series_count || 0,
+              sales: s.series_amount || 0,
+              profit: s.series_profit || 0,
+              adCost: s.series_ad_cost || 0,
+              finalProfit: s.series_final_profit || 0,
+            }))
+            .sort((a, b) => b.sales - a.sales);
+          setSeriesSummary(seriesSummaryData);
         } else {
-            setSeriesSummary([]);
+          setSeriesSummary([]);
         }
 
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
         const siteTotals: Totals = {};
-        SITES.forEach(s => { 
-          siteTotals[s.key] = { 
-            count: 0, 
-            amount: 0, 
-            profit: 0, 
+        SITES.forEach(s => {
+          siteTotals[s.key] = {
+            count: 0,
+            amount: 0,
+            profit: 0,
             adCost: 0,
             finalProfit: 0
-          }; 
+          };
         });
         setTotals(siteTotals);
         setSeriesSummary([]);
@@ -198,11 +198,11 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     fetchTrendData(item);
     const elementRect = event.currentTarget.getBoundingClientRect();
     const containerRect = containerRef.current?.getBoundingClientRect();
-    if(containerRect) {
-        setTooltipPosition({
-            top: elementRect.bottom - containerRect.top + 8,
-            left: elementRect.left - containerRect.left,
-        });
+    if (containerRect) {
+      setTooltipPosition({
+        top: elementRect.bottom - containerRect.top + 8,
+        left: elementRect.left - containerRect.left,
+      });
     }
   };
 
@@ -221,13 +221,13 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
   const grandTotalAdCost = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0;
   const grandTotalFinalProfit = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0;
-  
+
   const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
 
   return (
-    <div className="space-y-6" ref={containerRef}>
+    <div className="space-y-6 relative" ref={containerRef}>
       <div className="grid grid-cols-4 md:grid-cols-8 gap-4 relative">
-        <Card 
+        <Card
           className="text-center bg-gray-50 border-gray-200 cursor-pointer"
           onMouseEnter={(e) => handleMouseEnter({ type: 'total', key: 'grandTotal', name: '総合計' }, e)}
           onMouseLeave={handleMouseLeave}
@@ -242,8 +242,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
         </Card>
 
         {SITES.map((s) => (
-          <Card 
-            key={s.key} 
+          <Card
+            key={s.key}
             className={`text-center ${s.bgColor} ${s.borderColor} cursor-pointer`}
             onMouseEnter={(e) => handleMouseEnter({ type: 'site', key: s.key, name: s.name }, e)}
             onMouseLeave={handleMouseLeave}
@@ -263,8 +263,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
         <CardHeader><CardTitle>シリーズ別 売上サマリー</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 relative">
           {seriesSummary.map((series) => (
-            <div 
-              key={series.seriesName} 
+            <div
+              key={series.seriesName}
               className="text-center p-2 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors relative"
               onMouseEnter={(e) => handleMouseEnter({ type: 'series', key: series.seriesName, name: series.seriesName }, e)}
               onMouseLeave={handleMouseLeave}
@@ -278,9 +278,9 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           ))}
         </CardContent>
       </Card>
-      
+
       {currentTrendKey && (
-        <div 
+        <div
           className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-xl p-3 pointer-events-none"
           style={{
             top: `${tooltipPosition.top}px`,
@@ -291,7 +291,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           <div className="text-sm font-semibold mb-2 text-gray-800">
             {hoveredItem?.name} - 過去6ヶ月 トレンド
           </div>
-          
+
           {trendLoading[currentTrendKey] ? (
             <div className="flex items-center justify-center h-24">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
@@ -301,13 +301,13 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               {trendData[currentTrendKey].map((trend, index) => {
                 const maxSales = Math.max(...trendData[currentTrendKey].map(t => t.sales));
                 const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
-                
+
                 return (
                   <div key={index} className="space-y-1">
                     <div className="grid grid-cols-3 gap-2 items-center text-xs">
                       <span className="text-gray-600 text-left">{trend.month_label}</span>
                       <div className="flex-1 h-4 bg-gray-100 rounded-sm overflow-hidden border border-gray-200">
-                        <div 
+                        <div
                           className="h-full bg-sky-400 transition-all duration-300"
                           style={{ width: `${barWidth}%` }}
                         ></div>

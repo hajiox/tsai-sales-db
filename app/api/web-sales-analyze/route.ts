@@ -40,9 +40,10 @@ export async function POST(req: Request) {
     console.log('分析期間(3ヶ月):', { startMonth3, endMonth: targetMonth });
 
     // 1. 直近3ヶ月の販売データ取得 (get_period_sales_data)
+    // DB関数が内部で '-01' を追加するため、"YYYY-MM" 形式で渡す
     const { data: periodSalesData, error: periodError } = await supabase.rpc('get_period_sales_data', {
-      start_month: `${startMonth3}-01`,
-      end_month: `${targetMonth}-01` // 月初を指定する必要がある場合に対応
+      start_month: startMonth3,
+      end_month: targetMonth
     });
 
     if (periodError) {
