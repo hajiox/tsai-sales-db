@@ -5,6 +5,16 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+// PM2のフルパス（環境によりnpmグローバルのパスが異なる）
+const PM2_CMD = process.platform === 'win32'
+    ? 'C:\\Users\\ts\\AppData\\Roaming\\npm\\pm2.cmd'
+    : 'pm2';
+
+const EXEC_OPTS = {
+    timeout: 10000,
+    env: { ...process.env, PATH: process.env.PATH },
+};
+
 // ポート番号 → PM2プロセス名のマッピング
 const PORT_TO_PROCESS: Record<string, string> = {
     '3000': 'shopee-chatbot',
@@ -37,7 +47,7 @@ export async function GET(req: Request) {
     }
 
     try {
-        const { stdout } = await execAsync('pm2 jlist', { timeout: 5000 });
+        const { stdout } = await execAsync(`"${PM2_CMD}" jlist`, EXEC_OPTS);
         const processes = JSON.parse(stdout);
         const proc = processes.find((p: any) => p.name === processName);
 
@@ -106,12 +116,12 @@ export async function POST(req: Request) {
 
         let command: string;
         if (action === 'start') {
-            command = `cd /d C:\\作業用 && pm2 start ecosystem.config.js --only ${processName}`;
+            command = `cd /d C:\\作業用 && "${PM2_CMD}" start ecosystem.config.js --only ${processName}`;
         } else {
-            command = `pm2 stop ${processName}`;
+            command = `"${PM2_CMD}" stop ${processName}`;
         }
 
-        const { stdout, stderr } = await execAsync(command, { timeout: 15000 });
+        const { stdout, stderr } = await execAsync(command, { ...EXEC_OPTS, timeout: 15000 });
         console.log(`PM2 ${action} ${processName}:`, stdout);
 
         // 起動の場合は少し待ってからステータス確認
