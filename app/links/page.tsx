@@ -1,10 +1,10 @@
-// /app/links/page.tsx ver.7
+// /app/links/page.tsx ver.8 (サーバー制御機能付き)
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Upload } from "lucide-react"
+import { Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Upload, Power, PowerOff } from "lucide-react"
 
 interface CompanyLink {
   id: string
@@ -16,6 +16,44 @@ interface CompanyLink {
   sort_order: number
   created_at: string
   updated_at: string
+}
+
+interface ServerStatus {
+  controllable: boolean
+  processName?: string
+  status: 'online' | 'starting' | 'stopped' | 'error' | 'unknown'
+  memory?: number
+  cpu?: number
+  uptime?: number
+  restarts?: number
+}
+
+function isInternalServer(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.hostname.startsWith('192.168.') || parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
+  } catch {
+    return false
+  }
+}
+
+function formatMemory(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const mb = bytes / (1024 * 1024)
+  return `${mb.toFixed(1)} MB`
+}
+
+function formatUptime(timestamp: number): string {
+  if (!timestamp) return ''
+  const diff = Date.now() - timestamp
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  if (hours > 24) {
+    const days = Math.floor(hours / 24)
+    return `${days}日${hours % 24}時間`
+  }
+  if (hours > 0) return `${hours}時間${minutes}分`
+  return `${minutes}分`
 }
 
 export default function LinksPage() {
@@ -33,6 +71,8 @@ export default function LinksPage() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({})
+  const [controllingServer, setControllingServer] = useState<string | null>(null)
 
   const fetchLinks = async () => {
     try {
@@ -48,9 +88,58 @@ export default function LinksPage() {
     }
   }
 
+  const checkServerStatus = useCallback(async (url: string) => {
+    if (!isInternalServer(url)) return
+    try {
+      const res = await fetch(`/api/server-control?url=${encodeURIComponent(url)}`)
+      const data = await res.json()
+      setServerStatuses(prev => ({ ...prev, [url]: data }))
+    } catch {
+      setServerStatuses(prev => ({ ...prev, [url]: { controllable: false, status: 'error' } }))
+    }
+  }, [])
+
+  const checkAllServers = useCallback(async (linkList: CompanyLink[]) => {
+    const internalLinks = linkList.filter(l => isInternalServer(l.url))
+    await Promise.all(internalLinks.map(l => checkServerStatus(l.url)))
+  }, [checkServerStatus])
+
+  const handleServerControl = async (url: string, action: 'start' | 'stop') => {
+    setControllingServer(url)
+    try {
+      const res = await fetch('/api/server-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, action }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        // ステータスを再確認
+        await checkServerStatus(url)
+      } else {
+        alert(`サーバー${action === 'start' ? '起動' : '停止'}に失敗: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('Server control error:', error)
+      alert('サーバー制御に失敗しました')
+    } finally {
+      setControllingServer(null)
+    }
+  }
+
   useEffect(() => {
     fetchLinks()
   }, [])
+
+  // リンク読み込み後にサーバーステータスを確認
+  useEffect(() => {
+    if (links.length > 0) {
+      checkAllServers(links)
+      // 30秒ごとにステータス更新
+      const interval = setInterval(() => checkAllServers(links), 30000)
+      return () => clearInterval(interval)
+    }
+  }, [links, checkAllServers])
 
   const handleFetchOgp = async () => {
     if (!formUrl) return
@@ -282,48 +371,116 @@ export default function LinksPage() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {links.map((link, index) => (
-            <div key={link.id} className="bg-white border rounded-lg p-4 flex gap-4 hover:shadow-md transition-shadow">
-              <div className="flex-shrink-0 flex flex-col justify-center gap-1">
-                <Button variant="ghost" size="sm" onClick={() => handleMoveUp(index)} disabled={index === 0} className="h-6 w-6 p-0">
-                  <ChevronUp className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleMoveDown(index)} disabled={index === links.length - 1} className="h-6 w-6 p-0">
-                  <ChevronDown className="w-4 h-4" />
-                </Button>
-              </div>
+          {links.map((link, index) => {
+            const isInternal = isInternalServer(link.url)
+            const serverStatus = serverStatuses[link.url]
+            const isControlling = controllingServer === link.url
+            const statusColor = serverStatus?.status === 'online' ? 'bg-emerald-400' :
+              serverStatus?.status === 'starting' ? 'bg-amber-400' :
+                serverStatus?.status === 'stopped' ? 'bg-red-400' :
+                  'bg-gray-300'
+            const statusGlow = serverStatus?.status === 'online' ? 'shadow-[0_0_8px_2px_rgba(52,211,153,0.6)]' :
+              serverStatus?.status === 'starting' ? 'shadow-[0_0_8px_2px_rgba(251,191,36,0.6)]' : ''
+            const isOnline = serverStatus?.status === 'online' || serverStatus?.status === 'starting'
 
-              <div className="flex-shrink-0 w-32 h-20 bg-gray-100 rounded overflow-hidden">
-                {link.og_image ? (
-                  <img src={link.og_image} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">
-                    <ExternalLink className="w-8 h-8" />
+            return (
+              <div key={link.id} className={`bg-white border rounded-lg p-4 flex gap-4 hover:shadow-md transition-shadow ${isInternal && serverStatus?.status === 'online' ? 'border-l-4 border-l-emerald-400' :
+                  isInternal && serverStatus?.status === 'stopped' ? 'border-l-4 border-l-red-300' : ''
+                }`}>
+                <div className="flex-shrink-0 flex flex-col justify-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => handleMoveUp(index)} disabled={index === 0} className="h-6 w-6 p-0">
+                    <ChevronUp className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleMoveDown(index)} disabled={index === links.length - 1} className="h-6 w-6 p-0">
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <div className="flex-shrink-0 w-32 h-20 bg-gray-100 rounded overflow-hidden relative">
+                  {link.og_image ? (
+                    <img src={link.og_image} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                      <ExternalLink className="w-8 h-8" />
+                    </div>
+                  )}
+                  {/* ステータスランプ */}
+                  {isInternal && serverStatus?.controllable && (
+                    <div className="absolute top-1 right-1">
+                      <div className={`w-3 h-3 rounded-full ${statusColor} ${statusGlow} ${serverStatus?.status === 'starting' ? 'animate-pulse' : ''}`} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-lg font-semibold text-blue-600 hover:underline truncate">{link.title || link.url}</a>
+                    {/* インラインステータスバッジ */}
+                    {isInternal && serverStatus?.controllable && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${serverStatus.status === 'online' ? 'bg-emerald-100 text-emerald-700' :
+                          serverStatus.status === 'starting' ? 'bg-amber-100 text-amber-700' :
+                            serverStatus.status === 'stopped' ? 'bg-red-100 text-red-700' :
+                              'bg-gray-100 text-gray-600'
+                        }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />
+                        {serverStatus.status === 'online' ? '稼働中' :
+                          serverStatus.status === 'starting' ? '起動中' :
+                            serverStatus.status === 'stopped' ? '停止' : '不明'}
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
+                  {link.description && (
+                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">{link.description}</p>
+                  )}
+                  {link.memo && (
+                    <p className="text-sm text-orange-600 mt-1 bg-orange-50 px-2 py-1 rounded inline-block">メモ: {link.memo}</p>
+                  )}
+                  <div className="flex items-center gap-3 mt-2">
+                    <p className="text-xs text-gray-400 truncate">{link.url}</p>
+                    {/* サーバー詳細情報 */}
+                    {isInternal && serverStatus?.controllable && serverStatus.status === 'online' && (
+                      <span className="text-[10px] text-gray-400 flex-shrink-0">
+                        {serverStatus.memory ? formatMemory(serverStatus.memory) : ''}
+                        {serverStatus.uptime ? ` · 稼働${formatUptime(serverStatus.uptime)}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-              <div className="flex-1 min-w-0">
-                <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-lg font-semibold text-blue-600 hover:underline truncate block">{link.title || link.url}</a>
-                {link.description && (
-                  <p className="text-sm text-gray-600 mt-1 line-clamp-2">{link.description}</p>
-                )}
-                {link.memo && (
-                  <p className="text-sm text-orange-600 mt-1 bg-orange-50 px-2 py-1 rounded inline-block">メモ: {link.memo}</p>
-                )}
-                <p className="text-xs text-gray-400 mt-2 truncate">{link.url}</p>
+                <div className="flex-shrink-0 flex flex-col gap-2 items-center">
+                  {/* サーバー制御ボタン */}
+                  {isInternal && serverStatus?.controllable && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isControlling}
+                      onClick={() => handleServerControl(link.url, isOnline ? 'stop' : 'start')}
+                      className={`h-8 w-8 p-0 ${isOnline
+                          ? 'border-red-300 text-red-500 hover:bg-red-50 hover:text-red-700'
+                          : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700'
+                        }`}
+                      title={isOnline ? 'サーバー停止' : 'サーバー起動'}
+                    >
+                      {isControlling ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : isOnline ? (
+                        <PowerOff className="w-4 h-4" />
+                      ) : (
+                        <Power className="w-4 h-4" />
+                      )}
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => openEditModal(link)}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleDelete(link.id)} className="text-red-500 hover:text-red-700">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-
-              <div className="flex-shrink-0 flex flex-col gap-2">
-                <Button variant="outline" size="sm" onClick={() => openEditModal(link)}>
-                  <Pencil className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleDelete(link.id)} className="text-red-500 hover:text-red-700">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            )
+          })
+          }
         </div>
       )}
 
