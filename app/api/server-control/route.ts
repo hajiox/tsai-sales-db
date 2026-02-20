@@ -50,13 +50,16 @@ export async function GET(req: Request) {
             });
         }
 
-        // 実際にHTTPアクセスできるかも確認
+        // 実際にHTTPアクセスできるかも確認（localhostでチェック）
+        // Next.js devサーバーはルートで500を返す場合があるため、接続できること自体をチェック
         let httpAlive = false;
         try {
+            const parsed = new URL(url);
+            const localUrl = `http://localhost:${parsed.port}`;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 3000);
-            const res = await fetch(url, { signal: controller.signal });
-            httpAlive = res.ok;
+            await fetch(localUrl, { signal: controller.signal });
+            httpAlive = true; // レスポンスが返れば稼働中と判定
             clearTimeout(timeout);
         } catch {
             httpAlive = false;
