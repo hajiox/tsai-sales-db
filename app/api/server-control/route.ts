@@ -98,8 +98,11 @@ export async function GET(req: Request) {
 
 // POST: 起動/停止
 export async function POST(req: Request) {
+    let action = '';
     try {
-        const { url, action } = await req.json();
+        const body = await req.json();
+        const url = body.url;
+        action = body.action;
 
         if (!url || !action) {
             return NextResponse.json({ error: 'url and action required' }, { status: 400 });
@@ -116,13 +119,25 @@ export async function POST(req: Request) {
 
         let command: string;
         if (action === 'start') {
-            command = `cd /d C:\\作業用 && "${PM2_CMD}" start ecosystem.config.js --only ${processName}`;
+            // まずrestartを試み、プロセスが無い場合はstart
+            command = `"${PM2_CMD}" restart ${processName} 2>nul || (cd /d C:\\作業用 && "${PM2_CMD}" start ecosystem.config.js --only ${processName})`;
         } else {
             command = `"${PM2_CMD}" stop ${processName}`;
         }
 
-        const { stdout, stderr } = await execAsync(command, { ...EXEC_OPTS, timeout: 15000 });
-        console.log(`PM2 ${action} ${processName}:`, stdout);
+        let stdout = '';
+        try {
+            const result = await execAsync(command, { ...EXEC_OPTS, timeout: 15000 });
+            stdout = result.stdout;
+            console.log(`PM2 ${action} ${processName}:`, stdout);
+        } catch (execError: any) {
+            // stop時に既に停止中のプロセスの場合はエラーにしない
+            if (action === 'stop' && execError.stderr?.includes('not found')) {
+                stdout = 'Process already stopped';
+            } else {
+                throw execError;
+            }
+        }
 
         // 起動の場合は少し待ってからステータス確認
         if (action === 'start') {
@@ -137,6 +152,7 @@ export async function POST(req: Request) {
         });
     } catch (error: any) {
         console.error('PM2 control error:', error);
-        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+        const msg = action === 'start' ? 'サーバー起動' : 'サーバー停止';
+        return NextResponse.json({ ok: false, error: `${msg}に失敗: ${error.message}` }, { status: 500 });
     }
 }
