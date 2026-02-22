@@ -105,6 +105,20 @@ export default function LinksPage() {
   }, [checkServerStatus])
 
   const handleServerControl = async (url: string, action: 'start' | 'stop') => {
+    // 自分自身（tsai-sales-db）の停止を防止
+    try {
+      const parsed = new URL(url)
+      if (parsed.port === '3001' && action === 'stop') {
+        alert('このサーバー（TSAシステム）自身は停止できません')
+        return
+      }
+    } catch { }
+
+    // 停止時は確認ダイアログ
+    if (action === 'stop') {
+      if (!confirm('サーバーを停止しますか？')) return
+    }
+
     setControllingServer(url)
     try {
       const res = await fetch('/api/server-control', {
@@ -385,7 +399,7 @@ export default function LinksPage() {
 
             return (
               <div key={link.id} className={`bg-white border rounded-lg p-4 flex gap-4 hover:shadow-md transition-shadow ${isInternal && serverStatus?.status === 'online' ? 'border-l-4 border-l-emerald-400' :
-                  isInternal && serverStatus?.status === 'stopped' ? 'border-l-4 border-l-red-300' : ''
+                isInternal && serverStatus?.status === 'stopped' ? 'border-l-4 border-l-red-300' : ''
                 }`}>
                 <div className="flex-shrink-0 flex flex-col justify-center gap-1">
                   <Button variant="ghost" size="sm" onClick={() => handleMoveUp(index)} disabled={index === 0} className="h-6 w-6 p-0">
@@ -418,9 +432,9 @@ export default function LinksPage() {
                     {/* インラインステータスバッジ */}
                     {isInternal && serverStatus?.controllable && (
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${serverStatus.status === 'online' ? 'bg-emerald-100 text-emerald-700' :
-                          serverStatus.status === 'starting' ? 'bg-amber-100 text-amber-700' :
-                            serverStatus.status === 'stopped' ? 'bg-red-100 text-red-700' :
-                              'bg-gray-100 text-gray-600'
+                        serverStatus.status === 'starting' ? 'bg-amber-100 text-amber-700' :
+                          serverStatus.status === 'stopped' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-600'
                         }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />
                         {serverStatus.status === 'online' ? '稼働中' :
@@ -456,8 +470,8 @@ export default function LinksPage() {
                       disabled={isControlling}
                       onClick={() => handleServerControl(link.url, isOnline ? 'stop' : 'start')}
                       className={`h-8 w-8 p-0 ${isOnline
-                          ? 'border-red-300 text-red-500 hover:bg-red-50 hover:text-red-700'
-                          : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700'
+                        ? 'border-red-300 text-red-500 hover:bg-red-50 hover:text-red-700'
+                        : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700'
                         }`}
                       title={isOnline ? 'サーバー停止' : 'サーバー起動'}
                     >
