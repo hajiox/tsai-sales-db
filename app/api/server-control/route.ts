@@ -20,7 +20,6 @@ const EXEC_OPTS = {
 
 // ポート番号 → PM2プロセス名のマッピング
 const PORT_TO_PROCESS: Record<string, string> = {
-    '3000': 'shopee-chatbot',
     '3001': 'tsai-sales-db',
     '3003': 'yamato-analytics',
 };
