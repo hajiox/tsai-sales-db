@@ -5,6 +5,9 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+// Vercel環境かどうか（Vercelではpm2は使えない）
+const IS_VERCEL = !!process.env.VERCEL;
+
 // PM2のフルパス（環境によりnpmグローバルのパスが異なる）
 const PM2_CMD = process.platform === 'win32'
     ? 'C:\\Users\\ts\\AppData\\Roaming\\npm\\pm2.cmd'
@@ -34,6 +37,11 @@ function getProcessNameFromUrl(url: string): string | null {
 
 // GET: ステータス確認
 export async function GET(req: Request) {
+    // Vercel環境ではサーバー制御不可
+    if (IS_VERCEL) {
+        return NextResponse.json({ controllable: false, status: 'unknown', reason: 'cloud' });
+    }
+
     const { searchParams } = new URL(req.url);
     const url = searchParams.get('url');
 
@@ -98,6 +106,11 @@ export async function GET(req: Request) {
 
 // POST: 起動/停止
 export async function POST(req: Request) {
+    // Vercel環境ではサーバー制御不可
+    if (IS_VERCEL) {
+        return NextResponse.json({ ok: false, error: 'サーバー制御はローカル環境でのみ利用可能です' }, { status: 403 });
+    }
+
     let action = '';
     try {
         const body = await req.json();
