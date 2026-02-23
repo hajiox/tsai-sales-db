@@ -102,3 +102,20 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
   - `components/WebSalesDataTable.tsx` — フロント側のホバー処理・RPC呼び出し修正
   - `components/websales-summary-cards.tsx` — サマリーカードのトレンド取得
   - DB関数: `get_total_trend_data`, `get_site_trend_data`, `get_series_trend_data`, `get_product_trend_data`, `get_product_site_trend_data`
+
+
+### 2026-02-22 15:49:00 広告用顧客リストCSVエクスポート機能（ヤマト出荷データ管理システム）
+- Google Ads カスタマーマッチ / Meta カスタムオーディエンス用CSVエクスポート機能を実装
+- **バックエンドAPI** (`yamato-analytics/app/api/export/route.ts`):
+  - 電話番号を国内形式からE.164形式に変換（Google: `+81xxx` / Meta: `81xxx`）
+  - 日本語姓名分割ロジック（スペース区切り対応 + 漢字名2文字姓推定）
+  - `ignored_customers`テーブルの除外顧客を自動フィルタ
+  - 購入回数3回/5回/10回以上の抽出条件に対応
+- **フロントエンドUI** (`yamato-analytics/app/page.tsx`):
+  - ロイヤル顧客分析セクション直下にエクスポートUIを追加
+  - Google Ads / Meta の2カラムレイアウト、各3つのダウンロードボタン
+  - 対象顧客数をボタンに動的表示（3回以上: 10,499人 / 5回以上: 3,979人 / 10回以上: 874人）
+- **CSV仕様**:
+  - Google: `Email, Phone(E.164), First Name, Last Name, Country, Zip`
+  - Meta: `email, phone, fn, ln, ct, zip, value(LTV), currency`
+- **注意**: Email列はDBにデータがないため空欄、MetaのLTV(value)は購入回数で代替
