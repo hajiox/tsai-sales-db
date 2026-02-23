@@ -119,3 +119,17 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
   - Google: `Email, Phone(E.164), First Name, Last Name, Country, Zip`
   - Meta: `email, phone, fn, ln, ct, zip, value(LTV), currency`
 - **注意**: Email列はDBにデータがないため空欄、MetaのLTV(value)は購入回数で代替
+
+
+### 2026-02-23 17:00:00 ギフト注文者CSVエクスポート機能（ヤマト出荷データ管理システム）
+- 備考欄「〇〇様ご依頼分」からギフト依頼者名を正規表現で抽出し、広告用リストとしてCSVエクスポートする機能を追加
+- **データ分析結果:** 伝票10,653件 / ユニーク依頼者6,958人 / 2回以上リピーター1,440人
+- **バックエンドAPI:**
+  - `app/api/export/route.ts` に `type=gift` パラメータ対応を追加
+  - `extractRequesterName()` 関数で備考から依頼者名を抽出
+  - 依頼者名を正規化してグループ化、ギフト回数をカウント
+  - `minOrders=1`（全体）/ `minOrders=2`（2回以上）でフィルタ
+  - ギフト主の電話番号はDBに存在しないため、Phone列は空欄で出力
+- **新規API:** `app/api/gift-stats/route.ts` — 依頼者総数と2回以上利用者数を返す
+- **フロントエンドUI:** エクスポートセクションを「👥 リピーター顧客」と「🎁 ギフト注文者」に分離、ピンク色ボタンで視覚的に区別
+
