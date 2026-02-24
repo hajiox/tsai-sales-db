@@ -4,9 +4,13 @@ import { useState, useEffect } from "react"
 import { usePathname } from 'next/navigation'
 import MainSidebar from "@/components/main-sidebar"
 
+// サイドバーを表示しないルートのリスト
+const FULL_SCREEN_ROUTES = [
+  '/login',
+  '/recipe/database/label-import/mobile',
+]
+
 export default function MainDashboard({ children }: { children: React.ReactNode }) {
-  // この state は現在レイアウトには直接影響しませんが、
-  // サイドバー内のボタンのハイライト表示などに使われるため残します。
   const pathname = usePathname()
   const [activeModule, setActiveModule] = useState<'sales' | 'web'>('sales')
 
@@ -18,9 +22,14 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
     }
   }, [pathname])
 
+  // ログインページやモバイル専用ページではサイドバーなしの全画面表示
+  const isFullScreen = FULL_SCREEN_ROUTES.some(route => pathname.startsWith(route))
+
+  if (isFullScreen) {
+    return <>{children}</>
+  }
+
   return (
-    // これが最終的なレイアウト構成です。
-    // サイドバーとメインコンテンツのみをシンプルに横に並べます。
     <div className="flex h-screen bg-gray-100 print:h-auto print:block">
 
       <div className="print:hidden">

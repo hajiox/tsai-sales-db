@@ -112,22 +112,8 @@ function MobileLabelImportContent() {
         fetchAllIngredients();
     }, []);
 
-    // Hide sidebar and adjust layout for full-screen mobile
+    // Set viewport meta for proper mobile rendering
     useEffect(() => {
-        const sidebarWrapper = document.querySelector('.flex.h-screen > div:first-child') as HTMLElement;
-        const sidebarDirect = document.querySelector('.w-64.bg-slate-800') as HTMLElement;
-        const mainContent = document.querySelector('.flex.h-screen > main') as HTMLElement;
-        const layoutRoot = document.querySelector('.flex.h-screen') as HTMLElement;
-
-        if (sidebarWrapper) sidebarWrapper.style.display = 'none';
-        if (sidebarDirect) sidebarDirect.style.display = 'none';
-        if (mainContent) {
-            mainContent.style.padding = '0';
-            mainContent.style.overflow = 'auto';
-        }
-        if (layoutRoot) layoutRoot.style.background = 'transparent';
-
-        // Also add viewport meta for proper mobile rendering
         let metaViewport = document.querySelector('meta[name="viewport"]') as HTMLMetaElement;
         if (!metaViewport) {
             metaViewport = document.createElement('meta');
@@ -135,16 +121,6 @@ function MobileLabelImportContent() {
             document.head.appendChild(metaViewport);
         }
         metaViewport.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
-
-        return () => {
-            if (sidebarWrapper) sidebarWrapper.style.display = '';
-            if (sidebarDirect) sidebarDirect.style.display = '';
-            if (mainContent) {
-                mainContent.style.padding = '';
-                mainContent.style.overflow = '';
-            }
-            if (layoutRoot) layoutRoot.style.background = '';
-        };
     }, []);
 
     // Auto-hide toast
