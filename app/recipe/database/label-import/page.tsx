@@ -353,19 +353,36 @@ function LabelImportContent() {
     return (
         <div className="max-w-6xl mx-auto p-6 space-y-6">
             {/* Header */}
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" onClick={() => router.push("/recipe/database")}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    戻る
-                </Button>
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900">
-                        ラベルAI解析・データ取込
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        食品ラベルの画像をAIで解析し、原材料・栄養成分を自動登録
-                    </p>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" onClick={() => router.push("/recipe/database")}>
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        戻る
+                    </Button>
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">
+                            ラベルAI解析・データ取込
+                        </h1>
+                        <p className="text-sm text-gray-500 mt-1">
+                            食品ラベルの画像をAIで解析し、原材料・栄養成分を自動登録
+                        </p>
+                    </div>
                 </div>
+                <Button
+                    variant="outline"
+                    onClick={() => {
+                        const url = window.location.origin + "/recipe/database/label-import/mobile";
+                        navigator.clipboard.writeText(url).then(() => {
+                            toast.success("スマホ用URLをコピーしました");
+                        }).catch(() => {
+                            window.open("/recipe/database/label-import/mobile", "_blank");
+                        });
+                    }}
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50 gap-2"
+                >
+                    <Camera className="w-4 h-4" />
+                    📱 スマホ版URL
+                </Button>
             </div>
 
             {/* Step 1: Upload Label Images */}
