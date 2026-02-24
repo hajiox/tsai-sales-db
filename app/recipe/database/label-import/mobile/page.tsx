@@ -439,7 +439,6 @@ function MobileLabelImportContent() {
                                                 ref={(el) => { fileInputRefs.current[type] = el; }}
                                                 type="file"
                                                 accept="image/*"
-                                                capture="environment"
                                                 style={{ display: "none" }}
                                                 onChange={(e) => {
                                                     if (e.target.files?.[0]) {
@@ -500,12 +499,12 @@ function MobileLabelImportContent() {
                                                                     cursor: "pointer",
                                                                 }}
                                                             >
-                                                                📷再撮影
+                                                                📷変更
                                                             </button>
                                                             <button
                                                                 onClick={() => handleFileRemove(type)}
                                                                 style={{
-                                                                    padding: "8px 12px",
+                                                                    padding: "8px 14px",
                                                                     borderRadius: 10,
                                                                     border: "1px solid #fca5a5",
                                                                     background: "#fef2f2",
@@ -515,7 +514,7 @@ function MobileLabelImportContent() {
                                                                     cursor: "pointer",
                                                                 }}
                                                             >
-                                                                ✕
+                                                                🗑 取消
                                                             </button>
                                                         </div>
                                                     </div>
@@ -563,7 +562,7 @@ function MobileLabelImportContent() {
                                                         fontWeight: 600,
                                                         flexShrink: 0,
                                                     }}>
-                                                        📷 撮影
+                                                        📷 撮影/選択
                                                     </div>
                                                 </button>
                                             )}
