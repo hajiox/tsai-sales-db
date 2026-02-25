@@ -43,53 +43,58 @@ function isValidString(value: any): value is string {
 export async function POST(request: NextRequest) {
   try {
     console.log('=== BASE API開始 ver.4 (ステートレス/チャネル対応版) ===');
-    
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    
+
     if (!file) {
       return NextResponse.json({ success: false, error: 'ファイルがアップロードされていません' }, { status: 400 });
     }
 
     const csvContent = await file.text();
     if (!csvContent) {
-        return NextResponse.json({ success: false, error: 'CSVデータがありません' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'CSVデータがありません' }, { status: 400 });
     }
 
     const lines = csvContent.split('\n').slice(1).filter((line: string) => line.trim() !== '');
-    
+
     // ========== 集計処理（変更なし）==========
     const aggregatedData = new Map<string, number>();
     let blankTitleRows: any[] = [];
 
     for (let i = 0; i < lines.length; i++) {
-        const columns = parseCsvLine(lines[i]);
-        if (columns.length < 23) continue;
+      const columns = parseCsvLine(lines[i]);
+      if (columns.length < 23) continue;
 
-        const baseTitle = columns[18]?.trim() || '';
-        const quantity = parseInt(columns[22], 10) || 0;
+      const baseTitle = columns[18]?.trim() || '';
+      const quantity = parseInt(columns[22], 10) || 0;
 
-        if (quantity <= 0) continue;
+      if (quantity <= 0) continue;
 
-        if (!isValidString(baseTitle)) {
-            blankTitleRows.push({ rowNumber: i + 2, quantity });
-            continue;
-        }
+      if (!isValidString(baseTitle)) {
+        blankTitleRows.push({ rowNumber: i + 2, quantity });
+        continue;
+      }
 
-        const currentQuantity = aggregatedData.get(baseTitle) || 0;
-        aggregatedData.set(baseTitle, currentQuantity + quantity);
+      // クーポン・割引行はスキップ（商品ではない）
+      if (baseTitle.includes('クーポン') || baseTitle.startsWith('割引')) {
+        continue;
+      }
+
+      const currentQuantity = aggregatedData.get(baseTitle) || 0;
+      aggregatedData.set(baseTitle, currentQuantity + quantity);
     }
     console.log(`[BASE Parse] 集計完了: ${aggregatedData.size}種類の商品`);
 
     // ========== マッチング処理 ==========
     const [productsResponse, learningDataResponse] = await Promise.all([
-      supabase.from('products').select('*'),
+      supabase.from('products').select('*').eq('is_hidden', false),
       supabase.from('base_product_mapping').select('base_title, product_id')
     ]);
 
     if (productsResponse.error) throw new Error(`商品マスターの取得に失敗: ${productsResponse.error.message}`);
     const validProducts = (productsResponse.data || []).filter(p => p && isValidString(p.name));
-    
+
     if (learningDataResponse.error) throw new Error(`BASE学習データの取得に失敗: ${learningDataResponse.error.message}`);
     const validLearningData = (learningDataResponse.data || []).filter(l => l && isValidString(l.base_title));
 
@@ -98,59 +103,59 @@ export async function POST(request: NextRequest) {
 
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
-    
+
     // この処理専用の「マッチ済みID記憶セット」を作成（ステートレス化）
     const matchedProductIdsThisTime = new Set<string>();
 
     for (const [baseTitle, quantity] of aggregatedData) {
-        try {
-            // ★★★【最重要修正】★★★
-            // 汎用ヘルパー関数に 'base' という channel と記憶用Setを渡す
-            const result = findBestMatchSimplified(
-              baseTitle,
-              validProducts,
-              validLearningData,
-              matchedProductIdsThisTime,
-              'base' // <--- どのECサイトかを伝える
-            );
+      try {
+        // ★★★【最重要修正】★★★
+        // 汎用ヘルパー関数に 'base' という channel と記憶用Setを渡す
+        const result = findBestMatchSimplified(
+          baseTitle,
+          validProducts,
+          validLearningData,
+          matchedProductIdsThisTime,
+          'base' // <--- どのECサイトかを伝える
+        );
 
-            if (result) {
-                matchedProducts.push({ 
-                  baseTitle, 
-                  quantity, 
-                  productInfo: result.product, 
-                  isLearned: result.matchType === 'learned' 
-                });
-            } else {
-                unmatchedProducts.push({ baseTitle, quantity });
-            }
-        } catch (error) {
-            console.error(`マッチング処理でエラーが発生 (${baseTitle}):`, error);
-            unmatchedProducts.push({ baseTitle, quantity });
+        if (result) {
+          matchedProducts.push({
+            baseTitle,
+            quantity,
+            productInfo: result.product,
+            isLearned: result.matchType === 'learned'
+          });
+        } else {
+          unmatchedProducts.push({ baseTitle, quantity });
         }
+      } catch (error) {
+        console.error(`マッチング処理でエラーが発生 (${baseTitle}):`, error);
+        unmatchedProducts.push({ baseTitle, quantity });
+      }
     }
 
     const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
 
     return NextResponse.json({
-        success: true,
-        matchedProducts,
-        unmatchedProducts,
-        summary: {
-            totalProducts: aggregatedData.size,
-            totalQuantity: [...aggregatedData.values()].reduce((sum, q) => sum + q, 0),
-            processableQuantity,
-            matchedCount: matchedProducts.length,
-            unmatchedCount: unmatchedProducts.length,
-            learnedMatchCount: matchedProducts.filter(p => p.isLearned).length,
-            blankTitleInfo: {
-                count: blankTitleRows.length,
-                quantity: blankTitleRows.reduce((sum, r) => sum + r.quantity, 0)
-            }
+      success: true,
+      matchedProducts,
+      unmatchedProducts,
+      summary: {
+        totalProducts: aggregatedData.size,
+        totalQuantity: [...aggregatedData.values()].reduce((sum, q) => sum + q, 0),
+        processableQuantity,
+        matchedCount: matchedProducts.length,
+        unmatchedCount: unmatchedProducts.length,
+        learnedMatchCount: matchedProducts.filter(p => p.isLearned).length,
+        blankTitleInfo: {
+          count: blankTitleRows.length,
+          quantity: blankTitleRows.reduce((sum, r) => sum + r.quantity, 0)
         }
+      }
     });
   } catch (error) {
-      console.error('❌ BASE CSV解析APIで予期せぬエラー:', error);
-      return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
+    console.error('❌ BASE CSV解析APIで予期せぬエラー:', error);
+    return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
   }
 }

@@ -14,11 +14,13 @@ import iconv from 'iconv-lite';
  */
 function normalizeTitle(str: string | null | undefined): string {
   if (!str) return '';
-  // 全角スペースを半角に統一し、前後の空白を削除、連続する空白を1つにまとめる
   return str
     .trim()
-    .replace(/　/g, ' ') // 全角スペースを半角に
-    .replace(/\s+/g, ' '); // 連続する空白を1つに
+    .replace(/<[^>]+>/g, ' ')   // HTMLタグ（<br>など）を空白に
+    .replace(/&[a-zA-Z]+;/g, '') // HTMLエンティティ除去
+    .replace(/　/g, ' ')         // 全角スペースを半角に
+    .replace(/\s+/g, ' ')        // 連続する空白を1つに
+    .trim();
 }
 
 
@@ -27,7 +29,7 @@ function normalizeTitle(str: string | null | undefined): string {
 /* ------------------------------------------------------------------ */
 export function detectAndDecode(buf: Buffer): string {
   const utf8 = buf.toString('utf8');
-  const bad  = (utf8.match(/\uFFFD/g) || []).length;
+  const bad = (utf8.match(/\uFFFD/g) || []).length;
   if (bad / utf8.length > 0.03) {
     return iconv.decode(buf, 'shift_jis');
   }
@@ -64,7 +66,7 @@ interface LearningMap {
 /* ------------------------------------------------------------------ */
 export function extractImportantKeywords(title: string): string[] {
   const commonWords = ['送料無料', '個', '食'];
-  const importantBrands = [ '激辛', 'チャーシュー', '訳あり', 'レトルト', '極厚', 'カット', '650g', '個包装', '冷凍発送', '焼豚', '炒飯', 'トッピング', '会津ブランド館', 'プロ仕様', '二郎インスパイア系', 'つけ麺', 'パーフェクトラーメン', '極にぼし', '魚介豚骨', 'オーション', '極太麺', '付け麺', 'どろスープ', '魚粉', '喜多方', '山塩', 'BUTA', 'IE-K', 'インスパイア系', 'チャーシュー付き', '備蓄食', '非常食', 'アウトドア', '常温発送', 'ラーメン', 'セット', '醤油', '味噌', '塩', '豚骨', '鶏白湯', 'つけめん' ];
+  const importantBrands = ['激辛', 'チャーシュー', '訳あり', 'レトルト', '極厚', 'カット', '650g', '個包装', '冷凍発送', '焼豚', '炒飯', 'トッピング', '会津ブランド館', 'プロ仕様', '二郎インスパイア系', 'つけ麺', 'パーフェクトラーメン', '極にぼし', '魚介豚骨', 'オーション', '極太麺', '付け麺', 'どろスープ', '魚粉', '喜多方', '山塩', 'BUTA', 'IE-K', 'インスパイア系', 'チャーシュー付き', '備蓄食', '非常食', 'アウトドア', '常温発送', 'ラーメン', 'セット', '醤油', '味噌', '塩', '豚骨', '鶏白湯', 'つけめん'];
   const quantityPattern = /\d+[gkgKG個枚袋本]|[\d]+×[\d]+/g;
   const quantities = title.match(quantityPattern) || [];
   const words = title.replace(/[「」【】［］\[\]\(\)、。,.]/g, ' ').split(/\s+/).filter(Boolean);
@@ -75,7 +77,7 @@ export function extractImportantKeywords(title: string): string[] {
 /* ------------------------------------------------------------------ */
 /* 4. ★★★【重要修正】シンプル類似度マッチング（正規化対応）★★★   */
 /* ------------------------------------------------------------------ */
-const specialMatchingRules = [ { keywords: ['炊き込み', 'チャーシュー'], productName: 'チャーシュー 炊き込みご飯の素', priority: 100 }, ];
+const specialMatchingRules = [{ keywords: ['炊き込み', 'チャーシュー'], productName: 'チャーシュー 炊き込みご飯の素', priority: 100 },];
 
 type Channel = 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10';
 
@@ -86,7 +88,7 @@ export function findBestMatchSimplified(
   matchedIds: Set<string>,
   channel: Channel
 ): { product: Product, matchType: 'special' | 'learned' | 'direct' | 'keyword' } | null {
-  
+
   const normalizedTitle = normalizeTitle(title);
 
   // 0. 特定キーワードによる専用マッチング
@@ -123,8 +125,8 @@ export function findBestMatchSimplified(
   const direct = products.find((p) => {
     if (matchedIds.has(p.id)) return false;
     const titlesToCompare = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name]
-        .filter(Boolean)
-        .map(t => normalizeTitle(t));
+      .filter(Boolean)
+      .map(t => normalizeTitle(t));
     return titlesToCompare.includes(normalizedTitle);
   });
 
@@ -136,12 +138,12 @@ export function findBestMatchSimplified(
   // 4-3. キーワードスコアリング
   const keywords = extractImportantKeywords(normalizedTitle);
   if (keywords.length === 0) return null;
-  
+
   let bestMatch: { product: Product; score: number; matchRatio: number } | null = null;
-  
+
   for (const p of products) {
     if (matchedIds.has(p.id)) continue;
-    const targetTitles = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name].filter(Boolean);
+    const targetTitles = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name].filter(Boolean) as string[];
     let maxScore = 0;
     let bestMatchRatio = 0;
     for (const targetTitle of targetTitles) {
@@ -154,34 +156,34 @@ export function findBestMatchSimplified(
     }
     if (maxScore > 0 && (!bestMatch || maxScore > bestMatch.score)) { bestMatch = { product: p, score: maxScore, matchRatio: bestMatchRatio }; }
   }
-  
+
   if (bestMatch && bestMatch.matchRatio >= 0.35 && bestMatch.score >= 2) {
     matchedIds.add(bestMatch.product.id);
     return { product: bestMatch.product, matchType: 'keyword' };
   }
-  
+
   return null;
 }
 
 /* ------------------------------------------------------------------ */
 /* 5. チャネル別シンプルマッチング（正規化対応）                       */
 /* ------------------------------------------------------------------ */
-export function findBestMatchByChannel( title: string, products: Product[], channel: string ): { product: Product; confidence: number } | null {
+export function findBestMatchByChannel(title: string, products: Product[], channel: string): { product: Product; confidence: number } | null {
   const normalizedTitle = normalizeTitle(title);
   const channelKey = `${channel}_title` as keyof Product;
-  
+
   const direct = products.find((p) => {
     const titlesToCompare = [p[channelKey], p.name].filter(Boolean).map(t => normalizeTitle(t));
     return titlesToCompare.includes(normalizedTitle);
   });
 
   if (direct) return { product: direct, confidence: 100 };
-  
+
   const keywords = extractImportantKeywords(normalizedTitle);
   if (keywords.length === 0) return null;
   let best: { product: Product; score: number; matchRatio: number } | null = null;
   for (const p of products) {
-    const targetTitles = [p[channelKey], p.name].filter(Boolean);
+    const targetTitles = [p[channelKey], p.name].filter(Boolean) as string[];
     let maxScore = 0;
     let bestMatchRatio = 0;
     for (const targetTitle of targetTitles) {
