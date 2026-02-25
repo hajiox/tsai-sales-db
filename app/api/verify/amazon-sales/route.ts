@@ -14,7 +14,7 @@ function parseAmazonCsvLine(line: string): string[] {
   const columns: string[] = [];
   let currentColumn = '';
   let inQuotes = false;
-  
+
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
     if (char === '"' && inQuotes && line[i + 1] === '"') {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     // 1. CSVを行分割（ヘッダー1行スキップ）
     const lines = csvContent.split('\n').filter((line: string) => line.trim() !== '');
     const dataLines = lines.slice(1); // ヘッダー行をスキップ
-    
+
     console.log('📊 データ行数:', dataLines.length);
 
     // 2. Amazon固定フォーマットで解析（CSV形式）
@@ -51,19 +51,19 @@ export async function POST(request: NextRequest) {
       const columns = parseAmazonCsvLine(line);
       const title = columns[2]?.replace(/"/g, '').trim(); // C列: タイトル
       const quantity = parseInt(columns[13]?.replace(/"/g, '').trim() || '0', 10); // N列: 注文された商品点数
-      
+
       // デバッグ出力（最初の5件）
       if (index < 5) {
         console.log(`📝 CSV行${index + 1}: "${title}" (数量: ${quantity})`);
       }
-      
+
       return { amazonTitle: title, quantity };
     }).filter((item: any) => item.amazonTitle && item.quantity > 0);
 
     console.log('✅ 有効データ数:', csvSalesData.length, '件');
 
     // 3. 商品マスターと学習データを取得
-    const { data: products } = await supabase.from('products').select('*');
+    const { data: products } = await supabase.from('products').select('*').eq('is_hidden', false);
     const { data: learnedMappings } = await supabase.from('amazon_product_mapping').select('amazon_title, product_id');
     const learningData = (learnedMappings || []).map(m => ({ amazon_title: m.amazon_title, product_id: m.product_id }));
 
@@ -72,15 +72,17 @@ export async function POST(request: NextRequest) {
 
     // 4. CSVデータから商品IDごとに数量を集計
     const csvAggregated = new Map<string, number>();
+    const matchedIdsThisTime = new Set<string>();
     let matchCount = 0;
-    
+
     for (const item of csvSalesData) {
-      const matched = findBestMatchSimplified(item.amazonTitle, products || [], learningData);
-      if (matched) {
+      const result = findBestMatchSimplified(item.amazonTitle, products || [], learningData, matchedIdsThisTime, 'amazon');
+      if (result) {
+        const matched = result.product;
         const currentQty = csvAggregated.get(matched.id) || 0;
         csvAggregated.set(matched.id, currentQty + item.quantity);
         matchCount++;
-        
+
         // マッチした場合のデバッグ出力（最初の3件）
         if (matchCount <= 3) {
           console.log(`🎯 マッチ成功 ${matchCount}: "${item.amazonTitle}" → ${matched.name} (${matched.id})`);
@@ -101,7 +103,7 @@ export async function POST(request: NextRequest) {
       .from('web_sales_summary')
       .select('product_id, amazon_count')
       .eq('report_month', reportMonth);
-      
+
     const dbAggregated = new Map<string, number>();
     (dbData || []).forEach(row => {
       if (row.amazon_count && row.amazon_count > 0) {
@@ -119,7 +121,7 @@ export async function POST(request: NextRequest) {
       const productInfo = products?.find(p => p.id === productId);
       const csvCount = csvAggregated.get(productId) || 0;
       const dbCount = dbAggregated.get(productId) || 0;
-      
+
       verificationResults.push({
         productId,
         productName: productInfo?.name || '不明な商品',
@@ -129,7 +131,7 @@ export async function POST(request: NextRequest) {
         isMatch: csvCount === dbCount,
       });
     }
-    
+
     verificationResults.sort((a, b) => (a.series > b.series) ? 1 : -1);
 
     console.log('🎉 検証完了:', verificationResults.length, '商品');

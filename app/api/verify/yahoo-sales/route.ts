@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   try {
     /* ---------------- 1. multipart/form-data 受信 ---------------- */
     const fd = await req.formData();
-    const file      = fd.get('file') as File | null;
+    const file = fd.get('file') as File | null;
     const saleMonth = fd.get('saleMonth') as string | null;
 
     if (!file || !saleMonth) {
@@ -58,13 +58,13 @@ export async function POST(req: NextRequest) {
     /* ---------------- 3. CSV → [{title, qty}] -------------------- */
     const [_, ...dataLines] = csvText.split(/\r?\n/).filter(l => l.trim()); // ヘッダーは無視
     const TITLE_IDX = 0;   // A 列
-    const QTY_IDX   = 5;   // F 列（注文点数合計）
+    const QTY_IDX = 5;   // F 列（注文点数合計）
 
     const csvRows = dataLines
       .map(parseCsvLine)
       .map(cols => ({
         title: cols[TITLE_IDX] ?? '',
-        qty:   parseInt((cols[QTY_IDX] ?? '').replace(/[^\d-]/g, ''), 10) || 0,
+        qty: parseInt((cols[QTY_IDX] ?? '').replace(/[^\d-]/g, ''), 10) || 0,
       }))
       .filter(r => r.title && r.qty > 0);
 
@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
     const { data: products } = await supabase
       .from('products')
       .select('*')
+      .eq('is_hidden', false)
       .returns<Product[]>();
 
     const { data: maps } = await supabase
@@ -80,13 +81,14 @@ export async function POST(req: NextRequest) {
 
     const learning = (maps || []).map(m => ({
       yahoo_title: m.yahoo_title,
-      product_id:  m.product_id,
+      product_id: m.product_id,
     }));
 
     const csvAgg = new Map<string, number>();
+    const matchedIdsThisTime = new Set<string>();
     for (const row of csvRows) {
-      const hit = findBestMatchSimplified(row.title, products || [], learning);
-      if (hit) csvAgg.set(hit.id, (csvAgg.get(hit.id) || 0) + row.qty);
+      const result = findBestMatchSimplified(row.title, products || [], learning, matchedIdsThisTime, 'yahoo');
+      if (result) csvAgg.set(result.product.id, (csvAgg.get(result.product.id) || 0) + row.qty);
     }
 
     /* ---------------- 5. DB 集計 ------------------------------- */
@@ -102,16 +104,16 @@ export async function POST(req: NextRequest) {
     /* ---------------- 6. 照合結果 ------------------------------ */
     const ids = new Set([...csvAgg.keys(), ...dbAgg.keys()]);
     const results = [...ids].map(id => {
-      const p   = products?.find(x => x.id === id);
+      const p = products?.find(x => x.id === id);
       const csv = csvAgg.get(id) || 0;
-      const db  = dbAgg.get(id)  || 0;
+      const db = dbAgg.get(id) || 0;
       return {
-        product_id:   id,
+        product_id: id,
         product_name: p?.name ?? '不明',
-        csv_count:    csv,
-        db_count:     db,
-        difference:   csv - db,
-        is_match:     csv === db,
+        csv_count: csv,
+        db_count: db,
+        difference: csv - db,
+        is_match: csv === db,
       };
     });
 

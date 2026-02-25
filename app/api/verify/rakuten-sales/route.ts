@@ -48,17 +48,18 @@ export async function POST(request: NextRequest) {
     }).filter((item: any) => item.rakutenTitle && item.quantity > 0);
 
     // 2. 商品マスターと学習データを取得
-    const { data: products } = await supabase.from('products').select('*');
+    const { data: products } = await supabase.from('products').select('*').eq('is_hidden', false);
     const { data: learnedMappings } = await supabase.from('rakuten_product_mapping').select('rakuten_title, product_id');
     const learningData = (learnedMappings || []).map(m => ({ amazon_title: m.rakuten_title, product_id: m.product_id }));
 
     // 3. CSVデータから商品IDごとに数量を集計
     const csvAggregated = new Map<string, number>();
+    const matchedIdsThisTime = new Set<string>();
     for (const item of csvSalesData) {
-      const matched = findBestMatchSimplified(item.rakutenTitle, products || [], learningData);
-      if (matched) {
-        const currentQty = csvAggregated.get(matched.id) || 0;
-        csvAggregated.set(matched.id, currentQty + item.quantity);
+      const result = findBestMatchSimplified(item.rakutenTitle, products || [], learningData, matchedIdsThisTime, 'rakuten');
+      if (result) {
+        const currentQty = csvAggregated.get(result.product.id) || 0;
+        csvAggregated.set(result.product.id, currentQty + item.quantity);
       }
     }
 
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       .from('web_sales_summary')
       .select('product_id, rakuten_count')
       .eq('report_month', reportMonth);
-      
+
     const dbAggregated = new Map<string, number>();
     (dbData || []).forEach(row => {
       dbAggregated.set(row.product_id, row.rakuten_count || 0);
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
       const productInfo = products?.find(p => p.id === productId);
       const csvCount = csvAggregated.get(productId) || 0;
       const dbCount = dbAggregated.get(productId) || 0;
-      
+
       verificationResults.push({
         productId,
         productName: productInfo?.name || '不明な商品',
@@ -91,8 +92,8 @@ export async function POST(request: NextRequest) {
         isMatch: csvCount === dbCount,
       });
     }
-    
-    verificationResults.sort((a,b) => (a.series > b.series) ? 1 : -1);
+
+    verificationResults.sort((a, b) => (a.series > b.series) ? 1 : -1);
 
     return NextResponse.json({ success: true, results: verificationResults });
 

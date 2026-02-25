@@ -20,7 +20,8 @@ export async function POST(request: Request) {
     // 商品マスタを取得
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, name');
+      .select('id, name')
+      .eq('is_hidden', false);
 
     if (productsError) {
       return NextResponse.json({ error: `商品マスタの取得に失敗: ${productsError.message}` }, { status: 500 });
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
       if (result.matched && productNameToIdMap.has(result.matched)) {
         const productId = productNameToIdMap.get(result.matched);
         const key = `${productId}_${report_month}`;
-        
+
         if (!aggregatedData.has(key)) {
           aggregatedData.set(key, {
             product_id: productId,
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
         }
 
         const data = aggregatedData.get(key);
-        
+
         // 販売数を集約
         for (const [ecSite, quantity] of Object.entries(result.salesData)) {
           const dbColumn = ecSiteMapping[ecSite];
@@ -95,8 +96,8 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('APIエラー:', error);
-    return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'サーバーエラー' 
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'サーバーエラー'
     }, { status: 500 });
   }
 }

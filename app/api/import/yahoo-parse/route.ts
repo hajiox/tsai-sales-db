@@ -18,7 +18,7 @@ function isValidString(value: any): value is string {
 export async function POST(request: NextRequest) {
   try {
     console.log('=== Yahoo CSV解析API開始 ver.8 (チャネル対応版) ===');
-    
+
     const { csvData } = await request.json();
     if (!csvData) {
       return NextResponse.json({ success: false, error: 'CSVデータが見つかりません' }, { status: 400 });
@@ -32,19 +32,19 @@ export async function POST(request: NextRequest) {
 
     // 商品マスターとYahoo専用の学習データを並行して取得
     const [productsResponse, learningDataResponse] = await Promise.all([
-      supabase.from('products').select('*'),
+      supabase.from('products').select('*').eq('is_hidden', false),
       supabase.from('yahoo_product_mapping').select('yahoo_title, product_id')
     ]);
-    
+
     if (productsResponse.error) throw new Error(`商品マスターの取得に失敗: ${productsResponse.error.message}`);
     const validProducts = (productsResponse.data || []).filter(p => p && isValidString(p.name));
-    
+
     if (learningDataResponse.error) throw new Error(`Yahoo学習データの取得に失敗: ${learningDataResponse.error.message}`);
     const validLearningData = (learningDataResponse.data || []).filter(l => l && isValidString(l.yahoo_title));
-    
+
     console.log(`[Yahoo Parse] 有効な商品マスター: ${validProducts.length}件`);
     console.log(`[Yahoo Parse] 有効なYahoo学習データ: ${validLearningData.length}件`);
-    
+
     let matchedProducts: any[] = [];
     let unmatchedProducts: any[] = [];
     let blankTitleRows: any[] = [];
@@ -53,67 +53,67 @@ export async function POST(request: NextRequest) {
     const matchedProductIdsThisTime = new Set<string>();
 
     for (const line of lines) {
-        const columns = line.split(',').map((col: string) => col.trim().replace(/"/g, ''));
-        if (columns.length < 6) continue;
+      const columns = line.split(',').map((col: string) => col.trim().replace(/"/g, ''));
+      if (columns.length < 6) continue;
 
-        const productTitle = columns[0];
-        const quantity = parseInt(columns[5], 10) || 0;
+      const productTitle = columns[0];
+      const quantity = parseInt(columns[5], 10) || 0;
 
-        if (quantity <= 0) continue;
+      if (quantity <= 0) continue;
 
-        if (!isValidString(productTitle)) {
-            blankTitleRows.push({ rowNumber: lines.indexOf(line) + 2, quantity });
-            continue;
+      if (!isValidString(productTitle)) {
+        blankTitleRows.push({ rowNumber: lines.indexOf(line) + 2, quantity });
+        continue;
+      }
+
+      try {
+        // ★★★【最重要修正】★★★
+        // 汎用ヘルパー関数に 'yahoo' という channel を渡す
+        const result = findBestMatchSimplified(
+          productTitle,
+          validProducts,
+          validLearningData,
+          matchedProductIdsThisTime,
+          'yahoo' // <--- この引数が決定的に重要でした
+        );
+
+        if (result) {
+          matchedProducts.push({
+            yahooTitle: productTitle,
+            quantity,
+            productInfo: result.product,
+            isLearned: result.matchType === 'learned'
+          });
+        } else {
+          unmatchedProducts.push({ yahooTitle: productTitle, quantity });
         }
-
-        try {
-            // ★★★【最重要修正】★★★
-            // 汎用ヘルパー関数に 'yahoo' という channel を渡す
-            const result = findBestMatchSimplified(
-              productTitle, 
-              validProducts, 
-              validLearningData, 
-              matchedProductIdsThisTime,
-              'yahoo' // <--- この引数が決定的に重要でした
-            );
-
-            if (result) {
-                matchedProducts.push({ 
-                  yahooTitle: productTitle, 
-                  quantity, 
-                  productInfo: result.product,
-                  isLearned: result.matchType === 'learned' 
-                });
-            } else {
-                unmatchedProducts.push({ yahooTitle: productTitle, quantity });
-            }
-        } catch (error) {
-            console.error(`[Yahoo Parse] マッチング処理エラー (${productTitle}):`, error);
-            unmatchedProducts.push({ yahooTitle: productTitle, quantity });
-        }
+      } catch (error) {
+        console.error(`[Yahoo Parse] マッチング処理エラー (${productTitle}):`, error);
+        unmatchedProducts.push({ yahooTitle: productTitle, quantity });
+      }
     }
 
     const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
 
     return NextResponse.json({
-        success: true,
-        matchedProducts,
-        unmatchedProducts,
-        summary: {
-            totalProducts: matchedProducts.length + unmatchedProducts.length,
-            totalQuantity: lines.reduce((sum, line) => sum + (parseInt(line.split(',')[5], 10) || 0), 0),
-            processableQuantity,
-            matchedCount: matchedProducts.length,
-            unmatchedCount: unmatchedProducts.length,
-            learnedMatchCount: matchedProducts.filter(p => p.isLearned).length,
-            blankTitleInfo: {
-                count: blankTitleRows.length,
-                quantity: blankTitleRows.reduce((sum, r) => sum + r.quantity, 0)
-            }
+      success: true,
+      matchedProducts,
+      unmatchedProducts,
+      summary: {
+        totalProducts: matchedProducts.length + unmatchedProducts.length,
+        totalQuantity: lines.reduce((sum, line) => sum + (parseInt(line.split(',')[5], 10) || 0), 0),
+        processableQuantity,
+        matchedCount: matchedProducts.length,
+        unmatchedCount: unmatchedProducts.length,
+        learnedMatchCount: matchedProducts.filter(p => p.isLearned).length,
+        blankTitleInfo: {
+          count: blankTitleRows.length,
+          quantity: blankTitleRows.reduce((sum, r) => sum + r.quantity, 0)
         }
+      }
     });
   } catch (error) {
-      console.error('❌ Yahoo CSV解析APIで予期せぬエラー:', error);
-      return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
+    console.error('❌ Yahoo CSV解析APIで予期せぬエラー:', error);
+    return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
   }
 }
