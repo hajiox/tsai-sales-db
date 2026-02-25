@@ -44,7 +44,8 @@ export async function GET(request: Request) {
 
         const { data: products, error: productsError } = await supabase
             .from("products")
-            .select("id, name, price, profit_rate, series, series_code, product_code")
+            .select("id, name, price, profit_rate, series, series_code, product_code, is_hidden")
+            .neq("is_hidden", true)
             .order("series_code")
             .order("product_code");
 

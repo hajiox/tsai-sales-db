@@ -4,7 +4,7 @@
 import React, { useState, useRef, useEffect } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, TrendingUp, TrendingDown, Edit } from "lucide-react"
+import { Plus, Trash2, TrendingUp, TrendingDown, Edit, EyeOff } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import ProductEditModal from "./ProductEditModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
@@ -332,6 +332,29 @@ export default function WebSalesDataTable({
     }
   }
 
+  const handleHideProduct = async (productId: string) => {
+    const productName = getProductName(productId)
+
+    if (!confirm(`商品「${productName}」を終売（非表示）にしますか？\n\nデータは削除されません。紐付け管理画面のマッチング対象からも除外されます。`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({ is_hidden: true })
+        .eq('id', productId)
+
+      if (error) throw error
+
+      alert(`商品「${productName}」を終売にしました`)
+      if (onRefresh) onRefresh()
+    } catch (error) {
+      console.error('非表示エラー:', error)
+      alert('商品の非表示に失敗しました')
+    }
+  }
+
   const handleDeleteProduct = async (productId: string) => {
     const productName = getProductName(productId)
 
@@ -565,18 +588,25 @@ export default function WebSalesDataTable({
                         ¥{formatNumber(finalProfit)}
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => handleEditProduct(row.product_id)}
-                            className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                            className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
                             title="変更"
                           >
                             <Edit className="h-4 w-4" />
                           </button>
                           <button
+                            onClick={() => handleHideProduct(row.product_id)}
+                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                            title="終売（非表示）"
+                          >
+                            <EyeOff className="h-4 w-4" />
+                          </button>
+                          <button
                             onClick={() => handleDeleteProduct(row.product_id)}
                             disabled={isDeleting}
-                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
                             title="削除"
                           >
                             <Trash2 className="h-4 w-4" />
