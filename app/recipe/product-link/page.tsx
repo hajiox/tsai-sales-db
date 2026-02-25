@@ -1,5 +1,5 @@
 // app/recipe/product-link/page.tsx
-// レシピ ↔ WEB販売商品 紐付け管理ページ
+// レシピ ↔ WEB販売商品 自動マッチング＆紐付け管理
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -15,7 +15,14 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Link2, Unlink, RefreshCw, Search, Check, X, ArrowRight, AlertTriangle } from "lucide-react";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { ArrowLeft, Link2, Unlink, RefreshCw, Check, X, AlertTriangle, Sparkles, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface Recipe {
@@ -37,16 +44,35 @@ interface Product {
     product_code: number | null;
 }
 
+interface Suggestion {
+    recipeId: string;
+    recipeName: string;
+    recipePrice: number | null;
+    productId: string | null;
+    productName: string | null;
+    productPrice: number | null;
+    score: number;
+    confidence: "high" | "medium" | "low" | "none";
+}
+
+// Editable suggestion row state
+interface EditableSuggestion extends Suggestion {
+    accepted: boolean;
+    overrideProductId: string | null; // User can override the AI suggestion
+}
+
 export default function ProductLinkPage() {
     const router = useRouter();
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
+    const [matching, setMatching] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [syncing, setSyncing] = useState(false);
-    const [searchRecipe, setSearchRecipe] = useState("");
-    const [searchProduct, setSearchProduct] = useState("");
-    const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
-    const [linkingRecipeId, setLinkingRecipeId] = useState<string | null>(null);
+
+    // Matching results
+    const [suggestions, setSuggestions] = useState<EditableSuggestion[]>([]);
+    const [step, setStep] = useState<"overview" | "matching">("overview");
 
     useEffect(() => {
         fetchData();
@@ -67,19 +93,59 @@ export default function ProductLinkPage() {
         }
     };
 
-    const handleLink = async (recipeId: string, productId: string) => {
+    const handleAutoMatch = async () => {
+        setMatching(true);
         try {
+            const res = await fetch("/api/recipe/sync-product?autoMatch=true");
+            if (!res.ok) throw new Error("マッチングに失敗しました");
+            const data = await res.json();
+
+            const editableSuggestions: EditableSuggestion[] = (data.suggestions || []).map((s: Suggestion) => ({
+                ...s,
+                accepted: s.confidence === "high" || s.confidence === "medium",
+                overrideProductId: null,
+            }));
+
+            setSuggestions(editableSuggestions);
+            setRecipes(data.recipes || []);
+            setProducts(data.products || []);
+            setStep("matching");
+        } catch (error: any) {
+            toast.error(error.message);
+        } finally {
+            setMatching(false);
+        }
+    };
+
+    const handleApplyAll = async () => {
+        const accepted = suggestions.filter((s) => s.accepted && (s.overrideProductId || s.productId));
+        if (accepted.length === 0) {
+            toast.error("適用する紐付けがありません");
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const links = accepted.map((s) => ({
+                recipeId: s.recipeId,
+                productId: s.overrideProductId || s.productId,
+            }));
+
             const res = await fetch("/api/recipe/sync-product", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ recipeId, productId }),
+                body: JSON.stringify({ batch: true, links }),
             });
-            if (!res.ok) throw new Error("紐付けに失敗しました");
-            toast.success("紐付けを設定しました");
-            setLinkingRecipeId(null);
+
+            if (!res.ok) throw new Error("適用に失敗しました");
+            const data = await res.json();
+            toast.success(`${data.linked}件の紐付けを完了しました`);
+            setStep("overview");
             fetchData();
         } catch (error: any) {
             toast.error(error.message);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -114,23 +180,68 @@ export default function ProductLinkPage() {
         }
     };
 
+    const toggleAccept = (recipeId: string) => {
+        setSuggestions((prev) =>
+            prev.map((s) => (s.recipeId === recipeId ? { ...s, accepted: !s.accepted } : s))
+        );
+    };
+
+    const overrideProduct = (recipeId: string, productId: string | null) => {
+        setSuggestions((prev) =>
+            prev.map((s) =>
+                s.recipeId === recipeId
+                    ? { ...s, overrideProductId: productId, accepted: productId ? true : s.accepted }
+                    : s
+            )
+        );
+    };
+
     // Derived data
-    const linkedProductIds = useMemo(
-        () => new Set(recipes.filter((r) => r.linked_product_id).map((r) => r.linked_product_id!)),
-        [recipes]
-    );
-
     const linkedRecipes = recipes.filter((r) => r.linked_product_id);
-    const unlinkedRecipes = recipes.filter(
-        (r) => !r.linked_product_id && r.name.toLowerCase().includes(searchRecipe.toLowerCase())
-    );
-    const unlinkedProducts = products.filter(
-        (p) => !linkedProductIds.has(p.id) && p.name.toLowerCase().includes(searchProduct.toLowerCase())
-    );
-
-    const getLinkedProduct = (productId: string) => products.find((p) => p.id === productId);
-
+    const unlinkedCount = recipes.length - linkedRecipes.length;
+    const linkedProductIds = new Set(linkedRecipes.map((r) => r.linked_product_id!));
+    const getProduct = (id: string) => products.find((p) => p.id === id);
     const formatCurrency = (v: number | null) => (v ? `¥${v.toLocaleString()}` : "-");
+
+    const getConfidenceBadge = (confidence: string, score: number) => {
+        switch (confidence) {
+            case "high":
+                return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                        ✓ 高確度 {score}%
+                    </span>
+                );
+            case "medium":
+                return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
+                        △ 中確度 {score}%
+                    </span>
+                );
+            case "low":
+                return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                        ✗ 低確度 {score}%
+                    </span>
+                );
+            default:
+                return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                        — 候補なし
+                    </span>
+                );
+        }
+    };
+
+    // Available products for manual override (not yet used in suggestions)
+    const getAvailableProducts = (currentSuggestion: EditableSuggestion) => {
+        const usedIds = new Set(
+            suggestions
+                .filter((s) => s.recipeId !== currentSuggestion.recipeId && s.accepted)
+                .map((s) => s.overrideProductId || s.productId)
+                .filter(Boolean) as string[]
+        );
+        return products.filter((p) => !linkedProductIds.has(p.id) && !usedIds.has(p.id));
+    };
 
     if (loading) {
         return (
@@ -155,13 +266,31 @@ export default function ProductLinkPage() {
                         レシピ ↔ WEB販売 紐付け管理
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        レシピ（ネット専用）とWEB販売管理システムの商品を紐付けて、価格・利益率を自動同期します
+                        レシピ（ネット専用）とWEB販売管理の商品を紐付けて、価格・利益率を自動同期
                     </p>
                 </div>
-                <Button onClick={handleSyncAll} disabled={syncing} className="bg-green-600 hover:bg-green-700">
-                    <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-                    全件同期
-                </Button>
+                <div className="flex gap-2">
+                    {step === "overview" && (
+                        <>
+                            <Button
+                                onClick={handleSyncAll}
+                                disabled={syncing || linkedRecipes.length === 0}
+                                variant="outline"
+                            >
+                                <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+                                全件同期
+                            </Button>
+                            <Button
+                                onClick={handleAutoMatch}
+                                disabled={matching || unlinkedCount === 0}
+                                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                            >
+                                <Sparkles className={`w-4 h-4 mr-2 ${matching ? "animate-spin" : ""}`} />
+                                {matching ? "マッチング中..." : `AIマッチング（${unlinkedCount}件未紐付け）`}
+                            </Button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Summary Cards */}
@@ -181,22 +310,168 @@ export default function ProductLinkPage() {
                 <Card className="border-green-200 bg-green-50">
                     <CardContent className="pt-4 pb-3">
                         <div className="text-sm text-green-700">紐付け済み</div>
-                        <div className="text-2xl font-bold text-green-700">
-                            {linkedRecipes.length}
-                        </div>
+                        <div className="text-2xl font-bold text-green-700">{linkedRecipes.length}</div>
                     </CardContent>
                 </Card>
                 <Card className="border-amber-200 bg-amber-50">
                     <CardContent className="pt-4 pb-3">
                         <div className="text-sm text-amber-700">未紐付け</div>
-                        <div className="text-2xl font-bold text-amber-700">
-                            {recipes.length - linkedRecipes.length}
-                        </div>
+                        <div className="text-2xl font-bold text-amber-700">{unlinkedCount}</div>
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Linked Recipes */}
+            {/* ===== Matching Step ===== */}
+            {step === "matching" && (
+                <Card className="mb-6 border-purple-200">
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-purple-600" />
+                                AIマッチング結果（{suggestions.length}件）
+                            </CardTitle>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setStep("overview")}
+                                >
+                                    <X className="w-4 h-4 mr-1" /> キャンセル
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={handleApplyAll}
+                                    disabled={saving}
+                                    className="bg-green-600 hover:bg-green-700"
+                                >
+                                    <Check className="w-4 h-4 mr-1" />
+                                    {saving ? "適用中..." : `チェック済み${suggestions.filter((s) => s.accepted).length}件を適用`}
+                                </Button>
+                            </div>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">
+                            ✓ 高/中確度は自動チェック済み。低確度や候補なしは手動で商品を選択してください。
+                        </p>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[40px]">適用</TableHead>
+                                    <TableHead>レシピ名</TableHead>
+                                    <TableHead className="text-right">販売価格</TableHead>
+                                    <TableHead className="w-[40px] text-center">→</TableHead>
+                                    <TableHead>マッチ商品名（AI提案 or 手動選択）</TableHead>
+                                    <TableHead className="text-right">商品価格</TableHead>
+                                    <TableHead>確度</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {suggestions.map((s) => {
+                                    const availProducts = getAvailableProducts(s);
+                                    const effectiveProductId = s.overrideProductId || s.productId;
+                                    const effectiveProduct = effectiveProductId
+                                        ? products.find((p) => p.id === effectiveProductId)
+                                        : null;
+
+                                    return (
+                                        <TableRow
+                                            key={s.recipeId}
+                                            className={
+                                                s.accepted
+                                                    ? "bg-green-50/50"
+                                                    : s.confidence === "none"
+                                                        ? "bg-gray-50/50"
+                                                        : ""
+                                            }
+                                        >
+                                            <TableCell>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={s.accepted}
+                                                    onChange={() => toggleAccept(s.recipeId)}
+                                                    disabled={!effectiveProductId}
+                                                    className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                                />
+                                            </TableCell>
+                                            <TableCell className="font-medium text-sm">
+                                                {s.recipeName}
+                                            </TableCell>
+                                            <TableCell className="text-right text-sm">
+                                                {formatCurrency(s.recipePrice)}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <ChevronRight className="w-4 h-4 text-gray-400 mx-auto" />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Select
+                                                    value={effectiveProductId || "__none__"}
+                                                    onValueChange={(val) =>
+                                                        overrideProduct(
+                                                            s.recipeId,
+                                                            val === "__none__" ? null : val
+                                                        )
+                                                    }
+                                                >
+                                                    <SelectTrigger
+                                                        className={`h-8 text-sm ${s.overrideProductId
+                                                                ? "border-blue-300 bg-blue-50"
+                                                                : s.confidence === "high"
+                                                                    ? "border-green-300"
+                                                                    : s.confidence === "medium"
+                                                                        ? "border-yellow-300"
+                                                                        : "border-gray-300"
+                                                            }`}
+                                                    >
+                                                        <SelectValue>
+                                                            {effectiveProduct
+                                                                ? (s.overrideProductId ? "🔧 " : "") +
+                                                                effectiveProduct.name
+                                                                : "商品を選択..."}
+                                                        </SelectValue>
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__none__">
+                                                            <span className="text-gray-400">— 紐付けなし —</span>
+                                                        </SelectItem>
+                                                        {s.productId && (
+                                                            <SelectItem value={s.productId}>
+                                                                ⭐ {s.productName} （AI提案 {s.score}%）
+                                                            </SelectItem>
+                                                        )}
+                                                        {availProducts
+                                                            .filter((p) => p.id !== s.productId)
+                                                            .map((p) => (
+                                                                <SelectItem key={p.id} value={p.id}>
+                                                                    {p.name}
+                                                                    {p.price ? ` (¥${p.price.toLocaleString()})` : ""}
+                                                                </SelectItem>
+                                                            ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </TableCell>
+                                            <TableCell className="text-right text-sm">
+                                                {formatCurrency(effectiveProduct?.price || null)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {s.overrideProductId
+                                                    ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                                            🔧 手動
+                                                        </span>
+                                                    )
+                                                    : getConfidenceBadge(s.confidence, s.score)}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* ===== Linked Recipes (always shown) ===== */}
             <Card className="mb-6">
                 <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
@@ -224,8 +499,9 @@ export default function ProductLinkPage() {
                             </TableHeader>
                             <TableBody>
                                 {linkedRecipes.map((recipe) => {
-                                    const product = getLinkedProduct(recipe.linked_product_id!);
-                                    const priceMismatch = product && recipe.selling_price !== product.price;
+                                    const product = getProduct(recipe.linked_product_id!);
+                                    const priceMismatch =
+                                        product && recipe.selling_price !== product.price;
                                     return (
                                         <TableRow key={recipe.id}>
                                             <TableCell className="font-medium">{recipe.name}</TableCell>
@@ -247,9 +523,7 @@ export default function ProductLinkPage() {
                                                 </span>
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {product?.profit_rate != null
-                                                    ? `${product.profit_rate}%`
-                                                    : "-"}
+                                                {product?.profit_rate != null ? `${product.profit_rate}%` : "-"}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {priceMismatch ? (
@@ -280,170 +554,30 @@ export default function ProductLinkPage() {
                 </CardContent>
             </Card>
 
-            {/* Unlinked - Side by side */}
-            <div className="grid grid-cols-2 gap-4">
-                {/* Unlinked Recipes */}
-                <Card className="border-amber-200">
+            {/* Unlinked products info */}
+            {step === "overview" && (
+                <Card className="border-gray-200">
                     <CardHeader className="pb-3">
-                        <CardTitle className="text-lg flex items-center gap-2">
+                        <CardTitle className="text-lg flex items-center gap-2 text-gray-500">
                             <AlertTriangle className="w-5 h-5 text-amber-500" />
-                            未紐付けレシピ（{unlinkedRecipes.length}件）
+                            WEB販売にあってレシピに無い商品（{products.filter((p) => !linkedProductIds.has(p.id)).length}件）
                         </CardTitle>
-                        <div className="relative mt-2">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                            <Input
-                                placeholder="レシピを検索..."
-                                value={searchRecipe}
-                                onChange={(e) => setSearchRecipe(e.target.value)}
-                                className="pl-10"
-                            />
-                        </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="max-h-[400px] overflow-y-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>レシピ名</TableHead>
-                                        <TableHead className="text-right">販売価格</TableHead>
-                                        <TableHead></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {unlinkedRecipes.map((recipe) => (
-                                        <TableRow
-                                            key={recipe.id}
-                                            className={`cursor-pointer ${linkingRecipeId === recipe.id
-                                                ? "bg-blue-50 border-blue-300"
-                                                : "hover:bg-gray-50"
-                                                }`}
-                                            onClick={() =>
-                                                setLinkingRecipeId(
-                                                    linkingRecipeId === recipe.id ? null : recipe.id
-                                                )
-                                            }
-                                        >
-                                            <TableCell className="font-medium">{recipe.name}</TableCell>
-                                            <TableCell className="text-right">
-                                                {formatCurrency(recipe.selling_price)}
-                                            </TableCell>
-                                            <TableCell>
-                                                {linkingRecipeId === recipe.id ? (
-                                                    <span className="text-blue-500 text-xs flex items-center gap-1">
-                                                        <ArrowRight className="w-3 h-3" />
-                                                        選択中
-                                                    </span>
-                                                ) : (
-                                                    <Button variant="ghost" size="sm" className="text-blue-400">
-                                                        <Link2 className="w-4 h-4" />
-                                                    </Button>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                    {unlinkedRecipes.length === 0 && (
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="text-center text-gray-400 py-4">
-                                                未紐付けのレシピはありません
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
+                        <div className="flex flex-wrap gap-2">
+                            {products
+                                .filter((p) => !linkedProductIds.has(p.id))
+                                .map((p) => (
+                                    <span
+                                        key={p.id}
+                                        className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs border"
+                                    >
+                                        {p.name} {p.price ? `(¥${p.price.toLocaleString()})` : ""}
+                                    </span>
+                                ))}
                         </div>
                     </CardContent>
                 </Card>
-
-                {/* Unlinked Products */}
-                <Card className="border-amber-200">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <AlertTriangle className="w-5 h-5 text-amber-500" />
-                            未紐付けWEB商品（{unlinkedProducts.length}件）
-                        </CardTitle>
-                        <div className="relative mt-2">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                            <Input
-                                placeholder="商品を検索..."
-                                value={searchProduct}
-                                onChange={(e) => setSearchProduct(e.target.value)}
-                                className="pl-10"
-                            />
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="max-h-[400px] overflow-y-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>商品名</TableHead>
-                                        <TableHead className="text-right">価格</TableHead>
-                                        <TableHead></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {unlinkedProducts.map((product) => (
-                                        <TableRow
-                                            key={product.id}
-                                            className={`${linkingRecipeId
-                                                ? "cursor-pointer hover:bg-green-50"
-                                                : "hover:bg-gray-50"
-                                                }`}
-                                            onClick={() => {
-                                                if (linkingRecipeId) {
-                                                    handleLink(linkingRecipeId, product.id);
-                                                }
-                                            }}
-                                        >
-                                            <TableCell className="font-medium">{product.name}</TableCell>
-                                            <TableCell className="text-right">
-                                                {formatCurrency(product.price)}
-                                            </TableCell>
-                                            <TableCell>
-                                                {linkingRecipeId && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="text-green-500 hover:text-green-700"
-                                                    >
-                                                        <Link2 className="w-4 h-4" />
-                                                        紐付け
-                                                    </Button>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                    {unlinkedProducts.length === 0 && (
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="text-center text-gray-400 py-4">
-                                                未紐付けの商品はありません
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Linking hint */}
-            {linkingRecipeId && (
-                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 z-50">
-                    <Link2 className="w-5 h-5" />
-                    <span>
-                        「{recipes.find((r) => r.id === linkingRecipeId)?.name}」を紐付ける商品を右側から選択してください
-                    </span>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-white hover:bg-blue-500 ml-2"
-                        onClick={() => setLinkingRecipeId(null)}
-                    >
-                        <X className="w-4 h-4" />
-                        キャンセル
-                    </Button>
-                </div>
             )}
         </div>
     );
