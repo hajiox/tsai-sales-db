@@ -411,6 +411,11 @@ export default function RecipePage() {
                         データ統合
                     </Button>
 
+                    <Button variant="outline" onClick={() => router.push("/recipe/product-link")} className="border-blue-300 text-blue-700 hover:bg-blue-50">
+                        <LinkIcon className="w-4 h-4 mr-2" />
+                        WEB販売紐付け
+                    </Button>
+
                     <Button variant="outline" onClick={() => router.push("/recipe/database")}>
                         <Package className="w-4 h-4 mr-2" />
                         材料データベース

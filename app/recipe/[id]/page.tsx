@@ -81,6 +81,7 @@ interface Recipe {
   source_file: string | null;
   amazon_fee_enabled: boolean;
   ingredient_label?: string | null;
+  linked_product_id?: string | null;
 }
 
 interface RecipeItem {
@@ -594,6 +595,23 @@ export default function RecipeDetailPage() {
           amazon_fee_enabled: recipe.amazon_fee_enabled,
         })
         .eq("id", recipe.id);
+
+      // Auto-sync to linked product (WEB販売管理システム連動)
+      if (recipe.linked_product_id && recipe.selling_price) {
+        const profitRate = totalCost
+          ? ((recipe.selling_price - totalCost) / recipe.selling_price) * 100
+          : null;
+        const { error: syncError } = await supabase
+          .from("products")
+          .update({
+            price: recipe.selling_price,
+            profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
+          })
+          .eq("id", recipe.linked_product_id);
+        if (!syncError) {
+          console.log("WEB販売商品に同期しました");
+        }
+      }
 
       setHasChanges(false);
       // Keep editing mode active
