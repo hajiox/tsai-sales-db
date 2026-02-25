@@ -340,18 +340,22 @@ export default function WebSalesDataTable({
     }
 
     try {
-      const { error } = await supabase
-        .from('products')
-        .update({ is_hidden: true })
-        .eq('id', productId)
+      const res = await fetch("/api/products/hide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, isHidden: true }),
+      })
 
-      if (error) throw error
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "非表示に失敗しました")
+      }
 
       // 確実に画面から消すためリロード
       window.location.reload()
-    } catch (error) {
+    } catch (error: any) {
       console.error('非表示エラー:', error)
-      alert('商品の非表示に失敗しました')
+      alert(`商品の非表示に失敗しました: ${error.message}`)
     }
   }
 

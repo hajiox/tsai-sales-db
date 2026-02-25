@@ -2,7 +2,6 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 
 interface HiddenProduct {
     id: string
@@ -14,7 +13,6 @@ interface HiddenProduct {
 }
 
 export default function DiscontinuedClient() {
-    const supabase = getSupabaseBrowserClient()
     const [products, setProducts] = useState<HiddenProduct[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -25,13 +23,9 @@ export default function DiscontinuedClient() {
     const fetchHiddenProducts = async () => {
         setLoading(true)
         try {
-            const { data, error } = await supabase
-                .from("products")
-                .select("id, name, price, profit_rate, series, is_hidden")
-                .eq("is_hidden", true)
-                .order("name")
-
-            if (error) throw error
+            const res = await fetch("/api/products/hide?list=true")
+            if (!res.ok) throw new Error("取得失敗")
+            const data = await res.json()
             setProducts(data || [])
         } catch (error) {
             console.error("Error:", error)
@@ -46,33 +40,33 @@ export default function DiscontinuedClient() {
         if (!confirm(`「${product.name}」を復活させますか？`)) return
 
         try {
-            const { error } = await supabase
-                .from("products")
-                .update({ is_hidden: false })
-                .eq("id", productId)
-
-            if (error) throw error
+            const res = await fetch("/api/products/hide", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ productId, isHidden: false }),
+            })
+            if (!res.ok) throw new Error("復活に失敗しました")
             setProducts((prev) => prev.filter((p) => p.id !== productId))
-        } catch (error) {
-            alert("復活に失敗しました")
+        } catch (error: any) {
+            alert(error.message)
         }
     }
 
     const handleDelete = async (productId: string) => {
         const product = products.find((p) => p.id === productId)
         if (!product) return
-        if (!confirm(`「${product.name}」を完全に削除しますか？\n\n関連する販売データも削除されます。`)) return
+        if (!confirm(`「${product.name}」を完全に削除しますか？\n\n⚠ 関連する販売データも削除されます。`)) return
 
         try {
-            const { error } = await supabase
-                .from("products")
-                .delete()
-                .eq("id", productId)
-
-            if (error) throw error
+            const res = await fetch("/api/products/hide", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ productId }),
+            })
+            if (!res.ok) throw new Error("削除に失敗しました")
             setProducts((prev) => prev.filter((p) => p.id !== productId))
-        } catch (error) {
-            alert("削除に失敗しました")
+        } catch (error: any) {
+            alert(error.message)
         }
     }
 

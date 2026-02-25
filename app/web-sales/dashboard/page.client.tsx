@@ -68,6 +68,7 @@ function WebSalesDashboardContent() {
         const { data, error } = await supabase
           .from('products')
           .select('id, name, price, series, series_code, product_code')
+          .eq('is_hidden', false)
           .order('series_code')
           .order('product_code');
 
@@ -110,7 +111,7 @@ function WebSalesDashboardContent() {
         const { data: productsData, error: productsError } = await supabase
           .from('products')
           .select('*')
-          .or('is_hidden.eq.false,is_hidden.is.null')
+          .eq('is_hidden', false)
           .order('series_code')
           .order('product_code');
 
