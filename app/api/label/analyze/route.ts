@@ -2,14 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Increase body size limit for Base64 image uploads (default 1MB -> 20MB)
-export const config = {
-    api: {
-        bodyParser: {
-            sizeLimit: "20mb",
-        },
-    },
-};
+// App Router: extend function timeout to 60s for AI analysis
+export const maxDuration = 60;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;

@@ -143,6 +143,32 @@ function MobileLabelImportContent() {
         setToastMsg({ text, type });
     };
 
+    // ─── Image Compression (for Vercel 4.5MB body limit) ───
+    const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<{ base64: string; mimeType: string }> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                let w = img.width;
+                let h = img.height;
+                if (w > maxWidth) {
+                    h = Math.round((h * maxWidth) / w);
+                    w = maxWidth;
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) { reject(new Error("Canvas not supported")); return; }
+                ctx.drawImage(img, 0, 0, w, h);
+                const dataUrl = canvas.toDataURL("image/jpeg", quality);
+                const base64 = dataUrl.split(",")[1] || "";
+                resolve({ base64, mimeType: "image/jpeg" });
+            };
+            img.onerror = () => reject(new Error("画像の読み込みに失敗"));
+            img.src = URL.createObjectURL(file);
+        });
+    };
+
     // ─── File Handling ───
     const handleFileAdd = (type: LabelType, file: File) => {
         const preview = URL.createObjectURL(file);
@@ -177,23 +203,15 @@ function MobileLabelImportContent() {
         setSelectedFields({});
 
         try {
-            // Step A: Convert files to Base64
+            // Step A: Compress and convert files to Base64
             let fileData: { base64: string; mimeType: string; type: string }[];
             try {
-                const fileDataPromises = labelFiles.map((lf) => {
-                    return new Promise<{ base64: string; mimeType: string; type: string }>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const dataUrl = reader.result as string;
-                            const base64 = dataUrl.split(",")[1] || "";
-                            const mimeType = lf.file.type || "image/jpeg";
-                            resolve({ base64, mimeType, type: lf.type });
-                        };
-                        reader.onerror = () => reject(new Error("ファイル読み込みに失敗"));
-                        reader.readAsDataURL(lf.file);
-                    });
-                });
-                fileData = await Promise.all(fileDataPromises);
+                fileData = await Promise.all(
+                    labelFiles.map(async (lf) => {
+                        const compressed = await compressImage(lf.file);
+                        return { ...compressed, type: lf.type };
+                    })
+                );
             } catch (e: any) {
                 throw new Error("画像変換エラー: " + (e.message || e));
             }
