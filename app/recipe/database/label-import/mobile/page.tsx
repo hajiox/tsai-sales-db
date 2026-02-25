@@ -880,6 +880,35 @@ function MobileLabelImportContent() {
                         >
                             ← ラベル画像を変更
                         </button>
+
+                        <button
+                            onClick={() => {
+                                setStep(1);
+                                setLabelFiles([]);
+                                setExtracted(null);
+                                setCandidates([]);
+                                setActionMode("select");
+                                setSelectedCandidate(null);
+                                setEditedData({});
+                                setSelectedFields({});
+                                setSearchTerm("");
+                                setShowSearch(false);
+                            }}
+                            style={{
+                                width: "100%",
+                                marginTop: 4,
+                                padding: "14px",
+                                borderRadius: 14,
+                                border: "1px solid #fca5a5",
+                                background: "#fef2f2",
+                                color: "#dc2626",
+                                fontSize: 14,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                            }}
+                        >
+                            ✕ キャンセル（最初に戻る）
+                        </button>
                     </div>
                 )}
 
