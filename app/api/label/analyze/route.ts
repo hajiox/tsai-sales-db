@@ -2,6 +2,15 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// Increase body size limit for Base64 image uploads (default 1MB -> 20MB)
+export const config = {
+    api: {
+        bodyParser: {
+            sizeLimit: "20mb",
+        },
+    },
+};
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const geminiApiKey = process.env.GEMINI_API_KEY || "";
@@ -10,27 +19,50 @@ const genAI = new GoogleGenerativeAI(geminiApiKey);
 
 export async function POST(request: Request) {
     try {
-        const formData = await request.formData();
-        const files = formData.getAll("files") as File[];
-        const types = formData.getAll("types") as string[];
+        const contentType = request.headers.get("content-type") || "";
 
-        if (!files.length) {
-            return NextResponse.json({ error: "ファイルが必要です" }, { status: 400 });
+        let imageParts: { inlineData: { data: string; mimeType: string } }[] = [];
+        let types: string[] = [];
+
+        if (contentType.includes("application/json")) {
+            // JSON mode: Base64 encoded images from client
+            const body = await request.json();
+            const files = body.files as { base64: string; mimeType: string; type: string }[];
+
+            if (!files?.length) {
+                return NextResponse.json({ error: "ファイルが必要です" }, { status: 400 });
+            }
+
+            imageParts = files.map((f) => ({
+                inlineData: {
+                    data: f.base64,
+                    mimeType: f.mimeType || "image/jpeg",
+                },
+            }));
+            types = files.map((f) => f.type);
+        } else {
+            // FormData mode (fallback for desktop)
+            const formData = await request.formData();
+            const formFiles = formData.getAll("files") as File[];
+            types = formData.getAll("types") as string[];
+
+            if (!formFiles.length) {
+                return NextResponse.json({ error: "ファイルが必要です" }, { status: 400 });
+            }
+
+            imageParts = await Promise.all(
+                formFiles.map(async (file) => {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const base64Data = Buffer.from(arrayBuffer).toString("base64");
+                    return {
+                        inlineData: {
+                            data: base64Data,
+                            mimeType: file.type,
+                        },
+                    };
+                })
+            );
         }
-
-        // Prepare all images for Gemini
-        const imageParts = await Promise.all(
-            files.map(async (file) => {
-                const arrayBuffer = await file.arrayBuffer();
-                const base64Data = Buffer.from(arrayBuffer).toString("base64");
-                return {
-                    inlineData: {
-                        data: base64Data,
-                        mimeType: file.type,
-                    },
-                };
-            })
-        );
 
         // Fetch ALL existing ingredients for matching
         const supabase = createClient(supabaseUrl, supabaseServiceKey);

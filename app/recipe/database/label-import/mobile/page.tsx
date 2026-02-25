@@ -177,15 +177,26 @@ function MobileLabelImportContent() {
         setSelectedFields({});
 
         try {
-            const formData = new FormData();
-            labelFiles.forEach((lf) => {
-                formData.append("files", lf.file);
-                formData.append("types", lf.type);
+            // Convert files to Base64 on client side (avoids iOS Safari FormData issues)
+            const fileDataPromises = labelFiles.map(async (lf) => {
+                return new Promise<{ base64: string; mimeType: string; type: string }>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const dataUrl = reader.result as string;
+                        const base64 = dataUrl.split(",")[1];
+                        const mimeType = lf.file.type || "image/jpeg";
+                        resolve({ base64, mimeType, type: lf.type });
+                    };
+                    reader.onerror = () => reject(new Error("ファイル読み込みに失敗しました"));
+                    reader.readAsDataURL(lf.file);
+                });
             });
+            const fileData = await Promise.all(fileDataPromises);
 
             const res = await fetch("/api/label/analyze", {
                 method: "POST",
-                body: formData,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ files: fileData }),
             });
 
             if (!res.ok) {
