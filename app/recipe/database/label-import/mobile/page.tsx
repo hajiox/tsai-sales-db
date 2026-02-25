@@ -177,31 +177,47 @@ function MobileLabelImportContent() {
         setSelectedFields({});
 
         try {
-            // Convert files to Base64 on client side (avoids iOS Safari FormData issues)
-            const fileDataPromises = labelFiles.map(async (lf) => {
-                return new Promise<{ base64: string; mimeType: string; type: string }>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        const dataUrl = reader.result as string;
-                        const base64 = dataUrl.split(",")[1];
-                        const mimeType = lf.file.type || "image/jpeg";
-                        resolve({ base64, mimeType, type: lf.type });
-                    };
-                    reader.onerror = () => reject(new Error("ファイル読み込みに失敗しました"));
-                    reader.readAsDataURL(lf.file);
+            // Step A: Convert files to Base64
+            let fileData: { base64: string; mimeType: string; type: string }[];
+            try {
+                const fileDataPromises = labelFiles.map((lf) => {
+                    return new Promise<{ base64: string; mimeType: string; type: string }>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const dataUrl = reader.result as string;
+                            const base64 = dataUrl.split(",")[1] || "";
+                            const mimeType = lf.file.type || "image/jpeg";
+                            resolve({ base64, mimeType, type: lf.type });
+                        };
+                        reader.onerror = () => reject(new Error("ファイル読み込みに失敗"));
+                        reader.readAsDataURL(lf.file);
+                    });
                 });
-            });
-            const fileData = await Promise.all(fileDataPromises);
+                fileData = await Promise.all(fileDataPromises);
+            } catch (e: any) {
+                throw new Error("画像変換エラー: " + (e.message || e));
+            }
 
-            const res = await fetch("/api/label/analyze", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ files: fileData }),
-            });
+            // Step B: Send request
+            let res: Response;
+            try {
+                res = await fetch("/api/label/analyze", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ files: fileData }),
+                });
+            } catch (e: any) {
+                throw new Error("通信エラー: " + (e.message || e));
+            }
 
+            // Step C: Parse response
             if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.error || "解析に失敗しました");
+                let errMsg = "解析に失敗しました";
+                try {
+                    const errData = await res.json();
+                    errMsg = errData.error || errMsg;
+                } catch { }
+                throw new Error("API Error (" + res.status + "): " + errMsg);
             }
 
             const data = await res.json();
@@ -229,7 +245,7 @@ function MobileLabelImportContent() {
             setStep(3);
             showToast("ラベル解析が完了しました", "success");
         } catch (error: any) {
-            showToast(error.message, "error");
+            showToast(error.message || "不明なエラー", "error");
             setStep(1);
         } finally {
             setLoading(false);
@@ -398,7 +414,7 @@ function MobileLabelImportContent() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div>
                         <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5 }}>📷 ラベルAI取込</div>
-                        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>食品ラベルを撮影してDBに自動登録</div>
+                        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>食品ラベルを撮影してDBに自動登録 <span style={{ opacity: 0.5 }}>v2</span></div>
                     </div>
                     <div style={{
                         fontSize: 12,
