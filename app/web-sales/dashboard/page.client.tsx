@@ -12,7 +12,7 @@ import ProductAddModal from "@/components/ProductAddModal"
 import AdvertisingCostModal from "@/components/AdvertisingCostModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, DollarSign } from "lucide-react"
+import { Plus, Trash2, DollarSign, EyeOff } from "lucide-react"
 
 type ViewMode = 'month' | 'period';
 
@@ -110,7 +110,7 @@ function WebSalesDashboardContent() {
         const { data: productsData, error: productsError } = await supabase
           .from('products')
           .select('*')
-          .neq('is_hidden', true)
+          .or('is_hidden.eq.false,is_hidden.is.null')
           .order('series_code')
           .order('product_code');
 
@@ -277,6 +277,28 @@ function WebSalesDashboardContent() {
             >
               <DollarSign size={16} />
               広告費管理
+            </button>
+
+            <button
+              onClick={() => router.push('/web-sales/discontinued')}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                backgroundColor: '#6b7280',
+                color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: '500'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#4b5563'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#6b7280'}
+            >
+              <EyeOff size={16} />
+              終売管理
             </button>
 
             <input

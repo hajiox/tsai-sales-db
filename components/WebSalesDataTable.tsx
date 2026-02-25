@@ -335,7 +335,7 @@ export default function WebSalesDataTable({
   const handleHideProduct = async (productId: string) => {
     const productName = getProductName(productId)
 
-    if (!confirm(`商品「${productName}」を終売（非表示）にしますか？\n\nデータは削除されません。紐付け管理画面のマッチング対象からも除外されます。`)) {
+    if (!confirm(`商品「${productName}」を終売（非表示）にしますか？\n\nデータは削除されません。\n終売管理ページから復活できます。`)) {
       return
     }
 
@@ -347,8 +347,8 @@ export default function WebSalesDataTable({
 
       if (error) throw error
 
-      alert(`商品「${productName}」を終売にしました`)
-      if (onRefresh) onRefresh()
+      // 確実に画面から消すためリロード
+      window.location.reload()
     } catch (error) {
       console.error('非表示エラー:', error)
       alert('商品の非表示に失敗しました')
