@@ -408,6 +408,11 @@ export default function RecipeDetailPage() {
           }
           const updatedItem = { ...item, ...updates };
 
+          // 使用量が未設定(0)ならデフォルト1にする（資材・経費等で選択しただけで原価反映されるように）
+          if (!updatedItem.usage_amount && updatedItem.unit_price) {
+            updatedItem.usage_amount = 1;
+          }
+
           if (
             updatedItem.usage_amount &&
             updatedItem.unit_price &&
