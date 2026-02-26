@@ -1,11 +1,10 @@
 // app/recipe/product-link/page.tsx
-// レシピ ↔ WEB販売商品 自動マッチング＆紐付け管理
+// WEB販売商品 → レシピ 紐付け管理（WEB販売ベース版）
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Table,
@@ -22,7 +21,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Link2, Unlink, RefreshCw, Check, X, AlertTriangle, Sparkles, ChevronRight } from "lucide-react";
+import { ArrowLeft, Link2, Unlink, RefreshCw, Check, X, AlertTriangle, Sparkles, CheckCircle2, Circle } from "lucide-react";
 import { toast } from "sonner";
 
 interface Recipe {
@@ -55,10 +54,9 @@ interface Suggestion {
     confidence: "high" | "medium" | "low" | "none";
 }
 
-// Editable suggestion row state
 interface EditableSuggestion extends Suggestion {
     accepted: boolean;
-    overrideProductId: string | null; // User can override the AI suggestion
+    overrideProductId: string | null;
 }
 
 export default function ProductLinkPage() {
@@ -70,7 +68,6 @@ export default function ProductLinkPage() {
     const [saving, setSaving] = useState(false);
     const [syncing, setSyncing] = useState(false);
 
-    // Matching results
     const [suggestions, setSuggestions] = useState<EditableSuggestion[]>([]);
     const [step, setStep] = useState<"overview" | "matching">("overview");
 
@@ -198,10 +195,17 @@ export default function ProductLinkPage() {
 
     // Derived data
     const linkedRecipes = recipes.filter((r) => r.linked_product_id);
-    const unlinkedCount = recipes.length - linkedRecipes.length;
     const linkedProductIds = new Set(linkedRecipes.map((r) => r.linked_product_id!));
-    const getProduct = (id: string) => products.find((p) => p.id === id);
+    const getRecipeForProduct = (productId: string) => recipes.find((r) => r.linked_product_id === productId);
     const formatCurrency = (v: number | null) => (v ? `¥${v.toLocaleString()}` : "-");
+
+    // WEB販売ベースの分類
+    const linkedProducts = products.filter((p) => linkedProductIds.has(p.id));
+    const unlinkedProducts = products.filter((p) => !linkedProductIds.has(p.id));
+    const linkedCount = linkedProducts.length;
+    const totalProductCount = products.length;
+    const progressPercent = totalProductCount > 0 ? Math.round((linkedCount / totalProductCount) * 100) : 0;
+    const isComplete = linkedCount === totalProductCount && totalProductCount > 0;
 
     const getConfidenceBadge = (confidence: string, score: number) => {
         switch (confidence) {
@@ -232,7 +236,6 @@ export default function ProductLinkPage() {
         }
     };
 
-    // Available products for manual override (not yet used in suggestions)
     const getAvailableProducts = (currentSuggestion: EditableSuggestion) => {
         const usedIds = new Set(
             suggestions
@@ -263,10 +266,10 @@ export default function ProductLinkPage() {
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                         <Link2 className="w-7 h-7" />
-                        レシピ ↔ WEB販売 紐付け管理
+                        WEB販売商品 → レシピ 紐付け管理
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        レシピ（ネット専用）とWEB販売管理の商品を紐付けて、価格・利益率を自動同期
+                        WEB販売管理の全商品にレシピを紐付けて、価格・利益率を自動同期
                     </p>
                 </div>
                 <div className="flex gap-2">
@@ -274,7 +277,7 @@ export default function ProductLinkPage() {
                         <>
                             <Button
                                 onClick={handleSyncAll}
-                                disabled={syncing || linkedRecipes.length === 0}
+                                disabled={syncing || linkedCount === 0}
                                 variant="outline"
                             >
                                 <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
@@ -282,41 +285,63 @@ export default function ProductLinkPage() {
                             </Button>
                             <Button
                                 onClick={handleAutoMatch}
-                                disabled={matching || unlinkedCount === 0}
+                                disabled={matching || unlinkedProducts.length === 0}
                                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
                             >
                                 <Sparkles className={`w-4 h-4 mr-2 ${matching ? "animate-spin" : ""}`} />
-                                {matching ? "マッチング中..." : `AIマッチング（${unlinkedCount}件未紐付け）`}
+                                {matching ? "マッチング中..." : `AIマッチング（未紐付${unlinkedProducts.length}件）`}
                             </Button>
                         </>
                     )}
                 </div>
             </div>
 
+            {/* Progress Bar */}
+            <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">紐付け進捗</span>
+                    <span className={`text-sm font-bold ${isComplete ? "text-green-600" : "text-amber-600"}`}>
+                        {linkedCount} / {totalProductCount} 商品 ({progressPercent}%)
+                    </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                        className={`h-3 rounded-full transition-all duration-500 ${isComplete ? "bg-green-500" : "bg-blue-500"}`}
+                        style={{ width: `${progressPercent}%` }}
+                    />
+                </div>
+                {isComplete && (
+                    <div className="mt-2 flex items-center gap-2 text-green-600 font-medium">
+                        <CheckCircle2 className="w-5 h-5" />
+                        全商品の紐付けが完了しています！
+                    </div>
+                )}
+            </div>
+
             {/* Summary Cards */}
             <div className="grid grid-cols-4 gap-4 mb-6">
+                <Card>
+                    <CardContent className="pt-4 pb-3">
+                        <div className="text-sm text-gray-500">WEB販売商品</div>
+                        <div className="text-2xl font-bold">{totalProductCount}</div>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardContent className="pt-4 pb-3">
                         <div className="text-sm text-gray-500">レシピ（ネット専用）</div>
                         <div className="text-2xl font-bold">{recipes.length}</div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardContent className="pt-4 pb-3">
-                        <div className="text-sm text-gray-500">WEB販売商品</div>
-                        <div className="text-2xl font-bold">{products.length}</div>
-                    </CardContent>
-                </Card>
                 <Card className="border-green-200 bg-green-50">
                     <CardContent className="pt-4 pb-3">
                         <div className="text-sm text-green-700">紐付け済み</div>
-                        <div className="text-2xl font-bold text-green-700">{linkedRecipes.length}</div>
+                        <div className="text-2xl font-bold text-green-700">{linkedCount}</div>
                     </CardContent>
                 </Card>
-                <Card className="border-amber-200 bg-amber-50">
+                <Card className={`${unlinkedProducts.length === 0 ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
                     <CardContent className="pt-4 pb-3">
-                        <div className="text-sm text-amber-700">未紐付け</div>
-                        <div className="text-2xl font-bold text-amber-700">{unlinkedCount}</div>
+                        <div className={`text-sm ${unlinkedProducts.length === 0 ? "text-green-700" : "text-amber-700"}`}>未紐付け</div>
+                        <div className={`text-2xl font-bold ${unlinkedProducts.length === 0 ? "text-green-700" : "text-amber-700"}`}>{unlinkedProducts.length}</div>
                     </CardContent>
                 </Card>
             </div>
@@ -400,9 +425,7 @@ export default function ProductLinkPage() {
                                             <TableCell className="text-right text-sm">
                                                 {formatCurrency(s.recipePrice)}
                                             </TableCell>
-                                            <TableCell className="text-center">
-                                                <ChevronRight className="w-4 h-4 text-gray-400 mx-auto" />
-                                            </TableCell>
+                                            <TableCell className="text-center text-gray-400">→</TableCell>
                                             <TableCell>
                                                 <Select
                                                     value={effectiveProductId || "__none__"}
@@ -415,12 +438,12 @@ export default function ProductLinkPage() {
                                                 >
                                                     <SelectTrigger
                                                         className={`h-8 text-sm ${s.overrideProductId
-                                                                ? "border-blue-300 bg-blue-50"
-                                                                : s.confidence === "high"
-                                                                    ? "border-green-300"
-                                                                    : s.confidence === "medium"
-                                                                        ? "border-yellow-300"
-                                                                        : "border-gray-300"
+                                                            ? "border-blue-300 bg-blue-50"
+                                                            : s.confidence === "high"
+                                                                ? "border-green-300"
+                                                                : s.confidence === "medium"
+                                                                    ? "border-yellow-300"
+                                                                    : "border-gray-300"
                                                             }`}
                                                     >
                                                         <SelectValue>
@@ -471,113 +494,140 @@ export default function ProductLinkPage() {
                 </Card>
             )}
 
-            {/* ===== Linked Recipes (always shown) ===== */}
-            <Card className="mb-6">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                        <Check className="w-5 h-5 text-green-600" />
-                        紐付け済み（{linkedRecipes.length}件）
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {linkedRecipes.length === 0 ? (
-                        <p className="text-gray-400 text-center py-4">紐付け済みの商品はありません</p>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>レシピ名</TableHead>
-                                    <TableHead className="text-right">販売価格</TableHead>
-                                    <TableHead className="text-right">原価</TableHead>
-                                    <TableHead className="text-center">↔</TableHead>
-                                    <TableHead>WEB販売商品名</TableHead>
-                                    <TableHead className="text-right">商品価格</TableHead>
-                                    <TableHead className="text-right">利益率</TableHead>
-                                    <TableHead className="text-center">状態</TableHead>
-                                    <TableHead></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {linkedRecipes.map((recipe) => {
-                                    const product = getProduct(recipe.linked_product_id!);
-                                    const priceMismatch =
-                                        product && recipe.selling_price !== product.price;
-                                    return (
-                                        <TableRow key={recipe.id}>
-                                            <TableCell className="font-medium">{recipe.name}</TableCell>
-                                            <TableCell className="text-right">
-                                                {formatCurrency(recipe.selling_price)}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {formatCurrency(recipe.total_cost)}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <Link2 className="w-4 h-4 mx-auto text-green-500" />
-                                            </TableCell>
-                                            <TableCell className="font-medium">
-                                                {product?.name || "（削除済み）"}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <span className={priceMismatch ? "text-red-500 font-bold" : ""}>
-                                                    {formatCurrency(product?.price || null)}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {product?.profit_rate != null ? `${product.profit_rate}%` : "-"}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                {priceMismatch ? (
-                                                    <span className="flex items-center gap-1 text-amber-600 text-xs">
-                                                        <AlertTriangle className="w-3 h-3" />
-                                                        差異あり
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-green-600 text-xs">✓ 同期済</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="text-red-400 hover:text-red-600"
-                                                    onClick={() => handleUnlink(recipe.id)}
-                                                >
-                                                    <Unlink className="w-4 h-4" />
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Unlinked products info */}
+            {/* ===== WEB販売商品ベースの紐付け一覧 ===== */}
             {step === "overview" && (
-                <Card className="border-gray-200">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-lg flex items-center gap-2 text-gray-500">
-                            <AlertTriangle className="w-5 h-5 text-amber-500" />
-                            WEB販売にあってレシピに無い商品（{products.filter((p) => !linkedProductIds.has(p.id)).length}件）
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex flex-wrap gap-2">
-                            {products
-                                .filter((p) => !linkedProductIds.has(p.id))
-                                .map((p) => (
-                                    <span
-                                        key={p.id}
-                                        className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs border"
-                                    >
-                                        {p.name} {p.price ? `(¥${p.price.toLocaleString()})` : ""}
-                                    </span>
-                                ))}
-                        </div>
-                    </CardContent>
-                </Card>
+                <>
+                    {/* 未紐付け商品（先に表示） */}
+                    {unlinkedProducts.length > 0 && (
+                        <Card className="mb-6 border-amber-200">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-lg flex items-center gap-2 text-amber-700">
+                                    <Circle className="w-5 h-5" />
+                                    未紐付け WEB販売商品（{unlinkedProducts.length}件）
+                                </CardTitle>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    AIマッチングボタンで一括紐付けできます
+                                </p>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-[30px]">状態</TableHead>
+                                            <TableHead>WEB販売商品名</TableHead>
+                                            <TableHead className="text-right">商品価格</TableHead>
+                                            <TableHead className="text-right">利益率</TableHead>
+                                            <TableHead>紐付けレシピ</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {unlinkedProducts.map((product) => (
+                                            <TableRow key={product.id} className="bg-amber-50/30">
+                                                <TableCell>
+                                                    <Circle className="w-4 h-4 text-amber-400" />
+                                                </TableCell>
+                                                <TableCell className="font-medium">{product.name}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
+                                                <TableCell className="text-right">
+                                                    {product.profit_rate != null ? `${product.profit_rate}%` : "-"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="text-gray-400 text-sm">— 未紐付け</span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* 紐付け済み商品 */}
+                    <Card className="mb-6 border-green-200">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-lg flex items-center gap-2 text-green-700">
+                                <CheckCircle2 className="w-5 h-5" />
+                                紐付け済み WEB販売商品（{linkedCount}件）
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {linkedProducts.length === 0 ? (
+                                <p className="text-gray-400 text-center py-4">紐付け済みの商品はありません</p>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-[30px]">状態</TableHead>
+                                            <TableHead>WEB販売商品名</TableHead>
+                                            <TableHead className="text-right">商品価格</TableHead>
+                                            <TableHead className="text-right">利益率</TableHead>
+                                            <TableHead className="text-center">↔</TableHead>
+                                            <TableHead>レシピ名</TableHead>
+                                            <TableHead className="text-right">レシピ販売価格</TableHead>
+                                            <TableHead className="text-right">原価</TableHead>
+                                            <TableHead className="text-center">同期</TableHead>
+                                            <TableHead></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {linkedProducts.map((product) => {
+                                            const recipe = getRecipeForProduct(product.id);
+                                            const priceMismatch = recipe && recipe.selling_price !== product.price;
+                                            return (
+                                                <TableRow key={product.id}>
+                                                    <TableCell>
+                                                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">{product.name}</TableCell>
+                                                    <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        {product.profit_rate != null ? `${product.profit_rate}%` : "-"}
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Link2 className="w-4 h-4 mx-auto text-green-500" />
+                                                    </TableCell>
+                                                    <TableCell className="font-medium text-blue-700">
+                                                        {recipe?.name || "（レシピ不明）"}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <span className={priceMismatch ? "text-red-500 font-bold" : ""}>
+                                                            {formatCurrency(recipe?.selling_price || null)}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {formatCurrency(recipe?.total_cost || null)}
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        {priceMismatch ? (
+                                                            <span className="flex items-center justify-center gap-1 text-amber-600 text-xs">
+                                                                <AlertTriangle className="w-3 h-3" />
+                                                                差異
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-green-600 text-xs">✓</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {recipe && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-red-400 hover:text-red-600"
+                                                                onClick={() => handleUnlink(recipe.id)}
+                                                            >
+                                                                <Unlink className="w-4 h-4" />
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                </>
             )}
         </div>
     );
