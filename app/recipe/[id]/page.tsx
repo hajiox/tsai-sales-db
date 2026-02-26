@@ -1425,27 +1425,34 @@ Now Expanded or Scrollable */}
                               </td>
                               <td className="py-2 font-medium text-gray-700 align-top pr-2">
                                 {isEditing ? (
-                                  <ItemNameSelect
-                                    candidates={group.candidates}
-                                    value={item.item_name}
-                                    onSelect={(val) =>
-                                      handleItemSelect(item.id, val)
-                                    }
-                                  />
+                                  <div>
+                                    <ItemNameSelect
+                                      candidates={group.candidates}
+                                      value={item.item_name}
+                                      onSelect={(val) =>
+                                        handleItemSelect(item.id, val)
+                                      }
+                                    />
+                                    {/* タイプ変更プルダウン */}
+                                    <select
+                                      value={item.item_type}
+                                      onChange={(e) => {
+                                        handleItemChange(item.id, "item_type", e.target.value);
+                                      }}
+                                      className="mt-1 text-[10px] border border-gray-200 rounded px-1 py-0.5 bg-gray-50 text-gray-600 cursor-pointer hover:border-blue-400"
+                                    >
+                                      <option value="ingredient">食材</option>
+                                      <option value="material">資材・包材</option>
+                                      <option value="intermediate">中間部品</option>
+                                      <option value="product">商品</option>
+                                      <option value="expense">諸経費</option>
+                                    </select>
+                                  </div>
                                 ) : (
                                   <>
                                     <div className="flex items-center gap-2">
                                       {item.item_name}
-                                      {isEditing && (['ingredient', 'material'].includes(item.item_type)) && (
-                                        <button
-                                          onClick={() => handleItemChange(item.id, 'tax_included', !item.tax_included)}
-                                          className={`text-[9px] px-1 py-0 rounded font-bold border transition ${item.tax_included !== false ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}
-                                          title={item.tax_included !== false ? '現在: 税込 (クリックで税抜へ)' : '現在: 税抜 (クリックで税込へ)'}
-                                        >
-                                          {item.tax_included !== false ? '込' : '抜'}
-                                        </button>
-                                      )}
-                                      {!isEditing && item.tax_included === false && (['ingredient', 'material'].includes(item.item_type)) && (
+                                      {item.tax_included === false && (['ingredient', 'material'].includes(item.item_type)) && (
                                         <span className="text-[9px] px-1 py-0 rounded font-bold border bg-gray-100 text-gray-400 border-gray-200">税抜</span>
                                       )}
                                     </div>
