@@ -122,7 +122,64 @@ export async function GET(request: Request) {
     }
 }
 
-// POST: Link/unlink or batch-link
+// Helper: 1:1制約を保証して紐付け（既存の紐付けを自動解除）
+async function linkRecipeToProduct(
+    supabase: any,
+    recipeId: string,
+    productId: string | null
+): Promise<void> {
+    if (productId) {
+        // 1:1制約: この商品に既に紐付いている別レシピがあれば解除
+        const { data: existing } = await supabase
+            .from("recipes")
+            .select("id")
+            .eq("linked_product_id", productId)
+            .neq("id", recipeId);
+
+        if (existing && existing.length > 0) {
+            for (const ex of existing) {
+                await supabase
+                    .from("recipes")
+                    .update({ linked_product_id: null })
+                    .eq("id", ex.id);
+                console.log(`1:1制約: レシピ ${ex.id} の紐付けを解除（商品 ${productId} は別レシピに再割当）`);
+            }
+        }
+    }
+
+    await supabase
+        .from("recipes")
+        .update({ linked_product_id: productId })
+        .eq("id", recipeId);
+}
+
+// Helper: レシピの価格をWEB販売商品に同期
+async function syncPriceToProduct(
+    supabase: any,
+    recipeId: string,
+    productId: string
+): Promise<void> {
+    const { data: recipe } = await supabase
+        .from("recipes")
+        .select("selling_price, total_cost")
+        .eq("id", recipeId)
+        .single();
+
+    if (recipe && recipe.selling_price) {
+        const profitRate = recipe.total_cost
+            ? ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100
+            : null;
+        await supabase
+            .from("products")
+            .update({
+                price: recipe.selling_price,
+                profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
+            })
+            .eq("id", productId);
+    }
+}
+
+// POST: Link/unlink or batch-link（1:1制約付き）
 export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -132,35 +189,31 @@ export async function POST(request: Request) {
         // Batch link mode
         if (body.batch && Array.isArray(body.links)) {
             let linked = 0;
+
+            // 1:1制約チェック: 同じバッチ内で同じproductIdが複数ないか
+            const productIdCounts = new Map<string, number>();
             for (const link of body.links) {
-                const { error } = await supabase
-                    .from("recipes")
-                    .update({ linked_product_id: link.productId })
-                    .eq("id", link.recipeId);
-                if (!error) linked++;
+                if (link.productId) {
+                    productIdCounts.set(link.productId, (productIdCounts.get(link.productId) || 0) + 1);
+                }
+            }
+            const duplicates = [...productIdCounts.entries()].filter(([, count]) => count > 1);
+            if (duplicates.length > 0) {
+                return NextResponse.json(
+                    { error: `同一商品に複数レシピを紐付けることはできません（対象商品ID: ${duplicates.map(([id]) => id).join(', ')}）` },
+                    { status: 400 }
+                );
             }
 
-            // Sync all linked
+            for (const link of body.links) {
+                await linkRecipeToProduct(supabase, link.recipeId, link.productId);
+                linked++;
+            }
+
+            // Sync prices
             for (const link of body.links) {
                 if (!link.productId) continue;
-                const { data: recipe } = await supabase
-                    .from("recipes")
-                    .select("selling_price, total_cost")
-                    .eq("id", link.recipeId)
-                    .single();
-
-                if (recipe && recipe.selling_price) {
-                    const profitRate = recipe.total_cost
-                        ? ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100
-                        : null;
-                    await supabase
-                        .from("products")
-                        .update({
-                            price: recipe.selling_price,
-                            profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
-                        })
-                        .eq("id", link.productId);
-                }
+                await syncPriceToProduct(supabase, link.recipeId, link.productId);
             }
 
             return NextResponse.json({ success: true, linked });
@@ -168,32 +221,10 @@ export async function POST(request: Request) {
 
         // Single link mode
         const { recipeId, productId } = body;
-        const { error } = await supabase
-            .from("recipes")
-            .update({ linked_product_id: productId })
-            .eq("id", recipeId);
-
-        if (error) throw error;
+        await linkRecipeToProduct(supabase, recipeId, productId);
 
         if (productId) {
-            const { data: recipe } = await supabase
-                .from("recipes")
-                .select("selling_price, total_cost")
-                .eq("id", recipeId)
-                .single();
-
-            if (recipe && recipe.selling_price) {
-                const profitRate = recipe.total_cost
-                    ? ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100
-                    : null;
-                await supabase
-                    .from("products")
-                    .update({
-                        price: recipe.selling_price,
-                        profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
-                    })
-                    .eq("id", productId);
-            }
+            await syncPriceToProduct(supabase, recipeId, productId);
         }
 
         return NextResponse.json({ success: true });
