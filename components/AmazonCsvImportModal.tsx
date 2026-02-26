@@ -346,6 +346,13 @@ export default function AmazonCsvImportModal({
                 </Card>
               </div>
 
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  <span className="text-red-600 text-sm">{error}</span>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />戻る

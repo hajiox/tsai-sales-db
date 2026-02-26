@@ -1,6 +1,11 @@
-// /app/api/import/amazon-confirm/route.ts ver.18 (動作実績のあるver.10ベース)
+// /app/api/import/amazon-confirm/route.ts ver.19 (RLSバイパス対応)
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })()
+);
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +25,7 @@ interface AmazonConfirmRequest {
 
 export async function POST(request: NextRequest) {
   console.log('Amazon確定API開始 - ver.18');
-  
+
   try {
     const body: AmazonConfirmRequest = await request.json();
     const { saleDate, matchedProducts, newMappings } = body;
@@ -70,7 +75,7 @@ export async function POST(request: NextRequest) {
     for (const [productId, totalQuantity] of aggregatedSales.entries()) {
       try {
         const reportMonth = `${month}-01`;
-        
+
         const { data: existingData, error: selectError } = await supabase
           .from('web_sales_summary')
           .select('id')
