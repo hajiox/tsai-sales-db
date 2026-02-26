@@ -75,7 +75,7 @@ export default function ItemNameSelect({
                     <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[320px] p-0" align="start">
+            <PopoverContent className="w-[500px] p-0" align="start">
                 {/* 検索入力 */}
                 <div className="flex items-center border-b px-3">
                     <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
@@ -124,7 +124,7 @@ export default function ItemNameSelect({
                                         value === item.name ? "opacity-100 text-blue-600" : "opacity-0"
                                     )}
                                 />
-                                <span className="truncate">{item.name}</span>
+                                <span className="flex-1">{item.name}</span>
                                 <span className="ml-auto text-xs text-gray-400 shrink-0 pl-2">
                                     {item.unit_price ? `¥${item.unit_price}` : ''}
                                 </span>
