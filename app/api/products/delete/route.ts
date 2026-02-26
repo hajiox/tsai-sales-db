@@ -1,4 +1,4 @@
-// /app/api/products/delete/route.ts ver.1
+// /app/api/products/delete/route.ts ver.2 (カスケード削除対応)
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -33,7 +33,49 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // 商品を削除
+    // 関連テーブルを先に削除（FK制約回避のためのカスケード削除）
+    const relatedTables = [
+      { table: 'web_sales_summary', column: 'product_id' },
+      { table: 'product_price_history', column: 'product_id' },
+      { table: 'amazon_product_mapping', column: 'product_id' },
+      { table: 'rakuten_product_mapping', column: 'product_id' },
+      { table: 'yahoo_product_mapping', column: 'product_id' },
+      { table: 'mercari_product_mapping', column: 'product_id' },
+      { table: 'base_product_mapping', column: 'product_id' },
+      { table: 'qoo10_product_mapping', column: 'product_id' },
+      { table: 'tiktok_product_mapping', column: 'product_id' },
+    ]
+
+    const deletionLog: string[] = []
+
+    for (const { table, column } of relatedTables) {
+      const { error, count } = await supabase
+        .from(table)
+        .delete({ count: 'exact' })
+        .eq(column, id)
+
+      if (error) {
+        console.error(`${table} 削除エラー:`, error)
+        // テーブルが存在しない場合等はスキップ
+        deletionLog.push(`${table}: error (${error.message})`)
+      } else {
+        if (count && count > 0) {
+          deletionLog.push(`${table}: ${count}件削除`)
+        }
+      }
+    }
+
+    // recipes テーブルの linked_product_id をnullに（レシピ自体は残す）
+    const { error: recipeError, count: recipeCount } = await supabase
+      .from('recipes')
+      .update({ linked_product_id: null })
+      .eq('linked_product_id', id)
+
+    if (!recipeError && recipeCount && recipeCount > 0) {
+      deletionLog.push(`recipes: ${recipeCount}件のリンク解除`)
+    }
+
+    // 商品本体を削除
     const { error: deleteError } = await supabase
       .from('products')
       .delete()
@@ -47,13 +89,16 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    console.log(`商品「${existingProduct.name}」を削除:`, deletionLog)
+
     return NextResponse.json({
       success: true,
       message: `商品「${existingProduct.name}」を削除しました`,
-      data: existingProduct
+      data: existingProduct,
+      deletionLog,
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error:', error)
     return NextResponse.json(
       { error: 'サーバーエラーが発生しました', details: error.message },

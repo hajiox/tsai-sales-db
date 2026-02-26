@@ -362,24 +362,29 @@ export default function WebSalesDataTable({
   const handleDeleteProduct = async (productId: string) => {
     const productName = getProductName(productId)
 
-    if (!confirm(`商品「${productName}」を削除しますか？\n\n※ 関連するすべての販売データも削除されます`)) {
+    if (!confirm(`商品「${productName}」を削除しますか？\n\n※ 関連するすべての販売データ・マッピングデータも完全に削除されます。\nこの操作は取り消せません。`)) {
       return
     }
 
     setIsDeleting(true)
     try {
-      const { error: productError } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', productId)
+      const res = await fetch('/api/products/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: productId }),
+      })
 
-      if (productError) throw productError
+      const result = await res.json()
+
+      if (!res.ok) {
+        throw new Error(result.error || result.details || '削除に失敗しました')
+      }
 
       alert(`商品「${productName}」を削除しました`)
       if (onRefresh) onRefresh()
-    } catch (error) {
+    } catch (error: any) {
       console.error('削除エラー:', error)
-      alert('商品の削除に失敗しました')
+      alert(`商品の削除に失敗しました: ${error.message}`)
     } finally {
       setIsDeleting(false)
     }
