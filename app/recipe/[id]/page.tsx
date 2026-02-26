@@ -323,7 +323,7 @@ export default function RecipeDetailPage() {
 
           if (["usage_amount", "unit_quantity", "unit_price", "tax_included"].includes(field)) {
             const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
-            const qty = parseFloat(String(updatedItem.unit_quantity)) || 0;
+            const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
             const price = parseFloat(String(updatedItem.unit_price)) || 0;
 
             const rate =
@@ -335,9 +335,7 @@ export default function RecipeDetailPage() {
                   ? (1 + (taxRates.material / 100))
                   : 1.0;
 
-            if (qty !== 0) {
-              updatedItem.cost = Math.round(usage * (price / qty) * rate);
-            }
+            updatedItem.cost = Math.round(usage * (price / qty) * rate);
           }
           return updatedItem;
         }
@@ -413,13 +411,17 @@ export default function RecipeDetailPage() {
             updatedItem.usage_amount = 1;
           }
 
+          // unit_quantityが未設定・文字列の場合もデフォルト1にする
+          if (!updatedItem.unit_quantity || parseFloat(String(updatedItem.unit_quantity)) === 0) {
+            updatedItem.unit_quantity = 1;
+          }
+
           if (
             updatedItem.usage_amount &&
-            updatedItem.unit_price &&
-            updatedItem.unit_quantity
+            updatedItem.unit_price
           ) {
             const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
-            const qty = parseFloat(String(updatedItem.unit_quantity)) || 0;
+            const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
             const price = parseFloat(String(updatedItem.unit_price)) || 0;
 
             const rate =
@@ -431,9 +433,7 @@ export default function RecipeDetailPage() {
                   ? (1 + (taxRates.material / 100))
                   : 1.0;
 
-            if (qty !== 0) {
-              updatedItem.cost = Math.round(usage * (price / qty) * rate);
-            }
+            updatedItem.cost = Math.round(usage * (price / qty) * rate);
           }
           return updatedItem;
         }
