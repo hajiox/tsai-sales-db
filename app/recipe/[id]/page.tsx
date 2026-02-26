@@ -450,31 +450,20 @@ export default function RecipeDetailPage() {
     }
 
     if (field === "selling_price") {
-      // Amazon手数料は自動計算されるので、items内のAmazon手数料は更新不要
       setHasChanges(true);
     }
 
     if (field === "category") {
       const isIntermediate = value === "中間部品";
       try {
-        const { error } = await supabase
-          .from("recipes")
-          .update({
-            category: value,
-            is_intermediate: isIntermediate,
-          })
-          .eq("id", recipe.id);
-
-        if (error) throw error;
-        // Update local state
+        const res = await fetch('/api/recipe/update', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipeId: recipe.id, updates: { category: value } }),
+        });
+        if (!res.ok) throw new Error('更新に失敗しました');
         setRecipe((prev) =>
-          prev
-            ? {
-              ...prev,
-              category: String(value),
-              is_intermediate: isIntermediate,
-            }
-            : null,
+          prev ? { ...prev, category: String(value), is_intermediate: isIntermediate } : null,
         );
         toast.success("カテゴリーを更新しました");
       } catch (error) {
@@ -485,12 +474,12 @@ export default function RecipeDetailPage() {
     }
 
     try {
-      const { error } = await supabase
-        .from("recipes")
-        .update({ [field]: value })
-        .eq("id", recipe.id);
-
-      if (error) throw error;
+      const res = await fetch('/api/recipe/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId: recipe.id, updates: { [field]: value } }),
+      });
+      if (!res.ok) throw new Error('更新に失敗しました');
       toast.success("更新しました", { duration: 1000 });
     } catch (error) {
       console.error("Update error:", error);
@@ -502,56 +491,10 @@ export default function RecipeDetailPage() {
     if (!recipe) return;
 
     try {
-      // 1. Delete removed items
-      if (deletedItemIds.size > 0) {
-        const { error: delError } = await supabase
-          .from("recipe_items")
-          .delete()
-          .in("id", Array.from(deletedItemIds));
-        if (delError) throw delError;
-        setDeletedItemIds(new Set());
-      }
+      const newItemsList = items.filter((i) => i.id.startsWith("temp-"));
+      const existingItemsList = items.filter((i) => !i.id.startsWith("temp-"));
 
-      // 2. Process updates and inserts
-      const newItems = items.filter((i) => i.id.startsWith("temp-"));
-      const existingItems = items.filter((i) => !i.id.startsWith("temp-"));
-
-      // Inserts
-      if (newItems.length > 0) {
-        const { error: insError } = await supabase.from("recipe_items").insert(
-          newItems.map((item) => ({
-            recipe_id: recipe.id,
-            item_name: item.item_name,
-            item_type: item.item_type,
-            unit_quantity: item.unit_quantity,
-            unit_price: item.unit_price,
-            unit_weight: item.unit_weight,
-            usage_amount: item.usage_amount,
-            cost: item.cost,
-            tax_included: item.tax_included ?? true
-          })),
-        );
-        if (insError) throw insError;
-      }
-
-      // Updates
-      for (const item of existingItems) {
-        const { error: updError } = await supabase
-          .from("recipe_items")
-          .update({
-            item_name: item.item_name,
-            unit_quantity: item.unit_quantity,
-            unit_price: item.unit_price,
-            unit_weight: item.unit_weight,
-            usage_amount: item.usage_amount,
-            cost: item.cost,
-            tax_included: item.tax_included ?? true
-          })
-          .eq("id", item.id);
-        if (updError) throw updError;
-      }
-
-      // Amazon手数料をitems内の expense から除外して計算し、フラグベースで加算
+      // Amazon手数料をitems内の expense から除外して計算
       const itemsWithoutAmazonFee = items.filter(
         (i) => !(i.item_type === "expense" && i.item_name === "Amazon手数料")
       );
@@ -565,13 +508,11 @@ export default function RecipeDetailPage() {
       const totalCost = baseCost + savedAmazonFee;
 
       const totalWeight = items.reduce((sum, item) => {
-        // Items that contribute weight
         if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
           const usage = parseFloat(String(item.usage_amount)) || 0;
           if (item.item_type === "ingredient") {
             return sum + usage;
           } else {
-            // intermediate or product
             const unitWeight = item.unit_weight || 0;
             return sum + (usage * unitWeight);
           }
@@ -579,48 +520,41 @@ export default function RecipeDetailPage() {
         return sum;
       }, 0);
 
-      await supabase
-        .from("recipes")
-        .update({
-          total_cost: totalCost,
-          total_weight: totalWeight,
-          manufacturing_notes: recipe.manufacturing_notes,
-          filling_quantity: recipe.filling_quantity,
-          storage_method: recipe.storage_method,
-          label_quantity: recipe.label_quantity,
-          sterilization_method: recipe.sterilization_method,
-          sterilization_temperature: recipe.sterilization_temperature,
-          sterilization_time: recipe.sterilization_time,
-          development_date: recipe.development_date,
-          amazon_fee_enabled: recipe.amazon_fee_enabled,
-        })
-        .eq("id", recipe.id);
+      const res = await fetch('/api/recipe/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipeId: recipe.id,
+          deletedItemIds: Array.from(deletedItemIds),
+          newItems: newItemsList,
+          existingItems: existingItemsList,
+          recipeUpdates: {
+            total_cost: totalCost,
+            total_weight: totalWeight,
+            manufacturing_notes: recipe.manufacturing_notes,
+            filling_quantity: recipe.filling_quantity,
+            storage_method: recipe.storage_method,
+            label_quantity: recipe.label_quantity,
+            sterilization_method: recipe.sterilization_method,
+            sterilization_temperature: recipe.sterilization_temperature,
+            sterilization_time: recipe.sterilization_time,
+            development_date: recipe.development_date,
+            amazon_fee_enabled: recipe.amazon_fee_enabled,
+          },
+        }),
+      });
 
-      // Auto-sync to linked product (WEB販売管理システム連動)
-      if (recipe.linked_product_id && recipe.selling_price) {
-        const profitRate = totalCost
-          ? ((recipe.selling_price - totalCost) / recipe.selling_price) * 100
-          : null;
-        const { error: syncError } = await supabase
-          .from("products")
-          .update({
-            price: recipe.selling_price,
-            profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
-          })
-          .eq("id", recipe.linked_product_id);
-        if (!syncError) {
-          console.log("WEB販売商品に同期しました");
-        }
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '保存に失敗しました');
       }
 
+      setDeletedItemIds(new Set());
       setHasChanges(false);
-      // Keep editing mode active
-
-      // Reload to get real IDs
       fetchRecipe(recipe.id);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("保存に失敗しました");
+      toast.error(error.message || "保存に失敗しました");
     }
   };
 
@@ -824,19 +758,19 @@ export default function RecipeDetailPage() {
                           onClick={async () => {
                             if (!confirm('原材料表示を削除してもよろしいですか？')) return;
                             if (!recipe) return;
-                            const { error } = await supabase
-                              .from('recipes')
-                              .update({ ingredient_label: null })
-                              .eq('id', recipe.id);
-                            if (error) {
-                              toast.error('削除に失敗しました');
-                            } else {
+                            try {
+                              const res = await fetch('/api/recipe/update', {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ recipeId: recipe.id, updates: { ingredient_label: null } }),
+                              });
+                              if (!res.ok) throw new Error('削除に失敗しました');
                               toast.success('削除しました');
                               setRecipe(prev => prev ? { ...prev, ingredient_label: null } : prev);
                               setLabelText("");
                               setLabelWarnings([]);
                               setLabelMissing([]);
-                            }
+                            } catch { toast.error('削除に失敗しました'); }
                           }}
                           className="text-[10px] text-red-600 hover:text-red-800 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 flex items-center gap-0.5"
                           title="削除"

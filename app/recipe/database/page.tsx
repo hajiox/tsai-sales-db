@@ -171,18 +171,18 @@ export default function DatabasePage() {
             setExpenses(prev => prev.map(e => e.id === id ? { ...e, tax_included: next } : e));
         }
 
-        const { error } = await supabase
-            .from(table)
-            .update({ tax_included: next })
-            .eq('id', id);
-
-        if (error) {
-            console.error(error);
-            if (error.code === '42703') {
-                toast.error("DBに 'tax_included' カラムがありません。SQLを実行してください。");
-            } else {
-                toast.error(`保存失敗: ${error.message}`);
+        try {
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'update', table, id, data: { tax_included: next } }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                toast.error(`保存失敗: ${data.error}`);
             }
+        } catch (e: any) {
+            toast.error(`保存失敗: ${e.message}`);
         }
     };
 
@@ -231,14 +231,18 @@ export default function DatabasePage() {
         if (type === "ingredient") table = "ingredients";
         else if (type === "material") table = "materials";
         else table = "expenses";
-        const { error } = await supabase
-            .from(table)
-            .update({ [field]: parsedValue })
-            .eq('id', id);
-
-        if (error) {
-            console.error(`Update failed for ${table}:`, error);
-            toast.error(`保存失敗: ${error.message}`);
+        try {
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'update', table, id, data: { [field]: parsedValue } }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                toast.error(`保存失敗: ${data.error}`);
+            }
+        } catch (e: any) {
+            toast.error(`保存失敗: ${e.message}`);
         }
     };
 
@@ -269,20 +273,19 @@ export default function DatabasePage() {
             price: 0,
         };
 
-        const { data, error } = await supabase
-            .from('ingredients')
-            .insert(newData)
-            .select()
-            .single();
-
-        if (error || !data) {
-            console.error("Add ingredient failed:", error);
-            toast.error(`追加失敗: ${error?.message || 'Unknown'}`);
-            return;
+        try {
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'insert', table: 'ingredients', data: newData }),
+            });
+            if (!res.ok) throw new Error('追加失敗');
+            const result = await res.json();
+            setIngredients(prev => [{ ...result.data, isNew: true }, ...prev]);
+            setEditingCell({ id: result.data.id, field: 'name' });
+        } catch (e: any) {
+            toast.error(`追加失敗: ${e.message}`);
         }
-
-        setIngredients(prev => [{ ...data, isNew: true }, ...prev]);
-        setEditingCell({ id: data.id, field: 'name' });
     };
 
     const addNewMaterial = async () => {
@@ -291,20 +294,19 @@ export default function DatabasePage() {
             price: 0,
         };
 
-        const { data, error } = await supabase
-            .from('materials')
-            .insert(newData)
-            .select()
-            .single();
-
-        if (error || !data) {
-            console.error("Add material failed:", error);
-            toast.error(`追加失敗: ${error?.message || 'Unknown'}`);
-            return;
+        try {
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'insert', table: 'materials', data: newData }),
+            });
+            if (!res.ok) throw new Error('追加失敗');
+            const result = await res.json();
+            setMaterials(prev => [{ ...result.data, isNew: true }, ...prev]);
+            setEditingCell({ id: result.data.id, field: 'name' });
+        } catch (e: any) {
+            toast.error(`追加失敗: ${e.message}`);
         }
-
-        setMaterials(prev => [{ ...data, isNew: true }, ...prev]);
-        setEditingCell({ id: data.id, field: 'name' });
     };
 
     const deleteIngredient = async (id: string) => {
@@ -312,9 +314,18 @@ export default function DatabasePage() {
             setIngredients(prev => prev.filter(i => i.id !== id));
         } else {
             if (confirm('この食材を削除しますか？')) {
-                await supabase.from('ingredients').delete().eq('id', id);
-                setIngredients(prev => prev.filter(i => i.id !== id));
-                toast.success('削除しました');
+                try {
+                    const res = await fetch('/api/recipe/db-write', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ operation: 'delete', table: 'ingredients', id }),
+                    });
+                    if (!res.ok) throw new Error('削除失敗');
+                    setIngredients(prev => prev.filter(i => i.id !== id));
+                    toast.success('削除しました');
+                } catch (e: any) {
+                    toast.error(`削除失敗: ${e.message}`);
+                }
             }
         }
     };
@@ -324,9 +335,18 @@ export default function DatabasePage() {
             setMaterials(prev => prev.filter(m => m.id !== id));
         } else {
             if (confirm('この資材を削除しますか？')) {
-                await supabase.from('materials').delete().eq('id', id);
-                setMaterials(prev => prev.filter(m => m.id !== id));
-                toast.success('削除しました');
+                try {
+                    const res = await fetch('/api/recipe/db-write', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ operation: 'delete', table: 'materials', id }),
+                    });
+                    if (!res.ok) throw new Error('削除失敗');
+                    setMaterials(prev => prev.filter(m => m.id !== id));
+                    toast.success('削除しました');
+                } catch (e: any) {
+                    toast.error(`削除失敗: ${e.message}`);
+                }
             }
         }
     };
@@ -354,14 +374,18 @@ export default function DatabasePage() {
         for (const [key, val] of Object.entries(editForm)) {
             updates[key] = val.trim() || null;
         }
-        const { error } = await supabase.from('ingredients').update(updates).eq('id', editModal.id);
-        if (error) {
-            toast.error('保存に失敗しました');
-            console.error(error);
-        } else {
+        try {
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'update', table: 'ingredients', id: editModal.id, data: updates }),
+            });
+            if (!res.ok) throw new Error('保存に失敗しました');
             toast.success('保存しました');
             setIngredients(prev => prev.map(i => i.id === editModal.id ? { ...i, ...updates } : i));
             setEditModal(null);
+        } catch (e: any) {
+            toast.error(e.message);
         }
     };
 
@@ -511,13 +535,20 @@ export default function DatabasePage() {
                             onClick={async () => {
                                 if (!confirm(`${activeTab === 'ingredients' ? '食材' : '資材'}を全て「税込」に一括設定しますか？`)) return;
                                 const table = activeTab === 'ingredients' ? 'ingredients' : 'materials';
-                                const { error } = await supabase.from(table).update({ tax_included: true }).is('tax_included', null);
-                                const { error: error2 } = await supabase.from(table).update({ tax_included: true }).neq('tax_included', true);
-                                if (error || error2) toast.error("一括更新に失敗しました");
-                                else {
+                                try {
+                                    await fetch('/api/recipe/db-write', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ operation: 'bulk_update', table, field: 'tax_included', value: true, filterField: 'tax_included', filterOp: 'is_null', filterValue: null }),
+                                    });
+                                    await fetch('/api/recipe/db-write', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ operation: 'bulk_update', table, field: 'tax_included', value: true, filterField: 'tax_included', filterOp: 'neq', filterValue: true }),
+                                    });
                                     toast.success("全て税込に設定しました");
                                     fetchData();
-                                }
+                                } catch { toast.error("一括更新に失敗しました"); }
                             }}
                         >
                             全て税込
@@ -529,13 +560,20 @@ export default function DatabasePage() {
                             onClick={async () => {
                                 if (!confirm(`${activeTab === 'ingredients' ? '食材' : '資材'}を全て「税抜」に一括設定しますか？`)) return;
                                 const table = activeTab === 'ingredients' ? 'ingredients' : 'materials';
-                                const { error } = await supabase.from(table).update({ tax_included: false }).is('tax_included', null);
-                                const { error: error2 } = await supabase.from(table).update({ tax_included: false }).neq('tax_included', false);
-                                if (error || error2) toast.error("一括更新に失敗しました");
-                                else {
+                                try {
+                                    await fetch('/api/recipe/db-write', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ operation: 'bulk_update', table, field: 'tax_included', value: false, filterField: 'tax_included', filterOp: 'is_null', filterValue: null }),
+                                    });
+                                    await fetch('/api/recipe/db-write', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ operation: 'bulk_update', table, field: 'tax_included', value: false, filterField: 'tax_included', filterOp: 'neq', filterValue: false }),
+                                    });
                                     toast.success("全て税抜に設定しました");
                                     fetchData();
-                                }
+                                } catch { toast.error("一括更新に失敗しました"); }
                             }}
                         >
                             全て税抜

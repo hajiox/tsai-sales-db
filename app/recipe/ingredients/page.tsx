@@ -165,14 +165,18 @@ export default function IngredientsPage() {
         const skipFields = ['category_id', 'updated_at', 'item_type', 'category_name', 'isNew', 'isModified'];
         skipFields.forEach(f => delete dbUpdates[f]);
 
-        const { error } = await supabase
-            .from('ingredients')
-            .update(dbUpdates)
-            .eq('id', id);
-
-        if (error) {
+        try {
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'update', table: 'ingredients', id, data: dbUpdates }),
+            });
+            if (!res.ok) {
+                const result = await res.json();
+                toast.error(`保存に失敗しました: ${result.error}`);
+            }
+        } catch (e: any) {
             toast.error("保存に失敗しました");
-            console.error(error);
         }
     };
 
@@ -200,38 +204,32 @@ export default function IngredientsPage() {
     };
 
     const addNewRow = async () => {
-        const defaultCategoryName = activeTab === "food" ? "その他" : "資材";
-        const defaultCategory = categories.find(c => c.name === defaultCategoryName);
-
-        // 即時DB登録
         const newIngredientData = {
             name: "新規項目",
-            // category_id: defaultCategory?.id || null, // 一旦外す
             unit_quantity: 1000,
         };
 
-        const { data, error } = await supabase
-            .from('ingredients')
-            .insert(newIngredientData)
-            .select()
-            .single();
+        try {
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'insert', table: 'ingredients', data: newIngredientData }),
+            });
+            if (!res.ok) throw new Error('追加失敗');
+            const result = await res.json();
 
-        if (error || !data) {
-            console.error("Add failed:", error);
-            toast.error(`追加失敗: ${error?.message || 'Unknown'}`);
-            return;
+            const newIngredient: Ingredient = {
+                ...result.data,
+                price_incl_tax: result.data.price,
+                item_type: activeTab,
+                isNew: true,
+            };
+
+            setIngredients(prev => [newIngredient, ...prev]);
+            setEditingCell({ id: newIngredient.id, field: 'name' });
+        } catch (e: any) {
+            toast.error(`追加失敗: ${e.message}`);
         }
-
-        const newIngredient: Ingredient = {
-            ...data,
-            price_incl_tax: data.price,
-            item_type: activeTab,
-            isNew: true,
-        };
-
-        setIngredients(prev => [newIngredient, ...prev]);
-        // 名前入力欄にフォーカス
-        setEditingCell({ id: newIngredient.id, field: 'name' });
     };
 
     const deleteRow = async (id: string) => {
@@ -239,12 +237,17 @@ export default function IngredientsPage() {
             setIngredients(prev => prev.filter(ing => ing.id !== id));
         } else {
             if (confirm('この項目を削除しますか？')) {
-                const { error } = await supabase.from('ingredients').delete().eq('id', id);
-                if (error) {
-                    toast.error('削除に失敗しました');
-                } else {
+                try {
+                    const res = await fetch('/api/recipe/db-write', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ operation: 'delete', table: 'ingredients', id }),
+                    });
+                    if (!res.ok) throw new Error('削除に失敗しました');
                     setIngredients(prev => prev.filter(ing => ing.id !== id));
                     toast.success('削除しました');
+                } catch (e: any) {
+                    toast.error(e.message);
                 }
             }
         }

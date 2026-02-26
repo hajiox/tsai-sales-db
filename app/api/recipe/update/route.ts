@@ -20,7 +20,11 @@ export async function PATCH(request: Request) {
         const allowedFields = [
             "name", "category", "is_intermediate", "development_date",
             "selling_price", "series", "series_code", "product_code",
-            "linked_product_id",
+            "linked_product_id", "ingredient_label",
+            "manufacturing_notes", "filling_quantity",
+            "storage_method", "label_quantity",
+            "sterilization_method", "sterilization_temperature", "sterilization_time",
+            "amazon_fee_enabled", "total_cost", "total_weight",
         ];
 
         const safeUpdates: Record<string, any> = {};
@@ -47,6 +51,59 @@ export async function PATCH(request: Request) {
         if (error) throw error;
 
         return NextResponse.json({ success: true });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+// POST: Copy/duplicate a recipe
+export async function POST(request: Request) {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    try {
+        const body = await request.json();
+        const { recipeId } = body;
+
+        if (!recipeId) {
+            return NextResponse.json({ error: "recipeIdが必要です" }, { status: 400 });
+        }
+
+        // 1. Get original recipe
+        const { data: original, error: fetchError } = await supabase
+            .from("recipes")
+            .select("*")
+            .eq("id", recipeId)
+            .single();
+
+        if (fetchError) throw fetchError;
+        if (!original) throw new Error("レシピが見つかりません");
+
+        // 2. Create new recipe (remove id, timestamps, linked_product_id)
+        const { id, created_at, updated_at, linked_product_id, ...rest } = original;
+        const { data: newRecipe, error: createError } = await supabase
+            .from("recipes")
+            .insert({ ...rest, name: `${original.name} (コピー)`, linked_product_id: null })
+            .select()
+            .single();
+
+        if (createError) throw createError;
+
+        // 3. Copy recipe items
+        const { data: items } = await supabase
+            .from("recipe_items")
+            .select("*")
+            .eq("recipe_id", recipeId);
+
+        if (items && items.length > 0) {
+            const newItems = items.map((item: any) => {
+                const { id: itemId, recipe_id, created_at: itemCreated, ...itemRest } = item;
+                return { ...itemRest, recipe_id: newRecipe.id };
+            });
+            const { error: insertError } = await supabase.from("recipe_items").insert(newItems);
+            if (insertError) throw insertError;
+        }
+
+        return NextResponse.json({ success: true, newRecipeId: newRecipe.id });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

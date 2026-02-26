@@ -697,44 +697,20 @@ export default function RecipePage() {
                                                     if (!window.confirm(`「${recipe.name}」を複製しますか？`)) return;
 
                                                     try {
-                                                        // 1. Get original recipe
-                                                        const { data: original, error: fetchError } = await supabase
-                                                            .from('recipes')
-                                                            .select('*')
-                                                            .eq('id', recipe.id)
-                                                            .single();
-
-                                                        if (fetchError) throw fetchError;
-
-                                                        // 2. Create new recipe
-                                                        const { id, created_at, updated_at, ...rest } = original;
-                                                        const { data: newRecipe, error: createError } = await supabase
-                                                            .from('recipes')
-                                                            .insert({ ...rest, name: `${original.name} (コピー)` })
-                                                            .select()
-                                                            .single();
-
-                                                        if (createError) throw createError;
-
-                                                        // 3. Copy items
-                                                        const { data: items } = await supabase
-                                                            .from('recipe_items')
-                                                            .select('*')
-                                                            .eq('recipe_id', recipe.id);
-
-                                                        if (items && items.length > 0) {
-                                                            const newItems = items.map(item => {
-                                                                const { id, recipe_id, created_at, ...itemRest } = item;
-                                                                return { ...itemRest, recipe_id: newRecipe.id };
-                                                            });
-                                                            await supabase.from('recipe_items').insert(newItems);
+                                                        const res = await fetch('/api/recipe/update', {
+                                                            method: 'POST',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ recipeId: recipe.id }),
+                                                        });
+                                                        if (!res.ok) {
+                                                            const data = await res.json();
+                                                            throw new Error(data.error || '複製に失敗しました');
                                                         }
-
                                                         toast.success("レシピを複製しました");
                                                         fetchRecipes();
-                                                    } catch (err) {
+                                                    } catch (err: any) {
                                                         console.error(err);
-                                                        toast.error("複製に失敗しました");
+                                                        toast.error(err.message || "複製に失敗しました");
                                                     }
                                                 }}
                                             >
