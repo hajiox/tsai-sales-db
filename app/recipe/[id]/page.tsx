@@ -1456,82 +1456,72 @@ Now Expanded or Scrollable */}
                               </td>
                               {/* 1 Unit Usage */}
                               <td className="py-2 text-right font-mono text-gray-800 bg-gray-50/30 align-top">
-                                {!isMaterialGroup ? (
-                                  isEditing ? (
-                                    <input
-                                      type="number"
-                                      className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                                      value={item.usage_amount || ""}
-                                      onChange={(e) =>
-                                        handleItemChange(
-                                          item.id,
-                                          "usage_amount",
-                                          e.target.value,
-                                        )
-                                      }
-                                    />
-                                  ) : (
-                                    <>
-                                      <span className="font-bold">
-                                        {formatNumber(unitUsage, 1)}
-                                      </span>
-                                      <span className="text-[10px] text-gray-400 block">
-                                        {group.type === "product" || group.type === "intermediate" ? "個" : "g"}
-                                      </span>
-                                    </>
-                                  )
+                                {isEditing ? (
+                                  <input
+                                    type="number"
+                                    className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
+                                    value={item.usage_amount || ""}
+                                    onChange={(e) =>
+                                      handleItemChange(
+                                        item.id,
+                                        "usage_amount",
+                                        e.target.value,
+                                      )
+                                    }
+                                  />
                                 ) : (
-                                  <span className="text-gray-300">-</span>
+                                  <>
+                                    <span className="font-bold">
+                                      {formatNumber(unitUsage, 1)}
+                                    </span>
+                                    <span className="text-[10px] text-gray-400 block">
+                                      {group.type === "product" || group.type === "intermediate" ? "個" : isMaterialGroup ? "個" : "g"}
+                                    </span>
+                                  </>
                                 )}
                               </td>
                               {/* Batch 1 */}
                               <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
-                                {!isMaterialGroup ? (
-                                  <>
-                                    <div className="font-bold">
-                                      {formatNumber(b1Usage, 0)}
-                                      <span className="text-[10px] font-normal ml-0.5">
-                                        {group.type === "product" || group.type === "intermediate" ? "個" : "g"}
-                                      </span>
-                                    </div>
-                                    {b1Bags > 0 &&
-                                      item.item_type !== "expense" &&
-                                      group.type !== "product" && (
-                                        <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
-                                          {formatNumber(b1Bags, 2)}{" "}
-                                          <span className="font-normal opacity-70">
-                                            pk
-                                          </span>
-                                        </div>
-                                      )}
-                                  </>
-                                ) : (
-                                  <span className="text-gray-300">-</span>
-                                )}
+                                <>
+                                  <div className="font-bold">
+                                    {formatNumber(b1Usage, 0)}
+                                    <span className="text-[10px] font-normal ml-0.5">
+                                      {group.type === "product" || group.type === "intermediate" || isMaterialGroup ? "個" : "g"}
+                                    </span>
+                                  </div>
+                                  {b1Bags > 0 &&
+                                    !isMaterialGroup &&
+                                    item.item_type !== "expense" &&
+                                    group.type !== "product" && (
+                                      <div className="text-[10px] text-blue-500 mt-0.5 font-bold">
+                                        {formatNumber(b1Bags, 2)}{" "}
+                                        <span className="font-normal opacity-70">
+                                          pk
+                                        </span>
+                                      </div>
+                                    )}
+                                </>
                               </td>
                               {/* Batch 2 */}
                               <td className="py-2 text-right font-mono text-purple-700 bg-purple-50/30 border-l border-gray-50 align-top">
-                                {!isMaterialGroup ? (
-                                  <>
-                                    <div className="font-bold">
-                                      {formatNumber(b2Usage, 0)}
-                                      <span className="text-[10px] font-normal ml-0.5">
-                                        g
-                                      </span>
-                                    </div>
-                                    {b2Bags > 0 &&
-                                      item.item_type !== "expense" && (
-                                        <div className="text-[10px] text-purple-500 mt-0.5 font-bold">
-                                          {formatNumber(b2Bags, 2)}{" "}
-                                          <span className="font-normal opacity-70">
-                                            pk
-                                          </span>
-                                        </div>
-                                      )}
-                                  </>
-                                ) : (
-                                  <span className="text-gray-300">-</span>
-                                )}
+                                <>
+                                  <div className="font-bold">
+                                    {formatNumber(b2Usage, 0)}
+                                    <span className="text-[10px] font-normal ml-0.5">
+                                      {isMaterialGroup ? "個" : "g"}
+                                    </span>
+                                  </div>
+                                  {b2Bags > 0 &&
+                                    !isMaterialGroup &&
+                                    item.item_type !== "expense" && (
+                                      <div className="text-[10px] text-purple-500 mt-0.5 font-bold">
+                                        {formatNumber(b2Bags, 2)}{" "}
+                                        <span className="font-normal opacity-70">
+                                          pk
+                                        </span>
+                                      </div>
+                                    )}
+                                </>
                               </td>
                               <td className="py-2 text-right font-mono text-gray-400 align-top">
                                 {isMaterialGroup && isEditing ? (
