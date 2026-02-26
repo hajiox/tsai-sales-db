@@ -4,7 +4,7 @@
 import React, { useState, useRef, useEffect } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, TrendingUp, TrendingDown, Edit, EyeOff } from "lucide-react"
+import { Plus, Trash2, TrendingUp, TrendingDown, Edit, EyeOff, Link2 } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import ProductEditModal from "./ProductEditModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
@@ -74,6 +74,9 @@ export default function WebSalesDataTable({
   // 広告費データ
   const [adCostData, setAdCostData] = useState<AdCostData[]>([])
 
+  // レシピ紐づけデータ
+  const [recipeLinks, setRecipeLinks] = useState<Record<string, string>>({})
+
   // 広告費データを取得
   useEffect(() => {
     const fetchAdCostData = async () => {
@@ -119,6 +122,32 @@ export default function WebSalesDataTable({
 
     fetchAdCostData()
   }, [month, productMaster])
+
+  // レシピ紐づけデータを取得
+  useEffect(() => {
+    const fetchRecipeLinks = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('recipes')
+          .select('id, name, linked_product_id')
+          .not('linked_product_id', 'is', null)
+
+        if (error) throw error
+
+        const linkMap: Record<string, string> = {}
+        data?.forEach((recipe: { id: string; name: string; linked_product_id: string | null }) => {
+          if (recipe.linked_product_id) {
+            linkMap[recipe.linked_product_id] = recipe.name
+          }
+        })
+        setRecipeLinks(linkMap)
+      } catch (error) {
+        console.error('レシピ紐づけデータの取得に失敗しました:', error)
+      }
+    }
+
+    fetchRecipeLinks()
+  }, [filteredItems])
 
   // シリーズコードから広告費を取得
   const getAdCostForProduct = (productId: string): number => {
@@ -483,12 +512,22 @@ export default function WebSalesDataTable({
                   return (
                     <tr key={row.product_id} className="hover:bg-gray-50">
                       <td className="px-4 py-4 text-sm text-gray-900">
-                        <div
-                          className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
-                          onMouseEnter={(e) => handleProductNameMouseEnter(row.product_id, e)}
-                          onMouseLeave={handleMouseLeave}
-                        >
-                          {getProductName(row.product_id)}
+                        <div className="flex items-center gap-1">
+                          <div
+                            className="font-medium cursor-pointer hover:text-blue-600 hover:underline flex-1"
+                            onMouseEnter={(e) => handleProductNameMouseEnter(row.product_id, e)}
+                            onMouseLeave={handleMouseLeave}
+                          >
+                            {getProductName(row.product_id)}
+                          </div>
+                          {recipeLinks[row.product_id] && (
+                            <span
+                              className="flex-shrink-0 text-emerald-500 cursor-help"
+                              title={`レシピ連携済: ${recipeLinks[row.product_id]}`}
+                            >
+                              <Link2 className="h-3.5 w-3.5" />
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className={`px-4 py-4 text-center ${isHistoricalMode && priceDiff && priceDiff.difference !== 0
