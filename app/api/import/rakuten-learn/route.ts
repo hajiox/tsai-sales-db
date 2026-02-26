@@ -1,9 +1,9 @@
-// /app/api/import/rakuten-learn/route.ts ver.1
+// /app/api/import/rakuten-learn/route.ts ver.2 (RLSバイパス対応)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })();
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not set"); })();
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })();
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,8 +18,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Supabaseクライアントの初期化
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    // Supabaseクライアントの初期化（サービスロールキー使用）
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // 学習データの保存（upsert）
     const { data, error } = await supabase
