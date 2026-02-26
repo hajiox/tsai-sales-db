@@ -325,6 +325,7 @@ export default function RecipeDetailPage() {
             const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
             const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
             const price = parseFloat(String(updatedItem.unit_price)) || 0;
+            const isMat = updatedItem.item_type === "material" || updatedItem.item_type === "expense";
 
             const rate =
               updatedItem.item_type === "ingredient" &&
@@ -335,7 +336,11 @@ export default function RecipeDetailPage() {
                   ? (1 + (taxRates.material / 100))
                   : 1.0;
 
-            updatedItem.cost = Math.round(usage * (price / qty) * rate);
+            // 資材・経費: priceは1個単価なのでそのまま掛ける
+            // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
+            updatedItem.cost = isMat
+              ? Math.round(usage * price * rate)
+              : Math.round(usage * (price / qty) * rate);
           }
           return updatedItem;
         }
@@ -423,6 +428,7 @@ export default function RecipeDetailPage() {
             const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
             const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
             const price = parseFloat(String(updatedItem.unit_price)) || 0;
+            const isMat = updatedItem.item_type === "material" || updatedItem.item_type === "expense";
 
             const rate =
               updatedItem.item_type === "ingredient" &&
@@ -433,7 +439,11 @@ export default function RecipeDetailPage() {
                   ? (1 + (taxRates.material / 100))
                   : 1.0;
 
-            updatedItem.cost = Math.round(usage * (price / qty) * rate);
+            // 資材・経費: priceは1個単価なのでそのまま掛ける
+            // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
+            updatedItem.cost = isMat
+              ? Math.round(usage * price * rate)
+              : Math.round(usage * (price / qty) * rate);
           }
           return updatedItem;
         }
