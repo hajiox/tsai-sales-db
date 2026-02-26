@@ -262,21 +262,23 @@ export default function WebSalesEditableTable({
     if (!isConfirmed) return;
 
     try {
-      const columnName = channel === 'csv' ? 'csv_count' : `${channel}_count`;
+      const response = await fetch('/api/web-sales/channel-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel, month }),
+      });
 
-      // 対象月の全レコードの該当チャネルを0に一括更新
-      const { error: updateError } = await supabase
-        .from('web_sales_summary')
-        .update({ [columnName]: 0 })
-        .eq('report_month', `${month}-01`);
+      const result = await response.json();
 
-      if (updateError) throw updateError;
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'データの削除に失敗しました');
+      }
 
-      alert(`${channelNames[channel]}のデータを削除しました。`);
+      alert(`${channelNames[channel]}のデータを削除しました。（${result.updatedCount}件更新）`);
       onDataUpdated();
     } catch (error) {
       console.error('削除エラー:', error);
-      alert('データの削除に失敗しました。');
+      alert('データの削除に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'));
     }
   };
 
