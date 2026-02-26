@@ -355,6 +355,55 @@ export default function DatabasePage() {
     const saveChanges = async () => { };
 
     // 食材編集モーダルを開く
+    // アイテムのテーブル間移動（資材⇔諸経費）
+    const moveItem = async (id: string, fromTable: "materials" | "expenses", toTable: "materials" | "expenses") => {
+        if (fromTable === toTable) return;
+        const label = toTable === "expenses" ? "諸経費" : "資材";
+        if (!confirm(`この項目を「${label}」に移動しますか？`)) return;
+
+        try {
+            // 1. 元のデータを取得
+            let itemData: any;
+            if (fromTable === "materials") {
+                itemData = materials.find(m => m.id === id);
+            } else {
+                itemData = expenses.find(e => e.id === id);
+            }
+            if (!itemData) return;
+
+            // 2. 移動先にinsert
+            const newData: any = { name: itemData.name, tax_included: itemData.tax_included ?? false };
+            if (toTable === "expenses") {
+                newData.unit_price = itemData.price ?? itemData.unit_price ?? 0;
+                newData.notes = itemData.notes ?? null;
+            } else {
+                newData.price = itemData.unit_price ?? itemData.price ?? 0;
+                newData.notes = itemData.notes ?? null;
+            }
+
+            const insertRes = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'insert', table: toTable, data: newData }),
+            });
+            if (!insertRes.ok) throw new Error('移動先への追加に失敗');
+
+            // 3. 元テーブルから削除
+            const deleteRes = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'delete', table: fromTable, id }),
+            });
+            if (!deleteRes.ok) throw new Error('元データの削除に失敗');
+
+            toast.success(`「${label}」に移動しました`);
+            fetchData();
+        } catch (e: any) {
+            toast.error(e.message);
+        }
+    };
+
+    // 食材編集モーダルを開く
     const openEditModal = (ing: Ingredient) => {
         setEditModal(ing);
         setEditForm({
@@ -734,9 +783,18 @@ export default function DatabasePage() {
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'supplier', mat.supplier || '', 'material', 'w-24')}</td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'notes', mat.notes || '', 'material', 'w-36')}</td>
                                         <td className="px-2 py-1">
-                                            <Button variant="ghost" size="sm" onClick={() => deleteMaterial(mat.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
-                                                <Trash2 className="w-3 h-3" />
-                                            </Button>
+                                            <div className="flex items-center gap-0.5">
+                                                <button
+                                                    onClick={() => moveItem(mat.id, 'materials', 'expenses')}
+                                                    className="text-[9px] px-1.5 py-0.5 rounded border border-orange-200 text-orange-600 hover:bg-orange-50 whitespace-nowrap"
+                                                    title="諸経費に移動"
+                                                >
+                                                    →諸経費
+                                                </button>
+                                                <Button variant="ghost" size="sm" onClick={() => deleteMaterial(mat.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
+                                                    <Trash2 className="w-3 h-3" />
+                                                </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -774,6 +832,15 @@ export default function DatabasePage() {
                                         <td className="px-0 py-1 text-right">{renderEditableCell(exp, 'unit_price', formatNumber(exp.unit_price, 0), 'expense')}</td>
                                         <td className="px-0 py-1">{renderEditableCell(exp, 'notes', exp.notes || '', 'expense', 'w-36')}</td>
                                         <td className="px-2 py-1">
+                                            <div className="flex items-center gap-0.5">
+                                                <button
+                                                    onClick={() => moveItem(exp.id, 'expenses', 'materials')}
+                                                    className="text-[9px] px-1.5 py-0.5 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 whitespace-nowrap"
+                                                    title="資材に移動"
+                                                >
+                                                    →資材
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
