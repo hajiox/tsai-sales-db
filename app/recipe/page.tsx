@@ -48,6 +48,9 @@ interface Recipe {
     total_cost: number | null;
     source_file: string | null;
     linked_product_id: string | null;
+    series: string | null;
+    series_code: number | null;
+    product_code: number | null;
 }
 
 type TabType = "all" | "ネット専用" | "自社" | "OEM" | "Shopee" | "中間部品" | "試作" | "終売";
@@ -272,7 +275,77 @@ export default function RecipePage() {
         const matchesSearch = r.name.toLowerCase().includes(searchTerm.toLowerCase());
         if (activeTab === "all") return matchesSearch;
         return r.category === activeTab && matchesSearch;
+    }).sort((a, b) => {
+        // シリーズコード → 商品番号 → 名前の順でソート
+        const scA = a.series_code ?? 9999;
+        const scB = b.series_code ?? 9999;
+        if (scA !== scB) return scA - scB;
+        const pcA = a.product_code ?? 9999;
+        const pcB = b.product_code ?? 9999;
+        if (pcA !== pcB) return pcA - pcB;
+        return a.name.localeCompare(b.name, 'ja');
     });
+
+    // シリーズ変更
+    const handleSeriesChange = async (recipeId: string, seriesCode: number | null, seriesName: string | null) => {
+        try {
+            const { error } = await supabase
+                .from('recipes')
+                .update({ series_code: seriesCode, series: seriesName })
+                .eq('id', recipeId);
+            if (error) throw error;
+            setRecipes(prev => prev.map(r =>
+                r.id === recipeId ? { ...r, series_code: seriesCode, series: seriesName } : r
+            ));
+            toast.success('シリーズを更新しました');
+        } catch {
+            toast.error('シリーズ変更に失敗しました');
+        }
+    };
+
+    const handleProductCodeChange = async (recipeId: string, productCode: number | null) => {
+        try {
+            const { error } = await supabase
+                .from('recipes')
+                .update({ product_code: productCode })
+                .eq('id', recipeId);
+            if (error) throw error;
+            setRecipes(prev => prev.map(r =>
+                r.id === recipeId ? { ...r, product_code: productCode } : r
+            ));
+        } catch {
+            toast.error('商品番号の変更に失敗しました');
+        }
+    };
+
+    // 全シリーズ一覧（WEB販売と同じ）
+    const SERIES_LIST = [
+        { code: 1, name: '本格チャーシュー' },
+        { code: 2, name: 'レトルトチャーシュー' },
+        { code: 3, name: 'パーフェクトラーメン喜多方' },
+        { code: 4, name: 'パーフェクトラーメンSIO' },
+        { code: 5, name: 'パーフェクトラーメンBUTA' },
+        { code: 6, name: 'パーフェクトラーメンIE-K' },
+        { code: 7, name: '特濃つけ麺' },
+        { code: 8, name: '冷やし中華' },
+        { code: 9, name: '麺のみ' },
+        { code: 10, name: '辛杉家の憂鬱' },
+        { code: 11, name: '会津ソースカツ丼' },
+        { code: 12, name: 'ドレッシング' },
+        { code: 13, name: '福島の桃' },
+        { code: 14, name: '馬肉物語' },
+        { code: 15, name: 'ご飯のお供' },
+        { code: 16, name: 'AIZU CAMPFOOD' },
+        { code: 17, name: '会津の馬刺し' },
+        { code: 18, name: 'その他会津の食' },
+        { code: 19, name: '国産チャーシュー' },
+        { code: 20, name: 'パーフェクトラーメン辛味噌' },
+        { code: 21, name: 'ラーメン背脂' },
+        { code: 22, name: '【単品】' },
+        { code: 23, name: 'パーフェクトラーメン背脂喜多方' },
+        { code: 24, name: '悪魔カレー' },
+        { code: 99, name: '終売商品' },
+    ];
 
     const formatCurrency = (value: number | null) => {
         if (!value) return "-";
@@ -464,6 +537,8 @@ export default function RecipePage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            {(activeTab === "ネット専用" || activeTab === "all") && <TableHead className="w-[140px]">シリーズ</TableHead>}
+                            {(activeTab === "ネット専用" || activeTab === "all") && <TableHead className="w-[50px] text-center">No.</TableHead>}
                             <TableHead>商品名</TableHead>
                             {activeTab === "中間部品" && <TableHead>使用されている商品</TableHead>}
                             <TableHead>カテゴリ</TableHead>
@@ -492,6 +567,50 @@ export default function RecipePage() {
                                     className="cursor-pointer hover:bg-gray-50"
                                     onClick={() => router.push(`/recipe/${recipe.id}`)}
                                 >
+                                    {(activeTab === "ネット専用" || activeTab === "all") && (
+                                        <TableCell onClick={(e) => e.stopPropagation()} className="text-xs">
+                                            <Select
+                                                value={recipe.series_code != null ? String(recipe.series_code) : "__none__"}
+                                                onValueChange={(val) => {
+                                                    if (val === "__none__") {
+                                                        handleSeriesChange(recipe.id, null, null);
+                                                    } else {
+                                                        const s = SERIES_LIST.find(s => s.code === Number(val));
+                                                        handleSeriesChange(recipe.id, Number(val), s?.name || null);
+                                                    }
+                                                }}
+                                            >
+                                                <SelectTrigger className="h-7 w-[130px] text-xs">
+                                                    <SelectValue>
+                                                        {recipe.series || '—'}
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="__none__">
+                                                        <span className="text-gray-400">— なし —</span>
+                                                    </SelectItem>
+                                                    {SERIES_LIST.map(s => (
+                                                        <SelectItem key={s.code} value={String(s.code)}>
+                                                            {s.code}. {s.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                    )}
+                                    {(activeTab === "ネット専用" || activeTab === "all") && (
+                                        <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
+                                            <Input
+                                                type="number"
+                                                value={recipe.product_code ?? ''}
+                                                onChange={(e) => {
+                                                    const val = e.target.value ? Number(e.target.value) : null;
+                                                    handleProductCodeChange(recipe.id, val);
+                                                }}
+                                                className="w-[50px] h-7 text-xs text-center p-1"
+                                            />
+                                        </TableCell>
+                                    )}
                                     <TableCell className="font-medium">
                                         <div className="flex items-center gap-1">
                                             {recipe.is_intermediate && (
