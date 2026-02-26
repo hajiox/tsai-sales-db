@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Edit, Copy, Trash2 } from "lucide-react";
+import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 // カテゴリー一覧
@@ -47,6 +47,7 @@ interface Recipe {
     selling_price: number | null;
     total_cost: number | null;
     source_file: string | null;
+    linked_product_id: string | null;
 }
 
 type TabType = "all" | "ネット専用" | "自社" | "OEM" | "Shopee" | "中間部品" | "試作" | "終売";
@@ -70,6 +71,31 @@ export default function RecipePage() {
         materials: 0,
     });
     const [usageMap, setUsageMap] = useState<Record<string, string[]>>({});
+    const [linkedProductNames, setLinkedProductNames] = useState<Record<string, string>>({});
+
+    // 紐づけ先商品名を取得
+    useEffect(() => {
+        const fetchLinkedProductNames = async () => {
+            const linkedRecipes = recipes.filter(r => r.linked_product_id);
+            if (linkedRecipes.length === 0) {
+                setLinkedProductNames({});
+                return;
+            }
+            const productIds = linkedRecipes.map(r => r.linked_product_id!).filter((v, i, a) => a.indexOf(v) === i);
+            const { data, error } = await supabase
+                .from('products')
+                .select('id, name')
+                .in('id', productIds);
+            if (!error && data) {
+                const nameMap: Record<string, string> = {};
+                data.forEach((p: { id: string; name: string }) => {
+                    nameMap[p.id] = p.name;
+                });
+                setLinkedProductNames(nameMap);
+            }
+        };
+        fetchLinkedProductNames();
+    }, [recipes]);
 
     useEffect(() => {
         if (activeTab === "中間部品") {
@@ -467,12 +493,22 @@ export default function RecipePage() {
                                     onClick={() => router.push(`/recipe/${recipe.id}`)}
                                 >
                                     <TableCell className="font-medium">
-                                        {recipe.is_intermediate && (
-                                            <span className="mr-2 px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs">
-                                                P
-                                            </span>
-                                        )}
-                                        {recipe.name}
+                                        <div className="flex items-center gap-1">
+                                            {recipe.is_intermediate && (
+                                                <span className="mr-1 px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs">
+                                                    P
+                                                </span>
+                                            )}
+                                            <span className="flex-1">{recipe.name}</span>
+                                            {recipe.linked_product_id && (
+                                                <span
+                                                    className="flex-shrink-0 text-emerald-500 cursor-help"
+                                                    title={`WEB販売紐付済: ${linkedProductNames[recipe.linked_product_id] || '取得中...'}`}
+                                                >
+                                                    <Link2 className="h-3.5 w-3.5" />
+                                                </span>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     {activeTab === "中間部品" && (
                                         <TableCell>
