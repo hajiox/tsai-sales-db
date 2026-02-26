@@ -184,48 +184,46 @@ export default function RecipePage() {
         setLoading(false);
     };
 
+    // 汎用レシピ更新ヘルパー（API経由でRLSバイパス）
+    const updateRecipe = async (recipeId: string, updates: Record<string, any>): Promise<boolean> => {
+        try {
+            const res = await fetch('/api/recipe/update', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipeId, updates }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || '更新に失敗しました');
+            }
+            return true;
+        } catch (error: any) {
+            toast.error(error.message || '更新に失敗しました');
+            return false;
+        }
+    };
+
     // カテゴリー変更
     const handleCategoryChange = async (recipeId: string, newCategory: string) => {
-        try {
-            const isIntermediate = newCategory === '中間部品';
-            const { error } = await supabase
-                .from('recipes')
-                .update({
-                    category: newCategory,
-                    is_intermediate: isIntermediate
-                })
-                .eq('id', recipeId);
-
-            if (error) throw error;
-
-            // ローカルステートを更新
+        const isIntermediate = newCategory === '中間部品';
+        const ok = await updateRecipe(recipeId, { category: newCategory });
+        if (ok) {
             setRecipes(prev => prev.map(r =>
                 r.id === recipeId ? { ...r, category: newCategory, is_intermediate: isIntermediate } : r
             ));
             toast.success(`カテゴリーを「${newCategory}」に変更しました`);
-            fetchStats(); // 統計を更新
-        } catch (error) {
-            toast.error('カテゴリー変更に失敗しました');
+            fetchStats();
         }
     };
 
     // 開発日変更
     const handleDateChange = async (recipeId: string, newDate: string) => {
-        try {
-            const { error } = await supabase
-                .from('recipes')
-                .update({ development_date: newDate || null })
-                .eq('id', recipeId);
-
-            if (error) throw error;
-
-            // ローカルステートを更新
+        const ok = await updateRecipe(recipeId, { development_date: newDate || null });
+        if (ok) {
             setRecipes(prev => prev.map(r =>
                 r.id === recipeId ? { ...r, development_date: newDate || null } : r
             ));
             toast.success('開発日を更新しました');
-        } catch (error) {
-            toast.error('開発日の更新に失敗しました');
         }
     };
 
@@ -288,33 +286,21 @@ export default function RecipePage() {
 
     // シリーズ変更
     const handleSeriesChange = async (recipeId: string, seriesCode: number | null, seriesName: string | null) => {
-        try {
-            const { error } = await supabase
-                .from('recipes')
-                .update({ series_code: seriesCode, series: seriesName })
-                .eq('id', recipeId);
-            if (error) throw error;
+        const ok = await updateRecipe(recipeId, { series_code: seriesCode, series: seriesName });
+        if (ok) {
             setRecipes(prev => prev.map(r =>
                 r.id === recipeId ? { ...r, series_code: seriesCode, series: seriesName } : r
             ));
             toast.success('シリーズを更新しました');
-        } catch {
-            toast.error('シリーズ変更に失敗しました');
         }
     };
 
     const handleProductCodeChange = async (recipeId: string, productCode: number | null) => {
-        try {
-            const { error } = await supabase
-                .from('recipes')
-                .update({ product_code: productCode })
-                .eq('id', recipeId);
-            if (error) throw error;
+        const ok = await updateRecipe(recipeId, { product_code: productCode });
+        if (ok) {
             setRecipes(prev => prev.map(r =>
                 r.id === recipeId ? { ...r, product_code: productCode } : r
             ));
-        } catch {
-            toast.error('商品番号の変更に失敗しました');
         }
     };
 
@@ -685,20 +671,16 @@ export default function RecipePage() {
                                                 size="sm"
                                                 className="h-8 w-8 p-0 text-gray-400 hover:text-blue-500"
                                                 title="名称変更"
-                                                onClick={(e) => {
+                                                onClick={async (e) => {
                                                     e.stopPropagation();
                                                     const newName = window.prompt("新しいレシピ名を入力してください", recipe.name);
                                                     if (newName && newName !== recipe.name) {
-                                                        const confirm = window.confirm(`「${recipe.name}」を「${newName}」に変更しますか？`);
-                                                        if (confirm) {
-                                                            supabase.from('recipes').update({ name: newName }).eq('id', recipe.id).then(({ error }) => {
-                                                                if (!error) {
-                                                                    setRecipes(prev => prev.map(r => r.id === recipe.id ? { ...r, name: newName } : r));
-                                                                    toast.success("名称を変更しました");
-                                                                } else {
-                                                                    toast.error("変更に失敗しました");
-                                                                }
-                                                            });
+                                                        if (window.confirm(`「${recipe.name}」を「${newName}」に変更しますか？`)) {
+                                                            const ok = await updateRecipe(recipe.id, { name: newName });
+                                                            if (ok) {
+                                                                setRecipes(prev => prev.map(r => r.id === recipe.id ? { ...r, name: newName } : r));
+                                                                toast.success("名称を変更しました");
+                                                            }
                                                         }
                                                     }
                                                 }}
