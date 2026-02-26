@@ -250,7 +250,8 @@ export default function WebSalesEditableTable({
       mercari: 'メルカリ',
       base: 'BASE',
       qoo10: 'Qoo10',
-      tiktok: 'TikTok'
+      tiktok: 'TikTok',
+      all: '全チャネル'
     };
 
     const isConfirmed = confirm(
@@ -512,6 +513,7 @@ export default function WebSalesEditableTable({
       {/* ECチャネル別削除ボタン群（上部） */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">ECチャネル別データ削除:</span>
+        <button onClick={() => handleChannelDelete('all')} className="px-3 py-1 text-xs font-semibold text-white bg-red-600 border border-red-700 rounded hover:bg-red-700">⚠️ 全チャネル一括削除</button>
         <button onClick={() => handleChannelDelete('csv')} className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200">🗑️ 汎用CSV削除</button>
         <button onClick={() => handleChannelDelete('amazon')} className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200">🗑️ Amazon削除</button>
         <button onClick={() => handleChannelDelete('rakuten')} className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">🗑️ 楽天削除</button>
@@ -628,6 +630,7 @@ export default function WebSalesEditableTable({
       {/* ECチャネル別削除ボタン群 */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">ECチャネル別データ削除:</span>
+        <button onClick={() => handleChannelDelete('all')} className="px-3 py-1 text-xs font-semibold text-white bg-red-600 border border-red-700 rounded hover:bg-red-700">⚠️ 全チャネル一括削除</button>
         <button
           onClick={() => handleChannelDelete('csv')}
           className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"

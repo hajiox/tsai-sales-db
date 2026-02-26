@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const validChannels = ['csv', 'amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10', 'tiktok']
+        const validChannels = ['csv', 'amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10', 'tiktok', 'all']
         if (!validChannels.includes(channel)) {
             return NextResponse.json(
                 { error: '無効なチャネルです' },
@@ -27,8 +27,44 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const columnName = channel === 'csv' ? 'csv_count' : `${channel}_count`
         const reportMonth = `${month}-01`
+
+        // 全チャネル一括削除
+        if (channel === 'all') {
+            const { data, error } = await supabase
+                .from('web_sales_summary')
+                .update({
+                    csv_count: 0,
+                    amazon_count: 0,
+                    rakuten_count: 0,
+                    yahoo_count: 0,
+                    mercari_count: 0,
+                    base_count: 0,
+                    qoo10_count: 0,
+                    tiktok_count: 0,
+                })
+                .eq('report_month', reportMonth)
+                .select('id')
+
+            if (error) {
+                console.error('全チャネル削除エラー:', error)
+                return NextResponse.json(
+                    { error: 'データの削除に失敗しました', details: error.message },
+                    { status: 500 }
+                )
+            }
+
+            const updatedCount = data?.length || 0
+            console.log(`全チャネル削除: ${reportMonth} - ${updatedCount}件を0に更新`)
+
+            return NextResponse.json({
+                success: true,
+                message: `${updatedCount}件のデータを全削除しました`,
+                updatedCount,
+            })
+        }
+
+        const columnName = channel === 'csv' ? 'csv_count' : `${channel}_count`
 
         // サービスロールキーでRLSをバイパスして更新
         const { data, error, count } = await supabase
