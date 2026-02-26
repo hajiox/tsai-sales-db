@@ -178,8 +178,8 @@ export default function RecipeDetailPage() {
         ingData.map((i) => ({
           id: i.id,
           name: i.name,
-          unit_quantity: i.unit_quantity ?? undefined,
-          unit_price: i.price ?? undefined,
+          unit_quantity: i.unit_quantity ?? 1,
+          unit_price: i.price ?? 0,
           tax_included: i.tax_included ?? true,
           nutrition: {
             calories: i.calories,
@@ -200,8 +200,8 @@ export default function RecipeDetailPage() {
         matData.map((m) => ({
           id: m.id,
           name: m.name,
-          unit_quantity: m.unit_quantity ?? undefined,
-          unit_price: m.price ?? undefined,
+          unit_quantity: m.unit_quantity ? parseFloat(String(m.unit_quantity)) || 1 : 1,
+          unit_price: m.price ?? 0,
           tax_included: m.tax_included ?? true,
         })),
       );
