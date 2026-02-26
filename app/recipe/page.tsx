@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2 } from "lucide-react";
+import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Merge } from "lucide-react";
 import { toast } from "sonner";
 
 // カテゴリー一覧
@@ -523,6 +523,11 @@ export default function RecipePage() {
                     <Button variant="outline" onClick={() => router.push("/recipe/import")}>
                         <FileSpreadsheet className="w-4 h-4 mr-2" />
                         Excelインポート
+                    </Button>
+
+                    <Button variant="outline" onClick={() => router.push("/recipe/duplicates")} className="border-amber-300 text-amber-700 hover:bg-amber-50">
+                        <Merge className="w-4 h-4 mr-2" />
+                        重複チェック
                     </Button>
 
                     <Button onClick={() => router.push("/recipe/new")}>
