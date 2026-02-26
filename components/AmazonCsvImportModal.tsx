@@ -73,14 +73,14 @@ export default function AmazonCsvImportModal({
       const unmatched = parseResult.unmatchedProducts || [];
 
       const mappings = [
-        ...matched.map((m: MatchedProduct) => ({ ...m, isLearned: false })),
         ...unmatched.map((u: any) => ({
           amazonTitle: u.amazonTitle,
           productId: '',
           productName: '',
           quantity: u.quantity,
           isLearned: false
-        }))
+        })),
+        ...matched.map((m: MatchedProduct) => ({ ...m, isLearned: false })),
       ];
 
       setAllMappings(mappings);

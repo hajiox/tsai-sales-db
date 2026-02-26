@@ -22,9 +22,9 @@ interface RakutenCsvImportModalProps {
   products: Product[];
 }
 
-export default function RakutenCsvImportModal({ 
-  isOpen, 
-  onClose, 
+export default function RakutenCsvImportModal({
+  isOpen,
+  onClose,
   onSuccess,
   products
 }: RakutenCsvImportModalProps) {
@@ -63,8 +63,15 @@ export default function RakutenCsvImportModal({
     if (parseResult && step === 3) {
       const matched = parseResult.matchedProducts || [];
       const unmatched = parseResult.unmatchedProducts || [];
-      
+
       const mappings = [
+        ...unmatched.map((u: any) => ({
+          rakutenTitle: u.rakutenTitle,
+          productId: '',
+          productName: '',
+          quantity: u.quantity,
+          isLearned: false
+        })),
         // productInfoがある場合とない場合の両方に対応
         ...matched.map((m: any) => ({
           rakutenTitle: m.rakutenTitle,
@@ -73,15 +80,8 @@ export default function RakutenCsvImportModal({
           quantity: m.quantity,
           isLearned: false
         })),
-        ...unmatched.map((u: any) => ({
-          rakutenTitle: u.rakutenTitle,
-          productId: '',
-          productName: '',
-          quantity: u.quantity,
-          isLearned: false
-        }))
       ];
-      
+
       setAllMappings(mappings);
     }
   }, [parseResult, step]);
@@ -97,7 +97,7 @@ export default function RakutenCsvImportModal({
       setAllMappings([]);
     }
   };
-  
+
   const handleParse = async () => {
     if (!csvFile) {
       setError('CSVファイルを選択してください');
@@ -109,7 +109,7 @@ export default function RakutenCsvImportModal({
 
     try {
       const csvContent = await csvFile.text();
-      
+
       const response = await fetch('/api/import/rakuten-parse', {
         method: 'POST',
         headers: {
@@ -140,7 +140,7 @@ export default function RakutenCsvImportModal({
     if (!mapping.productId || mapping.isLearned) return;
 
     setSavingMapping(mapping.rakutenTitle);
-    
+
     try {
       const response = await fetch('/api/import/rakuten-learn', {
         method: 'POST',
@@ -153,7 +153,7 @@ export default function RakutenCsvImportModal({
 
       const result = await response.json();
       if (result.success) {
-        setAllMappings(prev => prev.map((m, i) => 
+        setAllMappings(prev => prev.map((m, i) =>
           i === index ? { ...m, isLearned: true } : m
         ));
       } else {
@@ -170,12 +170,12 @@ export default function RakutenCsvImportModal({
   // マッピング変更
   const handleMappingChange = (index: number, productId: string) => {
     const product = products.find(p => p.id === productId);
-    setAllMappings(prev => prev.map((m, i) => 
-      i === index ? { 
-        ...m, 
-        productId, 
+    setAllMappings(prev => prev.map((m, i) =>
+      i === index ? {
+        ...m,
+        productId,
         productName: product?.name || '',
-        isLearned: false 
+        isLearned: false
       } : m
     ));
   };
@@ -183,10 +183,10 @@ export default function RakutenCsvImportModal({
   const handleConfirm = async () => {
     setIsLoading(true);
     setError('');
-    
+
     try {
       let requestData;
-      
+
       if (step === 3) {
         // Step 3からの場合は修正されたデータを使用
         const validMappings = allMappings.filter(m => m.productId);
@@ -325,7 +325,7 @@ export default function RakutenCsvImportModal({
                   </div>
                 </CardContent>
               </Card>
-              
+
               <div className="grid grid-cols-2 gap-4 my-4">
                 <Card className="bg-green-50">
                   <CardHeader><CardTitle className="text-green-700">マッチ済み</CardTitle></CardHeader>
@@ -336,7 +336,7 @@ export default function RakutenCsvImportModal({
                   <CardContent><div className="text-2xl font-bold text-yellow-600">{stats.unmatched}件</div></CardContent>
                 </Card>
               </div>
-              
+
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />戻る
@@ -344,7 +344,7 @@ export default function RakutenCsvImportModal({
                 <Button onClick={() => setStep(3)} className="flex-1">
                   <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
                 </Button>
-                <Button 
+                <Button
                   onClick={handleConfirm}
                   disabled={isLoading || stats.matched === 0}
                   className="flex-1"
@@ -379,7 +379,7 @@ export default function RakutenCsvImportModal({
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader>
                   <CardTitle>📋 商品マッピング一覧</CardTitle>
@@ -442,21 +442,21 @@ export default function RakutenCsvImportModal({
                   </div>
                 </CardContent>
               </Card>
-              
+
               {error && (
                 <div className="my-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
                   <span className="text-red-600 text-sm">{error}</span>
                 </div>
               )}
-              
+
               <div className="flex gap-2 mt-4">
                 <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />確認画面に戻る
                 </Button>
-                <Button 
-                  onClick={handleConfirm} 
-                  disabled={isLoading || stats.matched === 0} 
+                <Button
+                  onClick={handleConfirm}
+                  disabled={isLoading || stats.matched === 0}
                   className="flex-1"
                 >
                   {isLoading ? '処理中...' : `インポート実行（${stats.matched}件）`}

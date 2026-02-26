@@ -22,9 +22,9 @@ interface TiktokCsvImportModalProps {
   products: Product[];
 }
 
-export default function TiktokCsvImportModal({ 
-  isOpen, 
-  onClose, 
+export default function TiktokCsvImportModal({
+  isOpen,
+  onClose,
   onImportComplete,
   products
 }: TiktokCsvImportModalProps) {
@@ -53,7 +53,7 @@ export default function TiktokCsvImportModal({
     const matched = allMappings.filter(m => m.productId).length;
     const unmatched = allMappings.length - matched;
     const totalQuantity = allMappings.filter(m => m.productId).reduce((sum, m) => sum + m.quantity, 0);
-    
+
     return {
       matched,
       unmatched,
@@ -76,24 +76,24 @@ export default function TiktokCsvImportModal({
     if (parseResult && step >= 2) {
       const learned = parseResult.results?.learned || [];
       const unlearned = parseResult.results?.unlearned || [];
-      
+
       const mappings = [
-        ...learned.map((item: any) => ({ 
-          tiktokTitle: item.title,
-          productId: item.productId || '',
-          productName: products.find(p => p.id === item.productId)?.name || '',
-          quantity: item.count,
-          isLearned: false 
-        })),
         ...unlearned.map((item: any) => ({
           tiktokTitle: item.title,
           productId: '',
           productName: '',
           quantity: item.count,
           isLearned: false
-        }))
+        })),
+        ...learned.map((item: any) => ({
+          tiktokTitle: item.title,
+          productId: item.productId || '',
+          productName: products.find(p => p.id === item.productId)?.name || '',
+          quantity: item.count,
+          isLearned: false
+        })),
       ];
-      
+
       setAllMappings(mappings);
     }
   }, [parseResult, step, products]);
@@ -109,7 +109,7 @@ export default function TiktokCsvImportModal({
       setAllMappings([]);
     }
   };
-  
+
   const handleParse = async () => {
     if (!csvFile) {
       setError('CSVファイルを選択してください');
@@ -121,7 +121,7 @@ export default function TiktokCsvImportModal({
 
     try {
       const text = await csvFile.text();
-      
+
       const response = await fetch('/api/import/tiktok-parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -150,7 +150,7 @@ export default function TiktokCsvImportModal({
     if (!mapping.productId || mapping.isLearned) return;
 
     setSavingMapping(mapping.tiktokTitle);
-    
+
     try {
       const response = await fetch('/api/import/tiktok-learn', {
         method: 'POST',
@@ -163,7 +163,7 @@ export default function TiktokCsvImportModal({
 
       const result = await response.json();
       if (result.success) {
-        setAllMappings(prev => prev.map((m, i) => 
+        setAllMappings(prev => prev.map((m, i) =>
           i === index ? { ...m, isLearned: true } : m
         ));
       } else {
@@ -180,12 +180,12 @@ export default function TiktokCsvImportModal({
   // マッピング変更
   const handleMappingChange = (index: number, productId: string) => {
     const product = products.find(p => p.id === productId);
-    setAllMappings(prev => prev.map((m, i) => 
-      i === index ? { 
-        ...m, 
-        productId, 
+    setAllMappings(prev => prev.map((m, i) =>
+      i === index ? {
+        ...m,
+        productId,
         productName: product?.name || '',
-        isLearned: false 
+        isLearned: false
       } : m
     ));
   };
@@ -193,10 +193,10 @@ export default function TiktokCsvImportModal({
   const handleConfirm = async () => {
     setIsLoading(true);
     setError('');
-    
+
     try {
       const validMappings = allMappings.filter(m => m.productId);
-      
+
       if (validMappings.length === 0) {
         throw new Error('インポートする商品が1件もありません');
       }
@@ -207,7 +207,7 @@ export default function TiktokCsvImportModal({
         saleDate: saleMonth,
         productId: item.productId
       }));
-      
+
       const response = await fetch('/api/import/tiktok-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -237,7 +237,7 @@ export default function TiktokCsvImportModal({
           <h2 className="text-xl font-bold">TikTokショップ CSV インポート</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X /></button>
         </div>
-        
+
         <div className="p-6 overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             {[1, 2, 3].map((s) => (
@@ -295,7 +295,7 @@ export default function TiktokCsvImportModal({
                   </div>
                 </CardContent>
               </Card>
-              
+
               <div className="grid grid-cols-2 gap-4 my-4">
                 <Card className="bg-green-50">
                   <CardHeader><CardTitle className="text-green-700">学習済み</CardTitle></CardHeader>
@@ -306,7 +306,7 @@ export default function TiktokCsvImportModal({
                   <CardContent><div className="text-2xl font-bold text-yellow-600">{parseResult.summary?.unlearned || 0}件</div></CardContent>
                 </Card>
               </div>
-              
+
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />戻る
@@ -314,7 +314,7 @@ export default function TiktokCsvImportModal({
                 <Button onClick={() => setStep(3)} className="flex-1" disabled={stats.unmatched === 0}>
                   <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
                 </Button>
-                <Button 
+                <Button
                   onClick={handleConfirm}
                   disabled={isLoading || stats.matched === 0}
                   className="flex-1"
@@ -349,7 +349,7 @@ export default function TiktokCsvImportModal({
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader>
                   <CardTitle>📋 商品マッピング一覧</CardTitle>
@@ -412,21 +412,21 @@ export default function TiktokCsvImportModal({
                   </div>
                 </CardContent>
               </Card>
-              
+
               {error && (
                 <div className="my-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
                   <span className="text-red-600 text-sm">{error}</span>
                 </div>
               )}
-              
+
               <div className="flex gap-2 mt-4">
                 <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />確認画面に戻る
                 </Button>
-                <Button 
-                  onClick={handleConfirm} 
-                  disabled={isLoading || stats.matched === 0} 
+                <Button
+                  onClick={handleConfirm}
+                  disabled={isLoading || stats.matched === 0}
                   className="flex-1"
                 >
                   {isLoading ? '処理中...' : `インポート実行（${stats.matched}件）`}
