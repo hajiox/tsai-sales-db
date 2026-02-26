@@ -98,19 +98,12 @@ export async function POST(request: Request) {
         if (body.action === "delete_one") {
             // Delete a single recipe
             const { recipeId } = body;
-            // First check it's not linked
-            const { data: recipe } = await supabase
-                .from("recipes")
-                .select("linked_product_id")
-                .eq("id", recipeId)
-                .single();
 
-            if (recipe?.linked_product_id) {
-                return NextResponse.json(
-                    { error: "紐付済みのレシピは削除できません。先に紐付けを解除してください。" },
-                    { status: 400 }
-                );
-            }
+            // 紐付済みの場合は先に解除
+            await supabase
+                .from("recipes")
+                .update({ linked_product_id: null })
+                .eq("id", recipeId);
 
             // Delete recipe items first
             await supabase.from("recipe_items").delete().eq("recipe_id", recipeId);

@@ -748,13 +748,21 @@ export default function RecipePage() {
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
                                                     if (window.confirm(`本当に「${recipe.name}」を削除しますか？\nこの操作は取り消せません。`)) {
-                                                        const { error } = await supabase.from('recipes').delete().eq('id', recipe.id);
-                                                        if (!error) {
+                                                        try {
+                                                            const res = await fetch('/api/recipe/duplicates', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ action: 'delete_one', recipeId: recipe.id }),
+                                                            });
+                                                            if (!res.ok) {
+                                                                const data = await res.json();
+                                                                throw new Error(data.error || '削除に失敗しました');
+                                                            }
                                                             setRecipes(prev => prev.filter(r => r.id !== recipe.id));
                                                             toast.success("レシピを削除しました");
                                                             fetchStats();
-                                                        } else {
-                                                            toast.error("削除に失敗しました");
+                                                        } catch (error: any) {
+                                                            toast.error(error.message || "削除に失敗しました");
                                                         }
                                                     }
                                                 }}
