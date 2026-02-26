@@ -1425,29 +1425,13 @@ Now Expanded or Scrollable */}
                               </td>
                               <td className="py-2 font-medium text-gray-700 align-top pr-2">
                                 {isEditing ? (
-                                  <div>
-                                    <ItemNameSelect
-                                      candidates={group.candidates}
-                                      value={item.item_name}
-                                      onSelect={(val) =>
-                                        handleItemSelect(item.id, val)
-                                      }
-                                    />
-                                    {/* タイプ変更プルダウン */}
-                                    <select
-                                      value={item.item_type}
-                                      onChange={(e) => {
-                                        handleItemChange(item.id, "item_type", e.target.value);
-                                      }}
-                                      className="mt-1 text-[10px] border border-gray-200 rounded px-1 py-0.5 bg-gray-50 text-gray-600 cursor-pointer hover:border-blue-400"
-                                    >
-                                      <option value="ingredient">食材</option>
-                                      <option value="material">資材・包材</option>
-                                      <option value="intermediate">中間部品</option>
-                                      <option value="product">商品</option>
-                                      <option value="expense">諸経費</option>
-                                    </select>
-                                  </div>
+                                  <ItemNameSelect
+                                    candidates={group.candidates}
+                                    value={item.item_name}
+                                    onSelect={(val) =>
+                                      handleItemSelect(item.id, val)
+                                    }
+                                  />
                                 ) : (
                                   <>
                                     <div className="flex items-center gap-2">
