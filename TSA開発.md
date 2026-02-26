@@ -167,3 +167,30 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
   3. 誤登録商品を完全削除
 - **結果:** IDが変わっていないため過去31ヶ月分の売上・学習マッピング・レシピが全て連続して参照可能
 
+
+### 2026-02-26 09:00:00 レシピ管理機能の全面修正（RLSバイパス・重複削除・原価計算）
+
+#### RLSバイパスのためのAPI移行
+- **問題:** フロントエンドからの直接Supabase書き込みがRow Level Security (RLS)で無言ブロックされ、レシピのコピー・削除・保存・データベース更新が全て失敗していた
+- **解決:** 全書き込み操作を`service_role_key`を使用するバックエンドAPI経由に移行
+
+**新規API:**
+| API | メソッド | 用途 |
+|-----|---------|------|
+| `/api/recipe/update` | PATCH/POST | レシピフィールド更新・複製 |
+| `/api/recipe/save` | POST | レシピ詳細の保存（アイテム追加/更新/削除 + メタデータ + WEB販売商品同期） |
+| `/api/recipe/db-write` | POST | 汎用テーブル書き込み（ingredients/materials/expenses の insert/update/delete） |
+
+**移行対象:** `recipe/page.tsx`, `recipe/[id]/page.tsx`, `recipe/database/page.tsx`, `recipe/ingredients/page.tsx` の全書き込み操作
+
+#### 資材・諸経費の原価計算修正
+- **問題1:** 資材・諸経費セクションに使用量入力欄がなく、常に`-`表示 → 修正: 使用量入力欄を全タイプで表示
+- **問題2:** 資材の`unit_quantity`がDB上で文字列型、parseFloat失敗→コスト計算スキップ → 修正: マスター読み込み時に数値変換
+- **問題3（根本原因）:** 資材の`price`は1個あたりの単価なのに、食材と同じ`usage × (price / unit_quantity)`で計算→¥0に → 修正: 資材・経費は`usage × price`、食材は`usage × (price / unit_quantity)`に分岐
+- **問題4:** 資材の400個分・800個分バッチ表示が`-`だった → 「個」単位で表示に修正
+
+#### 材料データベースのテーブル間移動機能
+- 資材テーブルの各行に「→諸経費」ボタン、諸経費テーブルの各行に「→資材」ボタンを追加
+- プルダウンUI改善（幅320px→500px、候補名の全文表示）
+- レシピ詳細の編集モードにアイテムタイプ変更セレクトを追加
+
