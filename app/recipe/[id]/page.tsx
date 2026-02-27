@@ -1678,6 +1678,31 @@ Now Expanded or Scrollable */}
                           </div>
                         </div>
                       </div>
+                      {/* 材料系小計 */}
+                      <div className="flex justify-start items-center gap-8 mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-sm font-bold text-emerald-700">原価小計 (セット内容 + 原材料 + 中間加工品)</div>
+                        <div className="font-mono font-bold text-lg text-emerald-700">
+                          {formatCurrency(
+                            items
+                              .filter(i => ["product", "ingredient", "intermediate"].includes(i.item_type))
+                              .reduce((sum, i) => sum + (parseFloat(String(i.cost)) || 0), 0)
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {group.type === "expense" && (
+                    <div className="mt-4 mb-2 border-t-2 border-double border-gray-200 pt-4 px-2">
+                      <div className="flex justify-start items-center gap-8">
+                        <div className="text-sm font-bold text-orange-700">原価小計 (資材・包材 + 諸経費)</div>
+                        <div className="font-mono font-bold text-lg text-orange-700">
+                          {formatCurrency(
+                            items
+                              .filter(i => ["material", "expense"].includes(i.item_type))
+                              .reduce((sum, i) => sum + (parseFloat(String(i.cost)) || 0), 0)
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
