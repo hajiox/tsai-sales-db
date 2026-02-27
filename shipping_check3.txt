@@ -1,0 +1,47 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: 🔑 add access controls to secrets: https://dotenvx.com/ops
+=== 異常値のrecipe_itemsを持つレシピ ===
+
+レシピ: 【商品】国産チャーシュー500g (07d38dfb-50d4-4d1e-9883-027c8d069a31)
+  {"id":"e887a3fb-8d7c-4d22-83dd-aa29aa426b64","item_name":"平均送料予測（冷凍・冷蔵）","item_type":"expense","cost":3017.2371,"usage_amount":null,"unit_quantity":990,"unit_price":null,"tax_included":true}
+
+レシピ: 【商品】国産チャーシュー贈答用 (40ae316f-d54a-4904-b5f6-a12574ce9f5f)
+  {"id":"fc657795-027c-4563-bf94-94b770393520","item_name":"平均送料予測（冷凍・冷蔵）","item_type":"expense","cost":4130.2211,"usage_amount":null,"unit_quantity":990,"unit_price":null,"tax_included":true}
+
+=== 全「平均送料予測」recipe_items ===
+✅ 正常 | 【商品】パーフェクトラーメンSIO | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】会津馬刺し200g | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】パーフェクトラーメン喜多方 | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】家系麺のみ10食 | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】燻製チャーシュースライス600ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】燻製チャーシューブロック600ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】燻製チャーシュー訳あり600ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+⚠️ 異常 | 【商品】チャーシュー訳あり800ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=null | tax_incl=true
+⚠️ 異常 | 【商品】会津馬刺し1kg | cost=990 | usage=1 | unit_qty=1 | unit_price=null | tax_incl=true
+⚠️ 異常 | 【商品】国産チャーシュー500g | cost=3017.2371 | usage=null | unit_qty=990 | unit_price=null | tax_incl=true
+⚠️ 異常 | 【商品】国産チャーシュー贈答用 | cost=4130.2211 | usage=null | unit_qty=990 | unit_price=null | tax_incl=true
+✅ 正常 | 【商品】国産チャーシュー1kg | cost=990 | usage=null | unit_qty=990 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】チャーシュースライス700ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 豚角煮 | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】パーフェクトラーメンBUTA3食 | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 会津馬刺し1キロ | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+✅ 正常 | 【商品】パーフェクトラーメンIE-K | cost=990 | usage=1 | unit_qty=1 | unit_price=990 | tax_incl=true
+
+=== Excel正しい値 ===
+平均送料予測（冷凍・冷蔵）: 税込990円 / 税抜900円
+ネコポス送料: 税込209円 / 税抜190円
+ヤマト常温送料: 税込770円 / 税抜700円
+ヤマト冷凍冷蔵業務用大: 税込1320円 / 税抜1200円
+
+=== expenses テーブル重複一覧（全送料系） ===
+  コンパクト送料 | id=6a33c187-5409-4e92-9654-3e52698c06c6 | unit_price=550 | tax_incl=false
+  ネコポス送料 | id=82a13c4c-2d7b-4926-90c3-e6e519422d87 | unit_price=209 | tax_incl=true
+  ネコポス送料 | id=4ebef64d-57ad-4d30-add3-9376f2cf0570 | unit_price=350 | tax_incl=false
+  ヤマト冷凍冷蔵発送業務用大（平均予測） | id=c4e98f47-bc0e-4f60-89e8-d26b26d48dad | unit_price=1320 | tax_incl=true
+  ヤマト冷凍冷蔵発送業務用大（平均予測） | id=27ab6d86-3dd2-4621-8297-4a2c67f78cd8 | unit_price=1320 | tax_incl=true
+  ヤマト常温送料（平均）700円計算 | id=5581f17b-21fa-4f4b-8486-bc95b8f6bbe4 | unit_price=770 | tax_incl=true
+  ヤマト常温送料（平均）700円計算 | id=004a73c4-b317-4499-a3a1-731386c3549b | unit_price=770 | tax_incl=true
+  ヤマト送料 | id=7c556162-70aa-4eac-b980-d6271cd4d4b8 | unit_price=950 | tax_incl=false
+  平均送料予測（冷凍冷蔵） | id=c93a0277-2f61-4cca-87cd-fdaeec4eeca9 | unit_price=990 | tax_incl=true
+  平均送料予測（冷凍冷蔵） | id=42e8e342-4418-4963-97e2-36af1d34b29e | unit_price=990 | tax_incl=true
+  平均送料予測（冷凍冷蔵） | id=3487f84f-d1ca-4386-845a-3f839726277d | unit_price=990 | tax_incl=true
+  平均送料予測（冷凍冷蔵） | id=a8afdbd6-e448-480a-af5d-aa8989be8606 | unit_price=990 | tax_incl=true

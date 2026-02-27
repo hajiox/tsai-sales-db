@@ -1,0 +1,56 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+=== 送料データ修正開始 ===
+
+--- 1. recipe_items 異常値修正 ---
+  修正: 2ca88e94-7436-4413-93c4-10df84d13ae8 | 旧: cost=990, usage=1, unit_qty=1, unit_price=null
+  ✅ → cost=990, usage=1, unit_qty=1, unit_price=990
+  修正: 402a620e-80ae-467d-b862-959a5ed33b9f | 旧: cost=990, usage=1, unit_qty=1, unit_price=null
+  ✅ → cost=990, usage=1, unit_qty=1, unit_price=990
+  修正: e887a3fb-8d7c-4d22-83dd-aa29aa426b64 | 旧: cost=3017.2371, usage=null, unit_qty=990, unit_price=null
+  ✅ → cost=990, usage=1, unit_qty=1, unit_price=990
+  修正: fc657795-027c-4563-bf94-94b770393520 | 旧: cost=4130.2211, usage=null, unit_qty=990, unit_price=null
+  ✅ → cost=990, usage=1, unit_qty=1, unit_price=990
+  修正: 788b6ea4-d496-46ce-8f9b-ac509d3b7531 | 旧: cost=990, usage=null, unit_qty=990, unit_price=990
+  ✅ → cost=990, usage=1, unit_qty=1, unit_price=990
+
+--- 2. expenses テーブル重複削除 ---
+  平均送料予測（冷凍冷蔵）: 3件の重複を削除 (残すID: c93a0277-2f61-4cca-87cd-fdaeec4eeca9)
+  ✅ 削除: a8afdbd6-e448-480a-af5d-aa8989be8606
+  ✅ 削除: 3487f84f-d1ca-4386-845a-3f839726277d
+  ✅ 削除: 42e8e342-4418-4963-97e2-36af1d34b29e
+  ヤマト常温送料（平均）700円計算: 1件の重複を削除 (残すID: 5581f17b-21fa-4f4b-8486-bc95b8f6bbe4)
+  ✅ 削除: 004a73c4-b317-4499-a3a1-731386c3549b
+  ヤマト冷凍冷蔵発送業務用大（平均予測）: 1件の重複を削除 (残すID: c4e98f47-bc0e-4f60-89e8-d26b26d48dad)
+  ✅ 削除: 27ab6d86-3dd2-4621-8297-4a2c67f78cd8
+
+--- 3. 修正結果確認 ---
+
+平均送料予測 recipe_items: 17件
+  ✅ 【商品】パーフェクトラーメンSIO | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】会津馬刺し200g | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】パーフェクトラーメン喜多方 | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】家系麺のみ10食 | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】燻製チャーシュースライス600ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】燻製チャーシューブロック600ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】燻製チャーシュー訳あり600ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】チャーシュー訳あり800ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】会津馬刺し1kg | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】国産チャーシュー500g | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】国産チャーシュー贈答用 | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】国産チャーシュー1kg | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】チャーシュースライス700ｇ | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 豚角煮 | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】パーフェクトラーメンBUTA3食 | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 会津馬刺し1キロ | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+  ✅ 【商品】パーフェクトラーメンIE-K | cost=990 | usage=1 | unit_qty=1 | unit_price=990
+
+expenses テーブル（送料系）: 7件
+  コンパクト送料 | unit_price=550 | tax_incl=false
+  ネコポス送料 | unit_price=209 | tax_incl=true
+  ネコポス送料 | unit_price=350 | tax_incl=false
+  ヤマト冷凍冷蔵発送業務用大（平均予測） | unit_price=1320 | tax_incl=true
+  ヤマト常温送料（平均）700円計算 | unit_price=770 | tax_incl=true
+  ヤマト送料 | unit_price=950 | tax_incl=false
+  平均送料予測（冷凍冷蔵） | unit_price=990 | tax_incl=true
+
+=== 修正完了 ===

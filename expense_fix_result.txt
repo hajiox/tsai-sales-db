@@ -1,0 +1,66 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+=== expenses テーブル重複削除 ===
+
+修正前: 53件
+
+「【卸製造人件費】100個*1人　三大ラーメン」: keep 1件(id=276cbf57), remove 1件
+「【卸製造人件費】300本*1人　業務用ソース」: keep 1件(id=92e62ca0), remove 1件
+「【卸製造人件費】400個*0.5人　お茶焙煎」: keep 1件(id=5a51bd90), remove 1件
+「【卸製造人件費】400個*1.5人　カレー」: keep 1件(id=a79fcc51), remove 1件
+「【卸製造人件費】400個*1.7人　カレー（肉カット）」: keep 1件(id=4cf01152), remove 1件
+「【卸製造人件費】400個*1人　ウマーボー丼」: keep 1件(id=4af810cd), remove 1件
+「【卸製造人件費】400個*1人　ドレッシング」: keep 1件(id=dd6d6f4e), remove 1件
+「【卸製造人件費】400個*2.5人　唐揚げ飯等」: keep 1件(id=380919b7), remove 1件
+「【卸製造人件費】400個*3人　チャーシュー飯」: keep 1件(id=5dd683d5), remove 1件
+「【卸製造人件費】500個*2人　ふりかけ系」: keep 1件(id=672a1bd9), remove 1件
+「【卸製造人件費】600個*1人　ソース」: keep 1件(id=550d45a2), remove 1件
+「OEM手数料」: keep 1件(id=cb8236ea), remove 1件
+「OEM追加手数料20円」: keep 1件(id=2ebaa1b8), remove 1件
+「ネコポス送料」: keep unit_price=209(税込), remove 1件 (unit_price=350)
+「総合ネット発送人件費（2023年4月確認）」: keep 1件(id=176ad9d3), remove 1件
+「総合人件費（2023年4月確認）」: keep 1件(id=641d78f9), remove 1件
+「製造人件費算出表（2024年6月集計）」: keep 1件(unit_price=0), remove 4件
+
+削除対象: 20件
+
+✅ 20/20件 削除完了
+
+
+=== 修正後の expenses テーブル ===
+全件数: 33件
+
+  【卸製造人件費】100個*1人　三大ラーメン | unit_price=70 | tax_incl=true
+  【卸製造人件費】300本*1人　業務用ソース | unit_price=23.33 | tax_incl=true
+  【卸製造人件費】400個*0.5人　お茶焙煎 | unit_price=9 | tax_incl=true
+  【卸製造人件費】400個*1.5人　カレー | unit_price=27 | tax_incl=true
+  【卸製造人件費】400個*1.7人　カレー（肉カット） | unit_price=30.6 | tax_incl=true
+  【卸製造人件費】400個*1人　ウマーボー丼 | unit_price=17.5 | tax_incl=true
+  【卸製造人件費】400個*1人　ドレッシング | unit_price=18 | tax_incl=true
+  【卸製造人件費】400個*2.5人　唐揚げ飯等 | unit_price=45 | tax_incl=true
+  【卸製造人件費】400個*3人　チャーシュー飯 | unit_price=54 | tax_incl=true
+  【卸製造人件費】500個*2人　ふりかけ系 | unit_price=28 | tax_incl=true
+  【卸製造人件費】600個*1人　ソース | unit_price=12 | tax_incl=true
+  OEM手数料 | unit_price=180 | tax_incl=true
+  OEM製造費 | unit_price=180 | tax_incl=true
+  OEM製造費（150円） | unit_price=165 | tax_incl=true
+  OEM製造費（190円）値上げ | unit_price=190 | tax_incl=true
+  OEM製造費業務用1kg用380円 | unit_price=380 | tax_incl=true
+  OEM追加手数料20円 | unit_price=20 | tax_incl=true
+  コンパクト送料 | unit_price=550 | tax_incl=false
+  ネコポス送料 | unit_price=209 | tax_incl=true
+  ヤマト冷凍冷蔵発送業務用大（平均予測） | unit_price=1320 | tax_incl=true
+  ヤマト常温送料（平均）700円計算 | unit_price=770 | tax_incl=true
+  ヤマト送料 | unit_price=950 | tax_incl=false
+  人件費 | unit_price=1200 | tax_incl=false
+  内職10円（海苔入れ等） | unit_price=10 | tax_incl=true
+  内職12円 | unit_price=12 | tax_incl=true
+  内職13円（ウマラーなど）シール3枚 | unit_price=13 | tax_incl=true
+  内職16円（辛杉家渡部価格） | unit_price=16 | tax_incl=true
+  内職28円（お茶専用） | unit_price=28 | tax_incl=true
+  平均送料予測（冷凍冷蔵） | unit_price=990 | tax_incl=true
+  総合ネット発送人件費（2023年4月確認） | unit_price=92.4 | tax_incl=true
+  総合人件費（2023年4月確認） | unit_price=32.79 | tax_incl=true
+  総合水道光熱費(2023年4月確認） | unit_price=11.33 | tax_incl=true
+  製造人件費算出表（2024年6月集計） | unit_price=0 | tax_incl=false
+
+✅ 重複なし！クリーン状態です。

@@ -1,0 +1,373 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+=== 中間加工品 recipe_items の既存データチェック ===
+
+recipe_items カラム一覧: id, recipe_id, item_name, item_type, unit_quantity, unit_price, usage_amount, cost, created_at, ingredient_id, material_id, intermediate_recipe_id, tax_included, unit_weight
+intermediate_recipe_id カラム存在: true
+
+中間加工品 recipe_items 件数: 70
+
+中間部品レシピ数: 29
+  【P】白の冷やし中華スープ | total_weight=76.4 | total_cost=61.15
+  【P】自社ラー油 | total_weight=784.7 | total_cost=439.73
+  白の冷やし中華 | total_weight=76.4 | total_cost=61.15
+  チャーシューたれ（大） | total_weight=104.2 | total_cost=72.41
+  醤油ラーメンスープ（煮干） | total_weight=80 | total_cost=53.59
+  醤油ラーメンスープ（鶏油） | total_weight=80 | total_cost=60
+  【P】鶏油60g | total_weight=120 | total_cost=31.36
+  【P】辛味噌スープ（極ver2） | total_weight=119.78000000000002 | total_cost=98.39
+  背脂醤油ラーメンスープ | total_weight=62 | total_cost=72.33
+  【P】完全再現スープ（醤油）鶏油  | total_weight=80 | total_cost=60
+  【P】完全再現スープSIO | total_weight=85 | total_cost=62.26
+  完全再現スープIEKI（MIX）改良 | total_weight=153.2 | total_cost=151.63
+  【P】中厚レトルトチャーシュー（小）1枚 | total_weight=34 | total_cost=102.75
+  【P】お茶漬け | total_weight=7.5 | total_cost=32.73
+  【P】チャーシューたれ（小） | total_weight=41.68000000000001 | total_cost=37.05
+  【P】つけ麺スープ | total_weight=115.35000000000001 | total_cost=134.76
+  【P】角煮のたれ（中華） | total_weight=192.675 | total_cost=186.91
+  【P】つけ麺スープ  (極にぼ) | total_weight=114.85000000000001 | total_cost=151.83
+  【P】チャーシューたれ（大) | total_weight=104.2 | total_cost=72.41
+  【P】完全再現スープ（BUTA）MIX | total_weight=119.89999999999999 | total_cost=79.83
+  【P】ネギ油 | total_weight=1870 | total_cost=671.79
+  【P】極辛背脂 | total_weight=7 | total_cost=129.27
+  【P】角煮のたれ（和風） | total_weight=413.44000000000005 | total_cost=141.54
+  【P】豚背脂 | total_weight=80 | total_cost=27.69
+  【P】豚背脂1kg | total_weight=1000 | total_cost=208.46
+  【P】完全再現スープ（醤油）煮干 | total_weight=80 | total_cost=66.62
+  【P】完全再現スープ（背脂醤油）  | total_weight=142 | total_cost=72.33
+  【P】煮干し油 | total_weight=30550 | total_cost=19899.74
+  【P】極厚レトルトチャーシュー1枚 | total_weight=90 | total_cost=249.41
+
+--- 既存データの問題チェック ---
+
+⚠️ ラーメンスープの素（醤油） → 【P】煮干し油
+  unit_weight: null → 正: 30550
+  unit_price: 19899.7443 → 正: 19899.74
+  intermediate_recipe_id: null → 正: a7a26d26-0652-4e02-9cee-b4c24bdc8e0b
+
+⚠️ 【商品】辛すぎInspire凪 → 【P】中厚レトルトチャーシュー（小）1枚
+  unit_weight: null → 正: 34
+  unit_price: 102.7465 → 正: 102.75
+  intermediate_recipe_id: null → 正: 349ec660-32f8-409e-b608-0733e099f546
+
+⚠️ 辛すぎInspire極　猛虎極辛 → 【P】極辛背脂
+  unit_weight: null → 正: 7
+  unit_price: 139.6118 → 正: 129.27
+  intermediate_recipe_id: null → 正: 8f19dae8-9487-4f98-b4ee-297f48dd4122
+
+⚠️ ラーメンスープの素（醤油）2本セット → 【P】煮干し油
+  unit_weight: null → 正: 30550
+  unit_price: 19899.7443 → 正: 19899.74
+  intermediate_recipe_id: null → 正: a7a26d26-0652-4e02-9cee-b4c24bdc8e0b
+
+⚠️ ラーメンスープの素(SIO) → 【P】ネギ油
+  unit_weight: null → 正: 1870
+  unit_price: 671.7927 → 正: 671.79
+  intermediate_recipe_id: null → 正: 22ddac3a-4b4d-4d73-b9d0-1a149280ce3b
+
+⚠️ ラーメンスープの素 → 【P】ネギ油
+  unit_weight: null → 正: 1870
+  unit_price: 671.7927 → 正: 671.79
+  intermediate_recipe_id: null → 正: 22ddac3a-4b4d-4d73-b9d0-1a149280ce3b
+
+⚠️ 【商品】極厚レトルトチャーシュー8枚SET → 【P】極厚レトルトチャーシュー1枚
+  unit_weight: null → 正: 90
+  unit_price: 249.4131 → 正: 249.41
+  intermediate_recipe_id: null → 正: 79e6ae64-c183-4aa3-8b6b-939214c80d5f
+
+⚠️ 【商品】中厚レトルトチャーシュー（小）12枚SET → 【P】中厚レトルトチャーシュー（小）1枚
+  unit_weight: null → 正: 34
+  unit_price: 102.7465 → 正: 102.75
+  intermediate_recipe_id: null → 正: 349ec660-32f8-409e-b608-0733e099f546
+
+⚠️ 【商品】パーフェクトラーメン【S】BUTA1食 → 【P】完全再現スープ（BUTA）MIX
+  unit_weight: null → 正: 119.89999999999999
+  unit_price: 79.8323 → 正: 79.83
+  intermediate_recipe_id: null → 正: 92cec699-adcc-417b-8d2a-42050d8f5c9b
+
+⚠️ 【商品】パーフェクトラーメン【S】BUTA1食 → 【P】極厚レトルトチャーシュー1枚
+  unit_weight: null → 正: 90
+  unit_price: 249.4131 → 正: 249.41
+  intermediate_recipe_id: null → 正: 79e6ae64-c183-4aa3-8b6b-939214c80d5f
+
+⚠️ 【商品】パーフェクトラーメン【S】BUTA2食 → 【P】完全再現スープ（BUTA）MIX
+  unit_weight: null → 正: 119.89999999999999
+  unit_price: 79.8323 → 正: 79.83
+  intermediate_recipe_id: null → 正: 92cec699-adcc-417b-8d2a-42050d8f5c9b
+
+⚠️ 【商品】パーフェクトラーメン【S】BUTA6食 → 【P】完全再現スープ（BUTA）MIX
+  unit_weight: null → 正: 119.89999999999999
+  unit_price: 79.8323 → 正: 79.83
+  intermediate_recipe_id: null → 正: 92cec699-adcc-417b-8d2a-42050d8f5c9b
+
+⚠️ 【商品】スープのみBUTA5食 → 【P】完全再現スープ（BUTA）MIX
+  unit_weight: null → 正: 119.89999999999999
+  unit_price: 79.8323 → 正: 79.83
+  intermediate_recipe_id: null → 正: 92cec699-adcc-417b-8d2a-42050d8f5c9b
+
+⚠️ 【商品】チャーシューたれ大3個セット → 【P】チャーシューのたれ大
+  unit_price: 72.4126 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 豚背脂8食セット → 【P】豚背脂
+  unit_weight: null → 正: 80
+  intermediate_recipe_id: null → 正: 57d92ed2-fa53-47c8-929e-13e99c4fe10f
+
+⚠️ 豚背脂24食セット（8×3個） → 【P】豚背脂
+  unit_weight: null → 正: 80
+  intermediate_recipe_id: null → 正: 57d92ed2-fa53-47c8-929e-13e99c4fe10f
+
+⚠️ 【楽天マート】パーフェクトラーメン【S】喜多方1食  → 【P】完全再現スープ　醤油
+  unit_price: 66.6163 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【楽天マート】パーフェクトラーメン【S】喜多方1食  → 【P】中厚レトルトチャーシュー（小）1枚
+  unit_weight: null → 正: 34
+  unit_price: 102.7465 → 正: 102.75
+  intermediate_recipe_id: null → 正: 349ec660-32f8-409e-b608-0733e099f546
+
+⚠️ 【商品】パーフェクトラーメン【S】喜多方背脂6食 → 【P】完全再現スープ 醤油（背脂）
+  unit_price: 72.3268 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】パーフェクトラーメン【S】喜多方9食 → 【P】完全再現スープ　醤油
+  unit_price: 66.6163 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】パーフェクトラーメン【S】喜多方3食 → 【P】完全再現スープ　醤油
+  unit_price: 66.6163 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】完全再現スープ醤油（背脂）5食 → 【P】完全再現スープ 醤油（背脂）
+  unit_price: 72.3268 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】完全再現スープ醤油（煮干し）8食 → 【P】完全再現スープ　醤油
+  unit_price: 66.6163 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【楽天マート】パーフェクトラーメン【S】SIO1食 → 【P】完全再現スープ　SIO
+  unit_price: 62.2602 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【楽天マート】パーフェクトラーメン【S】SIO1食 → 【P】中厚レトルトチャーシュー（小）1枚
+  unit_weight: null → 正: 34
+  unit_price: 102.7465 → 正: 102.75
+  intermediate_recipe_id: null → 正: 349ec660-32f8-409e-b608-0733e099f546
+
+⚠️ 【商品】パーフェクトラーメン【S】SIO3食 → 【P】完全再現スープ　SIO
+  unit_price: 62.2602 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】パーフェクトラーメン【S】IE-K1食 → 【P】完全再現スープ（IE-K）MIX改良版
+  unit_price: 151.6308 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】パーフェクトラーメン【S】IE-K1食 → 【P】中厚レトルトチャーシュー（小）1枚
+  unit_weight: null → 正: 34
+  unit_price: 102.7465 → 正: 102.75
+  intermediate_recipe_id: null → 正: 349ec660-32f8-409e-b608-0733e099f546
+
+⚠️ 【楽天マート】IE-K1食 （卸不可) → 【P】完全再現スープ（IE-K）MIX改良版
+  unit_price: 151.6308 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【楽天マート】IE-K1食 （卸不可) → 【P】中厚レトルトチャーシュー（小）1枚
+  unit_weight: null → 正: 34
+  unit_price: 102.7465 → 正: 102.75
+  intermediate_recipe_id: null → 正: 349ec660-32f8-409e-b608-0733e099f546
+
+⚠️ 【商品】パーフェクトラーメン【S】SIO9食 → 【P】完全再現スープ　SIO
+  unit_price: 62.2602 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】完全再現スープSIOのみ8食 → 【P】完全再現スープ　SIO
+  unit_price: 62.2602 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】パーフェクトラーメン【S】IE-K2食 → 【P】完全再現スープ（IE-K）MIX改良版
+  unit_price: 151.6308 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】パーフェクトラーメン【S】IE-K6食 → 【P】完全再現スープ（IE-K）MIX改良版
+  unit_price: 151.6308 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】スープのみIE-K5食（改良） → 【P】完全再現スープ（IE-K）MIX改良版
+  unit_price: 151.6308 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】特濃つけ麺魚介豚骨2食 → 【P】つけ麺スープ
+  unit_weight: null → 正: 115.35000000000001
+  unit_price: 134.7602 → 正: 134.76
+  intermediate_recipe_id: null → 正: 73651cd2-25f6-4faa-a4f1-865b1f46488c
+
+⚠️ 【商品】特濃つけ麺魚介豚骨6食 → 【P】つけ麺スープ
+  unit_weight: null → 正: 115.35000000000001
+  unit_price: 134.7602 → 正: 134.76
+  intermediate_recipe_id: null → 正: 73651cd2-25f6-4faa-a4f1-865b1f46488c
+
+⚠️ 【商品】スープのみ魚介豚骨5食 → 【P】つけ麺スープ
+  unit_weight: null → 正: 115.35000000000001
+  unit_price: 134.7602 → 正: 134.76
+  intermediate_recipe_id: null → 正: 73651cd2-25f6-4faa-a4f1-865b1f46488c
+
+⚠️ 【商品】特濃つけ麺極にぼし2食 → 【P】つけ麺スープ極にぼし
+  unit_price: 151.8328 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】特濃つけ麺極にぼし6食 → 【P】つけ麺スープ極にぼし
+  unit_price: 151.8328 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】スープのみ極にぼし5食 → 【P】つけ麺スープ極にぼし
+  unit_price: 151.8328 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】国産チャーシュー500g → 【P】チャーシューたれ（大)
+  intermediate_recipe_id: null → 正: 3c0e3727-203c-405d-95a6-fb6b44b00161
+
+⚠️ パーフェクトラーメンKARAMISO2食 → 【P】辛味噌スープVer2
+  unit_price: 106.2565 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ パーフェクトラーメンKARAMISO6食 → 【P】辛味噌スープVer2
+  unit_price: 106.2565 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【Shopee台湾】中厚レトルトチャーシュー12枚 → 【P】中厚レトルトチャーシュー（小）1枚
+  unit_weight: null → 正: 34
+  unit_price: 102.7465 → 正: 102.75
+  intermediate_recipe_id: null → 正: 349ec660-32f8-409e-b608-0733e099f546
+
+⚠️ 【Shopee台湾】極厚レトルトチャーシュー8枚 → 【P】極厚レトルトチャーシュー1枚
+  unit_weight: null → 正: 90
+  unit_price: 249.4131 → 正: 249.41
+  intermediate_recipe_id: null → 正: 79e6ae64-c183-4aa3-8b6b-939214c80d5f
+
+⚠️ 【Shopee台湾】BUTA → 【P】完全再現スープ（BUTA）MIX
+  unit_weight: null → 正: 119.89999999999999
+  unit_price: 79.8323 → 正: 79.83
+  intermediate_recipe_id: null → 正: 92cec699-adcc-417b-8d2a-42050d8f5c9b
+
+⚠️ 【Shopee台湾】BUTA → 【P】極厚レトルトチャーシュー1枚
+  unit_weight: null → 正: 90
+  unit_price: 249.4131 → 正: 249.41
+  intermediate_recipe_id: null → 正: 79e6ae64-c183-4aa3-8b6b-939214c80d5f
+
+⚠️ 【Shopee台湾】IE-K → 【P】完全再現スープ（IE-K）MIX改良版
+  unit_price: 151.6308 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【Shopee台湾】IE-K → 【P】中厚レトルトチャーシュー（小）1枚
+  unit_weight: null → 正: 34
+  unit_price: 102.7465 → 正: 102.75
+  intermediate_recipe_id: null → 正: 349ec660-32f8-409e-b608-0733e099f546
+
+⚠️ 【Shopee台湾】特濃つけ麺魚介豚骨 → 【P】つけ麺スープ
+  unit_weight: null → 正: 115.35000000000001
+  unit_price: 134.7602 → 正: 134.76
+  intermediate_recipe_id: null → 正: 73651cd2-25f6-4faa-a4f1-865b1f46488c
+
+⚠️ 【商品】パーフェクトラーメン【S】SIO1食 → 【P】完全再現スープSIO
+  intermediate_recipe_id: null → 正: 68596615-4d11-4887-9785-db9633fe69ad
+
+⚠️ 【商品】パーフェクトラーメン【S】喜多方背脂2食 → 【P】完全再現スープ 醤油（背脂）
+  unit_price: 72.3268 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】チャーシュー訳あり800ｇ → チャーシューたれ（大）
+  intermediate_recipe_id: null → 正: eefcefc3-295d-4b16-879f-2b2143700e20
+
+⚠️ 【Shopee台湾】旨辛タンメン → 【P】辛味噌スープVer2
+  unit_price: 106.2565 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】チャーシューたれ3個 → 【P】チャーシューのたれ大
+  unit_price: 72.4126 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】豚背脂個包装8食 → 【P】豚背脂
+  unit_weight: null → 正: 80
+  intermediate_recipe_id: null → 正: 57d92ed2-fa53-47c8-929e-13e99c4fe10f
+
+⚠️ 【商品】豚背脂個包装24食 → 【P】豚背脂
+  unit_weight: null → 正: 80
+  intermediate_recipe_id: null → 正: 57d92ed2-fa53-47c8-929e-13e99c4fe10f
+
+⚠️ パーフェクトラーメン旨辛タンメン2食 → 【P】辛味噌スープVer2
+  unit_price: 106.2565 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ パーフェクトラーメン旨辛タンメン6食 → 【P】辛味噌スープVer2
+  unit_price: 106.2565 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【商品】辛すぎInspire極（蒙古タンメン） → 【P】極辛背脂
+  unit_weight: null → 正: 7
+  unit_price: 139.6118 → 正: 129.27
+  intermediate_recipe_id: null → 正: 8f19dae8-9487-4f98-b4ee-297f48dd4122
+
+⚠️ 【商品】馬肉物語ウマーボー丼 → 【P】自社製造ラー油（出来高2/3）
+  unit_price: 571.6547 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ ウマーボー丼 → 【P】自社製造ラー油（出来高2/3）
+  unit_price: 571.6547 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ ラーメンスープの素(1本) → 【P】ネギ油
+  unit_weight: null → 正: 1870
+  unit_price: 671.7927 → 正: 671.79
+  intermediate_recipe_id: null → 正: 22ddac3a-4b4d-4d73-b9d0-1a149280ce3b
+
+⚠️ 醤油ラーメンスープ（煮干） → 【P】煮干し油
+  unit_weight: null → 正: 30550
+  intermediate_recipe_id: null → 正: a7a26d26-0652-4e02-9cee-b4c24bdc8e0b
+
+⚠️ 茶めし → 【P】伊達鶏レトルト2本
+  unit_price: 20.24 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 食べるウマラー → 【P】自社製造ラー油（固形あり）
+  unit_price: 571.6547 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ ウマーボー丼 → 【P】自社製造ラー油(出来高2/3)
+  unit_price: 571.65 → 正: null
+  intermediate_recipe_id: null → 正: undefined
+
+⚠️ 【P】完全再現スープ（醤油）煮干 → 【P】煮干し油
+  unit_weight: null → 正: 30550
+  unit_price: 19899.7443 → 正: 19899.74
+  intermediate_recipe_id: null → 正: a7a26d26-0652-4e02-9cee-b4c24bdc8e0b
+
+⚠️ 【P】完全再現スープSIO → 【P】ネギ油
+  unit_weight: null → 正: 1870
+  unit_price: 671.7927 → 正: 671.79
+  intermediate_recipe_id: null → 正: 22ddac3a-4b4d-4d73-b9d0-1a149280ce3b
+
+修正が必要: 70件
+
+product タイプ recipe_items 件数: 22
+  業務用トマトドレッシング | unit_weight=2 | unit_price=6486.49 | int_recipe_id=null
+  食べるウマラー | unit_weight=125.7536 | unit_price=282.27 | int_recipe_id=null
+  業務用じゅうねんドレッシング | unit_weight=2 | unit_price=6379.06 | int_recipe_id=null
+  ももの葉茶 | unit_weight=8 | unit_price=119.47 | int_recipe_id=null
+  もも茶 | unit_weight=12 | unit_price=191.3 | int_recipe_id=null
+  業務用じゅうねんドレッシング | unit_weight=2 | unit_price=6379.06 | int_recipe_id=null
+  【商品】業務用トマトドレッシング | unit_weight=null | unit_price=652.0436 | int_recipe_id=null
+  食べるウマミソ | unit_weight=156.087 | unit_price=249.76 | int_recipe_id=null
+  【商品】業務用じゅうねんドレッシング | unit_weight=null | unit_price=598.3289 | int_recipe_id=null
+  【商品】業務用じゅうねんドレッシング | unit_weight=null | unit_price=598.3289 | int_recipe_id=null
+  【商品】炊き込みチャーシュー飯 | unit_weight=null | unit_price=381.2628 | int_recipe_id=null
+  【商品】炊き込みチャーシュー飯 | unit_weight=null | unit_price=381.2628 | int_recipe_id=null
+  【商品】業務用トマトドレッシング | unit_weight=null | unit_price=652.0436 | int_recipe_id=null
+  【商品】食べるウマラー | unit_weight=null | unit_price=282.2741 | int_recipe_id=null
+  【商品】食べるウマミソ | unit_weight=null | unit_price=249.7614 | int_recipe_id=null
+  悪魔のBUTAカレー | unit_weight=228.5 | unit_price=343.68 | int_recipe_id=null
+  【商品】ももの葉茶 | unit_weight=null | unit_price=119.4674 | int_recipe_id=null
+  【商品】もも茶 | unit_weight=null | unit_price=191.3034 | int_recipe_id=null
+   | unit_weight=0 | unit_price=0 | int_recipe_id=null
+  【商品】唐揚げ飯 | unit_weight=null | unit_price=221.5886 | int_recipe_id=null
+  【商品】喜多方ラーメンふりかけ | unit_weight=null | unit_price=214.711 | int_recipe_id=null
+  唐揚げ飯 | unit_weight=115 | unit_price=221.59 | int_recipe_id=null

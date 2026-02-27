@@ -1,0 +1,149 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: 🔑 add access controls to secrets: https://dotenvx.com/ops
+=== expenses テーブル全件取得 ===
+
+全件数: 53
+
+--- 重複あり ---
+
+「【卸製造人件費】100個*1人　三大ラーメン」: 2件
+  id=276cbf57-b976-4489-bc47-0e84c3f99d16 | unit_price=70 | price=undefined | unit_qty=1 | tax_incl=true
+  id=bcd3e4fe-0bab-43f3-844d-97a4b2034f3a | unit_price=70 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】300本*1人　業務用ソース」: 2件
+  id=92e62ca0-af0a-4aac-ad01-d69fc8f8a2f7 | unit_price=23.33 | price=undefined | unit_qty=1 | tax_incl=true
+  id=0818fbe9-e643-4d7a-a3e9-4f9f4acdf3cf | unit_price=23.33 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】400個*0.5人　お茶焙煎」: 2件
+  id=5a51bd90-1d84-444b-ae2a-4749faaacf64 | unit_price=9 | price=undefined | unit_qty=1 | tax_incl=true
+  id=293a966f-6ad3-41df-a9d7-497b1f69db1d | unit_price=9 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】400個*1.5人　カレー」: 2件
+  id=91321f2a-d665-4334-812e-5a16e371ca1a | unit_price=27 | price=undefined | unit_qty=1 | tax_incl=true
+  id=a79fcc51-4886-4fbe-bb6e-28923295c695 | unit_price=27 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】400個*1.7人　カレー（肉カット）」: 2件
+  id=db92e5d3-ad6b-4c09-90bd-556ca549a6e5 | unit_price=30.6 | price=undefined | unit_qty=1 | tax_incl=true
+  id=4cf01152-0acd-493a-bd64-3ae695e4dd56 | unit_price=30.6 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】400個*1人　ウマーボー丼」: 2件
+  id=17f87952-52d2-4039-b05f-ee5a2ba0479c | unit_price=17.5 | price=undefined | unit_qty=1 | tax_incl=true
+  id=4af810cd-3da4-4643-a65e-4db051265926 | unit_price=17.5 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】400個*1人　ドレッシング」: 2件
+  id=dd6d6f4e-2d1e-4a61-b094-49531d9b8f1a | unit_price=18 | price=undefined | unit_qty=1 | tax_incl=true
+  id=821fd4ea-78c6-4b09-b76b-39b2a6d17be0 | unit_price=18 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】400個*2.5人　唐揚げ飯等」: 2件
+  id=fc68c3d6-454e-4521-b7c6-91bc907a351f | unit_price=45 | price=undefined | unit_qty=1 | tax_incl=true
+  id=380919b7-3c50-4a27-8994-facd2e3f7ab1 | unit_price=45 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】400個*3人　チャーシュー飯」: 2件
+  id=5dd683d5-aaa8-4e31-8aa6-5611d344c39e | unit_price=54 | price=undefined | unit_qty=1 | tax_incl=true
+  id=d3227205-b11e-45c6-ab4d-4ce622df7a55 | unit_price=54 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】500個*2人　ふりかけ系」: 2件
+  id=672a1bd9-5d7b-4e45-93ad-5e5eb4fee7e1 | unit_price=28 | price=undefined | unit_qty=1 | tax_incl=true
+  id=4ed2cc5b-7bf7-4394-a973-d554066f510f | unit_price=28 | price=undefined | unit_qty=1 | tax_incl=true
+
+「【卸製造人件費】600個*1人　ソース」: 2件
+  id=f00d11e7-63b9-4ea6-98f6-846da40adfc4 | unit_price=12 | price=undefined | unit_qty=1 | tax_incl=true
+  id=550d45a2-4781-4783-810e-fb05359bfaf0 | unit_price=12 | price=undefined | unit_qty=1 | tax_incl=true
+
+「OEM手数料」: 2件
+  id=2d8d3779-da03-47f6-8c5f-7fbe025ba653 | unit_price=180 | price=undefined | unit_qty=1 | tax_incl=true
+  id=cb8236ea-5e9d-47a5-b024-90d7fbf143f4 | unit_price=180 | price=undefined | unit_qty=1 | tax_incl=true
+
+「OEM追加手数料20円」: 2件
+  id=77b89bc6-f967-4404-bf4c-817bc65ca2e0 | unit_price=20 | price=undefined | unit_qty=1 | tax_incl=true
+  id=2ebaa1b8-4cea-419d-9bf4-6645291aa31e | unit_price=20 | price=undefined | unit_qty=1 | tax_incl=true
+
+「ネコポス送料」: 2件
+  id=4ebef64d-57ad-4d30-add3-9376f2cf0570 | unit_price=350 | price=undefined | unit_qty=1 | tax_incl=false
+  id=82a13c4c-2d7b-4926-90c3-e6e519422d87 | unit_price=209 | price=undefined | unit_qty=1 | tax_incl=true
+
+「総合ネット発送人件費（2023年4月確認）」: 2件
+  id=5fd37f5a-912c-48b6-b584-6e4f159fe790 | unit_price=92.4 | price=undefined | unit_qty=1 | tax_incl=true
+  id=176ad9d3-c2b7-4db6-b671-b7d45b39e054 | unit_price=92.4 | price=undefined | unit_qty=1 | tax_incl=true
+
+「総合人件費（2023年4月確認）」: 2件
+  id=641d78f9-5d72-485f-8faf-919998b8ed1a | unit_price=32.79 | price=undefined | unit_qty=1 | tax_incl=true
+  id=af859395-2d4b-4e42-8dfc-9f2ae49fbed8 | unit_price=32.79 | price=undefined | unit_qty=1 | tax_incl=true
+
+「製造人件費算出表（2024年6月集計）」: 5件
+  id=bd40d0e8-9945-4914-a6d3-91cb31fdadd3 | unit_price=null | price=undefined | unit_qty=1 | tax_incl=true
+  id=faa674b5-2f56-42a7-92a0-2ee42e036713 | unit_price=null | price=undefined | unit_qty=1 | tax_incl=true
+  id=80960c35-46c3-4dda-89d1-72bffcd99e0b | unit_price=null | price=undefined | unit_qty=1 | tax_incl=true
+  id=a7c9df42-8e61-45fa-a1a1-f208e81dfea5 | unit_price=0 | price=undefined | unit_qty=1 | tax_incl=false
+  id=30bdaaf2-9a28-45fe-aa5e-7cc250f264f6 | unit_price=null | price=undefined | unit_qty=1 | tax_incl=true
+
+
+--- recipe_items (item_type=expense) のサンプル ---
+  item_name=平均送料予測（冷凍・冷蔵） | material_id=null | ingredient_id=null
+  item_name=【発送用ダンボール】チャーシュー800ｇ-1ｋｇ | material_id=null | ingredient_id=null
+  item_name=平均送料予測（冷凍・冷蔵） | material_id=null | ingredient_id=null
+  item_name=ヤマト常温送料（平均）700円計算 | material_id=null | ingredient_id=null
+  item_name=総合ネット発送人件費（2023年4月確認） | material_id=null | ingredient_id=null
+  item_name=総合ネット発送人件費（2023年4月確認） | material_id=null | ingredient_id=null
+  item_name=総合水道光熱費(2023年4月確認） | material_id=null | ingredient_id=null
+  item_name=【発送用ダンボール】チャーシュー800ｇ-1ｋｇ | material_id=null | ingredient_id=null
+  item_name=【発送用ダンボール】パーフェクトラーメン1個 | material_id=null | ingredient_id=null
+  item_name=総合人件費（2023年4月確認） | material_id=null | ingredient_id=null
+
+
+--- recipe_items (item_type=expense) の material_id 参照先一覧 ---
+
+
+--- expenses テーブル全件一覧 ---
+  【卸製造人件費】100個*1人　三大ラーメン | id=276cbf57-b976-4489-bc47-0e84c3f99d16 | unit_price=70 | ref=0件
+  【卸製造人件費】100個*1人　三大ラーメン | id=bcd3e4fe-0bab-43f3-844d-97a4b2034f3a | unit_price=70 | ref=0件
+  【卸製造人件費】300本*1人　業務用ソース | id=92e62ca0-af0a-4aac-ad01-d69fc8f8a2f7 | unit_price=23.33 | ref=0件
+  【卸製造人件費】300本*1人　業務用ソース | id=0818fbe9-e643-4d7a-a3e9-4f9f4acdf3cf | unit_price=23.33 | ref=0件
+  【卸製造人件費】400個*0.5人　お茶焙煎 | id=5a51bd90-1d84-444b-ae2a-4749faaacf64 | unit_price=9 | ref=0件
+  【卸製造人件費】400個*0.5人　お茶焙煎 | id=293a966f-6ad3-41df-a9d7-497b1f69db1d | unit_price=9 | ref=0件
+  【卸製造人件費】400個*1.5人　カレー | id=91321f2a-d665-4334-812e-5a16e371ca1a | unit_price=27 | ref=0件
+  【卸製造人件費】400個*1.5人　カレー | id=a79fcc51-4886-4fbe-bb6e-28923295c695 | unit_price=27 | ref=0件
+  【卸製造人件費】400個*1.7人　カレー（肉カット） | id=db92e5d3-ad6b-4c09-90bd-556ca549a6e5 | unit_price=30.6 | ref=0件
+  【卸製造人件費】400個*1.7人　カレー（肉カット） | id=4cf01152-0acd-493a-bd64-3ae695e4dd56 | unit_price=30.6 | ref=0件
+  【卸製造人件費】400個*1人　ウマーボー丼 | id=17f87952-52d2-4039-b05f-ee5a2ba0479c | unit_price=17.5 | ref=0件
+  【卸製造人件費】400個*1人　ウマーボー丼 | id=4af810cd-3da4-4643-a65e-4db051265926 | unit_price=17.5 | ref=0件
+  【卸製造人件費】400個*1人　ドレッシング | id=dd6d6f4e-2d1e-4a61-b094-49531d9b8f1a | unit_price=18 | ref=0件
+  【卸製造人件費】400個*1人　ドレッシング | id=821fd4ea-78c6-4b09-b76b-39b2a6d17be0 | unit_price=18 | ref=0件
+  【卸製造人件費】400個*2.5人　唐揚げ飯等 | id=fc68c3d6-454e-4521-b7c6-91bc907a351f | unit_price=45 | ref=0件
+  【卸製造人件費】400個*2.5人　唐揚げ飯等 | id=380919b7-3c50-4a27-8994-facd2e3f7ab1 | unit_price=45 | ref=0件
+  【卸製造人件費】400個*3人　チャーシュー飯 | id=5dd683d5-aaa8-4e31-8aa6-5611d344c39e | unit_price=54 | ref=0件
+  【卸製造人件費】400個*3人　チャーシュー飯 | id=d3227205-b11e-45c6-ab4d-4ce622df7a55 | unit_price=54 | ref=0件
+  【卸製造人件費】500個*2人　ふりかけ系 | id=672a1bd9-5d7b-4e45-93ad-5e5eb4fee7e1 | unit_price=28 | ref=0件
+  【卸製造人件費】500個*2人　ふりかけ系 | id=4ed2cc5b-7bf7-4394-a973-d554066f510f | unit_price=28 | ref=0件
+  【卸製造人件費】600個*1人　ソース | id=f00d11e7-63b9-4ea6-98f6-846da40adfc4 | unit_price=12 | ref=0件
+  【卸製造人件費】600個*1人　ソース | id=550d45a2-4781-4783-810e-fb05359bfaf0 | unit_price=12 | ref=0件
+  OEM手数料 | id=2d8d3779-da03-47f6-8c5f-7fbe025ba653 | unit_price=180 | ref=0件
+  OEM手数料 | id=cb8236ea-5e9d-47a5-b024-90d7fbf143f4 | unit_price=180 | ref=0件
+  OEM製造費 | id=a613c6a5-1e47-4fac-8dec-dc2129515a0d | unit_price=180 | ref=0件
+  OEM製造費（150円） | id=71969e04-051a-4d9c-8af5-fafe8505045b | unit_price=165 | ref=0件
+  OEM製造費（190円）値上げ | id=60036b9b-ff72-47a2-86f6-59c04f63fa6c | unit_price=190 | ref=0件
+  OEM製造費業務用1kg用380円 | id=fec37200-a714-49b6-a00c-484bb6f5f799 | unit_price=380 | ref=0件
+  OEM追加手数料20円 | id=77b89bc6-f967-4404-bf4c-817bc65ca2e0 | unit_price=20 | ref=0件
+  OEM追加手数料20円 | id=2ebaa1b8-4cea-419d-9bf4-6645291aa31e | unit_price=20 | ref=0件
+  コンパクト送料 | id=6a33c187-5409-4e92-9654-3e52698c06c6 | unit_price=550 | ref=0件
+  ネコポス送料 | id=4ebef64d-57ad-4d30-add3-9376f2cf0570 | unit_price=350 | ref=0件
+  ネコポス送料 | id=82a13c4c-2d7b-4926-90c3-e6e519422d87 | unit_price=209 | ref=0件
+  ヤマト冷凍冷蔵発送業務用大（平均予測） | id=c4e98f47-bc0e-4f60-89e8-d26b26d48dad | unit_price=1320 | ref=0件
+  ヤマト常温送料（平均）700円計算 | id=5581f17b-21fa-4f4b-8486-bc95b8f6bbe4 | unit_price=770 | ref=0件
+  ヤマト送料 | id=7c556162-70aa-4eac-b980-d6271cd4d4b8 | unit_price=950 | ref=0件
+  人件費 | id=4de655bf-4cf9-4560-bcbe-7773d1c9ff91 | unit_price=1200 | ref=0件
+  内職10円（海苔入れ等） | id=cef171af-cdb2-4f2f-a795-7abc191f4d82 | unit_price=10 | ref=0件
+  内職12円 | id=6b566e4f-0050-4b12-9e43-b502f43f1043 | unit_price=12 | ref=0件
+  内職13円（ウマラーなど）シール3枚 | id=2ff8c8e6-178e-4d9a-9e67-74148f1fb043 | unit_price=13 | ref=0件
+  内職16円（辛杉家渡部価格） | id=245444e4-3885-4ac5-be50-c338abf35b4a | unit_price=16 | ref=0件
+  内職28円（お茶専用） | id=661edacf-5f56-4487-bcbd-3a21f7a606f9 | unit_price=28 | ref=0件
+  平均送料予測（冷凍冷蔵） | id=c93a0277-2f61-4cca-87cd-fdaeec4eeca9 | unit_price=990 | ref=0件
+  総合ネット発送人件費（2023年4月確認） | id=5fd37f5a-912c-48b6-b584-6e4f159fe790 | unit_price=92.4 | ref=0件
+  総合ネット発送人件費（2023年4月確認） | id=176ad9d3-c2b7-4db6-b671-b7d45b39e054 | unit_price=92.4 | ref=0件
+  総合人件費（2023年4月確認） | id=641d78f9-5d72-485f-8faf-919998b8ed1a | unit_price=32.79 | ref=0件
+  総合人件費（2023年4月確認） | id=af859395-2d4b-4e42-8dfc-9f2ae49fbed8 | unit_price=32.79 | ref=0件
+  総合水道光熱費(2023年4月確認） | id=e68f9bfa-1163-4449-b122-66cdc45fecbf | unit_price=11.33 | ref=0件
+  製造人件費算出表（2024年6月集計） | id=bd40d0e8-9945-4914-a6d3-91cb31fdadd3 | unit_price=null | ref=0件
+  製造人件費算出表（2024年6月集計） | id=faa674b5-2f56-42a7-92a0-2ee42e036713 | unit_price=null | ref=0件
+  製造人件費算出表（2024年6月集計） | id=80960c35-46c3-4dda-89d1-72bffcd99e0b | unit_price=null | ref=0件
+  製造人件費算出表（2024年6月集計） | id=a7c9df42-8e61-45fa-a1a1-f208e81dfea5 | unit_price=0 | ref=0件
+  製造人件費算出表（2024年6月集計） | id=30bdaaf2-9a28-45fe-aa5e-7cc250f264f6 | unit_price=null | ref=0件

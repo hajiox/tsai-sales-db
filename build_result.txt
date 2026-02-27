@@ -1,0 +1,97 @@
+﻿node.exe : ⚠ `eslint` configur
+ation in next.config.mjs is no
+ longer supported. See more in
+fo here: https://nextjs.org/do
+cs/app/api-reference/cli/next#
+next-lint-options
+発生場所 行:1 文字:1
++ & "C:\Program Files\nodejs/n
+ode.exe" "C:\Program Files\nod
+ejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo          : 
+    NotSpecified: (⚠ `eslint  
+  ` conf...xt-lint-options:   
+ String) [], RemoteExcepti    
+on
+    + FullyQualifiedErrorId : 
+    NativeCommandError
+ 
+⚠ Invalid next.config.mjs opti
+ons detected: 
+⚠     Unrecognized key(s) in o
+bject: 'eslint'
+⚠ See more info here: https://
+nextjs.org/docs/messages/inval
+id-next-config
+▲ Next.js 16.1.5 (Turbopack)
+- Environments: .env.local, .env
+
+⚠ The "middleware" file conven
+tion is deprecated. Please use
+ "proxy" instead. Learn more: 
+https://nextjs.org/docs/messag
+es/middleware-to-proxy
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed 
+with 1 errors:
+./app/api/excel-to-pdf/route.t
+s:7:1
+Module not found: Can't resolv
+e 'puppeteer'
+[0m [90m  5 |[39m [36mimpo
+rt[39m [33m*[39m [36mas[3
+9m fs [36mfrom[39m [32m'fs'
+[39m
+ [90m  6 |[39m [36mimport[
+39m [33m*[39m [36mas[39m p
+ath [36mfrom[39m [32m'path'
+[39m
+[31m[1m>[22m[39m[90m  7 |
+[39m [36mimport[39m puppete
+er [36mfrom[39m [32m'puppet
+eer'[39m
+ [90m    |[39m [31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[3
+1m[1m^[22m[39m
+ [90m  8 |[39m
+ [90m  9 |[39m [36mconst[3
+9m [33mRECIPE_DIR[39m [33m=
+[39m [32m'C:\\作業用\\レシピ'[39m
+ [90m 10 |[39m[0m
+
+
+
+https://nextjs.org/docs/messag
+es/module-not-found
+
+
+    at <unknown> (./app/api/ex
+cel-to-pdf/route.ts:7:1)
+    at <unknown> (https://next
+js.org/docs/messages/module-no
+t-found)

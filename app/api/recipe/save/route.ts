@@ -38,6 +38,7 @@ export async function POST(request: Request) {
                     usage_amount: item.usage_amount,
                     cost: item.cost,
                     tax_included: item.tax_included ?? true,
+                    intermediate_recipe_id: item.intermediate_recipe_id || null,
                 }))
             );
             if (insError) throw insError;
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
                         usage_amount: item.usage_amount,
                         cost: item.cost,
                         tax_included: item.tax_included ?? true,
+                        intermediate_recipe_id: item.intermediate_recipe_id || null,
                     })
                     .eq("id", item.id);
                 if (updError) throw updError;

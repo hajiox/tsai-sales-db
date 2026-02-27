@@ -1,0 +1,76 @@
+﻿[96mtypes/supabase.ts[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m~~~~[0m
+
+[96mtypes/supabase.ts[0m:[93m1[0m:[93m6[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m     ~~[0m
+
+[96mtypes/supabase.ts[0m:[93m1[0m:[93m9[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m        ~~~~~~~[0m
+
+[96mtypes/supabase.ts[0m:[93m1[0m:[93m17[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m                ~~~[0m
+
+[96mtypes/supabase.ts[0m:[93m1[0m:[93m21[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m                    ~~~~~~~~~[0m
+
+[96mtypes/supabase.ts[0m:[93m2[0m:[93m1[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m2[0m supabase@2.76.8
+[7m [0m [91m~~~~~~~~[0m
+
+[96mtypes/supabase.ts[0m:[93m2[0m:[93m14[0m - [91merror[0m[90m TS1146: [0mDeclaration expected.
+
+[7m2[0m supabase@2.76.8
+[7m [0m [91m             [0m
+
+[96mtypes/supabase_utf8.ts[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m~~~~[0m
+
+[96mtypes/supabase_utf8.ts[0m:[93m1[0m:[93m6[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m     ~~[0m
+
+[96mtypes/supabase_utf8.ts[0m:[93m1[0m:[93m9[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m        ~~~~~~~[0m
+
+[96mtypes/supabase_utf8.ts[0m:[93m1[0m:[93m17[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m                ~~~[0m
+
+[96mtypes/supabase_utf8.ts[0m:[93m1[0m:[93m21[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m1[0m Need to install the following packages:
+[7m [0m [91m                    ~~~~~~~~~[0m
+
+[96mtypes/supabase_utf8.ts[0m:[93m2[0m:[93m1[0m - [91merror[0m[90m TS1434: [0mUnexpected keyword or identifier.
+
+[7m2[0m supabase@2.76.8
+[7m [0m [91m~~~~~~~~[0m
+
+[96mtypes/supabase_utf8.ts[0m:[93m2[0m:[93m14[0m - [91merror[0m[90m TS1146: [0mDeclaration expected.
+
+[7m2[0m supabase@2.76.8
+[7m [0m [91m             [0m
+
+
+Found 14 errors in 2 files.
+
+Errors  Files
+     7  types/supabase.ts[90m:1[0m
+     7  types/supabase_utf8.ts[90m:1[0m

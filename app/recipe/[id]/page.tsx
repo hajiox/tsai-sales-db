@@ -95,6 +95,7 @@ interface RecipeItem {
   usage_amount: number | string | null;
   cost: number | string | null;
   tax_included?: boolean;
+  intermediate_recipe_id?: string | null;
 }
 
 export default function RecipeDetailPage() {
@@ -325,22 +326,28 @@ export default function RecipeDetailPage() {
             const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
             const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
             const price = parseFloat(String(updatedItem.unit_price)) || 0;
+            const isIntermediate = updatedItem.item_type === "intermediate" || updatedItem.item_type === "product";
             const isMat = updatedItem.item_type === "material" || updatedItem.item_type === "expense";
 
-            const rate =
-              updatedItem.item_type === "ingredient" &&
-                !updatedItem.tax_included
-                ? (1 + (taxRates.ingredient / 100))
-                : updatedItem.item_type === "material" &&
+            if (isIntermediate) {
+              // 中間加工品/商品: usage_amount(個数) × unit_price(元レシピの原価)
+              updatedItem.cost = Math.round(usage * price);
+            } else {
+              const rate =
+                updatedItem.item_type === "ingredient" &&
                   !updatedItem.tax_included
-                  ? (1 + (taxRates.material / 100))
-                  : 1.0;
+                  ? (1 + (taxRates.ingredient / 100))
+                  : updatedItem.item_type === "material" &&
+                    !updatedItem.tax_included
+                    ? (1 + (taxRates.material / 100))
+                    : 1.0;
 
-            // 資材・経費: priceは1個単価なのでそのまま掛ける
-            // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
-            updatedItem.cost = isMat
-              ? Math.round(usage * price * rate)
-              : Math.round(usage * (price / qty) * rate);
+              // 資材・経費: priceは1個単価なのでそのまま掛ける
+              // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
+              updatedItem.cost = isMat
+                ? Math.round(usage * price * rate)
+                : Math.round(usage * (price / qty) * rate);
+            }
           }
           return updatedItem;
         }
@@ -392,58 +399,78 @@ export default function RecipeDetailPage() {
           if (typeof selected === "string") {
             updates = { item_name: selected };
           } else {
-            updates = {
-              item_name: selected.name,
-              unit_price: selected.unit_price || 0,
-              unit_weight: selected.unit_weight || 0,
-              unit_quantity:
-                typeof selected.unit_quantity === "number"
-                  ? selected.unit_quantity
-                  : parseFloat(String(selected.unit_quantity)) || 0,
-              tax_included: selected.tax_included !== false, // default true
-            };
+            const isIntermediate = item.item_type === "intermediate" || item.item_type === "product";
 
-            if (selected.name === "Amazon手数料" && recipe?.selling_price) {
-              updates.cost = Math.round(recipe.selling_price * (taxRates.amazon_fee / 100));
-              updates.usage_amount = 1;
-              updates.unit_price = updates.cost;
+            if (isIntermediate) {
+              // 中間加工品/商品: 元レシピのtotal_weightをunit_weightに、total_costをunit_priceに自動設定
+              updates = {
+                item_name: selected.name,
+                unit_price: selected.unit_price || 0,  // 元レシピのtotal_cost
+                unit_weight: selected.unit_weight || 0, // 元レシピのtotal_weight
+                unit_quantity: 1,
+                usage_amount: 1, // デフォルト1個（倍率）
+                cost: Math.round(parseFloat(String(selected.unit_price)) || 0), // 1個分の原価
+                intermediate_recipe_id: selected.id,
+                tax_included: true,
+              };
+            } else {
+              updates = {
+                item_name: selected.name,
+                unit_price: selected.unit_price || 0,
+                unit_weight: selected.unit_weight || 0,
+                unit_quantity:
+                  typeof selected.unit_quantity === "number"
+                    ? selected.unit_quantity
+                    : parseFloat(String(selected.unit_quantity)) || 0,
+                tax_included: selected.tax_included !== false, // default true
+              };
+
+              if (selected.name === "Amazon手数料" && recipe?.selling_price) {
+                updates.cost = Math.round(recipe.selling_price * (taxRates.amazon_fee / 100));
+                updates.usage_amount = 1;
+                updates.unit_price = updates.cost;
+              }
             }
           }
           const updatedItem = { ...item, ...updates };
 
-          // 使用量が未設定(0)ならデフォルト1にする（資材・経費等で選択しただけで原価反映されるように）
-          if (!updatedItem.usage_amount && updatedItem.unit_price) {
-            updatedItem.usage_amount = 1;
-          }
+          // 中間加工品/商品はすでに上で完全に設定済み
+          const isIntermediate = updatedItem.item_type === "intermediate" || updatedItem.item_type === "product";
+          if (!isIntermediate) {
+            // 使用量が未設定(0)ならデフォルト1にする（資材・経費等で選択しただけで原価反映されるように）
+            if (!updatedItem.usage_amount && updatedItem.unit_price) {
+              updatedItem.usage_amount = 1;
+            }
 
-          // unit_quantityが未設定・文字列の場合もデフォルト1にする
-          if (!updatedItem.unit_quantity || parseFloat(String(updatedItem.unit_quantity)) === 0) {
-            updatedItem.unit_quantity = 1;
-          }
+            // unit_quantityが未設定・文字列の場合もデフォルト1にする
+            if (!updatedItem.unit_quantity || parseFloat(String(updatedItem.unit_quantity)) === 0) {
+              updatedItem.unit_quantity = 1;
+            }
 
-          if (
-            updatedItem.usage_amount &&
-            updatedItem.unit_price
-          ) {
-            const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
-            const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
-            const price = parseFloat(String(updatedItem.unit_price)) || 0;
-            const isMat = updatedItem.item_type === "material" || updatedItem.item_type === "expense";
+            if (
+              updatedItem.usage_amount &&
+              updatedItem.unit_price
+            ) {
+              const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
+              const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
+              const price = parseFloat(String(updatedItem.unit_price)) || 0;
+              const isMat = updatedItem.item_type === "material" || updatedItem.item_type === "expense";
 
-            const rate =
-              updatedItem.item_type === "ingredient" &&
-                !updatedItem.tax_included
-                ? (1 + (taxRates.ingredient / 100))
-                : updatedItem.item_type === "material" &&
+              const rate =
+                updatedItem.item_type === "ingredient" &&
                   !updatedItem.tax_included
-                  ? (1 + (taxRates.material / 100))
-                  : 1.0;
+                  ? (1 + (taxRates.ingredient / 100))
+                  : updatedItem.item_type === "material" &&
+                    !updatedItem.tax_included
+                    ? (1 + (taxRates.material / 100))
+                    : 1.0;
 
-            // 資材・経費: priceは1個単価なのでそのまま掛ける
-            // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
-            updatedItem.cost = isMat
-              ? Math.round(usage * price * rate)
-              : Math.round(usage * (price / qty) * rate);
+              // 資材・経費: priceは1個単価なのでそのまま掛ける
+              // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
+              updatedItem.cost = isMat
+                ? Math.round(usage * price * rate)
+                : Math.round(usage * (price / qty) * rate);
+            }
           }
           return updatedItem;
         }
@@ -1458,18 +1485,25 @@ Now Expanded or Scrollable */}
                               {/* 1 Unit Usage */}
                               <td className="py-2 text-right font-mono text-gray-800 bg-gray-50/30 align-top">
                                 {isEditing ? (
-                                  <input
-                                    type="number"
-                                    className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                                    value={item.usage_amount || ""}
-                                    onChange={(e) =>
-                                      handleItemChange(
-                                        item.id,
-                                        "usage_amount",
-                                        e.target.value,
-                                      )
-                                    }
-                                  />
+                                  <div>
+                                    <input
+                                      type="number"
+                                      className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
+                                      value={item.usage_amount || ""}
+                                      onChange={(e) =>
+                                        handleItemChange(
+                                          item.id,
+                                          "usage_amount",
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
+                                    {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
+                                      <div className="text-[9px] text-purple-500 mt-0.5">
+                                        元レシピ: {formatNumber(item.unit_weight, 1)}g → {formatNumber((parseFloat(String(item.usage_amount)) || 0) * (item.unit_weight || 0), 1)}g
+                                      </div>
+                                    )}
+                                  </div>
                                 ) : (
                                   <>
                                     <span className="font-bold">
@@ -1478,6 +1512,11 @@ Now Expanded or Scrollable */}
                                     <span className="text-[10px] text-gray-400 block">
                                       {group.type === "product" || group.type === "intermediate" ? "個" : isMaterialGroup ? "個" : "g"}
                                     </span>
+                                    {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
+                                      <span className="text-[9px] text-purple-500 block">
+                                        ({formatNumber(item.unit_weight, 1)}g/個 = {formatNumber(unitUsage * (item.unit_weight || 0), 1)}g)
+                                      </span>
+                                    )}
                                   </>
                                 )}
                               </td>
@@ -1570,15 +1609,29 @@ Now Expanded or Scrollable */}
                             {group.type === "ingredient" ||
                               group.type === "intermediate" ||
                               group.type === "product"
-                              ? formatNumber(
-                                group.items.reduce(
-                                  (sum, i) =>
-                                    sum +
-                                    (parseFloat(String(i.usage_amount)) || 0),
+                              ? <>
+                                {formatNumber(
+                                  group.items.reduce(
+                                    (sum, i) =>
+                                      sum +
+                                      (parseFloat(String(i.usage_amount)) || 0),
+                                    0,
+                                  ),
                                   0,
-                                ),
-                                0,
-                              ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
+                                )}{(group.type === "product" || group.type === "intermediate") ? "個" : "g"}
+                                {(group.type === "intermediate" || group.type === "product") && (
+                                  <div className="text-[9px] text-purple-500 font-normal mt-0.5">
+                                    {formatNumber(
+                                      group.items.reduce(
+                                        (sum, i) =>
+                                          sum + (parseFloat(String(i.usage_amount)) || 0) * (i.unit_weight || 0),
+                                        0,
+                                      ),
+                                      1,
+                                    )}g
+                                  </div>
+                                )}
+                              </>
                               : "-"}
                           </td>
                           <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">

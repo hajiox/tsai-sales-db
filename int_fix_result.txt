@@ -1,0 +1,102 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+=== 中間加工品 unit_weight / intermediate_recipe_id 一括修正 ===
+
+対象: 70件
+
+✅ 【P】煮干し油: unit_weight=30550, intermediate_recipe_id=a7a26d26-0652-4e02-9cee-b4c24bdc8e0b
+✅ 【P】中厚レトルトチャーシュー（小）1枚: unit_weight=34, intermediate_recipe_id=349ec660-32f8-409e-b608-0733e099f546
+✅ 【P】極辛背脂: unit_weight=7, intermediate_recipe_id=8f19dae8-9487-4f98-b4ee-297f48dd4122, unit_price=129.27
+✅ 【P】煮干し油: unit_weight=30550, intermediate_recipe_id=a7a26d26-0652-4e02-9cee-b4c24bdc8e0b
+✅ 【P】ネギ油: unit_weight=1870, intermediate_recipe_id=22ddac3a-4b4d-4d73-b9d0-1a149280ce3b
+✅ 【P】ネギ油: unit_weight=1870, intermediate_recipe_id=22ddac3a-4b4d-4d73-b9d0-1a149280ce3b
+✅ 【P】極厚レトルトチャーシュー1枚: unit_weight=90, intermediate_recipe_id=79e6ae64-c183-4aa3-8b6b-939214c80d5f
+✅ 【P】中厚レトルトチャーシュー（小）1枚: unit_weight=34, intermediate_recipe_id=349ec660-32f8-409e-b608-0733e099f546
+✅ 【P】完全再現スープ（BUTA）MIX: unit_weight=119.89999999999999, intermediate_recipe_id=92cec699-adcc-417b-8d2a-42050d8f5c9b
+✅ 【P】極厚レトルトチャーシュー1枚: unit_weight=90, intermediate_recipe_id=79e6ae64-c183-4aa3-8b6b-939214c80d5f
+✅ 【P】完全再現スープ（BUTA）MIX: unit_weight=119.89999999999999, intermediate_recipe_id=92cec699-adcc-417b-8d2a-42050d8f5c9b
+✅ 【P】完全再現スープ（BUTA）MIX: unit_weight=119.89999999999999, intermediate_recipe_id=92cec699-adcc-417b-8d2a-42050d8f5c9b
+✅ 【P】完全再現スープ（BUTA）MIX: unit_weight=119.89999999999999, intermediate_recipe_id=92cec699-adcc-417b-8d2a-42050d8f5c9b
+⚠️ SKIP: "【P】チャーシューのたれ大" - 対応する中間部品レシピが見つかりません
+✅ 【P】豚背脂: unit_weight=80, intermediate_recipe_id=57d92ed2-fa53-47c8-929e-13e99c4fe10f
+✅ 【P】豚背脂: unit_weight=80, intermediate_recipe_id=57d92ed2-fa53-47c8-929e-13e99c4fe10f
+⚠️ SKIP: "【P】完全再現スープ　醤油" - 対応する中間部品レシピが見つかりません
+✅ 【P】中厚レトルトチャーシュー（小）1枚: unit_weight=34, intermediate_recipe_id=349ec660-32f8-409e-b608-0733e099f546
+⚠️ SKIP: "【P】完全再現スープ 醤油（背脂）" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ　醤油" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ　醤油" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ 醤油（背脂）" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ　醤油" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ　SIO" - 対応する中間部品レシピが見つかりません
+✅ 【P】中厚レトルトチャーシュー（小）1枚: unit_weight=34, intermediate_recipe_id=349ec660-32f8-409e-b608-0733e099f546
+⚠️ SKIP: "【P】完全再現スープ　SIO" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ（IE-K）MIX改良版" - 対応する中間部品レシピが見つかりません
+✅ 【P】中厚レトルトチャーシュー（小）1枚: unit_weight=34, intermediate_recipe_id=349ec660-32f8-409e-b608-0733e099f546
+⚠️ SKIP: "【P】完全再現スープ（IE-K）MIX改良版" - 対応する中間部品レシピが見つかりません
+✅ 【P】中厚レトルトチャーシュー（小）1枚: unit_weight=34, intermediate_recipe_id=349ec660-32f8-409e-b608-0733e099f546
+⚠️ SKIP: "【P】完全再現スープ　SIO" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ　SIO" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ（IE-K）MIX改良版" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ（IE-K）MIX改良版" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】完全再現スープ（IE-K）MIX改良版" - 対応する中間部品レシピが見つかりません
+✅ 【P】つけ麺スープ: unit_weight=115.35000000000001, intermediate_recipe_id=73651cd2-25f6-4faa-a4f1-865b1f46488c
+✅ 【P】つけ麺スープ: unit_weight=115.35000000000001, intermediate_recipe_id=73651cd2-25f6-4faa-a4f1-865b1f46488c
+✅ 【P】つけ麺スープ: unit_weight=115.35000000000001, intermediate_recipe_id=73651cd2-25f6-4faa-a4f1-865b1f46488c
+⚠️ SKIP: "【P】つけ麺スープ極にぼし" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】つけ麺スープ極にぼし" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】つけ麺スープ極にぼし" - 対応する中間部品レシピが見つかりません
+✅ 【P】チャーシューたれ（大): intermediate_recipe_id=3c0e3727-203c-405d-95a6-fb6b44b00161
+⚠️ SKIP: "【P】辛味噌スープVer2" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】辛味噌スープVer2" - 対応する中間部品レシピが見つかりません
+✅ 【P】中厚レトルトチャーシュー（小）1枚: unit_weight=34, intermediate_recipe_id=349ec660-32f8-409e-b608-0733e099f546
+✅ 【P】極厚レトルトチャーシュー1枚: unit_weight=90, intermediate_recipe_id=79e6ae64-c183-4aa3-8b6b-939214c80d5f
+✅ 【P】完全再現スープ（BUTA）MIX: unit_weight=119.89999999999999, intermediate_recipe_id=92cec699-adcc-417b-8d2a-42050d8f5c9b
+✅ 【P】極厚レトルトチャーシュー1枚: unit_weight=90, intermediate_recipe_id=79e6ae64-c183-4aa3-8b6b-939214c80d5f
+⚠️ SKIP: "【P】完全再現スープ（IE-K）MIX改良版" - 対応する中間部品レシピが見つかりません
+✅ 【P】中厚レトルトチャーシュー（小）1枚: unit_weight=34, intermediate_recipe_id=349ec660-32f8-409e-b608-0733e099f546
+✅ 【P】つけ麺スープ: unit_weight=115.35000000000001, intermediate_recipe_id=73651cd2-25f6-4faa-a4f1-865b1f46488c
+✅ 【P】完全再現スープSIO: intermediate_recipe_id=68596615-4d11-4887-9785-db9633fe69ad
+⚠️ SKIP: "【P】完全再現スープ 醤油（背脂）" - 対応する中間部品レシピが見つかりません
+✅ チャーシューたれ（大）: intermediate_recipe_id=eefcefc3-295d-4b16-879f-2b2143700e20
+⚠️ SKIP: "【P】辛味噌スープVer2" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】チャーシューのたれ大" - 対応する中間部品レシピが見つかりません
+✅ 【P】豚背脂: unit_weight=80, intermediate_recipe_id=57d92ed2-fa53-47c8-929e-13e99c4fe10f
+✅ 【P】豚背脂: unit_weight=80, intermediate_recipe_id=57d92ed2-fa53-47c8-929e-13e99c4fe10f
+⚠️ SKIP: "【P】辛味噌スープVer2" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】辛味噌スープVer2" - 対応する中間部品レシピが見つかりません
+✅ 【P】極辛背脂: unit_weight=7, intermediate_recipe_id=8f19dae8-9487-4f98-b4ee-297f48dd4122, unit_price=129.27
+⚠️ SKIP: "【P】自社製造ラー油（出来高2/3）" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】自社製造ラー油（出来高2/3）" - 対応する中間部品レシピが見つかりません
+✅ 【P】ネギ油: unit_weight=1870, intermediate_recipe_id=22ddac3a-4b4d-4d73-b9d0-1a149280ce3b
+✅ 【P】煮干し油: unit_weight=30550, intermediate_recipe_id=a7a26d26-0652-4e02-9cee-b4c24bdc8e0b
+⚠️ SKIP: "【P】伊達鶏レトルト2本" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】自社製造ラー油（固形あり）" - 対応する中間部品レシピが見つかりません
+⚠️ SKIP: "【P】自社製造ラー油(出来高2/3)" - 対応する中間部品レシピが見つかりません
+✅ 【P】煮干し油: unit_weight=30550, intermediate_recipe_id=a7a26d26-0652-4e02-9cee-b4c24bdc8e0b
+✅ 【P】ネギ油: unit_weight=1870, intermediate_recipe_id=22ddac3a-4b4d-4d73-b9d0-1a149280ce3b
+
+--- product タイプの修正 ---
+対象: 22件
+✅ 業務用トマトドレッシング: intermediate_recipe_id=a36d1948-e9de-4fc3-a16e-a9d4676c4336, unit_price=2555.79
+✅ 食べるウマラー: intermediate_recipe_id=f94281bb-d959-4df2-b76a-5ad1a3ad3ab5
+✅ 業務用じゅうねんドレッシング: intermediate_recipe_id=48a7e753-cef3-4ca1-9f7c-81c35bf22948, unit_price=2448.36
+✅ ももの葉茶: intermediate_recipe_id=a7760c3b-ff44-4459-bc4b-7fc65afc4441, unit_price=106.4
+✅ もも茶: intermediate_recipe_id=b8f4d7a4-c7b9-41b6-b0b9-18a205367023, unit_price=182.59
+✅ 業務用じゅうねんドレッシング: intermediate_recipe_id=48a7e753-cef3-4ca1-9f7c-81c35bf22948, unit_price=2448.36
+⚠️ SKIP: "【商品】業務用トマトドレッシング" - 対応する商品レシピが見つかりません
+✅ 食べるウマミソ: intermediate_recipe_id=55714398-4591-4697-9ab8-96ca68650b46
+⚠️ SKIP: "【商品】業務用じゅうねんドレッシング" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】業務用じゅうねんドレッシング" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】炊き込みチャーシュー飯" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】炊き込みチャーシュー飯" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】業務用トマトドレッシング" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】食べるウマラー" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】食べるウマミソ" - 対応する商品レシピが見つかりません
+✅ 悪魔のBUTAカレー: unit_weight=248.49999999999994, intermediate_recipe_id=451bec25-2732-4679-bef2-5788c225f945
+⚠️ SKIP: "【商品】ももの葉茶" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】もも茶" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】唐揚げ飯" - 対応する商品レシピが見つかりません
+⚠️ SKIP: "【商品】喜多方ラーメンふりかけ" - 対応する商品レシピが見つかりません
+✅ 唐揚げ飯: intermediate_recipe_id=8d4cc19c-7a61-45a4-acff-f315ea3ccf93
+
+=== 完了: 47件修正, 32件スキップ ===

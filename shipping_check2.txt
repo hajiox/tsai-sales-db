@@ -1,0 +1,41 @@
+﻿[dotenv@17.2.4] injecting env (12) from .env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+=== expenses テーブル全送料関連 ===
+{"id":"6a33c187-5409-4e92-9654-3e52698c06c6","name":"コンパクト送料","unit_price":550,"unit_quantity":1,"tax_included":false}
+{"id":"82a13c4c-2d7b-4926-90c3-e6e519422d87","name":"ネコポス送料","unit_price":209,"unit_quantity":1,"tax_included":true}
+{"id":"4ebef64d-57ad-4d30-add3-9376f2cf0570","name":"ネコポス送料","unit_price":350,"unit_quantity":1,"tax_included":false}
+{"id":"c4e98f47-bc0e-4f60-89e8-d26b26d48dad","name":"ヤマト冷凍冷蔵発送業務用大（平均予測）","unit_price":1320,"unit_quantity":1,"tax_included":true}
+{"id":"27ab6d86-3dd2-4621-8297-4a2c67f78cd8","name":"ヤマト冷凍冷蔵発送業務用大（平均予測）","unit_price":1320,"unit_quantity":1,"tax_included":true}
+{"id":"5581f17b-21fa-4f4b-8486-bc95b8f6bbe4","name":"ヤマト常温送料（平均）700円計算","unit_price":770,"unit_quantity":1,"tax_included":true}
+{"id":"004a73c4-b317-4499-a3a1-731386c3549b","name":"ヤマト常温送料（平均）700円計算","unit_price":770,"unit_quantity":1,"tax_included":true}
+{"id":"7c556162-70aa-4eac-b980-d6271cd4d4b8","name":"ヤマト送料","unit_price":950,"unit_quantity":1,"tax_included":false}
+{"id":"c93a0277-2f61-4cca-87cd-fdaeec4eeca9","name":"平均送料予測（冷凍冷蔵）","unit_price":990,"unit_quantity":1,"tax_included":true}
+{"id":"42e8e342-4418-4963-97e2-36af1d34b29e","name":"平均送料予測（冷凍冷蔵）","unit_price":990,"unit_quantity":1,"tax_included":true}
+{"id":"3487f84f-d1ca-4386-845a-3f839726277d","name":"平均送料予測（冷凍冷蔵）","unit_price":990,"unit_quantity":1,"tax_included":true}
+{"id":"a8afdbd6-e448-480a-af5d-aa8989be8606","name":"平均送料予測（冷凍冷蔵）","unit_price":990,"unit_quantity":1,"tax_included":true}
+
+=== recipe_items 送料関連（最初の5件のフル構造） ===
+カラム一覧: id, recipe_id, item_name, item_type, unit_quantity, unit_price, usage_amount, cost, created_at, ingredient_id, material_id, intermediate_recipe_id, tax_included, unit_weight
+{"id":"18e3564a-d9c5-4ffa-932c-b83689de5008","recipe_id":"d5d3b97d-b2aa-4a51-abaa-7a5e4af999a7","item_name":"平均送料予測（冷凍・冷蔵）","item_type":"expense","unit_quantity":1,"unit_price":990,"usage_amount":1,"cost":990,"created_at":"2026-02-19T02:26:48.968527+00:00","ingredient_id":null,"material_id":null,"intermediate_recipe_id":null,"tax_included":true,"unit_weight":null}
+{"id":"8a7bb88b-ff2e-443c-b2e9-39cda88f9cd1","recipe_id":"3d3aebee-967f-4289-bc4e-97b1f9998a6f","item_name":"平均送料予測（冷凍・冷蔵）","item_type":"expense","unit_quantity":1,"unit_price":990,"usage_amount":1,"cost":990,"created_at":"2026-02-14T08:15:22.129004+00:00","ingredient_id":null,"material_id":null,"intermediate_recipe_id":null,"tax_included":true,"unit_weight":null}
+{"id":"db37503b-cdc0-4690-8117-ec557077f5a9","recipe_id":"e19e5de0-6947-48ec-b7a0-e4497c3f0ea8","item_name":"ヤマト常温送料（平均）700円計算","item_type":"expense","unit_quantity":1,"unit_price":770,"usage_amount":1,"cost":770,"created_at":"2026-02-14T06:38:20.764563+00:00","ingredient_id":null,"material_id":null,"intermediate_recipe_id":null,"tax_included":true,"unit_weight":null}
+{"id":"0b14d710-c559-401d-be05-ac49873153ec","recipe_id":"4dbe84c7-1462-40e0-9233-006a6bc165b8","item_name":"ネコポス送料","item_type":"expense","unit_quantity":1,"unit_price":209,"usage_amount":1,"cost":209,"created_at":"2026-02-14T08:14:54.031111+00:00","ingredient_id":null,"material_id":null,"intermediate_recipe_id":null,"tax_included":true,"unit_weight":null}
+{"id":"c3df521c-1b86-4b14-b7d1-8e0f030e54fd","recipe_id":"655e2cd2-689b-4a2e-914e-3f840436256d","item_name":"ヤマト常温送料（平均）700円計算","item_type":"expense","unit_quantity":1,"unit_price":770,"usage_amount":1,"cost":770,"created_at":"2026-02-14T08:15:30.43134+00:00","ingredient_id":null,"material_id":null,"intermediate_recipe_id":null,"tax_included":true,"unit_weight":null}
+
+=== recipe_items「平均送料予測」全件 ===
+件数: 17
+  ユニークcost: [ 990, 3017.2371, 4130.2211 ]
+  ユニークunit_price: [ 990, null ]
+  ユニークusage_amount: [ 1, null ]
+  ユニークunit_quantity: [ 1, 990 ]
+  異常値: {"id":"e887a3fb-8d7c-4d22-83dd-aa29aa426b64","recipe_id":"07d38dfb-50d4-4d1e-9883-027c8d069a31","item_name":"平均送料予測（冷凍・冷蔵）","item_type":"expense","cost":3017.2371,"usage_amount":null,"unit_quantity":990,"unit_price":null}
+  異常値: {"id":"fc657795-027c-4563-bf94-94b770393520","recipe_id":"40ae316f-d54a-4904-b5f6-a12574ce9f5f","item_name":"平均送料予測（冷凍・冷蔵）","item_type":"expense","cost":4130.2211,"usage_amount":null,"unit_quantity":990,"unit_price":null}
+
+=== expenses「平均送料予測」重複確認 ===
+件数: 4
+{"id":"a8afdbd6-e448-480a-af5d-aa8989be8606","name":"平均送料予測（冷凍冷蔵）","unit_price":990,"unit_quantity":1,"tax_included":true}
+{"id":"3487f84f-d1ca-4386-845a-3f839726277d","name":"平均送料予測（冷凍冷蔵）","unit_price":990,"unit_quantity":1,"tax_included":true}
+{"id":"42e8e342-4418-4963-97e2-36af1d34b29e","name":"平均送料予測（冷凍冷蔵）","unit_price":990,"unit_quantity":1,"tax_included":true}
+{"id":"c93a0277-2f61-4cca-87cd-fdaeec4eeca9","name":"平均送料予測（冷凍冷蔵）","unit_price":990,"unit_quantity":1,"tax_included":true}
+
+=== materials「平均送料予測」確認 ===
+件数: 0
