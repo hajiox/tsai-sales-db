@@ -107,63 +107,63 @@ export default function RecipePage() {
     }, [activeTab, recipes]);
 
     const fetchIntermediateUsage = async () => {
-        // Fetch ALL items to ensure we catch fuzzy matches
-        // Optimization: We could filter but for correctness vs fuzzy, fetching all is safer
-        const { data: allItems, error } = await supabase
-            .from('recipe_items')
-            .select('item_name, intermediate_recipe_id, recipe_id, recipes!inner(name)');
+        try {
+            const intermediates = recipes.filter(r => r.is_intermediate);
+            if (intermediates.length === 0) return;
 
-        if (error || !allItems) {
-            console.error("Error fetching usage items:", error);
-            return;
-        }
+            const interIds = intermediates.map(r => r.id);
+            const map: Record<string, string[]> = {};
 
-        const intermediates = recipes.filter(r => r.is_intermediate);
-        const map: Record<string, string[]> = {};
+            // 1. intermediate_recipe_id でリンクされたアイテムを取得
+            const { data: linkedItems, error: err1 } = await supabase
+                .from('recipe_items')
+                .select('intermediate_recipe_id, recipe_id, recipes!inner(name)')
+                .in('intermediate_recipe_id', interIds);
 
-        const normalize = (s: string) => s.replace(/【.*?】|\[.*?\]/g, '').replace(/\s+/g, '').trim();
-        const stripParens = (s: string) => s.replace(/[（()）]/g, '');
-        const stripNo = (s: string) => s.replace(/の/g, '');
+            if (!err1 && linkedItems) {
+                linkedItems.forEach(item => {
+                    const inter = intermediates.find(r => r.id === item.intermediate_recipe_id);
+                    if (inter) {
+                        const parentName = (item.recipes as any)?.name;
+                        if (parentName) {
+                            if (!map[inter.name]) map[inter.name] = [];
+                            if (!map[inter.name].includes(parentName)) map[inter.name].push(parentName);
+                        }
+                    }
+                });
+            }
 
-        intermediates.forEach(inter => {
-            const interName = inter.name;
-            const interId = inter.id;
-            const normInter = normalize(interName);
-            const interNoParens = stripParens(normInter);
-            const interNoNo = stripNo(interNoParens);
+            // 2. 名前マッチ用: 中間部品名でitem_nameを検索（ページネーション対応）
+            const normalize = (s: string) => s.replace(/【.*?】|\[.*?\]/g, '').replace(/\s+/g, '').trim();
+            const stripParens = (s: string) => s.replace(/[（()）]/g, '');
 
-            // Find matching items
-            const matches = allItems.filter(item => {
-                // 0. Exact ID match (Best)
-                if (item.intermediate_recipe_id && item.intermediate_recipe_id === interId) return true;
+            for (const inter of intermediates) {
+                if (map[inter.name] && map[inter.name].length > 0) continue; // 既にIDマッチあり
+                const normInter = normalize(inter.name);
+                const interNoParens = stripParens(normInter);
 
-                const iName = item.item_name;
-                const normItem = normalize(iName);
+                // item_name に中間部品名を含むアイテムを検索
+                const { data: nameMatches } = await supabase
+                    .from('recipe_items')
+                    .select('recipe_id, recipes!inner(name)')
+                    .ilike('item_name', `%${inter.name.replace(/[%_]/g, '')}%`)
+                    .limit(50);
 
-                // 1. Exact match (normalized)
-                if (normItem === normInter) return true;
-
-                // 2. Parens agnostic (e.g. "Foo(Bar)" vs "FooBar")
-                const itemNoParens = stripParens(normItem);
-                if (itemNoParens === interNoParens) return true;
-
-                // 3. 'No' agnostic (e.g. "FooNoBar" vs "FooBar")
-                const itemNoNo = stripNo(itemNoParens);
-                if (itemNoNo === interNoNo && itemNoNo.length > 2) return true;
-
-                return false;
-            });
-
-            matches.forEach(m => {
-                const parentName = (m.recipes as any)?.name;
-                if (parentName) {
-                    if (!map[interName]) map[interName] = [];
-                    if (!map[interName].includes(parentName)) map[interName].push(parentName);
+                if (nameMatches) {
+                    nameMatches.forEach(m => {
+                        const parentName = (m.recipes as any)?.name;
+                        if (parentName) {
+                            if (!map[inter.name]) map[inter.name] = [];
+                            if (!map[inter.name].includes(parentName)) map[inter.name].push(parentName);
+                        }
+                    });
                 }
-            });
-        });
+            }
 
-        setUsageMap(map);
+            setUsageMap(map);
+        } catch (err) {
+            console.error("Error in fetchIntermediateUsage:", err);
+        }
     };
 
     useEffect(() => {
