@@ -31,6 +31,30 @@ export async function POST(request: Request) {
 
         if (operation === "update") {
             if (!id) return NextResponse.json({ error: "idが必要です" }, { status: 400 });
+
+            // 名称変更時はrecipe_itemsのitem_nameも連動更新
+            if (data.name && ["ingredients", "materials", "expenses"].includes(table)) {
+                // 旧名称を取得
+                const { data: oldRecord } = await supabase
+                    .from(table)
+                    .select("name")
+                    .eq("id", id)
+                    .single();
+
+                if (oldRecord && oldRecord.name !== data.name) {
+                    // recipe_items で旧名称を使っているアイテムを新名称に一括更新
+                    const { error: syncError } = await supabase
+                        .from("recipe_items")
+                        .update({ item_name: data.name })
+                        .eq("item_name", oldRecord.name);
+
+                    if (syncError) {
+                        console.error("recipe_items sync error:", syncError);
+                        // 同期エラーは警告のみ、メインの更新は続行
+                    }
+                }
+            }
+
             const { error } = await supabase.from(table).update(data).eq("id", id);
             if (error) throw error;
             return NextResponse.json({ success: true });
