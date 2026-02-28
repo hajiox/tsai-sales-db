@@ -1132,179 +1132,228 @@ export default function RecipeDetailPage() {
           </div>
           {/* Right Column: Pricing & Simulation */}
           <div>
-            {/* Pricing Header Card */}
-            <div className="bg-gray-900 rounded-xl p-6 text-white mb-6 shadow-lg">
-              <div className="flex justify-between items-start mb-2">
-                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  販売価格 (Selling Price)
+            {recipe.is_intermediate ? (
+              /* 中間部品用: 原価合計のみ表示 */
+              <div className="bg-purple-900 rounded-xl p-6 text-white mb-6 shadow-lg">
+                <div className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-4">
+                  中間加工品 原価情報
                 </div>
-                <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300 flex items-center gap-1">
-                  <span className="text-gray-400">税抜:</span>
-                  <span className="font-bold">¥</span>
-                  <InlineEdit
-                    type="number"
-                    value={sellingPriceExTax}
-                    onSave={(val) => {
-                      const taxExcluded =
-                        typeof val === "string" ? parseFloat(val) : val;
-                      const taxIncluded = Math.round(taxExcluded * 1.08);
-                      handleRecipeChange(
-                        "selling_price",
-                        isNaN(taxIncluded) ? 0 : taxIncluded,
-                      );
-                    }}
-                    className="font-bold min-w-[30px] justify-end"
-                    inputClassName="bg-gray-700 text-white border-none w-16 text-right px-1 h-5 text-xs"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-              <div className="flex items-baseline justify-end mb-4">
-                <span
-                  className="text-xs font-bold text-gray-500 mr-1"
-                  style={{ alignSelf: "flex-end", marginBottom: "8px" }}
-                >
-                  税込
-                </span>
-                <span
-                  className="font-medium text-gray-400 mr-1"
-                  style={{
-                    fontSize: "24px",
-                    alignSelf: "flex-end",
-                    marginBottom: "4px",
-                  }}
-                >
-                  ¥
-                </span>
-                <InlineEdit
-                  type="number"
-                  value={recipe.selling_price}
-                  onSave={(val) => handleRecipeChange("selling_price", val)}
-                  style={{
-                    fontSize: "48px",
-                    lineHeight: "1.1",
-                    height: "56px",
-                  }}
-                  className="font-bold tracking-tight text-white text-right w-full max-w-[220px] justify-end"
-                  inputClassName="bg-gray-800 text-white border-none text-right px-2"
-                  placeholder="0"
-                />
-              </div>
-              {/* Amazon手数料 チェックボックス */}
-              <div className="pt-3 pb-1 border-t border-gray-800">
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      checked={recipe.amazon_fee_enabled || false}
-                      onChange={(e) => handleRecipeChange("amazon_fee_enabled", e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-10 h-5 bg-gray-700 rounded-full peer-checked:bg-orange-500 transition-colors" />
-                    <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-gray-400 rounded-full transition-transform peer-checked:translate-x-5 peer-checked:bg-white" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-gray-300 group-hover:text-white transition-colors">
-                      Amazon手数料
-                    </span>
-                    <span className="text-xs bg-gray-800 text-orange-400 px-2 py-0.5 rounded font-mono">
-                      {taxRates.amazon_fee}%
-                    </span>
-                  </div>
-                  {recipe.amazon_fee_enabled && recipe.selling_price ? (
-                    <span className="ml-auto text-sm font-bold text-orange-400">
-                      {formatCurrency(amazonFee)}
-                    </span>
-                  ) : null}
-                </label>
-              </div>
-              {/* 原価内訳 */}
-              {recipe.amazon_fee_enabled && amazonFee > 0 && (
-                <div className="pb-2 text-xs text-gray-500 space-y-1">
-                  <div className="flex justify-between">
-                    <span>材料・資材・経費</span>
-                    <span className="font-mono">{formatCurrency(totals.costWithoutAmazon)}</span>
-                  </div>
-                  <div className="flex justify-between text-orange-400">
-                    <span>Amazon手数料 ({taxRates.amazon_fee}%)</span>
-                    <span className="font-mono">{formatCurrency(amazonFee)}</span>
-                  </div>
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
-                <div>
-                  <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">
+                <div className="mb-4">
+                  <div className="text-[10px] text-purple-400 uppercase font-bold tracking-wider mb-1">
                     原価合計 (Total Cost)
                   </div>
-                  <div className="text-xl font-bold flex items-baseline gap-2">
+                  <div className="text-4xl font-bold tracking-tight">
                     {formatCurrency(totals.cost)}
-                    <span className="text-xs font-normal text-gray-500">
-                      (
-                      {recipe.selling_price && totals.cost
-                        ? ((totals.cost / recipe.selling_price) * 100).toFixed(1)
-                        : "-"}
-                      %)
-                    </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">
-                    粗利益 (Profit)
-                  </div>
-                  <div
-                    className={`text-xl font-bold flex items-baseline justify-end gap-2 ${profit > 0 ? "text-green-400" : "text-red-400"
-                      }`}
-                  >
-                    {formatCurrency(profit)}
-                    <span className="text-xs font-normal text-gray-500">
-                      ({recipe.selling_price ? profitRate.toFixed(1) : "-"}%)
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Wholesale Simulation */}
-            <div>
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">
-                卸価格シミュレーション
-              </h3>
-              <div className="space-y-3">
-                {[0.65, 0.7].map((rate) => {
-                  const wholesalePrice = recipe.selling_price
-                    ? Math.round(recipe.selling_price * rate)
-                    : 0;
-                  const wholesaleProfit = wholesalePrice - totals.cost;
-                  const wholesaleMargin = wholesalePrice
-                    ? (wholesaleProfit / wholesalePrice) * 100
-                    : 0;
-
-                  return (
-                    <div
-                      key={rate}
-                      className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg hover:border-gray-300 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">
-                          {Math.round(rate * 100)}%
+                {recipe.total_weight != null && recipe.total_weight > 0 && (
+                  <div className="pt-3 border-t border-purple-800 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-purple-300">材料総重量</span>
+                      <span className="font-mono font-bold">{formatNumber(recipe.total_weight, 1)}g</span>
+                    </div>
+                    {recipe.yield_rate != null && recipe.yield_rate < 1 && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-purple-300">出来高 ({Math.round(recipe.yield_rate * 1000) / 10}%)</span>
+                          <span className="font-mono font-bold">{formatNumber(recipe.total_weight * recipe.yield_rate, 1)}g</span>
                         </div>
-                        <div className="text-sm font-medium text-gray-900">
-                          卸値: {formatCurrency(wholesalePrice)}
+                        <div className="flex justify-between text-sm">
+                          <span className="text-purple-300">g単価 (歩留まり込)</span>
+                          <span className="font-mono font-bold">
+                            ¥{(totals.cost / (recipe.total_weight * recipe.yield_rate)).toFixed(2)}/g
+                          </span>
                         </div>
+                      </>
+                    )}
+                    {(!recipe.yield_rate || recipe.yield_rate >= 1) && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-purple-300">g単価</span>
+                        <span className="font-mono font-bold">
+                          ¥{(totals.cost / recipe.total_weight).toFixed(2)}/g
+                        </span>
                       </div>
-                      <div
-                        className={`text-sm font-bold ${wholesaleProfit > 0 ? "text-gray-700" : "text-red-600"
-                          }`}
-                      >
-                        利益: {formatCurrency(wholesaleProfit)}
-                        <span className="text-xs font-normal text-gray-400 ml-1">
-                          ({wholesaleMargin.toFixed(1)}%)
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Pricing Header Card */}
+                <div className="bg-gray-900 rounded-xl p-6 text-white mb-6 shadow-lg">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      販売価格 (Selling Price)
+                    </div>
+                    <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300 flex items-center gap-1">
+                      <span className="text-gray-400">税抜:</span>
+                      <span className="font-bold">¥</span>
+                      <InlineEdit
+                        type="number"
+                        value={sellingPriceExTax}
+                        onSave={(val) => {
+                          const taxExcluded =
+                            typeof val === "string" ? parseFloat(val) : val;
+                          const taxIncluded = Math.round(taxExcluded * 1.08);
+                          handleRecipeChange(
+                            "selling_price",
+                            isNaN(taxIncluded) ? 0 : taxIncluded,
+                          );
+                        }}
+                        className="font-bold min-w-[30px] justify-end"
+                        inputClassName="bg-gray-700 text-white border-none w-16 text-right px-1 h-5 text-xs"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-baseline justify-end mb-4">
+                    <span
+                      className="text-xs font-bold text-gray-500 mr-1"
+                      style={{ alignSelf: "flex-end", marginBottom: "8px" }}
+                    >
+                      税込
+                    </span>
+                    <span
+                      className="font-medium text-gray-400 mr-1"
+                      style={{
+                        fontSize: "24px",
+                        alignSelf: "flex-end",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      ¥
+                    </span>
+                    <InlineEdit
+                      type="number"
+                      value={recipe.selling_price}
+                      onSave={(val) => handleRecipeChange("selling_price", val)}
+                      style={{
+                        fontSize: "48px",
+                        lineHeight: "1.1",
+                        height: "56px",
+                      }}
+                      className="font-bold tracking-tight text-white text-right w-full max-w-[220px] justify-end"
+                      inputClassName="bg-gray-800 text-white border-none text-right px-2"
+                      placeholder="0"
+                    />
+                  </div>
+                  {/* Amazon手数料 チェックボックス */}
+                  <div className="pt-3 pb-1 border-t border-gray-800">
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={recipe.amazon_fee_enabled || false}
+                          onChange={(e) => handleRecipeChange("amazon_fee_enabled", e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-10 h-5 bg-gray-700 rounded-full peer-checked:bg-orange-500 transition-colors" />
+                        <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-gray-400 rounded-full transition-transform peer-checked:translate-x-5 peer-checked:bg-white" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-300 group-hover:text-white transition-colors">
+                          Amazon手数料
+                        </span>
+                        <span className="text-xs bg-gray-800 text-orange-400 px-2 py-0.5 rounded font-mono">
+                          {taxRates.amazon_fee}%
+                        </span>
+                      </div>
+                      {recipe.amazon_fee_enabled && recipe.selling_price ? (
+                        <span className="ml-auto text-sm font-bold text-orange-400">
+                          {formatCurrency(amazonFee)}
+                        </span>
+                      ) : null}
+                    </label>
+                  </div>
+                  {/* 原価内訳 */}
+                  {recipe.amazon_fee_enabled && amazonFee > 0 && (
+                    <div className="pb-2 text-xs text-gray-500 space-y-1">
+                      <div className="flex justify-between">
+                        <span>材料・資材・経費</span>
+                        <span className="font-mono">{formatCurrency(totals.costWithoutAmazon)}</span>
+                      </div>
+                      <div className="flex justify-between text-orange-400">
+                        <span>Amazon手数料 ({taxRates.amazon_fee}%)</span>
+                        <span className="font-mono">{formatCurrency(amazonFee)}</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
+                    <div>
+                      <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">
+                        原価合計 (Total Cost)
+                      </div>
+                      <div className="text-xl font-bold flex items-baseline gap-2">
+                        {formatCurrency(totals.cost)}
+                        <span className="text-xs font-normal text-gray-500">
+                          (
+                          {recipe.selling_price && totals.cost
+                            ? ((totals.cost / recipe.selling_price) * 100).toFixed(1)
+                            : "-"}
+                          %)
                         </span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">
+                        粗利益 (Profit)
+                      </div>
+                      <div
+                        className={`text-xl font-bold flex items-baseline justify-end gap-2 ${profit > 0 ? "text-green-400" : "text-red-400"
+                          }`}
+                      >
+                        {formatCurrency(profit)}
+                        <span className="text-xs font-normal text-gray-500">
+                          ({recipe.selling_price ? profitRate.toFixed(1) : "-"}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Wholesale Simulation */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">
+                    卸価格シミュレーション
+                  </h3>
+                  <div className="space-y-3">
+                    {[0.65, 0.7].map((rate) => {
+                      const wholesalePrice = recipe.selling_price
+                        ? Math.round(recipe.selling_price * rate)
+                        : 0;
+                      const wholesaleProfit = wholesalePrice - totals.cost;
+                      const wholesaleMargin = wholesalePrice
+                        ? (wholesaleProfit / wholesalePrice) * 100
+                        : 0;
+
+                      return (
+                        <div
+                          key={rate}
+                          className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg hover:border-gray-300 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">
+                              {Math.round(rate * 100)}%
+                            </div>
+                            <div className="text-sm font-medium text-gray-900">
+                              卸値: {formatCurrency(wholesalePrice)}
+                            </div>
+                          </div>
+                          <div
+                            className={`text-sm font-bold ${wholesaleProfit > 0 ? "text-gray-700" : "text-red-600"
+                              }`}
+                          >
+                            利益: {formatCurrency(wholesaleProfit)}
+                            <span className="text-xs font-normal text-gray-400 ml-1">
+                              ({wholesaleMargin.toFixed(1)}%)
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-12 gap-8">
