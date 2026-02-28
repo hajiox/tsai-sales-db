@@ -21,6 +21,7 @@ export interface ItemCandidate {
     unit_weight?: number
     tax_included?: boolean
     cost?: number | string // for intermediate
+    yield_rate?: number // 歩留まり率（中間加工品用）
     nutrition?: NutritionData;
 }
 

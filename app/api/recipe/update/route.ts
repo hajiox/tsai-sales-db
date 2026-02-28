@@ -25,6 +25,7 @@ export async function PATCH(request: Request) {
             "storage_method", "label_quantity",
             "sterilization_method", "sterilization_temperature", "sterilization_time",
             "amazon_fee_enabled", "total_cost", "total_weight",
+            "yield_rate",
         ];
 
         const safeUpdates: Record<string, any> = {};

@@ -7,6 +7,10 @@
 本プロジェクトは、従来Vercel上でブラウザベースで開発されていた販売管理KPI分析システムを、ローカル環境（C:\作業用\tsai-sales-db）で開発運用できるように環境構築を行ったものです。
 DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Google認証）を使用しています。
 
+- **本番環境:** Vercel（https://v0-tsa-19.vercel.app） — GitHub mainブランチへのpushで自動デプロイ
+- **テスト環境:** localhost:3001（PM2管理） — ローカル検証専用、本番ではない
+- **デプロイ手順:** `git add . && git commit && git push` → Vercelが自動ビルド・デプロイ
+
 ## 2. 開発履歴
 (省略...)
 

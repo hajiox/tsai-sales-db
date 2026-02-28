@@ -82,6 +82,7 @@ interface Recipe {
   amazon_fee_enabled: boolean;
   ingredient_label?: string | null;
   linked_product_id?: string | null;
+  yield_rate?: number | null;
 }
 
 interface RecipeItem {
@@ -210,17 +211,22 @@ export default function RecipeDetailPage() {
     // Intermediates
     const { data: recipeData } = await supabase
       .from("recipes")
-      .select("id, name, total_cost, total_weight")
+      .select("id, name, total_cost, total_weight, yield_rate")
       .eq("is_intermediate", true);
     if (recipeData) {
       setIntermediates(
-        recipeData.map((r) => ({
-          id: r.id,
-          name: r.name,
-          unit_quantity: 1,
-          unit_weight: r.total_weight ?? undefined,
-          unit_price: r.total_cost ?? undefined,
-        })),
+        recipeData.map((r) => {
+          const yieldRate = r.yield_rate ?? 1.0;
+          const actualWeight = (r.total_weight ?? 0) * yieldRate;
+          return {
+            id: r.id,
+            name: r.name,
+            unit_quantity: 1,
+            unit_weight: actualWeight || undefined,
+            unit_price: r.total_cost ?? undefined,
+            yield_rate: yieldRate,
+          };
+        }),
       );
     }
     // Products (Set Components) - Recipes that are NOT intermediate
@@ -582,6 +588,7 @@ export default function RecipeDetailPage() {
             sterilization_time: recipe.sterilization_time,
             development_date: recipe.development_date,
             amazon_fee_enabled: recipe.amazon_fee_enabled,
+            yield_rate: recipe.yield_rate,
           },
         }),
       });
@@ -994,6 +1001,42 @@ export default function RecipeDetailPage() {
                     suffix="g"
                   />
                 </div>
+                {recipe.is_intermediate && (
+                  <div className="p-3 bg-purple-50 rounded border border-purple-200 col-span-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-xs font-bold text-purple-600 uppercase tracking-wider">
+                        歩留まり（出来高率）
+                      </div>
+                      <div className="text-[10px] text-purple-400">
+                        材料重量に対する実際の出来高比率
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <InlineEdit
+                          type="number"
+                          value={recipe.yield_rate != null ? Math.round(recipe.yield_rate * 1000) / 10 : 100}
+                          onSave={(val) => {
+                            const pct = typeof val === "string" ? parseFloat(val) : (val as number);
+                            if (!isNaN(pct) && pct > 0 && pct <= 100) {
+                              handleRecipeChange("yield_rate", Math.round((pct / 100) * 10000) / 10000);
+                            }
+                          }}
+                          className="font-bold text-xl min-w-[3rem] text-purple-800 justify-end text-right"
+                          inputClassName="text-right font-bold text-xl w-20"
+                          placeholder="100"
+                          suffix="%"
+                        />
+                      </div>
+                      {recipe.yield_rate != null && recipe.yield_rate < 1 && recipe.total_weight != null && (
+                        <div className="text-sm text-purple-600 bg-purple-100 px-3 py-1 rounded-full">
+                          出来高: <span className="font-bold">{formatNumber(recipe.total_weight * recipe.yield_rate, 1)}g</span>
+                          <span className="text-purple-400 ml-1">/ {formatNumber(recipe.total_weight, 1)}g</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="p-3 bg-gray-50 rounded border border-gray-100 col-span-2">
                   <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
                     保存方法
