@@ -591,16 +591,23 @@ export default function RecipePage() {
                                     )}
                                     {(activeTab === "ネット専用" || activeTab === "all") && (
                                         <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
-                                            <Input
+                                            <input
                                                 type="text"
                                                 inputMode="numeric"
-                                                value={recipe.product_code ?? ''}
-                                                onChange={(e) => {
+                                                defaultValue={recipe.product_code ?? ''}
+                                                onBlur={(e) => {
                                                     const raw = e.target.value.replace(/[^0-9]/g, '');
                                                     const val = raw ? Number(raw) : null;
-                                                    handleProductCodeChange(recipe.id, val);
+                                                    if (val !== recipe.product_code) {
+                                                        handleProductCodeChange(recipe.id, val);
+                                                    }
                                                 }}
-                                                className="w-[50px] h-7 text-xs text-center p-1"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        (e.target as HTMLInputElement).blur();
+                                                    }
+                                                }}
+                                                className="w-[50px] h-7 text-xs text-center p-1 border rounded-md border-input bg-background"
                                             />
                                         </TableCell>
                                     )}
