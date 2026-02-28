@@ -592,10 +592,12 @@ export default function RecipePage() {
                                     {(activeTab === "ネット専用" || activeTab === "all") && (
                                         <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
                                             <Input
-                                                type="number"
+                                                type="text"
+                                                inputMode="numeric"
                                                 value={recipe.product_code ?? ''}
                                                 onChange={(e) => {
-                                                    const val = e.target.value ? Number(e.target.value) : null;
+                                                    const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                    const val = raw ? Number(raw) : null;
                                                     handleProductCodeChange(recipe.id, val);
                                                 }}
                                                 className="w-[50px] h-7 text-xs text-center p-1"
