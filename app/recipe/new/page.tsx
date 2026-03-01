@@ -128,6 +128,7 @@ export default function NewRecipePage() {
     const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
     const [products, setProducts] = useState<ItemCandidate[]>([]);
     const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
+    const [existingSeries, setExistingSeries] = useState<{ name: string; code: number | null }[]>([]);
 
     useEffect(() => {
         const fetchMasterData = async () => {
@@ -194,6 +195,21 @@ export default function NewRecipePage() {
                     unit_quantity: e.unit_quantity,
                     tax_included: e.tax_included !== false
                 })));
+            }
+            // 既存シリーズ名を取得（重複除去）
+            const { data: seriesData } = await supabase
+                .from('recipes')
+                .select('series, series_code')
+                .not('series', 'is', null)
+                .order('series');
+            if (seriesData) {
+                const seen = new Map<string, number | null>();
+                seriesData.forEach((r: { series: string; series_code: number | null }) => {
+                    if (r.series && !seen.has(r.series)) {
+                        seen.set(r.series, r.series_code);
+                    }
+                });
+                setExistingSeries(Array.from(seen.entries()).map(([name, code]) => ({ name, code })));
             }
         };
         fetchMasterData();
@@ -547,11 +563,26 @@ export default function NewRecipePage() {
                             <label className="text-sm font-medium text-gray-700 mb-1.5 block">
                                 シリーズ名
                             </label>
-                            <Input
-                                placeholder="例: 会津の馬刺し"
-                                value={series}
-                                onChange={(e) => setSeries(e.target.value)}
-                            />
+                            <div className="relative">
+                                <Input
+                                    list="series-list"
+                                    placeholder="例: 会津の馬刺し"
+                                    value={series}
+                                    onChange={(e) => {
+                                        setSeries(e.target.value);
+                                        // 既存シリーズ選択時にシリーズ番号を自動セット
+                                        const match = existingSeries.find(s => s.name === e.target.value);
+                                        if (match && match.code != null) {
+                                            setSeriesCode(match.code.toString());
+                                        }
+                                    }}
+                                />
+                                <datalist id="series-list">
+                                    {existingSeries.map((s, i) => (
+                                        <option key={i} value={s.name} />
+                                    ))}
+                                </datalist>
+                            </div>
                         </div>
                         <div>
                             <label className="text-sm font-medium text-gray-700 mb-1.5 block">
