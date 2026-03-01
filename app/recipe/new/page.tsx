@@ -80,6 +80,9 @@ export default function NewRecipePage() {
     const [isIntermediate, setIsIntermediate] = useState(false);
     const [developmentDate, setDevelopmentDate] = useState("");
     const [sellingPrice, setSellingPrice] = useState("");
+    const [series, setSeries] = useState("");
+    const [seriesCode, setSeriesCode] = useState("");
+    const [productCode, setProductCode] = useState("");
 
     useEffect(() => {
         const price = parseFloat(sellingPrice);
@@ -250,6 +253,9 @@ export default function NewRecipePage() {
                     development_date: developmentDate || null,
                     selling_price: sellingPrice ? parseFloat(sellingPrice) : null,
                     total_cost: totalCost,
+                    series: series.trim() || null,
+                    series_code: seriesCode ? parseInt(seriesCode) : null,
+                    product_code: productCode ? parseInt(productCode) : null,
                     total_weight: items.reduce((sum, item) => {
                         if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
                             const usage = parseFloat(item.usage_amount) || 0;
@@ -495,13 +501,13 @@ export default function NewRecipePage() {
                     <CardTitle className="text-base font-medium text-gray-700">基本情報</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <div className="col-span-1 md:col-span-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="col-span-1 md:col-span-2 lg:col-span-2">
                             <label className="text-sm font-medium text-gray-700 mb-1.5 block">
                                 レシピ名 <span className="text-red-500">*</span>
                             </label>
                             <Input
-                                placeholder="例: 【商品】パーフェクトラーメンBUTA"
+                                placeholder="例: 【ネット】パーフェクトラーメンBUTA"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 className="text-base"
@@ -528,16 +534,6 @@ export default function NewRecipePage() {
                         </div>
                         <div>
                             <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                                開発日
-                            </label>
-                            <Input
-                                type="date"
-                                value={developmentDate}
-                                onChange={(e) => setDevelopmentDate(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
                                 販売価格
                             </label>
                             <Input
@@ -545,6 +541,50 @@ export default function NewRecipePage() {
                                 placeholder="例: 1500"
                                 value={sellingPrice}
                                 onChange={(e) => setSellingPrice(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                                シリーズ名
+                            </label>
+                            <Input
+                                placeholder="例: 会津の馬刺し"
+                                value={series}
+                                onChange={(e) => setSeries(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                                シリーズ番号
+                            </label>
+                            <Input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="例: 1"
+                                value={seriesCode}
+                                onChange={(e) => setSeriesCode(e.target.value.replace(/[^0-9]/g, ''))}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                                商品番号
+                            </label>
+                            <Input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="例: 1"
+                                value={productCode}
+                                onChange={(e) => setProductCode(e.target.value.replace(/[^0-9]/g, ''))}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                                開発日
+                            </label>
+                            <Input
+                                type="date"
+                                value={developmentDate}
+                                onChange={(e) => setDevelopmentDate(e.target.value)}
                             />
                         </div>
                         <div className="flex items-center gap-2 pt-6">
