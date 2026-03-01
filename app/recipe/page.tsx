@@ -708,8 +708,16 @@ export default function RecipePage() {
                                                             const data = await res.json();
                                                             throw new Error(data.error || '複製に失敗しました');
                                                         }
+                                                        const { newRecipeId } = await res.json();
+                                                        // stateに複製レシピを追加（スクロール位置を維持）
+                                                        const copiedRecipe: Recipe = {
+                                                            ...recipe,
+                                                            id: newRecipeId,
+                                                            name: `${recipe.name} (コピー)`,
+                                                            linked_product_id: null,
+                                                        };
+                                                        setRecipes(prev => [...prev, copiedRecipe]);
                                                         toast.success("レシピを複製しました");
-                                                        fetchRecipes();
                                                     } catch (err: any) {
                                                         console.error(err);
                                                         toast.error(err.message || "複製に失敗しました");
