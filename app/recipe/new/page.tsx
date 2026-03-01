@@ -260,30 +260,36 @@ export default function NewRecipePage() {
         setSaving(true);
 
         try {
-            const { data: recipeData, error: recipeError } = await supabase
-                .from("recipes")
-                .insert({
-                    name: name.trim(),
-                    category,
-                    is_intermediate: isIntermediate,
-                    development_date: developmentDate || null,
-                    selling_price: sellingPrice ? parseFloat(sellingPrice) : null,
-                    total_cost: totalCost,
-                    series: series.trim() || null,
-                    series_code: seriesCode ? parseInt(seriesCode) : null,
-                    product_code: productCode ? parseInt(productCode) : null,
-                    total_weight: items.reduce((sum, item) => {
-                        if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
-                            const usage = parseFloat(item.usage_amount) || 0;
-                            return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
-                        }
-                        return sum;
-                    }, 0),
-                })
-                .select()
-                .single();
-
-            if (recipeError) throw recipeError;
+            // レシピ本体をAPIルート経由でinsert（RLS回避）
+            const recipeRes = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    operation: 'insert',
+                    table: 'recipes',
+                    data: {
+                        name: name.trim(),
+                        category,
+                        is_intermediate: isIntermediate,
+                        development_date: developmentDate || null,
+                        selling_price: sellingPrice ? parseFloat(sellingPrice) : null,
+                        total_cost: totalCost,
+                        series: series.trim() || null,
+                        series_code: seriesCode ? parseInt(seriesCode) : null,
+                        product_code: productCode ? parseInt(productCode) : null,
+                        total_weight: items.reduce((sum, item) => {
+                            if (["ingredient", "intermediate", "product"].includes(item.item_type)) {
+                                const usage = parseFloat(item.usage_amount) || 0;
+                                return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
+                            }
+                            return sum;
+                        }, 0),
+                    }
+                }),
+            });
+            const recipeResult = await recipeRes.json();
+            if (!recipeRes.ok) throw new Error(recipeResult.error || 'レシピの保存に失敗');
+            const recipeData = recipeResult.data;
 
             const validItems = items.filter(item => item.item_name.trim());
             if (validItems.length > 0) {
@@ -299,11 +305,17 @@ export default function NewRecipePage() {
                     tax_included: item.tax_included ?? true
                 }));
 
-                const { error: itemsError } = await supabase
-                    .from("recipe_items")
-                    .insert(itemRows);
-
-                if (itemsError) throw itemsError;
+                const itemsRes = await fetch('/api/recipe/db-write', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        operation: 'insert_many',
+                        table: 'recipe_items',
+                        data: itemRows,
+                    }),
+                });
+                const itemsResult = await itemsRes.json();
+                if (!itemsRes.ok) throw new Error(itemsResult.error || 'アイテムの保存に失敗');
             }
 
             toast.success("レシピを作成しました");

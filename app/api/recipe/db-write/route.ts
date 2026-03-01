@@ -29,6 +29,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, data: result });
         }
 
+        if (operation === "insert_many") {
+            const { data: result, error } = await supabase
+                .from(table)
+                .insert(data)
+                .select();
+            if (error) throw error;
+            return NextResponse.json({ success: true, data: result });
+        }
+
         if (operation === "update") {
             if (!id) return NextResponse.json({ error: "idが必要です" }, { status: 400 });
 
