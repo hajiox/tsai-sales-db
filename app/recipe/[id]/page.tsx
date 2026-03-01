@@ -229,11 +229,15 @@ export default function RecipeDetailPage() {
         }),
       );
     }
-    // Products (Set Components) - Recipes that are NOT intermediate
+    // Products (Set Components) - ネット専用・自社カテゴリのみ、シリーズ番号→商品番号でソート
     const { data: prodData } = await supabase
       .from("recipes")
-      .select("id, name, total_cost, total_weight")
-      .eq("is_intermediate", false);
+      .select("id, name, total_cost, total_weight, series_code, product_code")
+      .eq("is_intermediate", false)
+      .in("category", ["ネット専用", "自社"])
+      .order("series_code", { ascending: true, nullsFirst: false })
+      .order("product_code", { ascending: true, nullsFirst: false })
+      .order("name", { ascending: true });
     if (prodData) {
       setProducts(
         prodData.map((r) => ({
