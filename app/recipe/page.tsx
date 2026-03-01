@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
 import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Merge } from "lucide-react";
 import { toast } from "sonner";
-import { SERIES_LIST } from "@/lib/series-list";
+import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -62,6 +62,7 @@ export default function RecipePage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [activeTab, setActiveTab] = useState<TabType>("ネット専用");
+    const [seriesList, setSeriesList] = useState<SeriesItem[]>(SERIES_LIST);
     const [stats, setStats] = useState({
         total: 0,
         ネット専用: 0,
@@ -106,6 +107,10 @@ export default function RecipePage() {
             fetchIntermediateUsage();
         }
     }, [activeTab, recipes]);
+
+    useEffect(() => {
+        fetchSeriesList().then(setSeriesList);
+    }, []);
 
     const fetchIntermediateUsage = async () => {
         try {
@@ -488,6 +493,11 @@ export default function RecipePage() {
                         Excelインポート
                     </Button>
 
+                    <Button variant="outline" onClick={() => router.push("/recipe/series")}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        シリーズ管理
+                    </Button>
+
                     <Button variant="outline" onClick={() => router.push("/recipe/duplicates")} className="border-amber-300 text-amber-700 hover:bg-amber-50">
                         <Merge className="w-4 h-4 mr-2" />
                         重複チェック
@@ -549,7 +559,7 @@ export default function RecipePage() {
                                                     if (val === "__none__") {
                                                         handleSeriesChange(recipe.id, null, null);
                                                     } else {
-                                                        const s = SERIES_LIST.find(s => s.code === Number(val));
+                                                        const s = seriesList.find(s => s.code === Number(val));
                                                         handleSeriesChange(recipe.id, Number(val), s?.name || null);
                                                     }
                                                 }}
@@ -563,7 +573,7 @@ export default function RecipePage() {
                                                     <SelectItem value="__none__">
                                                         <span className="text-gray-400">— なし —</span>
                                                     </SelectItem>
-                                                    {SERIES_LIST.map(s => (
+                                                    {seriesList.map(s => (
                                                         <SelectItem key={s.code} value={String(s.code)}>
                                                             {s.code}. {s.name}
                                                         </SelectItem>

@@ -22,7 +22,7 @@ import NutritionDisplay, {
 } from "../_components/NutritionDisplay";
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 import InlineEdit from "../_components/InlineEdit";
-import { SERIES_LIST } from "@/lib/series-list";
+import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -145,6 +145,7 @@ export default function RecipeDetailPage() {
   const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
   const [products, setProducts] = useState<ItemCandidate[]>([]);
   const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
+  const [seriesList, setSeriesList] = useState<SeriesItem[]>(SERIES_LIST);
 
   // Batch calculation states
   const [batchSize1, setBatchSize1] = useState(400);
@@ -163,6 +164,8 @@ export default function RecipeDetailPage() {
       fetchRecipe(params.id as string);
       fetchMasterData();
     }
+    // シリーズをDBから取得
+    fetchSeriesList().then(setSeriesList);
   }, [params.id]);
 
   // 原材料表示テキストをレシピデータから初期化
@@ -791,7 +794,7 @@ export default function RecipeDetailPage() {
                   value={recipe.series_code != null ? String(recipe.series_code) : "__none__"}
                   onValueChange={async (val) => {
                     const seriesCode = val === "__none__" ? null : Number(val);
-                    const seriesName = val === "__none__" ? null : (SERIES_LIST.find(s => s.code === Number(val))?.name || null);
+                    const seriesName = val === "__none__" ? null : (seriesList.find(s => s.code === Number(val))?.name || null);
                     setRecipe(prev => prev ? { ...prev, series_code: seriesCode, series: seriesName } : null);
                     try {
                       const res = await fetch('/api/recipe/update', {
@@ -811,7 +814,7 @@ export default function RecipeDetailPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">— 未設定</SelectItem>
-                    {SERIES_LIST.map(s => (
+                    {seriesList.map(s => (
                       <SelectItem key={s.code} value={String(s.code)}>
                         {s.code}. {s.name}
                       </SelectItem>

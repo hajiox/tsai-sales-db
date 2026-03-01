@@ -1,7 +1,26 @@
 // lib/series-list.ts
-// シリーズ一覧（全体で共通利用）
+// シリーズ一覧をDBから取得（フォールバック付き）
 
-export const SERIES_LIST = [
+export interface SeriesItem {
+    id?: string;
+    code: number;
+    name: string;
+}
+
+// DB からシリーズ一覧を取得
+export async function fetchSeriesList(): Promise<SeriesItem[]> {
+    try {
+        const res = await fetch('/api/series', { cache: 'no-store' });
+        if (!res.ok) throw new Error('fetch failed');
+        const { data } = await res.json();
+        return data || SERIES_LIST_FALLBACK;
+    } catch {
+        return SERIES_LIST_FALLBACK;
+    }
+}
+
+// フォールバック用ハードコード（DB未作成時やSSR時）
+export const SERIES_LIST_FALLBACK: SeriesItem[] = [
     { code: 1, name: '本格チャーシュー' },
     { code: 2, name: 'レトルトチャーシュー' },
     { code: 3, name: 'パーフェクトラーメン喜多方' },
@@ -29,3 +48,6 @@ export const SERIES_LIST = [
     { code: 25, name: '単品' },
     { code: 99, name: '終売商品' },
 ];
+
+// 後方互換: 同期的に使う場合のエクスポート（フォールバック値）
+export const SERIES_LIST = SERIES_LIST_FALLBACK;
