@@ -22,6 +22,7 @@ import NutritionDisplay, {
 } from "../_components/NutritionDisplay";
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 import InlineEdit from "../_components/InlineEdit";
+import { SERIES_LIST } from "@/lib/series-list";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -83,6 +84,9 @@ interface Recipe {
   ingredient_label?: string | null;
   linked_product_id?: string | null;
   yield_rate?: number | null;
+  series?: string | null;
+  series_code?: number | null;
+  product_code?: number | null;
 }
 
 interface RecipeItem {
@@ -782,6 +786,56 @@ export default function RecipeDetailPage() {
                     Middle
                   </span>
                 )}
+                <span className="text-gray-300 mx-1">|</span>
+                <Select
+                  value={recipe.series_code != null ? String(recipe.series_code) : "__none__"}
+                  onValueChange={async (val) => {
+                    const seriesCode = val === "__none__" ? null : Number(val);
+                    const seriesName = val === "__none__" ? null : (SERIES_LIST.find(s => s.code === Number(val))?.name || null);
+                    setRecipe(prev => prev ? { ...prev, series_code: seriesCode, series: seriesName } : null);
+                    try {
+                      const res = await fetch('/api/recipe/update', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ recipeId: recipe.id, updates: { series_code: seriesCode, series: seriesName } }),
+                      });
+                      if (!res.ok) throw new Error('更新に失敗しました');
+                      toast.success("シリーズを更新しました", { duration: 1000 });
+                    } catch {
+                      toast.error("シリーズの更新に失敗しました");
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-6 px-2 py-0 border rounded text-[10px] font-bold w-auto inline-flex items-center gap-1 border-gray-200 text-gray-600 hover:border-gray-400">
+                    <SelectValue>{recipe.series ? `${recipe.series_code}. ${recipe.series}` : 'シリーズ'}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— 未設定</SelectItem>
+                    {SERIES_LIST.map(s => (
+                      <SelectItem key={s.code} value={String(s.code)}>
+                        {s.code}. {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-0.5">
+                  <span className="text-[10px] font-bold text-gray-400">#</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    defaultValue={recipe.product_code ?? ''}
+                    onBlur={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, '');
+                      const newVal = v ? Number(v) : null;
+                      if (newVal !== recipe.product_code) {
+                        handleRecipeChange("product_code", newVal);
+                      }
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    placeholder="—"
+                    className="w-8 h-6 text-[10px] font-bold text-gray-600 bg-transparent border border-gray-200 rounded px-1 text-center hover:border-gray-400 focus:border-blue-500 outline-none"
+                  />
+                </div>
               </div>
               <InlineEdit
                 value={recipe.name}
