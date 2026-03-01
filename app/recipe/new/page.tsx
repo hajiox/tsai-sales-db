@@ -20,6 +20,7 @@ import { ArrowLeft, Plus, Trash2, Save, ChefHat } from "lucide-react";
 import { toast } from "sonner";
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 import NutritionDisplay from "../_components/NutritionDisplay";
+import { SERIES_LIST } from "@/lib/series-list";
 
 const CATEGORIES = [
     { value: "ネット専用", label: "ネット専用", color: "bg-blue-100 text-blue-800" },
@@ -128,7 +129,6 @@ export default function NewRecipePage() {
     const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
     const [products, setProducts] = useState<ItemCandidate[]>([]);
     const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
-    const [existingSeries, setExistingSeries] = useState<{ name: string; code: number | null }[]>([]);
 
     useEffect(() => {
         const fetchMasterData = async () => {
@@ -195,21 +195,6 @@ export default function NewRecipePage() {
                     unit_quantity: e.unit_quantity,
                     tax_included: e.tax_included !== false
                 })));
-            }
-            // 既存シリーズ名を取得（重複除去）
-            const { data: seriesData } = await supabase
-                .from('recipes')
-                .select('series, series_code')
-                .not('series', 'is', null)
-                .order('series');
-            if (seriesData) {
-                const seen = new Map<string, number | null>();
-                seriesData.forEach((r: { series: string; series_code: number | null }) => {
-                    if (r.series && !seen.has(r.series)) {
-                        seen.set(r.series, r.series_code);
-                    }
-                });
-                setExistingSeries(Array.from(seen.entries()).map(([name, code]) => ({ name, code })));
             }
         };
         fetchMasterData();
@@ -523,128 +508,134 @@ export default function NewRecipePage() {
                 </Button>
             </div>
 
-            {/* Basic Info */}
-            <Card className="mb-8 shadow-sm">
-                <CardHeader className="bg-gray-50 border-b py-3">
-                    <CardTitle className="text-base font-medium text-gray-700">基本情報</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="col-span-1 md:col-span-2 lg:col-span-2">
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                                レシピ名 <span className="text-red-500">*</span>
-                            </label>
-                            <Input
-                                placeholder="例: 【ネット】パーフェクトラーメンBUTA"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="text-base"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                                カテゴリー
-                            </label>
-                            <Select value={category} onValueChange={handleCategoryChange}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {CATEGORIES.map((cat) => (
-                                        <SelectItem key={cat.value} value={cat.value}>
-                                            <span className={`px-2 py-0.5 rounded ${cat.color}`}>
-                                                {cat.label}
-                                            </span>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                                販売価格
-                            </label>
-                            <Input
-                                type="number"
-                                placeholder="例: 1500"
-                                value={sellingPrice}
-                                onChange={(e) => setSellingPrice(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                                シリーズ名
-                            </label>
-                            <div className="relative">
-                                <Input
-                                    list="series-list"
-                                    placeholder="例: 会津の馬刺し"
-                                    value={series}
-                                    onChange={(e) => {
-                                        setSeries(e.target.value);
-                                        // 既存シリーズ選択時にシリーズ番号を自動セット
-                                        const match = existingSeries.find(s => s.name === e.target.value);
-                                        if (match && match.code != null) {
-                                            setSeriesCode(match.code.toString());
-                                        }
-                                    }}
-                                />
-                                <datalist id="series-list">
-                                    {existingSeries.map((s, i) => (
-                                        <option key={i} value={s.name} />
-                                    ))}
-                                </datalist>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                                シリーズ番号
-                            </label>
-                            <Input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="例: 1"
-                                value={seriesCode}
-                                onChange={(e) => setSeriesCode(e.target.value.replace(/[^0-9]/g, ''))}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                                商品番号
-                            </label>
-                            <Input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="例: 1"
-                                value={productCode}
-                                onChange={(e) => setProductCode(e.target.value.replace(/[^0-9]/g, ''))}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                                開発日
-                            </label>
-                            <Input
-                                type="date"
-                                value={developmentDate}
-                                onChange={(e) => setDevelopmentDate(e.target.value)}
-                            />
-                        </div>
-                        <div className="flex items-center gap-2 pt-6">
-                            <input
-                                type="checkbox"
-                                id="isIntermediate"
-                                checked={isIntermediate}
-                                onChange={(e) => handleIsIntermediateChange(e.target.checked)}
-                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <label htmlFor="isIntermediate" className="text-sm font-medium text-gray-700 cursor-pointer">
-                                中間部品【P】として登録
-                            </label>
-                        </div>
+            {/* Basic Info - レシピ詳細と同じスタイル */}
+            <div className="border-b-2 border-gray-800 pb-4 mb-6">
+                <div className="flex gap-2 mb-2">
+                    <Select value={category} onValueChange={handleCategoryChange}>
+                        <SelectTrigger
+                            className={`h-6 px-2 py-0 border rounded uppercase tracking-wider text-[10px] font-bold w-auto inline-flex items-center gap-1 ${CATEGORIES.find((c) => c.value === category)?.color || "border-gray-200 text-gray-500"
+                                }`}
+                        >
+                            <SelectValue>{category}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {CATEGORIES.map((cat) => (
+                                <SelectItem key={cat.value} value={cat.value}>
+                                    <span className={`px-2 py-0.5 rounded ${cat.color}`}>
+                                        {cat.label}
+                                    </span>
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {isIntermediate && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold border border-purple-300 text-purple-700 rounded uppercase tracking-wider">
+                            Middle
+                        </span>
+                    )}
+                </div>
+                <Input
+                    placeholder="レシピ名を入力 *"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="text-3xl font-extrabold text-gray-900 leading-tight border-none shadow-none px-1 -ml-1 focus-visible:ring-1 bg-transparent placeholder:text-gray-300"
+                />
+                <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono items-center">
+                    <span className="flex items-center gap-1">
+                        DEV:
+                        <input
+                            type="date"
+                            value={developmentDate}
+                            onChange={(e) => setDevelopmentDate(e.target.value)}
+                            className="bg-transparent border-b border-dashed border-gray-300 hover:border-gray-500 focus:border-blue-500 outline-none text-xs font-mono text-gray-500 w-[110px] px-0.5"
+                        />
+                    </span>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={isIntermediate}
+                            onChange={(e) => handleIsIntermediateChange(e.target.checked)}
+                            className="w-3 h-3 rounded border-gray-300 text-blue-600"
+                        />
+                        <span>中間部品【P】</span>
+                    </label>
+                </div>
+            </div>
+
+            {/* シリーズ・価格情報 */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+                        シリーズ
                     </div>
-                </CardContent>
-            </Card>
+                    <Select
+                        value={seriesCode || "__none__"}
+                        onValueChange={(val) => {
+                            if (val === "__none__") {
+                                setSeriesCode("");
+                                setSeries("");
+                            } else {
+                                const s = SERIES_LIST.find(s => s.code === Number(val));
+                                setSeriesCode(val);
+                                setSeries(s?.name || "");
+                            }
+                        }}
+                    >
+                        <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-bold text-lg">
+                            <SelectValue>{series || '—'}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__none__">— 未設定</SelectItem>
+                            {SERIES_LIST.map(s => (
+                                <SelectItem key={s.code} value={String(s.code)}>
+                                    {s.code}. {s.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+                        商品番号
+                    </div>
+                    <Input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="—"
+                        value={productCode}
+                        onChange={(e) => setProductCode(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="h-7 border-none bg-transparent p-0 shadow-none font-bold text-lg focus-visible:ring-0"
+                    />
+                </div>
+                <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+                        販売価格
+                    </div>
+                    <div className="flex items-center">
+                        <span className="text-lg font-bold text-gray-400 mr-0.5">¥</span>
+                        <Input
+                            type="number"
+                            placeholder="—"
+                            value={sellingPrice}
+                            onChange={(e) => setSellingPrice(e.target.value)}
+                            className="h-7 border-none bg-transparent p-0 shadow-none font-bold text-lg focus-visible:ring-0"
+                        />
+                    </div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded border border-gray-100">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+                        原価率
+                    </div>
+                    <div className={`font-bold text-lg ${sellingPrice && parseFloat(sellingPrice) > 0
+                            ? (totalCost / parseFloat(sellingPrice)) * 100 > 35 ? 'text-red-600' : 'text-green-600'
+                            : 'text-gray-300'
+                        }`}>
+                        {sellingPrice && parseFloat(sellingPrice) > 0
+                            ? `${((totalCost / parseFloat(sellingPrice)) * 100).toFixed(1)}%`
+                            : '—'}
+                    </div>
+                </div>
+            </div>
 
             {/* Sections */}
             <div className="space-y-2">

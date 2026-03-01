@@ -26,6 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
 import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Merge } from "lucide-react";
 import { toast } from "sonner";
+import { SERIES_LIST } from "@/lib/series-list";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -307,34 +308,7 @@ export default function RecipePage() {
         }
     };
 
-    // 全シリーズ一覧（WEB販売と同じ）
-    const SERIES_LIST = [
-        { code: 1, name: '本格チャーシュー' },
-        { code: 2, name: 'レトルトチャーシュー' },
-        { code: 3, name: 'パーフェクトラーメン喜多方' },
-        { code: 4, name: 'パーフェクトラーメンSIO' },
-        { code: 5, name: 'パーフェクトラーメンBUTA' },
-        { code: 6, name: 'パーフェクトラーメンIE-K' },
-        { code: 7, name: '特濃つけ麺' },
-        { code: 8, name: '冷やし中華' },
-        { code: 9, name: '麺のみ' },
-        { code: 10, name: '辛杉家の憂鬱' },
-        { code: 11, name: '会津ソースカツ丼' },
-        { code: 12, name: 'ドレッシング' },
-        { code: 13, name: '福島の桃' },
-        { code: 14, name: '馬肉物語' },
-        { code: 15, name: 'ご飯のお供' },
-        { code: 16, name: 'AIZU CAMPFOOD' },
-        { code: 17, name: '会津の馬刺し' },
-        { code: 18, name: 'その他会津の食' },
-        { code: 19, name: '国産チャーシュー' },
-        { code: 20, name: 'パーフェクトラーメン辛味噌' },
-        { code: 21, name: 'ラーメン背脂' },
-        { code: 22, name: '【単品】' },
-        { code: 23, name: 'パーフェクトラーメン背脂喜多方' },
-        { code: 24, name: '悪魔カレー' },
-        { code: 99, name: '終売商品' },
-    ];
+    // シリーズ一覧は共通ファイルから取得
 
     const formatCurrency = (value: number | null) => {
         if (!value) return "-";

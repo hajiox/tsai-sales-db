@@ -1,0 +1,31 @@
+// lib/series-list.ts
+// シリーズ一覧（全体で共通利用）
+
+export const SERIES_LIST = [
+    { code: 1, name: '本格チャーシュー' },
+    { code: 2, name: 'レトルトチャーシュー' },
+    { code: 3, name: 'パーフェクトラーメン喜多方' },
+    { code: 4, name: 'パーフェクトラーメンSIO' },
+    { code: 5, name: 'パーフェクトラーメンBUTA' },
+    { code: 6, name: 'パーフェクトラーメンIE-K' },
+    { code: 7, name: '特濃つけ麺' },
+    { code: 8, name: '冷やし中華' },
+    { code: 9, name: '麺のみ' },
+    { code: 10, name: '辛杉家の憂鬱' },
+    { code: 11, name: '会津ソースカツ丼' },
+    { code: 12, name: 'ドレッシング' },
+    { code: 13, name: '福島の桃' },
+    { code: 14, name: '馬肉物語' },
+    { code: 15, name: 'ご飯のお供' },
+    { code: 16, name: 'AIZU CAMPFOOD' },
+    { code: 17, name: '会津の馬刺し' },
+    { code: 18, name: 'その他会津の食' },
+    { code: 19, name: '国産チャーシュー' },
+    { code: 20, name: 'パーフェクトラーメン辛味噌' },
+    { code: 21, name: 'ラーメン背脂' },
+    { code: 22, name: '【単品】' },
+    { code: 23, name: 'パーフェクトラーメン背脂喜多方' },
+    { code: 24, name: '悪魔カレー' },
+    { code: 25, name: '単品' },
+    { code: 99, name: '終売商品' },
+];
