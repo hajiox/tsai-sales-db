@@ -308,9 +308,9 @@ export default function NewRecipePage() {
 
             toast.success("レシピを作成しました");
             router.push(`/recipe/${recipeData.id}`);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Save error:", error);
-            toast.error("レシピの作成に失敗しました");
+            toast.error(`レシピの作成に失敗しました: ${error?.message || error}`);
         } finally {
             setSaving(false);
         }
