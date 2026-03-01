@@ -527,8 +527,8 @@ export default function RecipePage() {
             <div className="bg-white rounded-lg shadow">
                 <div className="flex items-center gap-4 px-4 py-2 border-b text-[10px] text-gray-400">
                     <span>利益率:</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />30%以上</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />20%以上</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />30%以上</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />20%以上</span>
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />20%未満</span>
                 </div>
                 <Table>
@@ -680,7 +680,7 @@ export default function RecipePage() {
                                         {(() => {
                                             if (!recipe.selling_price || !recipe.total_cost) return <span className="text-gray-300">-</span>;
                                             const rate = ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100;
-                                            const color = rate >= 30 ? "text-blue-600" : rate >= 20 ? "text-green-600" : "text-red-600";
+                                            const color = rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600";
                                             return <span className={`text-sm font-bold ${color}`}>{rate.toFixed(1)}%</span>;
                                         })()}
                                     </TableCell>
