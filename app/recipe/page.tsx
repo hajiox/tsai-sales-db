@@ -176,6 +176,9 @@ export default function RecipePage() {
         const { data, error } = await supabase
             .from("recipes")
             .select("*")
+            .order("series", { ascending: true, nullsFirst: false })
+            .order("series_code", { ascending: true, nullsFirst: false })
+            .order("product_code", { ascending: true, nullsFirst: false })
             .order("name");
 
         if (!error && data) {
