@@ -114,30 +114,37 @@ export default function ProductLinkPage() {
         }
     };
 
-    const handleApplyAll = async () => {
-        const accepted = suggestions.filter((s) => s.accepted && (s.overrideProductId || s.productId));
-        if (accepted.length === 0) {
-            toast.error("適用する紐付けがありません");
-            return;
-        }
-
-        setSaving(true);
+    // 1商品ずつ個別に紐づけ
+    const handleLinkOne = async (recipeId: string, productId: string) => {
         try {
-            const links = accepted.map((s) => ({
-                recipeId: s.recipeId,
-                productId: s.overrideProductId || s.productId,
-            }));
-
             const res = await fetch("/api/recipe/sync-product", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ batch: true, links }),
+                body: JSON.stringify({ recipeId, productId }),
             });
+            if (!res.ok) throw new Error("紐付けに失敗しました");
+            toast.success("紐付けしました");
+            // suggestionsから該当行を消す
+            setSuggestions(prev => prev.filter(s => s.recipeId !== recipeId));
+            fetchData();
+        } catch (error: any) {
+            toast.error(error.message);
+        }
+    };
 
-            if (!res.ok) throw new Error("適用に失敗しました");
-            const data = await res.json();
-            toast.success(`${data.linked}件の紐付けを完了しました`);
-            setStep("overview");
+    // 全解除
+    const handleUnlinkAll = async () => {
+        if (!confirm(`紐付け済み${linkedCount}件を全て解除しますか？\nこの操作は元に戻せません。`)) return;
+        setSaving(true);
+        try {
+            const unlinkTargets = linkedRecipes.map(r => r.id);
+            const res = await fetch("/api/recipe/sync-product", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ batch: true, links: unlinkTargets.map(id => ({ recipeId: id, productId: null })) }),
+            });
+            if (!res.ok) throw new Error("全解除に失敗しました");
+            toast.success(`${unlinkTargets.length}件の紐付けを解除しました`);
             fetchData();
         } catch (error: any) {
             toast.error(error.message);
@@ -276,6 +283,15 @@ export default function ProductLinkPage() {
                     {step === "overview" && (
                         <>
                             <Button
+                                onClick={handleUnlinkAll}
+                                disabled={saving || linkedCount === 0}
+                                variant="outline"
+                                className="text-red-600 border-red-200 hover:bg-red-50"
+                            >
+                                <Unlink className="w-4 h-4 mr-2" />
+                                全解除（{linkedCount}件）
+                            </Button>
+                            <Button
                                 onClick={handleSyncAll}
                                 disabled={syncing || linkedCount === 0}
                                 variant="outline"
@@ -355,40 +371,29 @@ export default function ProductLinkPage() {
                                 <Sparkles className="w-5 h-5 text-purple-600" />
                                 AIマッチング結果（{suggestions.length}件）
                             </CardTitle>
-                            <div className="flex gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setStep("overview")}
-                                >
-                                    <X className="w-4 h-4 mr-1" /> キャンセル
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    onClick={handleApplyAll}
-                                    disabled={saving}
-                                    className="bg-green-600 hover:bg-green-700"
-                                >
-                                    <Check className="w-4 h-4 mr-1" />
-                                    {saving ? "適用中..." : `チェック済み${suggestions.filter((s) => s.accepted).length}件を適用`}
-                                </Button>
-                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setStep("overview")}
+                            >
+                                <X className="w-4 h-4 mr-1" /> 閉じる
+                            </Button>
                         </div>
                         <p className="text-sm text-gray-500 mt-1">
-                            ✓ 高/中確度は自動チェック済み。低確度や候補なしは手動で商品を選択してください。
+                            各行の「紐づけ」ボタンで1商品ずつ確定できます。商品をプルダウンで変更してから紐づけも可能です。
                         </p>
                     </CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-[40px]">適用</TableHead>
                                     <TableHead>レシピ名</TableHead>
                                     <TableHead className="text-right">販売価格</TableHead>
                                     <TableHead className="w-[40px] text-center">→</TableHead>
                                     <TableHead>マッチ商品名（AI提案 or 手動選択）</TableHead>
                                     <TableHead className="text-right">商品価格</TableHead>
                                     <TableHead>確度</TableHead>
+                                    <TableHead className="w-[90px]"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -410,15 +415,7 @@ export default function ProductLinkPage() {
                                                         : ""
                                             }
                                         >
-                                            <TableCell>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={s.accepted}
-                                                    onChange={() => toggleAccept(s.recipeId)}
-                                                    disabled={!effectiveProductId}
-                                                    className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                                                />
-                                            </TableCell>
+
                                             <TableCell className="font-medium text-sm">
                                                 {s.recipeName}
                                             </TableCell>
@@ -484,6 +481,18 @@ export default function ProductLinkPage() {
                                                         </span>
                                                     )
                                                     : getConfidenceBadge(s.confidence, s.score)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {effectiveProductId && (
+                                                    <Button
+                                                        size="sm"
+                                                        className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                                                        onClick={() => handleLinkOne(s.recipeId, effectiveProductId)}
+                                                    >
+                                                        <Link2 className="w-3 h-3 mr-1" />
+                                                        紐づけ
+                                                    </Button>
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     );
