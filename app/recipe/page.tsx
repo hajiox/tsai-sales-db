@@ -539,8 +539,8 @@ export default function RecipePage() {
                             <TableHead>商品名</TableHead>
                             {activeTab === "中間部品" && <TableHead>使用されている商品</TableHead>}
                             <TableHead>カテゴリ</TableHead>
-                            <TableHead>開発日</TableHead>
                             <TableHead className="text-right">販売価格</TableHead>
+                            <TableHead className="text-right">原価</TableHead>
                             <TableHead className="text-right w-[80px]">利益率</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -665,16 +665,11 @@ export default function RecipePage() {
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
-                                    <TableCell onClick={(e) => e.stopPropagation()}>
-                                        <Input
-                                            type="date"
-                                            value={recipe.development_date || ''}
-                                            onChange={(e) => handleDateChange(recipe.id, e.target.value)}
-                                            className="w-[130px] h-7 text-sm"
-                                        />
-                                    </TableCell>
                                     <TableCell className="text-right">
                                         {formatCurrency(recipe.selling_price)}
+                                    </TableCell>
+                                    <TableCell className="text-right text-xs text-gray-500">
+                                        {recipe.total_cost ? formatCurrency(Math.round(recipe.total_cost)) : <span className="text-gray-300">-</span>}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {(() => {

@@ -789,9 +789,23 @@ export default function RecipeDetailPage() {
                 className="text-3xl font-extrabold text-gray-900 leading-tight w-full hover:bg-gray-50 rounded px-1 -ml-1 transition-colors"
                 inputClassName="text-3xl font-extrabold text-gray-900 leading-tight"
               />
-              <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono">
+              <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono items-center">
                 <span>ID: {recipe.id.split("-")[0]}</span>
-                <span>DEV: {recipe.development_date || "----/--/--"}</span>
+                <span className="flex items-center gap-1">
+                  DEV:
+                  <input
+                    type="date"
+                    defaultValue={recipe.development_date || ''}
+                    onBlur={(e) => {
+                      const val = e.target.value || null;
+                      if (val !== recipe.development_date) {
+                        handleRecipeChange("development_date", val);
+                      }
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    className="bg-transparent border-b border-dashed border-gray-300 hover:border-gray-500 focus:border-blue-500 outline-none text-xs font-mono text-gray-500 w-[110px] px-0.5"
+                  />
+                </span>
                 <span>UPD: {new Date().toLocaleDateString()}</span>
               </div>
             </div>
