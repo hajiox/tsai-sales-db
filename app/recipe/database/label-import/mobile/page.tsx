@@ -350,12 +350,20 @@ function MobileLabelImportContent() {
                 const result = await res.json();
                 showToast(`「${selectedCandidate.name}」を更新しました`, "success");
             } else if (actionMode === "create") {
-                const { data, error } = await supabase
-                    .from("ingredients")
-                    .insert([updates])
-                    .select();
-
-                if (error) throw new Error(error.message);
+                // Create new ingredient via server-side API (bypasses RLS)
+                const res = await fetch('/api/recipe/db-write', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        operation: 'insert',
+                        table: 'ingredients',
+                        data: updates,
+                    }),
+                });
+                if (!res.ok) {
+                    const errData = await res.json();
+                    throw new Error(errData.error || '登録に失敗しました');
+                }
                 showToast(`「${updates.name || "新規食材"}」を登録しました`, "success");
             }
 

@@ -302,13 +302,20 @@ function LabelImportContent() {
                 const result = await res.json();
                 toast.success(`「${selectedCandidate.name}」の${result.updated_fields.length}件の項目を更新しました`);
             } else if (actionMode === "create") {
-                // Create new ingredient
-                const { data, error } = await supabase
-                    .from("ingredients")
-                    .insert([updates])
-                    .select();
-
-                if (error) throw new Error(error.message);
+                // Create new ingredient via server-side API (bypasses RLS)
+                const res = await fetch('/api/recipe/db-write', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        operation: 'insert',
+                        table: 'ingredients',
+                        data: updates,
+                    }),
+                });
+                if (!res.ok) {
+                    const errData = await res.json();
+                    throw new Error(errData.error || '登録に失敗しました');
+                }
                 toast.success(`「${updates.name || "新規食材"}」を新規登録しました`);
             }
 
