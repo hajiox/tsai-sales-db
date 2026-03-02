@@ -521,8 +521,8 @@ export default function RecipePage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            {(activeTab === "ネット専用" || activeTab === "all") && <TableHead className="w-[140px]">シリーズ</TableHead>}
-                            {(activeTab === "ネット専用" || activeTab === "all") && <TableHead className="w-[50px] text-center">No.</TableHead>}
+                            <TableHead className="w-[140px]">シリーズ</TableHead>
+                            <TableHead className="w-[50px] text-center">No.</TableHead>
                             <TableHead>商品名</TableHead>
                             {activeTab === "中間部品" && <TableHead>使用されている商品</TableHead>}
                             <TableHead>カテゴリ</TableHead>
@@ -551,59 +551,55 @@ export default function RecipePage() {
                                     className="cursor-pointer hover:bg-gray-50"
                                     onClick={() => router.push(`/recipe/${recipe.id}`)}
                                 >
-                                    {(activeTab === "ネット専用" || activeTab === "all") && (
-                                        <TableCell onClick={(e) => e.stopPropagation()} className="text-xs">
-                                            <Select
-                                                value={recipe.series_code != null ? String(recipe.series_code) : "__none__"}
-                                                onValueChange={(val) => {
-                                                    if (val === "__none__") {
-                                                        handleSeriesChange(recipe.id, null, null);
-                                                    } else {
-                                                        const s = seriesList.find(s => s.code === Number(val));
-                                                        handleSeriesChange(recipe.id, Number(val), s?.name || null);
-                                                    }
-                                                }}
-                                            >
-                                                <SelectTrigger className="h-7 w-[130px] text-xs">
-                                                    <SelectValue>
-                                                        {recipe.series || '—'}
-                                                    </SelectValue>
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="__none__">
-                                                        <span className="text-gray-400">— なし —</span>
+                                    <TableCell onClick={(e) => e.stopPropagation()} className="text-xs">
+                                        <Select
+                                            value={recipe.series_code != null ? String(recipe.series_code) : "__none__"}
+                                            onValueChange={(val) => {
+                                                if (val === "__none__") {
+                                                    handleSeriesChange(recipe.id, null, null);
+                                                } else {
+                                                    const s = seriesList.find(s => s.code === Number(val));
+                                                    handleSeriesChange(recipe.id, Number(val), s?.name || null);
+                                                }
+                                            }}
+                                        >
+                                            <SelectTrigger className="h-7 w-[130px] text-xs">
+                                                <SelectValue>
+                                                    {recipe.series || '—'}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__none__">
+                                                    <span className="text-gray-400">— なし —</span>
+                                                </SelectItem>
+                                                {seriesList.map(s => (
+                                                    <SelectItem key={s.code} value={String(s.code)}>
+                                                        {s.code}. {s.name}
                                                     </SelectItem>
-                                                    {seriesList.map(s => (
-                                                        <SelectItem key={s.code} value={String(s.code)}>
-                                                            {s.code}. {s.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </TableCell>
-                                    )}
-                                    {(activeTab === "ネット専用" || activeTab === "all") && (
-                                        <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
-                                            <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                defaultValue={recipe.product_code ?? ''}
-                                                onBlur={(e) => {
-                                                    const raw = e.target.value.replace(/[^0-9]/g, '');
-                                                    const val = raw ? Number(raw) : null;
-                                                    if (val !== recipe.product_code) {
-                                                        handleProductCodeChange(recipe.id, val);
-                                                    }
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        (e.target as HTMLInputElement).blur();
-                                                    }
-                                                }}
-                                                className="w-[50px] h-7 text-xs text-center p-1 border rounded-md border-input bg-background"
-                                            />
-                                        </TableCell>
-                                    )}
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </TableCell>
+                                    <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            defaultValue={recipe.product_code ?? ''}
+                                            onBlur={(e) => {
+                                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                const val = raw ? Number(raw) : null;
+                                                if (val !== recipe.product_code) {
+                                                    handleProductCodeChange(recipe.id, val);
+                                                }
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    (e.target as HTMLInputElement).blur();
+                                                }
+                                            }}
+                                            className="w-[50px] h-7 text-xs text-center p-1 border rounded-md border-input bg-background"
+                                        />
+                                    </TableCell>
                                     <TableCell className="font-medium">
                                         <div className="flex items-center gap-1">
                                             {recipe.is_intermediate && (
