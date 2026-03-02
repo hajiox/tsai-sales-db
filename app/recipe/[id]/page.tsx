@@ -56,11 +56,6 @@ const CATEGORIES = [
     label: "試作",
     color: "bg-gray-100 text-gray-800 border-gray-200",
   },
-  {
-    value: "Shopee",
-    label: "Shopee",
-    color: "bg-pink-100 text-pink-800 border-pink-200",
-  },
 ];
 
 interface Recipe {

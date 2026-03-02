@@ -36,7 +36,6 @@ const CATEGORIES = [
     { value: "中間部品", label: "中間部品", color: "bg-purple-100 text-purple-800" },
     { value: "終売", label: "終売", color: "bg-gray-500 text-white" },
     { value: "試作", label: "試作", color: "bg-gray-100 text-gray-800" },
-    { value: "Shopee", label: "Shopee", color: "bg-pink-100 text-pink-800" },
 ];
 
 interface Recipe {
@@ -54,7 +53,7 @@ interface Recipe {
     product_code: number | null;
 }
 
-type TabType = "all" | "ネット専用" | "自社" | "OEM" | "Shopee" | "中間部品" | "試作" | "終売";
+type TabType = "all" | "ネット専用" | "自社" | "OEM" | "中間部品" | "試作" | "終売";
 
 export default function RecipePage() {
     const router = useRouter();
@@ -69,7 +68,6 @@ export default function RecipePage() {
         自社: 0,
         OEM: 0,
         試作: 0,
-        Shopee: 0,
         中間部品: 0,
         終売: 0,
         ingredients: 0,
@@ -269,7 +267,6 @@ export default function RecipePage() {
             自社: categoryCounts["自社"] || 0,
             OEM: categoryCounts["OEM"] || 0,
             試作: categoryCounts["試作"] || 0,
-            Shopee: categoryCounts["Shopee"] || 0,
             中間部品: categoryCounts["中間部品"] || 0,
             終売: categoryCounts["終売"] || 0,
             ingredients: ingredientCount || 0,
@@ -330,7 +327,6 @@ export default function RecipePage() {
         { key: "自社" as TabType, label: "自社", icon: Building, count: stats.自社 },
         { key: "OEM" as TabType, label: "OEM", icon: Truck, count: stats.OEM },
         { key: "試作" as TabType, label: "試作", icon: ChefHat, count: stats.試作 },
-        { key: "Shopee" as TabType, label: "Shopee", icon: Globe, count: stats.Shopee },
         { key: "中間部品" as TabType, label: "中間部品【P】", icon: Package, count: stats.中間部品 },
         { key: "終売" as TabType, label: "終売", icon: FileSpreadsheet, count: stats.終売 },
         { key: "all" as TabType, label: "全て", icon: FileSpreadsheet, count: stats.total },
