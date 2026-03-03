@@ -11,6 +11,23 @@ import KpiTargetModal from "./KpiTargetModal";
 import { KpiSummary, ChannelCode, updateKpiEntry } from "@/app/kpi/actions";
 import { formatCurrency, formatPercent } from '@/lib/utils';
 
+// Achievement rate color helper
+function getRateStyle(rate: number): string {
+    if (rate >= 100) return 'text-green-600 font-bold';
+    if (rate >= 90) return 'text-blue-600 font-bold';
+    if (rate < 80) return 'text-red-600 font-bold';
+    return '';
+}
+function RateCell({ rate, hasTarget }: { rate: number; hasTarget: boolean }) {
+    if (!hasTarget) return <span>-</span>;
+    return (
+        <div className="flex flex-col items-end">
+            <span>{formatPercent(rate)}</span>
+            {rate < 80 && <span className="text-red-500 text-[9px] leading-tight">⚠ 警告</span>}
+        </div>
+    );
+}
+
 // Inline Editable Component
 function EditableCell({
     value,
@@ -295,10 +312,10 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                         </tr>
 
                                         {/* 3. Actual */}
-                                        <tr className="hover:bg-gray-50/30">
-                                            <td className="p-2 border-r font-bold text-right">実績</td>
+                                        <tr className="bg-amber-50/80 hover:bg-amber-100/60">
+                                            <td className="p-2 border-r font-bold text-right text-amber-900">実績</td>
                                             {rowData.map(r => (
-                                                <td key={`actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold">
+                                                <td key={`actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold text-amber-900">
                                                     <EditableCell
                                                         value={r.actual}
                                                         type="currency"
@@ -306,7 +323,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                                     />
                                                 </td>
                                             ))}
-                                            <td className="p-2 text-right border-l tabular-nums font-bold">
+                                            <td className="p-2 text-right border-l tabular-nums font-bold text-amber-900">
                                                 {totalActual.toLocaleString()}
                                             </td>
                                         </tr>
@@ -317,14 +334,19 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             {rowData.map(r => {
                                                 const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                                 return (
-                                                    <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${rate >= 100 ? 'text-green-600 font-bold' : ''}`}>
-                                                        {r.target > 0 ? formatPercent(rate) : '-'}
+                                                    <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate)}`}>
+                                                        <RateCell rate={rate} hasTarget={r.target > 0} />
                                                     </td>
                                                 );
                                             })}
-                                            <td className="p-2 text-right border-l tabular-nums text-xs font-bold">
-                                                {totalTarget > 0 ? formatPercent((totalActual / totalTarget) * 100) : '-'}
-                                            </td>
+                                            {(() => {
+                                                const totalRate = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+                                                return (
+                                                    <td className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(totalRate)}`}>
+                                                        <RateCell rate={totalRate} hasTarget={totalTarget > 0} />
+                                                    </td>
+                                                );
+                                            })()}
                                         </tr>
 
                                         {/* 5. YoY Growth */}
@@ -386,14 +408,14 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             </td>
                                         </tr>
                                         {/* 3. Actual */}
-                                        <tr className="bg-gray-100/50">
-                                            <td className="p-2 border-r font-bold text-right">実績</td>
+                                        <tr className="bg-amber-50/80">
+                                            <td className="p-2 border-r font-bold text-right text-amber-900">実績</td>
                                             {totalRowData.map(r => (
-                                                <td key={`total-actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold text-lg">
+                                                <td key={`total-actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold text-sm text-amber-900">
                                                     {r.actual.toLocaleString()}
                                                 </td>
                                             ))}
-                                            <td className="p-2 text-right border-l tabular-nums font-bold text-lg">
+                                            <td className="p-2 text-right border-l tabular-nums font-bold text-sm text-amber-900">
                                                 {grandTotalActual.toLocaleString()}
                                             </td>
                                         </tr>
@@ -403,14 +425,19 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             {totalRowData.map(r => {
                                                 const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                                 return (
-                                                    <td key={`total-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${rate >= 100 ? 'text-green-700 font-bold' : ''}`}>
-                                                        {r.target > 0 ? formatPercent(rate) : '-'}
+                                                    <td key={`total-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate)}`}>
+                                                        <RateCell rate={rate} hasTarget={r.target > 0} />
                                                     </td>
                                                 );
                                             })}
-                                            <td className="p-2 text-right border-l tabular-nums text-xs font-bold">
-                                                {grandTotalTarget > 0 ? formatPercent((grandTotalActual / grandTotalTarget) * 100) : '-'}
-                                            </td>
+                                            {(() => {
+                                                const grandRate = grandTotalTarget > 0 ? (grandTotalActual / grandTotalTarget) * 100 : 0;
+                                                return (
+                                                    <td className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(grandRate)}`}>
+                                                        <RateCell rate={grandRate} hasTarget={grandTotalTarget > 0} />
+                                                    </td>
+                                                );
+                                            })()}
                                         </tr>
                                         {/* 5. YoY */}
                                         <tr className="border-b-4 border-double border-gray-400 bg-gray-50/50">
@@ -470,10 +497,10 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     </td>
                                 </tr>
                                 {/* Actual Row */}
-                                <tr className="hover:bg-gray-50/50">
-                                    <td className="p-2 font-medium border-r bg-gray-50/30 text-right">実績</td>
+                                <tr className="bg-amber-50/80 hover:bg-amber-100/60">
+                                    <td className="p-2 font-medium border-r bg-amber-50/80 text-right text-amber-900">実績</td>
                                     {data.salesActivity.map(r => (
-                                        <td key={`actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold">
+                                        <td key={`actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold text-amber-900">
                                             <EditableCell
                                                 value={r.actual}
                                                 type="number"
@@ -481,7 +508,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             />
                                         </td>
                                     ))}
-                                    <td className="p-2 text-right font-bold border-l bg-gray-50/30 tabular-nums">
+                                    <td className="p-2 text-right font-bold border-l bg-amber-50/80 tabular-nums text-amber-900">
                                         {data.salesActivity.reduce((sum, r) => sum + r.actual, 0)}
                                     </td>
                                 </tr>
@@ -491,17 +518,21 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     {data.salesActivity.map(r => {
                                         const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                         return (
-                                            <td key={`rate-${r.month}`} className={`p-3 text-right border-l tabular-nums text-xs ${rate >= 100 ? 'text-green-600 font-bold' : ''}`}>
-                                                {r.target > 0 ? formatPercent(rate) : '-'}
+                                            <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate)}`}>
+                                                <RateCell rate={rate} hasTarget={r.target > 0} />
                                             </td>
                                         );
                                     })}
-                                    <td className="p-2 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
-                                        {/* Simple Total Rate */}
+                                    <td className="p-2 text-right border-l bg-gray-50/30 tabular-nums text-xs">
                                         {(() => {
                                             const t = data.salesActivity.reduce((sum, r) => sum + r.target, 0);
                                             const a = data.salesActivity.reduce((sum, r) => sum + r.actual, 0);
-                                            return t > 0 ? formatPercent((a / t) * 100) : '-';
+                                            const rate = t > 0 ? (a / t) * 100 : 0;
+                                            return (
+                                                <span className={getRateStyle(rate)}>
+                                                    <RateCell rate={rate} hasTarget={t > 0} />
+                                                </span>
+                                            );
                                         })()}
                                     </td>
                                 </tr>
@@ -579,16 +610,21 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     {data.manufacturing.map(r => {
                                         const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                         return (
-                                            <td key={`man-rate-${r.month}`} className={`p-3 text-right border-l tabular-nums text-xs ${rate >= 100 ? 'text-green-600 font-bold' : ''}`}>
-                                                {r.target > 0 ? formatPercent(rate) : '-'}
+                                            <td key={`man-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate)}`}>
+                                                <RateCell rate={rate} hasTarget={r.target > 0} />
                                             </td>
                                         );
                                     })}
-                                    <td className="p-2 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
+                                    <td className="p-2 text-right border-l bg-gray-50/30 tabular-nums text-xs">
                                         {(() => {
                                             const t = data.manufacturing.reduce((sum, r) => sum + r.target, 0);
                                             const a = data.manufacturing.reduce((sum, r) => sum + r.actual, 0);
-                                            return t > 0 ? formatPercent((a / t) * 100) : '-';
+                                            const rate = t > 0 ? (a / t) * 100 : 0;
+                                            return (
+                                                <span className={getRateStyle(rate)}>
+                                                    <RateCell rate={rate} hasTarget={t > 0} />
+                                                </span>
+                                            );
                                         })()}
                                     </td>
                                 </tr>
