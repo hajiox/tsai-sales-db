@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Merge } from "lucide-react";
+import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 
@@ -469,11 +469,6 @@ export default function RecipePage() {
                         </div>
                     </div>
 
-                    <Button variant="outline" onClick={() => router.push("/recipe/integration")}>
-                        <LinkIcon className="w-4 h-4 mr-2" />
-                        データ統合
-                    </Button>
-
                     <Button variant="outline" onClick={() => router.push("/recipe/product-link")} className="border-blue-300 text-blue-700 hover:bg-blue-50">
                         <LinkIcon className="w-4 h-4 mr-2" />
                         WEB販売紐付け
@@ -484,19 +479,9 @@ export default function RecipePage() {
                         材料データベース
                     </Button>
 
-                    <Button variant="outline" onClick={() => router.push("/recipe/import")}>
-                        <FileSpreadsheet className="w-4 h-4 mr-2" />
-                        Excelインポート
-                    </Button>
-
                     <Button variant="outline" onClick={() => router.push("/recipe/series")}>
                         <Edit className="w-4 h-4 mr-2" />
                         シリーズ管理
-                    </Button>
-
-                    <Button variant="outline" onClick={() => router.push("/recipe/duplicates")} className="border-amber-300 text-amber-700 hover:bg-amber-50">
-                        <Merge className="w-4 h-4 mr-2" />
-                        重複チェック
                     </Button>
 
                     <Button onClick={() => router.push("/recipe/new")}>
