@@ -213,7 +213,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                     </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 print:hidden">
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">年間売上合計</CardTitle>
@@ -265,7 +265,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                 />
 
                 {/* Main Table: Monthly/Departmental */}
-                <div>
+                <div className="print:hidden">
                     <h2 className="text-xl font-bold mb-4">月次・部門別集計</h2>
                     <div className="border rounded-md shadow-sm">
                         <table className="w-full text-xs text-left border-collapse table-fixed">
@@ -487,7 +487,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
 
                 {/* Sales Activity Table */}
                 {data.salesActivity && data.salesActivity.length > 0 && (
-                    <div className="mt-8">
+                    <div className="mt-8 print:hidden">
                         <h3 className="text-lg font-medium mb-4">営業活動実績（新規・OEM獲得数）</h3>
                         <div className="border rounded-md">
                             <table className="w-full text-xs text-left table-fixed">
@@ -567,7 +567,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
 
                 {/* Manufacturing Table */}
                 {data.manufacturing && data.manufacturing.length > 0 && (
-                    <div className="mt-8">
+                    <div className="mt-8 print:hidden">
                         <h3 className="text-lg font-medium mb-4">商品製造数</h3>
                         <div className="border rounded-md">
                             <table className="w-full text-xs text-left table-fixed">
@@ -675,6 +675,221 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                         </div>
                     </div>
                 )}
+
+                {/* ==================== PRINT-ONLY SECTION ==================== */}
+                {(() => {
+                    const channelList: { code: ChannelCode; label: string }[] = [
+                        { code: 'SHOKU', label: '道の駅 食のブランド館' },
+                        { code: 'STORE', label: '会津ブランド館（店舗）' },
+                        { code: 'WEB', label: '会津ブランド館（ネット販売）' },
+                        { code: 'WHOLESALE', label: '外販・OEM 本社売上' },
+                    ];
+
+                    const renderPrintHalf = (monthIndices: number[], halfLabel: string, showYearTotal: boolean) => {
+                        const months = monthIndices.map(i => data.months[i]);
+                        const thCls = "p-1.5 border border-gray-300 text-right text-[11px]";
+                        const tdCls = "p-1 border border-gray-200 text-right tabular-nums text-[11px]";
+                        const tdLabelCls = "p-1 border border-gray-200 text-right text-[10px]";
+                        const colCount = monthIndices.length + 2 + (showYearTotal ? 1 : 0) + 1;
+
+                        return (
+                            <table className="w-full border-collapse border border-gray-300 mb-3">
+                                <thead>
+                                    <tr className="bg-gray-100">
+                                        <th className={`${thCls} text-left w-[120px]`}>部門 / 項目</th>
+                                        <th className={`${thCls} w-[50px]`}>内訳</th>
+                                        {months.map(m => (
+                                            <th key={m} className={thCls}>
+                                                {new Date(m).getMonth() + 1}月
+                                            </th>
+                                        ))}
+                                        <th className={`${thCls} bg-gray-50 font-bold`}>{halfLabel}</th>
+                                        {showYearTotal && <th className={`${thCls} bg-gray-200 font-bold`}>年間計</th>}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {channelList.map(({ code, label }) => {
+                                        const rowData = data.channels[code];
+                                        const halfRows = monthIndices.map(i => rowData[i]);
+                                        const subActual = halfRows.reduce((s, r) => s + r.actual, 0);
+                                        const subTarget = halfRows.reduce((s, r) => s + r.target, 0);
+                                        const subLastYear = halfRows.reduce((s, r) => s + r.lastYear, 0);
+                                        const yearActual = rowData.reduce((s, r) => s + r.actual, 0);
+                                        const yearTarget = rowData.reduce((s, r) => s + r.target, 0);
+                                        const yearLastYear = rowData.reduce((s, r) => s + r.lastYear, 0);
+
+                                        return (
+                                            <React.Fragment key={code}>
+                                                <tr><td className="p-1 border border-gray-300 font-bold bg-gray-50 text-[10px]" colSpan={colCount}>{label}</td></tr>
+                                                {/* 前年度 */}
+                                                <tr className="text-gray-500">
+                                                    <td className={tdLabelCls}></td>
+                                                    <td className={tdLabelCls}>前年度</td>
+                                                    {halfRows.map(r => <td key={`p-ly-${r.month}`} className={tdCls}>{r.lastYear.toLocaleString()}</td>)}
+                                                    <td className={`${tdCls} bg-gray-50 font-medium`}>{subLastYear.toLocaleString()}</td>
+                                                    {showYearTotal && <td className={`${tdCls} bg-gray-100 font-medium`}>{yearLastYear.toLocaleString()}</td>}
+                                                </tr>
+                                                {/* 目標 */}
+                                                <tr className="text-blue-700">
+                                                    <td className={tdLabelCls}></td>
+                                                    <td className={tdLabelCls}>目標</td>
+                                                    {halfRows.map(r => <td key={`p-tg-${r.month}`} className={tdCls}>{r.target.toLocaleString()}</td>)}
+                                                    <td className={`${tdCls} bg-gray-50 font-medium`}>{subTarget.toLocaleString()}</td>
+                                                    {showYearTotal && <td className={`${tdCls} bg-gray-100 font-medium`}>{yearTarget.toLocaleString()}</td>}
+                                                </tr>
+                                                {/* 実績 */}
+                                                <tr className="font-bold" style={{ backgroundColor: '#fffbeb' }}>
+                                                    <td className={tdLabelCls}></td>
+                                                    <td className={`${tdLabelCls} font-bold`}>実績</td>
+                                                    {halfRows.map(r => <td key={`p-ac-${r.month}`} className={tdCls}>{r.actual.toLocaleString()}</td>)}
+                                                    <td className={`${tdCls} bg-gray-50 font-bold`}>{subActual.toLocaleString()}</td>
+                                                    {showYearTotal && <td className={`${tdCls} bg-gray-100 font-bold`}>{yearActual.toLocaleString()}</td>}
+                                                </tr>
+                                                {/* 達成率 */}
+                                                <tr>
+                                                    <td className={tdLabelCls}></td>
+                                                    <td className={`${tdLabelCls} text-[9px]`}>達成率</td>
+                                                    {halfRows.map(r => {
+                                                        const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
+                                                        return <td key={`p-rt-${r.month}`} className={`${tdCls} text-[10px] ${getRateStyle(rate, r.actual)}`}>{r.target > 0 ? formatPercent(rate) : '-'}</td>;
+                                                    })}
+                                                    {(() => { const rt = subTarget > 0 ? (subActual / subTarget) * 100 : 0; return <td className={`${tdCls} bg-gray-50 text-[10px] ${getRateStyle(rt)}`}>{subTarget > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                                    {showYearTotal && (() => { const rt = yearTarget > 0 ? (yearActual / yearTarget) * 100 : 0; return <td className={`${tdCls} bg-gray-100 text-[10px] ${getRateStyle(rt)}`}>{yearTarget > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                                </tr>
+                                                {/* 前年比 */}
+                                                <tr className="border-b-2 border-gray-300">
+                                                    <td className={tdLabelCls}></td>
+                                                    <td className={`${tdLabelCls} text-[9px]`}>前年比</td>
+                                                    {halfRows.map(r => {
+                                                        const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
+                                                        return <td key={`p-yoy-${r.month}`} className={`${tdCls} text-[10px]`}>{r.actual > 0 && r.lastYear > 0 ? formatPercent(rate) : '-'}</td>;
+                                                    })}
+                                                    {(() => { const rt = subLastYear > 0 ? (subActual / subLastYear) * 100 : 0; return <td className={`${tdCls} bg-gray-50 text-[10px]`}>{subActual > 0 && subLastYear > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                                    {showYearTotal && (() => { const rt = yearLastYear > 0 ? (yearActual / yearLastYear) * 100 : 0; return <td className={`${tdCls} bg-gray-100 text-[10px]`}>{yearActual > 0 && yearLastYear > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                                </tr>
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                    {/* Grand Total */}
+                                    {(() => {
+                                        const totalRowData = data.total;
+                                        const halfRows = monthIndices.map(i => totalRowData[i]);
+                                        const subActual = halfRows.reduce((s, r) => s + r.actual, 0);
+                                        const subTarget = halfRows.reduce((s, r) => s + r.target, 0);
+                                        const subLastYear = halfRows.reduce((s, r) => s + r.lastYear, 0);
+                                        const yearActual = totalRowData.reduce((s, r) => s + r.actual, 0);
+                                        const yearTarget = totalRowData.reduce((s, r) => s + r.target, 0);
+                                        const yearLastYear = totalRowData.reduce((s, r) => s + r.lastYear, 0);
+                                        return (
+                                            <React.Fragment>
+                                                <tr><td className="p-1 border border-gray-400 font-bold bg-gray-200 text-xs" colSpan={colCount}>総合計</td></tr>
+                                                <tr className="text-gray-500">
+                                                    <td className={tdLabelCls}></td><td className={tdLabelCls}>前年度</td>
+                                                    {halfRows.map(r => <td key={`pt-ly-${r.month}`} className={tdCls}>{r.lastYear.toLocaleString()}</td>)}
+                                                    <td className={`${tdCls} bg-gray-50 font-medium`}>{subLastYear.toLocaleString()}</td>
+                                                    {showYearTotal && <td className={`${tdCls} bg-gray-200 font-bold`}>{yearLastYear.toLocaleString()}</td>}
+                                                </tr>
+                                                <tr className="text-blue-700">
+                                                    <td className={tdLabelCls}></td><td className={tdLabelCls}>目標</td>
+                                                    {halfRows.map(r => <td key={`pt-tg-${r.month}`} className={tdCls}>{r.target.toLocaleString()}</td>)}
+                                                    <td className={`${tdCls} bg-gray-50 font-medium`}>{subTarget.toLocaleString()}</td>
+                                                    {showYearTotal && <td className={`${tdCls} bg-gray-200 font-bold`}>{yearTarget.toLocaleString()}</td>}
+                                                </tr>
+                                                <tr className="font-bold text-sm" style={{ backgroundColor: '#fffbeb' }}>
+                                                    <td className={tdLabelCls}></td><td className={`${tdLabelCls} font-bold`}>実績</td>
+                                                    {halfRows.map(r => <td key={`pt-ac-${r.month}`} className={`${tdCls} font-bold`}>{r.actual.toLocaleString()}</td>)}
+                                                    <td className={`${tdCls} bg-gray-50 font-bold`}>{subActual.toLocaleString()}</td>
+                                                    {showYearTotal && <td className={`${tdCls} bg-gray-200 font-bold`}>{yearActual.toLocaleString()}</td>}
+                                                </tr>
+                                                <tr>
+                                                    <td className={tdLabelCls}></td><td className={`${tdLabelCls} text-[9px]`}>達成率</td>
+                                                    {halfRows.map(r => { const rt = r.target > 0 ? (r.actual / r.target) * 100 : 0; return <td key={`pt-rt-${r.month}`} className={`${tdCls} text-[10px] ${getRateStyle(rt, r.actual)}`}>{r.target > 0 ? formatPercent(rt) : '-'}</td> })}
+                                                    {(() => { const rt = subTarget > 0 ? (subActual / subTarget) * 100 : 0; return <td className={`${tdCls} bg-gray-50 text-[10px] ${getRateStyle(rt)}`}>{subTarget > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                                    {showYearTotal && (() => { const rt = yearTarget > 0 ? (yearActual / yearTarget) * 100 : 0; return <td className={`${tdCls} bg-gray-200 text-[10px] ${getRateStyle(rt)}`}>{yearTarget > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                                </tr>
+                                                <tr className="border-b-4 border-double border-gray-400">
+                                                    <td className={tdLabelCls}></td><td className={`${tdLabelCls} text-[9px]`}>前年比</td>
+                                                    {halfRows.map(r => { const rt = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0; return <td key={`pt-yoy-${r.month}`} className={`${tdCls} text-[10px]`}>{r.actual > 0 && r.lastYear > 0 ? formatPercent(rt) : '-'}</td> })}
+                                                    {(() => { const rt = subLastYear > 0 ? (subActual / subLastYear) * 100 : 0; return <td className={`${tdCls} bg-gray-50 text-[10px]`}>{subActual > 0 && subLastYear > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                                    {showYearTotal && (() => { const rt = yearLastYear > 0 ? (yearActual / yearLastYear) * 100 : 0; return <td className={`${tdCls} bg-gray-200 text-[10px]`}>{yearActual > 0 && yearLastYear > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                                </tr>
+                                            </React.Fragment>
+                                        );
+                                    })()}
+                                </tbody>
+                            </table>
+                        );
+                    };
+
+                    return (
+                        <div className="hidden print:block">
+                            {/* Page 1: First Half (Aug-Jan) */}
+                            <div>
+                                <h2 className="text-base font-bold mb-2">月次・部門別集計 ─ 上期（8月〜1月）</h2>
+                                {renderPrintHalf([0, 1, 2, 3, 4, 5], '上期計', false)}
+                            </div>
+
+                            {/* Page 2: Second Half (Feb-Jul) + Year Total */}
+                            <div style={{ breakBefore: 'page' }}>
+                                <h2 className="text-base font-bold mb-2">月次・部門別集計 ─ 下期（2月〜7月）</h2>
+                                {renderPrintHalf([6, 7, 8, 9, 10, 11], '下期計', true)}
+
+                                {/* Sales Activity for print */}
+                                {data.salesActivity && data.salesActivity.length > 0 && (
+                                    <div className="mt-4">
+                                        <h3 className="text-sm font-bold mb-1">営業活動実績（新規・OEM獲得数）</h3>
+                                        <table className="w-full border-collapse border border-gray-300 text-[11px]">
+                                            <thead>
+                                                <tr className="bg-orange-50">
+                                                    <th className="p-1 border border-gray-300 text-left w-[120px]">項目</th>
+                                                    {data.months.map(m => <th key={m} className="p-1 border border-gray-300 text-right">{new Date(m).getMonth() + 1}月</th>)}
+                                                    <th className="p-1 border border-gray-300 text-right bg-orange-50 font-bold">合計</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td className="p-1 border text-right">目標</td>
+                                                    {data.salesActivity.map(r => <td key={`psa-t-${r.month}`} className="p-1 border text-right text-blue-700">{r.target}</td>)}
+                                                    <td className="p-1 border text-right font-bold bg-gray-50">{data.salesActivity.reduce((s, r) => s + r.target, 0)}</td>
+                                                </tr>
+                                                <tr style={{ backgroundColor: '#fffbeb' }}><td className="p-1 border text-right font-bold">実績</td>
+                                                    {data.salesActivity.map(r => <td key={`psa-a-${r.month}`} className="p-1 border text-right font-bold">{r.actual}</td>)}
+                                                    <td className="p-1 border text-right font-bold bg-gray-50">{data.salesActivity.reduce((s, r) => s + r.actual, 0)}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {/* Manufacturing for print */}
+                                {data.manufacturing && data.manufacturing.length > 0 && (
+                                    <div className="mt-4">
+                                        <h3 className="text-sm font-bold mb-1">商品製造数</h3>
+                                        <table className="w-full border-collapse border border-gray-300 text-[11px]">
+                                            <thead>
+                                                <tr className="bg-blue-50">
+                                                    <th className="p-1 border border-gray-300 text-left w-[120px]">項目</th>
+                                                    {data.months.map(m => <th key={m} className="p-1 border border-gray-300 text-right">{new Date(m).getMonth() + 1}月</th>)}
+                                                    <th className="p-1 border border-gray-300 text-right bg-blue-50 font-bold">合計</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td className="p-1 border text-right">目標</td>
+                                                    {data.manufacturing.map(r => <td key={`pm-t-${r.month}`} className="p-1 border text-right text-blue-700">{r.target.toLocaleString()}</td>)}
+                                                    <td className="p-1 border text-right font-bold bg-gray-50">{data.manufacturing.reduce((s, r) => s + r.target, 0).toLocaleString()}</td>
+                                                </tr>
+                                                <tr style={{ backgroundColor: '#fffbeb' }}><td className="p-1 border text-right font-bold">実績</td>
+                                                    {data.manufacturing.map(r => <td key={`pm-a-${r.month}`} className="p-1 border text-right font-bold">{r.actual.toLocaleString()}</td>)}
+                                                    <td className="p-1 border text-right font-bold bg-gray-50">{data.manufacturing.reduce((s, r) => s + r.actual, 0).toLocaleString()}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })()}
+
             </div>
         </>
     );
