@@ -99,6 +99,10 @@ interface KpiPageClientProps {
         totalTwoYearsAgo: number;
         achievementRate: number;
         yoyGrowthIds: number;
+        elapsedMonthCount: number;
+        remainingMonths: number;
+        elapsedTarget: number;
+        elapsedLastYear: number;
     };
 }
 
@@ -155,7 +159,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                         <SelectContent>
                             {[0, 1, 2, 3].map(i => {
                                 const y = new Date().getFullYear() + 1 - i;
-                                return <SelectItem key={y} value={y.toString()}>{`FY${y} (8月期)`}</SelectItem>;
+                                return <SelectItem key={y} value={y.toString()}>{`FY${y} (7月期)`}</SelectItem>;
                             })}
                         </SelectContent>
                     </Select>
@@ -183,27 +187,29 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">目標達成率</CardTitle>
+                        <CardTitle className="text-sm font-medium">進捗達成率</CardTitle>
+                        <span className="text-muted-foreground text-xs">{summaryMetrics.elapsedMonthCount}/12ヶ月経過</span>
                     </CardHeader>
                     <CardContent>
                         <div className={`text-2xl font-bold ${summaryMetrics.achievementRate >= 100 ? 'text-green-600' : 'text-yellow-600'}`}>
                             {formatPercent(summaryMetrics.achievementRate)}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            残目標: {formatCurrency(Math.max(0, summaryMetrics.totalTarget - summaryMetrics.totalActual))}
+                            経過月目標: {formatCurrency(summaryMetrics.elapsedTarget)} / 残り{summaryMetrics.remainingMonths}ヶ月
                         </p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">前年比 (YoY)</CardTitle>
+                        <span className="text-muted-foreground text-xs">{summaryMetrics.elapsedMonthCount}/12ヶ月経過</span>
                     </CardHeader>
                     <CardContent>
                         <div className={`text-2xl font-bold ${summaryMetrics.yoyGrowthIds >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {summaryMetrics.yoyGrowthIds > 0 ? '+' : ''}{formatPercent(summaryMetrics.yoyGrowthIds)}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            前年実績: {formatCurrency(summaryMetrics.totalLastYear)}
+                            前年同期実績: {formatCurrency(summaryMetrics.elapsedLastYear)}
                         </p>
                     </CardContent>
                 </Card>

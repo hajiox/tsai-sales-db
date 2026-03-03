@@ -1,5 +1,6 @@
 
 import { getKpiSummary } from "./actions";
+import { format } from 'date-fns';
 import { KpiMainChart, KpiChannelChart } from "@/components/kpi/KpiCharts";
 import KpiPageClient from "@/components/kpi/KpiPageClient";
 import { Suspense } from "react";
@@ -32,8 +33,27 @@ export default async function KpiPage({
   const totalLastYear = data.total.reduce((sum, m) => sum + m.lastYear, 0);
   const totalTwoYearsAgo = data.total.reduce((sum, m) => sum + m.twoYearsAgo, 0);
 
-  const achievementRate = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
-  const yoyGrowthIds = totalLastYear > 0 ? ((totalActual - totalLastYear) / totalLastYear) * 100 : 0;
+  // Elapsed month calculation for pace-adjusted achievement rate
+  const now = new Date();
+  const currentYearMonth = format(new Date(now.getFullYear(), now.getMonth(), 1), 'yyyy-MM-01');
+
+  let elapsedMonthCount = 0;
+  let elapsedTarget = 0;
+  let elapsedLastYear = 0;
+  data.total.forEach(m => {
+    // Count months that have fully completed (before current month)
+    if (m.month < currentYearMonth) {
+      elapsedMonthCount++;
+      elapsedTarget += m.target;
+      elapsedLastYear += m.lastYear;
+    }
+  });
+
+  const remainingMonths = 12 - elapsedMonthCount;
+  // Adjusted rate: actual vs elapsed months' target only
+  const achievementRate = elapsedTarget > 0 ? (totalActual / elapsedTarget) * 100 : 0;
+  // Adjusted YoY: actual vs same elapsed months' last year actual
+  const yoyGrowthIds = elapsedLastYear > 0 ? ((totalActual - elapsedLastYear) / elapsedLastYear) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -55,7 +75,11 @@ export default async function KpiPage({
             totalLastYear,
             totalTwoYearsAgo,
             achievementRate,
-            yoyGrowthIds
+            yoyGrowthIds,
+            elapsedMonthCount,
+            remainingMonths,
+            elapsedTarget,
+            elapsedLastYear,
           }}
         />
 
