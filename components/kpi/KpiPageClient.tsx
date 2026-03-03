@@ -687,130 +687,72 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
 
                     const renderPrintHalf = (monthIndices: number[], halfLabel: string, showYearTotal: boolean) => {
                         const months = monthIndices.map(i => data.months[i]);
-                        const thCls = "p-1.5 border border-gray-300 text-right text-[11px]";
-                        const tdCls = "p-1 border border-gray-200 text-right tabular-nums text-[11px]";
-                        const tdLabelCls = "p-1 border border-gray-200 text-right text-[10px]";
-                        const colCount = monthIndices.length + 2 + (showYearTotal ? 1 : 0) + 1;
+                        const colCount = 1 + monthIndices.length + 1 + (showYearTotal ? 1 : 0);
+                        const td = "p-1.5 border border-gray-300 text-right tabular-nums text-[11px]";
+
+                        const renderRows = (label: string, bgClass: string, rows: typeof data.total, yearData: typeof data.total) => {
+                            const sub = (fn: (r: typeof rows[0]) => number) => rows.reduce((s, r) => s + fn(r), 0);
+                            const yr = (fn: (r: typeof yearData[0]) => number) => yearData.reduce((s, r) => s + fn(r), 0);
+                            const subA = sub(r => r.actual), subT = sub(r => r.target), subL = sub(r => r.lastYear);
+                            const yrA = yr(r => r.actual), yrT = yr(r => r.target), yrL = yr(r => r.lastYear);
+                            return (
+                                <React.Fragment>
+                                    <tr><td colSpan={colCount} className={`p-1.5 border border-gray-400 font-bold text-[12px] text-white ${bgClass}`}>{label}</td></tr>
+                                    <tr className="text-gray-600">
+                                        <td className={`${td} text-[10px]`}>前年度</td>
+                                        {rows.map(r => <td key={`ly-${label}-${r.month}`} className={td}>{r.lastYear.toLocaleString()}</td>)}
+                                        <td className={`${td} bg-gray-50 font-medium`}>{subL.toLocaleString()}</td>
+                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrL.toLocaleString()}</td>}
+                                    </tr>
+                                    <tr className="text-blue-700">
+                                        <td className={`${td} text-[10px]`}>目標</td>
+                                        {rows.map(r => <td key={`tg-${label}-${r.month}`} className={td}>{r.target.toLocaleString()}</td>)}
+                                        <td className={`${td} bg-gray-50 font-medium`}>{subT.toLocaleString()}</td>
+                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrT.toLocaleString()}</td>}
+                                    </tr>
+                                    <tr style={{ backgroundColor: '#fffbeb' }}>
+                                        <td className={`${td} text-[10px] font-bold`}>実績</td>
+                                        {rows.map(r => <td key={`ac-${label}-${r.month}`} className={`${td} font-bold`}>{r.actual.toLocaleString()}</td>)}
+                                        <td className={`${td} bg-gray-50 font-bold`}>{subA.toLocaleString()}</td>
+                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrA.toLocaleString()}</td>}
+                                    </tr>
+                                    <tr>
+                                        <td className={`${td} text-[9px]`}>達成率</td>
+                                        {rows.map(r => { const rt = r.target > 0 ? (r.actual / r.target) * 100 : 0; return <td key={`rt-${label}-${r.month}`} className={`${td} text-[10px] ${getRateStyle(rt, r.actual)}`}>{r.target > 0 ? formatPercent(rt) : '-'}</td> })}
+                                        {(() => { const rt = subT > 0 ? (subA / subT) * 100 : 0; return <td className={`${td} bg-gray-50 text-[10px] ${getRateStyle(rt)}`}>{subT > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                        {showYearTotal && (() => { const rt = yrT > 0 ? (yrA / yrT) * 100 : 0; return <td className={`${td} bg-gray-100 text-[10px] ${getRateStyle(rt)}`}>{yrT > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                    </tr>
+                                    <tr>
+                                        <td className={`${td} text-[9px]`}>前年比</td>
+                                        {rows.map(r => { const rt = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0; return <td key={`yoy-${label}-${r.month}`} className={`${td} text-[10px]`}>{r.actual > 0 && r.lastYear > 0 ? formatPercent(rt) : '-'}</td> })}
+                                        {(() => { const rt = subL > 0 ? (subA / subL) * 100 : 0; return <td className={`${td} bg-gray-50 text-[10px]`}>{subA > 0 && subL > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                        {showYearTotal && (() => { const rt = yrL > 0 ? (yrA / yrL) * 100 : 0; return <td className={`${td} bg-gray-100 text-[10px]`}>{yrA > 0 && yrL > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                    </tr>
+                                </React.Fragment>
+                            );
+                        };
 
                         return (
                             <table className="w-full border-collapse border border-gray-300 mb-3">
                                 <thead>
                                     <tr className="bg-gray-100">
-                                        <th className={`${thCls} text-left w-[120px]`}>部門 / 項目</th>
-                                        <th className={`${thCls} w-[50px]`}>内訳</th>
+                                        <th className="p-1.5 border border-gray-300 text-right text-[11px] w-[60px]">内訳</th>
                                         {months.map(m => (
-                                            <th key={m} className={thCls}>
+                                            <th key={m} className="p-1.5 border border-gray-300 text-right text-[11px]">
                                                 {new Date(m).getMonth() + 1}月
                                             </th>
                                         ))}
-                                        <th className={`${thCls} bg-gray-50 font-bold`}>{halfLabel}</th>
-                                        {showYearTotal && <th className={`${thCls} bg-gray-200 font-bold`}>年間計</th>}
+                                        <th className="p-1.5 border border-gray-300 text-right text-[11px] bg-gray-200 font-bold">{halfLabel}</th>
+                                        {showYearTotal && <th className="p-1.5 border border-gray-300 text-right text-[11px] bg-gray-300 font-bold">年間計</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {channelList.map(({ code, label }) => {
                                         const rowData = data.channels[code];
                                         const halfRows = monthIndices.map(i => rowData[i]);
-                                        const subActual = halfRows.reduce((s, r) => s + r.actual, 0);
-                                        const subTarget = halfRows.reduce((s, r) => s + r.target, 0);
-                                        const subLastYear = halfRows.reduce((s, r) => s + r.lastYear, 0);
-                                        const yearActual = rowData.reduce((s, r) => s + r.actual, 0);
-                                        const yearTarget = rowData.reduce((s, r) => s + r.target, 0);
-                                        const yearLastYear = rowData.reduce((s, r) => s + r.lastYear, 0);
-
-                                        return (
-                                            <React.Fragment key={code}>
-                                                {/* 前年度 - with rowSpan dept name */}
-                                                <tr className="text-gray-500">
-                                                    <td className="p-1 border border-gray-300 font-bold bg-gray-50 text-[10px]" rowSpan={5} style={{ verticalAlign: 'top' }}>{label}</td>
-                                                    <td className={tdLabelCls}>前年度</td>
-                                                    {halfRows.map(r => <td key={`p-ly-${r.month}`} className={tdCls}>{r.lastYear.toLocaleString()}</td>)}
-                                                    <td className={`${tdCls} bg-gray-50 font-medium`}>{subLastYear.toLocaleString()}</td>
-                                                    {showYearTotal && <td className={`${tdCls} bg-gray-100 font-medium`}>{yearLastYear.toLocaleString()}</td>}
-                                                </tr>
-                                                {/* 目標 */}
-                                                <tr className="text-blue-700">
-                                                    <td className={tdLabelCls}>目標</td>
-                                                    {halfRows.map(r => <td key={`p-tg-${r.month}`} className={tdCls}>{r.target.toLocaleString()}</td>)}
-                                                    <td className={`${tdCls} bg-gray-50 font-medium`}>{subTarget.toLocaleString()}</td>
-                                                    {showYearTotal && <td className={`${tdCls} bg-gray-100 font-medium`}>{yearTarget.toLocaleString()}</td>}
-                                                </tr>
-                                                {/* 実績 */}
-                                                <tr className="font-bold" style={{ backgroundColor: '#fffbeb' }}>
-                                                    <td className={`${tdLabelCls} font-bold`}>実績</td>
-                                                    {halfRows.map(r => <td key={`p-ac-${r.month}`} className={tdCls}>{r.actual.toLocaleString()}</td>)}
-                                                    <td className={`${tdCls} bg-gray-50 font-bold`}>{subActual.toLocaleString()}</td>
-                                                    {showYearTotal && <td className={`${tdCls} bg-gray-100 font-bold`}>{yearActual.toLocaleString()}</td>}
-                                                </tr>
-                                                {/* 達成率 */}
-                                                <tr>
-                                                    <td className={`${tdLabelCls} text-[9px]`}>達成率</td>
-                                                    {halfRows.map(r => {
-                                                        const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
-                                                        return <td key={`p-rt-${r.month}`} className={`${tdCls} text-[10px] ${getRateStyle(rate, r.actual)}`}>{r.target > 0 ? formatPercent(rate) : '-'}</td>;
-                                                    })}
-                                                    {(() => { const rt = subTarget > 0 ? (subActual / subTarget) * 100 : 0; return <td className={`${tdCls} bg-gray-50 text-[10px] ${getRateStyle(rt)}`}>{subTarget > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                                    {showYearTotal && (() => { const rt = yearTarget > 0 ? (yearActual / yearTarget) * 100 : 0; return <td className={`${tdCls} bg-gray-100 text-[10px] ${getRateStyle(rt)}`}>{yearTarget > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                                </tr>
-                                                {/* 前年比 */}
-                                                <tr className="border-b-2 border-gray-300">
-                                                    <td className={`${tdLabelCls} text-[9px]`}>前年比</td>
-                                                    {halfRows.map(r => {
-                                                        const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
-                                                        return <td key={`p-yoy-${r.month}`} className={`${tdCls} text-[10px]`}>{r.actual > 0 && r.lastYear > 0 ? formatPercent(rate) : '-'}</td>;
-                                                    })}
-                                                    {(() => { const rt = subLastYear > 0 ? (subActual / subLastYear) * 100 : 0; return <td className={`${tdCls} bg-gray-50 text-[10px]`}>{subActual > 0 && subLastYear > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                                    {showYearTotal && (() => { const rt = yearLastYear > 0 ? (yearActual / yearLastYear) * 100 : 0; return <td className={`${tdCls} bg-gray-100 text-[10px]`}>{yearActual > 0 && yearLastYear > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                                </tr>
-                                            </React.Fragment>
-                                        );
+                                        return <React.Fragment key={code}>{renderRows(label, 'bg-slate-600', halfRows, rowData)}</React.Fragment>;
                                     })}
-                                    {/* Grand Total */}
-                                    {(() => {
-                                        const totalRowData = data.total;
-                                        const halfRows = monthIndices.map(i => totalRowData[i]);
-                                        const subActual = halfRows.reduce((s, r) => s + r.actual, 0);
-                                        const subTarget = halfRows.reduce((s, r) => s + r.target, 0);
-                                        const subLastYear = halfRows.reduce((s, r) => s + r.lastYear, 0);
-                                        const yearActual = totalRowData.reduce((s, r) => s + r.actual, 0);
-                                        const yearTarget = totalRowData.reduce((s, r) => s + r.target, 0);
-                                        const yearLastYear = totalRowData.reduce((s, r) => s + r.lastYear, 0);
-                                        return (
-                                            <React.Fragment>
-                                                <tr className="text-gray-500 border-t-2 border-gray-400">
-                                                    <td className="p-1 border border-gray-400 font-bold bg-gray-200 text-xs" rowSpan={5} style={{ verticalAlign: 'top' }}>総合計</td>
-                                                    <td className={tdLabelCls}>前年度</td>
-                                                    {halfRows.map(r => <td key={`pt-ly-${r.month}`} className={tdCls}>{r.lastYear.toLocaleString()}</td>)}
-                                                    <td className={`${tdCls} bg-gray-50 font-medium`}>{subLastYear.toLocaleString()}</td>
-                                                    {showYearTotal && <td className={`${tdCls} bg-gray-200 font-bold`}>{yearLastYear.toLocaleString()}</td>}
-                                                </tr>
-                                                <tr className="text-blue-700">
-                                                    <td className={tdLabelCls}>目標</td>
-                                                    {halfRows.map(r => <td key={`pt-tg-${r.month}`} className={tdCls}>{r.target.toLocaleString()}</td>)}
-                                                    <td className={`${tdCls} bg-gray-50 font-medium`}>{subTarget.toLocaleString()}</td>
-                                                    {showYearTotal && <td className={`${tdCls} bg-gray-200 font-bold`}>{yearTarget.toLocaleString()}</td>}
-                                                </tr>
-                                                <tr className="font-bold text-sm" style={{ backgroundColor: '#fffbeb' }}>
-                                                    <td className={`${tdLabelCls} font-bold`}>実績</td>
-                                                    {halfRows.map(r => <td key={`pt-ac-${r.month}`} className={`${tdCls} font-bold`}>{r.actual.toLocaleString()}</td>)}
-                                                    <td className={`${tdCls} bg-gray-50 font-bold`}>{subActual.toLocaleString()}</td>
-                                                    {showYearTotal && <td className={`${tdCls} bg-gray-200 font-bold`}>{yearActual.toLocaleString()}</td>}
-                                                </tr>
-                                                <tr>
-                                                    <td className={`${tdLabelCls} text-[9px]`}>達成率</td>
-                                                    {halfRows.map(r => { const rt = r.target > 0 ? (r.actual / r.target) * 100 : 0; return <td key={`pt-rt-${r.month}`} className={`${tdCls} text-[10px] ${getRateStyle(rt, r.actual)}`}>{r.target > 0 ? formatPercent(rt) : '-'}</td> })}
-                                                    {(() => { const rt = subTarget > 0 ? (subActual / subTarget) * 100 : 0; return <td className={`${tdCls} bg-gray-50 text-[10px] ${getRateStyle(rt)}`}>{subTarget > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                                    {showYearTotal && (() => { const rt = yearTarget > 0 ? (yearActual / yearTarget) * 100 : 0; return <td className={`${tdCls} bg-gray-200 text-[10px] ${getRateStyle(rt)}`}>{yearTarget > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                                </tr>
-                                                <tr className="border-b-4 border-double border-gray-400">
-                                                    <td className={`${tdLabelCls} text-[9px]`}>前年比</td>
-                                                    {halfRows.map(r => { const rt = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0; return <td key={`pt-yoy-${r.month}`} className={`${tdCls} text-[10px]`}>{r.actual > 0 && r.lastYear > 0 ? formatPercent(rt) : '-'}</td> })}
-                                                    {(() => { const rt = subLastYear > 0 ? (subActual / subLastYear) * 100 : 0; return <td className={`${tdCls} bg-gray-50 text-[10px]`}>{subActual > 0 && subLastYear > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                                    {showYearTotal && (() => { const rt = yearLastYear > 0 ? (yearActual / yearLastYear) * 100 : 0; return <td className={`${tdCls} bg-gray-200 text-[10px]`}>{yearActual > 0 && yearLastYear > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                                </tr>
-                                            </React.Fragment>
-                                        );
-                                    })()}
+                                    {renderRows('★ 総合計', 'bg-slate-800', monthIndices.map(i => data.total[i]), data.total)}
                                 </tbody>
                             </table>
                         );
