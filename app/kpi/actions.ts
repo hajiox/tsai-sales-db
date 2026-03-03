@@ -3,6 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { addMonths, format, subYears, parseISO } from 'date-fns';
+import { revalidatePath } from 'next/cache';
 
 // ----------------------------------------------------------------------
 // Types & Interfaces

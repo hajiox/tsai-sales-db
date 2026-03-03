@@ -67,8 +67,9 @@ function EditableCell({
     if (isEditing) {
         return (
             <input
-                type="number"
-                className="w-20 p-1 text-right border rounded text-sm"
+                type="text"
+                inputMode="decimal"
+                className="w-24 p-1 text-right border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                 value={localValue}
                 onChange={(e) => setLocalValue(e.target.value)}
                 onBlur={save}
