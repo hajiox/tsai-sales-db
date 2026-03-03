@@ -1,9 +1,7 @@
 
 import { getKpiSummary } from "./actions";
 import { format } from 'date-fns';
-import { KpiMainChart, KpiChannelChart } from "@/components/kpi/KpiCharts";
 import KpiPageClient from "@/components/kpi/KpiPageClient";
-import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 // Helper to calculate current FY
@@ -41,7 +39,6 @@ export default async function KpiPage({
   let elapsedTarget = 0;
   let elapsedLastYear = 0;
   data.total.forEach(m => {
-    // Count months that have fully completed (before current month)
     if (m.month < currentYearMonth) {
       elapsedMonthCount++;
       elapsedTarget += m.target;
@@ -50,15 +47,13 @@ export default async function KpiPage({
   });
 
   const remainingMonths = 12 - elapsedMonthCount;
-  // Adjusted rate: actual vs elapsed months' target only
   const achievementRate = elapsedTarget > 0 ? (totalActual / elapsedTarget) * 100 : 0;
-  // Adjusted YoY: actual vs same elapsed months' last year actual
   const yoyGrowthIds = elapsedLastYear > 0 ? ((totalActual - elapsedLastYear) / elapsedLastYear) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <div className="flex-1 space-y-4 p-6 pt-4">
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50/50 print:bg-white print:min-h-0">
+      <div className="flex-1 space-y-4 p-6 pt-4 print:p-2 print:pt-1">
+        <div className="flex items-center justify-between print:hidden">
           <div className="flex items-center gap-4">
             <Link href="/">
               <Button variant="outline" size="sm" className="gap-1">
@@ -70,7 +65,6 @@ export default async function KpiPage({
           </div>
         </div>
 
-        {/* Client Component for interactivity (Year Selector, Modal, etc.) */}
         <KpiPageClient
           fiscalYear={fiscalYear}
           data={data}
@@ -87,15 +81,6 @@ export default async function KpiPage({
             elapsedLastYear,
           }}
         />
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-          <div className="col-span-4">
-            <KpiMainChart data={data.total} fiscalYear={fiscalYear} />
-          </div>
-          <div className="col-span-3">
-            <KpiChannelChart data={data.total} fiscalYear={fiscalYear} />
-          </div>
-        </div>
       </div>
     </div>
   );
