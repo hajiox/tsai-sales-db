@@ -138,6 +138,30 @@ function sum(values: number[]) {
   return values.reduce((acc, value) => acc + value, 0);
 }
 
+async function fetchTargets(fy: number) {
+  const sql = `
+    SELECT month, SUM(target_amount) as target_amount, SUM(last_year_amount) as last_year_amount
+    FROM kpi.kpi_targets_fy_v1
+    WHERE fy = $1
+    GROUP BY month
+  `;
+  const { rows } = await pool.query(sql, [fy]);
+  const map = new Map<string, { target: number; lastYear: number }>();
+  for (const row of rows) {
+    let m = null;
+    if (row.month instanceof Date) m = row.month.toISOString().slice(0, 10);
+    else if (typeof row.month === "string" && row.month.length >= 10) m = row.month.slice(0, 10);
+    if (m) {
+      const key = `${m.slice(0, 7)}-01`;
+      map.set(key, {
+        target: Number(row.target_amount) || 0,
+        lastYear: Number(row.last_year_amount) || 0,
+      });
+    }
+  }
+  return map;
+}
+
 export default async function Page() {
   let latestMonth = null;
   try {
@@ -210,8 +234,19 @@ export default async function Page() {
   const monthlyTotals = shaped.map((row) => row.monthTotal);
   const grandTotal = sum(monthlyTotals);
 
+  const targetMap = await fetchTargets(fiscal.fiscalStartYear);
+  const monthlyLastYear = fiscal.months.map((m) => targetMap.get(m)?.lastYear ?? 0);
+
+  const calcYoY = (actual: number, lastYear: number) => {
+    if (lastYear === 0) return null;
+    if (actual === 0) return null;
+    return (actual / lastYear) * 100;
+  };
+
+  const fmtPct = (value: number | null) => value === null ? "—" : `${value.toFixed(1)}%`;
+
   return (
-    <main className="p-6 space-y-6">
+    <main className="p-4 space-y-4">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">売上KPI（月次・会計年度表示）</h1>
         <p className="text-sm text-neutral-600">
@@ -222,19 +257,19 @@ export default async function Page() {
         </p>
       </header>
 
-      <div className="overflow-hidden rounded-xl border">
-        <table className="w-full table-fixed text-xs">
+      <div className="overflow-hidden rounded-lg border bg-white">
+        <table className="w-full table-fixed text-[11px]">
           <colgroup>
-            <col className="w-[12%]" />
+            <col className="w-[10%]" />
             {fiscal.months.map((month) => (
-              <col key={month} className="w-[7.33%]" />
+              <col key={month} className="w-[7.5%]" />
             ))}
           </colgroup>
-          <thead className="bg-neutral-50">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium">チャネル</th>
+          <thead>
+            <tr className="bg-slate-700 text-white">
+              <th className="px-2 py-1.5 text-left font-semibold">チャネル</th>
               {fiscal.months.map((month) => (
-                <th key={month} className="px-2 py-3 text-right font-medium">
+                <th key={month} className="px-2 py-1.5 text-right font-semibold">
                   {monthLabel(month)}
                 </th>
               ))}
@@ -242,28 +277,51 @@ export default async function Page() {
           </thead>
           <tbody>
             {matrix.map((row) => (
-              <tr key={row.channel} className="border-t">
-                <th className="px-4 py-2 text-left font-medium">{row.channel}</th>
+              <tr key={row.channel} className="border-t hover:bg-neutral-50">
+                <th className="px-2 py-1.5 text-left font-medium text-neutral-700 whitespace-nowrap">{row.channel}</th>
                 {row.monthly.map((value, idx) => (
-                  <td key={`${row.channel}-${idx}`} className="px-2 py-2 text-right">
-                    {fmtJPY(value)}
+                  <td key={`${row.channel}-${idx}`} className="px-2 py-1.5 text-right tabular-nums text-neutral-800">
+                    {value === 0 ? <span className="text-neutral-300">0</span> : fmtJPY(value)}
                   </td>
                 ))}
               </tr>
             ))}
           </tbody>
-          <tfoot className="border-t bg-neutral-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-semibold">月合計</th>
+          <tfoot className="border-t-2 border-blue-200">
+            <tr className="bg-blue-50">
+              <th className="px-2 py-2 text-left font-bold text-blue-900 whitespace-nowrap">★ 実績合計</th>
               {monthlyTotals.map((value, idx) => (
-                <td key={`total-${idx}`} className="px-2 py-2 text-right font-semibold">
-                  {fmtJPY(value)}
+                <td key={`total-${idx}`} className="px-2 py-2 text-right font-bold text-blue-900 tabular-nums">
+                  {value === 0 ? "" : fmtJPY(value)}
                 </td>
               ))}
             </tr>
-            <tr>
-              <th className="px-4 py-2 text-left font-semibold">年間合計</th>
-              <td className="px-2 py-2 text-right font-semibold" colSpan={fiscal.months.length}>
+            <tr className="border-t border-blue-100 bg-blue-50/50">
+              <th className="px-2 py-1.5 text-left font-medium text-blue-800 whitespace-nowrap">前年実績</th>
+              {monthlyLastYear.map((value, idx) => (
+                <td key={`ly-${idx}`} className="px-2 py-1.5 text-right font-medium text-blue-700 tabular-nums">
+                  {value === 0 ? "" : fmtJPY(value)}
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t border-blue-100 bg-blue-50/30">
+              <th className="px-2 py-1.5 text-left font-medium text-blue-800 whitespace-nowrap">前年同月比(%)</th>
+              {fiscal.months.map((_, idx) => {
+                const yoy = calcYoY(monthlyTotals[idx], monthlyLastYear[idx]);
+                let color = "text-blue-300";
+                if (yoy !== null) {
+                  color = yoy >= 100 ? "text-emerald-600 font-bold" : "text-red-500 font-medium";
+                }
+                return (
+                  <td key={`yoy-${idx}`} className={`px-2 py-1.5 text-right tabular-nums ${color}`}>
+                    {fmtPct(yoy)}
+                  </td>
+                );
+              })}
+            </tr>
+            <tr className="border-t-2 border-neutral-200 bg-neutral-100">
+              <th className="px-2 py-2 text-left font-bold text-neutral-800 whitespace-nowrap">★ 年間累計額</th>
+              <td className="px-2 py-2 text-right font-bold text-neutral-800 tabular-nums" colSpan={fiscal.months.length}>
                 {fmtJPY(grandTotal)}
               </td>
             </tr>
