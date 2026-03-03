@@ -1,4 +1,4 @@
-
+﻿
 'use client';
 
 import React, { useState, useEffect } from "react";
@@ -227,18 +227,18 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
             {/* Main Table: Monthly/Departmental */}
             <div>
                 <h2 className="text-xl font-bold mb-4">月次・部門別集計</h2>
-                <div className="overflow-x-auto border rounded-md shadow-sm">
-                    <table className="w-full text-sm text-left border-collapse">
+                <div className="border rounded-md shadow-sm">
+                    <table className="w-full text-xs text-left border-collapse table-fixed">
                         <thead className="bg-gray-100/80 text-gray-700 font-semibold sticky top-0">
                             <tr>
-                                <th className="p-3 border-r min-w-[200px] z-10 bg-gray-100/80 sticky left-0">部門 / 項目</th>
-                                <th className="p-3 border-r w-[100px] bg-gray-100/80">内訳</th>
+                                <th className="p-2 border-r z-10 bg-gray-100/80 sticky left-0 w-[140px]">部門 / 項目</th>
+                                <th className="p-2 border-r bg-gray-100/80 w-[60px]">内訳</th>
                                 {data.months.map(m => (
-                                    <th key={m} className="p-3 text-right border-l bg-white min-w-[100px]">
+                                    <th key={m} className="p-2 text-right border-l bg-white">
                                         {new Date(m).getMonth() + 1}月
                                     </th>
                                 ))}
-                                <th className="p-3 text-right border-l bg-gray-100/80 min-w-[120px]">合計</th>
+                                <th className="p-2 text-right border-l bg-gray-100/80 w-[80px]">合計</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-300">
@@ -259,7 +259,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     <React.Fragment key={channel}>
                                         {/* Channel Header Row (merged visually by first col) */}
                                         <tr className="bg-gray-50/50">
-                                            <td className="p-3 font-bold border-r bg-gray-100" rowSpan={5} style={{ verticalAlign: 'top' }}>
+                                            <td className="p-2 font-bold border-r bg-gray-100 text-xs" rowSpan={5} style={{ verticalAlign: 'top' }}>
                                                 {label}
                                             </td>
                                         </tr>
@@ -357,7 +357,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                 return (
                                     <React.Fragment key="total">
                                         <tr className="bg-gray-100 border-t-2 border-gray-400">
-                                            <td className="p-3 font-bold border-r bg-gray-200" rowSpan={5} style={{ verticalAlign: 'top' }}>
+                                            <td className="p-2 font-bold border-r bg-gray-200 text-xs" rowSpan={5} style={{ verticalAlign: 'top' }}>
                                                 総合計
                                             </td>
                                         </tr>
@@ -439,25 +439,25 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
             {data.salesActivity && data.salesActivity.length > 0 && (
                 <div className="mt-8">
                     <h3 className="text-lg font-medium mb-4">営業活動実績（新規・OEM獲得数）</h3>
-                    <div className="overflow-x-auto border rounded-md">
-                        <table className="w-full text-sm text-left">
+                    <div className="border rounded-md">
+                        <table className="w-full text-xs text-left table-fixed">
                             <thead className="bg-orange-50 text-gray-700 font-semibold">
                                 <tr>
-                                    <th className="p-3 min-w-[200px]">項目 / 月</th>
+                                    <th className="p-2 w-[140px]">項目 / 月</th>
                                     {data.months.map(m => (
-                                        <th key={m} className="p-3 text-right bg-white min-w-[100px] border-l">
+                                        <th key={m} className="p-2 text-right bg-white border-l">
                                             {new Date(m).getMonth() + 1}月
                                         </th>
                                     ))}
-                                    <th className="p-3 text-right bg-orange-50 border-l min-w-[120px]">合計</th>
+                                    <th className="p-2 text-right bg-orange-50 border-l w-[80px]">合計</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
                                 {/* Target Row */}
                                 <tr className="hover:bg-gray-50/50">
-                                    <td className="p-3 font-medium border-r bg-gray-50/30 text-right">新規・OEM 目標件数</td>
+                                    <td className="p-2 font-medium border-r bg-gray-50/30 text-right">新規・OEM 目標件数</td>
                                     {data.salesActivity.map(r => (
-                                        <td key={`target-${r.month}`} className="p-3 text-right border-l tabular-nums text-blue-600">
+                                        <td key={`target-${r.month}`} className="p-2 text-right border-l tabular-nums text-blue-600">
                                             <EditableCell
                                                 value={r.target}
                                                 type="number"
@@ -465,15 +465,15 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             />
                                         </td>
                                     ))}
-                                    <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
+                                    <td className="p-2 text-right font-bold border-l bg-gray-50/30 tabular-nums">
                                         {data.salesActivity.reduce((sum, r) => sum + r.target, 0)}
                                     </td>
                                 </tr>
                                 {/* Actual Row */}
                                 <tr className="hover:bg-gray-50/50">
-                                    <td className="p-3 font-medium border-r bg-gray-50/30 text-right">実績</td>
+                                    <td className="p-2 font-medium border-r bg-gray-50/30 text-right">実績</td>
                                     {data.salesActivity.map(r => (
-                                        <td key={`actual-${r.month}`} className="p-3 text-right border-l tabular-nums font-bold">
+                                        <td key={`actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold">
                                             <EditableCell
                                                 value={r.actual}
                                                 type="number"
@@ -481,13 +481,13 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             />
                                         </td>
                                     ))}
-                                    <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
+                                    <td className="p-2 text-right font-bold border-l bg-gray-50/30 tabular-nums">
                                         {data.salesActivity.reduce((sum, r) => sum + r.actual, 0)}
                                     </td>
                                 </tr>
                                 {/* Achievement Rate */}
                                 <tr className="hover:bg-gray-50/50">
-                                    <td className="p-3 text-xs border-r bg-gray-50/30 text-right">目標達成率 (%)</td>
+                                    <td className="p-2 text-xs border-r bg-gray-50/30 text-right">目標達成率 (%)</td>
                                     {data.salesActivity.map(r => {
                                         const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                         return (
@@ -496,7 +496,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             </td>
                                         );
                                     })}
-                                    <td className="p-3 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
+                                    <td className="p-2 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
                                         {/* Simple Total Rate */}
                                         {(() => {
                                             const t = data.salesActivity.reduce((sum, r) => sum + r.target, 0);
@@ -515,37 +515,37 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
             {data.manufacturing && data.manufacturing.length > 0 && (
                 <div className="mt-8">
                     <h3 className="text-lg font-medium mb-4">商品製造数</h3>
-                    <div className="overflow-x-auto border rounded-md">
-                        <table className="w-full text-sm text-left">
+                    <div className="border rounded-md">
+                        <table className="w-full text-xs text-left table-fixed">
                             <thead className="bg-blue-50 text-gray-700 font-semibold">
                                 <tr>
-                                    <th className="p-3 min-w-[200px]">項目 / 月</th>
+                                    <th className="p-2 w-[140px]">項目 / 月</th>
                                     {data.months.map(m => (
-                                        <th key={m} className="p-3 text-right bg-white min-w-[100px] border-l">
+                                        <th key={m} className="p-2 text-right bg-white border-l">
                                             {new Date(m).getMonth() + 1}月
                                         </th>
                                     ))}
-                                    <th className="p-3 text-right bg-blue-50 border-l min-w-[120px]">合計</th>
+                                    <th className="p-2 text-right bg-blue-50 border-l w-[80px]">合計</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
                                 {/* Last Year */}
                                 <tr className="text-gray-500 text-xs">
-                                    <td className="p-3 border-r bg-gray-50/30 text-right">前年度実績</td>
+                                    <td className="p-2 border-r bg-gray-50/30 text-right">前年度実績</td>
                                     {data.manufacturing.map(r => (
-                                        <td key={`man-ly-${r.month}`} className="p-3 text-right border-l tabular-nums">
+                                        <td key={`man-ly-${r.month}`} className="p-2 text-right border-l tabular-nums">
                                             {r.lastYear.toLocaleString()}
                                         </td>
                                     ))}
-                                    <td className="p-3 text-right border-l tabular-nums">
+                                    <td className="p-2 text-right border-l tabular-nums">
                                         {data.manufacturing.reduce((sum, r) => sum + r.lastYear, 0).toLocaleString()}
                                     </td>
                                 </tr>
                                 {/* Target Row */}
                                 <tr className="hover:bg-gray-50/50">
-                                    <td className="p-3 font-medium border-r bg-gray-50/30 text-right">製造目標</td>
+                                    <td className="p-2 font-medium border-r bg-gray-50/30 text-right">製造目標</td>
                                     {data.manufacturing.map(r => (
-                                        <td key={`man-target-${r.month}`} className="p-3 text-right border-l tabular-nums text-blue-600">
+                                        <td key={`man-target-${r.month}`} className="p-2 text-right border-l tabular-nums text-blue-600">
                                             <EditableCell
                                                 value={r.target}
                                                 type="number"
@@ -553,15 +553,15 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             />
                                         </td>
                                     ))}
-                                    <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
+                                    <td className="p-2 text-right font-bold border-l bg-gray-50/30 tabular-nums">
                                         {data.manufacturing.reduce((sum, r) => sum + r.target, 0).toLocaleString()}
                                     </td>
                                 </tr>
                                 {/* Actual Row */}
                                 <tr className="hover:bg-gray-50/50">
-                                    <td className="p-3 font-medium border-r bg-gray-50/30 text-right">製造実績</td>
+                                    <td className="p-2 font-medium border-r bg-gray-50/30 text-right">製造実績</td>
                                     {data.manufacturing.map(r => (
-                                        <td key={`man-actual-${r.month}`} className="p-3 text-right border-l tabular-nums font-bold">
+                                        <td key={`man-actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold">
                                             <EditableCell
                                                 value={r.actual}
                                                 type="number"
@@ -569,13 +569,13 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             />
                                         </td>
                                     ))}
-                                    <td className="p-3 text-right font-bold border-l bg-gray-50/30 tabular-nums">
+                                    <td className="p-2 text-right font-bold border-l bg-gray-50/30 tabular-nums">
                                         {data.manufacturing.reduce((sum, r) => sum + r.actual, 0).toLocaleString()}
                                     </td>
                                 </tr>
                                 {/* Achievement Rate */}
                                 <tr className="hover:bg-gray-50/50">
-                                    <td className="p-3 text-xs border-r bg-gray-50/30 text-right">目標達成率 (%)</td>
+                                    <td className="p-2 text-xs border-r bg-gray-50/30 text-right">目標達成率 (%)</td>
                                     {data.manufacturing.map(r => {
                                         const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                         return (
@@ -584,7 +584,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             </td>
                                         );
                                     })}
-                                    <td className="p-3 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
+                                    <td className="p-2 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
                                         {(() => {
                                             const t = data.manufacturing.reduce((sum, r) => sum + r.target, 0);
                                             const a = data.manufacturing.reduce((sum, r) => sum + r.actual, 0);
@@ -594,16 +594,16 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                 </tr>
                                 {/* YoY */}
                                 <tr className="hover:bg-gray-50/50">
-                                    <td className="p-3 text-xs border-r bg-gray-50/30 text-right">前年度対比 (%)</td>
+                                    <td className="p-2 text-xs border-r bg-gray-50/30 text-right">前年度対比 (%)</td>
                                     {data.manufacturing.map(r => {
                                         const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
                                         return (
-                                            <td key={`man-yoy-${r.month}`} className="p-3 text-right border-l tabular-nums text-xs">
+                                            <td key={`man-yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
                                                 {r.actual > 0 && r.lastYear > 0 ? formatPercent(rate) : '-'}
                                             </td>
                                         );
                                     })}
-                                    <td className="p-3 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
+                                    <td className="p-2 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
                                         {(() => {
                                             const ly = data.manufacturing.reduce((sum, r) => sum + r.lastYear, 0);
                                             const a = data.manufacturing.reduce((sum, r) => sum + r.actual, 0);

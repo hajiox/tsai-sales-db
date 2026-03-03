@@ -57,11 +57,16 @@ export default async function KpiPage({
 
   return (
     <div className="min-h-screen bg-gray-50/50">
-      <div className="flex-1 space-y-4 p-8 pt-6">
-        <div className="flex items-center justify-between space-y-2">
-          <h2 className="text-3xl font-bold tracking-tight">KPI ダッシュボード</h2>
-          <div className="flex items-center space-x-2">
-
+      <div className="flex-1 space-y-4 p-6 pt-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="outline" size="sm" className="gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                TSA TOP
+              </Button>
+            </Link>
+            <h2 className="text-2xl font-bold tracking-tight">KPI ダッシュボード</h2>
           </div>
         </div>
 

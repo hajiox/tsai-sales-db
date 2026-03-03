@@ -8,6 +8,7 @@ import MainSidebar from "@/components/main-sidebar"
 const FULL_SCREEN_ROUTES = [
   '/login',
   '/recipe/database/label-import/mobile',
+  '/kpi',
 ]
 
 export default function MainDashboard({ children }: { children: React.ReactNode }) {
