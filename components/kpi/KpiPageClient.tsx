@@ -12,18 +12,19 @@ import { KpiSummary, ChannelCode, updateKpiEntry } from "@/app/kpi/actions";
 import { formatCurrency, formatPercent } from '@/lib/utils';
 
 // Achievement rate color helper
-function getRateStyle(rate: number): string {
+function getRateStyle(rate: number, actual?: number): string {
+    if (actual !== undefined && actual === 0) return '';
     if (rate >= 100) return 'text-green-600 font-bold';
     if (rate >= 90) return 'text-blue-600 font-bold';
     if (rate < 80) return 'text-red-600 font-bold';
     return '';
 }
-function RateCell({ rate, hasTarget }: { rate: number; hasTarget: boolean }) {
+function RateCell({ rate, hasTarget, showWarning = true }: { rate: number; hasTarget: boolean; showWarning?: boolean }) {
     if (!hasTarget) return <span>-</span>;
     return (
         <div className="flex flex-col items-end">
             <span>{formatPercent(rate)}</span>
-            {rate < 80 && <span className="text-red-500 text-[9px] leading-tight">⚠ 警告</span>}
+            {showWarning && rate < 80 && <span className="text-red-500 text-[9px] leading-tight">⚠ 警告</span>}
         </div>
     );
 }
@@ -334,8 +335,8 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             {rowData.map(r => {
                                                 const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                                 return (
-                                                    <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate)}`}>
-                                                        <RateCell rate={rate} hasTarget={r.target > 0} />
+                                                    <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate, r.actual)}`}>
+                                                        <RateCell rate={rate} hasTarget={r.target > 0} showWarning={r.actual > 0} />
                                                     </td>
                                                 );
                                             })}
@@ -343,7 +344,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                                 const totalRate = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
                                                 return (
                                                     <td className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(totalRate)}`}>
-                                                        <RateCell rate={totalRate} hasTarget={totalTarget > 0} />
+                                                        <RateCell rate={totalRate} hasTarget={totalTarget > 0} showWarning={false} />
                                                     </td>
                                                 );
                                             })()}
@@ -425,8 +426,8 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             {totalRowData.map(r => {
                                                 const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                                 return (
-                                                    <td key={`total-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate)}`}>
-                                                        <RateCell rate={rate} hasTarget={r.target > 0} />
+                                                    <td key={`total-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate, r.actual)}`}>
+                                                        <RateCell rate={rate} hasTarget={r.target > 0} showWarning={r.actual > 0} />
                                                     </td>
                                                 );
                                             })}
@@ -434,7 +435,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                                 const grandRate = grandTotalTarget > 0 ? (grandTotalActual / grandTotalTarget) * 100 : 0;
                                                 return (
                                                     <td className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(grandRate)}`}>
-                                                        <RateCell rate={grandRate} hasTarget={grandTotalTarget > 0} />
+                                                        <RateCell rate={grandRate} hasTarget={grandTotalTarget > 0} showWarning={false} />
                                                     </td>
                                                 );
                                             })()}
@@ -518,8 +519,8 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     {data.salesActivity.map(r => {
                                         const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                         return (
-                                            <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate)}`}>
-                                                <RateCell rate={rate} hasTarget={r.target > 0} />
+                                            <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate, r.actual)}`}>
+                                                <RateCell rate={rate} hasTarget={r.target > 0} showWarning={r.actual > 0} />
                                             </td>
                                         );
                                     })}
@@ -530,7 +531,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             const rate = t > 0 ? (a / t) * 100 : 0;
                                             return (
                                                 <span className={getRateStyle(rate)}>
-                                                    <RateCell rate={rate} hasTarget={t > 0} />
+                                                    <RateCell rate={rate} hasTarget={t > 0} showWarning={false} />
                                                 </span>
                                             );
                                         })()}
@@ -610,8 +611,8 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     {data.manufacturing.map(r => {
                                         const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
                                         return (
-                                            <td key={`man-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate)}`}>
-                                                <RateCell rate={rate} hasTarget={r.target > 0} />
+                                            <td key={`man-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate, r.actual)}`}>
+                                                <RateCell rate={rate} hasTarget={r.target > 0} showWarning={r.actual > 0} />
                                             </td>
                                         );
                                     })}
@@ -622,7 +623,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                             const rate = t > 0 ? (a / t) * 100 : 0;
                                             return (
                                                 <span className={getRateStyle(rate)}>
-                                                    <RateCell rate={rate} hasTarget={t > 0} />
+                                                    <RateCell rate={rate} hasTarget={t > 0} showWarning={false} />
                                                 </span>
                                             );
                                         })()}
