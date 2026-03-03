@@ -775,22 +775,24 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                 {data.salesActivity && data.salesActivity.length > 0 && (
                                     <div className="mt-4">
                                         <h3 className="text-sm font-bold mb-1">営業活動実績（新規・OEM獲得数）</h3>
-                                        <table className="w-full border-collapse border border-gray-300 text-[11px]">
+                                        <table className="w-full border-collapse border border-gray-300 table-fixed">
                                             <thead>
                                                 <tr className="bg-orange-50">
-                                                    <th className="p-1 border border-gray-300 text-left w-[120px]">項目</th>
-                                                    {data.months.map(m => <th key={m} className="p-1 border border-gray-300 text-right">{new Date(m).getMonth() + 1}月</th>)}
-                                                    <th className="p-1 border border-gray-300 text-right bg-orange-50 font-bold">合計</th>
+                                                    <th className="p-1.5 border border-gray-300 text-right text-[11px] w-[60px]">内訳</th>
+                                                    {data.months.map(m => <th key={m} className="p-1.5 border border-gray-300 text-right text-[11px]">{new Date(m).getMonth() + 1}月</th>)}
+                                                    <th className="p-1.5 border border-gray-300 text-right text-[11px] bg-gray-200 font-bold">合計</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <tr><td className="p-1 border text-right">目標</td>
-                                                    {data.salesActivity.map(r => <td key={`psa-t-${r.month}`} className="p-1 border text-right text-blue-700">{r.target}</td>)}
-                                                    <td className="p-1 border text-right font-bold bg-gray-50">{data.salesActivity.reduce((s, r) => s + r.target, 0)}</td>
+                                                <tr className="text-blue-700">
+                                                    <td className="p-1.5 border border-gray-300 text-right text-[10px]">目標</td>
+                                                    {data.salesActivity.map(r => <td key={`psa-t-${r.month}`} className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px]">{r.target}</td>)}
+                                                    <td className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold bg-gray-50">{data.salesActivity.reduce((s, r) => s + r.target, 0)}</td>
                                                 </tr>
-                                                <tr style={{ backgroundColor: '#fffbeb' }}><td className="p-1 border text-right font-bold">実績</td>
-                                                    {data.salesActivity.map(r => <td key={`psa-a-${r.month}`} className="p-1 border text-right font-bold">{r.actual}</td>)}
-                                                    <td className="p-1 border text-right font-bold bg-gray-50">{data.salesActivity.reduce((s, r) => s + r.actual, 0)}</td>
+                                                <tr style={{ backgroundColor: '#fffbeb' }}>
+                                                    <td className="p-1.5 border border-gray-300 text-right text-[10px] font-bold">実績</td>
+                                                    {data.salesActivity.map(r => <td key={`psa-a-${r.month}`} className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold">{r.actual}</td>)}
+                                                    <td className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold bg-gray-50">{data.salesActivity.reduce((s, r) => s + r.actual, 0)}</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -801,22 +803,24 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                 {data.manufacturing && data.manufacturing.length > 0 && (
                                     <div className="mt-4">
                                         <h3 className="text-sm font-bold mb-1">商品製造数</h3>
-                                        <table className="w-full border-collapse border border-gray-300 text-[11px]">
+                                        <table className="w-full border-collapse border border-gray-300 table-fixed">
                                             <thead>
                                                 <tr className="bg-blue-50">
-                                                    <th className="p-1 border border-gray-300 text-left w-[120px]">項目</th>
-                                                    {data.months.map(m => <th key={m} className="p-1 border border-gray-300 text-right">{new Date(m).getMonth() + 1}月</th>)}
-                                                    <th className="p-1 border border-gray-300 text-right bg-blue-50 font-bold">合計</th>
+                                                    <th className="p-1.5 border border-gray-300 text-right text-[11px] w-[60px]">内訳</th>
+                                                    {data.months.map(m => <th key={m} className="p-1.5 border border-gray-300 text-right text-[11px]">{new Date(m).getMonth() + 1}月</th>)}
+                                                    <th className="p-1.5 border border-gray-300 text-right text-[11px] bg-gray-200 font-bold">合計</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <tr><td className="p-1 border text-right">目標</td>
-                                                    {data.manufacturing.map(r => <td key={`pm-t-${r.month}`} className="p-1 border text-right text-blue-700">{r.target.toLocaleString()}</td>)}
-                                                    <td className="p-1 border text-right font-bold bg-gray-50">{data.manufacturing.reduce((s, r) => s + r.target, 0).toLocaleString()}</td>
+                                                <tr className="text-blue-700">
+                                                    <td className="p-1.5 border border-gray-300 text-right text-[10px]">目標</td>
+                                                    {data.manufacturing.map(r => <td key={`pm-t-${r.month}`} className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px]">{r.target.toLocaleString()}</td>)}
+                                                    <td className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold bg-gray-50">{data.manufacturing.reduce((s, r) => s + r.target, 0).toLocaleString()}</td>
                                                 </tr>
-                                                <tr style={{ backgroundColor: '#fffbeb' }}><td className="p-1 border text-right font-bold">実績</td>
-                                                    {data.manufacturing.map(r => <td key={`pm-a-${r.month}`} className="p-1 border text-right font-bold">{r.actual.toLocaleString()}</td>)}
-                                                    <td className="p-1 border text-right font-bold bg-gray-50">{data.manufacturing.reduce((s, r) => s + r.actual, 0).toLocaleString()}</td>
+                                                <tr style={{ backgroundColor: '#fffbeb' }}>
+                                                    <td className="p-1.5 border border-gray-300 text-right text-[10px] font-bold">実績</td>
+                                                    {data.manufacturing.map(r => <td key={`pm-a-${r.month}`} className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold">{r.actual.toLocaleString()}</td>)}
+                                                    <td className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold bg-gray-50">{data.manufacturing.reduce((s, r) => s + r.actual, 0).toLocaleString()}</td>
                                                 </tr>
                                             </tbody>
                                         </table>
