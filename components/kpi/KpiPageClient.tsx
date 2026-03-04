@@ -257,7 +257,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                     </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 print:hidden">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 print:hidden">
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">年間売上合計</CardTitle>
@@ -267,6 +267,18 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                             <div className="text-2xl font-bold">{formatCurrency(summaryMetrics.totalActual)}</div>
                             <p className="text-xs text-muted-foreground">
                                 目標: {formatCurrency(summaryMetrics.totalTarget)}
+                            </p>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">前年度売上合計</CardTitle>
+                            <span className="text-muted-foreground text-xs">FY{fiscalYear - 1}</span>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-gray-600">{formatCurrency(summaryMetrics.totalLastYear)}</div>
+                            <p className="text-xs text-muted-foreground">
+                                前々年: {formatCurrency(summaryMetrics.totalTwoYearsAgo)}
                             </p>
                         </CardContent>
                     </Card>
@@ -351,8 +363,8 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                 {/* Main Table: Monthly/Departmental */}
                 <div className="print:hidden">
                     <h2 className="text-xl font-bold mb-4">月次・部門別集計</h2>
-                    <div className="border rounded-md shadow-sm">
-                        <table className="w-full text-xs text-left border-collapse table-fixed">
+                    <div className="border rounded-md shadow-sm overflow-x-auto">
+                        <table className="w-full text-xs text-left border-collapse table-fixed min-w-[900px]">
                             <thead className="bg-gray-100/80 text-gray-700 font-semibold sticky top-0">
                                 <tr>
                                     <th className="p-2 border-r z-10 bg-gray-100/80 sticky left-0 w-[140px]">部門 / 項目</th>
