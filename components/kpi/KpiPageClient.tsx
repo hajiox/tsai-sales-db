@@ -129,6 +129,50 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
     const router = useRouter();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
+    // AI Forecast state
+    const [aiForecast, setAiForecast] = useState<{ amount: number; reasoning: string; generatedAt: string } | null>(null);
+    const [aiLoading, setAiLoading] = useState(false);
+
+    // Load saved forecast from localStorage on mount
+    useEffect(() => {
+        const saved = localStorage.getItem(`kpi-ai-forecast-${fiscalYear}`);
+        if (saved) {
+            try {
+                setAiForecast(JSON.parse(saved));
+            } catch { /* ignore */ }
+        }
+    }, [fiscalYear]);
+
+    const handleAiForecast = async () => {
+        setAiLoading(true);
+        try {
+            const res = await fetch('/api/kpi/ai-forecast', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fiscalYear,
+                    monthlyData: {
+                        months: data.months,
+                        channels: data.channels,
+                        total: data.total,
+                    },
+                }),
+            });
+            const json = await res.json();
+            if (json.ok) {
+                const forecastData = { amount: json.forecast, reasoning: json.reasoning, generatedAt: json.generatedAt };
+                setAiForecast(forecastData);
+                localStorage.setItem(`kpi-ai-forecast-${fiscalYear}`, JSON.stringify(forecastData));
+            } else {
+                alert('AI予測に失敗しました: ' + (json.error || '不明なエラー'));
+            }
+        } catch (err: any) {
+            alert('AI予測エラー: ' + err.message);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     const handleYearChange = (val: string) => {
         router.push(`/kpi?year=${val}`);
     };
@@ -252,6 +296,46 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                             <p className="text-xs text-muted-foreground">
                                 前年同期実績: {formatCurrency(summaryMetrics.elapsedLastYear)}
                             </p>
+                        </CardContent>
+                    </Card>
+                    <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium text-purple-700">🤖 年度末売上予測</CardTitle>
+                            <span className="text-muted-foreground text-xs">AI推定</span>
+                        </CardHeader>
+                        <CardContent>
+                            {aiForecast ? (
+                                <>
+                                    <div className="text-2xl font-bold text-purple-800">{formatCurrency(aiForecast.amount)}</div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        目標比: {summaryMetrics.totalTarget > 0 ? formatPercent((aiForecast.amount / summaryMetrics.totalTarget) * 100) : '-'}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                        {new Date(aiForecast.generatedAt).toLocaleString('ja-JP')} 時点
+                                    </p>
+                                </>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">未実行</p>
+                            )}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 w-full border-purple-300 text-purple-700 hover:bg-purple-100"
+                                onClick={handleAiForecast}
+                                disabled={aiLoading}
+                            >
+                                {aiLoading ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                        AI分析中...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" /></svg>
+                                        AI売上予測
+                                    </>
+                                )}
+                            </Button>
                         </CardContent>
                     </Card>
                 </div>
