@@ -30,6 +30,7 @@ export interface KpiSummary {
     month: string;
     target: number;
     actual: number;
+    lastYear: number;
   }[];
   manufacturing: {
     month: string;
@@ -160,11 +161,15 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
       };
     });
 
-    const salesActivity = fyMonths.map(month => ({
-      month,
-      target: acquisitionTargetMap.get(month) || 0,
-      actual: acquisitionActualMap.get(month) || 0
-    }));
+    const salesActivity = fyMonths.map(month => {
+      const lastYearMonth = format(subYears(parseISO(month), 1), 'yyyy-MM-01');
+      return {
+        month,
+        target: acquisitionTargetMap.get(month) || 0,
+        actual: acquisitionActualMap.get(month) || 0,
+        lastYear: acquisitionActualMap.get(lastYearMonth) || 0
+      };
+    });
 
     const manufacturing = fyMonths.map(month => {
       const lastYearMonth = format(subYears(parseISO(month), 1), 'yyyy-MM-01');

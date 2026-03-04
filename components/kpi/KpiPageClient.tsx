@@ -602,6 +602,18 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
+                                    {/* Last Year Row */}
+                                    <tr className="hover:bg-gray-50/30">
+                                        <td className="p-2 border-r text-gray-500 text-xs bg-gray-50/30 text-right">前年度実績</td>
+                                        {data.salesActivity.map(r => (
+                                            <td key={`sa-ly-${r.month}`} className="p-2 text-right border-l tabular-nums text-gray-500">
+                                                {r.lastYear > 0 ? r.lastYear : '-'}
+                                            </td>
+                                        ))}
+                                        <td className="p-2 text-right font-medium border-l bg-gray-50/30 tabular-nums text-gray-500">
+                                            {data.salesActivity.reduce((sum, r) => sum + r.lastYear, 0) || '-'}
+                                        </td>
+                                    </tr>
                                     {/* Target Row */}
                                     <tr className="hover:bg-gray-50/50">
                                         <td className="p-2 font-medium border-r bg-gray-50/30 text-right">新規・OEM 目標件数</td>
@@ -655,6 +667,25 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                                         <RateCell rate={rate} hasTarget={t > 0} showWarning={false} />
                                                     </span>
                                                 );
+                                            })()}
+                                        </td>
+                                    </tr>
+                                    {/* YoY Row */}
+                                    <tr className="hover:bg-gray-50/30 border-t">
+                                        <td className="p-2 text-xs border-r bg-gray-50/30 text-right">前年度対比 (%)</td>
+                                        {data.salesActivity.map(r => {
+                                            const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
+                                            return (
+                                                <td key={`sa-yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
+                                                    {r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                </td>
+                                            );
+                                        })}
+                                        <td className="p-2 text-right border-l bg-gray-50/30 tabular-nums text-xs font-bold">
+                                            {(() => {
+                                                const totalLY = data.salesActivity.reduce((sum, r) => sum + r.lastYear, 0);
+                                                const totalA = data.salesActivity.reduce((sum, r) => sum + r.actual, 0);
+                                                return totalLY > 0 ? formatPercent((totalA / totalLY) * 100) : '-';
                                             })()}
                                         </td>
                                     </tr>
