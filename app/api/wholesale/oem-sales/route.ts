@@ -1,19 +1,19 @@
-// /app/api/wholesale/oem-sales/route.ts ver.2 正しいAPIルート
+// /app/api/wholesale/oem-sales/route.ts ver.3 RLSバイパス対応
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })();
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not set"); })();
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })();
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET(request: Request) {
   try {
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const { searchParams } = new URL(request.url);
     const month = searchParams.get("month");
 
     if (!month) {
-      return NextResponse.json({ 
-        error: "月の指定が必要です" 
+      return NextResponse.json({
+        error: "月の指定が必要です"
       }, { status: 400 });
     }
 
@@ -31,39 +31,38 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error("OEM売上データ取得エラー:", error);
-      return NextResponse.json({ 
-        error: "データ取得に失敗しました" 
+      return NextResponse.json({
+        error: "データ取得に失敗しました"
       }, { status: 500 });
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      sales: sales || [] 
+    return NextResponse.json({
+      success: true,
+      sales: sales || []
     });
   } catch (error) {
     console.error("サーバーエラー:", error);
-    return NextResponse.json({ 
-      error: "サーバーエラーが発生しました" 
+    return NextResponse.json({
+      error: "サーバーエラーが発生しました"
     }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const body = await request.json();
-    
-    const { 
-      product_id, 
-      customer_id, 
-      sale_date, 
-      quantity, 
-      unit_price 
+
+    const {
+      product_id,
+      customer_id,
+      sale_date,
+      quantity,
+      unit_price
     } = body;
 
     if (!product_id || !customer_id || !sale_date || !quantity || !unit_price) {
-      return NextResponse.json({ 
-        error: "必須項目が不足しています" 
+      return NextResponse.json({
+        error: "必須項目が不足しています"
       }, { status: 400 });
     }
 
@@ -89,7 +88,6 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
