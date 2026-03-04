@@ -277,6 +277,9 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-gray-600">{formatCurrency(summaryMetrics.totalLastYear)}</div>
+                            <p className={`text-xs font-semibold mt-1 ${summaryMetrics.totalLastYear > 0 ? ((summaryMetrics.totalActual / summaryMetrics.totalLastYear) * 100 >= 100 ? 'text-green-600' : 'text-red-600') : 'text-muted-foreground'}`}>
+                                前年度対比: {summaryMetrics.totalLastYear > 0 ? formatPercent((summaryMetrics.totalActual / summaryMetrics.totalLastYear) * 100) : '-'}
+                            </p>
                             <p className="text-xs text-muted-foreground">
                                 前々年: {formatCurrency(summaryMetrics.totalTwoYearsAgo)}
                             </p>
