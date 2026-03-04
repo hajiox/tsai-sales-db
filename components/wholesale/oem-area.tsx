@@ -45,11 +45,15 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
     const sales = oemSales.filter(sale => sale.product_id === product.id);
     const totalQuantity = sales.reduce((sum, sale) => sum + sale.quantity, 0);
     const totalAmount = sales.reduce((sum, sale) => sum + sale.amount, 0);
-    
+    // 実際の売上データから単価を取得（複数の場合は最頻値）
+    const unitPrices = [...new Set(sales.map(s => s.unit_price))];
+    const displayPrice = unitPrices.length === 1 ? unitPrices[0] : (totalQuantity > 0 ? Math.round(totalAmount / totalQuantity) : product.price);
+
     return {
       product,
       totalQuantity,
-      totalAmount
+      totalAmount,
+      displayPrice
     };
   }).filter(item => item.totalAmount > 0)
     .sort((a, b) => b.totalAmount - a.totalAmount);
@@ -109,7 +113,7 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
           </div>
         ) : (
           <div className="grid grid-cols-8 gap-2">
-            {productSummary.map(({ product, totalQuantity, totalAmount }) => (
+            {productSummary.map(({ product, totalQuantity, totalAmount, displayPrice }) => (
               <div key={product.id} className="bg-white rounded-lg p-2 shadow-sm hover:shadow-md transition-shadow">
                 <h3 className="font-medium text-gray-900 text-xs truncate" title={product.product_name}>
                   {product.product_name}
@@ -117,7 +121,7 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
                 <div className="mt-1 space-y-0.5">
                   <div className="flex justify-between items-center text-xs text-gray-600">
                     <span className="text-xs">単価:</span>
-                    <span className="font-medium text-xs">¥{product.price.toLocaleString()}</span>
+                    <span className="font-medium text-xs">¥{displayPrice.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs text-gray-600">
                     <span className="text-xs">数量:</span>
@@ -136,7 +140,7 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
             ))}
           </div>
         )}
-        
+
         {/* 合計表示 */}
         {productSummary.length > 0 && (
           <div className="mt-4 pt-4 border-t border-green-200">

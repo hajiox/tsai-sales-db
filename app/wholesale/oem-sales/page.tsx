@@ -1,4 +1,4 @@
-// /app/wholesale/oem-sales/page.tsx ver.9 コンポーネント分割・エラー修正版
+// /app/wholesale/oem-sales/page.tsx ver.10 単価マスター自動取得版
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
@@ -50,11 +50,11 @@ function OEMSalesContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState('')
   const [error, setError] = useState<string | null>(null)
-  
+
   // ダイアログの状態
   const [showProductDialog, setShowProductDialog] = useState(false)
   const [showCustomerDialog, setShowCustomerDialog] = useState(false)
-  
+
   // フォームの状態
   const [formData, setFormData] = useState({
     productId: '',
@@ -100,7 +100,7 @@ function OEMSalesContent() {
   const fetchInitialData = async (month: string) => {
     try {
       setIsLoading(true)
-      
+
       const [productsRes, customersRes, salesRes] = await Promise.all([
         fetch('/api/wholesale/oem-products'),
         fetch('/api/wholesale/oem-customers?all=true'),
@@ -140,10 +140,10 @@ function OEMSalesContent() {
       if (!response.ok) throw new Error('商品の登録に失敗しました')
 
       const newProduct = await response.json()
-      
+
       // 商品リストを再取得して確実に最新データを反映
       await fetchProducts()
-      
+
       // 少し遅延を入れて状態更新を確実に
       setTimeout(() => {
         setFormData(prev => ({
@@ -152,7 +152,7 @@ function OEMSalesContent() {
           unitPrice: newProduct.price.toString()
         }))
       }, 100)
-      
+
       setError(null)
     } catch (error) {
       setError('商品の登録に失敗しました')
@@ -173,10 +173,10 @@ function OEMSalesContent() {
       if (!response.ok) throw new Error('顧客の登録に失敗しました')
 
       const newCustomer = await response.json()
-      
+
       // 顧客リストを再取得して確実に最新データを反映
       await fetchCustomers()
-      
+
       // 少し遅延を入れて状態更新を確実に
       setTimeout(() => {
         setFormData(prev => ({
@@ -184,7 +184,7 @@ function OEMSalesContent() {
           customerId: newCustomer.id
         }))
       }, 100)
-      
+
       setError(null)
     } catch (error) {
       setError('顧客の登録に失敗しました')
@@ -227,7 +227,7 @@ function OEMSalesContent() {
         quantity: parseInt(formData.quantity),
         unit_price: parseInt(formData.unitPrice)
       }
-      
+
       const response = await fetch('/api/wholesale/oem-sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -238,7 +238,7 @@ function OEMSalesContent() {
         const data = await response.json()
         throw new Error(data.error || '登録に失敗しました')
       }
-      
+
       // フォームをリセット
       setFormData({
         productId: '',
@@ -247,7 +247,7 @@ function OEMSalesContent() {
         quantity: '',
         amount: 0
       })
-      
+
       // 売上一覧を再取得
       await fetchInitialData(selectedMonth)
     } catch (error) {
@@ -302,8 +302,8 @@ function OEMSalesContent() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center gap-4 mb-6">
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           size="sm"
           onClick={handleBackToDashboard}
         >
@@ -340,7 +340,7 @@ function OEMSalesContent() {
                   addNewLabel="新規商品を登録"
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="customer">発注者</Label>
                 <SearchableSelect
@@ -358,16 +358,13 @@ function OEMSalesContent() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="unitPrice">単価</Label>
-                <Input
-                  id="unitPrice"
-                  type="number"
-                  value={formData.unitPrice}
-                  onChange={(e) => setFormData(prev => ({ ...prev, unitPrice: e.target.value }))}
-                  required
-                />
+                <Label htmlFor="unitPrice">単価（商品マスターから自動取得）</Label>
+                <div className="h-10 px-3 py-2 bg-gray-100 border rounded-md flex items-center text-gray-700">
+                  {formData.unitPrice ? `¥${parseInt(formData.unitPrice).toLocaleString()}` : '商品を選択してください'}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">⮳ 単価を変更する場合はOEM商品管理から変更してください</p>
               </div>
-              
+
               <div>
                 <Label htmlFor="quantity">個数</Label>
                 <Input
@@ -378,7 +375,7 @@ function OEMSalesContent() {
                   required
                 />
               </div>
-              
+
               <div>
                 <Label>合計金額</Label>
                 <div className="h-10 px-3 py-2 bg-gray-50 border rounded-md flex items-center">
@@ -427,8 +424,8 @@ function OEMSalesContent() {
           </div>
         </CardHeader>
         <CardContent>
-          <OEMSalesTable 
-            sales={salesWithDetails} 
+          <OEMSalesTable
+            sales={salesWithDetails}
             onDelete={handleDelete}
           />
         </CardContent>
