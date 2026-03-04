@@ -15,24 +15,34 @@ interface ProductRanking {
 
 interface RankingCardsProps {
   products: any[];
-  salesData: { [productId: string]: { [date: string]: number } };
-  previousMonthData: { [productId: string]: { [date: string]: number } };
+  salesData: { [productId: string]: { [date: string]: { quantity: number; unit_price: number; amount: number } | undefined } };
+  previousMonthData: { [productId: string]: { [date: string]: { quantity: number; unit_price: number; amount: number } | undefined } };
 }
 
 export default function RankingCards({ products, salesData, previousMonthData }: RankingCardsProps) {
-  // 合計計算
+  // 合計計算（amountを直接合算）
   const calculateTotals = (productId: string) => {
     const sales = salesData[productId] || {};
-    const totalQuantity = Object.values(sales).reduce((sum: number, qty: any) => sum + (qty || 0), 0);
-    const product = products.find(p => p.id === productId);
-    const totalAmount = totalQuantity * (product?.price || 0);
+    let totalQuantity = 0;
+    let totalAmount = 0;
+    Object.values(sales).forEach(dayData => {
+      if (dayData) {
+        totalQuantity += dayData.quantity || 0;
+        totalAmount += dayData.amount || 0;
+      }
+    });
     return { totalQuantity, totalAmount };
   };
 
   // 前月合計計算
   const calculatePreviousMonthTotals = (productId: string) => {
     const sales = previousMonthData[productId] || {};
-    const totalQuantity = Object.values(sales).reduce((sum: number, qty: any) => sum + (qty || 0), 0);
+    let totalQuantity = 0;
+    Object.values(sales).forEach(dayData => {
+      if (dayData) {
+        totalQuantity += dayData.quantity || 0;
+      }
+    });
     return totalQuantity;
   };
 
@@ -41,8 +51,8 @@ export default function RankingCards({ products, salesData, previousMonthData }:
     const rankings: ProductRanking[] = products.map(product => {
       const { totalQuantity, totalAmount } = calculateTotals(product.id);
       const previousMonthQuantity = calculatePreviousMonthTotals(product.id);
-      const growthRate = previousMonthQuantity > 0 
-        ? ((totalQuantity - previousMonthQuantity) / previousMonthQuantity) * 100 
+      const growthRate = previousMonthQuantity > 0
+        ? ((totalQuantity - previousMonthQuantity) / previousMonthQuantity) * 100
         : totalQuantity > 0 ? 100 : 0;
 
       return {
@@ -68,8 +78,8 @@ export default function RankingCards({ products, salesData, previousMonthData }:
 
     // 前月比増加ベスト5（増加率降順）
     const growth5 = [...rankings]
-      .filter(p => p.growthRate > 0)
-      .sort((a, b) => b.growthRate - a.growthRate)
+      .filter(p => (p.growthRate || 0) > 0)
+      .sort((a, b) => (b.growthRate || 0) - (a.growthRate || 0))
       .slice(0, 5);
 
     return { best10, worst5, growth5 };
@@ -159,7 +169,7 @@ export default function RankingCards({ products, salesData, previousMonthData }:
                       {item.name}
                     </div>
                     <div className="text-xs font-bold text-emerald-900">
-                      +{item.growthRate.toFixed(0)}%
+                      +{(item.growthRate || 0).toFixed(0)}%
                     </div>
                   </div>
                 </CardContent>

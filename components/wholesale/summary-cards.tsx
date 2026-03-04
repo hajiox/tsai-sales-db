@@ -13,7 +13,7 @@ interface Product {
 }
 
 interface SalesData {
-  [productId: string]: { [date: string]: number | undefined; };
+  [productId: string]: { [date: string]: { quantity: number; unit_price: number; amount: number } | undefined; };
 }
 
 interface SummaryCardsProps {
@@ -25,8 +25,8 @@ interface SummaryCardsProps {
   selectedMonth: string;
 }
 
-export default function SummaryCards({ 
-  products, 
+export default function SummaryCards({
+  products,
   salesData,
   oemSalesCount = 0,
   oemTotal = 0,
@@ -52,7 +52,7 @@ export default function SummaryCards({
         `/api/wholesale/products/statistics?year=${selectedYear}&month=${selectedMonth}`
       );
       const data = await response.json();
-      
+
       if (data.success) {
         // 全商品の統計を集計
         let months6Count = 0;
@@ -67,7 +67,7 @@ export default function SummaryCards({
           months6Count += stat.months_6_quantity;
           months6Amount += stat.months_6_amount;
           months6Profit += Math.floor(stat.months_6_amount * (stat.profit_rate / 100));
-          
+
           // 12ヶ月集計
           months12Count += stat.months_12_quantity;
           months12Amount += stat.months_12_amount;
@@ -86,7 +86,7 @@ export default function SummaryCards({
     }
   };
 
-  // 当月の卸商品集計
+  // 当月の卸商品集計（wholesale_salesのamountを直接使用）
   const currentMonthWholesaleStats = () => {
     let totalCount = 0;
     let totalAmount = 0;
@@ -94,8 +94,16 @@ export default function SummaryCards({
 
     products.forEach(product => {
       const productSales = salesData[product.id] || {};
-      const quantity = Object.values(productSales).reduce((sum, qty) => sum + (qty || 0), 0);
-      const amount = quantity * product.price;
+      let quantity = 0;
+      let amount = 0;
+
+      Object.values(productSales).forEach(dayData => {
+        if (dayData) {
+          quantity += dayData.quantity || 0;
+          amount += dayData.amount || 0;
+        }
+      });
+
       const profit = Math.floor(amount * (product.profit_rate / 100));
 
       totalCount += quantity;
