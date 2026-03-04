@@ -758,12 +758,55 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                         );
                     };
 
+
+                    const renderPrintSubTable = (title: string, bgColor: string, dataRows: { month: string; target: number; actual: number }[], monthIndices: number[], halfLabel: string, showYearTotal: boolean) => {
+                        const td = "p-1.5 border border-gray-300 text-right tabular-nums text-[11px]";
+                        const halfData = monthIndices.map(i => dataRows[i]);
+                        const subT = halfData.reduce((s, r) => s + r.target, 0);
+                        const subA = halfData.reduce((s, r) => s + r.actual, 0);
+                        const yrT = dataRows.reduce((s, r) => s + r.target, 0);
+                        const yrA = dataRows.reduce((s, r) => s + r.actual, 0);
+                        const months = monthIndices.map(i => data.months[i]);
+                        return (
+                            <div className="mt-4">
+                                <h3 className="text-sm font-bold mb-1">{title}</h3>
+                                <table className="w-full border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr className={bgColor}>
+                                            <th className="p-1.5 border border-gray-300 text-right text-[11px] w-[60px]">内訳</th>
+                                            {months.map(m => <th key={m} className="p-1.5 border border-gray-300 text-right text-[11px]">{new Date(m).getMonth() + 1}月</th>)}
+                                            <th className="p-1.5 border border-gray-300 text-right text-[11px] bg-gray-200 font-bold">{halfLabel}</th>
+                                            {showYearTotal && <th className="p-1.5 border border-gray-300 text-right text-[11px] bg-gray-300 font-bold">年間計</th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr className="text-blue-700">
+                                            <td className={`${td} text-[10px]`}>目標</td>
+                                            {halfData.map(r => <td key={`st-${r.month}`} className={td}>{r.target.toLocaleString()}</td>)}
+                                            <td className={`${td} bg-gray-50 font-medium`}>{subT.toLocaleString()}</td>
+                                            {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrT.toLocaleString()}</td>}
+                                        </tr>
+                                        <tr style={{ backgroundColor: '#fffbeb' }}>
+                                            <td className={`${td} text-[10px] font-bold`}>実績</td>
+                                            {halfData.map(r => <td key={`sa-${r.month}`} className={`${td} font-bold`}>{r.actual.toLocaleString()}</td>)}
+                                            <td className={`${td} bg-gray-50 font-bold`}>{subA.toLocaleString()}</td>
+                                            {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrA.toLocaleString()}</td>}
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        );
+                    };
+
                     return (
                         <div className="hidden print:block">
                             {/* Page 1: First Half (Aug-Jan) */}
                             <div>
                                 <h2 className="text-base font-bold mb-2">月次・部門別集計 ─ 上期（8月〜1月）</h2>
                                 {renderPrintHalf([0, 1, 2, 3, 4, 5], '上期計', false)}
+
+                                {data.salesActivity && data.salesActivity.length > 0 && renderPrintSubTable('営業活動実績（新規・OEM獲得数）', 'bg-orange-50', data.salesActivity, [0,1,2,3,4,5], '上期計', false)}
+                                {data.manufacturing && data.manufacturing.length > 0 && renderPrintSubTable('商品製造数', 'bg-blue-50', data.manufacturing, [0,1,2,3,4,5], '上期計', false)}
                             </div>
 
                             {/* Page 2: Second Half (Feb-Jul) + Year Total */}
@@ -771,61 +814,9 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                 <h2 className="text-base font-bold mb-2">月次・部門別集計 ─ 下期（2月〜7月）</h2>
                                 {renderPrintHalf([6, 7, 8, 9, 10, 11], '下期計', true)}
 
-                                {/* Sales Activity for print */}
-                                {data.salesActivity && data.salesActivity.length > 0 && (
-                                    <div className="mt-4">
-                                        <h3 className="text-sm font-bold mb-1">営業活動実績（新規・OEM獲得数）</h3>
-                                        <table className="w-full border-collapse border border-gray-300 table-fixed">
-                                            <thead>
-                                                <tr className="bg-orange-50">
-                                                    <th className="p-1.5 border border-gray-300 text-right text-[11px] w-[60px]">内訳</th>
-                                                    {data.months.map(m => <th key={m} className="p-1.5 border border-gray-300 text-right text-[11px]">{new Date(m).getMonth() + 1}月</th>)}
-                                                    <th className="p-1.5 border border-gray-300 text-right text-[11px] bg-gray-200 font-bold">合計</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr className="text-blue-700">
-                                                    <td className="p-1.5 border border-gray-300 text-right text-[10px]">目標</td>
-                                                    {data.salesActivity.map(r => <td key={`psa-t-${r.month}`} className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px]">{r.target}</td>)}
-                                                    <td className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold bg-gray-50">{data.salesActivity.reduce((s, r) => s + r.target, 0)}</td>
-                                                </tr>
-                                                <tr style={{ backgroundColor: '#fffbeb' }}>
-                                                    <td className="p-1.5 border border-gray-300 text-right text-[10px] font-bold">実績</td>
-                                                    {data.salesActivity.map(r => <td key={`psa-a-${r.month}`} className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold">{r.actual}</td>)}
-                                                    <td className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold bg-gray-50">{data.salesActivity.reduce((s, r) => s + r.actual, 0)}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-
-                                {/* Manufacturing for print */}
-                                {data.manufacturing && data.manufacturing.length > 0 && (
-                                    <div className="mt-4">
-                                        <h3 className="text-sm font-bold mb-1">商品製造数</h3>
-                                        <table className="w-full border-collapse border border-gray-300 table-fixed">
-                                            <thead>
-                                                <tr className="bg-blue-50">
-                                                    <th className="p-1.5 border border-gray-300 text-right text-[11px] w-[60px]">内訳</th>
-                                                    {data.months.map(m => <th key={m} className="p-1.5 border border-gray-300 text-right text-[11px]">{new Date(m).getMonth() + 1}月</th>)}
-                                                    <th className="p-1.5 border border-gray-300 text-right text-[11px] bg-gray-200 font-bold">合計</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr className="text-blue-700">
-                                                    <td className="p-1.5 border border-gray-300 text-right text-[10px]">目標</td>
-                                                    {data.manufacturing.map(r => <td key={`pm-t-${r.month}`} className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px]">{r.target.toLocaleString()}</td>)}
-                                                    <td className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold bg-gray-50">{data.manufacturing.reduce((s, r) => s + r.target, 0).toLocaleString()}</td>
-                                                </tr>
-                                                <tr style={{ backgroundColor: '#fffbeb' }}>
-                                                    <td className="p-1.5 border border-gray-300 text-right text-[10px] font-bold">実績</td>
-                                                    {data.manufacturing.map(r => <td key={`pm-a-${r.month}`} className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold">{r.actual.toLocaleString()}</td>)}
-                                                    <td className="p-1.5 border border-gray-300 text-right tabular-nums text-[11px] font-bold bg-gray-50">{data.manufacturing.reduce((s, r) => s + r.actual, 0).toLocaleString()}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
+                                {/* Sales Activity & Manufacturing for print - 下期 */}
+                                {data.salesActivity && data.salesActivity.length > 0 && renderPrintSubTable('営業活動実績（新規・OEM獲得数）', 'bg-orange-50', data.salesActivity, [6,7,8,9,10,11], '下期計', true)}
+                                {data.manufacturing && data.manufacturing.length > 0 && renderPrintSubTable('商品製造数', 'bg-blue-50', data.manufacturing, [6,7,8,9,10,11], '下期計', true)}
                             </div>
                         </div>
                     );
