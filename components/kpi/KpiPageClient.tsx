@@ -479,7 +479,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                                     // Only show if actual > 0 (to avoid 0% when data not yet in)
                                                     return (
                                                         <td key={`yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
-                                                            {r.actual > 0 && r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                            {r.lastYear > 0 ? formatPercent(rate) : '-'}
                                                         </td>
                                                     );
                                                 })}
@@ -568,7 +568,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                                     const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
                                                     return (
                                                         <td key={`total-yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
-                                                            {r.actual > 0 && r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                            {r.lastYear > 0 ? formatPercent(rate) : '-'}
                                                         </td>
                                                     );
                                                 })}
