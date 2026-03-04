@@ -1,8 +1,9 @@
 // /app/api/import/qoo10-confirm/route.ts
-// ver.3 (データ形式対応強化版)
+// ver.4 (単価スナップショット対応)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getBulkProductUnitPrices } from '@/lib/unitPriceHelper';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
@@ -13,13 +14,13 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   console.log('🟣 Qoo10確定API開始 - ver.3');
-  
+
   try {
     const body = await request.json();
     console.log('受信データ（全体）:', JSON.stringify(body, null, 2));
-    
+
     const { saleDate, matchedProducts, newMappings } = body;
-    
+
     // 【修正】saleDateのエラーハンドリング強化
     let month: string;
     if (!saleDate || typeof saleDate !== 'string' || saleDate.length < 7) {
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
     if (newMappings && Array.isArray(newMappings) && newMappings.length > 0) {
       try {
         console.log('📚 新しいマッピング学習開始:', newMappings.length, '件');
-        
+
         const mappingsToInsert = newMappings.map(mapping => ({
           qoo10_title: mapping.qoo10Title,
           product_id: mapping.productId
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
           console.error('マッピング保存エラー:', mappingError);
           throw mappingError;
         }
-        
+
         learnedCount = newMappings.length;
         console.log(`📚 Qoo10学習データ保存完了: ${learnedCount}件`);
       } catch (mappingError) {
@@ -86,33 +87,33 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. 売上データを商品IDごとに【集計】する
-    const allSalesData: Array<{productId: string; quantity: number}> = [];
-    
+    const allSalesData: Array<{ productId: string; quantity: number }> = [];
+
     console.log('📊 マッチ商品データの処理開始:', matchedProducts.length, '件');
-    
+
     // マッチ済み商品を追加
     for (let i = 0; i < matchedProducts.length; i++) {
       const item = matchedProducts[i];
       console.log(`項目 ${i}:`, JSON.stringify(item, null, 2));
-      
+
       // 【修正】より柔軟なデータ構造対応
       let productId: string | undefined;
       let quantity: number = 0;
-      
+
       // productInfo.id の取得（複数パターンに対応）
       if (item.productInfo && item.productInfo.id) {
         productId = item.productInfo.id;
       } else if (item.productId) {
         productId = item.productId;
       }
-      
+
       // quantity の取得
       if (typeof item.quantity === 'number') {
         quantity = item.quantity;
       } else if (typeof item.count === 'number') {
         quantity = item.count;
       }
-      
+
       if (productId && quantity > 0) {
         allSalesData.push({
           productId: productId,
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
         console.warn(`⚠️ スキップ: productId=${productId}, quantity=${quantity}`);
       }
     }
-    
+
     // 新規マッピング商品を追加
     if (newMappings && Array.isArray(newMappings)) {
       for (const item of newMappings) {
@@ -135,9 +136,9 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    
+
     console.log('📊 最終処理対象データ:', allSalesData.length, '件');
-    
+
     if (allSalesData.length === 0) {
       return NextResponse.json({
         success: true,
@@ -154,15 +155,18 @@ export async function POST(request: NextRequest) {
       const currentQuantity = aggregatedSales.get(item.productId) || 0;
       aggregatedSales.set(item.productId, currentQuantity + item.quantity);
     }
-    
+
     console.log(`🔍 元データ件数: ${allSalesData.length}件 → 集計後: ${aggregatedSales.size}件`);
 
     // 3. 集計後のデータでDBを更新
+    const productIds = Array.from(aggregatedSales.keys());
+    const unitPriceMap = await getBulkProductUnitPrices(supabase, productIds);
+
     for (const [productId, totalQuantity] of aggregatedSales.entries()) {
       try {
         const reportMonth = `${month}-01`;
         console.log(`🔄 処理中: product_id=${productId}, quantity=${totalQuantity}, month=${reportMonth}`);
-        
+
         // 既存レコード確認
         const { data: existingData, error: selectError } = await supabase
           .from('web_sales_summary')
@@ -183,7 +187,7 @@ export async function POST(request: NextRequest) {
             .from('web_sales_summary')
             .update({ qoo10_count: totalQuantity })
             .eq('id', existingData.id);
-            
+
           if (updateError) {
             console.error('更新エラー:', updateError);
             throw updateError;
@@ -192,14 +196,17 @@ export async function POST(request: NextRequest) {
         } else {
           // 新規挿入
           console.log(`📝 新規レコード挿入`);
+          const unitPrice = unitPriceMap.get(productId) || { unit_price: 0, unit_profit_rate: 0 };
           const { error: insertError } = await supabase
             .from('web_sales_summary')
             .insert({
               product_id: productId,
               report_month: reportMonth,
               qoo10_count: totalQuantity,
+              unit_price: unitPrice.unit_price,
+              unit_profit_rate: unitPrice.unit_profit_rate,
             });
-            
+
           if (insertError) {
             console.error('挿入エラー:', insertError);
             throw insertError;
@@ -218,8 +225,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: isSuccess,
-      message: isSuccess 
-        ? `Qoo10データの更新が完了しました (成功: ${successCount}件)` 
+      message: isSuccess
+        ? `Qoo10データの更新が完了しました (成功: ${successCount}件)`
         : `一部エラーが発生しました (成功: ${successCount}件, エラー: ${errorCount}件)`,
       successCount,
       errorCount,

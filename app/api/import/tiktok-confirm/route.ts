@@ -1,6 +1,7 @@
-// app/api/import/tiktok-confirm/route.ts ver.4
+// app/api/import/tiktok-confirm/route.ts ver.5 (単価スナップショット対応)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getBulkProductUnitPrices } from '@/lib/unitPriceHelper';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -42,6 +43,10 @@ export async function POST(request: NextRequest) {
     console.log(`[TikTok Confirm] 商品ID別集計: ${productSummary.size}件`);
 
     // web_sales_summaryに保存（upsert方式）
+    // 新規挿入時にunit_priceを保存するため、商品価格を一括取得
+    const productIds = Array.from(productSummary.keys());
+    const unitPriceMap = await getBulkProductUnitPrices(supabase, productIds);
+
     const upsertPromises = Array.from(productSummary.entries()).map(
       async ([productId, data]) => {
         const reportMonth = data.saleDate + '-01'; // YYYY-MM-01形式に変換
@@ -82,6 +87,7 @@ export async function POST(request: NextRequest) {
           console.log(`[TikTok Confirm] 更新: ${productId} (${data.count}個)`);
         } else {
           // 新規データの場合は挿入
+          const unitPrice = unitPriceMap.get(productId) || { unit_price: 0, unit_profit_rate: 0 };
           const { error: insertError } = await supabase
             .from('web_sales_summary')
             .insert({
@@ -94,7 +100,9 @@ export async function POST(request: NextRequest) {
               base_count: 0,
               qoo10_count: 0,
               tiktok_count: data.count,
-              report_date: reportDate
+              report_date: reportDate,
+              unit_price: unitPrice.unit_price,
+              unit_profit_rate: unitPrice.unit_profit_rate,
             });
 
           if (insertError) {
@@ -135,10 +143,10 @@ function getMonthEndDate(yearMonth: string): string {
   const [year, month] = yearMonth.split('-').map(Number);
   // 翌月の0日 = 当月の末日
   const lastDay = new Date(year, month, 0);
-  
+
   const yyyy = lastDay.getFullYear();
   const mm = String(lastDay.getMonth() + 1).padStart(2, '0');
   const dd = String(lastDay.getDate()).padStart(2, '0');
-  
+
   return `${yyyy}-${mm}-${dd}`;
 }

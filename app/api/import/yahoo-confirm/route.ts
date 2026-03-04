@@ -1,8 +1,8 @@
-// /app/api/import/yahoo-confirm/route.ts ver.6
-// 既存データを上書き方式に変更（Amazon/楽天と統一）
+// /app/api/import/yahoo-confirm/route.ts ver.7 (単価スナップショット対応)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getBulkProductUnitPrices } from '@/lib/unitPriceHelper';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
@@ -25,21 +25,21 @@ interface NewMapping {
 export async function POST(request: NextRequest) {
   try {
     console.log('=== Yahoo CSV確定処理開始 ver.6 (上書き方式) ===');
-    
+
     const { matchedProducts, newMappings, targetMonth } = await request.json() as {
-        matchedProducts: MatchedProduct[],
-        newMappings: NewMapping[],
-        targetMonth: string
+      matchedProducts: MatchedProduct[],
+      newMappings: NewMapping[],
+      targetMonth: string
     };
-    
+
     if ((!matchedProducts || matchedProducts.length === 0) && (!newMappings || newMappings.length === 0)) {
-        return NextResponse.json({ success: true, message: "処理対象のデータがありませんでした。", totalCount: 0 });
+      return NextResponse.json({ success: true, message: "処理対象のデータがありませんでした。", totalCount: 0 });
     }
-    
+
     if (!targetMonth) {
       return NextResponse.json({ success: false, error: '対象月が必要です' }, { status: 400 });
     }
-    
+
     const formattedMonth = targetMonth.includes('-01') ? targetMonth : `${targetMonth}-01`;
 
     const productSummary = new Map<string, number>();
@@ -47,41 +47,45 @@ export async function POST(request: NextRequest) {
 
     // newMappingsには手動で紐付けた未学習データが含まれる
     const allProducts = [
-        ...matchedProducts,
-        ...newMappings.map(p => ({
-            productId: p.productId,
-            yahooTitle: p.yahooTitle,
-            quantity: p.quantity,
-            isLearned: false, // newMappingsは常に学習対象
-            productInfo: { id: p.productId, name: '' } // productInfoを擬似的に作成
-        }))
+      ...matchedProducts,
+      ...newMappings.map(p => ({
+        productId: p.productId,
+        yahooTitle: p.yahooTitle,
+        quantity: p.quantity,
+        isLearned: false, // newMappingsは常に学習対象
+        productInfo: { id: p.productId, name: '' } // productInfoを擬似的に作成
+      }))
     ];
 
     // 商品IDごとに数量を集計
     for (const item of allProducts) {
-        if (!item.productInfo?.id) continue;
-        const currentQuantity = productSummary.get(item.productInfo.id) || 0;
-        productSummary.set(item.productInfo.id, currentQuantity + (item.quantity || 0));
-        
-        // 学習データの収集
-        if (!item.isLearned) {
-            const title = item.yahooTitle;
-            const productId = item.productInfo.id;
-            
-            // yahooTitleが空やnullでないことを確認
-            if (title && productId) {
-                const existing = learningMappings.find(m => m.yahoo_title === title);
-                if (!existing) {
-                    learningMappings.push({ yahoo_title: title, product_id: productId });
-                }
-            }
+      if (!item.productInfo?.id) continue;
+      const currentQuantity = productSummary.get(item.productInfo.id) || 0;
+      productSummary.set(item.productInfo.id, currentQuantity + (item.quantity || 0));
+
+      // 学習データの収集
+      if (!item.isLearned) {
+        const title = item.yahooTitle;
+        const productId = item.productInfo.id;
+
+        // yahooTitleが空やnullでないことを確認
+        if (title && productId) {
+          const existing = learningMappings.find(m => m.yahoo_title === title);
+          if (!existing) {
+            learningMappings.push({ yahoo_title: title, product_id: productId });
+          }
         }
+      }
     }
 
     let successCount = 0;
     let errorCount = 0;
 
     // 売上サマリーの更新（上書き方式）
+    // 新規挿入時にunit_priceを保存するため、商品価格を一括取得
+    const productIdList = Array.from(productSummary.keys());
+    const unitPriceMap = await getBulkProductUnitPrices(supabase, productIdList);
+
     for (const [productId, totalQuantity] of productSummary) {
       try {
         const { error: selectError, data: existing } = await supabase
@@ -102,19 +106,22 @@ export async function POST(request: NextRequest) {
             .from('web_sales_summary')
             .update({ yahoo_count: totalQuantity })
             .eq('id', existing.id);
-          
+
           if (updateError) throw updateError;
         } else {
-          // 新規挿入
+          // 新規挿入（unit_priceを保存）
           console.log(`📝 新規レコード挿入: product_id=${productId}, yahoo_count=${totalQuantity}`);
+          const unitPrice = unitPriceMap.get(productId) || { unit_price: 0, unit_profit_rate: 0 };
           const { error: insertError } = await supabase
             .from('web_sales_summary')
-            .insert({ 
-              product_id: productId, 
-              report_month: formattedMonth, 
-              yahoo_count: totalQuantity 
+            .insert({
+              product_id: productId,
+              report_month: formattedMonth,
+              yahoo_count: totalQuantity,
+              unit_price: unitPrice.unit_price,
+              unit_profit_rate: unitPrice.unit_profit_rate,
             });
-          
+
           if (insertError) throw insertError;
         }
         successCount++;
@@ -123,7 +130,7 @@ export async function POST(request: NextRequest) {
         errorCount++;
       }
     }
-    
+
     console.log(`DB更新完了: 成功${successCount}件, エラー${errorCount}件`);
 
     // 学習データの保存
@@ -133,7 +140,7 @@ export async function POST(request: NextRequest) {
       const { count, error } = await supabase
         .from('yahoo_product_mapping')
         .upsert(learningMappings, { onConflict: 'yahoo_title', count: 'estimated' });
-      
+
       if (error) {
         console.error('学習データ保存エラー:', error);
         throw error;
@@ -144,11 +151,11 @@ export async function POST(request: NextRequest) {
 
     const isSuccess = successCount > 0 && errorCount === 0;
     console.log(`=== Yahoo CSV確定処理完了 ver.6: 成功${successCount}件, エラー${errorCount}件, 学習${learnedCount}件 ===`);
-    
+
     return NextResponse.json({
       success: isSuccess,
-      message: isSuccess 
-        ? `Yahoo売上データを正常に登録しました (成功: ${successCount}件)` 
+      message: isSuccess
+        ? `Yahoo売上データを正常に登録しました (成功: ${successCount}件)`
         : `一部エラーが発生しました (成功: ${successCount}件, エラー: ${errorCount}件)`,
       totalCount: productSummary.size,
       successCount,

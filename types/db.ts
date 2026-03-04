@@ -15,4 +15,6 @@ export interface WebSalesData {
   series?: string
   series_code?: number
   product_code?: number
+  unit_price?: number       // その月のスナップショット単価
+  unit_profit_rate?: number // その月のスナップショット利益率
 }

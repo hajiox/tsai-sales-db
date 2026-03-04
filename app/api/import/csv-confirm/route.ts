@@ -1,8 +1,8 @@
-// /app/api/import/csv-confirm/route.ts ver.3
-// 汎用CSV確定API（uuid型対応・引き継ぎ資料⑰準拠）
+// /app/api/import/csv-confirm/route.ts ver.4 (単価スナップショット対応)
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getBulkProductUnitPrices } from '@/lib/unitPriceHelper'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
@@ -26,26 +26,26 @@ interface ConfirmItem {
 export async function POST(request: NextRequest) {
   try {
     console.log("=== CSV Confirm API開始 (uuid対応版 ver.3) ===")
-    
+
     const body = await request.json()
     const { items, month } = body
-    
+
     // デバッグ: 受信したデータ構造を確認
     console.log("受信したbody:", JSON.stringify(body, null, 2))
-    
+
     console.log(`受信データ - items数: ${items?.length}, month: ${month}`)
 
     if (!items || !Array.isArray(items)) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
-        error: 'アイテムデータが無効です' 
+        error: 'アイテムデータが無効です'
       }, { status: 400 })
     }
 
     if (!month) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
-        error: '月が指定されていません' 
+        error: '月が指定されていません'
       }, { status: 400 })
     }
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       // フロントエンドからのデータ構造に対応
       const productId = item.matchedProduct?.id || item.productId
       const productName = item.matchedProduct?.name || item.productName
-      
+
       if (!productId) {
         console.log(`❌ スキップ: 商品IDなし - "${item.csvTitle}"`)
         skippedCount++
@@ -110,11 +110,15 @@ export async function POST(request: NextRequest) {
 
     console.log(`📊 集約結果: ${aggregatedData.size}個の商品`)
 
+    // 新規挿入時にunit_priceを保存するため、商品価格を一括取得
+    const productIdList = Array.from(aggregatedData.keys())
+    const unitPriceMap = await getBulkProductUnitPrices(supabase, productIdList)
+
     // データベース保存処理
     for (const [productId, data] of aggregatedData) {
       try {
         console.log(`\n--- 商品処理: ${data.productName} (${productId}) ---`)
-        
+
         // 既存データ確認
         const { data: existingData } = await supabase
           .from('web_sales_summary')
@@ -124,7 +128,7 @@ export async function POST(request: NextRequest) {
           .single()
 
         const upsertData = {
-          product_id: productId,  // フロントエンドからuuid文字列として送信される
+          product_id: productId,
           report_month: reportMonth,
           amazon_count: data.amazonCount,
           rakuten_count: data.rakutenCount,
@@ -132,7 +136,11 @@ export async function POST(request: NextRequest) {
           mercari_count: data.mercariCount,
           base_count: data.baseCount,
           qoo10_count: data.qoo10Count,
-          report_date: reportMonth
+          report_date: reportMonth,
+          ...(existingData ? {} : {
+            unit_price: unitPriceMap.get(productId)?.unit_price || 0,
+            unit_profit_rate: unitPriceMap.get(productId)?.unit_profit_rate || 0,
+          })
         }
 
         console.log(`💾 UPSERT実行:`, JSON.stringify(upsertData, null, 2))
@@ -153,7 +161,7 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`📊 UPSERT結果:`, JSON.stringify(upsertResult, null, 2))
-        
+
         // 実際に保存されたかを即座に確認
         const { data: verifyData, error: verifyError } = await supabase
           .from('web_sales_summary')
@@ -161,7 +169,7 @@ export async function POST(request: NextRequest) {
           .eq('product_id', productId)
           .eq('report_month', reportMonth)
           .single()
-        
+
         if (verifyError) {
           console.error(`❌ 保存確認エラー:`, verifyError)
         } else {
@@ -221,7 +229,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ CSV Confirm API エラー:', error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: false,
       error: 'CSV保存中にエラーが発生しました',
       details: error instanceof Error ? error.message : '不明なエラー'

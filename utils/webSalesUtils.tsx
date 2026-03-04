@@ -7,7 +7,7 @@ export const calculateTotalAllECSites = (
   productMap: Map<string, any>
 ) => {
   return filteredItems.reduce((totalSum, item) => {
-    const totalCount = 
+    const totalCount =
       (item.amazon_count || 0) +
       (item.rakuten_count || 0) +
       (item.yahoo_count || 0) +
@@ -15,10 +15,11 @@ export const calculateTotalAllECSites = (
       (item.base_count || 0) +
       (item.qoo10_count || 0) +
       (item.tiktok_count || 0)
-    
-    const price = productMap.get(item.product_id)?.price || 0
+
+    // unit_price (スナップショット単価) → price → productMap の順でフォールバック
+    const price = item.price || productMap.get(item.product_id)?.price || 0
     const amount = totalCount * price
-    
+
     return {
       totalCount: totalSum.totalCount + totalCount,
       totalAmount: totalSum.totalAmount + amount
@@ -44,7 +45,7 @@ export const filterWebSalesData = (
   filterValue: string
 ) => {
   if (!filterValue) return data
-  
+
   return data.filter((item) =>
     item.product_name
       ?.toLowerCase()

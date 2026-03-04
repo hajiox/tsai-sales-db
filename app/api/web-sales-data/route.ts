@@ -1,7 +1,8 @@
 // /app/api/web-sales-data/route.ts
-// ver.9 (PUT機能追加版)
+// ver.10 (単価スナップショット対応)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getProductUnitPrice } from '@/lib/unitPriceHelper'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,10 +18,10 @@ export async function GET(request: NextRequest) {
     console.log('📞 DB関数呼び出し開始:', { function: 'web_sales_full_month', target_month: month })
 
     const { data, error } = await supabase.rpc("web_sales_full_month", { target_month: month })
-    
-    console.log('📊 DB関数結果:', { 
-      success: !error, 
-      error: error?.message, 
+
+    console.log('📊 DB関数結果:', {
+      success: !error,
+      error: error?.message,
       dataLength: data?.length,
       sampleData: data?.slice(0, 2) // 最初の2件だけ表示
     })
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: data || [] })
   } catch (error) {
     console.error('🚨 API全体エラー:', error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: 'データの取得に失敗しました',
       details: error instanceof Error ? error.message : '不明なエラー',
       month: searchParams.get('month')
@@ -51,27 +52,27 @@ export async function PUT(request: NextRequest) {
     console.log('📝 PUT要求:', { product_id, report_month, site, count })
 
     if (!product_id || !report_month || !site || count === undefined) {
-      return NextResponse.json({ 
-        success: false, 
-        error: '必須パラメータが不足しています' 
+      return NextResponse.json({
+        success: false,
+        error: '必須パラメータが不足しています'
       }, { status: 400 })
     }
 
     // サイト名のバリデーション
     const validSites = ['amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10']
     if (!validSites.includes(site)) {
-      return NextResponse.json({ 
-        success: false, 
-        error: '無効なサイト名です' 
+      return NextResponse.json({
+        success: false,
+        error: '無効なサイト名です'
       }, { status: 400 })
     }
 
     // 数値のバリデーション
     const numericCount = parseInt(count, 10)
     if (isNaN(numericCount) || numericCount < 0) {
-      return NextResponse.json({ 
-        success: false, 
-        error: '販売数は0以上の整数である必要があります' 
+      return NextResponse.json({
+        success: false,
+        error: '販売数は0以上の整数である必要があります'
       }, { status: 400 })
     }
 
@@ -107,7 +108,8 @@ export async function PUT(request: NextRequest) {
       }
       result = data
     } else {
-      // 既存レコードがない場合は新規作成
+      // 既存レコードがない場合は新規作成（unit_priceを保存）
+      const unitPrice = await getProductUnitPrice(supabase, product_id)
       const newRecord = {
         product_id,
         report_month: targetDate,
@@ -117,6 +119,8 @@ export async function PUT(request: NextRequest) {
         mercari_count: 0,
         base_count: 0,
         qoo10_count: 0,
+        unit_price: unitPrice.unit_price,
+        unit_profit_rate: unitPrice.unit_profit_rate,
         [columnName]: numericCount
       }
 
@@ -134,15 +138,15 @@ export async function PUT(request: NextRequest) {
 
     console.log('✅ 更新完了:', result)
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       message: '販売数を更新しました',
       data: result?.[0]
     })
   } catch (error) {
     console.error('🚨 PUT API エラー:', error)
-    return NextResponse.json({ 
-      success: false, 
+    return NextResponse.json({
+      success: false,
       error: 'データの更新に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー')
     }, { status: 500 })
   }
@@ -155,9 +159,9 @@ export async function DELETE(request: NextRequest) {
     const channel = searchParams.get('channel') // 新規追加
 
     if (!month) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'monthパラメータが必要です' 
+      return NextResponse.json({
+        success: false,
+        error: 'monthパラメータが必要です'
       }, { status: 400 })
     }
 
@@ -177,8 +181,8 @@ export async function DELETE(request: NextRequest) {
     return await handleMonthDelete(targetDate, month)
   } catch (error) {
     console.error('🚨 DELETE API エラー:', error)
-    return NextResponse.json({ 
-      success: false, 
+    return NextResponse.json({
+      success: false,
       error: 'データの削除に失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー')
     }, { status: 500 })
   }
@@ -210,9 +214,9 @@ async function handleChannelDelete(targetDate: string, channel: string, month: s
 
   if (selectError) {
     console.error('🚨 SELECT エラー:', selectError);
-    return NextResponse.json({ 
-      success: false, 
-      error: 'データの確認に失敗しました: ' + selectError.message 
+    return NextResponse.json({
+      success: false,
+      error: 'データの確認に失敗しました: ' + selectError.message
     }, { status: 500 });
   }
 
@@ -222,7 +226,7 @@ async function handleChannelDelete(targetDate: string, channel: string, month: s
   console.log('🔍 削除前データ:', { affectedCount, totalQuantity });
 
   if (affectedCount === 0) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       message: `${month}の${channelDisplayName}データは存在しません`,
       deletedCount: 0,
@@ -240,15 +244,15 @@ async function handleChannelDelete(targetDate: string, channel: string, month: s
 
   if (updateError) {
     console.error('🚨 UPDATE エラー:', updateError);
-    return NextResponse.json({ 
-      success: false, 
-      error: `${channelDisplayName}データの削除に失敗しました: ` + updateError.message 
+    return NextResponse.json({
+      success: false,
+      error: `${channelDisplayName}データの削除に失敗しました: ` + updateError.message
     }, { status: 500 });
   }
 
   console.log('✅ ECチャネル別削除完了:', { channel, deletedCount: affectedCount, totalQuantity });
 
-  return NextResponse.json({ 
+  return NextResponse.json({
     success: true,
     message: `${month}の${channelDisplayName}データを削除しました`,
     deletedCount: affectedCount,
@@ -266,9 +270,9 @@ async function handleMonthDelete(targetDate: string, month: string) {
 
   if (countError) {
     console.error('🚨 COUNT エラー:', countError)
-    return NextResponse.json({ 
-      success: false, 
-      error: 'データ件数の確認に失敗しました: ' + countError.message 
+    return NextResponse.json({
+      success: false,
+      error: 'データ件数の確認に失敗しました: ' + countError.message
     }, { status: 500 })
   }
 
@@ -283,15 +287,15 @@ async function handleMonthDelete(targetDate: string, month: string) {
 
   if (error) {
     console.error('🚨 DELETE エラー:', error)
-    return NextResponse.json({ 
-      success: false, 
-      error: 'データの削除に失敗しました: ' + error.message 
+    return NextResponse.json({
+      success: false,
+      error: 'データの削除に失敗しました: ' + error.message
     }, { status: 500 })
   }
 
   console.log('✅ 月別一括削除完了:', { deletedCount: beforeCount })
 
-  return NextResponse.json({ 
+  return NextResponse.json({
     success: true,
     message: `${month}の販売データを削除しました`,
     deletedCount: beforeCount

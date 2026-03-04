@@ -1,7 +1,8 @@
-// /app/api/import/mercari-confirm/route.ts ver.1
+// /app/api/import/mercari-confirm/route.ts ver.2 (単価スナップショット対応)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getBulkProductUnitPrices } from '@/lib/unitPriceHelper';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
@@ -28,11 +29,11 @@ interface ConfirmRequest {
 
 export async function POST(request: NextRequest) {
   console.log('🚨 メルカリ確定API開始 - ver.1');
-  
+
   try {
     const body: ConfirmRequest = await request.json();
     console.log('受信データ:', JSON.stringify(body, null, 2));
-    
+
     const { saleDate, matchedProducts, newMappings } = body;
     const month = saleDate.substring(0, 7);
 
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     if (newMappings && Array.isArray(newMappings) && newMappings.length > 0) {
       try {
         console.log('📚 新しいマッピング学習開始:', newMappings.length, '件');
-        
+
         const mappingsToInsert = newMappings.map(mapping => ({
           mercari_title: mapping.mercariTitle,
           product_id: mapping.productId
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
           console.error('マッピング保存エラー:', mappingError);
           throw mappingError;
         }
-        
+
         learnedCount = newMappings.length;
         console.log(`📚 メルカリ学習データ保存完了: ${learnedCount}件`);
       } catch (mappingError) {
@@ -87,8 +88,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. 売上データを商品IDごとに【集計】する
-    const allSalesData: Array<{productId: string; quantity: number}> = [];
-    
+    const allSalesData: Array<{ productId: string; quantity: number }> = [];
+
     // マッチ済み商品を追加
     for (const item of matchedProducts) {
       if (item.productInfo && item.productInfo.id) {
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
         });
       }
     }
-    
+
     // 新規マッピング商品を追加
     if (newMappings && Array.isArray(newMappings)) {
       for (const item of newMappings) {
@@ -110,9 +111,9 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    
+
     console.log('📊 処理対象データ:', allSalesData.length, '件');
-    
+
     if (allSalesData.length === 0) {
       return NextResponse.json({
         success: true,
@@ -129,15 +130,18 @@ export async function POST(request: NextRequest) {
       const currentQuantity = aggregatedSales.get(item.productId) || 0;
       aggregatedSales.set(item.productId, currentQuantity + item.quantity);
     }
-    
+
     console.log(`🔍 元データ件数: ${allSalesData.length}件 → 集計後: ${aggregatedSales.size}件`);
 
     // 3. 集計後のデータでDBを更新
+    const productIds = Array.from(aggregatedSales.keys());
+    const unitPriceMap = await getBulkProductUnitPrices(supabase, productIds);
+
     for (const [productId, totalQuantity] of aggregatedSales.entries()) {
       try {
         const reportMonth = `${month}-01`;
         console.log(`🔄 処理中: product_id=${productId}, quantity=${totalQuantity}, month=${reportMonth}`);
-        
+
         // 既存レコード確認
         const { data: existingData, error: selectError } = await supabase
           .from('web_sales_summary')
@@ -158,7 +162,7 @@ export async function POST(request: NextRequest) {
             .from('web_sales_summary')
             .update({ mercari_count: totalQuantity })
             .eq('id', existingData.id);
-            
+
           if (updateError) {
             console.error('更新エラー:', updateError);
             throw updateError;
@@ -167,14 +171,17 @@ export async function POST(request: NextRequest) {
         } else {
           // 新規挿入
           console.log(`📝 新規レコード挿入`);
+          const unitPrice = unitPriceMap.get(productId) || { unit_price: 0, unit_profit_rate: 0 };
           const { error: insertError } = await supabase
             .from('web_sales_summary')
             .insert({
               product_id: productId,
               report_month: reportMonth,
               mercari_count: totalQuantity,
+              unit_price: unitPrice.unit_price,
+              unit_profit_rate: unitPrice.unit_profit_rate,
             });
-            
+
           if (insertError) {
             console.error('挿入エラー:', insertError);
             throw insertError;
@@ -193,8 +200,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: isSuccess,
-      message: isSuccess 
-        ? `メルカリデータの更新が完了しました (成功: ${successCount}件)` 
+      message: isSuccess
+        ? `メルカリデータの更新が完了しました (成功: ${successCount}件)`
         : `一部エラーが発生しました (成功: ${successCount}件, エラー: ${errorCount}件)`,
       successCount,
       errorCount,

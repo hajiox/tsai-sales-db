@@ -1,6 +1,7 @@
-// /app/api/import/amazon-confirm/route.ts ver.19 (RLSバイパス対応)
+// /app/api/import/amazon-confirm/route.ts ver.20 (単価スナップショット対応)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getBulkProductUnitPrices } from '@/lib/unitPriceHelper';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
@@ -72,6 +73,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. 集計後のデータでDBを更新
+    // 新規挿入時にunit_priceを保存するため、商品価格を一括取得
+    const productIds = Array.from(aggregatedSales.keys());
+    const unitPriceMap = await getBulkProductUnitPrices(supabase, productIds);
+
     for (const [productId, totalQuantity] of aggregatedSales.entries()) {
       try {
         const reportMonth = `${month}-01`;
@@ -88,20 +93,23 @@ export async function POST(request: NextRequest) {
         }
 
         if (existingData) {
-          // 更新
+          // 更新（unit_priceは既存値を維持）
           const { error: updateError } = await supabase
             .from('web_sales_summary')
             .update({ amazon_count: totalQuantity })
             .eq('id', existingData.id);
           if (updateError) throw updateError;
         } else {
-          // 新規挿入
+          // 新規挿入（unit_priceを保存）
+          const unitPrice = unitPriceMap.get(productId) || { unit_price: 0, unit_profit_rate: 0 };
           const { error: insertError } = await supabase
             .from('web_sales_summary')
             .insert({
               product_id: productId,
               report_month: reportMonth,
               amazon_count: totalQuantity,
+              unit_price: unitPrice.unit_price,
+              unit_profit_rate: unitPrice.unit_profit_rate,
             });
           if (insertError) throw insertError;
         }

@@ -1,5 +1,5 @@
-// /components/web-sales-editable-table.tsx ver.66 (TikTok products追加版)
-// 汎用CSV機能統合版
+// /components/web-sales-editable-table.tsx ver.67 (単価スナップショット方式)
+// 履歴モード削除・各月に保存されたunit_priceで自動計算
 
 "use client"
 
@@ -18,36 +18,14 @@ import BaseCsvImportModal from "./BaseCsvImportModal"
 import Qoo10CsvImportModal from "./Qoo10CsvImportModal"
 import TiktokCsvImportModal from "./TiktokCsvImportModal"
 import CsvImportModal from "./CsvImportModal"
-import PriceHistoryManagementModal from "./PriceHistoryManagementModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
 import { WebSalesData } from "@/types/db"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
-import { History, Calendar } from "lucide-react"
 
 interface WebSalesEditableTableProps {
   initialWebSalesData: WebSalesData[]
   month: string
   onDataUpdated: () => void
-}
-
-// 過去価格データの型定義
-interface HistoricalPriceData {
-  product_id: string
-  product_name: string
-  current_price: number
-  historical_price: number
-  current_profit_rate?: number
-  historical_profit_rate?: number
-  total_count: number
-  current_amount: number
-  historical_amount: number
-  price_difference: number
-}
-
-// 価格変更日の型定義
-interface PriceChangeDate {
-  change_date: string
-  product_count: number
 }
 
 export default function WebSalesEditableTable({
@@ -61,16 +39,6 @@ export default function WebSalesEditableTable({
   const [editMode, setEditMode] = useState<{ [key: string]: boolean }>({})
   const [editedValue, setEditedValue] = useState<string>("")
   const [originalValues, setOriginalValues] = useState<{ [key: string]: number }>({})
-
-  // 過去価格表示モード
-  const [isHistoricalMode, setIsHistoricalMode] = useState(false)
-  const [historicalPriceData, setHistoricalPriceData] = useState<HistoricalPriceData[]>([])
-  const [loadingHistorical, setLoadingHistorical] = useState(false)
-
-  // 価格変更日付管理
-  const [priceChangeDates, setPriceChangeDates] = useState<PriceChangeDate[]>([])
-  const [selectedHistoryDate, setSelectedHistoryDate] = useState<string | null>(null)
-  const [showHistoryManagementModal, setShowHistoryManagementModal] = useState(false)
 
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false)
   const [isAmazonCsvModalOpen, setIsAmazonCsvModalOpen] = useState(false)
@@ -87,144 +55,34 @@ export default function WebSalesEditableTable({
     setData(initialWebSalesData)
   }, [initialWebSalesData])
 
-  // 価格変更日付の取得
-  useEffect(() => {
-    fetchPriceChangeDates()
-  }, [])
-
-  const fetchPriceChangeDates = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('product_price_history')
-        .select('valid_from, product_id')
-        .order('valid_from', { ascending: false })
-
-      if (error) throw error
-
-      // 日付ごとにグループ化
-      const dateMap = new Map<string, Set<string>>()
-      data?.forEach(item => {
-        const date = new Date(item.valid_from).toISOString().split('T')[0]
-        if (!dateMap.has(date)) {
-          dateMap.set(date, new Set())
-        }
-        dateMap.get(date)?.add(item.product_id)
-      })
-
-      // 最新5件の日付を取得
-      const dates = Array.from(dateMap.entries())
-        .map(([date, products]) => ({
-          change_date: date,
-          product_count: products.size
-        }))
-        .slice(0, 5)
-
-      setPriceChangeDates(dates)
-    } catch (error) {
-      console.error('価格変更日付の取得に失敗しました:', error)
-    }
-  }
-
-  // 特定日付の価格で表示
-  const showPriceAtDate = async (date: string) => {
-    setLoadingHistorical(true)
-    setSelectedHistoryDate(date)
-    try {
-      // ここで特定日付の価格データを取得する処理を実装
-      // 現在の実装では month を使用していますが、date を使用するように変更が必要
-      const { data: historicalData, error } = await supabase.rpc(
-        'calculate_sales_with_historical_prices',
-        { target_month: month } // 将来的には target_date に変更
-      )
-
-      if (error) throw error
-
-      setHistoricalPriceData(historicalData || [])
-      setIsHistoricalMode(true)
-    } catch (error) {
-      console.error('過去価格データの取得に失敗しました:', error)
-      alert('過去価格データの取得に失敗しました')
-    } finally {
-      setLoadingHistorical(false)
-    }
-  }
-
-  // 過去価格データの取得
-  const fetchHistoricalPrices = async () => {
-    setLoadingHistorical(true)
-    try {
-      const { data: historicalData, error } = await supabase.rpc(
-        'calculate_sales_with_historical_prices',
-        { target_month: month }
-      )
-
-      if (error) throw error
-
-      setHistoricalPriceData(historicalData || [])
-    } catch (error) {
-      console.error('過去価格データの取得に失敗しました:', error)
-      alert('過去価格データの取得に失敗しました')
-    } finally {
-      setLoadingHistorical(false)
-    }
-  }
-
-  // 過去価格モードの切り替え
-  const toggleHistoricalMode = () => {
-    if (!isHistoricalMode && historicalPriceData.length === 0) {
-      fetchHistoricalPrices()
-    }
-    setIsHistoricalMode(!isHistoricalMode)
-    setSelectedHistoryDate(null)
-  }
-
+  // productMap: RPC関数がunit_priceをpriceとして返すので、そのまま使う
   const productMap = useMemo(() => {
     const map = new Map()
-
-    if (isHistoricalMode && historicalPriceData.length > 0) {
-      // 過去価格モードの場合
-      historicalPriceData.forEach(item => {
+    initialWebSalesData.forEach(item => {
+      if (item.product_id && item.product_name) {
         map.set(item.product_id, {
           id: item.product_id,
           name: item.product_name,
-          price: item.historical_price, // 過去価格を使用
-          profit_rate: item.historical_profit_rate || 0, // 過去の利益率
-          currentPrice: item.current_price,
-          currentProfitRate: item.current_profit_rate || 0,
-          historicalPrice: item.historical_price,
-          historicalProfitRate: item.historical_profit_rate || 0,
-          priceDifference: item.price_difference
+          price: item.price, // RPC関数が COALESCE(ws.unit_price, p.price) を返す
+          profit_rate: item.profit_rate || 0,
+          series: item.series,
+          series_code: item.series_code,
+          product_code: item.product_code,
         })
-      })
-    } else {
-      // 通常モードの場合
-      initialWebSalesData.forEach(item => {
-        if (item.product_id && item.product_name) {
-          map.set(item.product_id, {
-            id: item.product_id,
-            name: item.product_name,
-            price: item.price,
-            profit_rate: item.profit_rate || 0, // 利益率を追加
-            series: item.series,
-            series_code: item.series_code,
-            product_code: item.product_code,
-          })
-        }
-      })
-    }
-
+      }
+    })
     return map
-  }, [initialWebSalesData, isHistoricalMode, historicalPriceData])
+  }, [initialWebSalesData])
 
   const productMasterList = useMemo(() => {
     return Array.from(productMap.values());
-  }, [productMap]);
+  }, [productMap])
 
   const getProductName = (id: string) => productMap.get(id)?.name || ""
   const getProductSeriesCode = (id: string) => productMap.get(id)?.series_code || 0
   const getProductNumber = (id: string) => productMap.get(id)?.product_code || 0
   const getProductPrice = (id: string) => productMap.get(id)?.price || 0
-  const getProductProfitRate = (id: string) => productMap.get(id)?.profit_rate || 0 // 利益率取得関数を追加
+  const getProductProfitRate = (id: string) => productMap.get(id)?.profit_rate || 0
 
   const handleMonthChange = (selectedMonth: string) => {
     const params = new URLSearchParams()
@@ -365,6 +223,13 @@ export default function WebSalesEditableTable({
 
         if (updateError) throw updateError
       } else {
+        // 新規挿入時は現在の商品価格をunit_priceとして保存
+        const { data: productData } = await supabase
+          .from('products')
+          .select('price, profit_rate')
+          .eq('id', itemId)
+          .single()
+
         const defaultData = {
           product_id: itemId,
           report_month: reportMonth,
@@ -375,6 +240,8 @@ export default function WebSalesEditableTable({
           base_count: 0,
           qoo10_count: 0,
           tiktok_count: 0,
+          unit_price: productData?.price || 0,
+          unit_profit_rate: productData?.profit_rate || 0,
           report_date: new Date().toISOString().split('T')[0],
           [field]: newValue
         }
@@ -421,11 +288,6 @@ export default function WebSalesEditableTable({
     onDataUpdated()
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
-  }
-
   return (
     <div className="space-y-4">
       <WebSalesTableHeader
@@ -434,55 +296,6 @@ export default function WebSalesEditableTable({
         onMonthChange={handleMonthChange}
         onFilterChange={setFilterValue}
       />
-
-      {/* 過去価格表示ボタンと価格変更日付ボタン */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <button
-          onClick={toggleHistoricalMode}
-          disabled={loadingHistorical}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isHistoricalMode
-            ? 'bg-amber-500 text-white hover:bg-amber-600'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            } disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
-        >
-          <History className="h-4 w-4" />
-          {loadingHistorical ? '読み込み中...' : isHistoricalMode ? '現在価格で表示' : '過去価格で表示'}
-        </button>
-
-        {priceChangeDates.length > 0 && (
-          <>
-            <span className="text-sm text-gray-600">価格変更日:</span>
-            {priceChangeDates.map((dateInfo, index) => (
-              <button
-                key={index}
-                onClick={() => showPriceAtDate(dateInfo.change_date)}
-                disabled={loadingHistorical}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selectedHistoryDate === dateInfo.change_date
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                  } disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1`}
-              >
-                <Calendar className="h-3 w-3" />
-                {formatDate(dateInfo.change_date)} ({dateInfo.product_count}商品)
-              </button>
-            ))}
-          </>
-        )}
-
-        <button
-          onClick={() => setShowHistoryManagementModal(true)}
-          className="px-4 py-2 rounded-md text-sm font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors flex items-center gap-2"
-        >
-          <History className="h-4 w-4" />
-          履歴の管理
-        </button>
-      </div>
-
-      {(isHistoricalMode || selectedHistoryDate) && historicalPriceData.length > 0 && (
-        <div className="text-sm text-amber-600 font-medium">
-          ※ 売上金額は{selectedHistoryDate ? formatDate(selectedHistoryDate) : month}時点の価格で計算されています
-        </div>
-      )}
 
       {/* ===== 商品一覧テーブルの上：データ取り込み＆チャネル別削除ボタン ===== */}
       <WebSalesImportButtons
@@ -539,8 +352,6 @@ export default function WebSalesEditableTable({
         productMaster={productMasterList}
         onRefresh={onDataUpdated}
         onChannelDelete={handleChannelDelete}
-        isHistoricalMode={isHistoricalMode || !!selectedHistoryDate}
-        historicalPriceData={historicalPriceData}
         month={month}
       />
 
@@ -577,108 +388,28 @@ export default function WebSalesEditableTable({
       {/* 学習データ管理ボタン群 */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">学習データ管理:</span>
-        <button
-          onClick={() => handleLearningReset('csv')}
-          className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
-        >
-          🔄 汎用CSV学習データリセット
-        </button>
-        <button
-          onClick={() => handleLearningReset('amazon')}
-          className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200"
-        >
-          🔄 Amazon学習データリセット
-        </button>
-        <button
-          onClick={() => handleLearningReset('rakuten')}
-          className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200"
-        >
-          🔄 楽天学習データリセット
-        </button>
-        <button
-          onClick={() => handleLearningReset('yahoo')}
-          className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200"
-        >
-          🔄 Yahoo学習データリセット
-        </button>
-        <button
-          onClick={() => handleLearningReset('mercari')}
-          className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200"
-        >
-          🔄 メルカリ学習データリセット
-        </button>
-        <button
-          onClick={() => handleLearningReset('base')}
-          className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200"
-        >
-          🔄 BASE学習データリセット
-        </button>
-        <button
-          onClick={() => handleLearningReset('qoo10')}
-          className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200"
-        >
-          🔄 Qoo10学習データリセット
-        </button>
-        <button
-          onClick={() => handleLearningReset('tiktok')}
-          className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200"
-        >
-          🔄 TikTok学習データリセット
-        </button>
+        <button onClick={() => handleLearningReset('csv')} className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200">🔄 汎用CSV学習データリセット</button>
+        <button onClick={() => handleLearningReset('amazon')} className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200">🔄 Amazon学習データリセット</button>
+        <button onClick={() => handleLearningReset('rakuten')} className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">🔄 楽天学習データリセット</button>
+        <button onClick={() => handleLearningReset('yahoo')} className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200">🔄 Yahoo学習データリセット</button>
+        <button onClick={() => handleLearningReset('mercari')} className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200">🔄 メルカリ学習データリセット</button>
+        <button onClick={() => handleLearningReset('base')} className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200">🔄 BASE学習データリセット</button>
+        <button onClick={() => handleLearningReset('qoo10')} className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200">🔄 Qoo10学習データリセット</button>
+        <button onClick={() => handleLearningReset('tiktok')} className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200">🔄 TikTok学習データリセット</button>
       </div>
 
       {/* ECチャネル別削除ボタン群 */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">ECチャネル別データ削除:</span>
         <button onClick={() => handleChannelDelete('all')} className="px-3 py-1 text-xs font-semibold text-white bg-red-600 border border-red-700 rounded hover:bg-red-700">⚠️ 全チャネル一括削除</button>
-        <button
-          onClick={() => handleChannelDelete('csv')}
-          className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
-        >
-          🗑️ 汎用CSV削除
-        </button>
-        <button
-          onClick={() => handleChannelDelete('amazon')}
-          className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200"
-        >
-          🗑️ Amazon削除
-        </button>
-        <button
-          onClick={() => handleChannelDelete('rakuten')}
-          className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200"
-        >
-          🗑️ 楽天削除
-        </button>
-        <button
-          onClick={() => handleChannelDelete('yahoo')}
-          className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200"
-        >
-          🗑️ Yahoo削除
-        </button>
-        <button
-          onClick={() => handleChannelDelete('mercari')}
-          className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200"
-        >
-          🗑️ メルカリ削除
-        </button>
-        <button
-          onClick={() => handleChannelDelete('base')}
-          className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200"
-        >
-          🗑️ BASE削除
-        </button>
-        <button
-          onClick={() => handleChannelDelete('qoo10')}
-          className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200"
-        >
-          🗑️ Qoo10削除
-        </button>
-        <button
-          onClick={() => handleChannelDelete('tiktok')}
-          className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200"
-        >
-          🗑️ TikTok削除
-        </button>
+        <button onClick={() => handleChannelDelete('csv')} className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200">🗑️ 汎用CSV削除</button>
+        <button onClick={() => handleChannelDelete('amazon')} className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200">🗑️ Amazon削除</button>
+        <button onClick={() => handleChannelDelete('rakuten')} className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">🗑️ 楽天削除</button>
+        <button onClick={() => handleChannelDelete('yahoo')} className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200">🗑️ Yahoo削除</button>
+        <button onClick={() => handleChannelDelete('mercari')} className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200">🗑️ メルカリ削除</button>
+        <button onClick={() => handleChannelDelete('base')} className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200">🗑️ BASE削除</button>
+        <button onClick={() => handleChannelDelete('qoo10')} className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200">🗑️ Qoo10削除</button>
+        <button onClick={() => handleChannelDelete('tiktok')} className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200">🗑️ TikTok削除</button>
       </div>
 
       <WebSalesSummary totalCount={totalCount} totalAmount={totalAmount} />
@@ -753,18 +484,6 @@ export default function WebSalesEditableTable({
           onClose={() => setIsTiktokCsvModalOpen(false)}
           onImportComplete={handleImportSuccess}
           products={productMasterList}
-        />
-      )}
-
-      {/* 価格履歴管理モーダル */}
-      {showHistoryManagementModal && (
-        <PriceHistoryManagementModal
-          isOpen={showHistoryManagementModal}
-          onClose={() => setShowHistoryManagementModal(false)}
-          onRefresh={() => {
-            fetchPriceChangeDates()
-            onDataUpdated()
-          }}
         />
       )}
     </div>

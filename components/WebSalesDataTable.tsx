@@ -1,10 +1,10 @@
-// /components/WebSalesDataTable.tsx ver.15 (新規登録ボタン復活版)
+// /components/WebSalesDataTable.tsx ver.16 (単価スナップショット方式)
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, TrendingUp, TrendingDown, Edit, EyeOff, Link2 } from "lucide-react"
+import { Plus, Trash2, Edit, EyeOff, Link2 } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import ProductEditModal from "./ProductEditModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
@@ -24,8 +24,6 @@ interface WebSalesDataTableProps {
   productMaster?: any[]
   onRefresh?: () => void
   onChannelDelete?: (channel: string) => void
-  isHistoricalMode?: boolean
-  historicalPriceData?: any[]
   month?: string
 }
 
@@ -48,8 +46,6 @@ export default function WebSalesDataTable({
   productMaster = [],
   onRefresh,
   onChannelDelete,
-  isHistoricalMode = false,
-  historicalPriceData = [],
   month,
 }: WebSalesDataTableProps) {
   const supabase = getSupabaseBrowserClient();
@@ -156,23 +152,7 @@ export default function WebSalesDataTable({
     return adCost?.total_ad_cost || 0
   }
 
-  // 過去価格データから価格差情報を取得
-  const getPriceDifferenceInfo = (productId: string) => {
-    if (!isHistoricalMode || !historicalPriceData) return null
-    const data = historicalPriceData.find(item => item.product_id === productId)
-    if (!data) return null
 
-    return {
-      currentPrice: data.current_price,
-      historicalPrice: data.historical_price,
-      currentProfitRate: data.current_profit_rate,
-      historicalProfitRate: data.historical_profit_rate,
-      difference: data.price_difference,
-      differencePercent: data.current_price > 0
-        ? ((data.current_price - data.historical_price) / data.current_price * 100).toFixed(1)
-        : '0'
-    }
-  }
 
   // 現在の月を取得（"YYYY-MM" 形式）
   const getCurrentMonth = () => {
@@ -461,12 +441,10 @@ export default function WebSalesDataTable({
                   商品名
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-                  価格<br />
-                  {isHistoricalMode && <span className="text-amber-600 text-[10px]">(過去価格)</span>}
+                  価格
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-                  利益率<br />
-                  {isHistoricalMode && <span className="text-amber-600 text-[10px]">(過去)</span>}
+                  利益率
                 </th>
                 {sites.map(site => (
                   <th key={site.key} className={`px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap ${site.bgColor}`}>
@@ -501,7 +479,6 @@ export default function WebSalesDataTable({
                 filteredItems.map((row) => {
                   const price = getProductPrice(row.product_id)
                   const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
-                  const priceDiff = getPriceDifferenceInfo(row.product_id)
 
                   const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
                   const totalAmount = totalCount * price
@@ -530,61 +507,11 @@ export default function WebSalesDataTable({
                           )}
                         </div>
                       </td>
-                      <td className={`px-4 py-4 text-center ${isHistoricalMode && priceDiff && priceDiff.difference !== 0
-                        ? 'bg-amber-50'
-                        : ''
-                        }`}>
-                        <div className="flex flex-col items-center">
-                          <span>¥{formatNumber(price)}</span>
-                          {isHistoricalMode && priceDiff && priceDiff.difference !== 0 && (
-                            <div className="flex items-center gap-1 text-xs mt-1">
-                              {priceDiff.difference > 0 ? (
-                                <>
-                                  <TrendingUp className="h-3 w-3 text-green-600" />
-                                  <span className="text-green-600">
-                                    +¥{formatNumber(priceDiff.difference)} ({priceDiff.differencePercent}%)
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <TrendingDown className="h-3 w-3 text-red-600" />
-                                  <span className="text-red-600">
-                                    ¥{formatNumber(priceDiff.difference)} ({priceDiff.differencePercent}%)
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                      <td className="px-4 py-4 text-center">
+                        <span>¥{formatNumber(price)}</span>
                       </td>
-                      <td className={`px-4 py-4 text-center ${isHistoricalMode && priceDiff &&
-                        priceDiff.currentProfitRate !== priceDiff.historicalProfitRate
-                        ? 'bg-amber-50'
-                        : ''
-                        }`}>
-                        <div className="flex flex-col items-center">
-                          <span>{profitRate}%</span>
-                          {isHistoricalMode && priceDiff &&
-                            priceDiff.currentProfitRate !== priceDiff.historicalProfitRate && (
-                              <div className="flex items-center gap-1 text-xs mt-1">
-                                {(priceDiff.currentProfitRate || 0) > (priceDiff.historicalProfitRate || 0) ? (
-                                  <>
-                                    <TrendingUp className="h-3 w-3 text-green-600" />
-                                    <span className="text-green-600">
-                                      +{((priceDiff.currentProfitRate || 0) - (priceDiff.historicalProfitRate || 0)).toFixed(1)}%
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TrendingDown className="h-3 w-3 text-red-600" />
-                                    <span className="text-red-600">
-                                      {((priceDiff.currentProfitRate || 0) - (priceDiff.historicalProfitRate || 0)).toFixed(1)}%
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                        </div>
+                      <td className="px-4 py-4 text-center">
+                        <span>{profitRate}%</span>
                       </td>
                       {sites.map(site => {
                         const count = (row as any)[site.key] || 0
