@@ -152,12 +152,12 @@ export async function POST(request: NextRequest) {
         const totalAmount = salesData.amount;
         // CSV実売金額から加重平均単価を計算
         const csvUnitPrice = totalQuantity > 0 ? Math.round(totalAmount / totalQuantity) : 0;
-        console.log(`🔄 処理中: product_id=${productId}, quantity=${totalQuantity}, amount=${totalAmount}, csv_unit_price=${csvUnitPrice}, month=${reportMonth}`);
+        console.log(`🔄 処理中: product_id=${productId}, quantity=${totalQuantity}, amount=${totalAmount}, month=${reportMonth}`);
 
         // 既存レコード確認
         const { data: existingData, error: selectError } = await supabase
           .from('web_sales_summary')
-          .select('id, base_count, unit_price')
+          .select('id, base_count')
           .eq('product_id', productId)
           .eq('report_month', reportMonth)
           .single();
@@ -167,27 +167,19 @@ export async function POST(request: NextRequest) {
           throw selectError;
         }
 
-        // unit_price: CSV実売価格があればそれを使用、なければマスター価格
-        const finalUnitPrice = csvUnitPrice > 0 ? csvUnitPrice : (unitPriceMap.get(productId)?.unit_price || 0);
-
         if (existingData) {
-          // 更新
+          // 更新: base_count と base_amount を更新（unit_price は触らない）
           console.log(`📝 既存レコード更新: id=${existingData.id}, 旧base_count=${existingData.base_count}`);
-          const updateData: any = { base_count: totalQuantity };
-          // CSV実売単価があればunit_priceも更新
-          if (csvUnitPrice > 0) {
-            updateData.unit_price = finalUnitPrice;
-          }
           const { error: updateError } = await supabase
             .from('web_sales_summary')
-            .update(updateData)
+            .update({ base_count: totalQuantity, base_amount: totalAmount })
             .eq('id', existingData.id);
 
           if (updateError) {
             console.error('更新エラー:', updateError);
             throw updateError;
           }
-          console.log(`✅ 更新成功: base_count=${totalQuantity}, unit_price=${finalUnitPrice}`);
+          console.log(`✅ 更新成功: base_count=${totalQuantity}, base_amount=${totalAmount}`);
         } else {
           // 新規挿入
           console.log(`📝 新規レコード挿入`);
@@ -198,7 +190,8 @@ export async function POST(request: NextRequest) {
               product_id: productId,
               report_month: reportMonth,
               base_count: totalQuantity,
-              unit_price: csvUnitPrice > 0 ? finalUnitPrice : unitPrice.unit_price,
+              base_amount: totalAmount,
+              unit_price: unitPrice.unit_price,
               unit_profit_rate: unitPrice.unit_profit_rate,
             });
 
@@ -206,7 +199,7 @@ export async function POST(request: NextRequest) {
             console.error('挿入エラー:', insertError);
             throw insertError;
           }
-          console.log(`✅ 新規挿入成功: base_count=${totalQuantity}, unit_price=${finalUnitPrice}`);
+          console.log(`✅ 新規挿入成功: base_count=${totalQuantity}, base_amount=${totalAmount}`);
         }
         successCount++;
       } catch (itemError) {
