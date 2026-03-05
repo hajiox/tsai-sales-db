@@ -90,12 +90,14 @@ export function findBestMatchSimplified(
 ): { product: Product, matchType: 'special' | 'learned' | 'direct' | 'keyword' } | null {
 
   const normalizedTitle = normalizeTitle(title);
+  // BASEは同一商品の「送料別」「送料込み」など複数バリエーションがあるため重複排除しない
+  const allowDuplicate = channel === 'base';
 
   // 0. 特定キーワードによる専用マッチング
   for (const rule of specialMatchingRules) {
     const hasAllKeywords = rule.keywords.every(keyword => normalizedTitle.includes(keyword));
     if (hasAllKeywords) {
-      const specialProduct = products.find(p => p.name.includes(rule.productName) && !matchedIds.has(p.id));
+      const specialProduct = products.find(p => p.name.includes(rule.productName) && (allowDuplicate || !matchedIds.has(p.id)));
       if (specialProduct) {
         matchedIds.add(specialProduct.id);
         return { product: specialProduct, matchType: 'special' };
@@ -105,8 +107,6 @@ export function findBestMatchSimplified(
 
   // 4-1. 学習データ完全一致
   const learningKey = `${channel}_title` as keyof LearningMap;
-  // ★★★【最重要修正】★★★
-  // 比較前に両方の文字列を正規化する
   const learnedMatch = learning.find(m => {
     if (!m.product_id) return false;
     const normalizedLearnedTitle = normalizeTitle(m[learningKey]);
@@ -115,7 +115,7 @@ export function findBestMatchSimplified(
 
   if (learnedMatch) {
     const product = products.find(p => p.id === learnedMatch.product_id);
-    if (product && !matchedIds.has(product.id)) {
+    if (product && (allowDuplicate || !matchedIds.has(product.id))) {
       matchedIds.add(product.id);
       return { product, matchType: 'learned' };
     }
@@ -123,7 +123,7 @@ export function findBestMatchSimplified(
 
   // 4-2. 商品名の完全一致
   const direct = products.find((p) => {
-    if (matchedIds.has(p.id)) return false;
+    if (!allowDuplicate && matchedIds.has(p.id)) return false;
     const titlesToCompare = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name]
       .filter(Boolean)
       .map(t => normalizeTitle(t));
@@ -142,7 +142,7 @@ export function findBestMatchSimplified(
   let bestMatch: { product: Product; score: number; matchRatio: number } | null = null;
 
   for (const p of products) {
-    if (matchedIds.has(p.id)) continue;
+    if (!allowDuplicate && matchedIds.has(p.id)) continue;
     const targetTitles = [p.amazon_title, p.rakuten_title, p.yahoo_title, p.mercari_title, p.base_title, p.qoo10_title, p.name].filter(Boolean) as string[];
     let maxScore = 0;
     let bestMatchRatio = 0;
