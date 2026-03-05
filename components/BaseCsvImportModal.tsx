@@ -195,7 +195,8 @@ export default function BaseCsvImportModal({
             productInfo: {
               id: item.productId
             },
-            quantity: item.quantity
+            quantity: item.quantity,
+            amount: (item as any).amount || 0
           })),
           newMappings: [],
         };
@@ -203,7 +204,10 @@ export default function BaseCsvImportModal({
         // Step 2からの場合は元のデータを使用
         requestData = {
           saleDate: `${saleMonth}-01`,
-          matchedProducts: parseResult.matchedProducts,
+          matchedProducts: parseResult.matchedProducts.map((p: any) => ({
+            ...p,
+            amount: p.amount || 0
+          })),
           newMappings: [],
         };
       }

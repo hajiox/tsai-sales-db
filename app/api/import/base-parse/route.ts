@@ -1,5 +1,5 @@
 // /app/api/import/base-parse/route.ts
-// ver.4 (ステートレス/チャネル対応版)
+// ver.5 (実売金額対応版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -58,16 +58,17 @@ export async function POST(request: NextRequest) {
 
     const lines = csvContent.split('\n').slice(1).filter((line: string) => line.trim() !== '');
 
-    // ========== 集計処理（変更なし）==========
-    const aggregatedData = new Map<string, number>();
+    // ========== 集計処理（金額も集計）==========
+    const aggregatedData = new Map<string, { quantity: number; amount: number }>();
     let blankTitleRows: any[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const columns = parseCsvLine(lines[i]);
-      if (columns.length < 23) continue;
+      if (columns.length < 24) continue;
 
       const baseTitle = columns[18]?.trim() || '';
       const quantity = parseInt(columns[22], 10) || 0;
+      const amount = parseInt(columns[23], 10) || 0;
 
       if (quantity <= 0) continue;
 
@@ -81,8 +82,11 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const currentQuantity = aggregatedData.get(baseTitle) || 0;
-      aggregatedData.set(baseTitle, currentQuantity + quantity);
+      const current = aggregatedData.get(baseTitle) || { quantity: 0, amount: 0 };
+      aggregatedData.set(baseTitle, {
+        quantity: current.quantity + quantity,
+        amount: current.amount + amount
+      });
     }
     console.log(`[BASE Parse] 集計完了: ${aggregatedData.size}種類の商品`);
 
@@ -107,35 +111,37 @@ export async function POST(request: NextRequest) {
     // この処理専用の「マッチ済みID記憶セット」を作成（ステートレス化）
     const matchedProductIdsThisTime = new Set<string>();
 
-    for (const [baseTitle, quantity] of aggregatedData) {
+    for (const [baseTitle, data] of aggregatedData) {
       try {
-        // ★★★【最重要修正】★★★
-        // 汎用ヘルパー関数に 'base' という channel と記憶用Setを渡す
         const result = findBestMatchSimplified(
           baseTitle,
           validProducts,
           validLearningData,
           matchedProductIdsThisTime,
-          'base' // <--- どのECサイトかを伝える
+          'base'
         );
 
         if (result) {
           matchedProducts.push({
             baseTitle,
-            quantity,
+            quantity: data.quantity,
+            amount: data.amount,
             productInfo: result.product,
             isLearned: result.matchType === 'learned'
           });
         } else {
-          unmatchedProducts.push({ baseTitle, quantity });
+          unmatchedProducts.push({ baseTitle, quantity: data.quantity, amount: data.amount });
         }
       } catch (error) {
         console.error(`マッチング処理でエラーが発生 (${baseTitle}):`, error);
-        unmatchedProducts.push({ baseTitle, quantity });
+        unmatchedProducts.push({ baseTitle, quantity: data.quantity, amount: data.amount });
       }
     }
 
-    const processableQuantity = matchedProducts.reduce((sum, p) => sum + p.quantity, 0);
+    const processableQuantity = matchedProducts.reduce((sum: number, p: any) => sum + p.quantity, 0);
+    const processableAmount = matchedProducts.reduce((sum: number, p: any) => sum + p.amount, 0);
+    const totalQuantity = [...aggregatedData.values()].reduce((sum, d) => sum + d.quantity, 0);
+    const totalAmount = [...aggregatedData.values()].reduce((sum, d) => sum + d.amount, 0);
 
     return NextResponse.json({
       success: true,
@@ -143,8 +149,10 @@ export async function POST(request: NextRequest) {
       unmatchedProducts,
       summary: {
         totalProducts: aggregatedData.size,
-        totalQuantity: [...aggregatedData.values()].reduce((sum, q) => sum + q, 0),
+        totalQuantity,
+        totalAmount,
         processableQuantity,
+        processableAmount,
         matchedCount: matchedProducts.length,
         unmatchedCount: unmatchedProducts.length,
         learnedMatchCount: matchedProducts.filter(p => p.isLearned).length,

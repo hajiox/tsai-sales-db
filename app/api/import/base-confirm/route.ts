@@ -1,5 +1,5 @@
 // /app/api/import/base-confirm/route.ts
-// ver.2 (単価スナップショット対応)
+// ver.3 (実売金額対応版)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -20,11 +20,13 @@ interface ConfirmRequest {
       id: string;
     };
     quantity: number;
+    amount?: number;
   }>;
   newMappings: Array<{
     baseTitle: string;
     productId: string;
     quantity: number;
+    amount?: number;
   }>;
 }
 
@@ -89,14 +91,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. 売上データを商品IDごとに【集計】する
-    const allSalesData: Array<{ productId: string; quantity: number }> = [];
+    const allSalesData: Array<{ productId: string; quantity: number; amount: number }> = [];
 
     // マッチ済み商品を追加
     for (const item of matchedProducts) {
       if (item.productInfo && item.productInfo.id) {
         allSalesData.push({
           productId: item.productInfo.id,
-          quantity: item.quantity || 0
+          quantity: item.quantity || 0,
+          amount: item.amount || 0
         });
       }
     }
@@ -107,7 +110,8 @@ export async function POST(request: NextRequest) {
         if (item.productId) {
           allSalesData.push({
             productId: item.productId,
-            quantity: item.quantity || 0
+            quantity: item.quantity || 0,
+            amount: item.amount || 0
           });
         }
       }
@@ -126,10 +130,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const aggregatedSales = new Map<string, number>();
+    const aggregatedSales = new Map<string, { quantity: number; amount: number }>();
     for (const item of allSalesData) {
-      const currentQuantity = aggregatedSales.get(item.productId) || 0;
-      aggregatedSales.set(item.productId, currentQuantity + item.quantity);
+      const current = aggregatedSales.get(item.productId) || { quantity: 0, amount: 0 };
+      aggregatedSales.set(item.productId, {
+        quantity: current.quantity + item.quantity,
+        amount: current.amount + item.amount
+      });
     }
 
     console.log(`🔍 元データ件数: ${allSalesData.length}件 → 集計後: ${aggregatedSales.size}件`);
@@ -138,15 +145,19 @@ export async function POST(request: NextRequest) {
     const productIds = Array.from(aggregatedSales.keys());
     const unitPriceMap = await getBulkProductUnitPrices(supabase, productIds);
 
-    for (const [productId, totalQuantity] of aggregatedSales.entries()) {
+    for (const [productId, salesData] of aggregatedSales.entries()) {
       try {
         const reportMonth = `${month}-01`;
-        console.log(`🔄 処理中: product_id=${productId}, quantity=${totalQuantity}, month=${reportMonth}`);
+        const totalQuantity = salesData.quantity;
+        const totalAmount = salesData.amount;
+        // CSV実売金額から加重平均単価を計算
+        const csvUnitPrice = totalQuantity > 0 ? Math.round(totalAmount / totalQuantity) : 0;
+        console.log(`🔄 処理中: product_id=${productId}, quantity=${totalQuantity}, amount=${totalAmount}, csv_unit_price=${csvUnitPrice}, month=${reportMonth}`);
 
         // 既存レコード確認
         const { data: existingData, error: selectError } = await supabase
           .from('web_sales_summary')
-          .select('id, base_count')
+          .select('id, base_count, unit_price')
           .eq('product_id', productId)
           .eq('report_month', reportMonth)
           .single();
@@ -156,19 +167,27 @@ export async function POST(request: NextRequest) {
           throw selectError;
         }
 
+        // unit_price: CSV実売価格があればそれを使用、なければマスター価格
+        const finalUnitPrice = csvUnitPrice > 0 ? csvUnitPrice : (unitPriceMap.get(productId)?.unit_price || 0);
+
         if (existingData) {
           // 更新
           console.log(`📝 既存レコード更新: id=${existingData.id}, 旧base_count=${existingData.base_count}`);
+          const updateData: any = { base_count: totalQuantity };
+          // CSV実売単価があればunit_priceも更新
+          if (csvUnitPrice > 0) {
+            updateData.unit_price = finalUnitPrice;
+          }
           const { error: updateError } = await supabase
             .from('web_sales_summary')
-            .update({ base_count: totalQuantity })
+            .update(updateData)
             .eq('id', existingData.id);
 
           if (updateError) {
             console.error('更新エラー:', updateError);
             throw updateError;
           }
-          console.log(`✅ 更新成功: base_count=${totalQuantity}`);
+          console.log(`✅ 更新成功: base_count=${totalQuantity}, unit_price=${finalUnitPrice}`);
         } else {
           // 新規挿入
           console.log(`📝 新規レコード挿入`);
@@ -179,7 +198,7 @@ export async function POST(request: NextRequest) {
               product_id: productId,
               report_month: reportMonth,
               base_count: totalQuantity,
-              unit_price: unitPrice.unit_price,
+              unit_price: csvUnitPrice > 0 ? finalUnitPrice : unitPrice.unit_price,
               unit_profit_rate: unitPrice.unit_profit_rate,
             });
 
@@ -187,7 +206,7 @@ export async function POST(request: NextRequest) {
             console.error('挿入エラー:', insertError);
             throw insertError;
           }
-          console.log(`✅ 新規挿入成功: base_count=${totalQuantity}`);
+          console.log(`✅ 新規挿入成功: base_count=${totalQuantity}, unit_price=${finalUnitPrice}`);
         }
         successCount++;
       } catch (itemError) {
