@@ -290,3 +290,38 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 | `app/globals.css` | 印刷用スタイル追加 |
 
 
+
+
+### 2026-03-04~05 WEB/卸販売 単価スナップショット改修・BASE CSVインポート修正
+
+#### WEB販売管理 — 商品価格変更時の処理改善
+- **問題:** 商品価格変更時、過去月の売上データも最新価格で再計算されてしまう
+- **修正:** `web_sales_summary` に `unit_price` カラムを追加し、インポート時の単価をスナップショットとして保存
+- **影響範囲:** `calculateTotalAllECSites()` のフォールバック順序を `unit_price → price → productMap.price` に変更
+
+#### 卸販売管理 — 同等の単価スナップショット改修
+- WEB販売と同等の問題を卸販売でも修正
+- `wholesale_summary` に `unit_price` カラムを追加
+
+#### OEM売上入力画面 — マスターデータ優先方式
+- **問題:** OEM入力画面の単価入力フィールドが、結局マスターデータで上書きされる
+- **修正:** 単価フィールドをマスターから自動取得・読み取り専用に変更
+- **ファイル:** `app/wholesale/oem-sales/page.tsx`, `components/wholesale/oem-area.tsx`
+
+#### BASE CSVインポート — 実売金額・複数マッチ対応
+- **base-parse (ver.5):** CSVの合計金額列もパース・集計、`base_amount` として保存（参考データ用）
+- **csvHelpers.ts:** BASEのみ同一マスターへの複数マッチ許可（送料別/送料込み対応）
+- **金額表示の設計方針:** クーポン・割引は広告費扱い、全ECサイト `count × マスター価格` で統一表示
+
+#### DBスキーマ変更
+- `web_sales_summary` に `base_amount` (integer, DEFAULT 0) を追加
+
+#### 関連ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `app/api/import/base-parse/route.ts` | CSV合計金額列のパース・集計 |
+| `app/api/import/base-confirm/route.ts` | base_amount保存、unit_price非上書き |
+| `lib/csvHelpers.ts` | BASEのみ重複マッチ許可（allowDuplicate） |
+| `components/BaseCsvImportModal.tsx` | confirm送信時にamountを含める |
+| DB RPC `get_monthly_financial_summary` | count × マスター価格 に統一 |
+
