@@ -108,6 +108,7 @@ export default function AdvertisingDashboard() {
     // AI分析
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
+    const [aiTarget, setAiTarget] = useState<string | null>(null) // null=全体, string=アセットグループ名
 
     // データ取得
     const fetchData = useCallback(async () => {
@@ -309,12 +310,15 @@ export default function AdvertisingDashboard() {
     }
 
     // ===== AI分析 =====
-    const handleAiAnalysis = async () => {
+    const handleAiAnalysis = async (assetGroupName?: string) => {
         setIsAnalyzing(true); setAiAnalysis(null)
+        setAiTarget(assetGroupName || null)
         try {
+            const body: any = { month }
+            if (assetGroupName) body.assetGroupName = assetGroupName
             const res = await fetch('/api/google-ads/ai-analysis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ month }),
+                body: JSON.stringify(body),
             })
             const data = await res.json()
             if (data.success) { setAiAnalysis(data.analysis) }
@@ -540,6 +544,10 @@ export default function AdvertisingDashboard() {
                             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
                             <Download size={16} />広告費取り込み
                         </button>
+                        <button onClick={() => handleAiAnalysis()} disabled={isAnalyzing || assetGroups.length === 0}
+                            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
+                            <Brain size={16} className={isAnalyzing && !aiTarget ? 'animate-pulse' : ''} />{isAnalyzing && !aiTarget ? '分析中...' : 'AI全体分析'}
+                        </button>
                     </div>
 
                     {/* 取り込みパネル */}
@@ -604,6 +612,42 @@ export default function AdvertisingDashboard() {
                         </div>
                     )}
 
+                    {/* AI分析結果パネル（Googleタブ内） */}
+                    {(aiAnalysis || isAnalyzing) && (
+                        <div className="bg-white border-2 border-violet-200 rounded-xl overflow-hidden">
+                            <div className="bg-gradient-to-r from-violet-50 to-blue-50 p-4 border-b border-violet-200 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles className="text-violet-600" size={20} />
+                                    <h2 className="font-bold text-gray-900">
+                                        AI分析 — {aiTarget ? `「${aiTarget}」` : 'Google広告全体'}
+                                    </h2>
+                                    <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">Gemini 2.5 Flash</span>
+                                </div>
+                                <button onClick={() => { setAiAnalysis(null); setAiTarget(null) }} className="text-gray-400 hover:text-gray-600 text-sm">閉じる</button>
+                            </div>
+                            {isAnalyzing && (
+                                <div className="flex items-center gap-3 py-10 justify-center">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-300 border-t-violet-600" />
+                                    <span className="text-violet-700 font-medium">{aiTarget ? `「${aiTarget}」を分析中...` : '全体データを分析中...'}</span>
+                                </div>
+                            )}
+                            {aiAnalysis && (
+                                <div className="p-6">
+                                    <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700">
+                                        {aiAnalysis.split('\n').map((line, i) => {
+                                            if (line.startsWith('## ')) return <h2 key={i} className="text-lg font-bold mt-6 mb-3 pb-2 border-b border-gray-100">{line.replace('## ', '')}</h2>
+                                            if (line.startsWith('### ')) return <h3 key={i} className="text-base font-semibold mt-4 mb-2">{line.replace('### ', '')}</h3>
+                                            if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-4 mb-1 text-sm leading-relaxed">{line.replace(/^[-*]\s/, '')}</li>
+                                            if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-semibold text-sm my-2">{line.replace(/\*\*/g, '')}</p>
+                                            if (line.trim() === '') return <br key={i} />
+                                            return <p key={i} className="text-sm leading-relaxed mb-2">{line}</p>
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Google広告 シリーズ別パフォーマンス */}
                     <div className="bg-white border rounded-lg overflow-hidden">
                         <div className="p-5 border-b"><h2 className="text-lg font-semibold flex items-center gap-2"><Zap size={20} className="text-amber-500" />シリーズ別パフォーマンス — {month}</h2></div>
@@ -616,6 +660,7 @@ export default function AdvertisingDashboard() {
                                     <th className="text-right px-4 py-3 font-medium">CPC</th><th className="text-right px-4 py-3 font-medium">CV</th>
                                     <th className="text-right px-4 py-3 font-medium">CVR</th><th className="text-right px-4 py-3 font-medium">CV値</th>
                                     <th className="text-right px-4 py-3 font-medium">ROAS</th>
+                                    <th className="text-center px-2 py-3 font-medium">AI</th>
                                 </tr></thead>
                                 <tbody>
                                     {seriesSummary().map(([seriesCode, data]) => {
@@ -644,6 +689,15 @@ export default function AdvertisingDashboard() {
                                                     <td className="text-right px-4 py-3">{formatPercent(cvr)}</td>
                                                     <td className="text-right px-4 py-3">{formatCurrency(data.conversionsValue)}</td>
                                                     <td className={`text-right px-4 py-3 font-semibold ${roas >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>{roas.toFixed(0)}%</td>
+                                                    <td className="text-center px-2 py-3">
+                                                        {data.groups.length === 1 && (
+                                                            <button onClick={(e) => { e.stopPropagation(); handleAiAnalysis(data.groups[0].asset_group_name) }}
+                                                                disabled={isAnalyzing} title={`「${data.groups[0].asset_group_name}」をAI分析`}
+                                                                className="p-1.5 rounded-lg hover:bg-violet-100 text-violet-500 hover:text-violet-700 disabled:text-gray-300 transition-colors">
+                                                                <Brain size={14} />
+                                                            </button>
+                                                        )}
+                                                    </td>
                                                 </tr>
                                                 {isExpanded && data.groups.map(g => {
                                                     const gCtr = g.total_impressions > 0 ? (g.total_clicks / g.total_impressions * 100) : 0
@@ -662,6 +716,13 @@ export default function AdvertisingDashboard() {
                                                             <td className="text-right px-4 py-2">{formatPercent(gCvr)}</td>
                                                             <td className="text-right px-4 py-2">{formatCurrency(g.total_conversions_value)}</td>
                                                             <td className={`text-right px-4 py-2 ${gRoas >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>{gRoas.toFixed(0)}%</td>
+                                                            <td className="text-center px-2 py-2">
+                                                                <button onClick={() => handleAiAnalysis(g.asset_group_name)}
+                                                                    disabled={isAnalyzing} title={`「${g.asset_group_name}」をAI分析`}
+                                                                    className="p-1 rounded hover:bg-violet-100 text-violet-400 hover:text-violet-700 disabled:text-gray-300 transition-colors">
+                                                                    <Brain size={12} />
+                                                                </button>
+                                                            </td>
                                                         </tr>
                                                     )
                                                 })}
@@ -679,6 +740,7 @@ export default function AdvertisingDashboard() {
                                         <td className="text-right px-4 py-3">{formatPercent(avgCvr)}</td>
                                         <td className="text-right px-4 py-3">{formatCurrency(totalConversionsValue)}</td>
                                         <td className={`text-right px-4 py-3 ${totalCost > 0 ? (totalConversionsValue / totalCost * 100 >= 100 ? 'text-emerald-600' : 'text-red-500') : ''}`}>{totalCost > 0 ? `${(totalConversionsValue / totalCost * 100).toFixed(0)}%` : '—'}</td>
+                                        <td></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -687,7 +749,7 @@ export default function AdvertisingDashboard() {
                 </>
             )}
 
-            {/* ===== AI分析タブ ===== */}
+            {/* ===== AI分析タブ（概要タブからのリンク用） ===== */}
             {activeTab === 'ai-analysis' && (
                 <div className="space-y-5">
                     <div className="bg-gradient-to-r from-violet-50 to-blue-50 border border-violet-200 rounded-xl p-6">
@@ -697,42 +759,56 @@ export default function AdvertisingDashboard() {
                                     <Sparkles className="text-violet-600" size={22} />
                                     AI広告パフォーマンス分析 — {month}
                                 </h2>
-                                <p className="text-sm text-gray-600 mt-1">Gemini 2.0 Flashが広告データを分析し、最適化のための具体的な提案を生成します</p>
+                                <p className="text-sm text-gray-600 mt-1">Gemini 2.5 Flashが広告データを分析し、P-MAX最適化フレームワークで具体的な提案を生成します</p>
                             </div>
-                            <button onClick={handleAiAnalysis} disabled={isAnalyzing}
-                                className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-gray-400 transition-colors text-sm font-medium shadow-sm">
-                                <Brain size={18} className={isAnalyzing ? 'animate-pulse' : ''} />
-                                {isAnalyzing ? '分析中...' : 'AI分析を実行'}
-                            </button>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleAiAnalysis()} disabled={isAnalyzing}
+                                    className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-gray-400 transition-colors text-sm font-medium shadow-sm">
+                                    <Brain size={16} className={isAnalyzing && !aiTarget ? 'animate-pulse' : ''} />
+                                    {isAnalyzing && !aiTarget ? '分析中...' : '全体分析'}
+                                </button>
+                            </div>
                         </div>
-
-                        {isAnalyzing && (
-                            <div className="flex items-center gap-3 py-8 justify-center">
-                                <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-300 border-t-violet-600"></div>
-                                <span className="text-violet-700 font-medium">広告データを分析しています...</span>
-                            </div>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                            {assetGroups.filter(g => g.total_cost > 0).map(g => (
+                                <button key={g.asset_group_name}
+                                    onClick={() => handleAiAnalysis(g.asset_group_name)}
+                                    disabled={isAnalyzing}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${aiTarget === g.asset_group_name && isAnalyzing
+                                        ? 'bg-violet-200 text-violet-800'
+                                        : 'bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 disabled:text-gray-400 disabled:border-gray-200'
+                                        }`}>
+                                    <Brain size={12} />{g.asset_group_name}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    {aiAnalysis && (
-                        <div className="bg-white border rounded-xl p-6">
-                            <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-strong:text-gray-900 prose-li:text-gray-700">
-                                {aiAnalysis.split('\n').map((line, i) => {
-                                    if (line.startsWith('## ')) {
-                                        return <h2 key={i} className="text-lg font-bold mt-6 mb-3 pb-2 border-b border-gray-100">{line.replace('## ', '')}</h2>
-                                    }
-                                    if (line.startsWith('### ')) {
-                                        return <h3 key={i} className="text-base font-semibold mt-4 mb-2">{line.replace('### ', '')}</h3>
-                                    }
-                                    if (line.startsWith('- ') || line.startsWith('* ')) {
-                                        return <li key={i} className="ml-4 mb-1 text-sm leading-relaxed">{line.replace(/^[-*]\s/, '')}</li>
-                                    }
-                                    if (line.startsWith('**') && line.endsWith('**')) {
-                                        return <p key={i} className="font-semibold text-sm my-2">{line.replace(/\*\*/g, '')}</p>
-                                    }
-                                    if (line.trim() === '') return <br key={i} />
-                                    return <p key={i} className="text-sm leading-relaxed mb-2">{line}</p>
-                                })}
+                    {isAnalyzing && (
+                        <div className="flex items-center gap-3 py-10 justify-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-300 border-t-violet-600" />
+                            <span className="text-violet-700 font-medium">{aiTarget ? `「${aiTarget}」を分析中...` : '全体データを分析中...'}</span>
+                        </div>
+                    )}
+
+                    {aiAnalysis && !isAnalyzing && (
+                        <div className="bg-white border rounded-xl overflow-hidden">
+                            <div className="bg-violet-50 px-6 py-3 border-b flex items-center gap-2">
+                                <Sparkles size={16} className="text-violet-600" />
+                                <span className="font-semibold text-sm">{aiTarget ? `「${aiTarget}」の分析結果` : 'Google広告全体の分析結果'}</span>
+                                <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full ml-2">Gemini 2.5 Flash</span>
+                            </div>
+                            <div className="p-6">
+                                <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700">
+                                    {aiAnalysis.split('\n').map((line, i) => {
+                                        if (line.startsWith('## ')) return <h2 key={i} className="text-lg font-bold mt-6 mb-3 pb-2 border-b border-gray-100">{line.replace('## ', '')}</h2>
+                                        if (line.startsWith('### ')) return <h3 key={i} className="text-base font-semibold mt-4 mb-2">{line.replace('### ', '')}</h3>
+                                        if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-4 mb-1 text-sm leading-relaxed">{line.replace(/^[-*]\s/, '')}</li>
+                                        if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-semibold text-sm my-2">{line.replace(/\*\*/g, '')}</p>
+                                        if (line.trim() === '') return <br key={i} />
+                                        return <p key={i} className="text-sm leading-relaxed mb-2">{line}</p>
+                                    })}
+                                </div>
                             </div>
                         </div>
                     )}
