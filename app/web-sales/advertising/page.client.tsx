@@ -662,15 +662,21 @@ export default function AdvertisingDashboard() {
                         <div className="p-5 border-b"><h2 className="text-lg font-semibold flex items-center gap-2"><Zap size={20} className="text-amber-500" />シリーズ別パフォーマンス — {month}</h2></div>
                         <div className="overflow-x-auto">
                             <table className="w-full">
-                                <thead><tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
-                                    <th className="text-left px-5 py-3 font-medium">シリーズ / アセットグループ</th>
-                                    <th className="text-right px-4 py-3 font-medium">広告費</th><th className="text-right px-4 py-3 font-medium">表示</th>
-                                    <th className="text-right px-4 py-3 font-medium">クリック</th><th className="text-right px-4 py-3 font-medium">CTR</th>
-                                    <th className="text-right px-4 py-3 font-medium">CPC</th><th className="text-right px-4 py-3 font-medium">CV</th>
-                                    <th className="text-right px-4 py-3 font-medium">CVR</th><th className="text-right px-4 py-3 font-medium">CV値</th>
-                                    <th className="text-right px-4 py-3 font-medium">ROAS</th>
-                                    <th className="text-center px-2 py-3 font-medium">AI</th>
-                                </tr></thead>
+                                <thead>
+                                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
+                                        <th className="text-left px-5 py-3 font-medium min-w-[180px]">シリーズ / アセットグループ</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[90px]">広告費</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[80px]">表示</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[70px]">クリック</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[60px]">CTR</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[70px]">CPC</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[60px]">CV</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[60px]">CVR</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[80px]">CV値</th>
+                                        <th className="text-right px-4 py-3 font-medium min-w-[70px]">ROAS</th>
+                                        <th className="text-center px-2 py-3 font-medium min-w-[40px]">AI</th>
+                                    </tr>
+                                </thead>
                                 <tbody>
                                     {seriesSummary().map(([seriesCode, data]) => {
                                         const seriesName = seriesCode === 0 ? '未分類' : seriesMap.get(seriesCode) || `シリーズ ${seriesCode}`
