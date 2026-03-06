@@ -54,6 +54,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const [totals, setTotals] = useState<Totals | null>(null);
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rpcTotalAdCost, setRpcTotalAdCost] = useState(0);
+  const [rpcTotalFinalProfit, setRpcTotalFinalProfit] = useState(0);
 
   const [hoveredItem, setHoveredItem] = useState<HoveredItem | null>(null);
   const [trendData, setTrendData] = useState<Record<string, TrendData[]>>({});
@@ -126,6 +128,9 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
         const financialData = financialRes.data;
         if (financialData && financialData.length > 0) {
           const financial = financialData[0];
+          // RPCのtotal値を保存（サイト別合計では拾えないGoogle広告費等を含む）
+          setRpcTotalAdCost(financial.total_ad_cost ?? 0);
+          setRpcTotalFinalProfit(financial.total_final_profit ?? 0);
           const siteTotals: Totals = {};
           SITES.forEach(s => {
             siteTotals[s.key] = {
@@ -219,8 +224,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
-  const grandTotalAdCost = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0;
-  const grandTotalFinalProfit = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0;
+  const grandTotalAdCost = rpcTotalAdCost || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0);
+  const grandTotalFinalProfit = rpcTotalFinalProfit || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0);
 
   const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
 
