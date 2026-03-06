@@ -2,7 +2,7 @@
 // 統合広告管理ダッシュボード — 複数プラットフォーム対応 + AI分析機能
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import {
@@ -664,20 +664,33 @@ export default function AdvertisingDashboard() {
                     <div className="bg-white border rounded-lg overflow-hidden">
                         <div className="p-5 border-b"><h2 className="text-lg font-semibold flex items-center gap-2"><Zap size={20} className="text-amber-500" />シリーズ別パフォーマンス — {month}</h2></div>
                         <div className="overflow-x-auto">
-                            <table className="w-full">
+                            <table className="w-full" style={{ tableLayout: 'fixed' }}>
+                                <colgroup>
+                                    <col style={{ width: '18%' }} />
+                                    <col style={{ width: '9%' }} />
+                                    <col style={{ width: '9%' }} />
+                                    <col style={{ width: '7%' }} />
+                                    <col style={{ width: '7%' }} />
+                                    <col style={{ width: '7%' }} />
+                                    <col style={{ width: '7%' }} />
+                                    <col style={{ width: '7%' }} />
+                                    <col style={{ width: '9%' }} />
+                                    <col style={{ width: '7%' }} />
+                                    <col style={{ width: '4%' }} />
+                                </colgroup>
                                 <thead>
                                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
-                                        <th className="text-left px-5 py-3 font-medium min-w-[180px]">シリーズ / アセットグループ</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[90px]">広告費</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[80px]">表示</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[70px]">クリック</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[60px]">CTR</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[70px]">CPC</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[60px]">CV</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[60px]">CVR</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[80px]">CV値</th>
-                                        <th className="text-right px-4 py-3 font-medium min-w-[70px]">ROAS</th>
-                                        <th className="text-center px-2 py-3 font-medium min-w-[40px]">AI</th>
+                                        <th className="text-left px-5 py-3 font-medium">シリーズ / アセットグループ</th>
+                                        <th className="text-right px-4 py-3 font-medium">広告費</th>
+                                        <th className="text-right px-4 py-3 font-medium">表示</th>
+                                        <th className="text-right px-4 py-3 font-medium">クリック</th>
+                                        <th className="text-right px-4 py-3 font-medium">CTR</th>
+                                        <th className="text-right px-4 py-3 font-medium">CPC</th>
+                                        <th className="text-right px-4 py-3 font-medium">CV</th>
+                                        <th className="text-right px-4 py-3 font-medium">CVR</th>
+                                        <th className="text-right px-4 py-3 font-medium">CV値</th>
+                                        <th className="text-right px-4 py-3 font-medium">ROAS</th>
+                                        <th className="text-center px-2 py-3 font-medium">AI</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -690,7 +703,7 @@ export default function AdvertisingDashboard() {
                                         const isExpanded = expandedSeries.has(seriesCode)
                                         const hasMultipleGroups = data.groups.length > 1
                                         return (
-                                            <tbody key={`series-block-${seriesCode}`}>
+                                            <React.Fragment key={`series-block-${seriesCode}`}>
                                                 <tr className="border-b hover:bg-gray-50 cursor-pointer font-medium" onClick={() => hasMultipleGroups && toggleSeries(seriesCode)}>
                                                     <td className="px-5 py-3">
                                                         <div className="flex items-center gap-2">
@@ -746,7 +759,7 @@ export default function AdvertisingDashboard() {
                                                         </tr>
                                                     )
                                                 })}
-                                            </tbody>
+                                            </React.Fragment>
                                         )
                                     })}
                                     <tr className="bg-gray-100 font-bold border-t-2">
