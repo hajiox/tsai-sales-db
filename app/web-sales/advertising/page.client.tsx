@@ -111,7 +111,7 @@ export default function AdvertisingDashboard() {
     const [aiTarget, setAiTarget] = useState<string | null>(null) // null=全体, string=アセットグループ名
 
     // データ取得
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (forceSync = false) => {
         setIsLoading(true)
         try {
             // シリーズマスター取得
@@ -139,12 +139,41 @@ export default function AdvertisingDashboard() {
             const lastDay = new Date(endYear, endMonth, 0).getDate()
             const endDate = `${month}-${String(lastDay).padStart(2, '0')}`
 
-            // パフォーマンスデータ取得
-            const { data: perfData } = await supabase
+            // パフォーマンスデータ取得（DB）
+            let { data: perfData } = await supabase
                 .from('google_ads_performance')
                 .select('campaign_name, asset_group_name, asset_group_status, series_code, cost_micros, impressions, clicks, conversions, conversions_value')
                 .gte('report_date', startDate)
                 .lte('report_date', endDate)
+
+            // === 自動同期: DBにデータがなければAPIから取得 ===
+            if ((!perfData || perfData.length === 0) && !forceSync) {
+                setSyncResult(`${month} のデータを初回取得中...`)
+                setIsSyncing(true)
+                try {
+                    const res = await fetch('/api/google-ads/sync', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ startDate, endDate }),
+                    })
+                    const syncData = await res.json()
+                    if (syncData.success) {
+                        setSyncResult(`${month} のデータを取得しました（${syncData.inserted}件）`)
+                        // 再度DBから取得
+                        const { data: newPerfData } = await supabase
+                            .from('google_ads_performance')
+                            .select('campaign_name, asset_group_name, asset_group_status, series_code, cost_micros, impressions, clicks, conversions, conversions_value')
+                            .gte('report_date', startDate)
+                            .lte('report_date', endDate)
+                        perfData = newPerfData
+                    } else {
+                        setSyncResult(`自動取得エラー: ${syncData.error}`)
+                    }
+                } catch (e: any) {
+                    setSyncResult(`自動取得エラー: ${e.message}`)
+                } finally {
+                    setIsSyncing(false)
+                }
+            }
 
             // アセットグループ別に集計
             const groupMap = new Map<string, AssetGroupSummary>()
@@ -228,7 +257,7 @@ export default function AdvertisingDashboard() {
 
     useEffect(() => { fetchData() }, [fetchData])
 
-    // Google Adsから月のデータを同期
+    // 手動再同期（既存データを上書き更新）
     const handleSync = async () => {
         setIsSyncing(true); setSyncResult(null)
         try {
@@ -241,7 +270,7 @@ export default function AdvertisingDashboard() {
                 body: JSON.stringify({ startDate, endDate }),
             })
             const data = await res.json()
-            if (data.success) { setSyncResult(`${month} のデータを同期しました（${data.inserted}件）`); await fetchData() }
+            if (data.success) { setSyncResult(`${month} のデータを再同期しました（${data.inserted}件）`); await fetchData(true) }
             else { setSyncResult(`同期エラー: ${data.error}`) }
         } catch (error: any) { setSyncResult(`同期エラー: ${error.message}`) }
         finally { setIsSyncing(false) }
@@ -538,7 +567,7 @@ export default function AdvertisingDashboard() {
                     <div className="flex gap-3">
                         <button onClick={handleSync} disabled={isSyncing}
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
-                            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />{isSyncing ? '同期中...' : `${month}を同期`}
+                            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />{isSyncing ? '同期中...' : `${month}を再同期`}
                         </button>
                         <button onClick={openImportPanel} disabled={assetGroups.length === 0}
                             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
