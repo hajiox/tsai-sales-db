@@ -10,7 +10,7 @@ import {
     DollarSign, Eye, MousePointerClick, Target,
     BarChart3, Zap, ChevronDown, ChevronUp,
     Download, Check, Save, AlertCircle, ArrowRight,
-    Brain, Sparkles, LayoutDashboard
+    Brain, Sparkles, LayoutDashboard, CheckCircle
 } from "lucide-react"
 
 // ===== 型定義 =====
@@ -69,7 +69,7 @@ interface AdCostRow {
     other_cost: number
 }
 
-type TabType = 'overview' | 'google' | 'ai-analysis'
+type TabType = 'overview' | 'google'
 
 // ===== メインコンポーネント =====
 export default function AdvertisingDashboard() {
@@ -108,10 +108,12 @@ export default function AdvertisingDashboard() {
     // AI分析
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
-    const [aiTarget, setAiTarget] = useState<string | null>(null) // null=全体, string=アセットグループ名
+    const [aiTarget, setAiTarget] = useState<string | null>(null)
+    // 取り込み済み状態
+    const [isImported, setIsImported] = useState(false)
 
     // データ取得
-    const fetchData = useCallback(async (forceSync = false) => {
+    const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
             // シリーズマスター取得
@@ -146,34 +148,6 @@ export default function AdvertisingDashboard() {
                 .gte('report_date', startDate)
                 .lte('report_date', endDate)
 
-            // === 自動同期: DBにデータがなければAPIから取得 ===
-            if ((!perfData || perfData.length === 0) && !forceSync) {
-                setSyncResult(`${month} のデータを初回取得中...`)
-                setIsSyncing(true)
-                try {
-                    const res = await fetch('/api/google-ads/sync', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ startDate, endDate }),
-                    })
-                    const syncData = await res.json()
-                    if (syncData.success) {
-                        setSyncResult(`${month} のデータを取得しました（${syncData.inserted}件）`)
-                        // 再度DBから取得
-                        const { data: newPerfData } = await supabase
-                            .from('google_ads_performance')
-                            .select('campaign_name, asset_group_name, asset_group_status, series_code, cost_micros, impressions, clicks, conversions, conversions_value')
-                            .gte('report_date', startDate)
-                            .lte('report_date', endDate)
-                        perfData = newPerfData
-                    } else {
-                        setSyncResult(`自動取得エラー: ${syncData.error}`)
-                    }
-                } catch (e: any) {
-                    setSyncResult(`自動取得エラー: ${e.message}`)
-                } finally {
-                    setIsSyncing(false)
-                }
-            }
 
             // アセットグループ別に集計
             const groupMap = new Map<string, AssetGroupSummary>()
@@ -238,6 +212,13 @@ export default function AdvertisingDashboard() {
                 setPlatformCosts(pCosts)
             }
 
+            // 広告費取り込み済みチェック
+            if (adCostData && adCostData.some((r: any) => (r.google_cost || 0) > 0)) {
+                setIsImported(true)
+            } else {
+                setIsImported(false)
+            }
+
             // 最終同期日時
             const { data: syncData } = await supabase
                 .from('google_ads_performance')
@@ -257,7 +238,7 @@ export default function AdvertisingDashboard() {
 
     useEffect(() => { fetchData() }, [fetchData])
 
-    // 手動再同期（既存データを上書き更新）
+    // 手動同期
     const handleSync = async () => {
         setIsSyncing(true); setSyncResult(null)
         try {
@@ -270,7 +251,7 @@ export default function AdvertisingDashboard() {
                 body: JSON.stringify({ startDate, endDate }),
             })
             const data = await res.json()
-            if (data.success) { setSyncResult(`${month} のデータを再同期しました（${data.inserted}件）`); await fetchData(true) }
+            if (data.success) { setSyncResult(`${month} のデータを同期しました（${data.inserted}件）`); await fetchData() }
             else { setSyncResult(`同期エラー: ${data.error}`) }
         } catch (error: any) { setSyncResult(`同期エラー: ${error.message}`) }
         finally { setIsSyncing(false) }
@@ -404,7 +385,6 @@ export default function AdvertisingDashboard() {
     const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
         { id: 'overview', label: '概要', icon: <LayoutDashboard size={16} /> },
         { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span> },
-        { id: 'ai-analysis', label: 'AI分析', icon: <Brain size={16} /> },
     ]
 
     return (
@@ -567,15 +547,15 @@ export default function AdvertisingDashboard() {
                     <div className="flex gap-3">
                         <button onClick={handleSync} disabled={isSyncing}
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
-                            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />{isSyncing ? '同期中...' : `${month}を再同期`}
+                            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />{isSyncing ? '同期中...' : `${month}を同期`}
                         </button>
                         <button onClick={openImportPanel} disabled={assetGroups.length === 0}
-                            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
-                            <Download size={16} />広告費取り込み
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${isImported ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400'}`}>
+                            {isImported ? <><CheckCircle size={16} />取り込み済み</> : <><Download size={16} />広告費取り込み</>}
                         </button>
                         <button onClick={() => handleAiAnalysis()} disabled={isAnalyzing || assetGroups.length === 0}
                             className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
-                            <Brain size={16} className={isAnalyzing && !aiTarget ? 'animate-pulse' : ''} />{isAnalyzing && !aiTarget ? '分析中...' : 'AI全体分析'}
+                            <Brain size={16} className={isAnalyzing && !aiTarget ? 'animate-pulse' : ''} />{isAnalyzing && !aiTarget ? '分析中...' : 'AI分析'}
                         </button>
                     </div>
 
@@ -778,71 +758,7 @@ export default function AdvertisingDashboard() {
                 </>
             )}
 
-            {/* ===== AI分析タブ（概要タブからのリンク用） ===== */}
-            {activeTab === 'ai-analysis' && (
-                <div className="space-y-5">
-                    <div className="bg-gradient-to-r from-violet-50 to-blue-50 border border-violet-200 rounded-xl p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h2 className="text-lg font-bold flex items-center gap-2">
-                                    <Sparkles className="text-violet-600" size={22} />
-                                    AI広告パフォーマンス分析 — {month}
-                                </h2>
-                                <p className="text-sm text-gray-600 mt-1">Gemini 2.5 Flashが広告データを分析し、P-MAX最適化フレームワークで具体的な提案を生成します</p>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleAiAnalysis()} disabled={isAnalyzing}
-                                    className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-gray-400 transition-colors text-sm font-medium shadow-sm">
-                                    <Brain size={16} className={isAnalyzing && !aiTarget ? 'animate-pulse' : ''} />
-                                    {isAnalyzing && !aiTarget ? '分析中...' : '全体分析'}
-                                </button>
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {assetGroups.filter(g => g.total_cost > 0).map(g => (
-                                <button key={g.asset_group_name}
-                                    onClick={() => handleAiAnalysis(g.asset_group_name)}
-                                    disabled={isAnalyzing}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${aiTarget === g.asset_group_name && isAnalyzing
-                                        ? 'bg-violet-200 text-violet-800'
-                                        : 'bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 disabled:text-gray-400 disabled:border-gray-200'
-                                        }`}>
-                                    <Brain size={12} />{g.asset_group_name}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
 
-                    {isAnalyzing && (
-                        <div className="flex items-center gap-3 py-10 justify-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-300 border-t-violet-600" />
-                            <span className="text-violet-700 font-medium">{aiTarget ? `「${aiTarget}」を分析中...` : '全体データを分析中...'}</span>
-                        </div>
-                    )}
-
-                    {aiAnalysis && !isAnalyzing && (
-                        <div className="bg-white border rounded-xl overflow-hidden">
-                            <div className="bg-violet-50 px-6 py-3 border-b flex items-center gap-2">
-                                <Sparkles size={16} className="text-violet-600" />
-                                <span className="font-semibold text-sm">{aiTarget ? `「${aiTarget}」の分析結果` : 'Google広告全体の分析結果'}</span>
-                                <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full ml-2">Gemini 2.5 Flash</span>
-                            </div>
-                            <div className="p-6">
-                                <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700">
-                                    {aiAnalysis.split('\n').map((line, i) => {
-                                        if (line.startsWith('## ')) return <h2 key={i} className="text-lg font-bold mt-6 mb-3 pb-2 border-b border-gray-100">{line.replace('## ', '')}</h2>
-                                        if (line.startsWith('### ')) return <h3 key={i} className="text-base font-semibold mt-4 mb-2">{line.replace('### ', '')}</h3>
-                                        if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-4 mb-1 text-sm leading-relaxed">{line.replace(/^[-*]\s/, '')}</li>
-                                        if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-semibold text-sm my-2">{line.replace(/\*\*/g, '')}</p>
-                                        if (line.trim() === '') return <br key={i} />
-                                        return <p key={i} className="text-sm leading-relaxed mb-2">{line}</p>
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
         </div>
     )
 }
