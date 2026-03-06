@@ -2,7 +2,7 @@
 // 統合広告管理ダッシュボード — 複数プラットフォーム対応 + AI分析機能
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import {
@@ -96,6 +96,7 @@ export default function AdvertisingDashboard() {
 
     // 広告費取り込み関連
     const [showImportPanel, setShowImportPanel] = useState(false)
+    const importPanelRef = useRef<HTMLDivElement>(null)
     const [mappings, setMappings] = useState<MappingItem[]>([])
     const [isImporting, setIsImporting] = useState(false)
     const [importResult, setImportResult] = useState<string | null>(null)
@@ -277,6 +278,8 @@ export default function AdvertisingDashboard() {
             }
         })
         setMappings(items)
+        // パネルが開いたら自動スクロール
+        setTimeout(() => importPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     }
 
     const handleMappingChange = (index: number, seriesCodeStr: string) => {
@@ -561,7 +564,7 @@ export default function AdvertisingDashboard() {
 
                     {/* 取り込みパネル */}
                     {showImportPanel && (
-                        <div className="bg-white border-2 border-emerald-300 rounded-xl p-6 space-y-5">
+                        <div ref={importPanelRef} className="bg-white border-2 border-emerald-300 rounded-xl p-6 space-y-5">
                             <div className="flex items-center justify-between">
                                 <h2 className="text-lg font-bold flex items-center gap-2"><Download className="text-emerald-600" size={22} />Google広告費取り込み — {month}</h2>
                                 <button onClick={() => setShowImportPanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">閉じる</button>
