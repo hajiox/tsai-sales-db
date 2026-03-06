@@ -666,17 +666,15 @@ export default function AdvertisingDashboard() {
                         <div className="overflow-x-auto">
                             <table className="w-full" style={{ tableLayout: 'fixed' }}>
                                 <colgroup>
-                                    <col style={{ width: '18%' }} />
+                                    <col style={{ width: '22%' }} />
+                                    <col style={{ width: '10%' }} />
+                                    <col style={{ width: '10%' }} />
                                     <col style={{ width: '9%' }} />
-                                    <col style={{ width: '9%' }} />
-                                    <col style={{ width: '7%' }} />
-                                    <col style={{ width: '7%' }} />
-                                    <col style={{ width: '7%' }} />
-                                    <col style={{ width: '7%' }} />
-                                    <col style={{ width: '7%' }} />
-                                    <col style={{ width: '9%' }} />
-                                    <col style={{ width: '7%' }} />
-                                    <col style={{ width: '4%' }} />
+                                    <col style={{ width: '8%' }} />
+                                    <col style={{ width: '8%' }} />
+                                    <col style={{ width: '8%' }} />
+                                    <col style={{ width: '8%' }} />
+                                    <col style={{ width: '5%' }} />
                                 </colgroup>
                                 <thead>
                                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
@@ -688,8 +686,6 @@ export default function AdvertisingDashboard() {
                                         <th className="text-right px-4 py-3 font-medium">CPC</th>
                                         <th className="text-right px-4 py-3 font-medium">CV</th>
                                         <th className="text-right px-4 py-3 font-medium">CVR</th>
-                                        <th className="text-right px-4 py-3 font-medium">CV値</th>
-                                        <th className="text-right px-4 py-3 font-medium">ROAS</th>
                                         <th className="text-center px-2 py-3 font-medium">AI</th>
                                     </tr>
                                 </thead>
@@ -699,7 +695,7 @@ export default function AdvertisingDashboard() {
                                         const ctr = data.impressions > 0 ? (data.clicks / data.impressions * 100) : 0
                                         const cpc = data.clicks > 0 ? (data.cost / data.clicks) : 0
                                         const cvr = data.clicks > 0 ? (data.conversions / data.clicks * 100) : 0
-                                        const roas = data.cost > 0 ? (data.conversionsValue / data.cost * 100) : 0
+
                                         const isExpanded = expandedSeries.has(seriesCode)
                                         const hasMultipleGroups = data.groups.length > 1
                                         return (
@@ -720,8 +716,6 @@ export default function AdvertisingDashboard() {
                                                     <td className="text-right px-4 py-3">{formatCurrency(cpc)}</td>
                                                     <td className="text-right px-4 py-3 font-medium">{data.conversions.toFixed(1)}</td>
                                                     <td className="text-right px-4 py-3">{formatPercent(cvr)}</td>
-                                                    <td className="text-right px-4 py-3">{formatCurrency(data.conversionsValue)}</td>
-                                                    <td className={`text-right px-4 py-3 font-semibold ${roas >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>{roas.toFixed(0)}%</td>
                                                     <td className="text-center px-2 py-3">
                                                         {data.groups.length === 1 && (
                                                             <button onClick={(e) => { e.stopPropagation(); handleAiAnalysis(data.groups[0].asset_group_name) }}
@@ -736,7 +730,7 @@ export default function AdvertisingDashboard() {
                                                     const gCtr = g.total_impressions > 0 ? (g.total_clicks / g.total_impressions * 100) : 0
                                                     const gCpc = g.total_clicks > 0 ? (g.total_cost / g.total_clicks) : 0
                                                     const gCvr = g.total_clicks > 0 ? (g.total_conversions / g.total_clicks * 100) : 0
-                                                    const gRoas = g.total_cost > 0 ? (g.total_conversions_value / g.total_cost * 100) : 0
+
                                                     return (
                                                         <tr key={`${g.campaign_name}-${g.asset_group_name}`} className="border-b bg-gray-50/50 text-sm text-gray-600">
                                                             <td className="px-5 py-2 pl-12"><span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${g.asset_group_status === 'ENABLED' ? 'bg-green-400' : 'bg-gray-300'}`} />{g.asset_group_name}</td>
@@ -747,8 +741,6 @@ export default function AdvertisingDashboard() {
                                                             <td className="text-right px-4 py-2">{formatCurrency(gCpc)}</td>
                                                             <td className="text-right px-4 py-2">{g.total_conversions.toFixed(1)}</td>
                                                             <td className="text-right px-4 py-2">{formatPercent(gCvr)}</td>
-                                                            <td className="text-right px-4 py-2">{formatCurrency(g.total_conversions_value)}</td>
-                                                            <td className={`text-right px-4 py-2 ${gRoas >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>{gRoas.toFixed(0)}%</td>
                                                             <td className="text-center px-2 py-2">
                                                                 <button onClick={() => handleAiAnalysis(g.asset_group_name)}
                                                                     disabled={isAnalyzing} title={`「${g.asset_group_name}」をAI分析`}
@@ -771,8 +763,6 @@ export default function AdvertisingDashboard() {
                                         <td className="text-right px-4 py-3">{formatCurrency(avgCpc)}</td>
                                         <td className="text-right px-4 py-3">{totalConversions.toFixed(1)}</td>
                                         <td className="text-right px-4 py-3">{formatPercent(avgCvr)}</td>
-                                        <td className="text-right px-4 py-3">{formatCurrency(totalConversionsValue)}</td>
-                                        <td className={`text-right px-4 py-3 ${totalCost > 0 ? (totalConversionsValue / totalCost * 100 >= 100 ? 'text-emerald-600' : 'text-red-500') : ''}`}>{totalCost > 0 ? `${(totalConversionsValue / totalCost * 100).toFixed(0)}%` : '—'}</td>
                                         <td></td>
                                     </tr>
                                 </tbody>
