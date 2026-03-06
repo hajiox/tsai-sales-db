@@ -2,6 +2,9 @@
 import { Suspense } from 'react'
 import AdvertisingDashboard from './page.client'
 
+// ビルド時の静的レンダリングを回避
+export const dynamic = 'force-dynamic'
+
 function AdvertisingLoading() {
     return (
         <div className="w-full space-y-6">
