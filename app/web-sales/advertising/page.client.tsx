@@ -692,11 +692,13 @@ export default function AdvertisingDashboard() {
                                         return (
                                             <tbody key={`series-block-${seriesCode}`}>
                                                 <tr className="border-b hover:bg-gray-50 cursor-pointer font-medium" onClick={() => hasMultipleGroups && toggleSeries(seriesCode)}>
-                                                    <td className="px-5 py-3 flex items-center gap-2">
-                                                        {hasMultipleGroups && (isExpanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />)}
-                                                        <span className={`inline-block w-2 h-2 rounded-full ${data.cost > 10000 ? 'bg-emerald-500' : data.cost > 1000 ? 'bg-yellow-400' : 'bg-gray-300'}`} />
-                                                        {seriesName}
-                                                        {hasMultipleGroups && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{data.groups.length}</span>}
+                                                    <td className="px-5 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            {hasMultipleGroups && (isExpanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />)}
+                                                            <span className={`inline-block w-2 h-2 rounded-full ${data.cost > 10000 ? 'bg-emerald-500' : data.cost > 1000 ? 'bg-yellow-400' : 'bg-gray-300'}`} />
+                                                            {seriesName}
+                                                            {hasMultipleGroups && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{data.groups.length}</span>}
+                                                        </div>
                                                     </td>
                                                     <td className="text-right px-4 py-3 text-emerald-700 font-semibold">{formatCurrency(data.cost)}</td>
                                                     <td className="text-right px-4 py-3">{formatNumber(data.impressions)}</td>
