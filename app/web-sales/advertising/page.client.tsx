@@ -422,8 +422,13 @@ export default function AdvertisingDashboard() {
                         {tab.icon}{tab.label}
                     </button>
                 ))}
+                {/* Meta — CSVガイドリンク付き */}
+                <a href="/docs/meta-csv-guide" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-colors">
+                    Meta<span className="text-[10px] bg-blue-100 text-blue-500 px-1.5 py-0.5 rounded">CSVガイド</span>
+                </a>
                 {/* 将来のプラットフォーム（グレーアウト） */}
-                {['Meta', 'Amazon', '楽天', 'Yahoo'].map(name => (
+                {['Amazon', '楽天', 'Yahoo'].map(name => (
                     <button key={name} disabled className="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-gray-300 cursor-not-allowed">
                         {name}<span className="text-[10px] bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded">準備中</span>
                     </button>
