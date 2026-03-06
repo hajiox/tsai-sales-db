@@ -12,6 +12,7 @@ import {
     Download, Check, Save, AlertCircle, ArrowRight,
     Brain, Sparkles, LayoutDashboard, CheckCircle
 } from "lucide-react"
+import MetaTab from "./meta-tab"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -54,6 +55,7 @@ interface MappingItem {
 
 interface PlatformCosts {
     google: number
+    meta: number
     amazon: number
     rakuten: number
     yahoo: number
@@ -69,7 +71,7 @@ interface AdCostRow {
     other_cost: number
 }
 
-type TabType = 'overview' | 'google'
+type TabType = 'overview' | 'google' | 'meta'
 
 // ===== メインコンポーネント =====
 export default function AdvertisingDashboard() {
@@ -103,7 +105,7 @@ export default function AdvertisingDashboard() {
     const [savingMapping, setSavingMapping] = useState<string | null>(null)
 
     // プラットフォーム別広告費
-    const [platformCosts, setPlatformCosts] = useState<PlatformCosts>({ google: 0, amazon: 0, rakuten: 0, yahoo: 0, other: 0 })
+    const [platformCosts, setPlatformCosts] = useState<PlatformCosts>({ google: 0, meta: 0, amazon: 0, rakuten: 0, yahoo: 0, other: 0 })
     const [seriesAdCosts, setSeriesAdCosts] = useState<AdCostRow[]>([])
 
     // AI分析
@@ -197,14 +199,15 @@ export default function AdvertisingDashboard() {
             // プラットフォーム別広告費
             const { data: adCostData } = await supabase
                 .from('advertising_costs')
-                .select('series_code, google_cost, amazon_cost, rakuten_cost, yahoo_cost, other_cost')
+                .select('series_code, google_cost, meta_cost, amazon_cost, rakuten_cost, yahoo_cost, other_cost')
                 .eq('report_month', `${month}-01`)
 
             if (adCostData) {
                 setSeriesAdCosts(adCostData as AdCostRow[])
-                const pCosts = { google: 0, amazon: 0, rakuten: 0, yahoo: 0, other: 0 }
+                const pCosts = { google: 0, meta: 0, amazon: 0, rakuten: 0, yahoo: 0, other: 0 }
                 adCostData.forEach((r: any) => {
                     pCosts.google += r.google_cost || 0
+                    pCosts.meta += r.meta_cost || 0
                     pCosts.amazon += r.amazon_cost || 0
                     pCosts.rakuten += r.rakuten_cost || 0
                     pCosts.yahoo += r.yahoo_cost || 0
@@ -371,7 +374,7 @@ export default function AdvertisingDashboard() {
     const formatNumber = (n: number) => Math.round(n).toLocaleString()
     const formatCurrency = (n: number) => `¥${Math.round(n).toLocaleString()}`
     const formatPercent = (n: number) => `${n.toFixed(2)}%`
-    const totalPlatformCost = platformCosts.google + platformCosts.amazon + platformCosts.rakuten + platformCosts.yahoo + platformCosts.other
+    const totalPlatformCost = platformCosts.google + platformCosts.meta + platformCosts.amazon + platformCosts.rakuten + platformCosts.yahoo + platformCosts.other
 
     const mappingStats = {
         total: mappings.length,
@@ -388,6 +391,7 @@ export default function AdvertisingDashboard() {
     const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
         { id: 'overview', label: '概要', icon: <LayoutDashboard size={16} /> },
         { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span> },
+        { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span> },
     ]
 
     return (
@@ -422,11 +426,7 @@ export default function AdvertisingDashboard() {
                         {tab.icon}{tab.label}
                     </button>
                 ))}
-                {/* Meta — CSVガイドリンク付き */}
-                <a href="/docs/meta-csv-guide" target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-colors">
-                    Meta<span className="text-[10px] bg-blue-100 text-blue-500 px-1.5 py-0.5 rounded">CSVガイド</span>
-                </a>
+                {/* Meta — CSVガイドリンク削除（タブに統合） */}
                 {/* 将来のプラットフォーム（グレーアウト） */}
                 {['Amazon', '楽天', 'Yahoo'].map(name => (
                     <button key={name} disabled className="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-gray-300 cursor-not-allowed">
@@ -444,14 +444,15 @@ export default function AdvertisingDashboard() {
                             <DollarSign className="text-emerald-600" size={20} />
                             プラットフォーム別広告費 — {month}
                         </h2>
-                        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
                             {[
                                 { name: 'Google', cost: platformCosts.google, color: 'emerald', active: true },
+                                { name: 'Meta', cost: platformCosts.meta, color: 'blue', active: true },
                                 { name: 'Amazon', cost: platformCosts.amazon, color: 'orange', active: false },
                                 { name: '楽天', cost: platformCosts.rakuten, color: 'red', active: false },
                                 { name: 'Yahoo', cost: platformCosts.yahoo, color: 'purple', active: false },
                                 { name: 'その他', cost: platformCosts.other, color: 'gray', active: false },
-                                { name: '合計', cost: totalPlatformCost, color: 'blue', active: true },
+                                { name: '合計', cost: totalPlatformCost, color: 'indigo', active: true },
                             ].map(p => (
                                 <div key={p.name} className={`rounded-lg p-3 border ${p.active ? 'bg-white' : 'bg-gray-50'}`}>
                                     <div className="text-xs text-gray-500 mb-1">{p.name}</div>
@@ -775,6 +776,11 @@ export default function AdvertisingDashboard() {
                         </div>
                     </div>
                 </>
+            )}
+
+            {/* ===== Metaタブ ===== */}
+            {activeTab === 'meta' && (
+                <MetaTab month={month} />
             )}
 
 
