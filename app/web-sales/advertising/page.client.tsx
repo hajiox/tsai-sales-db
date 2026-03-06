@@ -318,66 +318,36 @@ export default function AdvertisingDashboard() {
         }
     }
 
-    // 広告費をadvertising_costsに流し込み
+    // 広告費をadvertising_costsに流し込み（API経由でRLS回避）
     const handleImportCosts = async () => {
         setIsImporting(true)
         setImportResult(null)
 
         try {
-            // シリーズ別に広告費を集計
-            const seriesCostMap = new Map<number, number>()
-            mappings.forEach(m => {
-                if (m.series_code !== null && m.cost > 0) {
-                    const current = seriesCostMap.get(m.series_code) || 0
-                    seriesCostMap.set(m.series_code, current + Math.round(m.cost))
-                }
+            // マッピングデータをAPIに送信
+            const costMappings = mappings
+                .filter(m => m.series_code !== null && m.cost > 0)
+                .map(m => ({
+                    series_code: m.series_code,
+                    cost: m.cost,
+                }))
+
+            const res = await fetch('/api/google-ads/import-costs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month, mappings: costMappings }),
             })
 
-            let updated = 0
-            let created = 0
-
-            for (const [seriesCode, googleCost] of seriesCostMap.entries()) {
-                // 既存レコードがあるか確認
-                const { data: existing } = await supabase
-                    .from('advertising_costs')
-                    .select('id')
-                    .eq('series_code', seriesCode)
-                    .eq('report_month', `${month}-01`)
-                    .maybeSingle()
-
-                if (existing) {
-                    // 既存レコードのgoogle_costを更新
-                    const { error } = await supabase
-                        .from('advertising_costs')
-                        .update({ google_cost: googleCost })
-                        .eq('series_code', seriesCode)
-                        .eq('report_month', `${month}-01`)
-                    if (error) throw error
-                    updated++
-                } else {
-                    // 新規作成
-                    const { error } = await supabase
-                        .from('advertising_costs')
-                        .insert({
-                            series_code: seriesCode,
-                            report_month: `${month}-01`,
-                            google_cost: googleCost,
-                            amazon_cost: 0,
-                            other_cost: 0,
-                            rakuten_cost: 0,
-                            yahoo_cost: 0,
-                        })
-                    if (error) throw error
-                    created++
-                }
+            const data = await res.json()
+            if (data.success) {
+                setImportResult(
+                    `${month}のGoogle広告費を反映しました\n` +
+                    `合計: ¥${data.totalCost.toLocaleString()}（${data.seriesCount}シリーズ）\n` +
+                    `更新: ${data.updated}件 / 新規: ${data.created}件`
+                )
+            } else {
+                setImportResult(`エラー: ${data.error}`)
             }
-
-            const totalCost = Array.from(seriesCostMap.values()).reduce((s, c) => s + c, 0)
-            setImportResult(
-                `${month}のGoogle広告費を反映しました\n` +
-                `合計: ¥${totalCost.toLocaleString()}（${seriesCostMap.size}シリーズ）\n` +
-                `更新: ${updated}件 / 新規: ${created}件`
-            )
         } catch (error: any) {
             setImportResult(`エラー: ${error.message}`)
         } finally {
@@ -589,8 +559,8 @@ export default function AdvertisingDashboard() {
                                                 value={mapping.series_code?.toString() || ''}
                                                 onChange={(e) => handleMappingChange(index, e.target.value)}
                                                 className={`w-full p-2 border rounded-lg text-sm ${mapping.series_code !== null
-                                                        ? 'border-green-300 bg-green-50'
-                                                        : 'border-yellow-300 bg-yellow-50'
+                                                    ? 'border-green-300 bg-green-50'
+                                                    : 'border-yellow-300 bg-yellow-50'
                                                     }`}
                                             >
                                                 <option value="">-- 未選択（取り込まない） --</option>
