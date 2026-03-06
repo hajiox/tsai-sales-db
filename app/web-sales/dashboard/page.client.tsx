@@ -259,7 +259,7 @@ function WebSalesDashboardContent() {
           {/* 月選択ボタンと広告費管理ボタン */}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
-              onClick={() => setIsAdCostModalOpen(true)}
+              onClick={() => router.push('/web-sales/advertising')}
               style={{
                 padding: '8px 16px',
                 fontSize: '14px',
@@ -277,7 +277,7 @@ function WebSalesDashboardContent() {
               onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#059669'}
             >
               <DollarSign size={16} />
-              広告費管理
+              広告管理
             </button>
 
             <button
