@@ -76,17 +76,22 @@ const COLUMN_MAP: Record<string, string> = {
 }
 
 // 部分一致でマッチを試みるキーワード → 内部キー
+// ※ 長いキーワードを先に配置（「リンクのクリック」が「クリック」より先にマッチするように）
 const PARTIAL_MATCH_MAP: [string, string][] = [
     ['広告セット名', 'ad_set_name'],
     ['キャンペーン名', 'campaign_name'],
     ['消化金額', 'amount_spent'],
     ['結果の単価', 'cost_per_result'],
-    ['結果レート', 'result_rate'],
     ['インプレッション', 'impressions'],
     ['リーチ', 'reach'],
     ['フリークエンシー', 'frequency'],
-    ['クリック', 'clicks'],
     ['リンクのクリック', 'link_clicks'],
+    ['クリック（すべて）', 'clicks'],
+    ['クリック(すべて)', 'clicks'],
+    ['CTR（すべて）', 'ctr'],
+    ['CTR(すべて)', 'ctr'],
+    ['CPC（すべて）', 'cpc'],
+    ['CPC(すべて)', 'cpc'],
     ['Amount Spent', 'amount_spent'],
     ['Amount spent', 'amount_spent'],
     ['Cost per Result', 'cost_per_result'],
@@ -95,6 +100,9 @@ const PARTIAL_MATCH_MAP: [string, string][] = [
     ['Ad set name', 'ad_set_name'],
     ['Campaign Name', 'campaign_name'],
     ['Campaign name', 'campaign_name'],
+    ['Link Clicks', 'link_clicks'],
+    ['Link clicks', 'link_clicks'],
+    ['Clicks', 'clicks'],
 ]
 
 function parseNumber(val: string | undefined): number {
@@ -206,8 +214,30 @@ export async function POST(request: NextRequest) {
         }
 
         if (records.length === 0) {
-            return NextResponse.json({ success: false, error: '有効なデータ行がありません' }, { status: 400 })
+            return NextResponse.json({
+                success: false,
+                error: '有効なデータ行がありません',
+                matched_columns: Object.entries(columnMapping).map(([idx, key]) => `${headers[parseInt(idx)]} → ${key}`),
+            }, { status: 400 })
         }
+
+        // DBに存在するカラムのみを残す
+        const DB_COLUMNS = new Set([
+            'report_month', 'campaign_name', 'ad_set_name', 'delivery',
+            'results', 'cost_per_result', 'amount_spent',
+            'impressions', 'reach', 'frequency', 'cpm',
+            'clicks', 'link_clicks', 'ctr', 'cpc', 'series_code'
+        ])
+
+        const cleanRecords = records.map(r => {
+            const clean: Record<string, any> = {}
+            for (const [key, val] of Object.entries(r)) {
+                if (DB_COLUMNS.has(key)) {
+                    clean[key] = val
+                }
+            }
+            return clean
+        })
 
         // 既存データを削除して再挿入（UPSERT）
         const { error: deleteError } = await supabase
@@ -219,17 +249,18 @@ export async function POST(request: NextRequest) {
 
         const { error: insertError } = await supabase
             .from('meta_ads_performance')
-            .insert(records)
+            .insert(cleanRecords)
 
         if (insertError) throw insertError
 
-        const totalSpent = records.reduce((s, r) => s + (r.amount_spent || 0), 0)
+        const totalSpent = cleanRecords.reduce((s, r) => s + (r.amount_spent || 0), 0)
 
         return NextResponse.json({
             success: true,
-            recordCount: records.length,
+            recordCount: cleanRecords.length,
             totalSpent: Math.round(totalSpent),
-            records: records.map(r => ({
+            matched_columns: Object.entries(columnMapping).map(([idx, key]) => `${headers[parseInt(idx)]} → ${key}`),
+            records: cleanRecords.map(r => ({
                 campaign_name: r.campaign_name,
                 ad_set_name: r.ad_set_name,
                 amount_spent: r.amount_spent,
