@@ -55,6 +55,8 @@ export default function MetaTab({ month }: Props) {
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
     const [showAnalysis, setShowAnalysis] = useState(false)
     const [mappingChanges, setMappingChanges] = useState<Map<number, number | null>>(new Map())
+    const [isAutoMatching, setIsAutoMatching] = useState(false)
+    const [autoMatchResult, setAutoMatchResult] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // データ取得
@@ -176,6 +178,32 @@ export default function MetaTab({ month }: Props) {
         setIsAnalyzing(false)
     }
 
+    // AI自動紐付け
+    const handleAutoMatch = async () => {
+        setIsAutoMatching(true)
+        setAutoMatchResult(null)
+        try {
+            const res = await fetch('/api/meta-ads/auto-match', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month }),
+            })
+            const data = await res.json()
+            if (data.success) {
+                const details = data.results?.map((r: any) => `${r.ad_set_name} → ${r.series_name} (${r.confidence})`).join('、') || ''
+                setAutoMatchResult(`✅ ${data.matched}/${data.total}件を自動紐付けしました${details ? '：' + details : ''}`)
+                fetchData()
+            } else {
+                setAutoMatchResult(`❌ エラー: ${data.error}`)
+            }
+        } catch (err: any) {
+            setAutoMatchResult(`❌ エラー: ${err.message}`)
+        }
+        setIsAutoMatching(false)
+    }
+
+    const hasUnmapped = metaData.some(d => d.series_code === null)
+
     const formatCurrency = (n: number) => `¥${Math.round(n).toLocaleString()}`
     const formatNumber = (n: number) => Math.round(n).toLocaleString()
     const formatPercent = (n: number) => `${n.toFixed(2)}%`
@@ -212,6 +240,13 @@ export default function MetaTab({ month }: Props) {
 
                 {hasData && (
                     <>
+                        {hasUnmapped && (
+                            <button onClick={handleAutoMatch} disabled={isAutoMatching}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-amber-300 transition-colors font-medium">
+                                <Brain size={16} />
+                                {isAutoMatching ? 'AI紐付け中...' : 'AI自動紐付け'}
+                            </button>
+                        )}
                         {allMapped && (
                             <button onClick={handleImportCosts} disabled={isImporting}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-emerald-300 transition-colors font-medium">
@@ -249,6 +284,11 @@ export default function MetaTab({ month }: Props) {
             {importResult && (
                 <div className={`px-4 py-2 rounded-lg text-sm ${importResult.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
                     {importResult}
+                </div>
+            )}
+            {autoMatchResult && (
+                <div className={`px-4 py-2 rounded-lg text-sm ${autoMatchResult.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                    {autoMatchResult}
                 </div>
             )}
 
