@@ -69,16 +69,12 @@ export default function MetaCsvGuidePage() {
                     <img src="/docs/meta-csv-guide/step2_columns.png" alt="列プリセット選択" className="w-full" />
                 </div>
                 <div className="space-y-3 text-gray-700 mt-4">
-                    <p>以下の項目にチェックを入れてください：</p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="font-medium text-blue-800">💡 キャンペーン名・広告セット名・配信について</p>
+                        <p className="text-blue-700 text-sm mt-1">これらは広告セットレベルの場合デフォルトで表示されるため、列カスタマイズでチェックする必要はありません。</p>
+                    </div>
+                    <p>列カスタマイズ画面で、以下の項目にチェックを入れてください：</p>
                     <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <h4 className="font-bold text-sm text-gray-800 mb-2">📊 基本指標</h4>
-                            <ul className="text-sm space-y-1 text-gray-600">
-                                <li>✅ キャンペーン名</li>
-                                <li>✅ 広告セット名</li>
-                                <li>✅ 配信</li>
-                            </ul>
-                        </div>
                         <div className="bg-gray-50 rounded-lg p-4">
                             <h4 className="font-bold text-sm text-gray-800 mb-2">💰 費用・パフォーマンス</h4>
                             <ul className="text-sm space-y-1 text-gray-600">
@@ -86,6 +82,7 @@ export default function MetaCsvGuidePage() {
                                 <li>✅ インプレッション</li>
                                 <li>✅ リーチ</li>
                                 <li>✅ フリークエンシー</li>
+                                <li>✅ CPM</li>
                             </ul>
                         </div>
                         <div className="bg-gray-50 rounded-lg p-4">
@@ -95,12 +92,11 @@ export default function MetaCsvGuidePage() {
                                 <li>✅ リンクのクリック</li>
                                 <li>✅ CTR（すべて）</li>
                                 <li>✅ CPC（すべて）</li>
-                                <li>✅ CPM</li>
                             </ul>
                         </div>
-                        <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="bg-gray-50 rounded-lg p-4 col-span-2">
                             <h4 className="font-bold text-sm text-gray-800 mb-2">🎯 結果</h4>
-                            <ul className="text-sm space-y-1 text-gray-600">
+                            <ul className="text-sm space-y-1 text-gray-600 grid grid-cols-3">
                                 <li>✅ 結果</li>
                                 <li>✅ 結果の単価</li>
                                 <li>✅ 結果レート</li>
