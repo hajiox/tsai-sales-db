@@ -8,7 +8,7 @@ import {
     Upload, Download, RefreshCw, Brain, Save,
     CheckCircle, AlertCircle, ChevronDown, ChevronUp,
     TrendingUp, Eye, MousePointerClick, Target, DollarSign,
-    FileText, ExternalLink, Edit3
+    FileText, ExternalLink, Edit3, Trash2
 } from "lucide-react"
 
 interface RakutenItem {
@@ -207,7 +207,28 @@ export default function RakutenTab({ month }: Props) {
     }
 
     const hasUnmapped = data.some(d => d.series_code === null)
+    const hasMapped = data.some(d => d.series_code !== null)
     const hasUnnamedCodes = data.some(d => d.product_code && !productNameMap.has(d.product_code))
+
+    const handleClearMappings = async () => {
+        if (!confirm(`${month} の楽天広告の紐付けを全てクリアしますか？\n（広告データ自体は削除されません）`)) return
+        try {
+            const res = await fetch('/api/rakuten-ads/clear-mappings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month }),
+            })
+            const result = await res.json()
+            if (result.success) {
+                setAutoMatchResult(`✅ ${result.cleared}件の紐付けをクリアしました`)
+                fetchData()
+            } else {
+                setAutoMatchResult(`❌ ${result.error}`)
+            }
+        } catch (err: any) {
+            setAutoMatchResult(`❌ ${err.message}`)
+        }
+    }
 
     const formatCurrency = (n: number) => `¥${Math.round(n).toLocaleString()}`
     const formatNumber = (n: number) => Math.round(n).toLocaleString()
@@ -259,6 +280,13 @@ export default function RakutenTab({ month }: Props) {
                             <Brain size={16} />
                             AI分析
                         </button>
+                        {hasMapped && (
+                            <button onClick={handleClearMappings}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium">
+                                <Trash2 size={16} />
+                                紐付けクリア
+                            </button>
+                        )}
                     </>
                 )}
 
