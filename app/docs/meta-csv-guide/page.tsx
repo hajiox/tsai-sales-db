@@ -3,19 +3,16 @@
 "use client"
 
 import { ArrowLeft, CheckCircle, AlertCircle, Download, ExternalLink, FileText } from "lucide-react"
-import { useRouter } from "next/navigation"
 
 export default function MetaCsvGuidePage() {
-    const router = useRouter()
-
     return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
             <div className="max-w-4xl mx-auto px-6 py-10">
                 {/* ヘッダー */}
                 <div className="flex items-center gap-3 mb-8">
-                    <button onClick={() => router.back()} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    <a href="/web-sales/advertising" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
                         <ArrowLeft size={20} />
-                    </button>
+                    </a>
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">Meta広告 CSVエクスポートガイド</h1>
                         <p className="text-gray-500 text-sm mt-1">Meta広告マネージャからCSVをエクスポートし、TSAシステムに取り込む手順</p>
