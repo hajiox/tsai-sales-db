@@ -100,30 +100,43 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'CSVファイルが空です' }, { status: 400 })
         }
 
-        // ヘッダー解析
-        const headerLine = lines[0]
-        const headers = parseCSVLine(headerLine)
+        // ヘッダー行を自動検出（メタ情報行がある場合を考慮）
+        let headerLineIndex = 0
+        let headers: string[] = []
         const columnMapping: Record<number, string> = {}
 
-        headers.forEach((h, i) => {
-            // BOM除去
-            const cleanHeader = h.replace(/^\uFEFF/, '').replace(/^"/, '').replace(/"$/, '').trim()
-            if (COLUMN_MAP[cleanHeader]) {
-                columnMapping[i] = COLUMN_MAP[cleanHeader]
+        for (let tryIdx = 0; tryIdx < Math.min(lines.length, 10); tryIdx++) {
+            const tryHeaders = parseCSVLine(lines[tryIdx])
+            const tempMapping: Record<number, string> = {}
+            tryHeaders.forEach((h, i) => {
+                const cleanHeader = h.replace(/^\uFEFF/, '').replace(/^"/, '').replace(/"$/, '').trim()
+                if (COLUMN_MAP[cleanHeader]) {
+                    tempMapping[i] = COLUMN_MAP[cleanHeader]
+                }
+            })
+            // 3つ以上のカラムがマッチしたらヘッダー行とみなす
+            if (Object.keys(tempMapping).length >= 3) {
+                headerLineIndex = tryIdx
+                headers = tryHeaders
+                Object.assign(columnMapping, tempMapping)
+                break
             }
-        })
+        }
 
         if (!Object.values(columnMapping).includes('ad_set_name')) {
+            // 広告セット名が見つからない場合、最初の行のヘッダーを返してデバッグ支援
+            const firstLineHeaders = parseCSVLine(lines[0]).map(h => h.replace(/^\uFEFF/, '').trim())
             return NextResponse.json({
                 success: false,
                 error: '「広告セット名」カラムが見つかりません。Meta広告マネージャから広告セットレベルでエクスポートしてください。',
-                detected_headers: headers.slice(0, 10),
+                detected_headers: firstLineHeaders.slice(0, 20),
             }, { status: 400 })
         }
 
         // データ行をパース
         const records: any[] = []
-        for (let i = 1; i < lines.length; i++) {
+        const skippedRows: string[] = []
+        for (let i = headerLineIndex + 1; i < lines.length; i++) {
             const values = parseCSVLine(lines[i])
             const row: Record<string, any> = {}
 
@@ -138,8 +151,24 @@ export async function POST(request: NextRequest) {
                 }
             }
 
-            // 広告セット名が空の行（合計行など）はスキップ
-            if (!row.ad_set_name || row.ad_set_name === '' || row.ad_set_name.includes('の成果')) continue
+            // 文字列フィールドがnull/undefinedの場合にデフォルト値を設定
+            row.ad_set_name = row.ad_set_name || ''
+            row.campaign_name = row.campaign_name || ''
+            row.delivery = row.delivery || ''
+
+            // 広告セット名が空の行（合計行・サマリー行など）はスキップ
+            if (!row.ad_set_name || row.ad_set_name === '') {
+                skippedRows.push(`行${i + 1}: 広告セット名が空`)
+                continue
+            }
+            // 合計行やメタデータ行をスキップ
+            if (row.ad_set_name.includes('の成果') ||
+                row.ad_set_name.includes('合計') ||
+                row.ad_set_name.includes('Total') ||
+                row.ad_set_name.startsWith('*')) {
+                skippedRows.push(`行${i + 1}: サマリー行 (${row.ad_set_name})`)
+                continue
+            }
 
             row.report_month = month
             records.push(row)
