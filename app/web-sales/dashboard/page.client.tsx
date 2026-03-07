@@ -26,6 +26,7 @@ function WebSalesDashboardContent() {
     const urlMonth = searchParams.get('month');
     if (urlMonth) return urlMonth;
 
+    // フォールバック: 現在月（DB取得前の初期値）
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
@@ -52,13 +53,42 @@ function WebSalesDashboardContent() {
     router.push(`?${params.toString()}`, { scroll: false });
   }, [month, searchParams, router]);
 
+  // 初期化: URLに月指定がなければDBからデータが存在する最新月を取得
   useEffect(() => {
     if (!isInitializedRef.current) {
-      const urlMonth = getCurrentMonth();
-      if (urlMonth !== month) {
-        setMonth(urlMonth);
-      }
       isInitializedRef.current = true;
+
+      const urlMonth = searchParams.get('month');
+      if (urlMonth) {
+        if (urlMonth !== month) setMonth(urlMonth);
+        return;
+      }
+
+      // DBから最新月を取得
+      const fetchLatestMonth = async () => {
+        try {
+          const { data } = await supabase
+            .from('web_sales_summary')
+            .select('report_month')
+            .order('report_month', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (data?.report_month) {
+            // report_month は "2026-02-01" 形式 → "2026-02" へ変換
+            const latestMonth = data.report_month.substring(0, 7);
+            if (latestMonth !== month) {
+              setMonth(latestMonth);
+              const params = new URLSearchParams(searchParams.toString());
+              params.set('month', latestMonth);
+              router.replace(`?${params.toString()}`, { scroll: false });
+            }
+          }
+        } catch {
+          // DBアクセスエラー時は現在月のまま
+        }
+      };
+      fetchLatestMonth();
     }
   }, []);
 
