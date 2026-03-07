@@ -270,8 +270,8 @@ export default function MetaTab({ month }: Props) {
                 )}
 
                 <a href="/docs/meta-csv-guide" target="_blank" rel="noopener noreferrer"
-                    className="ml-auto flex items-center gap-1.5 text-sm text-blue-500 hover:text-blue-700">
-                    <FileText size={14} /> CSVガイド <ExternalLink size={12} />
+                    className="ml-auto flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600">
+                    <FileText size={14} />CSVエクスポートガイド<ExternalLink size={12} />
                 </a>
             </div>
 
@@ -295,11 +295,13 @@ export default function MetaTab({ month }: Props) {
             {!hasData ? (
                 <div className="bg-white border rounded-xl p-10 text-center space-y-4">
                     <Upload size={48} className="mx-auto text-gray-300" />
-                    <h3 className="text-lg font-semibold text-gray-600">Meta広告データがありません</h3>
-                    <p className="text-sm text-gray-400">Meta広告マネージャからCSVをエクスポートし、上のボタンからアップロードしてください。</p>
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-700">{month} のデータがありません</h3>
+                        <p className="text-sm text-gray-500 mt-1">Meta広告マネージャからCSVをエクスポートしてアップロードしてください</p>
+                    </div>
                     <a href="/docs/meta-csv-guide" target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium">
-                        <FileText size={16} /> CSVエクスポートガイドを見る <ExternalLink size={14} />
+                        className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
+                        <FileText size={16} />CSVエクスポートガイドを見る<ExternalLink size={14} />
                     </a>
                 </div>
             ) : (
