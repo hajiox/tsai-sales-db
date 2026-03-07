@@ -8,7 +8,7 @@ import {
     Upload, Download, RefreshCw, Brain, Save,
     CheckCircle, AlertCircle, ChevronDown, ChevronUp,
     TrendingUp, Eye, MousePointerClick, Target, DollarSign,
-    FileText, ExternalLink
+    FileText, ExternalLink, Edit3
 } from "lucide-react"
 
 interface RakutenItem {
@@ -59,21 +59,25 @@ export default function RakutenTab({ month }: Props) {
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
     const [showAnalysis, setShowAnalysis] = useState(false)
     const [mappingChanges, setMappingChanges] = useState<Map<number, number | null>>(new Map())
+    const [productNameMap, setProductNameMap] = useState<Map<string, string>>(new Map())
+    const [newProductNames, setNewProductNames] = useState<Map<string, string>>(new Map())
+    const [isSavingNames, setIsSavingNames] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
-        const { data: items } = await supabase
-            .from('rakuten_ads_performance')
-            .select('*')
-            .eq('report_month', month)
-            .order('amount_spent', { ascending: false })
+        const [{ data: items }, { data: products }, { data: pNames }] = await Promise.all([
+            supabase.from('rakuten_ads_performance').select('*').eq('report_month', month).order('amount_spent', { ascending: false }),
+            supabase.from('products').select('series_code, series').not('series_code', 'is', null),
+            supabase.from('rakuten_product_names').select('product_code, product_name'),
+        ])
         setData(items || [])
 
-        const { data: products } = await supabase
-            .from('products')
-            .select('series_code, series')
-            .not('series_code', 'is', null)
+        // 商品名マップ
+        const pnMap = new Map<string, string>()
+        pNames?.forEach((p: any) => pnMap.set(p.product_code, p.product_name))
+        setProductNameMap(pnMap)
+
         const opts: SeriesOption[] = []
         const sMap = new Map<number, string>()
         const seen = new Set<number>()
@@ -183,7 +187,27 @@ export default function RakutenTab({ month }: Props) {
         fetchData()
     }
 
+    const handleSaveProductNames = async () => {
+        if (newProductNames.size === 0) return
+        setIsSavingNames(true)
+        const items = Array.from(newProductNames.entries()).map(([code, name]) => ({ product_code: code, product_name: name }))
+        try {
+            const res = await fetch('/api/rakuten-ads/product-names', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items }),
+            })
+            const result = await res.json()
+            if (result.success) {
+                setNewProductNames(new Map())
+                fetchData()
+            }
+        } catch { }
+        setIsSavingNames(false)
+    }
+
     const hasUnmapped = data.some(d => d.series_code === null)
+    const hasUnnamedCodes = data.some(d => d.product_code && !productNameMap.has(d.product_code))
 
     const formatCurrency = (n: number) => `¥${Math.round(n).toLocaleString()}`
     const formatNumber = (n: number) => Math.round(n).toLocaleString()
@@ -320,69 +344,96 @@ export default function RakutenTab({ month }: Props) {
                                 商品別パフォーマンス — {month}
                                 <span className="text-xs text-gray-400 font-normal">({data.length}商品)</span>
                             </h3>
-                            {mappingChanges.size > 0 && (
-                                <button onClick={handleSaveMappings}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
-                                    <Save size={14} />保存
-                                </button>
-                            )}
+                            <div className="flex items-center gap-2">
+                                {newProductNames.size > 0 && (
+                                    <button onClick={handleSaveProductNames} disabled={isSavingNames}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:bg-amber-300">
+                                        <Edit3 size={14} />{isSavingNames ? '保存中...' : `商品名保存 (${newProductNames.size}件)`}
+                                    </button>
+                                )}
+                                {mappingChanges.size > 0 && (
+                                    <button onClick={handleSaveMappings}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+                                        <Save size={14} />保存
+                                    </button>
+                                )}
+                            </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
                                 <thead className="bg-gray-50 border-b">
                                     <tr>
-                                        <th className="px-3 py-2 text-left font-medium text-gray-600" style={{ width: '120px' }}>商品コード</th>
+                                        <th className="px-3 py-2 text-left font-medium text-gray-600" style={{ width: '100px' }}>商品コード</th>
+                                        <th className="px-3 py-2 text-left font-medium text-gray-600" style={{ width: '160px' }}>商品名</th>
                                         <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '90px' }}>広告費</th>
-                                        <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '70px' }}>クリック</th>
-                                        <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '70px' }}>CPC</th>
+                                        <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '60px' }}>クリック</th>
+                                        <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '60px' }}>CPC</th>
                                         <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '50px' }}>CTR</th>
                                         <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '90px' }}>売上(720h)</th>
                                         <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '50px' }}>注文</th>
                                         <th className="px-3 py-2 text-right font-medium text-gray-600" style={{ width: '60px' }}>ROAS</th>
-                                        <th className="px-3 py-2 text-left font-medium text-gray-600" style={{ width: '140px' }}>シリーズ紐付け</th>
+                                        <th className="px-3 py-2 text-left font-medium text-gray-600" style={{ width: '130px' }}>シリーズ紐付け</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {data.map(item => (
-                                        <tr key={item.id} className="hover:bg-gray-50">
-                                            <td className="px-3 py-2">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className={`w-2 h-2 rounded-full ${item.series_code ? 'bg-green-500' : 'bg-orange-400'}`}></span>
-                                                    <span className="font-mono text-xs truncate" title={item.product_code}>{item.product_code}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.amount_spent)}</td>
-                                            <td className="px-3 py-2 text-right">{formatNumber(item.clicks)}</td>
-                                            <td className="px-3 py-2 text-right">{formatCurrency(item.cpc_actual)}</td>
-                                            <td className="px-3 py-2 text-right">{formatPercent(item.ctr)}</td>
-                                            <td className="px-3 py-2 text-right">{formatCurrency(item.sales_amount)}</td>
-                                            <td className="px-3 py-2 text-right">{item.sales_count}</td>
-                                            <td className="px-3 py-2 text-right">
-                                                <span className={`font-semibold ${item.roas >= 300 ? 'text-green-600' : item.roas >= 100 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                    {formatPercent(item.roas)}
-                                                </span>
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                <select
-                                                    value={mappingChanges.has(item.id) ? (mappingChanges.get(item.id) ?? '') : (item.series_code ?? '')}
-                                                    onChange={e => {
-                                                        const v = e.target.value ? parseInt(e.target.value) : null
-                                                        setMappingChanges(prev => new Map(prev).set(item.id, v))
-                                                    }}
-                                                    className="w-full text-xs border rounded px-1.5 py-1"
-                                                >
-                                                    <option value="">未設定</option>
-                                                    {seriesOptions.map(s => (
-                                                        <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {data.map(item => {
+                                        const pName = productNameMap.get(item.product_code)
+                                        return (
+                                            <tr key={item.id} className="hover:bg-gray-50">
+                                                <td className="px-3 py-2">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className={`w-2 h-2 rounded-full ${item.series_code ? 'bg-green-500' : 'bg-orange-400'}`}></span>
+                                                        <span className="font-mono text-xs truncate" title={item.product_code}>{item.product_code}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    {pName ? (
+                                                        <span className="text-xs text-gray-700 truncate block" title={pName}>{pName}</span>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            placeholder="商品名を入力"
+                                                            maxLength={30}
+                                                            value={newProductNames.get(item.product_code) || ''}
+                                                            onChange={e => setNewProductNames(prev => new Map(prev).set(item.product_code, e.target.value))}
+                                                            className="w-full text-xs border border-amber-300 rounded px-1.5 py-1 bg-amber-50 focus:border-amber-500 focus:outline-none"
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.amount_spent)}</td>
+                                                <td className="px-3 py-2 text-right">{formatNumber(item.clicks)}</td>
+                                                <td className="px-3 py-2 text-right">{formatCurrency(item.cpc_actual)}</td>
+                                                <td className="px-3 py-2 text-right">{formatPercent(item.ctr)}</td>
+                                                <td className="px-3 py-2 text-right">{formatCurrency(item.sales_amount)}</td>
+                                                <td className="px-3 py-2 text-right">{item.sales_count}</td>
+                                                <td className="px-3 py-2 text-right">
+                                                    <span className={`font-semibold ${item.roas >= 300 ? 'text-green-600' : item.roas >= 100 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                        {formatPercent(item.roas)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <select
+                                                        value={mappingChanges.has(item.id) ? (mappingChanges.get(item.id) ?? '') : (item.series_code ?? '')}
+                                                        onChange={e => {
+                                                            const v = e.target.value ? parseInt(e.target.value) : null
+                                                            setMappingChanges(prev => new Map(prev).set(item.id, v))
+                                                        }}
+                                                        className="w-full text-xs border rounded px-1.5 py-1"
+                                                    >
+                                                        <option value="">未設定</option>
+                                                        {seriesOptions.map(s => (
+                                                            <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
                                 </tbody>
                                 <tfoot className="bg-gray-50 border-t-2 font-semibold">
                                     <tr>
                                         <td className="px-3 py-2">合計</td>
+                                        <td className="px-3 py-2"></td>
                                         <td className="px-3 py-2 text-right">{formatCurrency(totalSpent)}</td>
                                         <td className="px-3 py-2 text-right">{formatNumber(totalClicks)}</td>
                                         <td className="px-3 py-2 text-right">{formatCurrency(avgCpc)}</td>
