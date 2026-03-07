@@ -54,18 +54,11 @@ function WebSalesDashboardContent() {
     router.push(`?${params.toString()}`, { scroll: false });
   }, [month, searchParams, router]);
 
-  // 初期化: URLに月指定がなければDBからデータが存在する最新月を取得
+  // 初期化: データが存在する最新月を取得し、現在の月にデータがなければ切り替え
   useEffect(() => {
     if (!isInitializedRef.current) {
       isInitializedRef.current = true;
 
-      const urlMonth = searchParams.get('month');
-      if (urlMonth) {
-        if (urlMonth !== month) setMonth(urlMonth);
-        return;
-      }
-
-      // DBから最新月を取得
       const fetchLatestMonth = async () => {
         const { data, error } = await supabase
           .from('web_sales_summary')
@@ -73,15 +66,20 @@ function WebSalesDashboardContent() {
           .order('report_month', { ascending: false })
           .limit(1);
 
-        if (error) {
-          console.error('最新月取得エラー:', error);
-          return;
-        }
+        if (error || !data || data.length === 0) return;
 
-        if (data && data.length > 0 && data[0].report_month) {
-          // report_month は "2026-02-01" 形式 → "2026-02" へ変換
-          const raw = String(data[0].report_month);
-          const latestMonth = raw.substring(0, 7);
+        const raw = String(data[0].report_month);
+        const latestMonth = raw.substring(0, 7);
+
+        // 現在表示中の月にデータがあるか確認
+        const currentMonthDate = `${month}-01`;
+        const { count } = await supabase
+          .from('web_sales_summary')
+          .select('id', { count: 'exact', head: true })
+          .eq('report_month', currentMonthDate);
+
+        // 現在月にデータがなければ最新月に切り替え
+        if (!count || count === 0) {
           if (latestMonth !== month) {
             setMonth(latestMonth);
             const params = new URLSearchParams(searchParams.toString());
