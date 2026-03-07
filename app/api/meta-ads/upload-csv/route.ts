@@ -35,19 +35,32 @@ function parseCSVLine(line: string): string[] {
 }
 
 // カラム名のマッピング（日本語 → 英語 → 内部キー）
+// 実際のMeta CSVヘッダー例:
+// レポート開始日,レポート終了日,広告セット名,広告セットの配信,結果,結果インジケーター,結果の単価,
+// "消化金額 (JPY)",インプレッション,リーチ,フリークエンシー,"CPM(インプレッション単価) (JPY)",
+// クリック(すべて),CTR(すべて),"CPC(すべて) (JPY)"
 const COLUMN_MAP: Record<string, string> = {
-    // 日本語
+    // 日本語 - 完全一致
     '広告セット名': 'ad_set_name',
     'キャンペーン名': 'campaign_name',
     '配信': 'delivery',
+    '広告セットの配信': 'delivery',
     '結果': 'results',
     '結果の単価': 'cost_per_result',
     '消化金額': 'amount_spent',
     'インプレッション': 'impressions',
     'リーチ': 'reach',
     'フリークエンシー': 'frequency',
-    'クリック（すべて）': 'clicks',
+    '結果レート': 'result_rate_skip',
+    // 半角カッコ（実際のMeta CSV）
+    'クリック(すべて)': 'clicks',
+    'CTR(すべて)': 'ctr',
+    'CPC(すべて)': 'cpc',
+    'CPM(インプレッション単価)': 'cpm',
     'リンクのクリック': 'link_clicks',
+    'ユニーククリック(すべて)': 'unique_clicks_skip',
+    // 全角カッコ
+    'クリック（すべて）': 'clicks',
     'CTR（すべて）': 'ctr',
     'CPC（すべて）': 'cpc',
     // 英語
@@ -76,22 +89,27 @@ const COLUMN_MAP: Record<string, string> = {
 }
 
 // 部分一致でマッチを試みるキーワード → 内部キー
-// ※ 長いキーワードを先に配置（「リンクのクリック」が「クリック」より先にマッチするように）
+// ※ 長いキーワード・具体的なキーワードを先に配置
 const PARTIAL_MATCH_MAP: [string, string][] = [
+    // 日本語 - 長いものから
     ['広告セット名', 'ad_set_name'],
     ['キャンペーン名', 'campaign_name'],
+    ['広告セットの配信', 'delivery'],
     ['消化金額', 'amount_spent'],
     ['結果の単価', 'cost_per_result'],
+    ['CPM(インプレッション単価)', 'cpm'],
+    ['CPM（インプレッション単価）', 'cpm'],
     ['インプレッション', 'impressions'],
-    ['リーチ', 'reach'],
     ['フリークエンシー', 'frequency'],
     ['リンクのクリック', 'link_clicks'],
-    ['クリック（すべて）', 'clicks'],
     ['クリック(すべて)', 'clicks'],
-    ['CTR（すべて）', 'ctr'],
+    ['クリック（すべて）', 'clicks'],
     ['CTR(すべて)', 'ctr'],
-    ['CPC（すべて）', 'cpc'],
+    ['CTR（すべて）', 'ctr'],
     ['CPC(すべて)', 'cpc'],
+    ['CPC（すべて）', 'cpc'],
+    ['リーチ', 'reach'],
+    // 英語
     ['Amount Spent', 'amount_spent'],
     ['Amount spent', 'amount_spent'],
     ['Cost per Result', 'cost_per_result'],
@@ -139,7 +157,13 @@ export async function POST(request: NextRequest) {
             const tryHeaders = parseCSVLine(lines[tryIdx])
             const tempMapping: Record<number, string> = {}
             tryHeaders.forEach((h, i) => {
-                const cleanHeader = h.replace(/^\uFEFF/, '').replace(/^"/, '').replace(/"$/, '').trim()
+                // BOM除去、引用符除去、通貨サフィックス除去（例: "(JPY)" → 除去）
+                const cleanHeader = h
+                    .replace(/^\uFEFF/, '')
+                    .replace(/^"/, '').replace(/"$/, '')
+                    .replace(/\s*\(JPY\)\s*$/i, '')
+                    .replace(/\s*\(USD\)\s*$/i, '')
+                    .trim()
                 // 完全一致
                 if (COLUMN_MAP[cleanHeader]) {
                     tempMapping[i] = COLUMN_MAP[cleanHeader]
