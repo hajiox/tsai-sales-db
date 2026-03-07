@@ -26,9 +26,10 @@ function WebSalesDashboardContent() {
     const urlMonth = searchParams.get('month');
     if (urlMonth) return urlMonth;
 
-    // フォールバック: 現在月（DB取得前の初期値）
+    // フォールバック: 前月（当月はまだデータが揃っていない可能性が高い）
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
   };
 
   const [month, setMonth] = useState<string>(() => getCurrentMonth());
@@ -66,26 +67,27 @@ function WebSalesDashboardContent() {
 
       // DBから最新月を取得
       const fetchLatestMonth = async () => {
-        try {
-          const { data } = await supabase
-            .from('web_sales_summary')
-            .select('report_month')
-            .order('report_month', { ascending: false })
-            .limit(1)
-            .single();
+        const { data, error } = await supabase
+          .from('web_sales_summary')
+          .select('report_month')
+          .order('report_month', { ascending: false })
+          .limit(1);
 
-          if (data?.report_month) {
-            // report_month は "2026-02-01" 形式 → "2026-02" へ変換
-            const latestMonth = data.report_month.substring(0, 7);
-            if (latestMonth !== month) {
-              setMonth(latestMonth);
-              const params = new URLSearchParams(searchParams.toString());
-              params.set('month', latestMonth);
-              router.replace(`?${params.toString()}`, { scroll: false });
-            }
+        if (error) {
+          console.error('最新月取得エラー:', error);
+          return;
+        }
+
+        if (data && data.length > 0 && data[0].report_month) {
+          // report_month は "2026-02-01" 形式 → "2026-02" へ変換
+          const raw = String(data[0].report_month);
+          const latestMonth = raw.substring(0, 7);
+          if (latestMonth !== month) {
+            setMonth(latestMonth);
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('month', latestMonth);
+            router.replace(`?${params.toString()}`, { scroll: false });
           }
-        } catch {
-          // DBアクセスエラー時は現在月のまま
         }
       };
       fetchLatestMonth();
