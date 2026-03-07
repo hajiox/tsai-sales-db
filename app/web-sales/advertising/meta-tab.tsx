@@ -267,7 +267,7 @@ export default function MetaTab({ month }: Props) {
                     {/* KPIカード */}
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                         <div className="bg-white border rounded-lg p-4">
-                            <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><DollarSign size={14} />消化金額</div>
+                            <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><DollarSign size={14} />広告費</div>
                             <div className="text-xl font-bold text-emerald-700">{formatCurrency(totalSpent)}</div>
                         </div>
                         <div className="bg-white border rounded-lg p-4">
@@ -326,7 +326,7 @@ export default function MetaTab({ month }: Props) {
                                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
                                         <th className="text-left px-4 py-3 font-medium">広告セット</th>
                                         <th className="text-left px-3 py-3 font-medium">キャンペーン</th>
-                                        <th className="text-right px-3 py-3 font-medium">消化金額</th>
+                                        <th className="text-right px-3 py-3 font-medium">広告費</th>
                                         <th className="text-right px-3 py-3 font-medium">インプレ</th>
                                         <th className="text-right px-3 py-3 font-medium">リーチ</th>
                                         <th className="text-right px-3 py-3 font-medium">クリック</th>

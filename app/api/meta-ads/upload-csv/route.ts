@@ -75,6 +75,28 @@ const COLUMN_MAP: Record<string, string> = {
     'CPM': 'cpm',
 }
 
+// 部分一致でマッチを試みるキーワード → 内部キー
+const PARTIAL_MATCH_MAP: [string, string][] = [
+    ['広告セット名', 'ad_set_name'],
+    ['キャンペーン名', 'campaign_name'],
+    ['消化金額', 'amount_spent'],
+    ['結果の単価', 'cost_per_result'],
+    ['結果レート', 'result_rate'],
+    ['インプレッション', 'impressions'],
+    ['リーチ', 'reach'],
+    ['フリークエンシー', 'frequency'],
+    ['クリック', 'clicks'],
+    ['リンクのクリック', 'link_clicks'],
+    ['Amount Spent', 'amount_spent'],
+    ['Amount spent', 'amount_spent'],
+    ['Cost per Result', 'cost_per_result'],
+    ['Cost per result', 'cost_per_result'],
+    ['Ad Set Name', 'ad_set_name'],
+    ['Ad set name', 'ad_set_name'],
+    ['Campaign Name', 'campaign_name'],
+    ['Campaign name', 'campaign_name'],
+]
+
 function parseNumber(val: string | undefined): number {
     if (!val || val === '' || val === '-' || val === '—') return 0
     // ¥や,を除去
@@ -110,8 +132,17 @@ export async function POST(request: NextRequest) {
             const tempMapping: Record<number, string> = {}
             tryHeaders.forEach((h, i) => {
                 const cleanHeader = h.replace(/^\uFEFF/, '').replace(/^"/, '').replace(/"$/, '').trim()
+                // 完全一致
                 if (COLUMN_MAP[cleanHeader]) {
                     tempMapping[i] = COLUMN_MAP[cleanHeader]
+                } else {
+                    // 部分一致（「消化金額 (JPY)」のような通貨サフィックス付きに対応）
+                    for (const [keyword, key] of PARTIAL_MATCH_MAP) {
+                        if (cleanHeader.includes(keyword) && !tempMapping[i]) {
+                            tempMapping[i] = key
+                            break
+                        }
+                    }
                 }
             })
             // 3つ以上のカラムがマッチしたらヘッダー行とみなす
