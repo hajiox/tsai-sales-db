@@ -239,10 +239,16 @@ export default function RakutenTab({ month }: Props) {
                 )}
 
                 {hasData && (
-                    <a href="/docs/rakuten-rpp-guide" target="_blank" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 ml-auto">
-                        <FileText size={14} />CSVエクスポートガイド<ExternalLink size={12} />
-                    </a>
+                    <span className="text-sm text-gray-500 flex items-center gap-1">
+                        <CheckCircle size={14} className="text-green-500" />
+                        {data.length}件取り込み済み
+                    </span>
                 )}
+
+                <a href="/docs/rakuten-rpp-guide" target="_blank" rel="noopener noreferrer"
+                    className="ml-auto flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600">
+                    <FileText size={14} />CSVエクスポートガイド<ExternalLink size={12} />
+                </a>
             </div>
 
             {/* 結果メッセージ */}
