@@ -43,9 +43,9 @@ export async function POST(request: NextRequest) {
         for (const item of rakutenData) {
             // 楽天の商品コード（例: "chashu-set-3p"）と products.product_code の一致を試行
             const product = products?.find(p => {
-                if (!p.product_code) return false
-                const rc = item.product_code.toLowerCase()
-                const pc = p.product_code.toLowerCase()
+                if (!p.product_code || !item.product_code) return false
+                const rc = String(item.product_code).toLowerCase()
+                const pc = String(p.product_code).toLowerCase()
                 return rc === pc || rc.startsWith(pc) || pc.startsWith(rc)
             })
             if (product) {
