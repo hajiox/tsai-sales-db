@@ -13,6 +13,7 @@ import {
     Brain, Sparkles, LayoutDashboard, CheckCircle
 } from "lucide-react"
 import MetaTab from "./meta-tab"
+import RakutenTab from "./rakuten-tab"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -71,7 +72,7 @@ interface AdCostRow {
     other_cost: number
 }
 
-type TabType = 'overview' | 'google' | 'meta'
+type TabType = 'overview' | 'google' | 'meta' | 'rakuten'
 
 // ===== メインコンポーネント =====
 export default function AdvertisingDashboard() {
@@ -392,6 +393,7 @@ export default function AdvertisingDashboard() {
         { id: 'overview', label: '概要', icon: <LayoutDashboard size={16} /> },
         { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span> },
         { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span> },
+        { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span> },
     ]
 
     return (
@@ -428,7 +430,7 @@ export default function AdvertisingDashboard() {
                 ))}
                 {/* Meta — CSVガイドリンク削除（タブに統合） */}
                 {/* 将来のプラットフォーム（グレーアウト） */}
-                {['Amazon', '楽天', 'Yahoo'].map(name => (
+                {['Amazon', 'Yahoo'].map(name => (
                     <button key={name} disabled className="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-gray-300 cursor-not-allowed">
                         {name}<span className="text-[10px] bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded">準備中</span>
                     </button>
@@ -449,7 +451,7 @@ export default function AdvertisingDashboard() {
                                 { name: 'Google', cost: platformCosts.google, color: 'emerald', active: true },
                                 { name: 'Meta', cost: platformCosts.meta, color: 'blue', active: true },
                                 { name: 'Amazon', cost: platformCosts.amazon, color: 'orange', active: false },
-                                { name: '楽天', cost: platformCosts.rakuten, color: 'red', active: false },
+                                { name: '楽天', cost: platformCosts.rakuten, color: 'red', active: true },
                                 { name: 'Yahoo', cost: platformCosts.yahoo, color: 'purple', active: false },
                                 { name: 'その他', cost: platformCosts.other, color: 'gray', active: false },
                                 { name: '合計', cost: totalPlatformCost, color: 'indigo', active: true },
@@ -781,6 +783,11 @@ export default function AdvertisingDashboard() {
             {/* ===== Metaタブ ===== */}
             {activeTab === 'meta' && (
                 <MetaTab month={month} />
+            )}
+
+            {/* ===== 楽天タブ ===== */}
+            {activeTab === 'rakuten' && (
+                <RakutenTab month={month} />
             )}
 
 
