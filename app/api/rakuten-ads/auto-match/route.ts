@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         // 楽天の商品コード → products テーブルの rakuten_product_code で直接マッチング
         const { data: products, error: pErr } = await supabase
             .from('products')
-            .select('id, product_name, series_code, series, rakuten_product_code')
+            .select('id, name, series_code, series, rakuten_product_code')
             .not('series_code', 'is', null)
 
         if (pErr) throw pErr
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
                     .update({ series_code: product.series_code })
                     .eq('id', item.id)
                 directMatched++
-                results.push({ product_code: item.product_code, series_name: product.series || product.product_name, confidence: 'high' })
+                results.push({ product_code: item.product_code, series_name: product.series || product.name, confidence: 'high' })
             } else {
                 unmatched.push(item)
             }
