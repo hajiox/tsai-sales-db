@@ -27,10 +27,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: true, message: '未紐付けのデータがありません', matched: 0 })
         }
 
-        // 楽天の商品コード → products テーブルの rakuten_product_code で直接マッチング
+        // シリーズ一覧を取得（product_code, name で直接マッチングを試みる）
         const { data: products, error: pErr } = await supabase
             .from('products')
-            .select('id, name, series_code, series, rakuten_product_code')
+            .select('id, name, series_code, series, product_code')
             .not('series_code', 'is', null)
 
         if (pErr) throw pErr
@@ -41,10 +41,13 @@ export async function POST(request: NextRequest) {
         const unmatched: typeof rakutenData = []
 
         for (const item of rakutenData) {
-            const product = products?.find(p =>
-                p.rakuten_product_code === item.product_code ||
-                p.rakuten_product_code === item.product_code.replace(/[a-zA-Z]+$/, '')
-            )
+            // 楽天の商品コード（例: "chashu-set-3p"）と products.product_code の一致を試行
+            const product = products?.find(p => {
+                if (!p.product_code) return false
+                const rc = item.product_code.toLowerCase()
+                const pc = p.product_code.toLowerCase()
+                return rc === pc || rc.startsWith(pc) || pc.startsWith(rc)
+            })
             if (product) {
                 await supabase.from('rakuten_ads_performance')
                     .update({ series_code: product.series_code })
