@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon } from "lucide-react";
+import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -154,6 +154,12 @@ export default function RecipeDetailPage() {
   const [labelWarnings, setLabelWarnings] = useState<string[]>([]);
   const [labelMissing, setLabelMissing] = useState<string[]>([]);
   const [labelEditing, setLabelEditing] = useState(false);
+
+  // 商品写真
+  const [recipeImages, setRecipeImages] = useState<{ id: string; image_url: string; sort_order: number }[]>([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (params.id) {
@@ -327,6 +333,76 @@ export default function RecipeDetailPage() {
     }
 
     setLoading(false);
+  };
+
+  // ─── 商品写真 ───
+  const fetchRecipeImages = async (rid: string) => {
+    try {
+      const res = await fetch(`/api/recipe/upload-image?recipeId=${rid}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRecipeImages(data.images || []);
+      }
+    } catch { }
+  };
+
+  useEffect(() => {
+    if (recipe?.id) fetchRecipeImages(recipe.id);
+  }, [recipe?.id]);
+
+  const compressPhoto = (file: File, maxWidth = 1200, targetSizeKB = 280): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = Math.round((h * maxWidth) / w); w = maxWidth; }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas error")); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        let lo = 0.1, hi = 0.92;
+        let bestBlob: Blob | null = null;
+        const tryQ = (q: number): Promise<Blob> => new Promise(res => canvas.toBlob(b => res(b!), "image/jpeg", q));
+        const find = async () => {
+          for (let i = 0; i < 6; i++) {
+            const mid = (lo + hi) / 2;
+            bestBlob = await tryQ(mid);
+            if (bestBlob.size / 1024 > targetSizeKB) hi = mid; else lo = mid;
+          }
+          if (bestBlob && bestBlob.size / 1024 > targetSizeKB * 1.5) {
+            const sf = Math.sqrt((targetSizeKB * 1024) / bestBlob.size);
+            canvas.width = Math.round(w * sf); canvas.height = Math.round(h * sf);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            bestBlob = await tryQ(0.82);
+          }
+          resolve(new File([bestBlob!], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+        };
+        find().catch(reject);
+      };
+      img.onerror = () => reject(new Error("画像読み込み失敗"));
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const uploadPhotos = async (files: File[]) => {
+    if (!recipe) return;
+    setPhotoUploading(true);
+    try {
+      for (const file of files) {
+        const compressed = await compressPhoto(file);
+        const formData = new FormData();
+        formData.append("file", compressed);
+        formData.append("recipeId", recipe.id);
+        const res = await fetch("/api/recipe/upload-image", { method: "POST", body: formData });
+        if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+        const data = await res.json();
+        setRecipeImages(prev => [...prev, { id: data.id, image_url: data.url, sort_order: data.sort_order }]);
+      }
+      toast.success(`${files.length}枚の写真をアップロードしました`);
+    } catch (error: any) {
+      toast.error(error.message || "アップロード失敗");
+    } finally { setPhotoUploading(false); }
   };
 
   const handleItemChange = (itemId: string, field: string, value: any) => {
@@ -2269,6 +2345,106 @@ Now Expanded or Scrollable */}
             </p>
           </div>
         )}
+      </div>
+
+      {/* ── 商品写真セクション (PC用・印刷非表示) ── */}
+      <div className="print:hidden mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
+            <Camera className="w-4 h-4 text-blue-600" />
+            商品写真
+            {recipeImages.length > 0 && (
+              <span className="text-xs font-normal text-gray-400 ml-1">({recipeImages.length}枚)</span>
+            )}
+          </h3>
+          <button
+            onClick={() => {
+              const url = `${window.location.origin}/recipe/photo/mobile?id=${recipe.id}`;
+              navigator.clipboard.writeText(url).then(() => toast.success('📱 スマホ用URLをコピーしました'));
+            }}
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+          >
+            📱 スマホで撮影
+          </button>
+        </div>
+
+        {/* サムネイル一覧 */}
+        {recipeImages.length > 0 && (
+          <div className="flex flex-wrap gap-3 mb-4">
+            {recipeImages.map((img) => (
+              <div key={img.id} className="relative group">
+                <img
+                  src={img.image_url}
+                  alt=""
+                  className="w-32 h-32 object-cover rounded-lg border-2 border-gray-200 group-hover:border-blue-400 transition-colors"
+                />
+                <button
+                  onClick={async () => {
+                    if (!confirm('この画像を削除しますか？')) return;
+                    try {
+                      const res = await fetch('/api/recipe/upload-image', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ imageId: img.id, recipeId: recipe.id }),
+                      });
+                      if (res.ok) {
+                        setRecipeImages(prev => prev.filter(i => i.id !== img.id));
+                        toast.success('画像を削除しました');
+                      }
+                    } catch { toast.error('削除に失敗しました'); }
+                  }}
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 border-2 border-white"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* D&D アップロードエリア */}
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={async (e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            if (files.length === 0) return;
+            await uploadPhotos(files);
+          }}
+          className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50'
+            } ${photoUploading ? 'opacity-50 pointer-events-none' : ''}`}
+          onClick={() => photoInputRef.current?.click()}
+        >
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={async (e) => {
+              if (e.target.files) {
+                await uploadPhotos(Array.from(e.target.files));
+                e.target.value = '';
+              }
+            }}
+          />
+          {photoUploading ? (
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+              <p className="text-sm text-gray-500">アップロード中...</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <Upload className="w-8 h-8 text-gray-400" />
+              <p className="text-sm text-gray-500">
+                クリックまたはドラッグ&ドロップで画像をアップロード
+              </p>
+              <p className="text-xs text-gray-400">複数ファイル対応・自動で200-300KBに圧縮</p>
+            </div>
+          )}
+        </div>
       </div>
       <style jsx global>
         {`
