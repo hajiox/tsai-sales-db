@@ -15,6 +15,7 @@ import {
 import MetaTab from "./meta-tab"
 import RakutenTab from "./rakuten-tab"
 import YahooTab from "./yahoo-tab"
+import AmazonTab from "./amazon-tab"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -73,7 +74,7 @@ interface AdCostRow {
     other_cost: number
 }
 
-type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'yahoo'
+type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'yahoo' | 'amazon'
 
 // ===== メインコンポーネント =====
 export default function AdvertisingDashboard() {
@@ -396,6 +397,7 @@ export default function AdvertisingDashboard() {
         { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span> },
         { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span> },
         { id: 'yahoo', label: 'Yahoo!広告', icon: <span className="text-xs font-bold text-purple-600">Y</span> },
+        { id: 'amazon', label: 'Amazon広告', icon: <span className="text-xs font-bold text-orange-500">A</span> },
     ]
 
     return (
@@ -824,6 +826,11 @@ export default function AdvertisingDashboard() {
             {/* ===== Yahoo!タブ ===== */}
             {activeTab === 'yahoo' && (
                 <YahooTab month={month} />
+            )}
+
+            {/* ===== Amazonタブ ===== */}
+            {activeTab === 'amazon' && (
+                <AmazonTab month={month} />
             )}
 
 
