@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -82,6 +82,7 @@ interface Recipe {
   series?: string | null;
   series_code?: number | null;
   product_code?: number | null;
+  product_image_url?: string | null;
 }
 
 interface RecipeItem {
@@ -859,6 +860,50 @@ export default function RecipeDetailPage() {
                   />
                 </span>
                 <span>UPD: {new Date().toLocaleDateString()}</span>
+              </div>
+            </div>
+            {/* 商品写真（インライン） */}
+            <div className="ml-4 flex-shrink-0 w-[120px]">
+              <div className="border border-gray-200 rounded-lg bg-gray-50/50 overflow-hidden">
+                {recipe.product_image_url ? (
+                  <div className="relative group">
+                    <img
+                      src={recipe.product_image_url}
+                      alt={recipe.name}
+                      className="w-full h-[100px] object-contain bg-white"
+                    />
+                    <button
+                      onClick={() => {
+                        const url = `${window.location.origin}/recipe/photo/mobile?id=${recipe.id}`;
+                        navigator.clipboard.writeText(url).then(() => {
+                          toast.success("📱 スマホ用URLをコピーしました");
+                        }).catch(() => {
+                          window.open(`/recipe/photo/mobile?id=${recipe.id}`, "_blank");
+                        });
+                      }}
+                      className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                      title="写真を変更"
+                    >
+                      <Camera className="w-5 h-5 text-white" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      const url = `${window.location.origin}/recipe/photo/mobile?id=${recipe.id}`;
+                      navigator.clipboard.writeText(url).then(() => {
+                        toast.success("📱 スマホ用URLをコピーしました");
+                      }).catch(() => {
+                        window.open(`/recipe/photo/mobile?id=${recipe.id}`, "_blank");
+                      });
+                    }}
+                    className="w-full h-[100px] flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                    title="📱スマホで写真を撮影"
+                  >
+                    <Camera className="w-5 h-5" />
+                    <span className="text-[10px] font-medium">📱写真登録</span>
+                  </button>
+                )}
               </div>
             </div>
             {/* 原材料表示（インライン） */}
