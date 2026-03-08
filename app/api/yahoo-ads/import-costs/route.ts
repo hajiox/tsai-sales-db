@@ -1,5 +1,5 @@
 // /app/api/yahoo-ads/import-costs/route.ts
-// Yahoo広告費をweb_sales_summaryに取り込み
+// Yahoo広告費をadvertising_costsテーブルに反映（yahoo_cost列）
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -28,48 +28,64 @@ export async function POST(request: NextRequest) {
         }
 
         // シリーズ別に広告費を集計
-        const seriesCosts = new Map<number, number>()
-        let totalYahooCost = 0
-        for (const d of data) {
-            const current = seriesCosts.get(d.series_code) || 0
-            seriesCosts.set(d.series_code, current + d.amount_spent)
-            totalYahooCost += d.amount_spent
-        }
+        const seriesCostMap = new Map<number, number>()
+        data.forEach(row => {
+            if (row.series_code && row.amount_spent > 0) {
+                const current = seriesCostMap.get(row.series_code) || 0
+                seriesCostMap.set(row.series_code, current + Math.round(row.amount_spent))
+            }
+        })
 
-        // web_sales_summaryに反映
-        for (const [seriesCode, yahooCost] of seriesCosts) {
+        const reportMonth = `${month}-01`
+        let updated = 0
+        let created = 0
+
+        for (const [seriesCode, yahooCost] of seriesCostMap.entries()) {
             const { data: existing } = await supabase
-                .from('web_sales_summary')
-                .select('id, yahoo_cost')
+                .from('advertising_costs')
+                .select('id')
                 .eq('series_code', seriesCode)
-                .eq('report_month', month)
-                .single()
+                .eq('report_month', reportMonth)
+                .maybeSingle()
 
             if (existing) {
-                await supabase.from('web_sales_summary')
+                const { error } = await supabase
+                    .from('advertising_costs')
                     .update({ yahoo_cost: yahooCost })
-                    .eq('id', existing.id)
+                    .eq('series_code', seriesCode)
+                    .eq('report_month', reportMonth)
+                if (error) throw error
+                updated++
             } else {
-                await supabase.from('web_sales_summary').insert({
-                    report_month: month,
-                    series_code: seriesCode,
-                    yahoo_cost: yahooCost,
-                    google_cost: 0,
-                    meta_cost: 0,
-                    amazon_cost: 0,
-                    rakuten_cost: 0,
-                    other_cost: 0,
-                })
+                const { error } = await supabase
+                    .from('advertising_costs')
+                    .insert({
+                        series_code: seriesCode,
+                        report_month: reportMonth,
+                        google_cost: 0,
+                        meta_cost: 0,
+                        amazon_cost: 0,
+                        rakuten_cost: 0,
+                        other_cost: 0,
+                        yahoo_cost: yahooCost,
+                    })
+                if (error) throw error
+                created++
             }
         }
 
+        const totalCost = Array.from(seriesCostMap.values()).reduce((s, c) => s + c, 0)
+
         return NextResponse.json({
             success: true,
-            yahoo_cost: totalYahooCost,
-            series_count: seriesCosts.size,
+            yahoo_cost: totalCost,
+            series_count: seriesCostMap.size,
+            updated,
+            created,
         })
     } catch (error: any) {
         console.error('Yahoo広告費取り込みエラー:', error)
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 }
+
