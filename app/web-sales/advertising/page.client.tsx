@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import MetaTab from "./meta-tab"
 import RakutenTab from "./rakuten-tab"
+import YahooTab from "./yahoo-tab"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -72,7 +73,7 @@ interface AdCostRow {
     other_cost: number
 }
 
-type TabType = 'overview' | 'google' | 'meta' | 'rakuten'
+type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'yahoo'
 
 // ===== メインコンポーネント =====
 export default function AdvertisingDashboard() {
@@ -394,6 +395,7 @@ export default function AdvertisingDashboard() {
         { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span> },
         { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span> },
         { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span> },
+        { id: 'yahoo', label: 'Yahoo!広告', icon: <span className="text-xs font-bold text-purple-600">Y</span> },
     ]
 
     return (
@@ -817,6 +819,11 @@ export default function AdvertisingDashboard() {
             {/* ===== 楽天タブ ===== */}
             {activeTab === 'rakuten' && (
                 <RakutenTab month={month} />
+            )}
+
+            {/* ===== Yahoo!タブ ===== */}
+            {activeTab === 'yahoo' && (
+                <YahooTab month={month} />
             )}
 
 
