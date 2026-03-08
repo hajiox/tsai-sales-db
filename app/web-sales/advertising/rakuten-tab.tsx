@@ -184,16 +184,19 @@ export default function RakutenTab({ month }: Props) {
             await supabase.from('rakuten_ads_performance').update({ series_code: seriesCode }).eq('id', id)
 
             // 学習: 商品コードとシリーズの紐付けを保存（次回以降自動適用）
-            if (seriesCode !== null) {
-                const item = data.find(d => d.id === id)
-                if (item?.product_code) {
-                    await supabase.from('rakuten_code_series_map').upsert({
-                        product_code: item.product_code,
-                        series_code: seriesCode,
-                        source: 'manual',
-                        updated_at: new Date().toISOString(),
-                    }, { onConflict: 'product_code' })
-                }
+            const item = data.find(d => d.id === id)
+            if (seriesCode !== null && item?.product_code) {
+                await supabase.from('rakuten_code_series_map').upsert({
+                    product_code: item.product_code,
+                    series_code: seriesCode,
+                    source: 'manual',
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'product_code' })
+
+                // 同じ商品コードの全月データも一括更新
+                await supabase.from('rakuten_ads_performance')
+                    .update({ series_code: seriesCode })
+                    .eq('product_code', item.product_code)
             }
         }
         setMappingChanges(new Map())

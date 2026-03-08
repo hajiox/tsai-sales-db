@@ -127,16 +127,19 @@ export default function MetaTab({ month }: Props) {
                 await supabase.from('meta_ads_performance').update({ series_code: seriesCode }).eq('id', id)
 
                 // 学習: 広告セット名とシリーズの紐付けを保存（次回以降自動適用）
-                if (seriesCode !== null) {
-                    const item = metaData.find(d => d.id === id)
-                    if (item?.ad_set_name) {
-                        await supabase.from('meta_adset_series_map').upsert({
-                            ad_set_name: item.ad_set_name,
-                            series_code: seriesCode,
-                            source: 'manual',
-                            updated_at: new Date().toISOString(),
-                        }, { onConflict: 'ad_set_name' })
-                    }
+                const item = metaData.find(d => d.id === id)
+                if (seriesCode !== null && item?.ad_set_name) {
+                    await supabase.from('meta_adset_series_map').upsert({
+                        ad_set_name: item.ad_set_name,
+                        series_code: seriesCode,
+                        source: 'manual',
+                        updated_at: new Date().toISOString(),
+                    }, { onConflict: 'ad_set_name' })
+
+                    // 同じ広告セット名の全月データも一括更新
+                    await supabase.from('meta_ads_performance')
+                        .update({ series_code: seriesCode })
+                        .eq('ad_set_name', item.ad_set_name)
                 }
             }
             setMappingChanges(new Map())
