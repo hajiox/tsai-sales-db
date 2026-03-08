@@ -47,28 +47,18 @@ export default function YahooItemReachGuidePage() {
                 <div className="bg-white border rounded-xl p-6 mb-6">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-3">
                         <span className="bg-purple-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">2</span>
-                        「実績・明細」タブを開く
+                        「実績・明細」→「広告詳細レポート」タブを開く
                     </h2>
                     <div className="space-y-3 text-sm text-gray-700">
-                        <p>コマースアドマネージャー上部メニューから <strong>「実績・明細」</strong> タブをクリック</p>
+                        <p>① コマースアドマネージャー上部メニューから <strong>「実績・明細」</strong> をクリック</p>
+                        <p>② 表示される3つのタブから <strong>「広告詳細レポート」</strong> タブを選択</p>
                         <div className="bg-gray-50 rounded-lg p-4 mt-2">
-                            <h3 className="font-semibold mb-2 text-gray-800">利用可能なレポート一覧</h3>
-                            <table className="w-full text-sm">
-                                <tbody>
-                                    <tr className="border-b">
-                                        <td className="py-2 font-medium text-gray-600 w-44">アカウント分析</td>
-                                        <td className="py-2">アカウント全体の実績（日別/月別/期間合計）</td>
-                                    </tr>
-                                    <tr className="border-b">
-                                        <td className="py-2 font-medium text-gray-600">キャンペーン別レポート</td>
-                                        <td className="py-2">キャンペーンごとの実績</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="py-2 font-medium text-purple-700">広告詳細レポート ⭐</td>
-                                        <td className="py-2"><strong>広告グループ（商品）ごとの実績 ← これをダウンロード</strong></td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <h3 className="font-semibold mb-2 text-gray-800">タブ一覧</h3>
+                            <div className="flex gap-6 text-sm">
+                                <span className="text-gray-500">アカウント分析</span>
+                                <span className="text-purple-700 font-bold border-b-2 border-purple-600 pb-1">広告詳細レポート ⭐</span>
+                                <span className="text-gray-500">請求・利用明細</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -77,37 +67,40 @@ export default function YahooItemReachGuidePage() {
                 <div className="bg-white border rounded-xl p-6 mb-6">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-3">
                         <span className="bg-purple-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">3</span>
-                        広告詳細レポートの条件を設定
+                        レポート条件を設定してCSVダウンロード
                     </h2>
                     <div className="space-y-4 text-sm text-gray-700">
-                        <p><strong>「広告詳細レポート」</strong> を選択し、以下の条件を設定してください。</p>
+                        <p>広告詳細レポート画面で以下を設定し、ダウンロードします。</p>
 
                         <div className="bg-gray-50 rounded-lg p-4">
                             <h3 className="font-semibold mb-3 text-gray-800">設定内容</h3>
                             <table className="w-full text-sm">
                                 <tbody>
                                     <tr className="border-b">
-                                        <td className="py-2 font-medium text-gray-600 w-36">広告タイプ</td>
-                                        <td className="py-2"><strong>「アイテムリーチ」</strong> を選択</td>
+                                        <td className="py-2 font-medium text-gray-600 w-36">レポート種類</td>
+                                        <td className="py-2">
+                                            <strong>「商品別」</strong> を選択（ラジオボタン）
+                                            <div className="text-xs text-gray-500 mt-1">※ 他に「検索キーワード別×商品別」「配信カテゴリ別」がありますが商品別を選択</div>
+                                        </td>
                                     </tr>
                                     <tr className="border-b">
                                         <td className="py-2 font-medium text-gray-600">集計単位</td>
-                                        <td className="py-2"><strong>「月別」</strong> を選択</td>
-                                    </tr>
-                                    <tr className="border-b">
-                                        <td className="py-2 font-medium text-gray-600">集計期間</td>
-                                        <td className="py-2">対象月の <strong>1日〜末日</strong> を指定</td>
-                                    </tr>
-                                    <tr className="border-b">
-                                        <td className="py-2 font-medium text-gray-600">キャンペーン</td>
-                                        <td className="py-2"><strong>「すべて」</strong> を選択</td>
+                                        <td className="py-2">
+                                            <strong>「月別」</strong> を選択（ラジオボタン）
+                                            <div className="text-xs text-gray-500 mt-1">※ 「日別」でも可ですが月別を推奨</div>
+                                        </td>
                                     </tr>
                                     <tr>
-                                        <td className="py-2 font-medium text-gray-600">表示項目</td>
-                                        <td className="py-2"><strong>「全項目」</strong> にチェック ✅</td>
+                                        <td className="py-2 font-medium text-gray-600">集計期間</td>
+                                        <td className="py-2">対象の <strong>年月（例: 2026/02）</strong> を選択</td>
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+
+                        <div className="flex items-center gap-3 pt-2">
+                            <Download size={20} className="text-purple-600" />
+                            <p>設定後、<strong>「CSVファイルをダウンロード」</strong> ボタンをクリック</p>
                         </div>
 
                         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -115,29 +108,16 @@ export default function YahooItemReachGuidePage() {
                                 <CheckCircle size={16} /> 出力される主要項目
                             </h3>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-                                {['商品コード', '商品名', 'キャンペーン名', 'インプレッション数', 'クリック数', 'クリック率(CTR)', 'CPC', '広告費', '注文数', '売上金額', 'ROAS', 'CVR'].map(item => (
+                                {['商品コード', '商品名', 'インプレッション数', 'クリック数', 'CPC', '広告費（利用金額）', '注文数', '売上金額', 'ROAS', 'CVR'].map(item => (
                                     <div key={item} className="flex items-center gap-1.5">
                                         <CheckCircle size={12} className="text-green-600" /> {item}
                                     </div>
                                 ))}
                             </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* STEP 4 */}
-                <div className="bg-white border rounded-xl p-6 mb-6">
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-3">
-                        <span className="bg-purple-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">4</span>
-                        CSVをダウンロード
-                    </h2>
-                    <div className="space-y-3 text-sm text-gray-700">
-                        <div className="flex items-center gap-3">
-                            <Download size={20} className="text-purple-600" />
-                            <p>レポート画面の <strong>「CSVダウンロード」</strong> ボタンをクリック</p>
+                            <p className="text-xs text-green-600 mt-2">※ 金額表記は「売上金額」のみ取込、それ以外は税抜</p>
                         </div>
 
-                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-3">
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                             <h3 className="font-semibold mb-1 text-amber-800">💡 ヒント</h3>
                             <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
                                 <li><strong>月ごと</strong>に1ファイルずつダウンロードしてください</li>
@@ -151,7 +131,7 @@ export default function YahooItemReachGuidePage() {
                 {/* STEP 5 */}
                 <div className="bg-white border rounded-xl p-6 mb-6">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-3">
-                        <span className="bg-purple-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">5</span>
+                        <span className="bg-purple-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">4</span>
                         TSAシステムにアップロード
                     </h2>
                     <div className="space-y-3 text-sm text-gray-700">
