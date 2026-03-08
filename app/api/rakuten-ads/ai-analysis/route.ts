@@ -26,14 +26,30 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'データがありません' }, { status: 404 })
         }
 
+        // 商品名マップを取得
+        const { data: productNames } = await supabase
+            .from('rakuten_product_names')
+            .select('product_code, product_name')
+
+        const nameMap = new Map<string, string>()
+        productNames?.forEach((p: any) => nameMap.set(p.product_code, p.product_name))
+
+        // シリーズマップも取得
+        const { data: products } = await supabase
+            .from('products').select('series_code, series').not('series_code', 'is', null)
+        const seriesMap = new Map<number, string>()
+        products?.forEach((p: any) => { if (!seriesMap.has(p.series_code)) seriesMap.set(p.series_code, p.series) })
+
         const totalSpent = data.reduce((s, d) => s + d.amount_spent, 0)
         const totalClicks = data.reduce((s, d) => s + d.clicks, 0)
         const totalSales = data.reduce((s, d) => s + d.sales_amount, 0)
         const totalOrders = data.reduce((s, d) => s + d.sales_count, 0)
 
-        const top10 = data.slice(0, 10).map(d =>
-            `商品${d.product_code}: 広告費¥${d.amount_spent} / クリック${d.clicks} / CPC¥${d.cpc_actual} / 売上¥${d.sales_amount} / ROAS${d.roas}%`
-        ).join('\n')
+        const top10 = data.slice(0, 10).map(d => {
+            const pName = nameMap.get(d.product_code) || d.product_code
+            const sName = d.series_code ? (seriesMap.get(d.series_code) || '') : ''
+            return `${pName}${sName ? '(シリーズ:' + sName + ')' : ''}: 広告費¥${d.amount_spent} / クリック${d.clicks} / CPC¥${d.cpc_actual} / 売上¥${d.sales_amount} / ROAS${d.roas}%`
+        }).join('\n')
 
         const prompt = `楽天RPP広告のパフォーマンスを分析してください。
 
