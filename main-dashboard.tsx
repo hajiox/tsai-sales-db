@@ -7,7 +7,9 @@ import MainSidebar from "@/components/main-sidebar"
 // サイドバーを表示しないルートのリスト
 const FULL_SCREEN_ROUTES = [
   '/login',
+  '/mobile',
   '/recipe/database/label-import/mobile',
+  '/recipe/photo/mobile',
   '/kpi',
 ]
 
