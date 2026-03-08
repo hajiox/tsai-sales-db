@@ -302,8 +302,18 @@ function RecipePhotoContent() {
                 {/* ── Recipe Selection ── */}
                 {!recipe && (
                     <div>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: "#1e293b", marginBottom: 12 }}>
-                            商品を選択
+                        <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginBottom: 12,
+                        }}>
+                            <div style={{ fontSize: 17, fontWeight: 700, color: "#1e293b" }}>
+                                商品を選択
+                            </div>
+                            <div style={{ fontSize: 12, color: "#94a3b8" }}>
+                                ✅ {recipes.filter(r => r.product_image_url).length} / {recipes.length} 登録済
+                            </div>
                         </div>
                         <input
                             type="text"
@@ -322,83 +332,86 @@ function RecipePhotoContent() {
                             }}
                         />
                         <div style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 6,
-                            maxHeight: "60vh",
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: 8,
+                            maxHeight: "62vh",
                             overflowY: "auto",
-                            borderRadius: 16,
-                            border: "1px solid #e2e8f0",
-                            background: "#fff",
+                            paddingBottom: 20,
                         }}>
                             {filteredRecipes.map((r) => (
                                 <button
                                     key={r.id}
                                     onClick={() => { setRecipe(r); setSearchTerm(""); }}
                                     style={{
-                                        width: "100%",
                                         textAlign: "left",
-                                        padding: "14px 16px",
-                                        borderBottom: "1px solid #f1f5f9",
-                                        background: "none",
-                                        border: "none",
-                                        borderBottomWidth: 1,
-                                        borderBottomStyle: "solid",
-                                        borderBottomColor: "#f1f5f9",
+                                        padding: "12px 10px",
+                                        borderRadius: 12,
+                                        border: r.product_image_url
+                                            ? "2px solid #86efac"
+                                            : "1.5px solid #e2e8f0",
+                                        background: r.product_image_url ? "#f0fdf4" : "#fff",
                                         cursor: "pointer",
                                         display: "flex",
-                                        alignItems: "center",
-                                        gap: 10,
+                                        flexDirection: "column",
+                                        gap: 6,
+                                        minHeight: 80,
                                     }}
                                 >
+                                    {/* サムネイル or プレースホルダ */}
                                     {r.product_image_url ? (
-                                        <img
-                                            src={r.product_image_url}
-                                            alt=""
-                                            style={{
-                                                width: 40,
-                                                height: 40,
-                                                borderRadius: 8,
-                                                objectFit: "cover",
-                                                flexShrink: 0,
-                                            }}
-                                        />
+                                        <div style={{ position: "relative" }}>
+                                            <img
+                                                src={r.product_image_url}
+                                                alt=""
+                                                style={{
+                                                    width: "100%",
+                                                    height: 70,
+                                                    borderRadius: 8,
+                                                    objectFit: "cover",
+                                                }}
+                                            />
+                                            <div style={{
+                                                position: "absolute",
+                                                top: 4,
+                                                right: 4,
+                                                background: "#059669",
+                                                color: "#fff",
+                                                fontSize: 10,
+                                                fontWeight: 700,
+                                                padding: "2px 6px",
+                                                borderRadius: 6,
+                                            }}>✅</div>
+                                        </div>
                                     ) : (
                                         <div style={{
-                                            width: 40,
-                                            height: 40,
+                                            width: "100%",
+                                            height: 70,
                                             borderRadius: 8,
-                                            background: "#f1f5f9",
+                                            background: "#f8fafc",
                                             display: "flex",
                                             alignItems: "center",
                                             justifyContent: "center",
-                                            fontSize: 18,
+                                            fontSize: 24,
                                             color: "#cbd5e1",
-                                            flexShrink: 0,
                                         }}>📷</div>
                                     )}
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{
-                                            fontSize: 14,
-                                            fontWeight: 600,
-                                            color: "#1e293b",
-                                            overflow: "hidden",
-                                            textOverflow: "ellipsis",
-                                            whiteSpace: "nowrap",
-                                        }}>{r.name}</div>
-                                        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-                                            {r.series_code ? `${r.series_code}. ${r.series}` : r.category}
-                                            {r.product_image_url && " ・ 📷写真あり"}
-                                        </div>
-                                    </div>
+                                    {/* 商品名（全文表示、折返しOK） */}
+                                    <div style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: "#1e293b",
+                                        lineHeight: 1.4,
+                                        wordBreak: "break-all",
+                                    }}>{r.name}</div>
                                 </button>
                             ))}
-                            {filteredRecipes.length === 0 && (
-                                <div style={{ padding: "20px 16px", fontSize: 14, color: "#94a3b8", textAlign: "center" }}>
-                                    該当する商品がありません
-                                </div>
-                            )}
                         </div>
+                        {filteredRecipes.length === 0 && (
+                            <div style={{ padding: "20px 16px", fontSize: 14, color: "#94a3b8", textAlign: "center" }}>
+                                該当する商品がありません
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -635,48 +648,41 @@ function RecipePhotoContent() {
                                     📋 他の商品
                                 </div>
                                 <div style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 4,
-                                    maxHeight: 200,
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr",
+                                    gap: 6,
+                                    maxHeight: 240,
                                     overflowY: "auto",
-                                    borderRadius: 12,
-                                    border: "1px solid #e2e8f0",
-                                    background: "#fff",
                                 }}>
                                     {recipes
                                         .filter(r => r.id !== recipe.id)
-                                        .slice(0, 20)
                                         .map((r) => (
                                             <button
                                                 key={r.id}
                                                 onClick={() => { setRecipe(r); cancelPreview(); }}
                                                 style={{
-                                                    width: "100%",
                                                     textAlign: "left",
-                                                    padding: "10px 14px",
-                                                    borderBottom: "1px solid #f8fafc",
-                                                    background: "none",
-                                                    border: "none",
-                                                    borderBottomWidth: 1,
-                                                    borderBottomStyle: "solid",
-                                                    borderBottomColor: "#f8fafc",
+                                                    padding: "8px",
+                                                    borderRadius: 10,
+                                                    border: r.product_image_url
+                                                        ? "1.5px solid #86efac"
+                                                        : "1px solid #e2e8f0",
+                                                    background: r.product_image_url ? "#f0fdf4" : "#fff",
                                                     cursor: "pointer",
                                                     display: "flex",
-                                                    alignItems: "center",
-                                                    gap: 8,
-                                                    fontSize: 13,
+                                                    alignItems: "flex-start",
+                                                    gap: 6,
                                                 }}
                                             >
-                                                <span style={{ fontSize: 14, flexShrink: 0 }}>
+                                                <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>
                                                     {r.product_image_url ? "✅" : "📷"}
                                                 </span>
                                                 <span style={{
-                                                    overflow: "hidden",
-                                                    textOverflow: "ellipsis",
-                                                    whiteSpace: "nowrap",
+                                                    fontSize: 11,
                                                     color: "#334155",
                                                     fontWeight: 500,
+                                                    lineHeight: 1.4,
+                                                    wordBreak: "break-all",
                                                 }}>
                                                     {r.name}
                                                 </span>
