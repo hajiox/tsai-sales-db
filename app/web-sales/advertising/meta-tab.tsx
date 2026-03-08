@@ -81,7 +81,7 @@ export default function MetaTab({ month }: Props) {
                 }
             })
             setSeriesMap(sMap)
-            setSeriesOptions(sOpts.sort((a, b) => a.series_name.localeCompare(b.series_name, 'ja')))
+            setSeriesOptions(sOpts.sort((a, b) => a.series_code - b.series_code))
         } catch (err) {
             console.error('Meta データ取得エラー:', err)
         }

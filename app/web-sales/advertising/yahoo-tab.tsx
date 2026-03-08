@@ -74,7 +74,7 @@ export default function YahooTab({ month }: { month: string }) {
                 options.push({ series_code: p.series_code, series_name: p.series })
             }
         })
-        setSeriesOptions(options.sort((a, b) => a.series_name.localeCompare(b.series_name, 'ja')))
+        setSeriesOptions(options.sort((a, b) => a.series_code - b.series_code))
         setIsLoading(false)
     }, [month, supabase])
 
