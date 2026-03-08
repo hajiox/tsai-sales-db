@@ -432,13 +432,6 @@ export default function AdvertisingDashboard() {
                         {tab.icon}{tab.label}
                     </button>
                 ))}
-                {/* Meta — CSVガイドリンク削除（タブに統合） */}
-                {/* 将来のプラットフォーム（グレーアウト） */}
-                {['Amazon', 'Yahoo'].map(name => (
-                    <button key={name} disabled className="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-gray-300 cursor-not-allowed">
-                        {name}<span className="text-[10px] bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded">準備中</span>
-                    </button>
-                ))}
             </div>
 
             {/* ===== 概要タブ ===== */}
