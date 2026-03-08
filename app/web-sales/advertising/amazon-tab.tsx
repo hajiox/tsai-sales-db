@@ -9,6 +9,7 @@ import {
     CheckCircle, AlertCircle, Target, DollarSign,
     ExternalLink, Trash2
 } from "lucide-react"
+import AdChatWindow from "@/components/AdChatWindow"
 
 interface AmazonAdData {
     id: number
@@ -438,31 +439,23 @@ export default function AmazonTab({ month }: { month: string }) {
                     </div>
 
                     {showAnalysis && (
-                        <div className="bg-white border rounded-xl overflow-hidden">
-                            <div className="p-5 border-b flex items-center justify-between">
-                                <h2 className="text-lg font-semibold flex items-center gap-2">
-                                    <Brain size={20} className="text-orange-500" />
-                                    AI分析レポート
-                                </h2>
-                                <button onClick={() => setShowAnalysis(false)} className="text-sm text-gray-400 hover:text-gray-600">閉じる</button>
-                            </div>
-                            <div className="p-6">
-                                {isAnalyzing ? (
+                        <>
+                            {isAnalyzing ? (
+                                <div className="bg-white border rounded-xl p-6">
                                     <div className="flex items-center gap-3 text-orange-600">
                                         <RefreshCw size={20} className="animate-spin" />
                                         <span>Gemini 2.5 Flashで分析中...</span>
                                     </div>
-                                ) : aiAnalysis ? (
-                                    <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{
-                                        __html: aiAnalysis
-                                            .replace(/^## /gm, '<h2 class="text-lg font-bold mt-6 mb-2">')
-                                            .replace(/^### /gm, '<h3 class="text-md font-semibold mt-4 mb-1">')
-                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                            .replace(/\n/g, '<br/>')
-                                    }} />
-                                ) : null}
-                            </div>
-                        </div>
+                                </div>
+                            ) : (
+                                <AdChatWindow
+                                    platform="amazon"
+                                    context={`${month} Amazon SP広告サマリー: 総広告費¥${Math.round(totalCost).toLocaleString()} / 総クリック${totalClicks.toLocaleString()} / 平均CPC¥${Math.round(avgCpc)} / 総売上¥${Math.round(totalSales).toLocaleString()} / 注文${totalOrders}件 / ROAS${overallRoas.toFixed(2)} / ACOS${(overallAcos * 100).toFixed(1)}% / ${campaignGroups.length}キャンペーン(${data.length}ASIN)\nキャンペーンTOP5: ${campaignGroups.slice(0, 5).map(g => `${g.campaign_name}(広告費¥${Math.round(g.cost)} 売上¥${Math.round(g.sales)} ROAS${g.cost > 0 ? (g.sales / g.cost).toFixed(2) : '0'})`).join(', ')}`}
+                                    analysisResult={aiAnalysis}
+                                    onClose={() => setShowAnalysis(false)}
+                                />
+                            )}
+                        </>
                     )}
                 </>
             )}
