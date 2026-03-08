@@ -325,3 +325,54 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 | `components/BaseCsvImportModal.tsx` | confirm送信時にamountを含める |
 | DB RPC `get_monthly_financial_summary` | count × マスター価格 に統一 |
 
+
+### 2026-03-05~06 広告管理システム — Google手動同期・Meta広告CSV取り込み
+
+#### Google広告 — 手動同期方式
+- Google Ads API方式を断念（OAuth承認審査の困難）、手動データ入力方式に移行
+- `advertising_costs` テーブルにシリーズ別・プラットフォーム別の広告費を保存
+
+#### Meta広告 — CSV取り込み
+- `/docs/meta-guide` にMeta広告マネージャCSVエクスポートガイドを作成
+- `meta_campaign_performance`, `meta_campaign_series_map` テーブル新設
+- API群（upload-csv, auto-match, import-costs, ai-analysis）、`meta-tab.tsx` 実装
+
+
+### 2026-03-07 広告管理システム — 楽天RPP・Yahoo!アイテムマッチ CSV取り込み
+
+#### 楽天RPP広告
+- `/docs/rakuten-rpp-guide` にCSVエクスポートガイド作成
+- `rakuten_rpp_performance` テーブル新設、API群4本、`rakuten-tab.tsx` 実装
+
+#### Yahoo!アイテムマッチ広告
+- `/docs/yahoo-ads-guide` にCSVエクスポートガイド作成
+- `yahoo_ads_performance`, `yahoo_item_series_map` テーブル新設、API群4本、`yahoo-tab.tsx` 実装
+- `get_monthly_financial_summary` RPCに `yahoo_cost` 追加（ダッシュボード反映修正）
+
+
+### 2026-03-08 広告管理システム — Amazon広告CSV移行・AIチャットウィンドウ
+
+#### Amazon スポンサープロダクト広告 CSV/XLSX取り込み
+- Amazon Ads API方式を断念、CSV/XLSXベースの手動取り込みに方針転換
+- `/docs/amazon-sp-guide` に「広告対象商品」レポートのダウンロード手順書作成
+- `amazon_ads_performance`, `amazon_code_series_map` テーブル新設
+- API群5本（upload-csv, auto-match, import-costs, ai-analysis, clear-mappings）
+- `amazon-tab.tsx` — KPIカード8種 + キャンペーン単位集約表示（複数ASIN対応）
+- XLSX日付パース修正、プルダウンソート統一、準備中タブ削除
+
+#### AIチャットウィンドウ（全広告タブ共通）
+- `/api/ads/chat` — 会話履歴保持 + Gemini 2.5 Flash + 広告データコンテキスト付与
+- `components/AdChatWindow.tsx` — プラットフォーム別テーマカラー、サジェスト質問
+- AI分析結果を会話起点として引き継ぎ、追加質問可能
+
+#### 関連ファイル
+| ファイル | 変更内容 |
+|---------|---------| 
+| `app/docs/amazon-sp-guide/page.tsx` | Amazon広告CSVエクスポートガイド（新規） |
+| `app/api/amazon-ads/*/route.ts` | Amazon広告API群（5本、新規） |
+| `app/api/ads/chat/route.ts` | 広告AIチャットAPI（新規・全タブ共通） |
+| `components/AdChatWindow.tsx` | AIチャットウィンドウ（新規・全タブ共通） |
+| `app/web-sales/advertising/amazon-tab.tsx` | Amazonタブ（新規） |
+| `app/web-sales/advertising/page.client.tsx` | Amazonタブ追加・準備中タブ削除 |
+
+
