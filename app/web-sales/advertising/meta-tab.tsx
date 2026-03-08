@@ -498,7 +498,7 @@ export default function MetaTab({ month }: Props) {
                             <div className="p-5 border-b flex items-center justify-between">
                                 <h2 className="text-lg font-semibold flex items-center gap-2">
                                     <Brain size={20} className="text-violet-500" />
-                                    AI分析結果
+                                    AI分析レポート
                                 </h2>
                                 <button onClick={() => setShowAnalysis(false)} className="text-sm text-gray-400 hover:text-gray-600">閉じる</button>
                             </div>

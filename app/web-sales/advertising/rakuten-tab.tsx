@@ -362,23 +362,6 @@ export default function RakutenTab({ month }: Props) {
                         ))}
                     </div>
 
-                    {/* AI分析パネル */}
-                    {aiAnalysis && (
-                        <div className="bg-white border rounded-xl">
-                            <button onClick={() => setShowAnalysis(!showAnalysis)}
-                                className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                                <div className="flex items-center gap-2 font-semibold">
-                                    <Brain size={18} className="text-violet-600" />AI分析レポート
-                                </div>
-                                {showAnalysis ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                            </button>
-                            {showAnalysis && (
-                                <div className="px-4 pb-4 prose prose-sm max-w-none whitespace-pre-wrap text-sm text-gray-700">
-                                    {aiAnalysis}
-                                </div>
-                            )}
-                        </div>
-                    )}
 
                     {/* 商品別パフォーマンステーブル */}
                     <div className="bg-white border rounded-xl">
@@ -491,6 +474,35 @@ export default function RakutenTab({ month }: Props) {
                             </table>
                         </div>
                     </div>
+
+                    {/* AI分析結果 */}
+                    {showAnalysis && (
+                        <div className="bg-white border rounded-xl overflow-hidden">
+                            <div className="p-5 border-b flex items-center justify-between">
+                                <h2 className="text-lg font-semibold flex items-center gap-2">
+                                    <Brain size={20} className="text-violet-500" />
+                                    AI分析レポート
+                                </h2>
+                                <button onClick={() => setShowAnalysis(false)} className="text-sm text-gray-400 hover:text-gray-600">閉じる</button>
+                            </div>
+                            <div className="p-6">
+                                {isAnalyzing ? (
+                                    <div className="flex items-center gap-3 text-violet-600">
+                                        <RefreshCw size={20} className="animate-spin" />
+                                        <span>Gemini 2.5 Flashで分析中...</span>
+                                    </div>
+                                ) : aiAnalysis ? (
+                                    <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{
+                                        __html: aiAnalysis
+                                            .replace(/^## /gm, '<h2 class="text-lg font-bold mt-6 mb-2">')
+                                            .replace(/^### /gm, '<h3 class="text-md font-semibold mt-4 mb-1">')
+                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                            .replace(/\n/g, '<br/>')
+                                    }} />
+                                ) : null}
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>
