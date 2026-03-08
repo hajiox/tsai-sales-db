@@ -50,7 +50,20 @@ export default function AmazonTab({ month }: { month: string }) {
     const [importResult, setImportResult] = useState<string | null>(null)
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
     const [showAnalysis, setShowAnalysis] = useState(false)
-    const [mappingChanges, setMappingChanges] = useState<Map<number, number | null>>(new Map())
+    const [mappingChanges, setMappingChanges] = useState<Map<string, number | null>>(new Map()) // key=campaign_name
+
+    // キャンペーン単位で集約
+    interface CampaignGroup {
+        campaign_name: string
+        ids: number[]
+        asins: string[]
+        cost: number
+        clicks: number
+        impressions: number
+        sales: number
+        orders: number
+        series_code: number | null
+    }
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -79,6 +92,38 @@ export default function AmazonTab({ month }: { month: string }) {
     }, [month, supabase])
 
     useEffect(() => { fetchData() }, [fetchData])
+
+    // キャンペーン名で集約
+    const campaignGroups: CampaignGroup[] = React.useMemo(() => {
+        const map = new Map<string, CampaignGroup>()
+        data.forEach(item => {
+            const key = item.campaign_name
+            if (!map.has(key)) {
+                map.set(key, {
+                    campaign_name: key,
+                    ids: [],
+                    asins: [],
+                    cost: 0,
+                    clicks: 0,
+                    impressions: 0,
+                    sales: 0,
+                    orders: 0,
+                    series_code: item.series_code,
+                })
+            }
+            const g = map.get(key)!
+            g.ids.push(item.id)
+            if (!g.asins.includes(item.asin)) g.asins.push(item.asin)
+            g.cost += item.cost
+            g.clicks += item.clicks
+            g.impressions += item.impressions
+            g.sales += item.sales
+            g.orders += item.orders
+            // series_code: 紐付け済みがあればそれを使う
+            if (item.series_code !== null) g.series_code = item.series_code
+        })
+        return Array.from(map.values()).sort((a, b) => b.cost - a.cost)
+    }, [data])
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -127,19 +172,23 @@ export default function AmazonTab({ month }: { month: string }) {
     }
 
     const handleSaveMappings = async () => {
-        for (const [id, seriesCode] of mappingChanges) {
-            await supabase.from('amazon_ads_performance').update({ series_code: seriesCode }).eq('id', id)
-            const item = data.find(d => d.id === id)
-            if (seriesCode !== null && item?.asin) {
-                await supabase.from('amazon_code_series_map').upsert({
-                    asin: item.asin,
-                    series_code: seriesCode,
-                    source: 'manual',
-                    updated_at: new Date().toISOString(),
-                }, { onConflict: 'asin' })
-                await supabase.from('amazon_ads_performance')
-                    .update({ series_code: seriesCode })
-                    .eq('asin', item.asin)
+        for (const [campaignName, seriesCode] of mappingChanges) {
+            const group = campaignGroups.find(g => g.campaign_name === campaignName)
+            if (!group) continue
+            // グループ内の全レコードを更新
+            for (const id of group.ids) {
+                await supabase.from('amazon_ads_performance').update({ series_code: seriesCode }).eq('id', id)
+            }
+            // 全ASINの学習マッピングを保存
+            if (seriesCode !== null) {
+                for (const asin of group.asins) {
+                    await supabase.from('amazon_code_series_map').upsert({
+                        asin,
+                        series_code: seriesCode,
+                        source: 'manual',
+                        updated_at: new Date().toISOString(),
+                    }, { onConflict: 'asin' })
+                }
             }
         }
         setMappingChanges(new Map())
@@ -300,28 +349,28 @@ export default function AmazonTab({ month }: { month: string }) {
                         <div className="p-4 border-b flex items-center justify-between">
                             <h3 className="font-semibold flex items-center gap-2">
                                 <Target size={18} className="text-orange-500" />
-                                商品別パフォーマンス — {month}
+                                キャンペーン別パフォーマンス — {month}
                             </h3>
-                            <span className="text-sm text-gray-500">{data.length}商品</span>
+                            <span className="text-sm text-gray-500">{campaignGroups.length}キャンペーン（{data.length} ASIN）</span>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
                                 <colgroup>
-                                    <col style={{ width: '180px' }} />
-                                    <col style={{ width: '100px' }} />
+                                    <col style={{ width: '200px' }} />
+                                    <col style={{ width: '55px' }} />
                                     <col style={{ width: '85px' }} />
                                     <col style={{ width: '70px' }} />
                                     <col style={{ width: '65px' }} />
                                     <col style={{ width: '85px' }} />
+                                    <col style={{ width: '55px' }} />
+                                    <col style={{ width: '65px' }} />
                                     <col style={{ width: '60px' }} />
-                                    <col style={{ width: '65px' }} />
-                                    <col style={{ width: '65px' }} />
                                     <col style={{ width: '140px' }} />
                                 </colgroup>
                                 <thead>
                                     <tr className="bg-gray-50 border-b text-gray-600">
                                         <th className="px-3 py-2 text-left">キャンペーン</th>
-                                        <th className="px-3 py-2 text-left">ASIN</th>
+                                        <th className="px-3 py-2 text-center">ASIN数</th>
                                         <th className="px-3 py-2 text-right">広告費</th>
                                         <th className="px-3 py-2 text-right">クリック</th>
                                         <th className="px-3 py-2 text-right">CPC</th>
@@ -333,39 +382,47 @@ export default function AmazonTab({ month }: { month: string }) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {data.map(item => (
-                                        <tr key={item.id} className="border-b hover:bg-gray-50">
-                                            <td className="px-3 py-2 truncate" title={item.campaign_name}>{item.campaign_name}</td>
-                                            <td className="px-3 py-2 text-xs font-mono">{item.asin}</td>
-                                            <td className="px-3 py-2 text-right">{fmtCur(item.cost)}</td>
-                                            <td className="px-3 py-2 text-right">{fmt(item.clicks)}</td>
-                                            <td className="px-3 py-2 text-right">{fmtCur(item.cpc)}</td>
-                                            <td className="px-3 py-2 text-right">{fmtCur(item.sales)}</td>
-                                            <td className="px-3 py-2 text-right">{item.orders}</td>
-                                            <td className="px-3 py-2 text-right">{fmtPct(item.acos)}</td>
-                                            <td className="px-3 py-2 text-right">{item.roas.toFixed(2)}</td>
-                                            <td className="px-3 py-2">
-                                                <select
-                                                    value={mappingChanges.has(item.id) ? (mappingChanges.get(item.id) ?? '') : (item.series_code ?? '')}
-                                                    onChange={e => {
-                                                        const v = e.target.value ? parseInt(e.target.value) : null
-                                                        setMappingChanges(prev => new Map(prev).set(item.id, v))
-                                                    }}
-                                                    className="w-full text-xs border rounded px-1.5 py-1"
-                                                >
-                                                    <option value="">未設定</option>
-                                                    {seriesOptions.map(s => (
-                                                        <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {campaignGroups.map(g => {
+                                        const cpc = g.clicks > 0 ? g.cost / g.clicks : 0
+                                        const acos = g.sales > 0 ? g.cost / g.sales : 0
+                                        const roas = g.cost > 0 ? g.sales / g.cost : 0
+                                        const currentSc = mappingChanges.has(g.campaign_name)
+                                            ? mappingChanges.get(g.campaign_name)
+                                            : g.series_code
+                                        return (
+                                            <tr key={g.campaign_name} className="border-b hover:bg-gray-50">
+                                                <td className="px-3 py-2 truncate" title={g.campaign_name}>{g.campaign_name}</td>
+                                                <td className="px-3 py-2 text-center text-gray-500">{g.asins.length}</td>
+                                                <td className="px-3 py-2 text-right">{fmtCur(g.cost)}</td>
+                                                <td className="px-3 py-2 text-right">{fmt(g.clicks)}</td>
+                                                <td className="px-3 py-2 text-right">{fmtCur(cpc)}</td>
+                                                <td className="px-3 py-2 text-right">{fmtCur(g.sales)}</td>
+                                                <td className="px-3 py-2 text-right">{g.orders}</td>
+                                                <td className="px-3 py-2 text-right">{fmtPct(acos)}</td>
+                                                <td className="px-3 py-2 text-right">{roas.toFixed(2)}</td>
+                                                <td className="px-3 py-2">
+                                                    <select
+                                                        value={currentSc ?? ''}
+                                                        onChange={e => {
+                                                            const v = e.target.value ? parseInt(e.target.value) : null
+                                                            setMappingChanges(prev => new Map(prev).set(g.campaign_name, v))
+                                                        }}
+                                                        className="w-full text-xs border rounded px-1.5 py-1"
+                                                    >
+                                                        <option value="">未設定</option>
+                                                        {seriesOptions.map(s => (
+                                                            <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
                                 </tbody>
                                 <tfoot className="bg-gray-50 border-t-2 font-semibold">
                                     <tr>
                                         <td className="px-3 py-2">合計</td>
-                                        <td className="px-3 py-2"></td>
+                                        <td className="px-3 py-2 text-center">{data.length}</td>
                                         <td className="px-3 py-2 text-right">{fmtCur(totalCost)}</td>
                                         <td className="px-3 py-2 text-right">{fmt(totalClicks)}</td>
                                         <td className="px-3 py-2 text-right">{fmtCur(avgCpc)}</td>
