@@ -130,7 +130,7 @@ export default function RakutenTab({ month }: Props) {
             })
             const result = await res.json()
             if (result.success) {
-                setAutoMatchResult(`✅ ${result.matched}/${result.total}件を紐付け（直接:${result.direct_matched || 0}件）`)
+                setAutoMatchResult(`✅ ${result.matched}/${result.total}件を紐付け（学習済み:${result.auto_applied || 0}件、AI:${result.ai_matched || 0}件）`)
                 fetchData()
             } else {
                 setAutoMatchResult(`❌ ${result.error}`)
@@ -182,6 +182,19 @@ export default function RakutenTab({ month }: Props) {
     const handleSaveMappings = async () => {
         for (const [id, seriesCode] of mappingChanges) {
             await supabase.from('rakuten_ads_performance').update({ series_code: seriesCode }).eq('id', id)
+
+            // 学習: 商品コードとシリーズの紐付けを保存（次回以降自動適用）
+            if (seriesCode !== null) {
+                const item = data.find(d => d.id === id)
+                if (item?.product_code) {
+                    await supabase.from('rakuten_code_series_map').upsert({
+                        product_code: item.product_code,
+                        series_code: seriesCode,
+                        source: 'manual',
+                        updated_at: new Date().toISOString(),
+                    }, { onConflict: 'product_code' })
+                }
+            }
         }
         setMappingChanges(new Map())
         fetchData()

@@ -17,15 +17,42 @@ export async function POST(request: NextRequest) {
         if (!month) return NextResponse.json({ success: false, error: 'monthは必須です' }, { status: 400 })
 
         // 未紐付けの楽天広告データを取得
-        const { data: rakutenData, error: rErr } = await supabase
+        const { data: allUnmapped, error: rErr } = await supabase
             .from('rakuten_ads_performance')
             .select('id, product_code, product_url')
             .eq('report_month', month)
             .is('series_code', null)
 
         if (rErr) throw rErr
-        if (!rakutenData || rakutenData.length === 0) {
-            return NextResponse.json({ success: true, message: '未紐付けのデータがありません', matched: 0, total: 0 })
+        if (!allUnmapped || allUnmapped.length === 0) {
+            return NextResponse.json({ success: true, message: '紐付けのデータがありません', matched: 0, total: 0 })
+        }
+
+        // ★ STEP 1: 学習済みマッピングを先に自動適用
+        const { data: learnedMaps } = await supabase
+            .from('rakuten_code_series_map')
+            .select('product_code, series_code')
+
+        const learnedMap = new Map<string, number>()
+        learnedMaps?.forEach((m: any) => learnedMap.set(m.product_code, m.series_code))
+
+        let autoApplied = 0
+        const rakutenData: typeof allUnmapped = []
+
+        for (const item of allUnmapped) {
+            const learned = learnedMap.get(item.product_code)
+            if (learned) {
+                await supabase.from('rakuten_ads_performance')
+                    .update({ series_code: learned }).eq('id', item.id)
+                autoApplied++
+            } else {
+                rakutenData.push(item)
+            }
+        }
+
+        // 全部学習済みで適用完了
+        if (rakutenData.length === 0) {
+            return NextResponse.json({ success: true, matched: autoApplied, total: allUnmapped.length, auto_applied: autoApplied, message: '全て学習済みマッピングで紐付けました' })
         }
 
         // 商品名マッピングを取得
@@ -137,13 +164,23 @@ ${itemList}
                     series_name: seriesName,
                     confidence: match.confidence || 'unknown',
                 })
+
+                // ★ 学習: マッピングを保存（次回以降自動適用）
+                await supabase.from('rakuten_code_series_map').upsert({
+                    product_code: item.product_code,
+                    series_code: match.series_code,
+                    source: 'ai',
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'product_code' })
             }
         }
 
         return NextResponse.json({
             success: true,
-            matched: updated,
-            total: rakutenData.length,
+            matched: updated + autoApplied,
+            total: allUnmapped.length,
+            auto_applied: autoApplied,
+            ai_matched: updated,
             results,
         })
     } catch (error: any) {
