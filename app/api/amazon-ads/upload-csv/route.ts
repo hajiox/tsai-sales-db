@@ -19,6 +19,23 @@ function parseNumber(val: any): number {
     return isNaN(num) ? 0 : num
 }
 
+function parseDate(val: any): Date | null {
+    if (!val) return null
+    // Date object (from cellDates: true)
+    if (val instanceof Date && !isNaN(val.getTime())) return val
+    // Excel serial number
+    if (typeof val === 'number') {
+        const d = new Date((val - 25569) * 86400 * 1000)
+        if (!isNaN(d.getTime())) return d
+    }
+    // String: YYYY-MM-DD or YYYY/MM/DD
+    if (typeof val === 'string') {
+        const d = new Date(val.replace(/\//g, '-'))
+        if (!isNaN(d.getTime())) return d
+    }
+    return null
+}
+
 // Amazon レポートカラム名 → DB キー
 const COLUMN_KEYS: Record<string, string> = {
     '開始日': 'start_date',
@@ -73,7 +90,7 @@ export async function POST(request: NextRequest) {
         const buffer = Buffer.from(arrayBuffer)
 
         // XLSX/CSV をパース
-        const workbook = XLSX.read(buffer, { type: 'buffer' })
+        const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true })
         const sheetName = workbook.SheetNames[0]
         const sheet = workbook.Sheets[sheetName]
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][]
@@ -116,17 +133,16 @@ export async function POST(request: NextRequest) {
 
             // 日付から月を取得
             let reportMonth = month
-            if (row.start_date) {
-                const d = new Date(row.start_date)
-                if (!isNaN(d.getTime())) {
-                    reportMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                }
+            const startD = parseDate(row.start_date)
+            if (startD) {
+                reportMonth = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}`
             }
 
+            const endD = parseDate(row.end_date)
             records.push({
                 report_month: reportMonth,
-                start_date: row.start_date ? new Date(row.start_date).toISOString().split('T')[0] : null,
-                end_date: row.end_date ? new Date(row.end_date).toISOString().split('T')[0] : null,
+                start_date: startD ? startD.toISOString().split('T')[0] : null,
+                end_date: endD ? endD.toISOString().split('T')[0] : null,
                 portfolio: row.portfolio === 'No Portfolio' ? null : (row.portfolio || null),
                 campaign_name: row.campaign_name || '',
                 ad_group_name: row.ad_group_name || '',
