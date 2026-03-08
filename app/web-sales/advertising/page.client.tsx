@@ -777,6 +777,35 @@ export default function AdvertisingDashboard() {
                             </table>
                         </div>
                     </div>
+
+                    {/* AI分析結果 */}
+                    {(aiAnalysis || isAnalyzing) && (
+                        <div className="bg-white border rounded-xl overflow-hidden">
+                            <div className="p-5 border-b flex items-center justify-between">
+                                <h2 className="text-lg font-semibold flex items-center gap-2">
+                                    <Brain size={20} className="text-violet-500" />
+                                    AI分析レポート{aiTarget ? ` — ${aiTarget}` : ''}
+                                </h2>
+                                <button onClick={() => { setAiAnalysis(null); setAiTarget(null) }} className="text-sm text-gray-400 hover:text-gray-600">閉じる</button>
+                            </div>
+                            <div className="p-6">
+                                {isAnalyzing ? (
+                                    <div className="flex items-center gap-3 text-violet-600">
+                                        <RefreshCw size={20} className="animate-spin" />
+                                        <span>Gemini 2.5 Flashで分析中...</span>
+                                    </div>
+                                ) : aiAnalysis ? (
+                                    <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{
+                                        __html: aiAnalysis
+                                            .replace(/^## /gm, '<h2 class="text-lg font-bold mt-6 mb-2">')
+                                            .replace(/^### /gm, '<h3 class="text-md font-semibold mt-4 mb-1">')
+                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                            .replace(/\n/g, '<br/>')
+                                    }} />
+                                ) : null}
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
 
