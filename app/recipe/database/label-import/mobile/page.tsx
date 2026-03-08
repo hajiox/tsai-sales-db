@@ -106,7 +106,8 @@ function MobileLabelImportContent() {
     const [searchTerm, setSearchTerm] = useState("");
     const [showSearch, setShowSearch] = useState(false);
     const [toastMsg, setToastMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
-    const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+    const cameraInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+    const galleryInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
     useEffect(() => {
         fetchAllIngredients();
@@ -488,8 +489,23 @@ function MobileLabelImportContent() {
                                     const existing = labelFiles.find((f) => f.type === type);
                                     return (
                                         <div key={type}>
+                                            {/* カメラ撮影用 input (capture属性付き = Androidでカメラ直接起動) */}
                                             <input
-                                                ref={(el) => { fileInputRefs.current[type] = el; }}
+                                                ref={(el) => { cameraInputRefs.current[type] = el; }}
+                                                type="file"
+                                                accept="image/*"
+                                                capture="environment"
+                                                style={{ display: "none" }}
+                                                onChange={(e) => {
+                                                    if (e.target.files?.[0]) {
+                                                        handleFileAdd(type, e.target.files[0]);
+                                                        e.target.value = "";
+                                                    }
+                                                }}
+                                            />
+                                            {/* ギャラリー選択用 input (capture属性なし = ファイル/写真選択) */}
+                                            <input
+                                                ref={(el) => { galleryInputRefs.current[type] = el; }}
                                                 type="file"
                                                 accept="image/*"
                                                 style={{ display: "none" }}
@@ -538,86 +554,137 @@ function MobileLabelImportContent() {
                                                                 <div style={{ fontSize: 11, color: "#4ade80" }}>撮影済み</div>
                                                             </div>
                                                         </div>
-                                                        <div style={{ display: "flex", gap: 8 }}>
+                                                        <div style={{ display: "flex", gap: 6 }}>
                                                             <button
-                                                                onClick={() => fileInputRefs.current[type]?.click()}
+                                                                onClick={() => cameraInputRefs.current[type]?.click()}
                                                                 style={{
-                                                                    padding: "8px 14px",
+                                                                    padding: "8px 12px",
                                                                     borderRadius: 10,
                                                                     border: "1px solid #86efac",
                                                                     background: "#fff",
                                                                     color: "#166534",
-                                                                    fontSize: 13,
+                                                                    fontSize: 12,
                                                                     fontWeight: 600,
                                                                     cursor: "pointer",
                                                                 }}
                                                             >
-                                                                📷変更
+                                                                📷撮影
+                                                            </button>
+                                                            <button
+                                                                onClick={() => galleryInputRefs.current[type]?.click()}
+                                                                style={{
+                                                                    padding: "8px 12px",
+                                                                    borderRadius: 10,
+                                                                    border: "1px solid #93c5fd",
+                                                                    background: "#eff6ff",
+                                                                    color: "#1d4ed8",
+                                                                    fontSize: 12,
+                                                                    fontWeight: 600,
+                                                                    cursor: "pointer",
+                                                                }}
+                                                            >
+                                                                📁選択
                                                             </button>
                                                             <button
                                                                 onClick={() => handleFileRemove(type)}
                                                                 style={{
-                                                                    padding: "8px 14px",
+                                                                    padding: "8px 12px",
                                                                     borderRadius: 10,
                                                                     border: "1px solid #fca5a5",
                                                                     background: "#fef2f2",
                                                                     color: "#dc2626",
-                                                                    fontSize: 13,
+                                                                    fontSize: 12,
                                                                     fontWeight: 600,
                                                                     cursor: "pointer",
                                                                 }}
                                                             >
-                                                                🗑 取消
+                                                                🗑
                                                             </button>
                                                         </div>
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <button
-                                                    onClick={() => fileInputRefs.current[type]?.click()}
-                                                    style={{
-                                                        width: "100%",
+                                                <div style={{
+                                                    borderRadius: 16,
+                                                    border: "2px dashed #cbd5e1",
+                                                    background: "#fff",
+                                                    overflow: "hidden",
+                                                }}>
+                                                    <div style={{
                                                         display: "flex",
                                                         alignItems: "center",
                                                         gap: 14,
-                                                        padding: "18px 16px",
-                                                        borderRadius: 16,
-                                                        border: "2px dashed #cbd5e1",
-                                                        background: "#fff",
-                                                        cursor: "pointer",
-                                                        textAlign: "left",
-                                                    }}
-                                                >
+                                                        padding: "14px 16px",
+                                                    }}>
+                                                        <div style={{
+                                                            width: 48,
+                                                            height: 48,
+                                                            borderRadius: 14,
+                                                            background: config.bg,
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            fontSize: 24,
+                                                            flexShrink: 0,
+                                                        }}>
+                                                            {config.emoji}
+                                                        </div>
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b" }}>
+                                                                {config.label}
+                                                            </div>
+                                                            <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
+                                                                {config.description}
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                     <div style={{
-                                                        width: 52,
-                                                        height: 52,
-                                                        borderRadius: 14,
-                                                        background: config.bg,
                                                         display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        fontSize: 26,
-                                                        flexShrink: 0,
+                                                        gap: 8,
+                                                        padding: "0 16px 14px",
                                                     }}>
-                                                        {config.emoji}
+                                                        <button
+                                                            onClick={() => cameraInputRefs.current[type]?.click()}
+                                                            style={{
+                                                                flex: 1,
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "center",
+                                                                gap: 6,
+                                                                padding: "12px 10px",
+                                                                borderRadius: 12,
+                                                                border: "1.5px solid " + config.color + "40",
+                                                                background: config.bg,
+                                                                color: config.color,
+                                                                fontSize: 14,
+                                                                fontWeight: 700,
+                                                                cursor: "pointer",
+                                                            }}
+                                                        >
+                                                            📷 撮影
+                                                        </button>
+                                                        <button
+                                                            onClick={() => galleryInputRefs.current[type]?.click()}
+                                                            style={{
+                                                                flex: 1,
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "center",
+                                                                gap: 6,
+                                                                padding: "12px 10px",
+                                                                borderRadius: 12,
+                                                                border: "1.5px solid #e2e8f0",
+                                                                background: "#f8fafc",
+                                                                color: "#475569",
+                                                                fontSize: 14,
+                                                                fontWeight: 700,
+                                                                cursor: "pointer",
+                                                            }}
+                                                        >
+                                                            📁 選択
+                                                        </button>
                                                     </div>
-                                                    <div style={{ flex: 1 }}>
-                                                        <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b" }}>
-                                                            {config.label}
-                                                        </div>
-                                                        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
-                                                            {config.description}
-                                                        </div>
-                                                    </div>
-                                                    <div style={{
-                                                        fontSize: 12,
-                                                        color: config.color,
-                                                        fontWeight: 600,
-                                                        flexShrink: 0,
-                                                    }}>
-                                                        📷 撮影/選択
-                                                    </div>
-                                                </button>
+                                                </div>
                                             )}
                                         </div>
                                     );
