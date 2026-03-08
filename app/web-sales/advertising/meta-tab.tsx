@@ -8,7 +8,7 @@ import {
     Upload, Download, RefreshCw, Brain, Save,
     CheckCircle, AlertCircle, ChevronDown, ChevronUp,
     TrendingUp, Eye, MousePointerClick, Target, DollarSign,
-    FileText, ExternalLink
+    FileText, ExternalLink, Trash2
 } from "lucide-react"
 
 interface MetaAdSet {
@@ -118,13 +118,26 @@ export default function MetaTab({ month }: Props) {
         if (fileInputRef.current) fileInputRef.current.value = ''
     }
 
-    // シリーズ紐付け保存
+    // シリーズ紐付け保存（+ 学習保存）
     const handleSaveMappings = async () => {
         if (mappingChanges.size === 0) return
 
         try {
             for (const [id, seriesCode] of mappingChanges.entries()) {
                 await supabase.from('meta_ads_performance').update({ series_code: seriesCode }).eq('id', id)
+
+                // 学習: 広告セット名とシリーズの紐付けを保存（次回以降自動適用）
+                if (seriesCode !== null) {
+                    const item = metaData.find(d => d.id === id)
+                    if (item?.ad_set_name) {
+                        await supabase.from('meta_adset_series_map').upsert({
+                            ad_set_name: item.ad_set_name,
+                            series_code: seriesCode,
+                            source: 'manual',
+                            updated_at: new Date().toISOString(),
+                        }, { onConflict: 'ad_set_name' })
+                    }
+                }
             }
             setMappingChanges(new Map())
             fetchData()
@@ -190,8 +203,7 @@ export default function MetaTab({ month }: Props) {
             })
             const data = await res.json()
             if (data.success) {
-                const details = data.results?.map((r: any) => `${r.ad_set_name} → ${r.series_name} (${r.confidence})`).join('、') || ''
-                setAutoMatchResult(`✅ ${data.matched}/${data.total}件を自動紐付けしました${details ? '：' + details : ''}`)
+                setAutoMatchResult(`✅ ${data.matched}/${data.total}件を自動紐付け（学習済み:${data.auto_applied || 0}件、AI:${data.ai_matched || 0}件）`)
                 fetchData()
             } else {
                 setAutoMatchResult(`❌ エラー: ${data.error}`)
@@ -203,6 +215,27 @@ export default function MetaTab({ month }: Props) {
     }
 
     const hasUnmapped = metaData.some(d => d.series_code === null)
+    const hasMapped = metaData.some(d => d.series_code !== null)
+
+    const handleClearMappings = async () => {
+        if (!confirm(`${month} のMeta広告の紐付けを全てクリアしますか？\n（広告データ自体は削除されません）`)) return
+        try {
+            const res = await fetch('/api/meta-ads/clear-mappings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month }),
+            })
+            const result = await res.json()
+            if (result.success) {
+                setAutoMatchResult(`✅ ${result.cleared}件の紐付けをクリアしました`)
+                fetchData()
+            } else {
+                setAutoMatchResult(`❌ ${result.error}`)
+            }
+        } catch (err: any) {
+            setAutoMatchResult(`❌ ${err.message}`)
+        }
+    }
 
     const formatCurrency = (n: number) => `¥${Math.round(n).toLocaleString()}`
     const formatNumber = (n: number) => Math.round(n).toLocaleString()
@@ -259,6 +292,13 @@ export default function MetaTab({ month }: Props) {
                             <Brain size={16} />
                             AI分析
                         </button>
+                        {hasMapped && (
+                            <button onClick={handleClearMappings}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium">
+                                <Trash2 size={16} />
+                                紐付けクリア
+                            </button>
+                        )}
                     </>
                 )}
 
