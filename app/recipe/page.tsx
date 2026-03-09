@@ -48,6 +48,7 @@ interface Recipe {
     total_cost: number | null;
     source_file: string | null;
     linked_product_id: string | null;
+    linked_wholesale_product_id: string | null;
     series: string | null;
     series_code: number | null;
     product_code: number | null;
@@ -474,6 +475,11 @@ export default function RecipePage() {
                         WEB販売紐付け
                     </Button>
 
+                    <Button variant="outline" onClick={() => router.push("/recipe/wholesale-link")} className="border-green-300 text-green-700 hover:bg-green-50">
+                        <LinkIcon className="w-4 h-4 mr-2" />
+                        卸販売紐付け
+                    </Button>
+
                     <Button variant="outline" onClick={() => router.push("/recipe/database")}>
                         <Package className="w-4 h-4 mr-2" />
                         材料データベース
@@ -593,6 +599,14 @@ export default function RecipePage() {
                                                 <span
                                                     className="flex-shrink-0 text-emerald-500 cursor-help"
                                                     title={`WEB販売紐付済: ${linkedProductNames[recipe.linked_product_id] || '取得中...'}`}
+                                                >
+                                                    <Link2 className="h-3.5 w-3.5" />
+                                                </span>
+                                            )}
+                                            {recipe.linked_wholesale_product_id && (
+                                                <span
+                                                    className="flex-shrink-0 text-green-600 cursor-help"
+                                                    title="卸販売紐付済"
                                                 >
                                                     <Link2 className="h-3.5 w-3.5" />
                                                 </span>
