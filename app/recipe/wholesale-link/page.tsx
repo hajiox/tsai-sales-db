@@ -108,6 +108,43 @@ export default function WholesaleLinkPage() {
         } catch (error: any) { toast.error(error.message); }
     };
 
+    // 一括紐づけ
+    const handleBatchLink = async () => {
+        const toLink = suggestions.filter(s => {
+            const effectiveId = s.overrideProductId || s.productId;
+            return s.accepted && effectiveId;
+        });
+        if (toLink.length === 0) {
+            toast.error("紐付け対象がありません");
+            return;
+        }
+        if (!confirm(`${toLink.length}件を一括紐づけしますか？`)) return;
+        setSaving(true);
+        try {
+            const links = toLink.map(s => ({
+                recipeId: s.recipeId,
+                productId: s.overrideProductId || s.productId,
+            }));
+            const res = await fetch("/api/recipe/sync-wholesale", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ batch: true, links }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "一括紐づけに失敗しました");
+            }
+            toast.success(`${toLink.length}件を紐づけしました`);
+            setSuggestions([]);
+            setStep("overview");
+            fetchData();
+        } catch (error: any) {
+            toast.error(error.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleUnlinkAll = async () => {
         if (!confirm(`紐付け済み${linkedCount}件を全て解除しますか？`)) return;
         setSaving(true);
@@ -269,7 +306,7 @@ export default function WholesaleLinkPage() {
                                 <X className="w-4 h-4 mr-1" /> 閉じる
                             </Button>
                         </div>
-                        <p className="text-sm text-gray-500 mt-1">各行の「紐づけ」ボタンで1商品ずつ確定できます。</p>
+                        <p className="text-sm text-gray-500 mt-1">各行の「紐づけ」ボタンで1商品ずつ確定、または下部の「一括紐づけ」でまとめて紐づけできます。</p>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -323,6 +360,25 @@ export default function WholesaleLinkPage() {
                                 })}
                             </TableBody>
                         </Table>
+                        {/* 一括紐づけボタン */}
+                        {(() => {
+                            const batchCount = suggestions.filter(s => s.accepted && (s.overrideProductId || s.productId)).length;
+                            return batchCount > 0 ? (
+                                <div className="mt-4 flex items-center justify-end gap-3 border-t pt-4">
+                                    <span className="text-sm text-gray-500">
+                                        商品選択済み: <span className="font-bold text-green-700">{batchCount}件</span>
+                                    </span>
+                                    <Button
+                                        onClick={handleBatchLink}
+                                        disabled={saving}
+                                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                                    >
+                                        <Link2 className="w-4 h-4 mr-2" />
+                                        {saving ? "処理中..." : `${batchCount}件を一括紐づけ`}
+                                    </Button>
+                                </div>
+                            ) : null;
+                        })()}
                     </CardContent>
                 </Card>
             )}
