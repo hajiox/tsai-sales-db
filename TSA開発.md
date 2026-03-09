@@ -376,3 +376,47 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 | `app/web-sales/advertising/page.client.tsx` | Amazonタブ追加・準備中タブ削除 |
 
 
+### 2026-03-09 レシピ-卸販売紐付け・卸OEM統合・ダッシュボード改修
+
+#### レシピ-卸販売商品紐付け機能
+- **DBスキーマ変更:** `recipes`テーブルに`linked_wholesale_product_id`カラム（UUID型）を追加
+- **新規API:** `/api/recipe/sync-wholesale` — レシピ⇔卸販売商品の紐付け管理（GET/POST/PUT）
+  - GET: レシピと卸販売商品を取得し、名前類似度でマッチング候補を生成
+  - POST: 紐付け/解除（1対1制約）
+  - PUT: 価格・利益率同期（卸価格 = 販売価格 × 0.7）
+- **新規ページ:** `/app/recipe/wholesale-link/page.tsx` — AIマッチング・手動紐付け・一括紐づけ・全件同期
+- **レシピ一覧:** 「自社」タブで卸販売紐付け済み商品に緑色バッジ（卸）を表示、WEB販売紐付けは青色バッジ（WEB）で区別
+- **利益率表示:** 「自社」タブの利益率を「利益率（７掛）」として卸価格シミュレーション（70%）ベースで表示
+
+#### 卸販売ダッシュボード改修
+- **データのない月を非表示:** URLパラメータなしの初回アクセス時、`wholesale_sales`テーブルから最新売上月を取得してデフォルト表示（WEB販売と同じロジック）
+- **リンクマーク表示:** 日別売上テーブルで紐付け済み商品名の横にLink2アイコンバッジを表示
+  - RLSバイパスのため`/api/recipe/sync-wholesale`経由でサーバー側取得に変更
+
+#### 卸販売管理 通常卸×OEM テーブル統合（案A実行）
+
+##### DBマイグレーション
+| 変更 | 内容 |
+|------|------|
+| `wholesale_products` | `product_type`カラム追加（`'通常卸'` / `'OEM'`） |
+| OEM商品移行 | `oem_products` 53件 → `wholesale_products`（ID保持） |
+| `wholesale_customers` | `oem_customers`からリネーム＋`customer_type`カラム追加（22件） |
+| OEM売上移行 | `oem_sales` 147件 → `wholesale_sales`（customer_id付き） |
+
+##### API改修
+| ファイル | 変更内容 |
+|---------|---------|
+| `app/api/wholesale/products/route.ts` (ver.6) | `?type=通常卸/OEM/all`パラメータ対応、POST時`product_type`設定 |
+
+##### UI改修
+| ファイル | 変更内容 |
+|---------|---------|
+| `app/wholesale/products/page.tsx` (ver.4) | 通常卸/OEMタブ統合、タブ切替で商品フィルター＆新規登録時の種別自動設定 |
+| `app/wholesale/dashboard/page.tsx` | OEM商品取得を統合API経由に変更、OEM売上をwholesale_salesからcustomer_id IS NOT NULLで取得 |
+| `components/wholesale/oem-area.tsx` | 「OEM商品管理」→統合「商品管理」ページに遷移 |
+| `components/wholesale/sales-data-table.tsx` | linkedProductIds prop追加、リンクバッジ表示 |
+
+##### 設計ポイント
+- OEM商品が`wholesale_products`に統合されたため、将来のレシピOEMタブ紐付けは**既存の`linked_wholesale_product_id`をそのまま使用可能**
+- 旧テーブル（`oem_products`, `oem_sales`）はバックアップとして残存、動作確認後Phase 4で削除予定
+
