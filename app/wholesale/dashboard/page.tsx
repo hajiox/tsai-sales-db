@@ -92,6 +92,7 @@ function WholesaleDashboardContent() {
   const [isImporting, setIsImporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setMounted(true);
@@ -201,6 +202,19 @@ function WholesaleDashboardContent() {
       }
     } catch (error) {
       console.error('商品データ取得エラー:', error);
+    }
+    // レシピ紐付け情報も取得
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data: recipes } = await supabase
+        .from('recipes')
+        .select('linked_wholesale_product_id')
+        .not('linked_wholesale_product_id', 'is', null);
+      if (recipes) {
+        setLinkedProductIds(new Set(recipes.map((r: { linked_wholesale_product_id: string }) => r.linked_wholesale_product_id)));
+      }
+    } catch (error) {
+      console.error('紐付け情報取得エラー:', error);
     }
   };
 
@@ -588,6 +602,7 @@ function WholesaleDashboardContent() {
               onQuantityChange={handleQuantityChange}
               onSave={saveSalesData}
               onInputKeyDown={handleInputKeyDown}
+              linkedProductIds={linkedProductIds}
             />
           </div>
         )}

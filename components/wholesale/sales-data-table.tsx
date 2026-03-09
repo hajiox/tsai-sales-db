@@ -4,7 +4,7 @@
 import { KeyboardEvent } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Settings } from 'lucide-react';
+import { TrendingUp, Settings, Link2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface Product {
@@ -26,6 +26,7 @@ interface SalesDataTableProps {
   onQuantityChange: (productId: string, day: number, value: string) => void;
   onSave: (productId: string, day: number) => void;
   onInputKeyDown: (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => void;
+  linkedProductIds?: Set<string>;
 }
 
 export default function SalesDataTable({
@@ -35,6 +36,7 @@ export default function SalesDataTable({
   onQuantityChange,
   onSave,
   onInputKeyDown,
+  linkedProductIds,
 }: SalesDataTableProps) {
   const router = useRouter();
 
@@ -107,7 +109,14 @@ export default function SalesDataTable({
               return (
                 <tr key={product.id} className="border-b hover:bg-gray-50">
                   <td className="p-2 border-r">
-                    <div className="font-medium text-gray-800">{product.product_name}</div>
+                    <div className="font-medium text-gray-800 flex items-center gap-1">
+                      {product.product_name}
+                      {linkedProductIds?.has(product.id) && (
+                        <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium" title="レシピ紐付済">
+                          <Link2 className="h-2.5 w-2.5" />
+                        </span>
+                      )}
+                    </div>
                     <div className="text-gray-500">単価: {product.price.toLocaleString()}円</div>
                   </td>
                   {Array.from({ length: daysInMonth }, (_, i) => {
