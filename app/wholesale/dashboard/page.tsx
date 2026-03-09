@@ -113,11 +113,41 @@ function WholesaleDashboardContent() {
     }
     setMonthOptions(months);
 
-    const urlYear = searchParams.get('year') || String(now.getFullYear());
-    const urlMonth = searchParams.get('month') || String(now.getMonth() + 1).padStart(2, '0');
+    const urlYear = searchParams.get('year');
+    const urlMonth = searchParams.get('month');
 
-    setSelectedYear(urlYear);
-    setSelectedMonth(urlMonth);
+    if (urlYear && urlMonth) {
+      setSelectedYear(urlYear);
+      setSelectedMonth(urlMonth);
+    } else {
+      // URLパラメータがない場合、データのある最新月を取得
+      const fetchLatestMonth = async () => {
+        try {
+          const supabase = getSupabaseBrowserClient();
+          const { data, error } = await supabase
+            .from('wholesale_sales')
+            .select('sale_date')
+            .order('sale_date', { ascending: false })
+            .limit(1);
+
+          if (!error && data && data.length > 0) {
+            const latestDate = new Date(data[0].sale_date);
+            const latestYear = String(latestDate.getUTCFullYear());
+            const latestMonth = String(latestDate.getUTCMonth() + 1).padStart(2, '0');
+            setSelectedYear(latestYear);
+            setSelectedMonth(latestMonth);
+          } else {
+            // データがない場合は当月
+            setSelectedYear(String(now.getFullYear()));
+            setSelectedMonth(String(now.getMonth() + 1).padStart(2, '0'));
+          }
+        } catch {
+          setSelectedYear(String(now.getFullYear()));
+          setSelectedMonth(String(now.getMonth() + 1).padStart(2, '0'));
+        }
+      };
+      fetchLatestMonth();
+    }
   }, [mounted, searchParams]);
 
   const updateURL = (year: string, month: string) => {
