@@ -203,15 +203,18 @@ function WholesaleDashboardContent() {
     } catch (error) {
       console.error('商品データ取得エラー:', error);
     }
-    // レシピ紐付け情報も取得
+    // レシピ紐付け情報も取得（サーバーサイドAPI経由でRLSバイパス）
     try {
-      const supabase = getSupabaseBrowserClient();
-      const { data: recipes } = await supabase
-        .from('recipes')
-        .select('linked_wholesale_product_id')
-        .not('linked_wholesale_product_id', 'is', null);
-      if (recipes) {
-        setLinkedProductIds(new Set(recipes.map((r: { linked_wholesale_product_id: string }) => r.linked_wholesale_product_id)));
+      const linkRes = await fetch('/api/recipe/sync-wholesale');
+      if (linkRes.ok) {
+        const linkData = await linkRes.json();
+        if (linkData.recipes) {
+          const linked = new Set<string>();
+          linkData.recipes.forEach((r: { linked_wholesale_product_id: string | null }) => {
+            if (r.linked_wholesale_product_id) linked.add(r.linked_wholesale_product_id);
+          });
+          setLinkedProductIds(linked);
+        }
       }
     } catch (error) {
       console.error('紐付け情報取得エラー:', error);
