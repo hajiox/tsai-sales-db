@@ -597,18 +597,18 @@ export default function RecipePage() {
                                             <span className="flex-1">{recipe.name}</span>
                                             {recipe.linked_product_id && (
                                                 <span
-                                                    className="flex-shrink-0 text-emerald-500 cursor-help"
+                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium cursor-help"
                                                     title={`WEB販売紐付済: ${linkedProductNames[recipe.linked_product_id] || '取得中...'}`}
                                                 >
-                                                    <Link2 className="h-3.5 w-3.5" />
+                                                    <Link2 className="h-3 w-3" />WEB
                                                 </span>
                                             )}
                                             {recipe.linked_wholesale_product_id && (
                                                 <span
-                                                    className="flex-shrink-0 text-green-600 cursor-help"
+                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium cursor-help"
                                                     title="卸販売紐付済"
                                                 >
-                                                    <Link2 className="h-3.5 w-3.5" />
+                                                    <Link2 className="h-3 w-3" />卸
                                                 </span>
                                             )}
                                         </div>
