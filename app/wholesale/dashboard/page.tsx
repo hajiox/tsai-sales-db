@@ -220,11 +220,15 @@ function WholesaleDashboardContent() {
 
   const fetchOemProducts = async () => {
     try {
-      const response = await fetch('/api/wholesale/oem-products');
+      const response = await fetch('/api/wholesale/products?type=OEM');
       if (response.ok) {
         const data = await response.json();
-        if (Array.isArray(data)) {
-          setOemProducts(data);
+        if (data.success && Array.isArray(data.products)) {
+          setOemProducts(data.products.map((p: any) => ({
+            id: p.id,
+            product_name: p.product_name,
+            price: p.price,
+          })));
         }
       }
     } catch (error) {
@@ -263,15 +267,27 @@ function WholesaleDashboardContent() {
 
   const fetchOemSalesData = async (month: string) => {
     try {
-      const response = await fetch(`/api/wholesale/oem-sales?month=${month}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && Array.isArray(data.sales)) {
-          setOemSales(data.sales);
-        } else {
-          setOemSales([]);
-        }
+      const startDate = `${month}-01`;
+      const [year, monthNum] = month.split('-').map(Number);
+      const lastDay = new Date(year, monthNum, 0).getDate();
+      const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
+
+      const supabase = getSupabaseBrowserClient();
+      const { data: sales, error } = await supabase
+        .from('wholesale_sales')
+        .select('*')
+        .not('customer_id', 'is', null)
+        .gte('sale_date', startDate)
+        .lte('sale_date', endDate)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('OEM売上データ取得エラー:', error);
+        setOemSales([]);
+        return;
       }
+
+      setOemSales(sales || []);
     } catch (error) {
       console.error('OEM売上データ取得エラー:', error);
       setOemSales([]);

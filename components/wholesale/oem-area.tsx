@@ -79,11 +79,11 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
             <Button
               size="sm"
               variant="outline"
-              onClick={() => router.push('/wholesale/oem-products')}
+              onClick={() => router.push('/wholesale/products')}
               className="flex items-center gap-2 bg-white hover:bg-green-50 border-green-300 text-green-700"
             >
               <Settings className="w-4 h-4" />
-              OEM商品管理
+              商品管理
             </Button>
             <Button
               size="sm"

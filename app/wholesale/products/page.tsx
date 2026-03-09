@@ -1,4 +1,4 @@
-// /app/wholesale/products/page.tsx ver.3 利益率対応版
+// /app/wholesale/products/page.tsx ver.4 統合版
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -17,11 +17,13 @@ interface Product {
   profit_rate: number;
   is_active: boolean;
   display_order: number;
+  product_type: string;
 }
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'通常卸' | 'OEM'>('通常卸');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     product_code: '',
@@ -39,11 +41,12 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [activeTab]);
 
   const fetchProducts = async () => {
+    setLoading(true);
     try {
-      const response = await fetch('/api/wholesale/products');
+      const response = await fetch(`/api/wholesale/products?type=${activeTab}`);
       const data = await response.json();
       if (data.success) {
         setProducts(data.products);
@@ -154,7 +157,8 @@ export default function ProductsPage() {
         body: JSON.stringify({
           ...newForm,
           price: parseInt(newForm.price),
-          profit_rate: parseFloat(newForm.profit_rate)
+          profit_rate: parseFloat(newForm.profit_rate),
+          product_type: activeTab
         })
       });
 
@@ -184,14 +188,30 @@ export default function ProductsPage() {
   return (
     <div className="container mx-auto p-4">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">卸商品マスター管理</h1>
+        <div>
+          <h1 className="text-2xl font-bold">卸商品マスター管理</h1>
+          <div className="flex mt-2 border-b">
+            {(['通常卸', 'OEM'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => { setActiveTab(tab); setEditingId(null); setShowNewForm(false); }}
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === tab
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex gap-2">
           <Link href="/wholesale/dashboard">
             <Button variant="outline">ダッシュボードに戻る</Button>
           </Link>
           <Button onClick={() => setShowNewForm(true)} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
-            新規登録
+            {activeTab === 'OEM' ? 'OEM商品追加' : '新規登録'}
           </Button>
         </div>
       </div>

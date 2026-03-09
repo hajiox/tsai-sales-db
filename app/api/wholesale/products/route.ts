@@ -1,4 +1,4 @@
-// /api/wholesale/products/route.ts ver.5 利益率対応版
+// /api/wholesale/products/route.ts ver.6 統合版
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -6,13 +6,27 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new E
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })();
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { data: products, error } = await supabase
+    const { searchParams } = new URL(request.url);
+    const productType = searchParams.get('type'); // '通常卸' | 'OEM' | 'all' | null
+
+    let query = supabase
       .from('wholesale_products')
       .select('*')
       .order('display_order', { ascending: true })
       .order('product_code', { ascending: true });
+
+    // デフォルトは通常卸のみ（後方互換）
+    if (productType === 'all') {
+      // 全件取得
+    } else if (productType === 'OEM') {
+      query = query.eq('product_type', 'OEM');
+    } else {
+      query = query.eq('product_type', '通常卸');
+    }
+
+    const { data: products, error } = await query;
 
     if (error) {
       console.error('商品データ取得エラー:', error);
@@ -38,7 +52,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { product_code, product_name, price, profit_rate = 20.00 } = body;
+    const { product_code, product_name, price, profit_rate = 20.00, product_type = '通常卸' } = body;
 
     if (!product_code || !product_name || price === undefined) {
       return NextResponse.json(
@@ -54,8 +68,8 @@ export async function POST(request: Request) {
       .order('display_order', { ascending: false })
       .limit(1);
 
-    const nextOrder = maxOrderData && maxOrderData[0]?.display_order 
-      ? maxOrderData[0].display_order + 1 
+    const nextOrder = maxOrderData && maxOrderData[0]?.display_order
+      ? maxOrderData[0].display_order + 1
       : 1;
 
     const { data, error } = await supabase
@@ -67,7 +81,8 @@ export async function POST(request: Request) {
           price: parseInt(price),
           profit_rate: parseFloat(profit_rate),
           display_order: nextOrder,
-          is_active: true
+          is_active: true,
+          product_type
         }
       ])
       .select()
