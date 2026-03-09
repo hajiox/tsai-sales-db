@@ -588,11 +588,12 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                 {data.salesActivity && data.salesActivity.length > 0 && (
                     <div className="mt-8 print:hidden">
                         <h3 className="text-lg font-medium mb-4">営業活動実績（新規・OEM獲得数）</h3>
-                        <div className="border rounded-md">
-                            <table className="w-full text-xs text-left table-fixed">
+                        <div className="border rounded-md shadow-sm overflow-x-auto">
+                            <table className="w-full text-xs text-left border-collapse table-fixed min-w-[900px]">
                                 <thead className="bg-orange-50 text-gray-700 font-semibold">
                                     <tr>
                                         <th className="p-2 w-[140px]">項目 / 月</th>
+                                        <th className="p-2 border-r w-[60px]"></th>
                                         {data.months.map(m => (
                                             <th key={m} className="p-2 text-right bg-white border-l">
                                                 {new Date(m).getMonth() + 1}月
@@ -604,6 +605,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                 <tbody className="divide-y">
                                     {/* Last Year Row */}
                                     <tr className="hover:bg-gray-50/30">
+                                        <td className="p-2 bg-gray-50/30" rowSpan={5} style={{ verticalAlign: 'top' }}></td>
                                         <td className="p-2 border-r text-gray-500 text-xs bg-gray-50/30 text-right">前年度実績</td>
                                         {data.salesActivity.map(r => (
                                             <td key={`sa-ly-${r.month}`} className="p-2 text-right border-l tabular-nums text-gray-500">
@@ -699,11 +701,12 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                 {data.manufacturing && data.manufacturing.length > 0 && (
                     <div className="mt-8 print:hidden">
                         <h3 className="text-lg font-medium mb-4">商品製造数</h3>
-                        <div className="border rounded-md">
-                            <table className="w-full text-xs text-left table-fixed">
+                        <div className="border rounded-md shadow-sm overflow-x-auto">
+                            <table className="w-full text-xs text-left border-collapse table-fixed min-w-[900px]">
                                 <thead className="bg-blue-50 text-gray-700 font-semibold">
                                     <tr>
                                         <th className="p-2 w-[140px]">項目 / 月</th>
+                                        <th className="p-2 border-r w-[60px]"></th>
                                         {data.months.map(m => (
                                             <th key={m} className="p-2 text-right bg-white border-l">
                                                 {new Date(m).getMonth() + 1}月
@@ -715,6 +718,7 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                                 <tbody className="divide-y">
                                     {/* Last Year */}
                                     <tr className="text-gray-500 text-xs">
+                                        <td className="p-2 bg-gray-50/30" rowSpan={5} style={{ verticalAlign: 'top' }}></td>
                                         <td className="p-2 border-r bg-gray-50/30 text-right">前年度実績</td>
                                         {data.manufacturing.map(r => (
                                             <td key={`man-ly-${r.month}`} className="p-2 text-right border-l tabular-nums">
