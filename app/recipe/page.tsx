@@ -509,7 +509,7 @@ export default function RecipePage() {
                             <TableHead>カテゴリ</TableHead>
                             <TableHead className="text-right">販売価格</TableHead>
                             <TableHead className="text-right">原価</TableHead>
-                            <TableHead className="text-right w-[80px]">利益率</TableHead>
+                            <TableHead className="text-right w-[80px]">{activeTab === "自社" ? "利益率（７掛）" : "利益率"}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -638,9 +638,18 @@ export default function RecipePage() {
                                     <TableCell className="text-right">
                                         {(() => {
                                             if (!recipe.selling_price || !recipe.total_cost) return <span className="text-gray-300">-</span>;
-                                            const rate = ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100;
-                                            const color = rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600";
-                                            return <span className={`text-sm font-bold ${color}`}>{rate.toFixed(1)}%</span>;
+                                            if (activeTab === "自社") {
+                                                // 7掛の卸価格ベースの利益率
+                                                const wholesalePrice = Math.round(recipe.selling_price * 0.7);
+                                                const wholesaleProfit = wholesalePrice - recipe.total_cost;
+                                                const rate = wholesalePrice > 0 ? (wholesaleProfit / wholesalePrice) * 100 : 0;
+                                                const color = rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600";
+                                                return <span className={`text-sm font-bold ${color}`}>{rate.toFixed(1)}%</span>;
+                                            } else {
+                                                const rate = ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100;
+                                                const color = rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600";
+                                                return <span className={`text-sm font-bold ${color}`}>{rate.toFixed(1)}%</span>;
+                                            }
                                         })()}
                                     </TableCell>
                                     <TableCell onClick={(e) => e.stopPropagation()}>
