@@ -4,7 +4,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Check, X, Plus, RefreshCw, FileText, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -182,12 +181,8 @@ export default function EstimatesPage() {
         if (res.ok) {
             const data = await res.json();
             setItems(data.items || []);
+            setIngredients(data.ingredients || []);
         }
-        const { data: ings } = await supabase
-            .from("ingredients")
-            .select("id, name, price, price_excl_tax, supplier, unit_quantity")
-            .order("name");
-        setIngredients(ings || []);
         setLoading(false);
     }, [statusFilter]);
 

@@ -24,7 +24,13 @@ export async function GET(request: NextRequest) {
         .select("*", { count: "exact", head: true })
         .eq("status", "pending");
 
-    return NextResponse.json({ items: data, pendingCount: count || 0 });
+    // 既存材料マスターも返す（マッチング候補表示用）
+    const { data: ingredients } = await supabase
+        .from("ingredients")
+        .select("id, name, price, price_excl_tax, supplier, unit_quantity")
+        .order("name");
+
+    return NextResponse.json({ items: data, pendingCount: count || 0, ingredients: ingredients || [] });
 }
 
 // PATCH: 見積もり項目に対するアクション
