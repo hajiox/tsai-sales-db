@@ -36,7 +36,6 @@ interface ExistingIngredient {
     id: string;
     name: string;
     price: number | null;
-    price_excl_tax: number | null;
     supplier: string | null;
     unit_quantity: number;
 }
