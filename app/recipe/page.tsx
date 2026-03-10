@@ -49,6 +49,7 @@ interface Recipe {
     source_file: string | null;
     linked_product_id: string | null;
     linked_wholesale_product_id: string | null;
+    linked_oem_product_id: string | null;
     series: string | null;
     series_code: number | null;
     product_code: number | null;
@@ -503,6 +504,11 @@ export default function RecipePage() {
                         卸販売紐付け
                     </Button>
 
+                    <Button variant="outline" onClick={() => router.push("/recipe/oem-link")} className="border-purple-300 text-purple-700 hover:bg-purple-50">
+                        <LinkIcon className="w-4 h-4 mr-2" />
+                        OEM紐付け
+                    </Button>
+
                     <Button variant="outline" onClick={() => router.push("/recipe/database")}>
                         <Package className="w-4 h-4 mr-2" />
                         材料データベース
@@ -646,6 +652,14 @@ export default function RecipePage() {
                                                     title="卸販売紐付済"
                                                 >
                                                     <Link2 className="h-3 w-3" />卸
+                                                </span>
+                                            )}
+                                            {recipe.linked_oem_product_id && (
+                                                <span
+                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-medium cursor-help"
+                                                    title="OEM紐付済"
+                                                >
+                                                    <Link2 className="h-3 w-3" />OEM
                                                 </span>
                                             )}
                                         </div>
