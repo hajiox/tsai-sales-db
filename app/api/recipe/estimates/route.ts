@@ -3,8 +3,78 @@ import { NextRequest, NextResponse } from "next/server";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const geminiApiKey = process.env.GEMINI_API_KEY || "";
 
-// GET: pending_estimate_items 取得
+// --- AI マッチング: Gemini 2.0 Flash で見積書品目と既存材料の対応を推定 ---
+async function aiMatchItems(
+    estimateItems: { id: string; item_name: string; counterparty_name: string | null }[],
+    ingredients: { id: string; name: string; price: number | null }[]
+): Promise<Record<string, { ingredientId: string; ingredientName: string; confidence: number }>> {
+    if (!geminiApiKey || ingredients.length === 0 || estimateItems.length === 0) return {};
+
+    const ingList = ingredients.map(i => `${i.id}|${i.name}`).join("\n");
+    const itemList = estimateItems.map(i => `${i.id}|${i.item_name}`).join("\n");
+
+    const prompt = `あなたは食品・資材の材料マスターマッチングAIです。
+見積書の品目名と、既存の材料マスター名を比較して、同じ材料と思われるものをマッチングしてください。
+
+【既存材料マスター】(ID|名前)
+${ingList}
+
+【見積書品目】(ID|品名)
+${itemList}
+
+【ルール】
+- 完全一致でなくても、明らかに同じ材料なら対応させる（例: "QP ワインビネガー IL" と "ワインビネガー"）
+- ブランド名・容量・規格の違いは許容する
+- 確信度を0.0〜1.0で返す（0.9以上=ほぼ確実、0.5-0.8=可能性あり）
+- マッチなしの品目は出力しない
+
+【出力形式】JSON配列のみ（説明不要）
+[{"estimateId":"...","ingredientId":"...","ingredientName":"...","confidence":0.8}]`;
+
+    try {
+        const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+                }),
+            }
+        );
+        if (!res.ok) {
+            console.error("[AI Match] API error:", res.status);
+            return {};
+        }
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+        // JSON抽出
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) return {};
+
+        const matches: { estimateId: string; ingredientId: string; ingredientName: string; confidence: number }[] =
+            JSON.parse(jsonMatch[0]);
+
+        const result: Record<string, { ingredientId: string; ingredientName: string; confidence: number }> = {};
+        for (const m of matches) {
+            result[m.estimateId] = {
+                ingredientId: m.ingredientId,
+                ingredientName: m.ingredientName,
+                confidence: m.confidence,
+            };
+        }
+        return result;
+    } catch (e) {
+        console.error("[AI Match] error:", e);
+        return {};
+    }
+}
+
+// GET: pending_estimate_items 取得 + AI マッチング
 export async function GET(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const { searchParams } = new URL(request.url);
@@ -18,13 +88,13 @@ export async function GET(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // pending件数も返す
+    // pending件数
     const { count } = await supabase
         .from("pending_estimate_items")
         .select("*", { count: "exact", head: true })
         .eq("status", "pending");
 
-    // 既存材料マスターも返す（マッチング候補表示用）
+    // 既存材料マスター
     const { data: ingredients, error: ingError } = await supabase
         .from("ingredients")
         .select("id, name, price, unit_quantity")
@@ -34,7 +104,43 @@ export async function GET(request: NextRequest) {
     if (ingError) {
         console.error("[estimates API] ingredients取得エラー:", ingError.message);
     }
-    console.log(`[estimates API] items=${data?.length}, ingredients=${ingredients?.length}, serviceKey=${supabaseServiceKey ? 'set' : 'NOT SET'}`);
+
+    // AI マッチング（pendingの場合のみ、マッチ未済の品目に対して実行）
+    let aiMatches: Record<string, { ingredientId: string; ingredientName: string; confidence: number }> = {};
+    if (status === "pending" && data && data.length > 0 && ingredients && ingredients.length > 0) {
+        const unmatchedItems = data
+            .filter((item: any) => !item.matched_ingredient_id)
+            .map((item: any) => ({
+                id: item.id,
+                item_name: item.item_name,
+                counterparty_name: item.counterparty_name,
+            }));
+
+        if (unmatchedItems.length > 0) {
+            aiMatches = await aiMatchItems(unmatchedItems, ingredients);
+
+            // マッチ結果をDBに保存（次回以降は再計算不要）
+            for (const [itemId, match] of Object.entries(aiMatches)) {
+                await supabase
+                    .from("pending_estimate_items")
+                    .update({
+                        matched_ingredient_id: match.ingredientId,
+                        matched_ingredient_name: match.ingredientName,
+                        match_confidence: match.confidence,
+                    })
+                    .eq("id", itemId);
+            }
+
+            // dataにもマッチ結果を反映
+            for (const item of data as any[]) {
+                if (aiMatches[item.id]) {
+                    item.matched_ingredient_id = aiMatches[item.id].ingredientId;
+                    item.matched_ingredient_name = aiMatches[item.id].ingredientName;
+                    item.match_confidence = aiMatches[item.id].confidence;
+                }
+            }
+        }
+    }
 
     return NextResponse.json({
         items: data,
@@ -53,7 +159,6 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "itemId and action are required" }, { status: 400 });
     }
 
-    // 対象の見積もり項目を取得
     const { data: item, error: fetchErr } = await supabase
         .from("pending_estimate_items")
         .select("*")
@@ -66,26 +171,21 @@ export async function PATCH(request: NextRequest) {
 
     try {
         if (action === "update_price") {
-            // 既存材料の単価を更新
             if (!ingredientId) return NextResponse.json({ error: "ingredientId is required" }, { status: 400 });
 
             const updateData: any = {};
             if (item.unit_price != null) {
-                updateData.price_excl_tax = item.unit_price;
-                updateData.price = item.unit_price; // price_incl_taxとして使われているフィールド
-            }
-            if (item.counterparty_name) {
-                updateData.supplier = item.counterparty_name;
+                updateData.price = item.unit_price;
             }
 
-            const { error: updateErr } = await supabase
-                .from("ingredients")
-                .update(updateData)
-                .eq("id", ingredientId);
+            if (Object.keys(updateData).length > 0) {
+                const { error: updateErr } = await supabase
+                    .from("ingredients")
+                    .update(updateData)
+                    .eq("id", ingredientId);
+                if (updateErr) throw updateErr;
+            }
 
-            if (updateErr) throw updateErr;
-
-            // ステータスを更新
             await supabase
                 .from("pending_estimate_items")
                 .update({
@@ -100,14 +200,10 @@ export async function PATCH(request: NextRequest) {
         }
 
         if (action === "create_new") {
-            // 新規材料として登録
-            const ingredientData = {
+            const ingredientData: any = {
                 name: newIngredientData?.name || item.item_name,
                 unit_quantity: newIngredientData?.unit_quantity || 1,
                 price: item.unit_price || item.amount,
-                price_excl_tax: item.unit_price || item.amount,
-                supplier: item.counterparty_name,
-                ...(newIngredientData || {}),
             };
 
             const { data: newIng, error: insertErr } = await supabase
@@ -118,7 +214,6 @@ export async function PATCH(request: NextRequest) {
 
             if (insertErr) throw insertErr;
 
-            // ステータスを更新
             await supabase
                 .from("pending_estimate_items")
                 .update({
@@ -146,7 +241,6 @@ export async function PATCH(request: NextRequest) {
         }
 
         return NextResponse.json({ error: "不明なaction" }, { status: 400 });
-
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
