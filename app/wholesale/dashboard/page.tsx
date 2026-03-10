@@ -6,13 +6,13 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Button } from "@/components/ui/button";
-import { Upload, Trash2, Settings, Users, TrendingUp, BarChart3 } from 'lucide-react';
+import { Upload, Trash2, Settings, Users, TrendingUp, BarChart3, Edit3 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
 import OEMArea from '@/components/wholesale/oem-area';
-import SalesDataTable from '@/components/wholesale/sales-data-table';
+
 import ProductStatistics from '@/components/wholesale/product-statistics';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 
@@ -610,6 +610,13 @@ function WholesaleDashboardContent() {
               OEM売上入力
             </Button>
           </Link>
+          <div className="h-4 w-px bg-gray-300" />
+          <Link href={`/wholesale/sales-input?year=${selectedYear}&month=${selectedMonth}`}>
+            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
+              <Edit3 className="w-3.5 h-3.5" />
+              日別売上入力
+            </Button>
+          </Link>
         </div>
       </header>
 
@@ -637,16 +644,6 @@ function WholesaleDashboardContent() {
             />
 
             <ProductStatistics selectedYear={selectedYear} selectedMonth={selectedMonth} />
-
-            <SalesDataTable
-              products={products}
-              salesData={salesData}
-              daysInMonth={getDaysInMonth()}
-              onQuantityChange={handleQuantityChange}
-              onSave={saveSalesData}
-              onInputKeyDown={handleInputKeyDown}
-              linkedProductIds={linkedProductIds}
-            />
           </div>
         )}
       </main>

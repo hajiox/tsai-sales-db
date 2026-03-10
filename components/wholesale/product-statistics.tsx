@@ -40,7 +40,7 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
     setLoading(true);
     try {
       const response = await fetch(
-        `/api/wholesale/products/statistics?year=${selectedYear}&month=${selectedMonth}`
+        `/api/wholesale/products/statistics?year=${selectedYear}&month=${selectedMonth}&type=通常卸`
       );
       const data = await response.json();
       

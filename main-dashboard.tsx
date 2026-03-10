@@ -11,6 +11,7 @@ const FULL_SCREEN_ROUTES = [
   '/recipe/database/label-import/mobile',
   '/recipe/photo/mobile',
   '/kpi',
+  '/wholesale/sales-input',
 ]
 
 export default function MainDashboard({ children }: { children: React.ReactNode }) {

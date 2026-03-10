@@ -1,4 +1,4 @@
-// ver.2 (2025-08-19 JST) - disable prerender; runtime=node; no revalidate
+// ver.3 — OEMフィルタ対応
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const revalidate = 0;
@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const year = searchParams.get('year');
     const month = searchParams.get('month');
+    const productType = searchParams.get('type'); // '通常卸' | 'OEM' | null
 
     if (!year || !month) {
       return NextResponse.json(
@@ -39,9 +40,24 @@ export async function GET(request: Request) {
       );
     }
 
+    // product_typeでフィルタ（指定されている場合）
+    let filteredData = data || [];
+    if (productType) {
+      // 商品タイプでフィルタするため商品マスタから取得
+      const { data: products } = await supabase
+        .from('wholesale_products')
+        .select('id')
+        .eq('product_type', productType);
+      
+      if (products) {
+        const productIds = new Set(products.map((p: any) => p.id));
+        filteredData = filteredData.filter((stat: any) => productIds.has(stat.product_id));
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      statistics: data || []
+      statistics: filteredData
     });
 
   } catch (error) {
