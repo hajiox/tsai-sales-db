@@ -1,4 +1,4 @@
-// /app/api/wholesale/products/[id]/route.ts ver.1
+// /app/api/wholesale/products/[id]/route.ts ver.2 — Next.js 16 params Promise対応
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -10,11 +10,11 @@ const supabase = createClient(
 // PUT: 商品を更新
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const body = await request.json();
-    const { id } = params;
+    const { id } = await params;
     
     const { data, error } = await supabase
       .from('wholesale_products')
@@ -39,10 +39,10 @@ export async function PUT(
 // DELETE: 商品を削除
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     // 関連する売上データも削除される（外部キー制約によるカスケード削除）
     const { error } = await supabase

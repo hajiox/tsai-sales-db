@@ -1,4 +1,4 @@
-// /app/api/wholesale/products/[id]/order/route.ts ver.1
+// /app/api/wholesale/products/[id]/order/route.ts ver.2 — Next.js 16 params Promise対応
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -9,18 +9,18 @@ const supabase = createClient(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const body = await request.json();
     const { direction } = body;
-    const { id } = params;
+    const { id } = await params;
     
     // 全商品を取得
     const { data: products, error: fetchError } = await supabase
       .from('wholesale_products')
       .select('*')
-      .order('display_order', { ascending: true, nullsLast: true });
+      .order('display_order', { ascending: true });
     
     if (fetchError || !products) {
       return NextResponse.json({ success: false, error: '商品の取得に失敗しました' }, { status: 500 });
