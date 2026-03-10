@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
-import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { ArrowUp, ArrowDown, Minus, Link2 } from 'lucide-react';
 
 interface ProductStatistics {
   product_id: string;
@@ -30,11 +30,31 @@ interface ProductStatisticsProps {
 export default function ProductStatistics({ selectedYear, selectedMonth }: ProductStatisticsProps) {
   const [statistics, setStatistics] = useState<ProductStatistics[]>([]);
   const [loading, setLoading] = useState(true);
+  const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!selectedYear || !selectedMonth) return;
     fetchStatistics();
+    fetchLinkedProducts();
   }, [selectedYear, selectedMonth]);
+
+  const fetchLinkedProducts = async () => {
+    try {
+      const res = await fetch('/api/recipe/sync-wholesale');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.recipes) {
+          const linked = new Set<string>();
+          data.recipes.forEach((r: { linked_wholesale_product_id: string | null }) => {
+            if (r.linked_wholesale_product_id) linked.add(r.linked_wholesale_product_id);
+          });
+          setLinkedProductIds(linked);
+        }
+      }
+    } catch (error) {
+      console.error('紐付け情報取得エラー:', error);
+    }
+  };
 
   const fetchStatistics = async () => {
     setLoading(true);
@@ -163,7 +183,14 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
                       </span>
                     </td>
                     <td className="p-3">
-                      <div className="font-medium text-sm">{stat.product_name}</div>
+                      <div className="font-medium text-sm flex items-center gap-1">
+                        {stat.product_name}
+                        {linkedProductIds.has(stat.product_id) && (
+                          <span className="inline-flex items-center px-1 py-0.5 bg-green-100 text-green-700 rounded" title="レシピ紐付済">
+                            <Link2 className="h-2.5 w-2.5" />
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-gray-500">{stat.product_code}</div>
                     </td>
                     <td className="text-center p-3 text-sm">{formatCurrency(stat.price)}</td>
