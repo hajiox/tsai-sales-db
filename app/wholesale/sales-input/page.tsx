@@ -4,7 +4,7 @@
 import { Suspense } from 'react';
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Upload, Save } from 'lucide-react';
+import { ArrowLeft, Upload, Save, Link2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 
@@ -36,6 +36,7 @@ function SalesInputContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [yearOptions, setYearOptions] = useState<string[]>([]);
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
+  const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setMounted(true);
@@ -66,7 +67,7 @@ function SalesInputContent() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      await Promise.all([fetchProducts(), fetchSalesData()]);
+      await Promise.all([fetchProducts(), fetchSalesData(), fetchLinkedProducts()]);
     } catch (error) {
       console.error('データ取得エラー:', error);
     } finally {
@@ -98,6 +99,24 @@ function SalesInputContent() {
       setSalesData(formatted);
     } else {
       setSalesData({});
+    }
+  };
+
+  const fetchLinkedProducts = async () => {
+    try {
+      const res = await fetch('/api/recipe/sync-wholesale');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.recipes) {
+          const linked = new Set<string>();
+          data.recipes.forEach((r: { linked_wholesale_product_id: string | null }) => {
+            if (r.linked_wholesale_product_id) linked.add(r.linked_wholesale_product_id);
+          });
+          setLinkedProductIds(linked);
+        }
+      }
+    } catch (error) {
+      console.error('紐付け情報取得エラー:', error);
     }
   };
 
@@ -351,7 +370,14 @@ function SalesInputContent() {
                 return (
                   <tr key={product.id} className="border-b hover:bg-gray-50">
                     <td className="p-2 border-r sticky left-0 bg-white z-10">
-                      <div className="font-medium text-gray-800">{product.product_name}</div>
+                      <div className="font-medium text-gray-800 flex items-center gap-1">
+                        {product.product_name}
+                        {linkedProductIds.has(product.id) && (
+                          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium" title="レシピ紐付済">
+                            <Link2 className="h-2.5 w-2.5" />
+                          </span>
+                        )}
+                      </div>
                       <div className="text-gray-500">¥{product.price.toLocaleString()}</div>
                     </td>
                     <td className="p-1 border-l text-center bg-blue-50 font-medium">
