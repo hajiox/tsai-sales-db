@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     // 既存材料マスターも返す（マッチング候補表示用）
     const { data: ingredients, error: ingError } = await supabase
         .from("ingredients")
-        .select("id, name, price, supplier, unit_quantity")
+        .select("id, name, price, unit_quantity")
         .order("name")
         .limit(1000);
 

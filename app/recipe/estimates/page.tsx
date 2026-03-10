@@ -36,7 +36,6 @@ interface ExistingIngredient {
     id: string;
     name: string;
     price: number | null;
-    supplier: string | null;
     unit_quantity: number;
 }
 
@@ -86,7 +85,7 @@ function IngredientSelector({
     const filtered = ingredients.filter(ing => {
         if (!search) return true;
         const s = search.toLowerCase();
-        return ing.name.toLowerCase().includes(s) || (ing.supplier || "").toLowerCase().includes(s);
+        return ing.name.toLowerCase().includes(s);
     });
 
     const selectedIng = selectedId ? ingredients.find(i => i.id === selectedId) : null;
@@ -147,7 +146,6 @@ function IngredientSelector({
                                 <span className="font-medium text-gray-800 truncate">{ing.name}</span>
                                 <span className="text-gray-400 shrink-0 ml-2">
                                     {ing.price != null && formatPrice(ing.price)}
-                                    {ing.supplier && ` / ${ing.supplier}`}
                                 </span>
                             </button>
                         ))
