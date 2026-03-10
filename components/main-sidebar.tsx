@@ -127,6 +127,14 @@ export default function MainSidebar() {
         </Button>
 
         <Button
+          variant="ghost"
+          className="w-full justify-start text-slate-200 hover:bg-slate-700 hover:text-white"
+          onClick={() => window.open("http://192.168.110.200:3004", "_blank")}
+        >
+          事務支援システム
+        </Button>
+
+        <Button
           variant={activeVariant("kpi")}
           className={baseBtn("kpi")}
           onClick={() => goto("kpi")}

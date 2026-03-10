@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2 } from "lucide-react";
+import { Search, FileSpreadsheet, FileText, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 
@@ -63,6 +63,7 @@ export default function RecipePage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [activeTab, setActiveTab] = useState<TabType>("ネット専用");
     const [seriesList, setSeriesList] = useState<SeriesItem[]>(SERIES_LIST);
+    const [pendingEstimateCount, setPendingEstimateCount] = useState(0);
     const [stats, setStats] = useState({
         total: 0,
         ネット専用: 0,
@@ -174,6 +175,11 @@ export default function RecipePage() {
     useEffect(() => {
         fetchRecipes();
         fetchStats();
+        // 見積書pending件数を取得
+        fetch('/api/recipe/estimates?status=pending')
+            .then(r => r.json())
+            .then(d => setPendingEstimateCount(d.pendingCount || 0))
+            .catch(() => { });
     }, []);
 
     const fetchRecipes = async () => {
@@ -344,6 +350,23 @@ export default function RecipePage() {
                 <p className="text-gray-600 mt-1">製造レシピの一元管理・原価計算</p>
             </div>
 
+            {/* 見積書データ待機アラート */}
+            {pendingEstimateCount > 0 && (
+                <div
+                    onClick={() => router.push('/recipe/estimates')}
+                    className="mb-6 flex items-center gap-3 px-5 py-3 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100 transition shadow-sm"
+                >
+                    <div className="flex items-center justify-center w-8 h-8 bg-amber-400 rounded-full text-white">
+                        <Bell className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1">
+                        <span className="font-semibold text-amber-900">📋 見積書データが {pendingEstimateCount}件 待機中</span>
+                        <span className="text-amber-700 text-sm ml-2">Doc Scannerから受信した見積書の明細を確認してください</span>
+                    </div>
+                    <span className="text-amber-500 text-sm">確認する →</span>
+                </div>
+            )}
+
             {/* Stats Cards - Updated to single row layout */}
             <div className="flex flex-wrap gap-4 mb-6">
                 <Card className="min-w-[140px] flex-1">
@@ -483,6 +506,20 @@ export default function RecipePage() {
                     <Button variant="outline" onClick={() => router.push("/recipe/database")}>
                         <Package className="w-4 h-4 mr-2" />
                         材料データベース
+                    </Button>
+
+                    <Button
+                        variant="outline"
+                        onClick={() => router.push('/recipe/estimates')}
+                        className={pendingEstimateCount > 0 ? 'border-amber-400 text-amber-700 hover:bg-amber-50 relative' : ''}
+                    >
+                        <FileText className="w-4 h-4 mr-2" />
+                        見積書データ
+                        {pendingEstimateCount > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                                {pendingEstimateCount}
+                            </span>
+                        )}
                     </Button>
 
                     <Button variant="outline" onClick={() => router.push("/recipe/series")}>
@@ -763,6 +800,6 @@ export default function RecipePage() {
                     </TableBody>
                 </Table>
             </div>
-        </div>
+        </div >
     );
 }
