@@ -25,12 +25,28 @@ export async function GET(request: NextRequest) {
         .eq("status", "pending");
 
     // 既存材料マスターも返す（マッチング候補表示用）
-    const { data: ingredients } = await supabase
+    const { data: ingredients, error: ingError } = await supabase
         .from("ingredients")
         .select("id, name, price, price_excl_tax, supplier, unit_quantity")
-        .order("name");
+        .order("name")
+        .limit(1000);
 
-    return NextResponse.json({ items: data, pendingCount: count || 0, ingredients: ingredients || [] });
+    if (ingError) {
+        console.error("[estimates API] ingredients取得エラー:", ingError.message);
+    }
+    console.log(`[estimates API] items=${data?.length}, ingredients=${ingredients?.length}, serviceKey=${supabaseServiceKey ? 'set' : 'NOT SET'}`);
+
+    return NextResponse.json({
+        items: data,
+        pendingCount: count || 0,
+        ingredients: ingredients || [],
+        _debug: {
+            ingCount: ingredients?.length ?? -1,
+            ingError: ingError?.message ?? null,
+            hasServiceKey: !!supabaseServiceKey,
+            supabaseUrl: supabaseUrl?.substring(0, 30),
+        },
+    });
 }
 
 // PATCH: 見積もり項目に対するアクション
