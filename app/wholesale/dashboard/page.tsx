@@ -1,4 +1,4 @@
-// /app/wholesale/dashboard/page.tsx ver.40 単価スナップショット方式
+// /app/wholesale/dashboard/page.tsx ver.41 ヘッダーUI改善
 "use client"
 
 export const dynamic = 'force-dynamic';
@@ -6,8 +6,9 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Button } from "@/components/ui/button";
-import { Upload, Trash2 } from 'lucide-react';
+import { Upload, Trash2, Settings, Users, TrendingUp, BarChart3 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import SummaryCards from '@/components/wholesale/summary-cards';
 import RankingCards from '@/components/wholesale/ranking-cards';
 import OEMArea from '@/components/wholesale/oem-area';
@@ -539,6 +540,7 @@ function WholesaleDashboardContent() {
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       <header className="flex-shrink-0 bg-white shadow-sm border-b z-30">
+        {/* 上段：タイトル・年月選択・データ操作 */}
         <div className="px-4 py-2 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">卸販売管理システム</h1>
           <div className="flex items-center gap-3">
@@ -558,6 +560,7 @@ function WholesaleDashboardContent() {
             >
               {monthOptions.map(month => <option key={month} value={month}>{month}月</option>)}
             </select>
+            <div className="h-5 w-px bg-gray-300" />
             <input
               type="file"
               ref={fileInputRef}
@@ -586,6 +589,27 @@ function WholesaleDashboardContent() {
               {isDeleting ? '削除中...' : '月削除'}
             </Button>
           </div>
+        </div>
+        {/* 下段：ナビゲーションバー */}
+        <div className="px-4 py-1.5 bg-gray-50 border-t flex items-center gap-2">
+          <Link href="/wholesale/products">
+            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs">
+              <Settings className="w-3.5 h-3.5" />
+              商品マスター
+            </Button>
+          </Link>
+          <Link href="/wholesale/oem-customers">
+            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs">
+              <Users className="w-3.5 h-3.5" />
+              OEM顧客管理
+            </Button>
+          </Link>
+          <Link href={`/wholesale/oem-sales?year=${selectedYear}&month=${selectedMonth}`}>
+            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs bg-green-50 border-green-300 text-green-700 hover:bg-green-100">
+              <TrendingUp className="w-3.5 h-3.5" />
+              OEM売上入力
+            </Button>
+          </Link>
         </div>
       </header>
 

@@ -1,9 +1,9 @@
-// /components/wholesale/oem-area.tsx ver.4 複数段対応・空枠非表示版
+// /components/wholesale/oem-area.tsx ver.5 ボタン整理版
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Package, Settings, Users, TrendingUp } from 'lucide-react';
+import { Package, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface OEMProduct {
@@ -76,24 +76,6 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
             OEMエリア
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => router.push('/wholesale/products')}
-              className="flex items-center gap-2 bg-white hover:bg-green-50 border-green-300 text-green-700"
-            >
-              <Settings className="w-4 h-4" />
-              商品管理
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => router.push('/wholesale/oem-customers')}
-              className="flex items-center gap-2 bg-white hover:bg-green-50 border-green-300 text-green-700"
-            >
-              <Users className="w-4 h-4" />
-              OEM顧客管理
-            </Button>
             <Button
               size="sm"
               onClick={handleOemSalesClick}
