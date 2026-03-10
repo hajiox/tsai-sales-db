@@ -1,4 +1,4 @@
-// /app/wholesale/products/page.tsx ver.5 統合版 — チェックボックス複数削除・属性プルダウン
+// /app/wholesale/products/page.tsx ver.6 受注元プルダウン対応
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
@@ -19,6 +19,14 @@ interface Product {
   is_active: boolean;
   display_order: number;
   product_type: string;
+  customer_id: string | null;
+}
+
+interface OEMCustomer {
+  id: string;
+  customer_code: string;
+  customer_name: string;
+  is_active: boolean;
 }
 
 type FilterType = 'all' | '通常卸' | 'OEM';
@@ -34,7 +42,8 @@ export default function ProductsPage() {
     product_name: '',
     price: '',
     profit_rate: '',
-    product_type: '通常卸'
+    product_type: '通常卸',
+    customer_id: '' as string
   });
   const [showNewForm, setShowNewForm] = useState(false);
   const [newForm, setNewForm] = useState({
@@ -42,14 +51,33 @@ export default function ProductsPage() {
     product_name: '',
     price: '',
     profit_rate: '20.00',
-    product_type: '通常卸' as '通常卸' | 'OEM'
+    product_type: '通常卸' as '通常卸' | 'OEM',
+    customer_id: '' as string
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [oemCustomers, setOemCustomers] = useState<OEMCustomer[]>([]);
 
   useEffect(() => {
     fetchProducts();
+    fetchOemCustomers();
   }, []);
+
+  const fetchOemCustomers = async () => {
+    try {
+      const response = await fetch('/api/wholesale/oem-customers?all=true');
+      const data = await response.json();
+      if (data.success) setOemCustomers(data.customers);
+    } catch (error) {
+      console.error('OEM顧客取得エラー:', error);
+    }
+  };
+
+  const getCustomerName = (customerId: string | null) => {
+    if (!customerId) return '';
+    const c = oemCustomers.find(c => c.id === customerId);
+    return c ? c.customer_name : '';
+  };
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -91,7 +119,8 @@ export default function ProductsPage() {
       product_name: product.product_name,
       price: product.price.toString(),
       profit_rate: product.profit_rate.toString(),
-      product_type: product.product_type
+      product_type: product.product_type,
+      customer_id: product.customer_id || ''
     });
   };
 
@@ -108,7 +137,8 @@ export default function ProductsPage() {
           product_name: editForm.product_name,
           price: parseInt(editForm.price),
           profit_rate: parseFloat(editForm.profit_rate),
-          product_type: editForm.product_type
+          product_type: editForm.product_type,
+          customer_id: editForm.customer_id || null
         })
       });
 
@@ -124,7 +154,7 @@ export default function ProductsPage() {
 
   const handleCancel = () => {
     setEditingId(null);
-    setEditForm({ product_code: '', product_name: '', price: '', profit_rate: '', product_type: '通常卸' });
+    setEditForm({ product_code: '', product_name: '', price: '', profit_rate: '', product_type: '通常卸', customer_id: '' });
   };
 
   const handleToggleActive = async (id: string, currentStatus: boolean) => {
@@ -184,13 +214,14 @@ export default function ProductsPage() {
           ...newForm,
           price: parseInt(newForm.price),
           profit_rate: parseFloat(newForm.profit_rate),
+          customer_id: newForm.customer_id || null,
         })
       });
 
       if (response.ok) {
         await fetchProducts();
         setShowNewForm(false);
-        setNewForm({ product_code: '', product_name: '', price: '', profit_rate: '20.00', product_type: '通常卸' });
+        setNewForm({ product_code: '', product_name: '', price: '', profit_rate: '20.00', product_type: '通常卸', customer_id: '' });
       }
     } catch (error) {
       console.error('登録エラー:', error);
@@ -359,13 +390,28 @@ export default function ProductsPage() {
             />
             <select
               value={newForm.product_type}
-              onChange={(e) => setNewForm({ ...newForm, product_type: e.target.value as '通常卸' | 'OEM' })}
+              onChange={(e) => setNewForm({ ...newForm, product_type: e.target.value as '通常卸' | 'OEM', customer_id: e.target.value === '通常卸' ? '' : newForm.customer_id })}
               className="border rounded-md px-3 py-2 text-sm"
             >
               <option value="通常卸">通常卸</option>
               <option value="OEM">OEM</option>
             </select>
           </div>
+          {newForm.product_type === 'OEM' && (
+            <div className="mt-2">
+              <label className="text-sm font-medium text-gray-600 mb-1 block">受注元（OEM顧客）</label>
+              <select
+                value={newForm.customer_id}
+                onChange={(e) => setNewForm({ ...newForm, customer_id: e.target.value })}
+                className="border rounded-md px-3 py-2 text-sm w-64"
+              >
+                <option value="">-- 未設定 --</option>
+                {oemCustomers.filter(c => c.is_active).map(c => (
+                  <option key={c.id} value={c.id}>{c.customer_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex gap-2 mt-3">
             <Button onClick={handleAddNew} size="sm">登録</Button>
             <Button onClick={() => setShowNewForm(false)} size="sm" variant="outline">キャンセル</Button>
@@ -386,7 +432,8 @@ export default function ProductsPage() {
               </TableHead>
               <TableHead className="w-12">順序</TableHead>
               <TableHead className="w-24">属性</TableHead>
-              <TableHead className="w-32">商品コード</TableHead>
+              <TableHead className="w-32">受注元</TableHead>
+              <TableHead className="w-28">商品コード</TableHead>
               <TableHead>商品名</TableHead>
               <TableHead className="w-28 text-right">卸価格</TableHead>
               <TableHead className="w-24 text-right">利益率(%)</TableHead>
@@ -451,6 +498,26 @@ export default function ProductsPage() {
                       <option value="通常卸">通常卸</option>
                       <option value="OEM">OEM</option>
                     </select>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {product.product_type === 'OEM' ? (
+                    editingId === product.id ? (
+                      <select
+                        value={editForm.customer_id}
+                        onChange={(e) => setEditForm({ ...editForm, customer_id: e.target.value })}
+                        className="border rounded px-1 py-1 text-xs w-full"
+                      >
+                        <option value="">--</option>
+                        {oemCustomers.filter(c => c.is_active).map(c => (
+                          <option key={c.id} value={c.id}>{c.customer_name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-xs text-gray-600">{getCustomerName(product.customer_id) || '-'}</span>
+                    )
+                  ) : (
+                    <span className="text-xs text-gray-400">-</span>
                   )}
                 </TableCell>
                 <TableCell>
@@ -532,7 +599,7 @@ export default function ProductsPage() {
             ))}
             {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={10} className="text-center py-8 text-gray-500">
                   {searchQuery ? '検索条件に一致する商品がありません' : '商品データがありません'}
                 </TableCell>
               </TableRow>
