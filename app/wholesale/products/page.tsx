@@ -448,7 +448,7 @@ export default function ProductsPage() {
               </TableHead>
               <TableHead className="w-12">順序</TableHead>
               <TableHead className="w-24">属性</TableHead>
-              <TableHead className="w-32">受注元</TableHead>
+              <TableHead className="w-48">受注元</TableHead>
               <TableHead className="w-28">商品コード</TableHead>
               <TableHead>商品名</TableHead>
               <TableHead className="w-28 text-right">卸価格</TableHead>
