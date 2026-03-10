@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-customers/[id]/route.ts ver.1
+// /app/api/wholesale/oem-customers/[id]/route.ts ver.2 — Next.js 16 params Promise対応
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -8,9 +8,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const { customer_code, customer_name, is_active } = body;
 
@@ -26,7 +27,7 @@ export async function PUT(
         is_active,
         updated_at: new Date().toISOString()
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -42,14 +43,16 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+
     // 売上データの存在確認
     const { data: sales, error: salesError } = await supabase
       .from('oem_sales')
       .select('id')
-      .eq('customer_id', params.id)
+      .eq('customer_id', id)
       .limit(1);
 
     if (salesError) {
@@ -66,7 +69,7 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('oem_customers')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (deleteError) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 });

@@ -1,11 +1,11 @@
-// /api/rcm/products/[id]/preview/route.ts
+// /api/rcm/products/[id]/preview/route.ts ver.2 — Next.js 16 params Promise対応
 import { NextRequest, NextResponse } from "next/server";
 // import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string }}) {
-  const { id } = params;
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const asof = new URL(_req.url).searchParams.get("asof"); // YYYY-MM-DD or null(=today)
   // 1) products + product_items を取得
   // 2) ref_type に応じて ingredients/materials/parts を解決

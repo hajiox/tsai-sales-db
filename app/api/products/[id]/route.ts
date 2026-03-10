@@ -1,4 +1,4 @@
-// app/api/products/[id]/route.ts
+// app/api/products/[id]/route.ts ver.2 — Next.js 16 params Promise対応
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -9,11 +9,11 @@ const supabase = createClient(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const body = await request.json();
-    const { id } = params;
+    const { id } = await params;
     
     // 更新データから不要なフィールドを除外
     const { id: _, created_at, updated_at, ...updateData } = body;
@@ -48,10 +48,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     const { error } = await supabase
       .from('products')

@@ -1,4 +1,4 @@
-// /app/api/ai-tools/[id]/route.ts ver.2
+// /app/api/ai-tools/[id]/route.ts ver.3 — Next.js 16 params Promise対応
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -18,10 +18,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // PUT: 更新
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await Promise.resolve(params);
+    const { id } = await params;
     if (!id) {
       return NextResponse.json(
         { error: 'IDが指定されていません' },
@@ -61,10 +61,10 @@ export async function PUT(
 // DELETE: 削除
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await Promise.resolve(params);
+    const { id } = await params;
     if (!id) {
       return NextResponse.json(
         { error: 'IDが指定されていません' },

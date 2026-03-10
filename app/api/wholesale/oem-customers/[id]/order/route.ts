@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-customers/[id]/order/route.ts ver.1
+// /app/api/wholesale/oem-customers/[id]/order/route.ts ver.2 — Next.js 16 params Promise対応
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -8,9 +8,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const { direction } = body;
 
@@ -26,7 +27,7 @@ export async function PUT(
     }
 
     // 現在の顧客のインデックスを見つける
-    const currentIndex = customers.findIndex(c => c.id === params.id);
+    const currentIndex = customers.findIndex(c => c.id === id);
     if (currentIndex === -1) {
       return NextResponse.json({ error: '顧客が見つかりません' }, { status: 404 });
     }

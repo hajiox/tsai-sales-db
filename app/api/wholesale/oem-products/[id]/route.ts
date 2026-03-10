@@ -1,4 +1,4 @@
-// /app/api/wholesale/oem-products/[id]/route.ts ver.1 個別商品操作
+// /app/api/wholesale/oem-products/[id]/route.ts ver.2 — Next.js 16 params Promise対応
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -9,11 +9,11 @@ const supabase = createClient(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const body = await request.json()
-    const { id } = params
+    const { id } = await params
 
     const { data, error } = await supabase
       .from('oem_products')
@@ -39,10 +39,10 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     // CASCADE設定により、関連する売上データも自動削除される
     const { error } = await supabase

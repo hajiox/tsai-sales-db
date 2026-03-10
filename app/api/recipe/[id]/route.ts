@@ -1,4 +1,4 @@
-// app/api/recipe/[id]/route.ts
+// app/api/recipe/[id]/route.ts ver.2 — Next.js 16 params Promise対応
 // レシピ詳細・更新・削除API
 
 import { NextRequest, NextResponse } from "next/server";
@@ -11,9 +11,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // GET: レシピ詳細取得
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
+
         const { data, error } = await supabase
             .from("recipes")
             .select(`
@@ -24,7 +26,7 @@ export async function GET(
           ingredient:ingredients(*)
         )
       `)
-            .eq("id", params.id)
+            .eq("id", id)
             .single();
 
         if (error) {
@@ -67,9 +69,10 @@ export async function GET(
 // PUT: レシピ更新
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const body = await request.json();
 
         const { data: recipe, error: recipeError } = await supabase
@@ -84,7 +87,7 @@ export async function PUT(
                 status: body.status,
                 updated_at: new Date().toISOString(),
             })
-            .eq("id", params.id)
+            .eq("id", id)
             .select()
             .single();
 
@@ -99,12 +102,12 @@ export async function PUT(
             await supabase
                 .from("recipe_ingredients")
                 .delete()
-                .eq("recipe_id", params.id);
+                .eq("recipe_id", id);
 
             // Insert new ingredients
             if (body.ingredients.length > 0) {
                 const ingredientData = body.ingredients.map((ing: any, index: number) => ({
-                    recipe_id: params.id,
+                    recipe_id: id,
                     ingredient_id: ing.ingredient_id,
                     ingredient_name: ing.ingredient_name,
                     usage_amount: ing.usage_amount,
@@ -135,7 +138,7 @@ export async function PUT(
                         unit_cost: totalCost / (body.production_quantity || recipe.production_quantity || 400),
                         total_weight: totalWeight,
                     })
-                    .eq("id", params.id);
+                    .eq("id", id);
             }
         }
 
@@ -149,14 +152,16 @@ export async function PUT(
 // DELETE: レシピ削除
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
+
         // recipe_ingredients will be deleted by CASCADE
         const { error } = await supabase
             .from("recipes")
             .delete()
-            .eq("id", params.id);
+            .eq("id", id);
 
         if (error) {
             console.error("Recipe delete error:", error);
