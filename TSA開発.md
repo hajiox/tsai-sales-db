@@ -420,3 +420,38 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 - OEM商品が`wholesale_products`に統合されたため、将来のレシピOEMタブ紐付けは**既存の`linked_wholesale_product_id`をそのまま使用可能**
 - 旧テーブル（`oem_products`, `oem_sales`）はバックアップとして残存、動作確認後Phase 4で削除予定
 
+
+### 2026-03-10 見積書データ連携（Doc Scanner→TSA）・AIマッチング・重複修正
+
+#### Doc Scanner → TSA 見積書連携（前回から継続）
+- **見積書データ重複削除**: ダイサン食材の見積書が2回取り込まれ`pending_estimate_items`に重複 → 整理（11→3件）
+- **重複防止ロジック**: `lib/tsa-integration.ts` に同一`doc_scanner_doc_id`での二重送信チェック追加
+
+#### 見積書確認ページ全面修正（`app/recipe/estimates/page.tsx`）
+- **材料取得エラー修正**: `ingredients`テーブルに存在しない`price_excl_tax`・`supplier`カラム参照でクエリ全失敗 → 実テーブル定義に合致
+- **RLS回避**: 材料リスト取得をクライアントsupabase → サーバーAPI経由（service role key）に変更
+- **候補UIドロップダウン化**: 検索欄フォーカスで全材料候補ドロップダウン、リアルタイム絞り込み、タグ表示
+- **position:fixed**: 画面下部でも上方向に開く、親overflowに影響されない
+
+#### Gemini 2.0 Flash AIマッチング
+- 未マッチ品目を既存材料マスターとAIで照合（`app/api/recipe/estimates/route.ts`）
+- 結果をDB保存（2回目以降は再計算不要）
+- ⭐推奨マーク付き先頭表示、マッチ確信度バッジ
+
+#### Doc Scanner — direction判定プロンプト修正
+- 見積書の方向誤判定（自社→他社と判定すべき所を逆に）を修正
+- AIプロンプトのdirectionルールを5項目に詳細化
+
+#### Doc Scanner — 再処理時のファイル再移動
+- 再処理で分類変更時もファイルを正しいフォルダに自動再移動
+- ファイルパス検索を `moved_to_path` → `local_copy_path` → `file_path` 優先順位に
+- TSA連携も再処理時に実行
+
+#### 関連ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `app/api/recipe/estimates/route.ts` | AIマッチング追加、カラム修正、ingredients取得修正 |
+| `app/recipe/estimates/page.tsx` | ドロップダウンUI、position:fixed |
+| `components/main-sidebar.tsx` | 事務支援システムリンク追加 |
+| `doc-scanner/lib/processor.ts` | direction修正、reprocessDocument改修 |
+| `doc-scanner/lib/tsa-integration.ts` | 重複送信防止 |
