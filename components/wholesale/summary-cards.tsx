@@ -1,4 +1,4 @@
-// /components/wholesale/summary-cards.tsx ver.5 5枚構成版
+// /components/wholesale/summary-cards.tsx ver.6 利益率表示追加
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,6 +137,10 @@ export default function SummaryCards({
             ¥{totalAmount.toLocaleString()}
           </div>
           <div className="text-xs text-blue-600">
+            利益: ¥{totalProfit.toLocaleString()}
+            <span className="ml-1 text-[10px]">({totalAmount > 0 ? (totalProfit / totalAmount * 100).toFixed(1) : '0.0'}%)</span>
+          </div>
+          <div className="text-[10px] text-blue-400">
             卸+OEM
           </div>
         </CardContent>
@@ -159,6 +163,7 @@ export default function SummaryCards({
           </div>
           <div className="text-xs text-indigo-600">
             利益: ¥{wholesaleStats.profit.toLocaleString()}
+            <span className="ml-1 text-[10px]">({wholesaleStats.amount > 0 ? (wholesaleStats.profit / wholesaleStats.amount * 100).toFixed(1) : '0.0'}%)</span>
           </div>
         </CardContent>
       </Card>
@@ -201,6 +206,7 @@ export default function SummaryCards({
           </div>
           <div className="text-xs text-purple-600">
             利益: ¥{loading ? '...' : historicalData.months6.profit.toLocaleString()}
+            <span className="ml-1 text-[10px]">({loading ? '...' : (historicalData.months6.amount > 0 ? (historicalData.months6.profit / historicalData.months6.amount * 100).toFixed(1) : '0.0')}%)</span>
           </div>
         </CardContent>
       </Card>
@@ -222,6 +228,7 @@ export default function SummaryCards({
           </div>
           <div className="text-xs text-orange-600">
             利益: ¥{loading ? '...' : historicalData.months12.profit.toLocaleString()}
+            <span className="ml-1 text-[10px]">({loading ? '...' : (historicalData.months12.amount > 0 ? (historicalData.months12.profit / historicalData.months12.amount * 100).toFixed(1) : '0.0')}%)</span>
           </div>
         </CardContent>
       </Card>
