@@ -157,6 +157,22 @@ export default function ProductsPage() {
     setEditForm({ product_code: '', product_name: '', price: '', profit_rate: '', product_type: '通常卸', customer_id: '' });
   };
 
+  const handleCustomerChange = async (id: string, customerId: string) => {
+    try {
+      const response = await fetch('/api/wholesale/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, customer_id: customerId || null })
+      });
+
+      if (response.ok) {
+        await fetchProducts();
+      }
+    } catch (error) {
+      console.error('受注元変更エラー:', error);
+    }
+  };
+
   const handleToggleActive = async (id: string, currentStatus: boolean) => {
     try {
       const response = await fetch('/api/wholesale/products', {
@@ -502,20 +518,20 @@ export default function ProductsPage() {
                 </TableCell>
                 <TableCell>
                   {product.product_type === 'OEM' ? (
-                    editingId === product.id ? (
-                      <select
-                        value={editForm.customer_id}
-                        onChange={(e) => setEditForm({ ...editForm, customer_id: e.target.value })}
-                        className="border rounded px-1 py-1 text-xs w-full"
-                      >
-                        <option value="">--</option>
-                        {oemCustomers.filter(c => c.is_active).map(c => (
-                          <option key={c.id} value={c.id}>{c.customer_name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-xs text-gray-600">{getCustomerName(product.customer_id) || '-'}</span>
-                    )
+                    <select
+                      value={product.customer_id || ''}
+                      onChange={(e) => handleCustomerChange(product.id, e.target.value)}
+                      className={`border rounded px-1 py-1 text-xs w-full ${
+                        product.customer_id
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-gray-50 text-gray-400 border-gray-200'
+                      }`}
+                    >
+                      <option value="">-- 未設定 --</option>
+                      {oemCustomers.filter(c => c.is_active).map(c => (
+                        <option key={c.id} value={c.id}>{c.customer_name}</option>
+                      ))}
+                    </select>
                   ) : (
                     <span className="text-xs text-gray-400">-</span>
                   )}
