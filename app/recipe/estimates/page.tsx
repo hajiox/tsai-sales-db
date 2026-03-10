@@ -72,6 +72,8 @@ function IngredientSelector({
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
     const ref = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
 
     // 外側クリックで閉じる
     useEffect(() => {
@@ -81,6 +83,22 @@ function IngredientSelector({
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    // ドロップダウン位置を計算
+    useEffect(() => {
+        if (open && inputRef.current) {
+            const rect = inputRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const dropH = 260;
+            if (spaceBelow < dropH) {
+                // 上方向に開く
+                setDropStyle({ position: "fixed", left: rect.left, bottom: window.innerHeight - rect.top + 4, width: 320 });
+            } else {
+                // 下方向に開く
+                setDropStyle({ position: "fixed", left: rect.left, top: rect.bottom + 4, width: 320 });
+            }
+        }
+    }, [open]);
 
     const filtered = ingredients.filter(ing => {
         if (!search) return true;
@@ -107,6 +125,7 @@ function IngredientSelector({
                     <div className="relative">
                         <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-300" />
                         <input
+                            ref={inputRef}
                             type="text"
                             placeholder="材料名で検索..."
                             value={search}
@@ -120,7 +139,7 @@ function IngredientSelector({
 
             {/* ドロップダウン候補リスト */}
             {open && !selectedIng && (
-                <div className="absolute z-50 left-16 top-8 w-80 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                <div style={dropStyle} className="z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
                     {/* 自動マッチ候補 */}
                     {matchedId && matchedName && (
                         <button
