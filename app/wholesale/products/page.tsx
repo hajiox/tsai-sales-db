@@ -1,12 +1,13 @@
-// /app/wholesale/products/page.tsx ver.4 統合版
+// /app/wholesale/products/page.tsx ver.5 統合版 — チェックボックス複数削除・属性プルダウン
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { ArrowUpDown, Pencil, Trash2, Save, X, Plus } from 'lucide-react';
+import { Checkbox } from "@/components/ui/checkbox";
+import { ArrowUpDown, Pencil, Save, X, Plus, Trash2, Search } from 'lucide-react';
 import Link from 'next/link';
 
 interface Product {
@@ -20,33 +21,40 @@ interface Product {
   product_type: string;
 }
 
+type FilterType = 'all' | '通常卸' | 'OEM';
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'通常卸' | 'OEM'>('通常卸');
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     product_code: '',
     product_name: '',
     price: '',
-    profit_rate: ''
+    profit_rate: '',
+    product_type: '通常卸'
   });
   const [showNewForm, setShowNewForm] = useState(false);
   const [newForm, setNewForm] = useState({
     product_code: '',
     product_name: '',
     price: '',
-    profit_rate: '20.00'
+    profit_rate: '20.00',
+    product_type: '通常卸' as '通常卸' | 'OEM'
   });
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchProducts();
-  }, [activeTab]);
+  }, []);
 
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/wholesale/products?type=${activeTab}`);
+      const response = await fetch('/api/wholesale/products');
       const data = await response.json();
       if (data.success) {
         setProducts(data.products);
@@ -58,13 +66,32 @@ export default function ProductsPage() {
     }
   };
 
+  // フィルタ＋検索の適用
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => {
+      const matchesType = filter === 'all' || p.product_type === filter;
+      const matchesSearch = searchQuery === '' ||
+        p.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.product_code.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesType && matchesSearch;
+    });
+  }, [products, filter, searchQuery]);
+
+  // 集計
+  const counts = useMemo(() => ({
+    all: products.length,
+    通常卸: products.filter(p => p.product_type === '通常卸').length,
+    OEM: products.filter(p => p.product_type === 'OEM').length,
+  }), [products]);
+
   const handleEdit = (product: Product) => {
     setEditingId(product.id);
     setEditForm({
       product_code: product.product_code,
       product_name: product.product_name,
       price: product.price.toString(),
-      profit_rate: product.profit_rate.toString()
+      profit_rate: product.profit_rate.toString(),
+      product_type: product.product_type
     });
   };
 
@@ -77,9 +104,11 @@ export default function ProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editingId,
-          ...editForm,
+          product_code: editForm.product_code,
+          product_name: editForm.product_name,
           price: parseInt(editForm.price),
-          profit_rate: parseFloat(editForm.profit_rate)
+          profit_rate: parseFloat(editForm.profit_rate),
+          product_type: editForm.product_type
         })
       });
 
@@ -95,7 +124,7 @@ export default function ProductsPage() {
 
   const handleCancel = () => {
     setEditingId(null);
-    setEditForm({ product_code: '', product_name: '', price: '', profit_rate: '' });
+    setEditForm({ product_code: '', product_name: '', price: '', profit_rate: '', product_type: '通常卸' });
   };
 
   const handleToggleActive = async (id: string, currentStatus: boolean) => {
@@ -114,22 +143,19 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('この商品を削除しますか？関連する売上データも削除されます。')) {
-      return;
-    }
-
+  const handleTypeChange = async (id: string, newType: string) => {
     try {
-      const response = await fetch(`/api/wholesale/products/${id}`, {
-        method: 'DELETE'
+      const response = await fetch('/api/wholesale/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, product_type: newType })
       });
 
       if (response.ok) {
         await fetchProducts();
       }
     } catch (error) {
-      console.error('削除エラー:', error);
-      alert('削除に失敗しました');
+      console.error('属性変更エラー:', error);
     }
   };
 
@@ -158,18 +184,69 @@ export default function ProductsPage() {
           ...newForm,
           price: parseInt(newForm.price),
           profit_rate: parseFloat(newForm.profit_rate),
-          product_type: activeTab
         })
       });
 
       if (response.ok) {
         await fetchProducts();
         setShowNewForm(false);
-        setNewForm({ product_code: '', product_name: '', price: '', profit_rate: '20.00' });
+        setNewForm({ product_code: '', product_name: '', price: '', profit_rate: '20.00', product_type: '通常卸' });
       }
     } catch (error) {
       console.error('登録エラー:', error);
       alert('登録に失敗しました');
+    }
+  };
+
+  // チェックボックス操作
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(filteredProducts.map(p => p.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    const newSet = new Set(selectedIds);
+    if (checked) {
+      newSet.add(id);
+    } else {
+      newSet.delete(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    const selectedProducts = products.filter(p => selectedIds.has(p.id));
+    const names = selectedProducts.map(p => `  • ${p.product_name}`).join('\n');
+
+    if (!confirm(`以下の${selectedIds.size}件を削除しますか？\n関連する売上データも削除されます。\n\n${names}`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch('/api/wholesale/products', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await fetchProducts();
+        setSelectedIds(new Set());
+      } else {
+        alert(`削除に失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('バッチ削除エラー:', error);
+      alert('削除に失敗しました');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -181,45 +258,78 @@ export default function ProductsPage() {
     return num.toFixed(2);
   };
 
+  const isAllSelected = filteredProducts.length > 0 && filteredProducts.every(p => selectedIds.has(p.id));
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen">読み込み中...</div>;
   }
 
   return (
     <div className="container mx-auto p-4">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">卸商品マスター管理</h1>
-          <div className="flex mt-2 border-b">
-            {(['通常卸', 'OEM'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => { setActiveTab(tab); setEditingId(null); setShowNewForm(false); }}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === tab
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">卸商品マスター管理</h1>
         <div className="flex gap-2">
           <Link href="/wholesale/dashboard">
             <Button variant="outline">ダッシュボードに戻る</Button>
           </Link>
           <Button onClick={() => setShowNewForm(true)} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
-            {activeTab === 'OEM' ? 'OEM商品追加' : '新規登録'}
+            新規登録
           </Button>
         </div>
       </div>
 
+      {/* フィルタ・検索バー */}
+      <div className="flex items-center gap-3 mb-4">
+        {/* 属性フィルタ */}
+        <div className="flex border rounded-lg overflow-hidden">
+          {([['all', `全て (${counts.all})`], ['通常卸', `通常卸 (${counts.通常卸})`], ['OEM', `OEM (${counts.OEM})`]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => { setFilter(key as FilterType); setSelectedIds(new Set()); }}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                filter === key
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* 検索 */}
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder="商品名・コードで検索"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-9"
+          />
+        </div>
+
+        {/* 一括削除ボタン */}
+        {selectedIds.size > 0 && (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleBatchDelete}
+            disabled={isDeleting}
+            className="flex items-center gap-1.5"
+          >
+            <Trash2 className="w-4 h-4" />
+            {isDeleting ? '削除中...' : `${selectedIds.size}件を削除`}
+          </Button>
+        )}
+      </div>
+
+      {/* 新規登録フォーム */}
       {showNewForm && (
-        <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-          <h3 className="text-lg font-semibold mb-4">新規商品登録</h3>
-          <div className="grid grid-cols-5 gap-4">
+        <div className="mb-4 p-4 border rounded-lg bg-gray-50">
+          <h3 className="text-lg font-semibold mb-3">新規商品登録</h3>
+          <div className="grid grid-cols-6 gap-3">
             <Input
               placeholder="商品コード"
               value={newForm.product_code}
@@ -247,32 +357,57 @@ export default function ProductsPage() {
               min="0"
               max="100"
             />
+            <select
+              value={newForm.product_type}
+              onChange={(e) => setNewForm({ ...newForm, product_type: e.target.value as '通常卸' | 'OEM' })}
+              className="border rounded-md px-3 py-2 text-sm"
+            >
+              <option value="通常卸">通常卸</option>
+              <option value="OEM">OEM</option>
+            </select>
           </div>
-          <div className="flex gap-2 mt-4">
+          <div className="flex gap-2 mt-3">
             <Button onClick={handleAddNew} size="sm">登録</Button>
             <Button onClick={() => setShowNewForm(false)} size="sm" variant="outline">キャンセル</Button>
           </div>
         </div>
       )}
 
+      {/* テーブル */}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={isAllSelected}
+                  onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                />
+              </TableHead>
               <TableHead className="w-12">順序</TableHead>
+              <TableHead className="w-24">属性</TableHead>
               <TableHead className="w-32">商品コード</TableHead>
               <TableHead>商品名</TableHead>
               <TableHead className="w-28 text-right">卸価格</TableHead>
               <TableHead className="w-24 text-right">利益率(%)</TableHead>
               <TableHead className="w-20 text-center">状態</TableHead>
-              <TableHead className="w-32 text-center">操作</TableHead>
+              <TableHead className="w-24 text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products.map((product, index) => (
-              <TableRow key={product.id}>
+            {filteredProducts.map((product, index) => (
+              <TableRow
+                key={product.id}
+                className={selectedIds.has(product.id) ? 'bg-blue-50' : ''}
+              >
                 <TableCell>
-                  <div className="flex items-center gap-1">
+                  <Checkbox
+                    checked={selectedIds.has(product.id)}
+                    onCheckedChange={(checked) => handleSelectOne(product.id, !!checked)}
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-0.5">
                     <Button
                       size="sm"
                       variant="ghost"
@@ -286,12 +421,37 @@ export default function ProductsPage() {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleOrderChange(product.id, 'down')}
-                      disabled={index === products.length - 1}
+                      disabled={index === filteredProducts.length - 1}
                       className="h-6 w-6 p-0"
                     >
                       <ArrowUpDown className="w-3 h-3" />
                     </Button>
                   </div>
+                </TableCell>
+                <TableCell>
+                  {editingId === product.id ? (
+                    <select
+                      value={editForm.product_type}
+                      onChange={(e) => setEditForm({ ...editForm, product_type: e.target.value })}
+                      className="border rounded px-2 py-1 text-sm w-full"
+                    >
+                      <option value="通常卸">通常卸</option>
+                      <option value="OEM">OEM</option>
+                    </select>
+                  ) : (
+                    <select
+                      value={product.product_type}
+                      onChange={(e) => handleTypeChange(product.id, e.target.value)}
+                      className={`border rounded px-2 py-1 text-xs font-medium w-full ${
+                        product.product_type === 'OEM'
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}
+                    >
+                      <option value="通常卸">通常卸</option>
+                      <option value="OEM">OEM</option>
+                    </select>
+                  )}
                 </TableCell>
                 <TableCell>
                   {editingId === product.id ? (
@@ -301,7 +461,7 @@ export default function ProductsPage() {
                       className="h-8"
                     />
                   ) : (
-                    product.product_code
+                    <span className="text-sm">{product.product_code}</span>
                   )}
                 </TableCell>
                 <TableCell>
@@ -362,21 +522,29 @@ export default function ProductsPage() {
                         </Button>
                       </>
                     ) : (
-                      <>
-                        <Button size="sm" variant="ghost" onClick={() => handleEdit(product)} className="h-8 w-8 p-0">
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(product.id)} className="h-8 w-8 p-0 text-red-600">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </>
+                      <Button size="sm" variant="ghost" onClick={() => handleEdit(product)} className="h-8 w-8 p-0">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                     )}
                   </div>
                 </TableCell>
               </TableRow>
             ))}
+            {filteredProducts.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                  {searchQuery ? '検索条件に一致する商品がありません' : '商品データがありません'}
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* フッターサマリー */}
+      <div className="mt-3 text-sm text-gray-500">
+        表示: {filteredProducts.length}件 / 全{products.length}件
+        {selectedIds.size > 0 && <span className="ml-3 text-blue-600 font-medium">{selectedIds.size}件選択中</span>}
       </div>
     </div>
   );

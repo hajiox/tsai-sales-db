@@ -1,4 +1,4 @@
-// /api/wholesale/products/route.ts ver.6 統合版
+// /api/wholesale/products/route.ts ver.7 統合版 — product_type更新・バッチ削除対応
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -14,17 +14,17 @@ export async function GET(request: Request) {
     let query = supabase
       .from('wholesale_products')
       .select('*')
+      .order('product_type', { ascending: true })
       .order('display_order', { ascending: true })
       .order('product_code', { ascending: true });
 
-    // デフォルトは通常卸のみ（後方互換）
-    if (productType === 'all') {
-      // 全件取得
-    } else if (productType === 'OEM') {
+    // デフォルトは全件取得（統合ページ対応）
+    if (productType === 'OEM') {
       query = query.eq('product_type', 'OEM');
-    } else {
+    } else if (productType === '通常卸') {
       query = query.eq('product_type', '通常卸');
     }
+    // 'all' or null → 全件取得
 
     const { data: products, error } = await query;
 
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, product_code, product_name, price, profit_rate, is_active } = body;
+    const { id, product_code, product_name, price, profit_rate, is_active, product_type } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -127,6 +127,7 @@ export async function PUT(request: Request) {
     if (price !== undefined) updateData.price = parseInt(price);
     if (profit_rate !== undefined) updateData.profit_rate = parseFloat(profit_rate);
     if (is_active !== undefined) updateData.is_active = is_active;
+    if (product_type !== undefined) updateData.product_type = product_type;
 
     const { data, error } = await supabase
       .from('wholesale_products')
@@ -151,6 +152,45 @@ export async function PUT(request: Request) {
     console.error('API エラー:', error);
     return NextResponse.json(
       { success: false, error: '商品の更新に失敗しました' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: バッチ削除
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+    const { ids } = body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '削除対象が指定されていません' },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabase
+      .from('wholesale_products')
+      .delete()
+      .in('id', ids);
+
+    if (error) {
+      console.error('バッチ削除エラー:', error);
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      deletedCount: ids.length
+    });
+  } catch (error) {
+    console.error('API エラー:', error);
+    return NextResponse.json(
+      { success: false, error: '商品の削除に失敗しました' },
       { status: 500 }
     );
   }
