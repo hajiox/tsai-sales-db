@@ -230,7 +230,9 @@ export async function PATCH(request: NextRequest) {
 
             const updateData: any = {};
             if (item.unit_price != null) {
-                updateData.price = item.unit_price;
+                // 見積書の単価は税別 → DBは税込で保存
+                const taxRate = item.tax_rate || 0.1; // デフォルト10%
+                updateData.price = Math.round(item.unit_price * (1 + taxRate) * 100) / 100;
             }
 
             if (Object.keys(updateData).length > 0) {
@@ -264,10 +266,18 @@ export async function PATCH(request: NextRequest) {
         }
 
         if (action === "create_new") {
+            // 見積書の単価は税別 → DBは税込で保存
+            const taxRate = item.tax_rate || 0.1;
+            const priceExclTax = item.unit_price || item.amount;
+            const priceInclTax = priceExclTax != null
+                ? Math.round(priceExclTax * (1 + taxRate) * 100) / 100
+                : null;
+
             const itemData: any = {
                 name: newIngredientData?.name || item.item_name,
                 unit_quantity: newIngredientData?.unit_quantity || 1,
-                price: item.unit_price || item.amount,
+                price: priceInclTax,
+                tax_included: true,
             };
 
             const { data: newItem, error: insertErr } = await supabase

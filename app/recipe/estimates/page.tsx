@@ -547,8 +547,16 @@ export default function EstimatesPage() {
                                                             )}
                                                         </div>
                                                         <div className="flex items-center gap-4 text-sm text-gray-500">
-                                                            {item.quantity != null && <span>数量: {item.quantity}{item.unit || ""}</span>}
-                                                            {item.unit_price != null && <span>単価: {formatPrice(item.unit_price)}</span>}
+                                                            {item.quantity != null && <span>数量: {item.quantity}{item.unit || "個"}</span>}
+                                                            {item.unit_price != null && (
+                                                                <span>
+                                                                    単価: {formatPrice(item.unit_price)}
+                                                                    <span className="text-[10px] text-gray-400 ml-0.5">(税別)</span>
+                                                                    <span className="text-[10px] text-blue-500 ml-1">
+                                                                        →税込{formatPrice(Math.round(item.unit_price * (1 + (item.tax_rate || 0.1)) * 100) / 100)}
+                                                                    </span>
+                                                                </span>
+                                                            )}
                                                             {item.amount != null && <span className="font-medium text-gray-700">金額: {formatPrice(item.amount)}</span>}
                                                         </div>
 
