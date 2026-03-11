@@ -101,11 +101,28 @@ function IngredientSelector({
         }
     }, [open]);
 
-    const filtered = ingredients.filter(ing => {
-        if (!search) return true;
-        const s = search.toLowerCase();
-        return ing.name.toLowerCase().includes(s);
-    });
+    // 品目名から資材っぽいかを推定
+    const materialKeywords = ["段ボール", "ダンボール", "箱", "ボール", "パック", "袋", "ラベル", "シール", "テープ", "ギフト", "発送用", "ネコポス", "レトルト用", "個入"];
+    const isItemMaterial = materialKeywords.some(kw => itemName.includes(kw));
+
+    const filtered = ingredients
+        .filter(ing => {
+            if (!search) return true;
+            const s = search.toLowerCase();
+            return ing.name.toLowerCase().includes(s);
+        })
+        .sort((a, b) => {
+            // 推奨マッチを最優先
+            if (a.id === matchedId) return -1;
+            if (b.id === matchedId) return 1;
+            // 品目名に基づいて同じtypeを優先
+            const preferredType = isItemMaterial ? "material" : "ingredient";
+            const aMatch = a.type === preferredType ? 0 : 1;
+            const bMatch = b.type === preferredType ? 0 : 1;
+            if (aMatch !== bMatch) return aMatch - bMatch;
+            // 同じtype内は名前順
+            return a.name.localeCompare(b.name, "ja");
+        });
 
     const selectedIng = selectedId ? ingredients.find(i => i.id === selectedId) : null;
     const formatPrice = (v: number | null) => v != null ? `¥${Math.round(v).toLocaleString()}` : "";
