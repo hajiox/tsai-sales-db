@@ -210,6 +210,26 @@ export async function PATCH(request: NextRequest) {
     // targetTable: "ingredient" or "material" (デフォルトはingredient)
     const targetTable = body.targetTable === "material" ? "materials" : "ingredients";
 
+    // 一括スキップ（1リクエストで複数件処理）
+    if (action === "bulk_skip") {
+        const itemIds: string[] = body.itemIds || [];
+        if (itemIds.length === 0) {
+            return NextResponse.json({ error: "itemIds is required" }, { status: 400 });
+        }
+        const { error } = await supabase
+            .from("pending_estimate_items")
+            .update({
+                status: "skipped",
+                applied_action: "bulk_skipped",
+                applied_at: new Date().toISOString(),
+            })
+            .in("id", itemIds);
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, skipped: itemIds.length });
+    }
+
     if (!itemId || !action) {
         return NextResponse.json({ error: "itemId and action are required" }, { status: 400 });
     }

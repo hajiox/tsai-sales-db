@@ -368,44 +368,44 @@ export default function EstimatesPage() {
     const handleSkipGroup = async (group: EstimateGroup) => {
         const pendingInGroup = group.items.filter(i => i.status === "pending");
         if (pendingInGroup.length === 0) return;
-        // 楽観更新: 即座にリストから除去
-        const skipIds = new Set(pendingInGroup.map(i => i.id));
-        setItems(prev => prev.filter(i => !skipIds.has(i.id)));
-        // バックグラウンドでAPI実行
-        Promise.all(pendingInGroup.map(item =>
-            fetch("/api/recipe/estimates", {
+        const skipIds = pendingInGroup.map(i => i.id);
+        // 楽観更新
+        const skipSet = new Set(skipIds);
+        setItems(prev => prev.filter(i => !skipSet.has(i.id)));
+        try {
+            const res = await fetch("/api/recipe/estimates", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "skip", itemId: item.id }),
-            })
-        )).then(() => {
+                body: JSON.stringify({ action: "bulk_skip", itemIds: skipIds }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
             toast.info(`${group.counterpartyName} の見積書をスキップしました（${pendingInGroup.length}品目）`);
-        }).catch(() => {
+        } catch (e: any) {
             toast.error("スキップに失敗しました");
             fetchData();
-        });
+        }
     };
 
     const handleSkipAll = async () => {
         const pendingItems = items.filter(i => i.status === "pending");
         if (pendingItems.length === 0) return;
         if (!confirm(`${pendingItems.length}件すべてをスキップしますか？`)) return;
-        // 楽観更新: 即座に全件除去
-        const pendingIds = new Set(pendingItems.map(i => i.id));
-        setItems(prev => prev.filter(i => !pendingIds.has(i.id)));
-        // バックグラウンドで全件スキップ
-        Promise.all(pendingItems.map(item =>
-            fetch("/api/recipe/estimates", {
+        const skipIds = pendingItems.map(i => i.id);
+        // 楽観更新
+        const skipSet = new Set(skipIds);
+        setItems(prev => prev.filter(i => !skipSet.has(i.id)));
+        try {
+            const res = await fetch("/api/recipe/estimates", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "skip", itemId: item.id }),
-            })
-        )).then(() => {
+                body: JSON.stringify({ action: "bulk_skip", itemIds: skipIds }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
             toast.info(`${pendingItems.length}件をスキップしました`);
-        }).catch(() => {
-            toast.error("一部のスキップに失敗しました");
+        } catch (e: any) {
+            toast.error("スキップに失敗しました");
             fetchData();
-        });
+        }
     };
 
     const formatPrice = (v: number | null) => v != null ? `¥${Math.round(v).toLocaleString()}` : "-";
