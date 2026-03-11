@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, X, Plus, RefreshCw, FileText, ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ArrowLeft, Check, X, Plus, RefreshCw, FileText, ChevronDown, ChevronRight, Search, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -196,6 +196,7 @@ export default function EstimatesPage() {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [selectedIngredient, setSelectedIngredient] = useState<Record<string, string>>({});
+    const [aiMatching, setAiMatching] = useState(false);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -244,10 +245,30 @@ export default function EstimatesPage() {
         });
     };
 
+    // AIマッチング実行（手動）
+    const handleRunAiMatch = async () => {
+        const unmatchedCount = items.filter(i => i.status === "pending" && !i.matched_ingredient_id).length;
+        if (unmatchedCount === 0) {
+            toast.info("未マッチの品目はありません");
+            return;
+        }
+        setAiMatching(true);
+        try {
+            const res = await fetch("/api/recipe/estimates", { method: "POST" });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message || `${data.matched}件マッチ完了`);
+                fetchData(); // マッチ結果反映のため再取得
+            } else {
+                toast.error(data.error || "マッチングエラー");
+            }
+        } catch (e: any) { toast.error(e.message); }
+        setAiMatching(false);
+    };
+
     const handleUpdatePrice = async (item: PendingEstimateItem, ingredientId: string) => {
         setProcessing(item.id);
         try {
-            // 選択した材料のtype判定
             const selectedIng = ingredients.find(i => i.id === ingredientId);
             const targetTable = selectedIng?.type === "material" ? "material" : "ingredient";
             const res = await fetch("/api/recipe/estimates", {
@@ -257,7 +278,8 @@ export default function EstimatesPage() {
             });
             if (!res.ok) throw new Error((await res.json()).error);
             toast.success(`${item.item_name} → 価格更新完了`);
-            fetchData();
+            // 楽観更新: リストから除去
+            setItems(prev => prev.filter(i => i.id !== item.id));
         } catch (e: any) { toast.error(e.message); }
         setProcessing(null);
     };
@@ -265,7 +287,6 @@ export default function EstimatesPage() {
     const handleCreateNew = async (item: PendingEstimateItem) => {
         setProcessing(item.id);
         try {
-            // 品名から資材かどうか推定（段ボール・箱・パック等は資材）
             const materialKeywords = ["段ボール", "ダンボール", "箱", "ボール", "パック", "袋", "ラベル", "シール", "テープ", "ギフト", "発送用", "ネコポス", "レトルト用"];
             const isMaterial = materialKeywords.some(kw => item.item_name.includes(kw));
             const targetTable = isMaterial ? "material" : "ingredient";
@@ -281,13 +302,15 @@ export default function EstimatesPage() {
             });
             if (!res.ok) throw new Error((await res.json()).error);
             toast.success(`${item.item_name} → ${isMaterial ? "資材DB" : "食材DB"}に新規登録完了`);
-            fetchData();
+            // 楽観更新
+            setItems(prev => prev.filter(i => i.id !== item.id));
         } catch (e: any) { toast.error(e.message); }
         setProcessing(null);
     };
 
     const handleSkip = async (item: PendingEstimateItem) => {
-        setProcessing(item.id);
+        // 楽観更新: 即座にリストから除去
+        setItems(prev => prev.filter(i => i.id !== item.id));
         try {
             const res = await fetch("/api/recipe/estimates", {
                 method: "PATCH",
@@ -296,24 +319,32 @@ export default function EstimatesPage() {
             });
             if (!res.ok) throw new Error((await res.json()).error);
             toast.info(`${item.item_name} → スキップ`);
-            fetchData();
-        } catch (e: any) { toast.error(e.message); }
-        setProcessing(null);
+        } catch (e: any) {
+            toast.error(e.message);
+            fetchData(); // エラー時のみ再取得
+        }
     };
 
     const handleSkipAll = async () => {
         const pendingItems = items.filter(i => i.status === "pending");
         if (pendingItems.length === 0) return;
         if (!confirm(`${pendingItems.length}件すべてをスキップしますか？`)) return;
-        for (const item of pendingItems) {
-            await fetch("/api/recipe/estimates", {
+        // 楽観更新: 即座に全件除去
+        const pendingIds = new Set(pendingItems.map(i => i.id));
+        setItems(prev => prev.filter(i => !pendingIds.has(i.id)));
+        // バックグラウンドで全件スキップ
+        Promise.all(pendingItems.map(item =>
+            fetch("/api/recipe/estimates", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "skip", itemId: item.id }),
-            });
-        }
-        toast.info(`${pendingItems.length}件をスキップしました`);
-        fetchData();
+            })
+        )).then(() => {
+            toast.info(`${pendingItems.length}件をスキップしました`);
+        }).catch(() => {
+            toast.error("一部のスキップに失敗しました");
+            fetchData();
+        });
     };
 
     const formatPrice = (v: number | null) => v != null ? `¥${Math.round(v).toLocaleString()}` : "-";
@@ -338,6 +369,17 @@ export default function EstimatesPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
+                    {pendingCount > 0 && items.some(i => i.status === "pending" && !i.matched_ingredient_id) && (
+                        <Button
+                            variant="outline" size="sm"
+                            onClick={handleRunAiMatch}
+                            disabled={aiMatching}
+                            className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                        >
+                            <Sparkles className={`w-3 h-3 mr-1 ${aiMatching ? "animate-spin" : ""}`} />
+                            {aiMatching ? "マッチング中..." : "AIマッチング実行"}
+                        </Button>
+                    )}
                     {pendingCount > 0 && (
                         <Button variant="outline" size="sm" onClick={handleSkipAll} className="text-gray-500">
                             <X className="w-3 h-3 mr-1" />

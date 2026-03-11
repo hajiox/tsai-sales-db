@@ -108,7 +108,7 @@ ${itemList}
 export const maxDuration = 60;
 
 
-// GET: pending_estimate_items 取得 + AI マッチング
+// GET: pending_estimate_items 取得（高速・DB読み取りのみ）
 export async function GET(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const { searchParams } = new URL(request.url);
@@ -134,60 +134,71 @@ export async function GET(request: NextRequest) {
         supabase.from("materials").select("id, name, price, unit_quantity").order("name").limit(500),
     ]);
 
-    if (ingredientsRes.error) {
-        console.error("[estimates API] ingredients取得エラー:", ingredientsRes.error.message);
-    }
-    if (materialsRes.error) {
-        console.error("[estimates API] materials取得エラー:", materialsRes.error.message);
-    }
-
     // type付きで統合リストを作成
     const allItems = [
         ...(ingredientsRes.data || []).map((i: any) => ({ ...i, type: "ingredient" })),
         ...(materialsRes.data || []).map((m: any) => ({ ...m, type: "material" })),
     ];
 
-    // AI マッチング（pendingの場合のみ、マッチ未済の品目に対して実行）
-    let aiMatches: Record<string, { ingredientId: string; ingredientName: string; confidence: number }> = {};
-    if (status === "pending" && data && data.length > 0 && allItems.length > 0) {
-        const unmatchedItems = data
-            .filter((item: any) => !item.matched_ingredient_id)
-            .map((item: any) => ({
-                id: item.id,
-                item_name: item.item_name,
-                counterparty_name: item.counterparty_name,
-            }));
-
-        if (unmatchedItems.length > 0) {
-            aiMatches = await aiMatchItems(unmatchedItems, allItems);
-
-            // マッチ結果をDBに保存（次回以降は再計算不要）
-            for (const [itemId, match] of Object.entries(aiMatches)) {
-                await supabase
-                    .from("pending_estimate_items")
-                    .update({
-                        matched_ingredient_id: match.ingredientId,
-                        matched_ingredient_name: match.ingredientName,
-                        match_confidence: match.confidence,
-                    })
-                    .eq("id", itemId);
-            }
-
-            // dataにもマッチ結果を反映
-            for (const item of data as any[]) {
-                if (aiMatches[item.id]) {
-                    item.matched_ingredient_id = aiMatches[item.id].ingredientId;
-                    item.matched_ingredient_name = aiMatches[item.id].ingredientName;
-                    item.match_confidence = aiMatches[item.id].confidence;
-                }
-            }
-        }
-    }
-
     return NextResponse.json({
         items: data,
         pendingCount: count || 0,
         ingredients: allItems,
+    });
+}
+
+// POST: AIマッチングを実行（明示的に呼び出し）
+export async function POST(request: NextRequest) {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // 未マッチのpending品目を取得
+    const { data, error } = await supabase
+        .from("pending_estimate_items")
+        .select("id, item_name, counterparty_name")
+        .eq("status", "pending")
+        .is("matched_ingredient_id", null);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data || data.length === 0) {
+        return NextResponse.json({ matched: 0, message: "マッチ対象なし" });
+    }
+
+    // 既存材料マスター取得
+    const [ingredientsRes, materialsRes] = await Promise.all([
+        supabase.from("ingredients").select("id, name, price, unit_quantity").order("name").limit(1000),
+        supabase.from("materials").select("id, name, price, unit_quantity").order("name").limit(500),
+    ]);
+
+    const allItems = [
+        ...(ingredientsRes.data || []).map((i: any) => ({ ...i, type: "ingredient" })),
+        ...(materialsRes.data || []).map((m: any) => ({ ...m, type: "material" })),
+    ];
+
+    if (allItems.length === 0) {
+        return NextResponse.json({ matched: 0, message: "マスターデータなし" });
+    }
+
+    // AIマッチング実行
+    const aiMatches = await aiMatchItems(data, allItems);
+
+    // マッチ結果をDBに保存
+    let savedCount = 0;
+    for (const [itemId, match] of Object.entries(aiMatches)) {
+        await supabase
+            .from("pending_estimate_items")
+            .update({
+                matched_ingredient_id: match.ingredientId,
+                matched_ingredient_name: match.ingredientName,
+                match_confidence: match.confidence,
+            })
+            .eq("id", itemId);
+        savedCount++;
+    }
+
+    return NextResponse.json({
+        matched: savedCount,
+        total: data.length,
+        message: `${savedCount}/${data.length}件をマッチしました`,
     });
 }
 
