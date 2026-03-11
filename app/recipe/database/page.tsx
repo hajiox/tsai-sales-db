@@ -728,16 +728,20 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'unit_quantity', formatNumber(ing.unit_quantity, 0), 'ingredient')}</td>
+                                        {/* 税別単価 = 税込価格 ÷ 1.08（食材の元の軽減税率）→ 固定 */}
                                         <td className="px-2 py-1 text-right">
                                             {ing.tax_included !== false
-                                                ? <span className="text-gray-400 text-xs">{ing.price != null ? `¥${Math.round(ing.price / (1 + taxRates.ingredient / 100)).toLocaleString()}` : '-'}</span>
+                                                ? <span className="text-xs">{ing.price != null ? `¥${Math.round(ing.price / 1.08).toLocaleString()}` : '-'}</span>
                                                 : renderEditableCell(ing, 'price', formatNumber(ing.price, 0), 'ingredient')
                                             }
                                         </td>
+                                        {/* 税込単価 = 税別 × (1 + 現在の設定税率) → 税率変更で即座に変わる */}
                                         <td className="px-2 py-1 text-right">
-                                            {ing.tax_included !== false
-                                                ? renderEditableCell(ing, 'price', formatNumber(ing.price, 0), 'ingredient')
-                                                : <span className="text-blue-600 font-medium text-xs">{ing.price != null ? `¥${Math.round(ing.price * (1 + taxRates.ingredient / 100)).toLocaleString()}` : '-'}</span>
+                                            {ing.price != null
+                                                ? <span className="text-blue-600 font-medium text-xs">
+                                                    ¥{Math.round((ing.tax_included !== false ? ing.price / 1.08 : ing.price) * (1 + taxRates.ingredient / 100)).toLocaleString()}
+                                                  </span>
+                                                : '-'
                                             }
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'calories', formatNumber(ing.calories, 1), 'ingredient')}</td>
@@ -792,16 +796,20 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'unit_quantity', mat.unit_quantity || '', 'material', 'w-36')}</td>
+                                        {/* 税別単価 = 税込価格 ÷ 1.10（資材の元の標準税率）→ 固定 */}
                                         <td className="px-2 py-1 text-right">
                                             {mat.tax_included !== false
-                                                ? <span className="text-gray-400 text-xs">{mat.price != null ? `¥${Math.round(mat.price / (1 + taxRates.material / 100)).toLocaleString()}` : '-'}</span>
+                                                ? <span className="text-xs">{mat.price != null ? `¥${Math.round(mat.price / 1.10 * 100) / 100}` : '-'}</span>
                                                 : renderEditableCell(mat, 'price', formatNumber(mat.price, 0), 'material')
                                             }
                                         </td>
+                                        {/* 税込単価 = 税別 × (1 + 現在の設定税率) → 税率変更で即座に変わる */}
                                         <td className="px-2 py-1 text-right">
-                                            {mat.tax_included !== false
-                                                ? renderEditableCell(mat, 'price', formatNumber(mat.price, 0), 'material')
-                                                : <span className="text-blue-600 font-medium text-xs">{mat.price != null ? `¥${Math.round(mat.price * (1 + taxRates.material / 100)).toLocaleString()}` : '-'}</span>
+                                            {mat.price != null
+                                                ? <span className="text-blue-600 font-medium text-xs">
+                                                    ¥{(Math.round((mat.tax_included !== false ? mat.price / 1.10 : mat.price) * (1 + taxRates.material / 100) * 100) / 100).toLocaleString()}
+                                                  </span>
+                                                : '-'
                                             }
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'supplier', mat.supplier || '', 'material', 'w-24')}</td>
