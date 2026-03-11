@@ -65,6 +65,7 @@ export default function RecipePage() {
     const [activeTab, setActiveTab] = useState<TabType>("ネット専用");
     const [seriesList, setSeriesList] = useState<SeriesItem[]>(SERIES_LIST);
     const [pendingEstimateCount, setPendingEstimateCount] = useState(0);
+    const [pendingEstimateGroups, setPendingEstimateGroups] = useState(0);
     const [stats, setStats] = useState({
         total: 0,
         ネット専用: 0,
@@ -179,7 +180,13 @@ export default function RecipePage() {
         // 見積書pending件数を取得
         fetch('/api/recipe/estimates?status=pending')
             .then(r => r.json())
-            .then(d => setPendingEstimateCount(d.pendingCount || 0))
+            .then(d => {
+                setPendingEstimateCount(d.pendingCount || 0);
+                // グループ数（見積書の社数）を算出
+                const items = d.items || [];
+                const docIds = new Set(items.map((i: any) => i.doc_scanner_doc_id));
+                setPendingEstimateGroups(docIds.size);
+            })
             .catch(() => { });
     }, []);
 
@@ -424,7 +431,7 @@ export default function RecipePage() {
                         <Bell className="w-4 h-4" />
                     </div>
                     <div className="flex-1">
-                        <span className="font-semibold text-amber-900">📋 見積書データが {pendingEstimateCount}件 待機中</span>
+                        <span className="font-semibold text-amber-900">📋 見積書 {pendingEstimateGroups}社 {pendingEstimateCount}項目 待機中</span>
                         <span className="text-amber-700 text-sm ml-2">Doc Scannerから受信した見積書の明細を確認してください</span>
                     </div>
                     <span className="text-amber-500 text-sm">確認する →</span>
