@@ -691,7 +691,8 @@ export default function DatabasePage() {
                                 <th className="px-2 py-2 text-left min-w-[200px]">食材名</th>
                                 <th className="px-2 py-2 text-center w-20">税込設定</th>
                                 <th className="px-2 py-2 text-right w-24">入数(g)</th>
-                                <th className="px-2 py-2 text-right w-24">単価(税込)</th>
+                                <th className="px-2 py-2 text-right w-24">税別単価</th>
+                                <th className="px-2 py-2 text-right w-24">税込単価</th>
                                 <th className="px-2 py-2 text-right w-20">熱量</th>
                                 <th className="px-2 py-2 text-right w-20">タンパク</th>
                                 <th className="px-2 py-2 text-right w-20">脂質</th>
@@ -702,7 +703,7 @@ export default function DatabasePage() {
                         </thead>
                         <tbody>
                             {filteredIngredients.length === 0 ? (
-                                <tr><td colSpan={11} className="text-center py-8 text-gray-500">データがありません</td></tr>
+                                <tr><td colSpan={12} className="text-center py-8 text-gray-500">データがありません</td></tr>
                             ) : (
                                 filteredIngredients.map((ing, index) => (
                                     <tr key={ing.id} className={`border-b hover:bg-gray-50 ${ing.isNew ? 'bg-green-50' : ''} ${ing.isModified && !ing.isNew ? 'bg-yellow-50' : ''}`}>
@@ -727,7 +728,18 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'unit_quantity', formatNumber(ing.unit_quantity, 0), 'ingredient')}</td>
-                                        <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'price', formatNumber(ing.price, 0), 'ingredient')}</td>
+                                        <td className="px-2 py-1 text-right">
+                                            {ing.tax_included !== false
+                                                ? <span className="text-gray-400 text-xs">{ing.price != null ? `¥${Math.round(ing.price / (1 + taxRates.ingredient / 100)).toLocaleString()}` : '-'}</span>
+                                                : renderEditableCell(ing, 'price', formatNumber(ing.price, 0), 'ingredient')
+                                            }
+                                        </td>
+                                        <td className="px-2 py-1 text-right">
+                                            {ing.tax_included !== false
+                                                ? renderEditableCell(ing, 'price', formatNumber(ing.price, 0), 'ingredient')
+                                                : <span className="text-blue-600 font-medium text-xs">{ing.price != null ? `¥${Math.round(ing.price * (1 + taxRates.ingredient / 100)).toLocaleString()}` : '-'}</span>
+                                            }
+                                        </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'calories', formatNumber(ing.calories, 1), 'ingredient')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'protein', formatNumber(ing.protein, 1), 'ingredient')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'fat', formatNumber(ing.fat, 1), 'ingredient')}</td>
@@ -756,7 +768,8 @@ export default function DatabasePage() {
                                 <th className="px-2 py-2 text-left min-w-[250px]">資材名</th>
                                 <th className="px-2 py-2 text-center w-20">税込設定</th>
                                 <th className="px-2 py-2 text-left w-40">入数</th>
-                                <th className="px-2 py-2 text-right w-24">単価(税込)</th>
+                                <th className="px-2 py-2 text-right w-24">税別単価</th>
+                                <th className="px-2 py-2 text-right w-24">税込単価</th>
                                 <th className="px-2 py-2 text-left w-28">仕入先</th>
                                 <th className="px-2 py-2 text-left w-40">備考</th>
                                 <th className="px-2 py-2 w-10"></th>
@@ -764,7 +777,7 @@ export default function DatabasePage() {
                         </thead>
                         <tbody>
                             {filteredMaterials.length === 0 ? (
-                                <tr><td colSpan={8} className="text-center py-8 text-gray-500">データがありません</td></tr>
+                                <tr><td colSpan={9} className="text-center py-8 text-gray-500">データがありません</td></tr>
                             ) : (
                                 filteredMaterials.map((mat, index) => (
                                     <tr key={mat.id} className={`border-b hover:bg-gray-50 ${mat.isNew ? 'bg-green-50' : ''} ${mat.isModified && !mat.isNew ? 'bg-yellow-50' : ''}`}>
@@ -779,7 +792,18 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'unit_quantity', mat.unit_quantity || '', 'material', 'w-36')}</td>
-                                        <td className="px-0 py-1 text-right">{renderEditableCell(mat, 'price', formatNumber(mat.price, 0), 'material')}</td>
+                                        <td className="px-2 py-1 text-right">
+                                            {mat.tax_included !== false
+                                                ? <span className="text-gray-400 text-xs">{mat.price != null ? `¥${Math.round(mat.price / (1 + taxRates.material / 100)).toLocaleString()}` : '-'}</span>
+                                                : renderEditableCell(mat, 'price', formatNumber(mat.price, 0), 'material')
+                                            }
+                                        </td>
+                                        <td className="px-2 py-1 text-right">
+                                            {mat.tax_included !== false
+                                                ? renderEditableCell(mat, 'price', formatNumber(mat.price, 0), 'material')
+                                                : <span className="text-blue-600 font-medium text-xs">{mat.price != null ? `¥${Math.round(mat.price * (1 + taxRates.material / 100)).toLocaleString()}` : '-'}</span>
+                                            }
+                                        </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'supplier', mat.supplier || '', 'material', 'w-24')}</td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'notes', mat.notes || '', 'material', 'w-36')}</td>
                                         <td className="px-2 py-1">
