@@ -6,16 +6,42 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const geminiApiKey = process.env.GEMINI_API_KEY || "";
 
 // --- AI マッチング: Gemini 2.0 Flash で見積書品目と既存材料の対応を推定 ---
+// バッチ処理: 品目を10件ずつに分割して処理
 async function aiMatchItems(
     estimateItems: { id: string; item_name: string; counterparty_name: string | null }[],
     allItems: { id: string; name: string; price: number | null; type: string }[]
 ): Promise<Record<string, { ingredientId: string; ingredientName: string; confidence: number }>> {
     if (!geminiApiKey || allItems.length === 0 || estimateItems.length === 0) return {};
 
-    const ingList = allItems.map(i => `${i.id}|${i.name}|${i.type}`).join("\n");
-    const itemList = estimateItems.map(i => `${i.id}|${i.item_name}`).join("\n");
+    // UUID→短縮IDのマップ（トークン節約）
+    const idMap = new Map<string, string>();
+    const reverseIdMap = new Map<string, string>();
+    allItems.forEach((item, idx) => {
+        const shortId = `M${idx}`;
+        idMap.set(item.id, shortId);
+        reverseIdMap.set(shortId, item.id);
+    });
 
-    const prompt = `あなたは食品・資材の材料マスターマッチングAIです。
+    // マスターリストを短縮IDで作成
+    const ingList = allItems.map(i => `${idMap.get(i.id)}|${i.name}|${i.type}`).join("\n");
+
+    const result: Record<string, { ingredientId: string; ingredientName: string; confidence: number }> = {};
+
+    // 10件ずつバッチ処理
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < estimateItems.length; i += BATCH_SIZE) {
+        const batch = estimateItems.slice(i, i + BATCH_SIZE);
+        // 品目側も短縮ID
+        const itemIdMap = new Map<string, string>();
+        const itemReverseMap = new Map<string, string>();
+        batch.forEach((item, idx) => {
+            const shortId = `E${i + idx}`;
+            itemIdMap.set(item.id, shortId);
+            itemReverseMap.set(shortId, item.id);
+        });
+        const itemList = batch.map(it => `${itemIdMap.get(it.id)}|${it.item_name}`).join("\n");
+
+        const prompt = `あなたは食品・資材の材料マスターマッチングAIです。
 見積書の品目名と、既存の材料マスター（食材+資材）名を比較して、同じものをマッチングしてください。
 
 【既存材料マスター】(ID|名前|種別)
@@ -33,48 +59,54 @@ ${itemList}
 - マッチなしの品目は出力しない
 
 【出力形式】JSON配列のみ（説明不要）
-[{"estimateId":"...","ingredientId":"...","ingredientName":"...","confidence":0.8}]`;
+[{"estimateId":"E0","ingredientId":"M5","ingredientName":"名前","confidence":0.8}]`;
 
-    try {
-        const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
-                }),
+        try {
+            const res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
+                    }),
+                }
+            );
+            if (!res.ok) {
+                console.error(`[AI Match] API error (batch ${i}):`, res.status);
+                continue;
             }
-        );
-        if (!res.ok) {
-            console.error("[AI Match] API error:", res.status);
-            return {};
+            const data = await res.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+            const jsonMatch = text.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) continue;
+
+            const matches: { estimateId: string; ingredientId: string; ingredientName: string; confidence: number }[] =
+                JSON.parse(jsonMatch[0]);
+
+            for (const m of matches) {
+                // 短縮IDから元のUUIDを復元
+                const realEstimateId = itemReverseMap.get(m.estimateId) || m.estimateId;
+                const realIngredientId = reverseIdMap.get(m.ingredientId) || m.ingredientId;
+                result[realEstimateId] = {
+                    ingredientId: realIngredientId,
+                    ingredientName: m.ingredientName,
+                    confidence: m.confidence,
+                };
+            }
+        } catch (e) {
+            console.error(`[AI Match] batch ${i} error:`, e);
         }
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-        // JSON抽出
-        const jsonMatch = text.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) return {};
-
-        const matches: { estimateId: string; ingredientId: string; ingredientName: string; confidence: number }[] =
-            JSON.parse(jsonMatch[0]);
-
-        const result: Record<string, { ingredientId: string; ingredientName: string; confidence: number }> = {};
-        for (const m of matches) {
-            result[m.estimateId] = {
-                ingredientId: m.ingredientId,
-                ingredientName: m.ingredientName,
-                confidence: m.confidence,
-            };
-        }
-        return result;
-    } catch (e) {
-        console.error("[AI Match] error:", e);
-        return {};
     }
+
+    return result;
 }
+
+// Vercel関数タイムアウト延長（AIマッチングに時間がかかるため）
+export const maxDuration = 60;
+
 
 // GET: pending_estimate_items 取得 + AI マッチング
 export async function GET(request: NextRequest) {
