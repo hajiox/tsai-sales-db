@@ -93,10 +93,10 @@ function IngredientSelector({
             const dropH = 260;
             if (spaceBelow < dropH) {
                 // 上方向に開く
-                setDropStyle({ position: "fixed", left: rect.left, bottom: window.innerHeight - rect.top + 4, width: 320 });
+                setDropStyle({ position: "fixed", left: rect.left, bottom: window.innerHeight - rect.top + 4, width: 480 });
             } else {
                 // 下方向に開く
-                setDropStyle({ position: "fixed", left: rect.left, top: rect.bottom + 4, width: 320 });
+                setDropStyle({ position: "fixed", left: rect.left, top: rect.bottom + 4, width: 480 });
             }
         }
     }, [open]);

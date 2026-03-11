@@ -491,3 +491,10 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 | `doc-scanner/app/documents/page.tsx` | 経路バッジ・フィルター追加 |
 | `doc-scanner/app/documents/[id]/page.tsx` | 経費経路フィールド追加（表示・編集） |
 | `doc-scanner/app/api/documents/route.ts` | `department`フィルターパラメータ対応 |
+
+#### Doc Scanner — 精算書（settlement）書類種別追加
+- `DOC_TYPES` に `settlement: '精算書'` 追加
+- `DOC_SUBTYPES` に `payment`（支払精算書）/ `consignment`（委託精算書）/ `expense`（経費精算書）
+- AIプロンプトに精算書認識ルール追加（「その他」に誤分類防止）
+- 既存の「その他」分類の精算書（道の駅なみえ精算報告書）を修正済み
+- ファイルもネットワークドライブ上の「精算書」フォルダに再移動済み
