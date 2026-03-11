@@ -54,11 +54,24 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { product_code, product_name, price, profit_rate = 20.00, product_type = '通常卸', customer_id } = body;
 
-    if (!product_code || !product_name || price === undefined) {
+    if (!product_name || price === undefined) {
       return NextResponse.json(
         { success: false, error: '必須項目が入力されていません' },
         { status: 400 }
       );
+    }
+
+    // 商品コード自動採番（未指定の場合）
+    let finalProductCode = product_code;
+    if (!finalProductCode) {
+      const { data: maxCodeData } = await supabase
+        .from('wholesale_products')
+        .select('product_code')
+        .order('product_code', { ascending: false })
+        .limit(1);
+      const maxCode = maxCodeData?.[0]?.product_code;
+      const nextNum = maxCode ? parseInt(maxCode, 10) + 1 : 1;
+      finalProductCode = String(nextNum).padStart(4, '0');
     }
 
     // 既存商品の最大display_orderを取得
@@ -73,7 +86,7 @@ export async function POST(request: Request) {
       : 1;
 
     const insertData: any = {
-      product_code,
+      product_code: finalProductCode,
       product_name,
       price: parseInt(price),
       profit_rate: parseFloat(profit_rate),

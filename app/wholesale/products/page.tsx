@@ -1,13 +1,13 @@
-// /app/wholesale/products/page.tsx ver.6 受注元プルダウン対応
+// /app/wholesale/products/page.tsx ver.7 インライン編集+D&D並び替え
 "use client"
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowUpDown, Pencil, Save, X, Plus, Trash2, Search } from 'lucide-react';
+import { GripVertical, Plus, Trash2, Search } from 'lucide-react';
 import Link from 'next/link';
 
 interface Product {
@@ -31,23 +31,19 @@ interface OEMCustomer {
 
 type FilterType = 'all' | '通常卸' | 'OEM';
 
+// インライン編集中のセル情報
+type EditingCell = {
+  id: string;
+  field: 'product_name' | 'price' | 'profit_rate';
+} | null;
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({
-    product_code: '',
-    product_name: '',
-    price: '',
-    profit_rate: '',
-    product_type: '通常卸',
-    customer_id: '' as string
-  });
   const [showNewForm, setShowNewForm] = useState(false);
   const [newForm, setNewForm] = useState({
-    product_code: '',
     product_name: '',
     price: '',
     profit_rate: '20.00',
@@ -58,10 +54,27 @@ export default function ProductsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [oemCustomers, setOemCustomers] = useState<OEMCustomer[]>([]);
 
+  // インライン編集
+  const [editingCell, setEditingCell] = useState<EditingCell>(null);
+  const [editValue, setEditValue] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // ドラッグ&ドロップ
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
   useEffect(() => {
     fetchProducts();
     fetchOemCustomers();
   }, []);
+
+  // 編集セルに切り替わったらフォーカス
+  useEffect(() => {
+    if (editingCell && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingCell]);
 
   const fetchOemCustomers = async () => {
     try {
@@ -71,12 +84,6 @@ export default function ProductsPage() {
     } catch (error) {
       console.error('OEM顧客取得エラー:', error);
     }
-  };
-
-  const getCustomerName = (customerId: string | null) => {
-    if (!customerId) return '';
-    const c = oemCustomers.find(c => c.id === customerId);
-    return c ? c.customer_name : '';
   };
 
   const fetchProducts = async () => {
@@ -94,7 +101,6 @@ export default function ProductsPage() {
     }
   };
 
-  // フィルタ＋検索の適用
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
       const matchesType = filter === 'all' || p.product_type === filter;
@@ -105,56 +111,86 @@ export default function ProductsPage() {
     });
   }, [products, filter, searchQuery]);
 
-  // 集計
   const counts = useMemo(() => ({
     all: products.length,
     通常卸: products.filter(p => p.product_type === '通常卸').length,
     OEM: products.filter(p => p.product_type === 'OEM').length,
   }), [products]);
 
-  const handleEdit = (product: Product) => {
-    setEditingId(product.id);
-    setEditForm({
-      product_code: product.product_code,
-      product_name: product.product_name,
-      price: product.price.toString(),
-      profit_rate: product.profit_rate.toString(),
-      product_type: product.product_type,
-      customer_id: product.customer_id || ''
-    });
+  // === インライン編集 ===
+  const startEditing = (id: string, field: 'product_name' | 'price' | 'profit_rate') => {
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+    setEditingCell({ id, field });
+    if (field === 'product_name') setEditValue(product.product_name);
+    else if (field === 'price') setEditValue(String(product.price));
+    else if (field === 'profit_rate') setEditValue(String(product.profit_rate));
   };
 
-  const handleSave = async () => {
-    if (!editingId) return;
+  const saveInlineEdit = async () => {
+    if (!editingCell) return;
+    const { id, field } = editingCell;
+    const product = products.find(p => p.id === id);
+    if (!product) { setEditingCell(null); return; }
+
+    let updateData: any = {};
+    if (field === 'product_name') {
+      if (!editValue.trim()) { setEditingCell(null); return; }
+      if (editValue.trim() === product.product_name) { setEditingCell(null); return; }
+      updateData.product_name = editValue.trim();
+    } else if (field === 'price') {
+      const num = parseInt(editValue);
+      if (isNaN(num) || num === product.price) { setEditingCell(null); return; }
+      updateData.price = num;
+    } else if (field === 'profit_rate') {
+      let num = parseFloat(editValue);
+      if (isNaN(num)) num = 0;
+      if (num < 0) num = 0;
+      if (num > 100) num = 100;
+      num = parseFloat(num.toFixed(2));
+      if (num === product.profit_rate) { setEditingCell(null); return; }
+      updateData.profit_rate = num;
+    }
 
     try {
       const response = await fetch('/api/wholesale/products', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingId,
-          product_code: editForm.product_code,
-          product_name: editForm.product_name,
-          price: parseInt(editForm.price),
-          profit_rate: parseFloat(editForm.profit_rate),
-          product_type: editForm.product_type,
-          customer_id: editForm.customer_id || null
-        })
+        body: JSON.stringify({ id, ...updateData })
       });
-
       if (response.ok) {
-        await fetchProducts();
-        setEditingId(null);
+        // ローカルstate即時更新
+        setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updateData } : p));
       }
     } catch (error) {
       console.error('更新エラー:', error);
-      alert('更新に失敗しました');
+    }
+    setEditingCell(null);
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveInlineEdit();
+    } else if (e.key === 'Escape') {
+      setEditingCell(null);
     }
   };
 
-  const handleCancel = () => {
-    setEditingId(null);
-    setEditForm({ product_code: '', product_name: '', price: '', profit_rate: '', product_type: '通常卸', customer_id: '' });
+  // === 属性・受注元・状態変更 ===
+  const handleTypeChange = async (id: string, newType: string) => {
+    try {
+      const response = await fetch('/api/wholesale/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, product_type: newType })
+      });
+      if (response.ok) {
+        setProducts(prev => prev.map(p => p.id === id ? { ...p, product_type: newType, customer_id: newType === '通常卸' ? null : p.customer_id } : p));
+      }
+    } catch (error) {
+      console.error('属性変更エラー:', error);
+    }
   };
 
   const handleCustomerChange = async (id: string, customerId: string) => {
@@ -164,9 +200,8 @@ export default function ProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, customer_id: customerId || null })
       });
-
       if (response.ok) {
-        await fetchProducts();
+        setProducts(prev => prev.map(p => p.id === id ? { ...p, customer_id: customerId || null } : p));
       }
     } catch (error) {
       console.error('受注元変更エラー:', error);
@@ -180,56 +215,87 @@ export default function ProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, is_active: !currentStatus })
       });
-
       if (response.ok) {
-        await fetchProducts();
+        setProducts(prev => prev.map(p => p.id === id ? { ...p, is_active: !currentStatus } : p));
       }
     } catch (error) {
       console.error('ステータス更新エラー:', error);
     }
   };
 
-  const handleTypeChange = async (id: string, newType: string) => {
-    try {
-      const response = await fetch('/api/wholesale/products', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, product_type: newType })
-      });
-
-      if (response.ok) {
-        await fetchProducts();
-      }
-    } catch (error) {
-      console.error('属性変更エラー:', error);
+  // === ドラッグ&ドロップ ===
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    // ドラッグ時の半透明エフェクト
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.4';
     }
   };
 
-  const handleOrderChange = async (id: string, direction: 'up' | 'down') => {
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
+    setDragId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(id);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropId: string) => {
+    e.preventDefault();
+    if (!dragId || dragId === dropId) {
+      setDragId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    // フィルタ適用中は全商品リストで並び替え
+    const currentList = [...products];
+    const dragIndex = currentList.findIndex(p => p.id === dragId);
+    const dropIndex = currentList.findIndex(p => p.id === dropId);
+
+    if (dragIndex === -1 || dropIndex === -1) return;
+
+    // ドラッグ元を抜いて、ドロップ先に挿入
+    const [dragged] = currentList.splice(dragIndex, 1);
+    currentList.splice(dropIndex, 0, dragged);
+
+    // ローカルstate即時更新（オプティミスティック）
+    const reordered = currentList.map((p, i) => ({ ...p, display_order: i + 1 }));
+    setProducts(reordered);
+    setDragId(null);
+    setDragOverId(null);
+
+    // サーバーに保存
     try {
-      const response = await fetch(`/api/wholesale/products/${id}/order`, {
+      await fetch('/api/wholesale/products/reorder', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ direction })
+        body: JSON.stringify({ orderedIds: reordered.map(p => p.id) })
       });
-
-      if (response.ok) {
-        await fetchProducts();
-      }
     } catch (error) {
-      console.error('並び順変更エラー:', error);
+      console.error('並び替え保存エラー:', error);
+      await fetchProducts(); // 失敗時はリロード
     }
   };
 
+  // === 新規登録 ===
   const handleAddNew = async () => {
     try {
       const response = await fetch('/api/wholesale/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...newForm,
+          product_name: newForm.product_name,
           price: parseInt(newForm.price),
           profit_rate: parseFloat(newForm.profit_rate),
+          product_type: newForm.product_type,
           customer_id: newForm.customer_id || null,
         })
       });
@@ -237,7 +303,7 @@ export default function ProductsPage() {
       if (response.ok) {
         await fetchProducts();
         setShowNewForm(false);
-        setNewForm({ product_code: '', product_name: '', price: '', profit_rate: '20.00', product_type: '通常卸', customer_id: '' });
+        setNewForm({ product_name: '', price: '', profit_rate: '20.00', product_type: '通常卸', customer_id: '' });
       }
     } catch (error) {
       console.error('登録エラー:', error);
@@ -245,7 +311,7 @@ export default function ProductsPage() {
     }
   };
 
-  // チェックボックス操作
+  // === 選択・削除 ===
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       setSelectedIds(new Set(filteredProducts.map(p => p.id)));
@@ -256,23 +322,15 @@ export default function ProductsPage() {
 
   const handleSelectOne = (id: string, checked: boolean) => {
     const newSet = new Set(selectedIds);
-    if (checked) {
-      newSet.add(id);
-    } else {
-      newSet.delete(id);
-    }
+    if (checked) newSet.add(id); else newSet.delete(id);
     setSelectedIds(newSet);
   };
 
   const handleBatchDelete = async () => {
     if (selectedIds.size === 0) return;
-
     const selectedProducts = products.filter(p => selectedIds.has(p.id));
     const names = selectedProducts.map(p => `  • ${p.product_name}`).join('\n');
-
-    if (!confirm(`以下の${selectedIds.size}件を削除しますか？\n関連する売上データも削除されます。\n\n${names}`)) {
-      return;
-    }
+    if (!confirm(`以下の${selectedIds.size}件を削除しますか？\n関連する売上データも削除されます。\n\n${names}`)) return;
 
     setIsDeleting(true);
     try {
@@ -281,7 +339,6 @@ export default function ProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: Array.from(selectedIds) })
       });
-
       const data = await response.json();
       if (data.success) {
         await fetchProducts();
@@ -295,14 +352,6 @@ export default function ProductsPage() {
     } finally {
       setIsDeleting(false);
     }
-  };
-
-  const validateProfitRate = (value: string) => {
-    const num = parseFloat(value);
-    if (isNaN(num) || num < 0 || num > 100) {
-      return '0.00';
-    }
-    return num.toFixed(2);
   };
 
   const isAllSelected = filteredProducts.length > 0 && filteredProducts.every(p => selectedIds.has(p.id));
@@ -329,7 +378,6 @@ export default function ProductsPage() {
 
       {/* フィルタ・検索バー */}
       <div className="flex items-center gap-3 mb-4">
-        {/* 属性フィルタ */}
         <div className="flex border rounded-lg overflow-hidden">
           {([['all', `全て (${counts.all})`], ['通常卸', `通常卸 (${counts.通常卸})`], ['OEM', `OEM (${counts.OEM})`]] as const).map(([key, label]) => (
             <button
@@ -346,18 +394,16 @@ export default function ProductsPage() {
           ))}
         </div>
 
-        {/* 検索 */}
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
-            placeholder="商品名・コードで検索"
+            placeholder="商品名で検索"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-9"
           />
         </div>
 
-        {/* 一括削除ボタン */}
         {selectedIds.size > 0 && (
           <Button
             variant="destructive"
@@ -376,12 +422,7 @@ export default function ProductsPage() {
       {showNewForm && (
         <div className="mb-4 p-4 border rounded-lg bg-gray-50">
           <h3 className="text-lg font-semibold mb-3">新規商品登録</h3>
-          <div className="grid grid-cols-6 gap-3">
-            <Input
-              placeholder="商品コード"
-              value={newForm.product_code}
-              onChange={(e) => setNewForm({ ...newForm, product_code: e.target.value })}
-            />
+          <div className="grid grid-cols-5 gap-3">
             <Input
               placeholder="商品名"
               value={newForm.product_name}
@@ -399,7 +440,6 @@ export default function ProductsPage() {
               placeholder="利益率(%)"
               value={newForm.profit_rate}
               onChange={(e) => setNewForm({ ...newForm, profit_rate: e.target.value })}
-              onBlur={(e) => setNewForm({ ...newForm, profit_rate: validateProfitRate(e.target.value) })}
               step="0.01"
               min="0"
               max="100"
@@ -446,22 +486,25 @@ export default function ProductsPage() {
                   onCheckedChange={(checked) => handleSelectAll(!!checked)}
                 />
               </TableHead>
-              <TableHead className="w-12">順序</TableHead>
+              <TableHead className="w-10"></TableHead>
               <TableHead className="w-24">属性</TableHead>
               <TableHead className="w-48">受注元</TableHead>
-              <TableHead className="w-28">商品コード</TableHead>
               <TableHead>商品名</TableHead>
               <TableHead className="w-28 text-right">卸価格</TableHead>
               <TableHead className="w-24 text-right">利益率(%)</TableHead>
               <TableHead className="w-20 text-center">状態</TableHead>
-              <TableHead className="w-24 text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredProducts.map((product, index) => (
+            {filteredProducts.map((product) => (
               <TableRow
                 key={product.id}
-                className={selectedIds.has(product.id) ? 'bg-blue-50' : ''}
+                className={`${selectedIds.has(product.id) ? 'bg-blue-50' : ''} ${dragOverId === product.id && dragId !== product.id ? 'border-t-2 border-blue-400' : ''}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, product.id)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleDragOver(e, product.id)}
+                onDrop={(e) => handleDrop(e, product.id)}
               >
                 <TableCell>
                   <Checkbox
@@ -469,52 +512,22 @@ export default function ProductsPage() {
                     onCheckedChange={(checked) => handleSelectOne(product.id, !!checked)}
                   />
                 </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-0.5">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleOrderChange(product.id, 'up')}
-                      disabled={index === 0}
-                      className="h-6 w-6 p-0"
-                    >
-                      <ArrowUpDown className="w-3 h-3 rotate-180" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleOrderChange(product.id, 'down')}
-                      disabled={index === filteredProducts.length - 1}
-                      className="h-6 w-6 p-0"
-                    >
-                      <ArrowUpDown className="w-3 h-3" />
-                    </Button>
-                  </div>
+                <TableCell className="cursor-grab active:cursor-grabbing px-1">
+                  <GripVertical className="w-4 h-4 text-gray-400" />
                 </TableCell>
                 <TableCell>
-                  {editingId === product.id ? (
-                    <select
-                      value={editForm.product_type}
-                      onChange={(e) => setEditForm({ ...editForm, product_type: e.target.value })}
-                      className="border rounded px-2 py-1 text-sm w-full"
-                    >
-                      <option value="通常卸">通常卸</option>
-                      <option value="OEM">OEM</option>
-                    </select>
-                  ) : (
-                    <select
-                      value={product.product_type}
-                      onChange={(e) => handleTypeChange(product.id, e.target.value)}
-                      className={`border rounded px-2 py-1 text-xs font-medium w-full ${
-                        product.product_type === 'OEM'
-                          ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                      }`}
-                    >
-                      <option value="通常卸">通常卸</option>
-                      <option value="OEM">OEM</option>
-                    </select>
-                  )}
+                  <select
+                    value={product.product_type}
+                    onChange={(e) => handleTypeChange(product.id, e.target.value)}
+                    className={`border rounded px-2 py-1 text-xs font-medium w-full ${
+                      product.product_type === 'OEM'
+                        ? 'bg-purple-50 text-purple-700 border-purple-200'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}
+                  >
+                    <option value="通常卸">通常卸</option>
+                    <option value="OEM">OEM</option>
+                  </select>
                 </TableCell>
                 <TableCell>
                   {product.product_type === 'OEM' ? (
@@ -536,86 +549,98 @@ export default function ProductsPage() {
                     <span className="text-xs text-gray-400">-</span>
                   )}
                 </TableCell>
-                <TableCell>
-                  {editingId === product.id ? (
+
+                {/* 商品名：クリックで編集 */}
+                <TableCell
+                  className="cursor-text"
+                  onClick={() => {
+                    if (!editingCell || editingCell.id !== product.id || editingCell.field !== 'product_name') {
+                      startEditing(product.id, 'product_name');
+                    }
+                  }}
+                >
+                  {editingCell?.id === product.id && editingCell.field === 'product_name' ? (
                     <Input
-                      value={editForm.product_code}
-                      onChange={(e) => setEditForm({ ...editForm, product_code: e.target.value })}
-                      className="h-8"
+                      ref={editInputRef}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={handleEditKeyDown}
+                      onBlur={saveInlineEdit}
+                      className="h-8 text-sm"
                     />
                   ) : (
-                    <span className="text-sm">{product.product_code}</span>
+                    <span className="text-sm hover:text-blue-600 transition-colors">
+                      {product.product_name}
+                    </span>
                   )}
                 </TableCell>
-                <TableCell>
-                  {editingId === product.id ? (
+
+                {/* 卸価格：クリックで編集 */}
+                <TableCell
+                  className="text-right cursor-text"
+                  onClick={() => {
+                    if (!editingCell || editingCell.id !== product.id || editingCell.field !== 'price') {
+                      startEditing(product.id, 'price');
+                    }
+                  }}
+                >
+                  {editingCell?.id === product.id && editingCell.field === 'price' ? (
                     <Input
-                      value={editForm.product_name}
-                      onChange={(e) => setEditForm({ ...editForm, product_name: e.target.value })}
-                      className="h-8"
-                    />
-                  ) : (
-                    product.product_name
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {editingId === product.id ? (
-                    <Input
+                      ref={editInputRef}
                       type="number"
-                      value={editForm.price}
-                      onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
-                      className="h-8 text-right"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={handleEditKeyDown}
+                      onBlur={saveInlineEdit}
+                      className="h-8 text-right text-sm w-24 ml-auto"
                     />
                   ) : (
-                    `¥${product.price.toLocaleString()}`
+                    <span className="text-sm hover:text-blue-600 transition-colors">
+                      ¥{product.price.toLocaleString()}
+                    </span>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
-                  {editingId === product.id ? (
+
+                {/* 利益率：クリックで編集 */}
+                <TableCell
+                  className="text-right cursor-text"
+                  onClick={() => {
+                    if (!editingCell || editingCell.id !== product.id || editingCell.field !== 'profit_rate') {
+                      startEditing(product.id, 'profit_rate');
+                    }
+                  }}
+                >
+                  {editingCell?.id === product.id && editingCell.field === 'profit_rate' ? (
                     <Input
+                      ref={editInputRef}
                       type="number"
-                      value={editForm.profit_rate}
-                      onChange={(e) => setEditForm({ ...editForm, profit_rate: e.target.value })}
-                      onBlur={(e) => setEditForm({ ...editForm, profit_rate: validateProfitRate(e.target.value) })}
-                      className="h-8 text-right"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={handleEditKeyDown}
+                      onBlur={saveInlineEdit}
+                      className="h-8 text-right text-sm w-20 ml-auto"
                       step="0.01"
                       min="0"
                       max="100"
                     />
                   ) : (
-                    `${product.profit_rate}%`
+                    <span className="text-sm hover:text-blue-600 transition-colors">
+                      {product.profit_rate}%
+                    </span>
                   )}
                 </TableCell>
+
                 <TableCell className="text-center">
                   <Switch
                     checked={product.is_active}
                     onCheckedChange={() => handleToggleActive(product.id, product.is_active)}
-                    disabled={editingId === product.id}
                   />
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center justify-center gap-1">
-                    {editingId === product.id ? (
-                      <>
-                        <Button size="sm" variant="ghost" onClick={handleSave} className="h-8 w-8 p-0">
-                          <Save className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={handleCancel} className="h-8 w-8 p-0">
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </>
-                    ) : (
-                      <Button size="sm" variant="ghost" onClick={() => handleEdit(product)} className="h-8 w-8 p-0">
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
                 </TableCell>
               </TableRow>
             ))}
             {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                   {searchQuery ? '検索条件に一致する商品がありません' : '商品データがありません'}
                 </TableCell>
               </TableRow>
@@ -628,6 +653,7 @@ export default function ProductsPage() {
       <div className="mt-3 text-sm text-gray-500">
         表示: {filteredProducts.length}件 / 全{products.length}件
         {selectedIds.size > 0 && <span className="ml-3 text-blue-600 font-medium">{selectedIds.size}件選択中</span>}
+        <span className="ml-3 text-gray-400">💡 商品名・卸価格・利益率はクリックで直接編集、Enterで保存  |  ⠿ をドラッグして並び替え</span>
       </div>
     </div>
   );
