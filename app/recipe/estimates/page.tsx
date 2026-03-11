@@ -325,6 +325,27 @@ export default function EstimatesPage() {
         }
     };
 
+    const handleSkipGroup = async (group: EstimateGroup) => {
+        const pendingInGroup = group.items.filter(i => i.status === "pending");
+        if (pendingInGroup.length === 0) return;
+        // 楽観更新: 即座にリストから除去
+        const skipIds = new Set(pendingInGroup.map(i => i.id));
+        setItems(prev => prev.filter(i => !skipIds.has(i.id)));
+        // バックグラウンドでAPI実行
+        Promise.all(pendingInGroup.map(item =>
+            fetch("/api/recipe/estimates", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "skip", itemId: item.id }),
+            })
+        )).then(() => {
+            toast.info(`${group.counterpartyName} の見積書をスキップしました（${pendingInGroup.length}品目）`);
+        }).catch(() => {
+            toast.error("スキップに失敗しました");
+            fetchData();
+        });
+    };
+
     const handleSkipAll = async () => {
         const pendingItems = items.filter(i => i.status === "pending");
         if (pendingItems.length === 0) return;
@@ -427,11 +448,11 @@ export default function EstimatesPage() {
                         {groups.map(group => (
                             <div key={group.docId} className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
                                 {/* グループヘッダー */}
-                                <button
-                                    onClick={() => toggleGroup(group.docId)}
-                                    className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition"
-                                >
-                                    <div className="flex items-center gap-3">
+                                <div className="flex items-center justify-between px-5 py-3 bg-gray-50">
+                                    <button
+                                        onClick={() => toggleGroup(group.docId)}
+                                        className="flex items-center gap-3 hover:opacity-70 transition"
+                                    >
                                         {expandedGroups.has(group.docId) ?
                                             <ChevronDown className="w-4 h-4 text-gray-400" /> :
                                             <ChevronRight className="w-4 h-4 text-gray-400" />}
@@ -445,11 +466,24 @@ export default function EstimatesPage() {
                                                 {group.totalAmount != null && ` ・ 合計 ${formatPrice(group.totalAmount)}`}
                                             </div>
                                         </div>
+                                    </button>
+                                    <div className="flex items-center gap-3">
+                                        {statusFilter === "pending" && group.items.some(i => i.status === "pending") && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={(e) => { e.stopPropagation(); handleSkipGroup(group); }}
+                                                className="text-gray-400 hover:text-red-500 hover:bg-red-50 text-xs"
+                                            >
+                                                <X className="w-3 h-3 mr-1" />
+                                                この見積をスキップ
+                                            </Button>
+                                        )}
+                                        <span className="text-xs text-gray-400">
+                                            受信: {new Date(group.createdAt).toLocaleString("ja-JP")}
+                                        </span>
                                     </div>
-                                    <div className="text-xs text-gray-400">
-                                        受信: {new Date(group.createdAt).toLocaleString("ja-JP")}
-                                    </div>
-                                </button>
+                                </div>
 
                                 {/* グループ内容 */}
                                 {expandedGroups.has(group.docId) && (

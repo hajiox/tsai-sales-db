@@ -1,4 +1,4 @@
-﻿# レシピシステム開発 (TSA開発ログ)
+# レシピシステム開発 (TSA開発ログ)
 
 ## 概要
 レシピデータの同期、食材（水）のマスター統合、重量原価の自動計算、および本番環境へのデプロイ管理。
@@ -455,3 +455,39 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 | `components/main-sidebar.tsx` | 事務支援システムリンク追加 |
 | `doc-scanner/lib/processor.ts` | direction修正、reprocessDocument改修 |
 | `doc-scanner/lib/tsa-integration.ts` | 重複送信防止 |
+
+---
+
+### 2026/03/11 — Doc Scanner: レシート経費経路AI自動振り分け
+
+#### 背景
+小口経費の部署振り分け（3部署）と現金出納簿・クレジット払いの区分を、レシートスキャン時にAIで自動判定する必要があった。
+
+#### 実装内容 — 5経路自動振り分け
+レシートに対して以下の5経路を自動判定:
+
+| 経路 | `department`値 | 判定基準 |
+|------|---------------|---------|
+| 小口（会津ブランド館） | `A` | 余白に手書きⒶ |
+| 小口（製造） | `B` | 余白に手書きⒷ |
+| 小口（道の駅） | `C` | 余白に手書きⒸ |
+| 現金出納簿 | `cash_book` | 手書きコードなし＋現金払い |
+| 本社クレジット払い | `credit` | レシート印字にクレジット/VISA/JCB等 |
+
+- クレジット払いには部門振り分けなし（クレジット優先判定）
+- レシート以外の書類（請求書・見積書等）は`department = null`
+
+#### 技術ポイント
+- **Gemini 2.5 Flash**: 手書きの丸囲み文字（©マーク類似形状）を高精度で認識
+- **AIプロンプト**: 支払方法確認 → 手書きコード確認の2段階フローチャートで判定
+- **DBマイグレーション**: `documents`テーブルに`department`カラムを自動追加
+
+#### 関連ファイル
+| ファイル | 変更内容 |
+|---------|---------| 
+| `doc-scanner/lib/constants.ts` | `DEPARTMENTS`, `EXPENSE_ROUTES` 定数追加 |
+| `doc-scanner/lib/db.ts` | `department`カラム追加（マイグレーション・型・更新対応） |
+| `doc-scanner/lib/processor.ts` | AIプロンプトに5経路判定ルール追加 |
+| `doc-scanner/app/documents/page.tsx` | 経路バッジ・フィルター追加 |
+| `doc-scanner/app/documents/[id]/page.tsx` | 経費経路フィールド追加（表示・編集） |
+| `doc-scanner/app/api/documents/route.ts` | `department`フィルターパラメータ対応 |
