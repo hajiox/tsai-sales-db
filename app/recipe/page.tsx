@@ -298,6 +298,69 @@ export default function RecipePage() {
         return a.name.localeCompare(b.name, 'ja');
     });
 
+    // 削除ハンドラ（独立関数としてStale Closure回避）
+    const handleDeleteRecipe = async (recipeId: string, recipeName: string) => {
+        if (!window.confirm(`本当に「${recipeName}」を削除しますか？\nこの操作は取り消せません。`)) return;
+        try {
+            const res = await fetch('/api/recipe/duplicates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete_one', recipeId }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || '削除に失敗しました');
+            }
+            setRecipes(prev => prev.filter(r => r.id !== recipeId));
+            toast.success('レシピを削除しました');
+            fetchStats();
+        } catch (error: any) {
+            toast.error(error.message || '削除に失敗しました');
+        }
+    };
+
+    // 名称変更ハンドラ
+    const handleRenameRecipe = async (recipeId: string, currentName: string) => {
+        const newName = window.prompt('新しいレシピ名を入力してください', currentName);
+        if (newName && newName !== currentName) {
+            if (window.confirm(`「${currentName}」を「${newName}」に変更しますか？`)) {
+                const ok = await updateRecipe(recipeId, { name: newName });
+                if (ok) {
+                    setRecipes(prev => prev.map(r => r.id === recipeId ? { ...r, name: newName } : r));
+                    toast.success('名称を変更しました');
+                }
+            }
+        }
+    };
+
+    // 複製ハンドラ
+    const handleDuplicateRecipe = async (recipe: Recipe) => {
+        if (!window.confirm(`「${recipe.name}」を複製しますか？`)) return;
+        try {
+            const res = await fetch('/api/recipe/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipeId: recipe.id }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || '複製に失敗しました');
+            }
+            const { newRecipeId } = await res.json();
+            const copiedRecipe: Recipe = {
+                ...recipe,
+                id: newRecipeId,
+                name: `${recipe.name} (コピー)`,
+                linked_product_id: null,
+            };
+            setRecipes(prev => [...prev, copiedRecipe]);
+            toast.success('レシピを複製しました');
+        } catch (err: any) {
+            console.error(err);
+            toast.error(err.message || '複製に失敗しました');
+        }
+    };
+
     // シリーズ変更
     const handleSeriesChange = async (recipeId: string, seriesCode: number | null, seriesName: string | null) => {
         const ok = await updateRecipe(recipeId, { series_code: seriesCode, series: seriesName });
@@ -724,18 +787,9 @@ export default function RecipePage() {
                                                 size="sm"
                                                 className="h-8 w-8 p-0 text-gray-400 hover:text-blue-500"
                                                 title="名称変更"
-                                                onClick={async (e) => {
+                                                onClick={(e) => {
                                                     e.stopPropagation();
-                                                    const newName = window.prompt("新しいレシピ名を入力してください", recipe.name);
-                                                    if (newName && newName !== recipe.name) {
-                                                        if (window.confirm(`「${recipe.name}」を「${newName}」に変更しますか？`)) {
-                                                            const ok = await updateRecipe(recipe.id, { name: newName });
-                                                            if (ok) {
-                                                                setRecipes(prev => prev.map(r => r.id === recipe.id ? { ...r, name: newName } : r));
-                                                                toast.success("名称を変更しました");
-                                                            }
-                                                        }
-                                                    }
+                                                    handleRenameRecipe(recipe.id, recipe.name);
                                                 }}
                                             >
                                                 <Edit className="w-4 h-4" />
@@ -745,34 +799,9 @@ export default function RecipePage() {
                                                 size="sm"
                                                 className="h-8 w-8 p-0 text-gray-400 hover:text-green-500"
                                                 title="複製"
-                                                onClick={async (e) => {
+                                                onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!window.confirm(`「${recipe.name}」を複製しますか？`)) return;
-
-                                                    try {
-                                                        const res = await fetch('/api/recipe/update', {
-                                                            method: 'POST',
-                                                            headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({ recipeId: recipe.id }),
-                                                        });
-                                                        if (!res.ok) {
-                                                            const data = await res.json();
-                                                            throw new Error(data.error || '複製に失敗しました');
-                                                        }
-                                                        const { newRecipeId } = await res.json();
-                                                        // stateに複製レシピを追加（スクロール位置を維持）
-                                                        const copiedRecipe: Recipe = {
-                                                            ...recipe,
-                                                            id: newRecipeId,
-                                                            name: `${recipe.name} (コピー)`,
-                                                            linked_product_id: null,
-                                                        };
-                                                        setRecipes(prev => [...prev, copiedRecipe]);
-                                                        toast.success("レシピを複製しました");
-                                                    } catch (err: any) {
-                                                        console.error(err);
-                                                        toast.error(err.message || "複製に失敗しました");
-                                                    }
+                                                    handleDuplicateRecipe(recipe);
                                                 }}
                                             >
                                                 <Copy className="w-4 h-4" />
@@ -782,26 +811,9 @@ export default function RecipePage() {
                                                 size="sm"
                                                 className="h-8 w-8 p-0 text-gray-400 hover:text-red-500"
                                                 title="削除"
-                                                onClick={async (e) => {
+                                                onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (window.confirm(`本当に「${recipe.name}」を削除しますか？\nこの操作は取り消せません。`)) {
-                                                        try {
-                                                            const res = await fetch('/api/recipe/duplicates', {
-                                                                method: 'POST',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({ action: 'delete_one', recipeId: recipe.id }),
-                                                            });
-                                                            if (!res.ok) {
-                                                                const data = await res.json();
-                                                                throw new Error(data.error || '削除に失敗しました');
-                                                            }
-                                                            setRecipes(prev => prev.filter(r => r.id !== recipe.id));
-                                                            toast.success("レシピを削除しました");
-                                                            fetchStats();
-                                                        } catch (error: any) {
-                                                            toast.error(error.message || "削除に失敗しました");
-                                                        }
-                                                    }
+                                                    handleDeleteRecipe(recipe.id, recipe.name);
                                                 }}
                                             >
                                                 <Trash2 className="w-4 h-4" />
