@@ -105,16 +105,39 @@ function IngredientSelector({
     const materialKeywords = ["段ボール", "ダンボール", "箱", "ボール", "パック", "袋", "ラベル", "シール", "テープ", "ギフト", "発送用", "ネコポス", "レトルト用", "個入"];
     const isItemMaterial = materialKeywords.some(kw => itemName.includes(kw));
 
+    // 品目名からキーワードを抽出（数字・記号・先頭の"1 "を除去して分割）
+    const cleanName = itemName.replace(/^[\d\s]+/, "").replace(/[（）()]/g, "");
+    const nameTokens = cleanName.split(/[\s　・×]+/).filter(t => t.length >= 2);
+
+    // 各マスター項目の関連度スコアを計算
+    const calcRelevance = (ingName: string): number => {
+        const lower = ingName.toLowerCase();
+        let score = 0;
+        for (const token of nameTokens) {
+            if (lower.includes(token.toLowerCase())) {
+                score += token.length; // マッチした文字数をスコアに
+            }
+        }
+        // 品目名全体が含まれるなら大ボーナス
+        if (lower.includes(cleanName.toLowerCase()) || cleanName.toLowerCase().includes(lower.replace(/【.*?】/g, ""))) {
+            score += 50;
+        }
+        return score;
+    };
+
     const filtered = ingredients
         .filter(ing => {
             if (!search) return true;
             const s = search.toLowerCase();
             return ing.name.toLowerCase().includes(s);
         })
+        .map(ing => ({ ...ing, relevance: calcRelevance(ing.name) }))
         .sort((a, b) => {
             // 推奨マッチを最優先
             if (a.id === matchedId) return -1;
             if (b.id === matchedId) return 1;
+            // 関連度スコアが高い順
+            if (a.relevance !== b.relevance) return b.relevance - a.relevance;
             // 品目名に基づいて同じtypeを優先
             const preferredType = isItemMaterial ? "material" : "ingredient";
             const aMatch = a.type === preferredType ? 0 : 1;
