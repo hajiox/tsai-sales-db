@@ -37,6 +37,7 @@ interface ExistingIngredient {
     name: string;
     price: number | null;
     unit_quantity: number;
+    type?: string; // "ingredient" | "material"
 }
 
 interface EstimateGroup {
@@ -162,7 +163,12 @@ function IngredientSelector({
                                 onClick={() => { onSelect(ing.id); setOpen(false); setSearch(""); }}
                                 className={`w-full flex items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-blue-50 transition ${ing.id === matchedId ? "bg-green-50" : ""}`}
                             >
-                                <span className="font-medium text-gray-800 truncate">{ing.name}</span>
+                                <span className="font-medium text-gray-800 truncate flex items-center gap-1">
+                                    <span className={`text-[10px] px-1 py-0.5 rounded ${ing.type === "material" ? "bg-orange-100 text-orange-600" : "bg-emerald-100 text-emerald-600"}`}>
+                                        {ing.type === "material" ? "📦資材" : "🥕食材"}
+                                    </span>
+                                    {ing.name}
+                                </span>
                                 <span className="text-gray-400 shrink-0 ml-2">
                                     {ing.price != null && formatPrice(ing.price)}
                                 </span>
@@ -241,10 +247,13 @@ export default function EstimatesPage() {
     const handleUpdatePrice = async (item: PendingEstimateItem, ingredientId: string) => {
         setProcessing(item.id);
         try {
+            // 選択した材料のtype判定
+            const selectedIng = ingredients.find(i => i.id === ingredientId);
+            const targetTable = selectedIng?.type === "material" ? "material" : "ingredient";
             const res = await fetch("/api/recipe/estimates", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "update_price", itemId: item.id, ingredientId }),
+                body: JSON.stringify({ action: "update_price", itemId: item.id, ingredientId, targetTable }),
             });
             if (!res.ok) throw new Error((await res.json()).error);
             toast.success(`${item.item_name} → 価格更新完了`);
@@ -256,17 +265,22 @@ export default function EstimatesPage() {
     const handleCreateNew = async (item: PendingEstimateItem) => {
         setProcessing(item.id);
         try {
+            // 品名から資材かどうか推定（段ボール・箱・パック等は資材）
+            const materialKeywords = ["段ボール", "ダンボール", "箱", "ボール", "パック", "袋", "ラベル", "シール", "テープ", "ギフト", "発送用", "ネコポス", "レトルト用"];
+            const isMaterial = materialKeywords.some(kw => item.item_name.includes(kw));
+            const targetTable = isMaterial ? "material" : "ingredient";
             const res = await fetch("/api/recipe/estimates", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     action: "create_new",
                     itemId: item.id,
+                    targetTable,
                     newIngredientData: { name: item.item_name, unit_quantity: item.quantity || 1 },
                 }),
             });
             if (!res.ok) throw new Error((await res.json()).error);
-            toast.success(`${item.item_name} → 新規登録完了`);
+            toast.success(`${item.item_name} → ${isMaterial ? "資材DB" : "食材DB"}に新規登録完了`);
             fetchData();
         } catch (e: any) { toast.error(e.message); }
         setProcessing(null);

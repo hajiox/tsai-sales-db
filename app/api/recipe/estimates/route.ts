@@ -8,25 +8,27 @@ const geminiApiKey = process.env.GEMINI_API_KEY || "";
 // --- AI マッチング: Gemini 2.0 Flash で見積書品目と既存材料の対応を推定 ---
 async function aiMatchItems(
     estimateItems: { id: string; item_name: string; counterparty_name: string | null }[],
-    ingredients: { id: string; name: string; price: number | null }[]
+    allItems: { id: string; name: string; price: number | null; type: string }[]
 ): Promise<Record<string, { ingredientId: string; ingredientName: string; confidence: number }>> {
-    if (!geminiApiKey || ingredients.length === 0 || estimateItems.length === 0) return {};
+    if (!geminiApiKey || allItems.length === 0 || estimateItems.length === 0) return {};
 
-    const ingList = ingredients.map(i => `${i.id}|${i.name}`).join("\n");
+    const ingList = allItems.map(i => `${i.id}|${i.name}|${i.type}`).join("\n");
     const itemList = estimateItems.map(i => `${i.id}|${i.item_name}`).join("\n");
 
     const prompt = `あなたは食品・資材の材料マスターマッチングAIです。
-見積書の品目名と、既存の材料マスター名を比較して、同じ材料と思われるものをマッチングしてください。
+見積書の品目名と、既存の材料マスター（食材+資材）名を比較して、同じものをマッチングしてください。
 
-【既存材料マスター】(ID|名前)
+【既存材料マスター】(ID|名前|種別)
 ${ingList}
 
 【見積書品目】(ID|品名)
 ${itemList}
 
 【ルール】
-- 完全一致でなくても、明らかに同じ材料なら対応させる（例: "QP ワインビネガー IL" と "ワインビネガー"）
-- ブランド名・容量・規格の違いは許容する
+- 段ボール・箱・パック等の梱包資材は「material」種別のマスターとマッチさせること
+- 食材は「ingredient」種別のマスターとマッチさせること
+- 完全一致でなくても、明らかに同じものなら対応させる
+- ブランド名・容量・規格・サイズの違いは許容する
 - 確信度を0.0〜1.0で返す（0.9以上=ほぼ確実、0.5-0.8=可能性あり）
 - マッチなしの品目は出力しない
 
@@ -94,20 +96,28 @@ export async function GET(request: NextRequest) {
         .select("*", { count: "exact", head: true })
         .eq("status", "pending");
 
-    // 既存材料マスター
-    const { data: ingredients, error: ingError } = await supabase
-        .from("ingredients")
-        .select("id, name, price, unit_quantity")
-        .order("name")
-        .limit(1000);
+    // 既存材料マスター（食材 + 資材の両方を取得）
+    const [ingredientsRes, materialsRes] = await Promise.all([
+        supabase.from("ingredients").select("id, name, price, unit_quantity").order("name").limit(1000),
+        supabase.from("materials").select("id, name, price, unit_quantity").order("name").limit(500),
+    ]);
 
-    if (ingError) {
-        console.error("[estimates API] ingredients取得エラー:", ingError.message);
+    if (ingredientsRes.error) {
+        console.error("[estimates API] ingredients取得エラー:", ingredientsRes.error.message);
     }
+    if (materialsRes.error) {
+        console.error("[estimates API] materials取得エラー:", materialsRes.error.message);
+    }
+
+    // type付きで統合リストを作成
+    const allItems = [
+        ...(ingredientsRes.data || []).map((i: any) => ({ ...i, type: "ingredient" })),
+        ...(materialsRes.data || []).map((m: any) => ({ ...m, type: "material" })),
+    ];
 
     // AI マッチング（pendingの場合のみ、マッチ未済の品目に対して実行）
     let aiMatches: Record<string, { ingredientId: string; ingredientName: string; confidence: number }> = {};
-    if (status === "pending" && data && data.length > 0 && ingredients && ingredients.length > 0) {
+    if (status === "pending" && data && data.length > 0 && allItems.length > 0) {
         const unmatchedItems = data
             .filter((item: any) => !item.matched_ingredient_id)
             .map((item: any) => ({
@@ -117,7 +127,7 @@ export async function GET(request: NextRequest) {
             }));
 
         if (unmatchedItems.length > 0) {
-            aiMatches = await aiMatchItems(unmatchedItems, ingredients);
+            aiMatches = await aiMatchItems(unmatchedItems, allItems);
 
             // マッチ結果をDBに保存（次回以降は再計算不要）
             for (const [itemId, match] of Object.entries(aiMatches)) {
@@ -145,7 +155,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
         items: data,
         pendingCount: count || 0,
-        ingredients: ingredients || [],
+        ingredients: allItems,
     });
 }
 
@@ -154,6 +164,8 @@ export async function PATCH(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await request.json();
     const { action, itemId, ingredientId, newIngredientData } = body;
+    // targetTable: "ingredient" or "material" (デフォルトはingredient)
+    const targetTable = body.targetTable === "material" ? "materials" : "ingredients";
 
     if (!itemId || !action) {
         return NextResponse.json({ error: "itemId and action are required" }, { status: 400 });
@@ -179,11 +191,20 @@ export async function PATCH(request: NextRequest) {
             }
 
             if (Object.keys(updateData).length > 0) {
+                // 選択先のテーブル（ingredients or materials）を更新
                 const { error: updateErr } = await supabase
-                    .from("ingredients")
+                    .from(targetTable)
                     .update(updateData)
                     .eq("id", ingredientId);
-                if (updateErr) throw updateErr;
+                if (updateErr) {
+                    // フォールバック: もう片方のテーブルも試す
+                    const fallbackTable = targetTable === "ingredients" ? "materials" : "ingredients";
+                    const { error: fallbackErr } = await supabase
+                        .from(fallbackTable)
+                        .update(updateData)
+                        .eq("id", ingredientId);
+                    if (fallbackErr) throw updateErr;
+                }
             }
 
             await supabase
@@ -200,15 +221,15 @@ export async function PATCH(request: NextRequest) {
         }
 
         if (action === "create_new") {
-            const ingredientData: any = {
+            const itemData: any = {
                 name: newIngredientData?.name || item.item_name,
                 unit_quantity: newIngredientData?.unit_quantity || 1,
                 price: item.unit_price || item.amount,
             };
 
-            const { data: newIng, error: insertErr } = await supabase
-                .from("ingredients")
-                .insert(ingredientData)
+            const { data: newItem, error: insertErr } = await supabase
+                .from(targetTable)
+                .insert(itemData)
                 .select()
                 .single();
 
@@ -220,11 +241,11 @@ export async function PATCH(request: NextRequest) {
                     status: "applied",
                     applied_action: "created_new",
                     applied_at: new Date().toISOString(),
-                    matched_ingredient_id: newIng.id,
+                    matched_ingredient_id: newItem.id,
                 })
                 .eq("id", itemId);
 
-            return NextResponse.json({ success: true, action: "created_new", ingredientId: newIng.id });
+            return NextResponse.json({ success: true, action: "created_new", ingredientId: newItem.id });
         }
 
         if (action === "reject" || action === "skip") {
