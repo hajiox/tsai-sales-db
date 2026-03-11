@@ -423,35 +423,46 @@ export default function ProductsPage() {
         <div className="mb-4 p-4 border rounded-lg bg-gray-50">
           <h3 className="text-lg font-semibold mb-3">新規商品登録</h3>
           <div className="grid grid-cols-5 gap-3">
-            <Input
-              placeholder="商品名"
-              value={newForm.product_name}
-              onChange={(e) => setNewForm({ ...newForm, product_name: e.target.value })}
-              className="col-span-2"
-            />
-            <Input
-              type="number"
-              placeholder="卸価格"
-              value={newForm.price}
-              onChange={(e) => setNewForm({ ...newForm, price: e.target.value })}
-            />
-            <Input
-              type="number"
-              placeholder="利益率(%)"
-              value={newForm.profit_rate}
-              onChange={(e) => setNewForm({ ...newForm, profit_rate: e.target.value })}
-              step="0.01"
-              min="0"
-              max="100"
-            />
-            <select
-              value={newForm.product_type}
-              onChange={(e) => setNewForm({ ...newForm, product_type: e.target.value as '通常卸' | 'OEM', customer_id: e.target.value === '通常卸' ? '' : newForm.customer_id })}
-              className="border rounded-md px-3 py-2 text-sm"
-            >
-              <option value="通常卸">通常卸</option>
-              <option value="OEM">OEM</option>
-            </select>
+            <div className="col-span-2">
+              <label className="text-sm font-medium text-gray-700 mb-1 block">商品名 <span className="text-red-500">*</span></label>
+              <Input
+                placeholder="例: 大根ドレッシング"
+                value={newForm.product_name}
+                onChange={(e) => setNewForm({ ...newForm, product_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">卸価格（税込）<span className="text-red-500">*</span></label>
+              <Input
+                type="number"
+                placeholder="例: 315"
+                value={newForm.price}
+                onChange={(e) => setNewForm({ ...newForm, price: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">利益率（%）</label>
+              <Input
+                type="number"
+                placeholder="例: 20"
+                value={newForm.profit_rate}
+                onChange={(e) => setNewForm({ ...newForm, profit_rate: e.target.value })}
+                step="0.01"
+                min="0"
+                max="100"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">属性</label>
+              <select
+                value={newForm.product_type}
+                onChange={(e) => setNewForm({ ...newForm, product_type: e.target.value as '通常卸' | 'OEM', customer_id: e.target.value === '通常卸' ? '' : newForm.customer_id })}
+                className="border rounded-md px-3 py-2 text-sm w-full h-10"
+              >
+                <option value="通常卸">通常卸</option>
+                <option value="OEM">OEM</option>
+              </select>
+            </div>
           </div>
           {newForm.product_type === 'OEM' && (
             <div className="mt-2">
