@@ -116,59 +116,10 @@ export default function RecipePage() {
 
     const fetchIntermediateUsage = async () => {
         try {
-            const intermediates = recipes.filter(r => r.is_intermediate);
-            if (intermediates.length === 0) return;
-
-            const interIds = intermediates.map(r => r.id);
-            const map: Record<string, string[]> = {};
-
-            // 1. intermediate_recipe_id でリンクされたアイテムを取得
-            const { data: linkedItems, error: err1 } = await supabase
-                .from('recipe_items')
-                .select('intermediate_recipe_id, recipe_id, recipes!inner(name)')
-                .in('intermediate_recipe_id', interIds);
-
-            if (!err1 && linkedItems) {
-                linkedItems.forEach(item => {
-                    const inter = intermediates.find(r => r.id === item.intermediate_recipe_id);
-                    if (inter) {
-                        const parentName = (item.recipes as any)?.name;
-                        if (parentName) {
-                            if (!map[inter.name]) map[inter.name] = [];
-                            if (!map[inter.name].includes(parentName)) map[inter.name].push(parentName);
-                        }
-                    }
-                });
-            }
-
-            // 2. 名前マッチ用: 中間部品名でitem_nameを検索（ページネーション対応）
-            const normalize = (s: string) => s.replace(/【.*?】|\[.*?\]/g, '').replace(/\s+/g, '').trim();
-            const stripParens = (s: string) => s.replace(/[（()）]/g, '');
-
-            for (const inter of intermediates) {
-                if (map[inter.name] && map[inter.name].length > 0) continue; // 既にIDマッチあり
-                const normInter = normalize(inter.name);
-                const interNoParens = stripParens(normInter);
-
-                // item_name に中間部品名を含むアイテムを検索
-                const { data: nameMatches } = await supabase
-                    .from('recipe_items')
-                    .select('recipe_id, recipes!inner(name)')
-                    .ilike('item_name', `%${inter.name.replace(/[%_]/g, '')}%`)
-                    .limit(50);
-
-                if (nameMatches) {
-                    nameMatches.forEach(m => {
-                        const parentName = (m.recipes as any)?.name;
-                        if (parentName) {
-                            if (!map[inter.name]) map[inter.name] = [];
-                            if (!map[inter.name].includes(parentName)) map[inter.name].push(parentName);
-                        }
-                    });
-                }
-            }
-
-            setUsageMap(map);
+            const res = await fetch("/api/recipe/intermediate-usage");
+            if (!res.ok) throw new Error("API error");
+            const data = await res.json();
+            setUsageMap(data.usageMap || {});
         } catch (err) {
             console.error("Error in fetchIntermediateUsage:", err);
         }
