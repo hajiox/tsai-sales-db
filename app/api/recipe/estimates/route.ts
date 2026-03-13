@@ -272,7 +272,7 @@ export async function PATCH(request: NextRequest) {
                 }
             }
 
-            await supabase
+            const { error: statusErr } = await supabase
                 .from("pending_estimate_items")
                 .update({
                     status: "applied",
@@ -281,6 +281,11 @@ export async function PATCH(request: NextRequest) {
                     matched_ingredient_id: ingredientId,
                 })
                 .eq("id", itemId);
+
+            if (statusErr) {
+                console.error("[Estimates PATCH] status update failed:", statusErr.message);
+                return NextResponse.json({ error: `ステータス更新失敗: ${statusErr.message}` }, { status: 500 });
+            }
 
             return NextResponse.json({ success: true, action: "price_updated" });
         }
@@ -308,7 +313,7 @@ export async function PATCH(request: NextRequest) {
 
             if (insertErr) throw insertErr;
 
-            await supabase
+            const { error: statusErr } = await supabase
                 .from("pending_estimate_items")
                 .update({
                     status: "applied",
@@ -318,11 +323,16 @@ export async function PATCH(request: NextRequest) {
                 })
                 .eq("id", itemId);
 
+            if (statusErr) {
+                console.error("[Estimates PATCH] create_new status update failed:", statusErr.message);
+                return NextResponse.json({ error: `ステータス更新失敗: ${statusErr.message}` }, { status: 500 });
+            }
+
             return NextResponse.json({ success: true, action: "created_new", ingredientId: newItem.id });
         }
 
         if (action === "reject" || action === "skip") {
-            await supabase
+            const { error: statusErr } = await supabase
                 .from("pending_estimate_items")
                 .update({
                     status: action === "reject" ? "rejected" : "skipped",
@@ -330,6 +340,11 @@ export async function PATCH(request: NextRequest) {
                     notes: body.notes || null,
                 })
                 .eq("id", itemId);
+
+            if (statusErr) {
+                console.error("[Estimates PATCH] reject/skip status update failed:", statusErr.message);
+                return NextResponse.json({ error: `ステータス更新失敗: ${statusErr.message}` }, { status: 500 });
+            }
 
             return NextResponse.json({ success: true, action });
         }

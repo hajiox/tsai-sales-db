@@ -316,11 +316,18 @@ export default function EstimatesPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "update_price", itemId: item.id, ingredientId, targetTable }),
             });
-            if (!res.ok) throw new Error((await res.json()).error);
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || "価格更新に失敗しました");
+            }
             toast.success(`${item.item_name} → 価格更新完了`);
             // 楽観更新: リストから除去
             setItems(prev => prev.filter(i => i.id !== item.id));
-        } catch (e: any) { toast.error(e.message); }
+        } catch (e: any) {
+            toast.error(e.message || "価格更新に失敗しました");
+            // エラー時はリストを復帰（再取得）
+            fetchData();
+        }
         setProcessing(null);
     };
 
@@ -340,11 +347,17 @@ export default function EstimatesPage() {
                     newIngredientData: { name: item.item_name, unit_quantity: item.quantity || 1 },
                 }),
             });
-            if (!res.ok) throw new Error((await res.json()).error);
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || "新規登録に失敗しました");
+            }
             toast.success(`${item.item_name} → ${isMaterial ? "資材DB" : "食材DB"}に新規登録完了`);
             // 楽観更新
             setItems(prev => prev.filter(i => i.id !== item.id));
-        } catch (e: any) { toast.error(e.message); }
+        } catch (e: any) {
+            toast.error(e.message || "新規登録に失敗しました");
+            fetchData();
+        }
         setProcessing(null);
     };
 
