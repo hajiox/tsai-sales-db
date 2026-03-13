@@ -461,6 +461,16 @@ export default function LinksPage() {
                   </div>
                 </div>
 
+                {/* QRコード */}
+                <div className="flex-shrink-0 w-20 h-20 bg-white rounded border border-gray-200 overflow-hidden flex items-center justify-center" title={link.url}>
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(link.url)}`}
+                    alt={`QR: ${link.url}`}
+                    className="w-full h-full object-contain p-1"
+                    loading="lazy"
+                  />
+                </div>
+
                 <div className="flex-shrink-0 flex flex-col gap-2 items-center">
                   {/* サーバー制御ボタン */}
                   {isInternal && serverStatus?.controllable && (
