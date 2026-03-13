@@ -626,9 +626,9 @@ export default function RecipePage() {
                             <TableHead>商品名</TableHead>
                             {activeTab === "中間部品" && <TableHead>使用されている商品</TableHead>}
                             <TableHead>カテゴリ</TableHead>
-                            <TableHead className="text-right">販売価格</TableHead>
+                            {activeTab !== "中間部品" && <TableHead className="text-right">販売価格</TableHead>}
                             <TableHead className="text-right">原価</TableHead>
-                            <TableHead className="text-right w-[80px]">{activeTab === "自社" ? "利益率（７掛）" : "利益率"}</TableHead>
+                            {activeTab !== "中間部品" && <TableHead className="text-right w-[80px]">{activeTab === "自社" ? "利益率（７掛）" : "利益率"}</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -764,17 +764,19 @@ export default function RecipePage() {
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
+                                    {activeTab !== "中間部品" && (
                                     <TableCell className="text-right">
                                         {formatCurrency(recipe.selling_price)}
                                     </TableCell>
+                                    )}
                                     <TableCell className="text-right text-xs text-gray-500">
                                         {recipe.total_cost ? formatCurrency(Math.round(recipe.total_cost)) : <span className="text-gray-300">-</span>}
                                     </TableCell>
+                                    {activeTab !== "中間部品" && (
                                     <TableCell className="text-right">
                                         {(() => {
                                             if (!recipe.selling_price || !recipe.total_cost) return <span className="text-gray-300">-</span>;
                                             if (activeTab === "自社") {
-                                                // 7掛の卸価格ベースの利益率
                                                 const wholesalePrice = Math.round(recipe.selling_price * 0.7);
                                                 const wholesaleProfit = wholesalePrice - recipe.total_cost;
                                                 const rate = wholesalePrice > 0 ? (wholesaleProfit / wholesalePrice) * 100 : 0;
@@ -787,6 +789,7 @@ export default function RecipePage() {
                                             }
                                         })()}
                                     </TableCell>
+                                    )}
                                     <TableCell onClick={(e) => e.stopPropagation()}>
                                         <div className="flex justify-end gap-1">
                                             <Button
