@@ -30,6 +30,7 @@ interface PendingEstimateItem {
     applied_at: string | null;
     notes: string | null;
     created_at: string;
+    source_type?: string; // 'estimate' | 'receipt'
 }
 
 interface ExistingIngredient {
@@ -47,6 +48,7 @@ interface EstimateGroup {
     docNumber: string | null;
     totalAmount: number | null;
     createdAt: string;
+    sourceType: string;
     items: PendingEstimateItem[];
 }
 
@@ -273,6 +275,7 @@ export default function EstimatesPage() {
             docNumber: first.doc_number,
             totalAmount: first.total_amount,
             createdAt: first.created_at,
+            sourceType: first.source_type || 'estimate',
             items: groupItems,
         });
     });
@@ -437,7 +440,7 @@ export default function EstimatesPage() {
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                             <FileText className="w-6 h-6" />
-                            見積書データ連携
+                            見積書・レシートデータ連携
                         </h1>
                         <p className="text-gray-600 text-sm">Doc Scannerから受信した見積書の明細を確認・材料マスターに反映</p>
                     </div>
@@ -511,7 +514,10 @@ export default function EstimatesPage() {
                                             <ChevronRight className="w-4 h-4 text-gray-400" />}
                                         <div className="text-left">
                                             <div className="font-semibold text-gray-900">
-                                                📋 {group.counterpartyName}
+                                                {group.sourceType === 'receipt' ? '🧾' : '📋'} {group.counterpartyName}
+                                                {group.sourceType === 'receipt' && (
+                                                    <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-normal">レシート</span>
+                                                )}
                                                 {group.docNumber && <span className="text-gray-500 font-normal ml-2">({group.docNumber})</span>}
                                             </div>
                                             <div className="text-xs text-gray-500">
