@@ -145,28 +145,72 @@ function MobileLabelImportContent() {
     };
 
     // ─── Image Compression (for Vercel 4.5MB body limit) ───
-    const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<{ base64: string; mimeType: string }> => {
+    // タイムアウト付き・メモリ安全なスマホ画像圧縮
+    const compressImage = (file: File, maxWidth = 1024, quality = 0.6): Promise<Blob> => {
         return new Promise((resolve, reject) => {
+            const TIMEOUT_MS = 20000; // 20秒でタイムアウト
+            let objectUrl: string | null = null;
+            let timer: ReturnType<typeof setTimeout> | null = null;
+            let settled = false;
+
+            const cleanup = () => {
+                if (timer) clearTimeout(timer);
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+            };
+
+            const settle = (fn: () => void) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                fn();
+            };
+
+            // タイムアウト: onload/onerror どちらも呼ばれない場合の安全弁
+            timer = setTimeout(() => {
+                settle(() => reject(new Error("画像圧縮タイムアウト（20秒）")));
+            }, TIMEOUT_MS);
+
             const img = new Image();
             img.onload = () => {
-                let w = img.width;
-                let h = img.height;
-                if (w > maxWidth) {
-                    h = Math.round((h * maxWidth) / w);
-                    w = maxWidth;
+                try {
+                    let w = img.width;
+                    let h = img.height;
+                    // スマホ向け: 長辺をmaxWidthに制限
+                    const longer = Math.max(w, h);
+                    if (longer > maxWidth) {
+                        const ratio = maxWidth / longer;
+                        w = Math.round(w * ratio);
+                        h = Math.round(h * ratio);
+                    }
+                    const canvas = document.createElement("canvas");
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) { settle(() => reject(new Error("Canvas取得失敗"))); return; }
+                    ctx.drawImage(img, 0, 0, w, h);
+                    canvas.toBlob(
+                        (blob) => {
+                            // Canvas → メモリ解放
+                            canvas.width = 0;
+                            canvas.height = 0;
+                            if (blob) {
+                                settle(() => resolve(blob));
+                            } else {
+                                settle(() => reject(new Error("画像変換に失敗しました")));
+                            }
+                        },
+                        "image/jpeg",
+                        quality
+                    );
+                } catch (e: any) {
+                    settle(() => reject(new Error("画像処理エラー: " + (e.message || e))));
                 }
-                const canvas = document.createElement("canvas");
-                canvas.width = w;
-                canvas.height = h;
-                const ctx = canvas.getContext("2d");
-                if (!ctx) { reject(new Error("Canvas not supported")); return; }
-                ctx.drawImage(img, 0, 0, w, h);
-                const dataUrl = canvas.toDataURL("image/jpeg", quality);
-                const base64 = dataUrl.split(",")[1] || "";
-                resolve({ base64, mimeType: "image/jpeg" });
             };
-            img.onerror = () => reject(new Error("画像の読み込みに失敗"));
-            img.src = URL.createObjectURL(file);
+            img.onerror = () => {
+                settle(() => reject(new Error("画像の読み込みに失敗しました")));
+            };
+            objectUrl = URL.createObjectURL(file);
+            img.src = objectUrl;
         });
     };
 
@@ -204,26 +248,33 @@ function MobileLabelImportContent() {
         setSelectedFields({});
 
         try {
-            // Step A: Compress and convert files to Base64
-            let fileData: { base64: string; mimeType: string; type: string }[];
-            try {
-                fileData = await Promise.all(
-                    labelFiles.map(async (lf) => {
+            // FormData方式で送信（PC版と同じ方式 — 最も安定）
+            // ただしVercelの4.5MB制限のため、スマホ写真は事前圧縮を試みる
+            const formData = new FormData();
+
+            for (const lf of labelFiles) {
+                let fileToSend: File | Blob = lf.file;
+
+                // 1MB以上の画像は圧縮を試みる（失敗しても元ファイルで続行）
+                if (lf.file.size > 1 * 1024 * 1024) {
+                    try {
                         const compressed = await compressImage(lf.file);
-                        return { ...compressed, type: lf.type };
-                    })
-                );
-            } catch (e: any) {
-                throw new Error("画像変換エラー: " + (e.message || e));
+                        fileToSend = new File([compressed], lf.file.name || "photo.jpg", { type: "image/jpeg" });
+                    } catch (compressErr: any) {
+                        console.warn("圧縮失敗（元画像で送信）:", compressErr.message);
+                        // 圧縮失敗 → 元ファイルのまま送信（サーバー側で処理）
+                    }
+                }
+                formData.append("files", fileToSend);
+                formData.append("types", lf.type);
             }
 
-            // Step B: Send request
+            // FormData送信（Content-Typeは自動設定）
             let res: Response;
             try {
                 res = await fetch("/api/label/analyze", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ files: fileData }),
+                    body: formData,
                 });
             } catch (e: any) {
                 throw new Error("通信エラー: " + (e.message || e));
