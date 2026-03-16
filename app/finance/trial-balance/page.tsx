@@ -114,10 +114,17 @@ export default function TrialBalancePage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    setCurrentMonth(`${yyyy}-${mm}`);
+    // URLパラメータを優先
+    const params = new URLSearchParams(window.location.search);
+    const urlMonth = params.get('month');
+    if (urlMonth && /^\d{4}-\d{2}$/.test(urlMonth)) {
+      setCurrentMonth(urlMonth);
+    } else {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      setCurrentMonth(`${yyyy}-${mm}`);
+    }
   }, []);
 
   useEffect(() => {

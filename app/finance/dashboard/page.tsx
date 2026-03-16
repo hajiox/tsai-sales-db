@@ -663,6 +663,12 @@ function MonthCell({
             <ExternalLink className="w-3.5 h-3.5" /> 損益分析を開く
           </button>
           <button
+            onClick={() => { setShowMenu(false); window.location.href = `/finance/general-ledger-detail?month=${month}`; }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-violet-50 hover:text-violet-700 transition"
+          >
+            <BookOpen className="w-3.5 h-3.5" /> 仕訳一覧
+          </button>
+          <button
             onClick={() => { setShowMenu(false); onImport(); }}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition"
           >

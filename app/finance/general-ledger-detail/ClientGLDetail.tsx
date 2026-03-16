@@ -9,15 +9,18 @@ import { Search, MessageSquare, FileText, TrendingUp, Filter, Send, Loader2 } fr
 import Link from 'next/link';
 
 export default function ClientGLDetail() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
 
   // データ関連の状態
   const [transactions, setTransactions] = useState<any[]>([]);
   const [accountMaster, setAccountMaster] = useState<any[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState('2025-02');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('month') || '2025-02';
+    }
+    return '2025-02';
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAccount, setSelectedAccount] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -37,43 +40,13 @@ export default function ClientGLDetail() {
 
   const itemsPerPage = 50;
 
-  // 認証チェック
+  // 初回ロード
   useEffect(() => {
-    const authStatus = sessionStorage.getItem('financeAuthenticated');
-    if (authStatus === 'true') {
-      setIsAuthenticated(true);
-      loadAccountMaster();
-      loadTransactions();
-    }
+    loadAccountMaster();
+    loadTransactions();
   }, []);
 
-  // パスワード認証
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
 
-    try {
-      const response = await fetch('/api/finance/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-
-      if (response.ok) {
-        sessionStorage.setItem('financeAuthenticated', 'true');
-        setIsAuthenticated(true);
-        loadAccountMaster();
-        loadTransactions();
-      } else {
-        setError('パスワードが正しくありません');
-      }
-    } catch (err) {
-      setError('認証エラーが発生しました');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // 勘定科目マスタ読み込み
   const loadAccountMaster = async () => {
@@ -161,49 +134,15 @@ export default function ClientGLDetail() {
 
   // 検索・フィルタ変更時の処理
   useEffect(() => {
-    if (isAuthenticated) {
-      setCurrentPage(1);
-      loadTransactions();
-    }
+    setCurrentPage(1);
+    loadTransactions();
   }, [selectedMonth, selectedAccount, searchTerm]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadTransactions();
-    }
+    loadTransactions();
   }, [currentPage]);
 
-  // 認証前画面
-  if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="w-full max-w-md p-8 space-y-4 bg-white rounded-lg shadow-lg">
-          <h2 className="text-2xl font-bold text-center">財務分析システム - 詳細検索</h2>
-          <p className="text-sm text-gray-600 text-center">管理者パスワードを入力してください</p>
-          {error && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 rounded">{error}</div>
-          )}
-          <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="パスワード"
-              required
-            />
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isLoading ? 'ログイン中...' : 'ログイン'}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+
 
   // メイン画面
   return (
@@ -212,8 +151,8 @@ export default function ClientGLDetail() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">総勘定元帳 詳細検索・AI分析</h1>
         <div className="flex gap-4 text-sm">
-          <Link href="/finance/general-ledger" className="text-blue-600 hover:text-blue-800">
-            ← 総勘定元帳へ戻る
+          <Link href="/finance/dashboard" className="text-blue-600 hover:text-blue-800">
+            ← ダッシュボードへ戻る
           </Link>
           <Link href="/finance/financial-statements" className="text-blue-600 hover:text-blue-800">
             財務諸表
