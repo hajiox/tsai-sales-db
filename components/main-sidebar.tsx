@@ -47,7 +47,7 @@ export default function MainSidebar() {
       wholesale: "/wholesale/dashboard",
       "brand-store": "/brand-store-analysis",
       "food-store": "/food-store-analysis",
-      finance: "/finance/trial-balance",
+      finance: "/finance/dashboard",
       kpi: "/kpi",
       recipe: "/recipe",
       links: "/links",
