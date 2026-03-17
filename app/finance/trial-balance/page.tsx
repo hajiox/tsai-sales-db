@@ -1,7 +1,7 @@
 // app/finance/trial-balance/page.tsx ver.6
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -504,9 +504,8 @@ export default function TrialBalancePage() {
                   const isAnomaly = analysisData?.anomalies.some(a => a.code === acc.code);
 
                   return (
-                    <>
+                    <React.Fragment key={acc.code}>
                       <TableRow
-                        key={acc.code}
                         className={`cursor-pointer transition-colors ${getRowClass(acc)}`}
                         onClick={() => toggleAccountExpand(acc.code)}
                       >
@@ -596,7 +595,7 @@ export default function TrialBalancePage() {
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </React.Fragment>
                   );
                 })}
               </TableBody>

@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
   const limit = Math.min(Number(req.nextUrl.searchParams.get("limit") || 100), 500);
   const offset = Math.max(Number(req.nextUrl.searchParams.get("offset") || 0), 0);
+  const month = req.nextUrl.searchParams.get("month")?.trim(); // "YYYY-MM"
 
   if (!q || q.length < 1) {
     return NextResponse.json({ results: [], total: 0 });
@@ -23,20 +24,32 @@ export async function GET(req: NextRequest) {
   try {
     const searchPattern = `%${q}%`;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("general_ledger")
       .select("report_month, transaction_date, account_code, counter_account, department, description, debit_amount, credit_amount, balance")
       .or(`description.ilike.${searchPattern},account_code.ilike.${searchPattern},counter_account.ilike.${searchPattern},department.ilike.${searchPattern}`)
       .order("transaction_date", { ascending: false })
       .range(offset, offset + limit - 1);
 
+    // 月フィルター
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      query = query.eq("report_month", `${month}-01`);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
     // 総件数を別途取得
-    const { count, error: countError } = await supabase
+    let countQuery = supabase
       .from("general_ledger")
       .select("id", { count: "exact", head: true })
       .or(`description.ilike.${searchPattern},account_code.ilike.${searchPattern},counter_account.ilike.${searchPattern},department.ilike.${searchPattern}`);
+
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      countQuery = countQuery.eq("report_month", `${month}-01`);
+    }
+
+    const { count, error: countError } = await countQuery;
 
     return NextResponse.json({
       results: data || [],

@@ -21,6 +21,7 @@ import {
   Trash2,
   ExternalLink,
   Search,
+  ClipboardList,
 } from 'lucide-react';
 
 // --- Types ---
@@ -92,6 +93,10 @@ export default function FinanceDashboardPage() {
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const SEARCH_PER_PAGE = 100;
 
+  // 決算データ
+  const [closingCount, setClosingCount] = useState<number>(0);
+  const [closingLoading, setClosingLoading] = useState(false);
+
   async function doSearch(query: string, page: number) {
     setSearching(true);
     try {
@@ -153,6 +158,23 @@ export default function FinanceDashboardPage() {
 
   const yearTotalTransactions = yearMonths.reduce((s, m) => s + (m.data?.transactionCount || 0), 0);
   const yearImportedCount = yearMonths.filter(m => m.data).length;
+
+  // 決算データ件数チェック
+  useEffect(() => {
+    async function checkClosing() {
+      setClosingLoading(true);
+      try {
+        const res = await fetch(`/api/finance/search?q=${encodeURIComponent('[決算]')}&limit=1&offset=0&month=${selectedYear}-07`);
+        const json = await res.json();
+        setClosingCount(json.total || 0);
+      } catch {
+        setClosingCount(0);
+      } finally {
+        setClosingLoading(false);
+      }
+    }
+    checkClosing();
+  }, [selectedYear]);
 
   function navigateToMonth(month: string) {
     router.push(`/finance/trial-balance?month=${month}`);
@@ -379,6 +401,44 @@ export default function FinanceDashboardPage() {
                 onImport={() => router.push('/finance/general-ledger/import')}
               />
             ))}
+          </div>
+
+          {/* 決算確認セクション */}
+          <div className="px-6 pb-6 pt-2">
+            <div className="flex items-center gap-3">
+              {closingLoading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" /> 決算データ確認中...
+                </div>
+              ) : closingCount > 0 ? (
+                <>
+                  <button
+                    onClick={() => router.push(`/finance/trial-balance?month=${selectedYear}-07`)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all"
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    決算確認（{closingCount}件）
+                  </button>
+                  <button
+                    onClick={() => window.location.href = `/finance/general-ledger-detail?month=${selectedYear}-07`}
+                    className="inline-flex items-center gap-2 px-3 py-2 text-xs text-violet-600 bg-violet-50 rounded-lg hover:bg-violet-100 transition"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" /> 決算仕訳一覧
+                  </button>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <ClipboardList className="w-4 h-4" />
+                  決算データなし
+                  <button
+                    onClick={() => router.push('/finance/general-ledger/closing-import')}
+                    className="ml-2 text-xs text-blue-500 hover:text-blue-700 hover:underline"
+                  >
+                    インポート →
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

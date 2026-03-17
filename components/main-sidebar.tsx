@@ -131,7 +131,7 @@ export default function MainSidebar() {
           className="w-full justify-start text-slate-200 hover:bg-slate-700 hover:text-white"
           onClick={() => window.open("http://192.168.110.200:3004", "_blank")}
         >
-          事務支援システム
+          Doc Scanner
         </Button>
 
         <Button
