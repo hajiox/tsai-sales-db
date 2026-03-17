@@ -285,6 +285,7 @@ function FinancialStatementsInner() {
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-6xl p-6">
+        <a href="/finance/dashboard" className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block">← ダッシュボードへ戻る</a>
         <h1 className="text-2xl font-bold mb-4">財務諸表</h1>
 
         {/* タブ */}

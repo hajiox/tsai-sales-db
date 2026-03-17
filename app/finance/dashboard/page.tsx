@@ -377,7 +377,6 @@ export default function FinanceDashboardPage() {
                 data={data}
                 onView={() => navigateToMonth(key)}
                 onImport={() => router.push('/finance/general-ledger/import')}
-                onDelete={() => openDeleteDialog(key)}
               />
             ))}
           </div>
@@ -579,30 +578,15 @@ function SummaryCard({
 }
 
 function MonthCell({
-  month, label, data, onView, onImport, onDelete,
+  month, label, data, onView, onImport,
 }: {
   month: string; label: string; data: MonthStatus | null;
-  onView: () => void; onImport: () => void; onDelete: () => void;
+  onView: () => void; onImport: () => void;
 }) {
-  const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
   const now = new Date();
   const [y, m] = month.split('-').map(Number);
   const isCurrentMonth = y === now.getFullYear() && m === now.getMonth() + 1;
   const isFuture = new Date(y, m - 1) > now;
-
-  // クリック外でメニュー閉じる
-  useEffect(() => {
-    if (!showMenu) return;
-    function handler(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showMenu]);
 
   if (isFuture) {
     return (
@@ -631,59 +615,26 @@ function MonthCell({
   }
 
   return (
-    <div className="relative" ref={menuRef}>
-      <button
-        onClick={() => setShowMenu(!showMenu)}
-        className={`w-full rounded-xl border-2 p-3 text-center transition-all hover:shadow-md hover:scale-[1.02] group ${
-          isCurrentMonth
-            ? 'border-emerald-400 bg-emerald-50 shadow-sm'
-            : data.isBalanced
-            ? 'border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50'
-            : 'border-amber-300 bg-amber-50/30 hover:bg-amber-50'
-        }`}
-      >
-        <div className={`text-xs font-bold mb-1 ${isCurrentMonth ? 'text-emerald-700' : 'text-slate-600'}`}>
-          {label}
-        </div>
-        {data.isBalanced ? (
-          <CheckCircle2 className="w-5 h-5 mx-auto mb-1 text-emerald-500" />
-        ) : (
-          <AlertTriangle className="w-5 h-5 mx-auto mb-1 text-amber-500" />
-        )}
-        <div className="text-[10px] text-slate-500">{fmt(data.transactionCount)}件</div>
-      </button>
-
-      {/* ポップオーバーメニュー */}
-      {showMenu && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-white rounded-xl shadow-xl border border-slate-200 py-1 min-w-[140px]">
-          <button
-            onClick={() => { setShowMenu(false); onView(); }}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition"
-          >
-            <ExternalLink className="w-3.5 h-3.5" /> 損益分析を開く
-          </button>
-          <button
-            onClick={() => { setShowMenu(false); window.location.href = `/finance/general-ledger-detail?month=${month}`; }}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-violet-50 hover:text-violet-700 transition"
-          >
-            <BookOpen className="w-3.5 h-3.5" /> 仕訳一覧
-          </button>
-          <button
-            onClick={() => { setShowMenu(false); onImport(); }}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition"
-          >
-            <Upload className="w-3.5 h-3.5" /> 再インポート
-          </button>
-          <div className="border-t border-slate-100 my-1" />
-          <button
-            onClick={() => { setShowMenu(false); onDelete(); }}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 transition"
-          >
-            <Trash2 className="w-3.5 h-3.5" /> データ削除
-          </button>
-        </div>
+    <button
+      onClick={onView}
+      className={`w-full rounded-xl border-2 p-3 text-center transition-all hover:shadow-md hover:scale-[1.02] group ${
+        isCurrentMonth
+          ? 'border-emerald-400 bg-emerald-50 shadow-sm'
+          : data.isBalanced
+          ? 'border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50'
+          : 'border-amber-300 bg-amber-50/30 hover:bg-amber-50'
+      }`}
+    >
+      <div className={`text-xs font-bold mb-1 ${isCurrentMonth ? 'text-emerald-700' : 'text-slate-600'}`}>
+        {label}
+      </div>
+      {data.isBalanced ? (
+        <CheckCircle2 className="w-5 h-5 mx-auto mb-1 text-emerald-500" />
+      ) : (
+        <AlertTriangle className="w-5 h-5 mx-auto mb-1 text-amber-500" />
       )}
-    </div>
+      <div className="text-[10px] text-slate-500">{fmt(data.transactionCount)}件</div>
+    </button>
   );
 }
 

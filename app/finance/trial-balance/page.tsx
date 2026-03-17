@@ -323,6 +323,7 @@ export default function TrialBalancePage() {
       {/* ヘッダーエリア */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
+          <a href="/finance/dashboard" className="text-sm text-blue-600 hover:text-blue-800 mb-1 inline-block">← ダッシュボードへ戻る</a>
           <h1 className="text-2xl font-bold text-gray-800">損益分析ビューアー</h1>
           <p className="text-sm text-gray-500">
             当月の収支と、AIによるコスト異常検知を行います

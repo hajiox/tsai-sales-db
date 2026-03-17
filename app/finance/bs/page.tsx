@@ -92,6 +92,7 @@ export default function BSPage() {
 
   return (
     <main style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
+      <a href="/finance/dashboard" style={{ fontSize: 14, color: '#2563eb', marginBottom: 8, display: 'inline-block' }}>← ダッシュボードへ戻る</a>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>B/S Snapshot（final）</h1>
 
       <section style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>

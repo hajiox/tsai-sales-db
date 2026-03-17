@@ -119,6 +119,7 @@ export default function PlPage() {
 
   return (
     <div style={{ maxWidth: 1240, margin: '0 auto', padding: 16 }}>
+      <a href="/finance/dashboard" style={{ fontSize: 14, color: '#2563eb', marginBottom: 8, display: 'inline-block' }}>← ダッシュボードへ戻る</a>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>
         P/L Snapshot（{scope === 'ytd' ? 'FY累計' : '当月'}）
       </h1>
