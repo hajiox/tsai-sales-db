@@ -83,6 +83,11 @@ interface Recipe {
   series_code?: number | null;
   product_code?: number | null;
   product_image_url?: string | null;
+  jan_code?: string | null;
+  lot_size?: number | null;
+  case_quantity?: number | null;
+  case_size?: string | null;
+  shelf_life?: string | null;
 }
 
 interface RecipeItem {
@@ -672,6 +677,11 @@ export default function RecipeDetailPage() {
             development_date: recipe.development_date,
             amazon_fee_enabled: recipe.amazon_fee_enabled,
             yield_rate: recipe.yield_rate,
+            jan_code: recipe.jan_code,
+            lot_size: recipe.lot_size,
+            case_quantity: recipe.case_quantity,
+            case_size: recipe.case_size,
+            shelf_life: recipe.shelf_life,
           },
         }),
       });
@@ -1247,6 +1257,73 @@ export default function RecipeDetailPage() {
                       <SelectItem value="冷凍">冷凍</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                {/* JANコード・賞味期限 */}
+                <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                    JANコード
+                  </div>
+                  <InlineEdit
+                    value={recipe.jan_code}
+                    onSave={(val) => handleRecipeChange("jan_code", val || null)}
+                    className="font-semibold text-sm font-mono"
+                    inputClassName="font-semibold text-sm font-mono w-full"
+                    placeholder="4900000000000"
+                  />
+                </div>
+                <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                    賞味期限
+                  </div>
+                  <InlineEdit
+                    value={recipe.shelf_life}
+                    onSave={(val) => handleRecipeChange("shelf_life", val || null)}
+                    className="font-semibold text-sm"
+                    inputClassName="font-semibold text-sm w-full"
+                    placeholder="12ヶ月"
+                  />
+                </div>
+                {/* 製造ロット数・ケース入数 */}
+                <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                    製造ロット数
+                  </div>
+                  <InlineEdit
+                    type="number"
+                    value={recipe.lot_size}
+                    onSave={(val) => handleRecipeChange("lot_size", val)}
+                    className="font-semibold text-sm"
+                    inputClassName="text-right font-semibold text-sm w-16"
+                    placeholder="-"
+                    suffix="個"
+                  />
+                </div>
+                <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                    ケース入数
+                  </div>
+                  <InlineEdit
+                    type="number"
+                    value={recipe.case_quantity}
+                    onSave={(val) => handleRecipeChange("case_quantity", val)}
+                    className="font-semibold text-sm"
+                    inputClassName="text-right font-semibold text-sm w-16"
+                    placeholder="-"
+                    suffix="個/ケース"
+                  />
+                </div>
+                {/* ケースサイズ */}
+                <div className="p-2 bg-gray-50 rounded border border-gray-100 col-span-2">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                    ケースサイズ
+                  </div>
+                  <InlineEdit
+                    value={recipe.case_size}
+                    onSave={(val) => handleRecipeChange("case_size", val || null)}
+                    className="font-semibold text-sm"
+                    inputClassName="font-semibold text-sm w-full"
+                    placeholder="450×350×200mm"
+                  />
                 </div>
               </div>
             </div>
