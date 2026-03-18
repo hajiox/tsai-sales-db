@@ -1188,7 +1188,7 @@ export default function RecipeDetailPage() {
                 </div>
                 <div className="p-3 bg-gray-50 rounded border border-gray-100">
                   <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
-                    表記量
+                    内容量（表記量）
                   </div>
                   <InlineEdit
                     type="number"
@@ -1259,71 +1259,81 @@ export default function RecipeDetailPage() {
                   </Select>
                 </div>
                 {/* JANコード・賞味期限 */}
-                <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                <div className="p-2 bg-gray-50 rounded border border-gray-100 min-h-[52px] flex flex-col">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                     JANコード
                   </div>
-                  <InlineEdit
-                    value={recipe.jan_code}
-                    onSave={(val) => handleRecipeChange("jan_code", val || null)}
-                    className="font-semibold text-sm font-mono"
-                    inputClassName="font-semibold text-sm font-mono w-full"
-                    placeholder="4900000000000"
-                  />
+                  <div className="flex-1 flex items-center">
+                    <InlineEdit
+                      value={recipe.jan_code}
+                      onSave={(val) => handleRecipeChange("jan_code", val || null)}
+                      className="font-semibold text-sm font-mono"
+                      inputClassName="font-semibold text-sm font-mono w-full"
+                      placeholder="-"
+                    />
+                  </div>
                 </div>
-                <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                <div className="p-2 bg-gray-50 rounded border border-gray-100 min-h-[52px] flex flex-col">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                     賞味期限
                   </div>
-                  <InlineEdit
-                    value={recipe.shelf_life}
-                    onSave={(val) => handleRecipeChange("shelf_life", val || null)}
-                    className="font-semibold text-sm"
-                    inputClassName="font-semibold text-sm w-full"
-                    placeholder="12ヶ月"
-                  />
+                  <div className="flex-1 flex items-center">
+                    <InlineEdit
+                      value={recipe.shelf_life}
+                      onSave={(val) => handleRecipeChange("shelf_life", val || null)}
+                      className="font-semibold text-sm"
+                      inputClassName="font-semibold text-sm w-full"
+                      placeholder="-"
+                    />
+                  </div>
                 </div>
                 {/* 製造ロット数・ケース入数 */}
-                <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                <div className="p-2 bg-gray-50 rounded border border-gray-100 min-h-[52px] flex flex-col">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                     製造ロット数
                   </div>
-                  <InlineEdit
-                    type="number"
-                    value={recipe.lot_size}
-                    onSave={(val) => handleRecipeChange("lot_size", val)}
-                    className="font-semibold text-sm"
-                    inputClassName="text-right font-semibold text-sm w-16"
-                    placeholder="-"
-                    suffix="個"
-                  />
+                  <div className="flex-1 flex items-center">
+                    <InlineEdit
+                      type="number"
+                      value={recipe.lot_size}
+                      onSave={(val) => handleRecipeChange("lot_size", val)}
+                      className="font-semibold text-sm"
+                      inputClassName="text-right font-semibold text-sm w-16"
+                      placeholder="-"
+                      suffix="個"
+                    />
+                  </div>
                 </div>
-                <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                <div className="p-2 bg-gray-50 rounded border border-gray-100 min-h-[52px] flex flex-col">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                     ケース入数
                   </div>
-                  <InlineEdit
-                    type="number"
-                    value={recipe.case_quantity}
-                    onSave={(val) => handleRecipeChange("case_quantity", val)}
-                    className="font-semibold text-sm"
-                    inputClassName="text-right font-semibold text-sm w-16"
-                    placeholder="-"
-                    suffix="個/ケース"
-                  />
+                  <div className="flex-1 flex items-center">
+                    <InlineEdit
+                      type="number"
+                      value={recipe.case_quantity}
+                      onSave={(val) => handleRecipeChange("case_quantity", val)}
+                      className="font-semibold text-sm"
+                      inputClassName="text-right font-semibold text-sm w-16"
+                      placeholder="-"
+                      suffix="個/ケース"
+                    />
+                  </div>
                 </div>
                 {/* ケースサイズ */}
-                <div className="p-2 bg-gray-50 rounded border border-gray-100 col-span-2">
+                <div className="p-2 bg-gray-50 rounded border border-gray-100 col-span-2 min-h-[52px] flex flex-col">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                     ケースサイズ
                   </div>
-                  <InlineEdit
-                    value={recipe.case_size}
-                    onSave={(val) => handleRecipeChange("case_size", val || null)}
-                    className="font-semibold text-sm"
-                    inputClassName="font-semibold text-sm w-full"
-                    placeholder="450×350×200mm"
-                  />
+                  <div className="flex-1 flex items-center">
+                    <InlineEdit
+                      value={recipe.case_size}
+                      onSave={(val) => handleRecipeChange("case_size", val || null)}
+                      className="font-semibold text-sm"
+                      inputClassName="font-semibold text-sm w-full"
+                      placeholder="-"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -2190,7 +2200,7 @@ Now Expanded or Scrollable */}
           </div>
           <div className="border border-gray-400 rounded px-2 py-0.5">
             <div className="text-[9px] font-bold text-gray-500 mb-0">
-              表記量
+              内容量（表記量）
             </div>
             <div className="text-xs font-bold leading-tight">
               {recipe.label_quantity || "-"}
