@@ -819,6 +819,23 @@ export default function RecipeDetailPage() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => {
+              const p = new URLSearchParams();
+              p.set('recipe_id', recipe.id);
+              p.set('product_name', recipe.name);
+              if (recipe.selling_price) {
+                p.set('unit_price', String(Math.round(recipe.selling_price / 1.08)));
+              }
+              if (recipe.category) p.set('category', recipe.category);
+              window.open(`http://192.168.110.200:3004/estimates/new?${p.toString()}`, '_blank');
+            }}
+            className="gap-2 border-cyan-600 text-cyan-700 hover:bg-cyan-50"
+          >
+            📄 見積書作成
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handlePrint}
             className="gap-2"
           >

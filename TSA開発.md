@@ -498,3 +498,54 @@ DBはSupabase、AI分析にはGoogle Gemini API、認証にはNextAuth.js（Goog
 - AIプロンプトに精算書認識ルール追加（「その他」に誤分類防止）
 - 既存の「その他」分類の精算書（道の駅なみえ精算報告書）を修正済み
 - ファイルもネットワークドライブ上の「精算書」フォルダに再移動済み
+
+
+### 2026-03-17 DisGrav — Antigravity遠隔操縦 Discord Bot 新規開発
+
+#### 概要
+外出先のスマホ（Discord）からAntigravityを遠隔操作するための中継Botプログラム「DisGrav」を新規開発。
+
+#### プロジェクト
+- **場所:** `C:\作業用\disgrav`
+- **技術スタック:** Node.js, discord.js v14, chrome-remote-interface (CDP), dotenv
+- **Discordサーバー:** 会津ブランド館Antigravity（# 開発チャンネル）
+
+#### 実装内容
+
+##### Discord Bot基盤（Step 1-2）
+- Discordサーバー「会津ブランド館Antigravity」作成、Bot「DisGrav」をDeveloper Portalで作成・招待
+- MESSAGE CONTENT INTENT特権インテント有効化
+- `!ag ping` → pong応答の基礎通信テスト成功
+
+##### 双方向操作Bot v2（Step 3）
+| コマンド | 機能 |
+|----------|------|
+| `!ag chat <msg>` / `!ag c` | Antigravityにチャット送信→応答自動転送 |
+| `!ag ok` / `!ag y` | 承認ボタンをクリック |
+| `!ag no` / `!ag n` | 拒否ボタンをクリック |
+| `!ag run <cmd>` | PowerShellコマンドリモート実行 |
+| `!ag ps` | プロセス一覧 |
+| `!ag ls [path]` | ディレクトリ一覧 |
+| `!ag status` | 稼働状態（Embed表示） |
+| `!ag inspect` | Antigravity DOM構造調査 |
+| `!ag targets` | CDPターゲット一覧 |
+| `!ag buttons` | 承認ボタン検出一覧 |
+
+- **Discord Button UI:** 承認要求を✅承認/🚫拒否/✅全承認のインタラクティブボタン付きEmbed表示
+- **自動ポーリング:** Antigravityの変化を4秒間隔で監視し、応答・承認要求を自動転送
+- **長文分割送信:** Discord 2000文字制限を自動分割対応
+- **Embed表示:** ヘルプ・ステータスをリッチEmbed形式で表示
+
+#### 関連ファイル
+| ファイル | 説明 |
+|---------|------|
+| `disgrav/index.js` | Discord Bot本体（v2） |
+| `disgrav/antigravity_controller.js` | CDP経由Antigravity操作モジュール |
+| `disgrav/start.bat` | Antigravity(CDP有効) + Bot 一括起動 |
+| `disgrav/.env` | Token, Channel ID, CDP Port設定 |
+| `disgrav/package.json` | discord.js, chrome-remote-interface, dotenv |
+
+#### 未完了・次回対応
+- **Antigravity CDP有効化:** `start.bat` でAntigravityを `--remote-debugging-port=9333` 付きで再起動する必要あり
+- **DOMセレクター調整:** CDP接続後に `!ag inspect` でDOM構造を調査し、チャット入力欄・メッセージ・承認ボタンのセレクターを実際のDOMに合わせて修正
+- **PM2常駐化:** Bot を PM2 で自動再起動管理
