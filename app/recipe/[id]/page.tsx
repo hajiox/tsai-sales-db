@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload } from "lucide-react";
+import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -152,6 +152,10 @@ export default function RecipeDetailPage() {
   const [batchSize1, setBatchSize1] = useState(400);
   const [batchSize2, setBatchSize2] = useState(800);
 
+  // 基本(1)スケール変更: 元データ(100%)のバックアップ
+  const [originalUsageMap, setOriginalUsageMap] = useState<Record<string, number>>({});
+  const [currentScalePercent, setCurrentScalePercent] = useState<number | null>(null);
+
   // 原材料表示モーダル
   const [labelModalOpen, setLabelModalOpen] = useState(false);
   const [labelText, setLabelText] = useState("");
@@ -165,6 +169,107 @@ export default function RecipeDetailPage() {
   const [photoUploading, setPhotoUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // バージョン管理
+  interface RecipeVersion {
+    id: string;
+    version_number: number;
+    version_note: string | null;
+    created_at: string;
+    snapshot_recipe: any;
+    snapshot_items: any[];
+  }
+  const [versions, setVersions] = useState<RecipeVersion[]>([]);
+  const [versionPanelOpen, setVersionPanelOpen] = useState(false);
+  const [versionSaving, setVersionSaving] = useState(false);
+  const [versionNoteInput, setVersionNoteInput] = useState("");
+  const [showNoteInput, setShowNoteInput] = useState(false);
+
+  const fetchVersions = useCallback(async (recipeId: string) => {
+    try {
+      const res = await fetch(`/api/recipe/versions?recipeId=${recipeId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setVersions(data.versions || []);
+      }
+    } catch { }
+  }, []);
+
+  useEffect(() => {
+    if (recipe?.id) fetchVersions(recipe.id);
+  }, [recipe?.id, fetchVersions]);
+
+  const saveVersion = async (note?: string) => {
+    if (!recipe) return;
+    setVersionSaving(true);
+    try {
+      // まず未保存の変更があれば先に保存
+      if (hasChanges) {
+        await saveChanges();
+      }
+      const res = await fetch('/api/recipe/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId: recipe.id, note: note || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success(`Ver.${data.version.version_number} を保存しました`);
+      setShowNoteInput(false);
+      setVersionNoteInput("");
+      fetchVersions(recipe.id);
+    } catch (error: any) {
+      toast.error(error.message || '履歴保存に失敗しました');
+    } finally {
+      setVersionSaving(false);
+    }
+  };
+
+  const restoreVersion = async (version: RecipeVersion) => {
+    if (!recipe) return;
+    if (!confirm(`Ver.${version.version_number} に復元しますか？\n現在の変更は失われます。`)) return;
+    try {
+      // レシピメタデータを復元
+      const snap = version.snapshot_recipe;
+      const restoreFields: Record<string, any> = {};
+      const fieldsToRestore = ['name', 'filling_quantity', 'label_quantity', 'storage_method',
+        'sterilization_method', 'sterilization_temperature', 'sterilization_time',
+        'manufacturing_notes', 'selling_price', 'amazon_fee_enabled', 'yield_rate',
+        'jan_code', 'lot_size', 'case_quantity', 'case_size', 'shelf_life'];
+      fieldsToRestore.forEach(f => { if (f in snap) restoreFields[f] = snap[f]; });
+
+      const res = await fetch('/api/recipe/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipeId: recipe.id,
+          deletedItemIds: items.filter(i => !i.id.startsWith('temp-')).map(i => i.id),
+          newItems: version.snapshot_items.map((si: any) => ({
+            item_name: si.item_name,
+            item_type: si.item_type,
+            unit_quantity: si.unit_quantity,
+            unit_price: si.unit_price,
+            unit_weight: si.unit_weight,
+            usage_amount: si.usage_amount,
+            cost: si.cost,
+            tax_included: si.tax_included ?? true,
+            intermediate_recipe_id: si.intermediate_recipe_id || null,
+          })),
+          existingItems: [],
+          recipeUpdates: {
+            ...restoreFields,
+            total_cost: snap.total_cost,
+            total_weight: snap.total_weight,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error('復元に失敗しました');
+      toast.success(`Ver.${version.version_number} に復元しました`);
+      fetchRecipe(recipe.id);
+    } catch (error: any) {
+      toast.error(error.message || '復元に失敗しました');
+    }
+  };
 
   useEffect(() => {
     if (params.id) {
@@ -574,53 +679,15 @@ export default function RecipeDetailPage() {
     setHasChanges(true);
   };
 
-  const handleRecipeChange = async (field: keyof Recipe, value: any) => {
+  const handleRecipeChange = (field: keyof Recipe, value: any) => {
     if (!recipe) return;
-
     const updatedRecipe = { ...recipe, [field]: value };
-    setRecipe(updatedRecipe);
-
-    // amazon_fee_enabled の変更時は即座にDB保存
-    if (field === "amazon_fee_enabled") {
-      setHasChanges(true);
-    }
-
-    if (field === "selling_price") {
-      setHasChanges(true);
-    }
-
+    // category変更時はis_intermediateも連動
     if (field === "category") {
-      const isIntermediate = value === "中間部品";
-      try {
-        const res = await fetch('/api/recipe/update', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recipeId: recipe.id, updates: { category: value } }),
-        });
-        if (!res.ok) throw new Error('更新に失敗しました');
-        setRecipe((prev) =>
-          prev ? { ...prev, category: String(value), is_intermediate: isIntermediate } : null,
-        );
-        toast.success("カテゴリーを更新しました");
-      } catch (error) {
-        console.error("Update error:", error);
-        toast.error("カテゴリーの更新に失敗しました");
-      }
-      return;
+      updatedRecipe.is_intermediate = value === "中間部品";
     }
-
-    try {
-      const res = await fetch('/api/recipe/update', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipeId: recipe.id, updates: { [field]: value } }),
-      });
-      if (!res.ok) throw new Error('更新に失敗しました');
-      toast.success("更新しました", { duration: 1000 });
-    } catch (error) {
-      console.error("Update error:", error);
-      toast.error("更新に失敗しました");
-    }
+    setRecipe(updatedRecipe);
+    setHasChanges(true);
   };
 
   const saveChanges = async () => {
@@ -665,6 +732,10 @@ export default function RecipeDetailPage() {
           newItems: newItemsList,
           existingItems: existingItemsList,
           recipeUpdates: {
+            name: recipe.name,
+            category: recipe.category,
+            is_intermediate: recipe.is_intermediate,
+            selling_price: recipe.selling_price,
             total_cost: totalCost,
             total_weight: totalWeight,
             manufacturing_notes: recipe.manufacturing_notes,
@@ -682,6 +753,9 @@ export default function RecipeDetailPage() {
             case_quantity: recipe.case_quantity,
             case_size: recipe.case_size,
             shelf_life: recipe.shelf_life,
+            series_code: recipe.series_code,
+            series: recipe.series,
+            product_code: recipe.product_code,
           },
         }),
       });
@@ -693,11 +767,20 @@ export default function RecipeDetailPage() {
 
       setDeletedItemIds(new Set());
       setHasChanges(false);
+      toast.success("保存しました");
       fetchRecipe(recipe.id);
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "保存に失敗しました");
     }
+  };
+
+  const cancelChanges = () => {
+    if (!recipe) return;
+    if (hasChanges && !confirm('変更を破棄しますか？')) return;
+    setDeletedItemIds(new Set());
+    setHasChanges(false);
+    fetchRecipe(recipe.id);
   };
 
   const formatNumber = (value?: number | null, decimals = 1, suffix = "") => {
@@ -843,17 +926,81 @@ export default function RecipeDetailPage() {
             A4印刷
           </Button>
           {hasChanges && (
-            <Button
-              size="sm"
-              onClick={saveChanges}
-              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Save className="w-4 h-4" />
-              保存
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={cancelChanges}
+                className="gap-2 text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-4 h-4" />
+                キャンセル
+              </Button>
+              <Button
+                size="sm"
+                onClick={saveChanges}
+                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Save className="w-4 h-4" />
+                保存
+              </Button>
+            </>
           )}
+          <div className="border-l pl-3 ml-1 flex items-center gap-2">
+            {versions.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setVersionPanelOpen(!versionPanelOpen)}
+                className="text-xs text-gray-500 hover:text-gray-700 gap-1"
+              >
+                <History className="w-3 h-3" />
+                <ChevronDown className={`w-3 h-3 transition-transform ${versionPanelOpen ? 'rotate-180' : ''}`} />
+                履歴 (v{versions[0]?.version_number})
+              </Button>
+            )}
+          </div>
         </div>
       </header>
+      {/* バージョン履歴パネル */}
+      {versionPanelOpen && versions.length > 0 && (
+        <div className="bg-amber-50/80 border-b border-amber-200 px-6 py-3 print:hidden">
+          <div className="max-w-[1400px] mx-auto">
+            <div className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2">
+              <History className="w-3 h-3" />
+              変更履歴（{versions.length}件）
+            </div>
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {versions.map((v) => (
+                <div key={v.id} className="flex items-center justify-between bg-white/80 rounded px-3 py-1.5 border border-amber-200/60 hover:border-amber-400 transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                      v{v.version_number}
+                    </span>
+                    <span className="text-xs text-gray-500 font-mono">
+                      {new Date(v.created_at).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {v.version_note && (
+                      <span className="text-xs text-gray-700">{v.version_note}</span>
+                    )}
+                    <span className="text-[10px] text-gray-400">
+                      材料{v.snapshot_items?.length || 0}件
+                      {v.snapshot_recipe?.total_cost != null && ` / 原価¥${Math.round(v.snapshot_recipe.total_cost).toLocaleString()}`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => restoreVersion(v)}
+                    className="text-[10px] text-amber-700 hover:text-amber-900 font-bold px-2 py-1 rounded hover:bg-amber-100 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    復元
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Main Content - Screen Only */}
       <main className="max-w-[1400px] mx-auto p-8 print:hidden">
         {/* Header Section */}
@@ -1282,7 +1429,7 @@ export default function RecipeDetailPage() {
                   </div>
                   <div className="flex-1 flex items-center">
                     <InlineEdit
-                      value={recipe.jan_code}
+                      value={recipe.jan_code ?? null}
                       onSave={(val) => handleRecipeChange("jan_code", val || null)}
                       className="font-semibold text-sm font-mono"
                       inputClassName="font-semibold text-sm font-mono w-full"
@@ -1296,7 +1443,7 @@ export default function RecipeDetailPage() {
                   </div>
                   <div className="flex-1 flex items-center">
                     <InlineEdit
-                      value={recipe.shelf_life}
+                      value={recipe.shelf_life ?? null}
                       onSave={(val) => handleRecipeChange("shelf_life", val || null)}
                       className="font-semibold text-sm"
                       inputClassName="font-semibold text-sm w-full"
@@ -1312,7 +1459,7 @@ export default function RecipeDetailPage() {
                   <div className="flex-1 flex items-center">
                     <InlineEdit
                       type="number"
-                      value={recipe.lot_size}
+                      value={recipe.lot_size ?? null}
                       onSave={(val) => handleRecipeChange("lot_size", val)}
                       className="font-semibold text-sm"
                       inputClassName="text-right font-semibold text-sm w-16"
@@ -1328,7 +1475,7 @@ export default function RecipeDetailPage() {
                   <div className="flex-1 flex items-center">
                     <InlineEdit
                       type="number"
-                      value={recipe.case_quantity}
+                      value={recipe.case_quantity ?? null}
                       onSave={(val) => handleRecipeChange("case_quantity", val)}
                       className="font-semibold text-sm"
                       inputClassName="text-right font-semibold text-sm w-16"
@@ -1344,7 +1491,7 @@ export default function RecipeDetailPage() {
                   </div>
                   <div className="flex-1 flex items-center">
                     <InlineEdit
-                      value={recipe.case_size}
+                      value={recipe.case_size ?? null}
                       onSave={(val) => handleRecipeChange("case_size", val || null)}
                       className="font-semibold text-sm"
                       inputClassName="font-semibold text-sm w-full"
@@ -1663,6 +1810,49 @@ Now Expanded or Scrollable */}
                 <span className="font-mono text-gray-400">
                   {items.length} FILES
                 </span>
+                {/* 履歴保存ボタン */}
+                <div className="flex items-center gap-2 print:hidden">
+                  {showNoteInput ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={versionNoteInput}
+                        onChange={(e) => setVersionNoteInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveVersion(versionNoteInput); if (e.key === 'Escape') { setShowNoteInput(false); setVersionNoteInput(''); } }}
+                        placeholder="変更内容メモ（任意）"
+                        className="h-7 w-44 px-2 text-xs border border-gray-300 rounded focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => saveVersion(versionNoteInput)}
+                        disabled={versionSaving}
+                        className="h-7 px-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded flex items-center gap-1 disabled:opacity-50"
+                      >
+                        {versionSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        確定
+                      </button>
+                      <button
+                        onClick={() => { setShowNoteInput(false); setVersionNoteInput(''); }}
+                        className="h-7 px-1 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowNoteInput(true)}
+                      className="h-7 px-3 text-xs font-bold border border-amber-500 text-amber-700 hover:bg-amber-50 rounded flex items-center gap-1.5 transition-colors"
+                    >
+                      <History className="w-3.5 h-3.5" />
+                      履歴保存
+                      {versions.length > 0 && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">
+                          v{versions[0]?.version_number}
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             {/* Batch Settings (Only visible in edit/interact mode, but printed values persist) */}
@@ -1726,63 +1916,128 @@ Now Expanded or Scrollable */}
                           <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">
                             基本(1)
                             {isEditing && (
-                              <div className="flex justify-end mt-1 print:hidden">
-                                <InlineEdit
-                                  type="number"
-                                  value={null}
-                                  placeholder="%"
-                                  onSave={(val) => {
-                                    const percent = parseFloat(String(val));
-                                    if (val === "") return;
-                                    if (percent && percent > 0) {
-                                      const scale = percent / 100;
+                              <div className="flex justify-end items-center gap-1 mt-1 print:hidden">
+                                {currentScalePercent !== null && currentScalePercent !== 100 && (
+                                  <button
+                                    onClick={() => {
+                                      // 全グループの元データを100%に復元
                                       setItems((prev) =>
                                         prev.map((item) => {
-                                          // Only update if item belongs to this group
-                                          if (item.item_type === group.type) {
-                                            const currentUsage =
-                                              parseFloat(
-                                                String(item.usage_amount),
-                                              ) || 0;
-                                            const newUsage =
-                                              currentUsage * scale;
-
-                                            // Recalculate cost if consistent with handleItemChange logic
-                                            let updates: Partial<RecipeItem> = {
-                                              usage_amount: newUsage,
-                                            };
-                                            if (
-                                              [
-                                                "ingredient",
-                                                "intermediate",
-                                              ].includes(item.item_type)
-                                            ) {
-                                              const qty =
-                                                parseFloat(
-                                                  String(item.unit_quantity),
-                                                ) || 0;
-                                              const price =
-                                                parseFloat(
-                                                  String(item.unit_price),
-                                                ) || 0;
-                                              if (qty !== 0) {
-                                                updates.cost = Math.round(
-                                                  newUsage * (price / qty),
-                                                );
-                                              }
+                                          const origUsage = originalUsageMap[item.id];
+                                          if (origUsage !== undefined) {
+                                            const isIntermed = item.item_type === "intermediate" || item.item_type === "product";
+                                            const isMat = item.item_type === "material" || item.item_type === "expense";
+                                            const qty = parseFloat(String(item.unit_quantity)) || 1;
+                                            const price = parseFloat(String(item.unit_price)) || 0;
+                                            let cost = 0;
+                                            if (isIntermed) {
+                                              cost = Math.round(origUsage * price);
+                                            } else if (isMat) {
+                                              const rate = item.item_type === "material" && !item.tax_included ? (1 + (taxRates.material / 100)) : 1.0;
+                                              cost = Math.round(origUsage * price * rate);
+                                            } else {
+                                              const rate = item.item_type === "ingredient" && !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                              cost = Math.round(origUsage * (price / qty) * rate);
                                             }
-                                            return { ...item, ...updates };
+                                            return { ...item, usage_amount: origUsage, cost };
                                           }
                                           return item;
                                         }),
                                       );
+                                      setOriginalUsageMap({});
+                                      setCurrentScalePercent(null);
+                                      setHasChanges(true);
+                                      toast.success("使用量を100%（元の値）に戻しました");
+                                    }}
+                                    className="text-[9px] bg-orange-100 text-orange-700 hover:bg-orange-200 px-1.5 py-0.5 rounded border border-orange-300 font-bold whitespace-nowrap"
+                                    title="元の使用量に戻す"
+                                  >
+                                    ↩
+                                  </button>
+                                )}
+                                <InlineEdit
+                                  type="number"
+                                  value={currentScalePercent}
+                                  placeholder="100"
+                                  onSave={(val) => {
+                                    const percent = parseFloat(String(val));
+                                    if (val === "") return;
+                                    if (percent && percent > 0) {
+                                      if (percent === 100) {
+                                        // 100%入力 = 元に戻す
+                                        if (Object.keys(originalUsageMap).length > 0) {
+                                          setItems((prev) =>
+                                            prev.map((item) => {
+                                              const origUsage = originalUsageMap[item.id];
+                                              if (origUsage !== undefined) {
+                                                const isIntermed = item.item_type === "intermediate" || item.item_type === "product";
+                                                const isMat = item.item_type === "material" || item.item_type === "expense";
+                                                const qty = parseFloat(String(item.unit_quantity)) || 1;
+                                                const price = parseFloat(String(item.unit_price)) || 0;
+                                                let cost = 0;
+                                                if (isIntermed) {
+                                                  cost = Math.round(origUsage * price);
+                                                } else if (isMat) {
+                                                  const rate = item.item_type === "material" && !item.tax_included ? (1 + (taxRates.material / 100)) : 1.0;
+                                                  cost = Math.round(origUsage * price * rate);
+                                                } else {
+                                                  const rate = item.item_type === "ingredient" && !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                                  cost = Math.round(origUsage * (price / qty) * rate);
+                                                }
+                                                return { ...item, usage_amount: origUsage, cost };
+                                              }
+                                              return item;
+                                            }),
+                                          );
+                                          setOriginalUsageMap({});
+                                        }
+                                        setCurrentScalePercent(null);
+                                        setHasChanges(true);
+                                        toast.success("使用量を100%（元の値）に戻しました");
+                                        return;
+                                      }
+                                      const scale = percent / 100;
+                                      // 元の使用量をバックアップ（ローカル変数で先に構築）
+                                      const backupMap = { ...originalUsageMap };
+                                      items.forEach((item) => {
+                                        if (!(item.id in backupMap)) {
+                                          backupMap[item.id] = parseFloat(String(item.usage_amount)) || 0;
+                                        }
+                                      });
+                                      setOriginalUsageMap(backupMap);
+                                      setItems((prev) =>
+                                        prev.map((item) => {
+                                          // 元の使用量をベースにスケーリング
+                                          const baseUsage = backupMap[item.id] ?? (parseFloat(String(item.usage_amount)) || 0);
+                                          const newUsage = Math.round(baseUsage * scale * 10) / 10; // 小数点第2位で四捨五入
+
+                                          const isIntermed = item.item_type === "intermediate" || item.item_type === "product";
+                                          const isMat = item.item_type === "material" || item.item_type === "expense";
+                                          const qty = parseFloat(String(item.unit_quantity)) || 1;
+                                          const price = parseFloat(String(item.unit_price)) || 0;
+                                          let cost = parseFloat(String(item.cost)) || 0;
+
+                                          if (isIntermed) {
+                                            cost = Math.round(newUsage * price);
+                                          } else if (isMat) {
+                                            const rate = item.item_type === "material" && !item.tax_included ? (1 + (taxRates.material / 100)) : 1.0;
+                                            cost = Math.round(newUsage * price * rate);
+                                          } else if (item.item_type === "ingredient") {
+                                            const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                            cost = Math.round(newUsage * (price / qty) * rate);
+                                          }
+
+                                          return { ...item, usage_amount: newUsage, cost };
+                                        }),
+                                      );
+                                      setCurrentScalePercent(percent);
                                       setHasChanges(true);
                                       toast.success(
-                                        `${group.title}の使用量を${percent}%に変更しました`,
+                                        `使用量を${percent}%に変更しました`,
                                       );
                                     }
                                   }}
-                                  className="w-12 text-right bg-white border border-gray-200 rounded px-1 text-xs font-normal"
+                                  className={`w-12 text-right border rounded px-1 text-xs font-normal ${currentScalePercent !== null && currentScalePercent !== 100 ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-gray-200'}`}
                                   inputClassName="w-12 text-right text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   suffix="%"
                                 />
@@ -2165,9 +2420,6 @@ Now Expanded or Scrollable */}
                 className="w-full h-full min-h-[150px] text-sm leading-relaxed bg-transparent border-none resize-none p-0 focus:ring-0 text-gray-700 placeholder:text-gray-300"
                 value={recipe.manufacturing_notes || ""}
                 onChange={(e) =>
-                  setRecipe({ ...recipe, manufacturing_notes: e.target.value })
-                }
-                onBlur={(e) =>
                   handleRecipeChange("manufacturing_notes", e.target.value)
                 }
                 placeholder="製造プロセスや注意点を記載..."
@@ -2194,6 +2446,36 @@ Now Expanded or Scrollable */}
           </div>
         </div>
       </main>
+      {/* 下部固定 保存/キャンセルバー */}
+      {hasChanges && (
+        <div className="sticky bottom-0 z-20 bg-white/95 backdrop-blur border-t border-blue-200 px-6 py-3 print:hidden shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
+          <div className="max-w-[1400px] mx-auto flex justify-between items-center">
+            <div className="text-sm text-amber-600 font-medium flex items-center gap-2">
+              <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+              未保存の変更があります
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={cancelChanges}
+                className="gap-2 text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-4 h-4" />
+                キャンセル
+              </Button>
+              <Button
+                size="sm"
+                onClick={saveChanges}
+                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6"
+              >
+                <Save className="w-4 h-4" />
+                保存
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ====== Print-Only Layout ====== */}
       <div className="hidden print:block p-0 m-0 w-full text-black text-sm">
         {/* Print Header */}
@@ -2472,16 +2754,81 @@ Now Expanded or Scrollable */}
           </button>
         </div>
 
-        {/* サムネイル一覧 */}
+        {/* サムネイル一覧（ドラッグ&ドロップ対応） */}
         {recipeImages.length > 0 && (
           <div className="flex flex-wrap gap-3 mb-4">
-            {recipeImages.map((img) => (
-              <div key={img.id} className="relative group">
+            {recipeImages.map((img, index) => (
+              <div
+                key={img.id}
+                className={`relative group cursor-grab active:cursor-grabbing`}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', String(index));
+                  e.dataTransfer.effectAllowed = 'move';
+                  (e.currentTarget as HTMLElement).style.opacity = '0.4';
+                }}
+                onDragEnd={(e) => {
+                  (e.currentTarget as HTMLElement).style.opacity = '1';
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  (e.currentTarget as HTMLElement).classList.add('ring-2', 'ring-blue-500');
+                }}
+                onDragLeave={(e) => {
+                  (e.currentTarget as HTMLElement).classList.remove('ring-2', 'ring-blue-500');
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  (e.currentTarget as HTMLElement).classList.remove('ring-2', 'ring-blue-500');
+                  const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                  const toIndex = index;
+                  if (fromIndex === toIndex) return;
+
+                  // ローカルで並び替え
+                  const newImages = [...recipeImages];
+                  const [moved] = newImages.splice(fromIndex, 1);
+                  newImages.splice(toIndex, 0, moved);
+                  // sort_orderを振り直し
+                  const reordered = newImages.map((im, i) => ({ ...im, sort_order: i }));
+                  setRecipeImages(reordered);
+
+                  // 上部サムネイルも更新（1枚目がメインになるため）
+                  if (recipe) {
+                    setRecipe(prev => prev ? { ...prev, product_image_url: reordered[0]?.image_url || null } : prev);
+                  }
+
+                  // APIで永続化
+                  try {
+                    await fetch('/api/recipe/upload-image', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        recipeId: recipe.id,
+                        imageOrder: reordered.map(im => ({ id: im.id, sort_order: im.sort_order })),
+                      }),
+                    });
+                    toast.success('画像の順番を更新しました');
+                  } catch { toast.error('並び替えに失敗しました'); }
+                }}
+              >
+                {/* メインラベル */}
+                {index === 0 && (
+                  <div className="absolute top-1 left-1 z-10 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                    メイン
+                  </div>
+                )}
                 <img
                   src={img.image_url}
                   alt=""
-                  className="w-32 h-32 object-cover rounded-lg border-2 border-gray-200 group-hover:border-blue-400 transition-colors"
+                  className={`w-32 h-32 object-cover rounded-lg border-2 transition-colors ${
+                    index === 0 ? 'border-blue-400' : 'border-gray-200 group-hover:border-blue-400'
+                  }`}
                 />
+                {/* 順番表示 */}
+                <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                  {index + 1}
+                </div>
                 <button
                   onClick={async () => {
                     if (!confirm('この画像を削除しますか？')) return;

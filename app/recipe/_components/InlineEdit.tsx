@@ -102,7 +102,7 @@ export default function InlineEdit({
         <div
             onClick={() => setIsEditing(true)}
             className={cn(
-                "cursor-pointer hover:bg-gray-100/50 rounded px-1 py-0.5 min-h-[1.5em] transition-colors flex items-center",
+                "cursor-pointer hover:bg-gray-100/50 rounded px-1 py-0.5 min-h-[1.5em] w-full transition-colors flex items-center",
                 !value && "text-gray-400 italic",
                 className
             )}

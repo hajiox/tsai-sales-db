@@ -166,3 +166,42 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+
+// PATCH: 画像の並び替え
+export async function PATCH(request: NextRequest) {
+  try {
+    const { recipeId, imageOrder } = await request.json();
+    // imageOrder: [{ id: string, sort_order: number }]
+
+    if (!recipeId || !imageOrder || !Array.isArray(imageOrder)) {
+      return NextResponse.json({ error: 'recipeId と imageOrder が必要です' }, { status: 400 });
+    }
+
+    // 各画像のsort_orderを更新
+    for (const item of imageOrder) {
+      await supabaseAdmin
+        .from('recipe_images')
+        .update({ sort_order: item.sort_order })
+        .eq('id', item.id);
+    }
+
+    // 1枚目の画像でrecipes.product_image_urlを更新
+    const { data: firstImage } = await supabaseAdmin
+      .from('recipe_images')
+      .select('image_url')
+      .eq('recipe_id', recipeId)
+      .order('sort_order', { ascending: true })
+      .limit(1)
+      .single();
+
+    await supabaseAdmin
+      .from('recipes')
+      .update({ product_image_url: firstImage?.image_url || null })
+      .eq('id', recipeId);
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Image reorder error:', error);
+    return NextResponse.json({ error: error.message || '並び替えに失敗しました' }, { status: 500 });
+  }
+}
