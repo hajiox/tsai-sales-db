@@ -80,6 +80,7 @@ export default function WebSalesEditableTable({
 
   const getProductName = (id: string) => productMap.get(id)?.name || ""
   const getProductSeriesCode = (id: string) => productMap.get(id)?.series_code || 0
+  const getProductSeries = (id: string) => productMap.get(id)?.series || ''
   const getProductNumber = (id: string) => productMap.get(id)?.product_code || 0
   const getProductPrice = (id: string) => productMap.get(id)?.price || 0
   const getProductProfitRate = (id: string) => productMap.get(id)?.profit_rate || 0
@@ -345,6 +346,7 @@ export default function WebSalesEditableTable({
         getProductPrice={getProductPrice}
         getProductProfitRate={getProductProfitRate}
         getProductSeriesCode={getProductSeriesCode}
+        getProductSeries={getProductSeries}
         onEdit={handleEditStart}
         onSave={handleSave}
         onEditValueChange={setEditedValue}

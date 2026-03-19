@@ -1,10 +1,10 @@
-// /components/WebSalesDataTable.tsx ver.16 (単価スナップショット方式)
+// /components/WebSalesDataTable.tsx ver.17 (シリーズ別アコーディオン)
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useMemo } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, Edit, EyeOff, Link2 } from "lucide-react"
+import { Plus, Trash2, Edit, EyeOff, Link2, ChevronRight, ChevronDown, ChevronsUpDown } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import ProductEditModal from "./ProductEditModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
@@ -17,6 +17,7 @@ interface WebSalesDataTableProps {
   getProductPrice: (productId: string) => number
   getProductProfitRate?: (productId: string) => number
   getProductSeriesCode?: (productId: string) => number
+  getProductSeries?: (productId: string) => string
   onEdit: (productId: string, ecSite: string) => void
   onSave: (productId: string, ecSite: string) => void
   onEditValueChange: (value: string) => void
@@ -39,6 +40,7 @@ export default function WebSalesDataTable({
   getProductPrice,
   getProductProfitRate,
   getProductSeriesCode,
+  getProductSeries,
   onEdit,
   onSave,
   onEditValueChange,
@@ -53,6 +55,9 @@ export default function WebSalesDataTable({
   const [isEditingProduct, setIsEditingProduct] = useState(false)
   const [editingProductData, setEditingProductData] = useState<any>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // シリーズ折りたたみ状態（デフォルト: 全て折りたたみ）
+  const [expandedSeries, setExpandedSeries] = useState<Set<number>>(new Set())
 
   // 商品名トレンド表示関連のState
   const [hoveredProductId, setHoveredProductId] = useState<string | null>(null)
@@ -419,10 +424,90 @@ export default function WebSalesDataTable({
     'tiktok_count': 'TikTok',
   }
 
+  // シリーズ別にグループ化
+  const seriesGroups = useMemo(() => {
+    const groups = new Map<number, { seriesName: string; items: WebSalesData[] }>()
+
+    filteredItems.forEach(row => {
+      const code = getProductSeriesCode ? getProductSeriesCode(row.product_id) : (row.series_code || 0)
+      const name = getProductSeries ? getProductSeries(row.product_id) : (row.series || `シリーズ ${code}`)
+
+      if (!groups.has(code)) {
+        groups.set(code, { seriesName: name, items: [] })
+      }
+      groups.get(code)!.items.push(row)
+    })
+
+    // series_codeの昇順で返す
+    return Array.from(groups.entries()).sort((a, b) => a[0] - b[0])
+  }, [filteredItems, getProductSeriesCode, getProductSeries])
+
+  const toggleSeries = (seriesCode: number) => {
+    setExpandedSeries(prev => {
+      const next = new Set(prev)
+      if (next.has(seriesCode)) {
+        next.delete(seriesCode)
+      } else {
+        next.add(seriesCode)
+      }
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (expandedSeries.size === seriesGroups.length) {
+      // 全展開中 → 全折りたたみ
+      setExpandedSeries(new Set())
+    } else {
+      // 全展開
+      setExpandedSeries(new Set(seriesGroups.map(([code]) => code)))
+    }
+  }
+
+  // シリーズ別小計を計算
+  const getSeriesSubtotals = (items: WebSalesData[]) => {
+    const siteCounts: Record<string, number> = {}
+    sites.forEach(site => { siteCounts[site.key] = 0 })
+    let totalCount = 0
+    let totalAmount = 0
+    let totalAdCost = 0
+    let totalProfit = 0
+
+    items.forEach(row => {
+      const price = getProductPrice(row.product_id)
+      const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
+      let rowTotal = 0
+
+      sites.forEach(site => {
+        const count = (row as any)[site.key] || 0
+        siteCounts[site.key] += count
+        rowTotal += count
+      })
+
+      totalCount += rowTotal
+      const amount = rowTotal * price
+      totalAmount += amount
+      const profitAmount = Math.round(amount * (profitRate / 100))
+      const adCost = getAdCostForProduct(row.product_id)
+      totalAdCost += adCost
+      totalProfit += profitAmount - adCost
+    })
+
+    return { siteCounts, totalCount, totalAmount, totalAdCost, totalProfit }
+  }
+
   return (
     <div ref={containerRef} className="relative">
-      {/* 🆕 新規登録ボタンを追加 */}
-      <div className="mb-4 flex justify-end">
+      {/* ボタン群 */}
+      <div className="mb-4 flex justify-end gap-2">
+        <button
+          onClick={toggleAll}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors border border-gray-300"
+          title={expandedSeries.size === seriesGroups.length ? '全て折りたたむ' : '全て展開'}
+        >
+          <ChevronsUpDown className="h-4 w-4" />
+          {expandedSeries.size === seriesGroups.length ? '全て折りたたむ' : '全て展開'}
+        </button>
         <button
           onClick={() => setIsAddingProduct(true)}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -476,119 +561,167 @@ export default function WebSalesDataTable({
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((row) => {
-                  const price = getProductPrice(row.product_id)
-                  const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
-
-                  const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
-                  const totalAmount = totalCount * price
-                  const profitAmount = Math.round(totalAmount * (profitRate / 100))
-                  const adCost = getAdCostForProduct(row.product_id)
-                  const finalProfit = profitAmount - adCost
+                seriesGroups.map(([seriesCode, group]) => {
+                  const isExpanded = expandedSeries.has(seriesCode)
+                  const subtotals = getSeriesSubtotals(group.items)
 
                   return (
-                    <tr key={row.product_id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4 text-sm text-gray-900">
-                        <div className="flex items-center gap-1">
-                          <div
-                            className="font-medium cursor-pointer hover:text-blue-600 hover:underline flex-1"
-                            onMouseEnter={(e) => handleProductNameMouseEnter(row.product_id, e)}
-                            onMouseLeave={handleMouseLeave}
-                          >
-                            {getProductName(row.product_id)}
+                    <React.Fragment key={`series-${seriesCode}`}>
+                      {/* ===== シリーズヘッダー行 ===== */}
+                      <tr
+                        className="bg-slate-100 hover:bg-slate-200 cursor-pointer select-none border-t-2 border-slate-300"
+                        onClick={() => toggleSeries(seriesCode)}
+                      >
+                        <td className="px-4 py-3 text-sm font-bold text-slate-800" colSpan={1}>
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                            )}
+                            <span>{group.seriesName || `シリーズ ${seriesCode}`}</span>
+                            <span className="text-xs font-normal text-slate-500 ml-1">({group.items.length}商品)</span>
                           </div>
-                          {recipeLinks[row.product_id] && (
-                            <span
-                              className="flex-shrink-0 text-emerald-500 cursor-help"
-                              title={`レシピ連携済: ${recipeLinks[row.product_id]}`}
-                            >
-                              <Link2 className="h-3.5 w-3.5" />
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <span>¥{formatNumber(price)}</span>
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <span>{profitRate}%</span>
-                      </td>
-                      {sites.map(site => {
-                        const count = (row as any)[site.key] || 0
-                        const cellKey = `${row.product_id}-${site.key}`
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-slate-500">—</td>
+                        <td className="px-4 py-3 text-center text-xs text-slate-500">—</td>
+                        {sites.map(site => (
+                          <td key={site.key} className={`px-4 py-3 text-center text-sm font-semibold text-slate-700 ${site.bgColor} bg-opacity-60`}>
+                            {subtotals.siteCounts[site.key] || 0}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 text-center text-sm font-bold text-slate-800">
+                          {subtotals.totalCount}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm font-bold text-slate-800">
+                          ¥{formatNumber(subtotals.totalAmount)}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm font-semibold text-red-600">
+                          ¥{formatNumber(subtotals.totalAdCost)}
+                        </td>
+                        <td className={`px-4 py-3 text-center text-sm font-bold ${subtotals.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ¥{formatNumber(subtotals.totalProfit)}
+                        </td>
+                        <td className="px-4 py-3"></td>
+                      </tr>
+
+                      {/* ===== シリーズ内の個別商品行 ===== */}
+                      {isExpanded && group.items.map((row) => {
+                        const price = getProductPrice(row.product_id)
+                        const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
+
+                        const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
+                        const totalAmount = totalCount * price
+                        const profitAmount = Math.round(totalAmount * (profitRate / 100))
+                        const adCost = getAdCostForProduct(row.product_id)
+                        const finalProfit = profitAmount - adCost
 
                         return (
-                          <td
-                            key={site.key}
-                            className={`px-4 py-4 text-center ${site.bgColor} cursor-pointer hover:opacity-80`}
-                            onMouseEnter={(e) => handleSiteMouseEnter(row.product_id, site.key, e)}
-                            onMouseLeave={handleMouseLeave}
-                          >
-                            {editMode[cellKey] ? (
+                          <tr key={row.product_id} className="hover:bg-gray-50 bg-white">
+                            <td className="px-4 py-4 text-sm text-gray-900 pl-10">
+                              <div className="flex items-center gap-1">
+                                <div
+                                  className="font-medium cursor-pointer hover:text-blue-600 hover:underline flex-1"
+                                  onMouseEnter={(e) => handleProductNameMouseEnter(row.product_id, e)}
+                                  onMouseLeave={handleMouseLeave}
+                                >
+                                  {getProductName(row.product_id)}
+                                </div>
+                                {recipeLinks[row.product_id] && (
+                                  <span
+                                    className="flex-shrink-0 text-emerald-500 cursor-help"
+                                    title={`レシピ連携済: ${recipeLinks[row.product_id]}`}
+                                  >
+                                    <Link2 className="h-3.5 w-3.5" />
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span>¥{formatNumber(price)}</span>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span>{profitRate}%</span>
+                            </td>
+                            {sites.map(site => {
+                              const count = (row as any)[site.key] || 0
+                              const cellKey = `${row.product_id}-${site.key}`
+
+                              return (
+                                <td
+                                  key={site.key}
+                                  className={`px-4 py-4 text-center ${site.bgColor} cursor-pointer hover:opacity-80`}
+                                  onMouseEnter={(e) => handleSiteMouseEnter(row.product_id, site.key, e)}
+                                  onMouseLeave={handleMouseLeave}
+                                >
+                                  {editMode[cellKey] ? (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Input
+                                        type="number"
+                                        value={editedValue}
+                                        onChange={(e) => onEditValueChange(e.target.value)}
+                                        className="w-16 h-8 text-center"
+                                        size="sm"
+                                        autoFocus
+                                      />
+                                      <button onClick={() => onSave(row.product_id, site.key)} className="text-green-600 hover:text-green-800 text-sm">
+                                        ✓
+                                      </button>
+                                      <button onClick={onCancel} className="text-red-600 hover:text-red-800 text-sm">
+                                        ✗
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span onClick={() => onEdit(row.product_id, site.key)}>
+                                      {count}
+                                    </span>
+                                  )}
+                                </td>
+                              )
+                            })}
+                            <td className="px-4 py-4 text-center font-semibold">
+                              {totalCount}
+                            </td>
+                            <td className="px-4 py-4 text-center font-semibold">
+                              ¥{formatNumber(totalAmount)}
+                            </td>
+                            <td className="px-4 py-4 text-center text-red-600 font-semibold">
+                              ¥{formatNumber(adCost)}
+                            </td>
+                            <td className={`px-4 py-4 text-center font-semibold ${finalProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                              ¥{formatNumber(finalProfit)}
+                            </td>
+                            <td className="px-4 py-4 text-center">
                               <div className="flex items-center justify-center gap-1">
-                                <Input
-                                  type="number"
-                                  value={editedValue}
-                                  onChange={(e) => onEditValueChange(e.target.value)}
-                                  className="w-16 h-8 text-center"
-                                  size="sm"
-                                  autoFocus
-                                />
-                                <button onClick={() => onSave(row.product_id, site.key)} className="text-green-600 hover:text-green-800 text-sm">
-                                  ✓
+                                <button
+                                  onClick={() => handleEditProduct(row.product_id)}
+                                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                  title="変更"
+                                >
+                                  <Edit className="h-4 w-4" />
                                 </button>
-                                <button onClick={onCancel} className="text-red-600 hover:text-red-800 text-sm">
-                                  ✗
+                                <button
+                                  onClick={() => handleHideProduct(row.product_id)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                  title="終売（非表示）"
+                                >
+                                  <EyeOff className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteProduct(row.product_id)}
+                                  disabled={isDeleting}
+                                  className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                                  title="削除"
+                                >
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               </div>
-                            ) : (
-                              <span onClick={() => onEdit(row.product_id, site.key)}>
-                                {count}
-                              </span>
-                            )}
-                          </td>
+                            </td>
+                          </tr>
                         )
                       })}
-                      <td className="px-4 py-4 text-center font-semibold">
-                        {totalCount}
-                      </td>
-                      <td className="px-4 py-4 text-center font-semibold">
-                        ¥{formatNumber(totalAmount)}
-                      </td>
-                      <td className="px-4 py-4 text-center text-red-600 font-semibold">
-                        ¥{formatNumber(adCost)}
-                      </td>
-                      <td className={`px-4 py-4 text-center font-semibold ${finalProfit >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                        ¥{formatNumber(finalProfit)}
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleEditProduct(row.product_id)}
-                            className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
-                            title="変更"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleHideProduct(row.product_id)}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                            title="終売（非表示）"
-                          >
-                            <EyeOff className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(row.product_id)}
-                            disabled={isDeleting}
-                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                            title="削除"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    </React.Fragment>
                   )
                 })
               )}
