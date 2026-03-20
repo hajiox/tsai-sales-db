@@ -3003,9 +3003,10 @@ Now Expanded or Scrollable */}
                 setRecipe(prev => prev ? { ...prev, web_description: e.target.value } : null);
                 setHasChanges(true);
               }}
-              rows={5}
+              rows={12}
               placeholder="ECサイト等に掲載する商品説明文を入力..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none overflow-hidden"
+              style={{ fieldSizing: 'content' as any, minHeight: '180px' }}
             />
           </div>
           {/* 商品ポイント */}
@@ -3017,9 +3018,10 @@ Now Expanded or Scrollable */}
                 setRecipe(prev => prev ? { ...prev, product_points: e.target.value } : null);
                 setHasChanges(true);
               }}
-              rows={4}
+              rows={8}
               placeholder="商品の特徴やアピールポイントを入力..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none overflow-hidden"
+              style={{ fieldSizing: 'content' as any, minHeight: '120px' }}
             />
           </div>
         </div>
