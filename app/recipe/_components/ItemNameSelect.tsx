@@ -23,6 +23,7 @@ export interface ItemCandidate {
     cost?: number | string // for intermediate
     yield_rate?: number // 歩留まり率（中間加工品用）
     nutrition?: NutritionData;
+    raw_materials?: string | null; // 原材料取込済み判定用
 }
 
 interface ItemNameSelectProps {

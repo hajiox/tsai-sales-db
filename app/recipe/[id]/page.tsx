@@ -292,7 +292,7 @@ export default function RecipeDetailPage() {
     const { data: ingData } = await supabase
       .from("ingredients")
       .select(
-        "id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, tax_included",
+        "id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, tax_included, raw_materials",
       );
     if (ingData) {
       setIngredients(
@@ -302,6 +302,7 @@ export default function RecipeDetailPage() {
           unit_quantity: i.unit_quantity ?? 1,
           unit_price: i.price ?? 0,
           tax_included: i.tax_included ?? true,
+          raw_materials: i.raw_materials ?? null,
           nutrition: {
             calories: i.calories,
             protein: i.protein,
@@ -1908,6 +1909,7 @@ Now Expanded or Scrollable */}
                       <thead>
                         <tr className="border-b border-gray-200 text-gray-500">
                           <th className="text-left py-1 w-8 font-normal">#</th>
+                          <th className="py-1 w-5 font-normal"></th>
                           <th className="text-left py-1 min-w-[320px] font-normal">
                             名称
                           </th>
@@ -1915,7 +1917,7 @@ Now Expanded or Scrollable */}
                           {/* 1 Unit */}
                           <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">
                             基本(1)
-                            {isEditing && (
+                            {isEditing && group.type === 'ingredient' && (
                               <div className="flex justify-end items-center gap-1 mt-1 print:hidden">
                                 {currentScalePercent !== null && currentScalePercent !== 100 && (
                                   <button
@@ -1923,22 +1925,13 @@ Now Expanded or Scrollable */}
                                       // 全グループの元データを100%に復元
                                       setItems((prev) =>
                                         prev.map((item) => {
+                                          if (item.item_type !== 'ingredient') return item;
                                           const origUsage = originalUsageMap[item.id];
                                           if (origUsage !== undefined) {
-                                            const isIntermed = item.item_type === "intermediate" || item.item_type === "product";
-                                            const isMat = item.item_type === "material" || item.item_type === "expense";
                                             const qty = parseFloat(String(item.unit_quantity)) || 1;
                                             const price = parseFloat(String(item.unit_price)) || 0;
-                                            let cost = 0;
-                                            if (isIntermed) {
-                                              cost = Math.round(origUsage * price);
-                                            } else if (isMat) {
-                                              const rate = item.item_type === "material" && !item.tax_included ? (1 + (taxRates.material / 100)) : 1.0;
-                                              cost = Math.round(origUsage * price * rate);
-                                            } else {
-                                              const rate = item.item_type === "ingredient" && !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
-                                              cost = Math.round(origUsage * (price / qty) * rate);
-                                            }
+                                            const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                            const cost = Math.round(origUsage * (price / qty) * rate);
                                             return { ...item, usage_amount: origUsage, cost };
                                           }
                                           return item;
@@ -1968,22 +1961,13 @@ Now Expanded or Scrollable */}
                                         if (Object.keys(originalUsageMap).length > 0) {
                                           setItems((prev) =>
                                             prev.map((item) => {
+                                              if (item.item_type !== 'ingredient') return item;
                                               const origUsage = originalUsageMap[item.id];
                                               if (origUsage !== undefined) {
-                                                const isIntermed = item.item_type === "intermediate" || item.item_type === "product";
-                                                const isMat = item.item_type === "material" || item.item_type === "expense";
                                                 const qty = parseFloat(String(item.unit_quantity)) || 1;
                                                 const price = parseFloat(String(item.unit_price)) || 0;
-                                                let cost = 0;
-                                                if (isIntermed) {
-                                                  cost = Math.round(origUsage * price);
-                                                } else if (isMat) {
-                                                  const rate = item.item_type === "material" && !item.tax_included ? (1 + (taxRates.material / 100)) : 1.0;
-                                                  cost = Math.round(origUsage * price * rate);
-                                                } else {
-                                                  const rate = item.item_type === "ingredient" && !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
-                                                  cost = Math.round(origUsage * (price / qty) * rate);
-                                                }
+                                                const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                                const cost = Math.round(origUsage * (price / qty) * rate);
                                                 return { ...item, usage_amount: origUsage, cost };
                                               }
                                               return item;
@@ -1997,35 +1981,25 @@ Now Expanded or Scrollable */}
                                         return;
                                       }
                                       const scale = percent / 100;
-                                      // 元の使用量をバックアップ（ローカル変数で先に構築）
+                                      // 原材料のみバックアップ
                                       const backupMap = { ...originalUsageMap };
                                       items.forEach((item) => {
-                                        if (!(item.id in backupMap)) {
+                                        if (item.item_type === 'ingredient' && !(item.id in backupMap)) {
                                           backupMap[item.id] = parseFloat(String(item.usage_amount)) || 0;
                                         }
                                       });
                                       setOriginalUsageMap(backupMap);
                                       setItems((prev) =>
                                         prev.map((item) => {
+                                          if (item.item_type !== 'ingredient') return item;
                                           // 元の使用量をベースにスケーリング
                                           const baseUsage = backupMap[item.id] ?? (parseFloat(String(item.usage_amount)) || 0);
                                           const newUsage = Math.round(baseUsage * scale * 10) / 10; // 小数点第2位で四捨五入
 
-                                          const isIntermed = item.item_type === "intermediate" || item.item_type === "product";
-                                          const isMat = item.item_type === "material" || item.item_type === "expense";
                                           const qty = parseFloat(String(item.unit_quantity)) || 1;
                                           const price = parseFloat(String(item.unit_price)) || 0;
-                                          let cost = parseFloat(String(item.cost)) || 0;
-
-                                          if (isIntermed) {
-                                            cost = Math.round(newUsage * price);
-                                          } else if (isMat) {
-                                            const rate = item.item_type === "material" && !item.tax_included ? (1 + (taxRates.material / 100)) : 1.0;
-                                            cost = Math.round(newUsage * price * rate);
-                                          } else if (item.item_type === "ingredient") {
-                                            const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
-                                            cost = Math.round(newUsage * (price / qty) * rate);
-                                          }
+                                          const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                          const cost = Math.round(newUsage * (price / qty) * rate);
 
                                           return { ...item, usage_amount: newUsage, cost };
                                         }),
@@ -2091,6 +2065,14 @@ Now Expanded or Scrollable */}
                             >
                               <td className="py-2 text-gray-300 align-top">
                                 {idx + 1}
+                              </td>
+                              <td className="py-2 align-top text-center" title={(() => { if (item.item_type !== 'ingredient') return ''; const cand = group.candidates.find((c: any) => c.name === item.item_name); return cand?.raw_materials ? `原材料: ${cand.raw_materials}` : ''; })()}>
+                                {item.item_type === 'ingredient' && (() => {
+                                  const cand = group.candidates.find((c: any) => c.name === item.item_name);
+                                  return cand?.raw_materials ? (
+                                    <FlaskConical className="w-3.5 h-3.5 text-emerald-500 inline-block" />
+                                  ) : null;
+                                })()}
                               </td>
                               <td className="py-2 font-medium text-gray-700 align-top pr-2">
                                 {isEditing ? (
@@ -2242,7 +2224,7 @@ Now Expanded or Scrollable */}
                       <tfoot className="border-t border-gray-100">
                         <tr>
                           <td
-                            colSpan={2}
+                            colSpan={3}
                             className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider"
                           >
                             Total
