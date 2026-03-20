@@ -833,6 +833,8 @@ export default function RecipeDetailPage() {
     setHasChanges(false);
     setPreviewingVersionId(null);
     setPendingVersions([]);
+    setCurrentScalePercent(null);
+    setOriginalUsageMap({});
     fetchRecipe(recipe.id);
   };
 
@@ -2091,6 +2093,16 @@ Now Expanded or Scrollable */}
                               </div>
                             )}
                           </th>
+                          {/* 1g単価 - 原材料のみ */}
+                          {group.type === 'ingredient' && (
+                            <th className="text-right py-1 w-16 font-normal text-gray-400">
+                              1g単価
+                            </th>
+                          )}
+                          {/* Cost */}
+                          <th className="text-right py-1 w-20 font-normal text-gray-400">
+                            原価(1)
+                          </th>
                           {/* Batch 1 */}
                           <th className="text-right py-1 w-28 font-bold text-blue-700 bg-blue-50 border-l border-white">
                             {batchSize1}個分 <br />
@@ -2104,10 +2116,6 @@ Now Expanded or Scrollable */}
                             <span className="text-xs font-normal text-gray-500">
                               使用量 | 袋数
                             </span>
-                          </th>
-                          {/* Cost */}
-                          <th className="text-right py-1 w-20 font-normal text-gray-400">
-                            原価(1)
                           </th>
                           {isEditing && <th className="w-8"></th>}
                         </tr>
@@ -2217,6 +2225,31 @@ Now Expanded or Scrollable */}
                                   </>
                                 )}
                               </td>
+                              {/* 1g単価 - 原材料のみ */}
+                              {group.type === 'ingredient' && (
+                                <td className="py-2 text-right font-mono text-gray-400 align-top">
+                                  {unitUsage > 0 ? `¥${(itemCost / unitUsage).toFixed(2)}` : '-'}
+                                </td>
+                              )}
+                              {/* Cost */}
+                              <td className="py-2 text-right font-mono text-gray-400 align-top">
+                                {isMaterialGroup && isEditing ? (
+                                  <input
+                                    type="number"
+                                    className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
+                                    value={item.cost || ""}
+                                    onChange={(e) =>
+                                      handleItemChange(
+                                        item.id,
+                                        "cost",
+                                        e.target.value,
+                                      )
+                                    }
+                                  />
+                                ) : (
+                                  formatCurrency(itemCost)
+                                )}
+                              </td>
                               {/* Batch 1 */}
                               <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
                                 <>
@@ -2260,24 +2293,6 @@ Now Expanded or Scrollable */}
                                     )}
                                 </>
                               </td>
-                              <td className="py-2 text-right font-mono text-gray-400 align-top">
-                                {isMaterialGroup && isEditing ? (
-                                  <input
-                                    type="number"
-                                    className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                                    value={item.cost || ""}
-                                    onChange={(e) =>
-                                      handleItemChange(
-                                        item.id,
-                                        "cost",
-                                        e.target.value,
-                                      )
-                                    }
-                                  />
-                                ) : (
-                                  formatCurrency(itemCost)
-                                )}
-                              </td>
                               {isEditing && (
                                 <td className="py-2 text-center align-top">
                                   <button
@@ -2297,7 +2312,7 @@ Now Expanded or Scrollable */}
                       <tfoot className="border-t border-gray-100">
                         <tr>
                           <td
-                            colSpan={3}
+                            colSpan={group.type === 'ingredient' ? 4 : 3}
                             className="py-2 text-right text-[10px] text-gray-400 uppercase tracking-wider"
                           >
                             Total
@@ -2331,6 +2346,17 @@ Now Expanded or Scrollable */}
                               </>
                               : "-"}
                           </td>
+                          {/* 原価合計 */}
+                          <td className="py-2 text-right font-mono font-bold text-gray-900">
+                            {formatCurrency(
+                              group.items.reduce(
+                                (sum, i) =>
+                                  sum + (parseFloat(String(i.cost)) || 0),
+                                0,
+                              ),
+                            )}
+                          </td>
+                          {/* バッチ1合計 */}
                           <td className="py-2 text-right font-mono font-bold text-blue-700 bg-blue-50/30 border-l border-gray-50">
                             {group.type === "ingredient" ||
                               group.type === "intermediate" ||
@@ -2348,6 +2374,7 @@ Now Expanded or Scrollable */}
                               ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
                               : "-"}
                           </td>
+                          {/* バッチ2合計 */}
                           <td className="py-2 text-right font-mono font-bold text-purple-700 bg-purple-50/30 border-l border-gray-50">
                             {group.type === "ingredient" ||
                               group.type === "intermediate" ||
@@ -2364,15 +2391,6 @@ Now Expanded or Scrollable */}
                                 2,
                               ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
                               : "-"}
-                          </td>
-                          <td className="py-2 text-right font-mono font-bold text-gray-900">
-                            {formatCurrency(
-                              group.items.reduce(
-                                (sum, i) =>
-                                  sum + (parseFloat(String(i.cost)) || 0),
-                                0,
-                              ),
-                            )}
                           </td>
                           {isEditing && <td></td>}
                         </tr>
