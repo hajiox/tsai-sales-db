@@ -1020,17 +1020,6 @@ export default function RecipeDetailPage() {
               </Button>
             </>
           )}
-          <div className="border-l pl-3 ml-1 flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push('/recipe')}
-              className="text-xs text-gray-400 hover:text-gray-600"
-            >
-              <Printer className="w-3 h-3 mr-1" />
-              印刷
-            </Button>
-          </div>
         </div>
       </header>
       {/* Main Content - Screen Only */}
