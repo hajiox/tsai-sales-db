@@ -865,7 +865,30 @@ export default function RecipeDetailPage() {
     };
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (!recipe) return;
+    // DocScannerにレシピ印刷データを送信
+    try {
+      const previewVer = previewingVersionId ? versions.find(v => v.id === previewingVersionId) : null;
+      const printData = {
+        recipe_name: recipe.name,
+        recipe_id: recipe.id,
+        category: recipe.category,
+        version: previewVer ? { number: previewVer.version_number, note: previewVer.version_note } : null,
+        items: items.map(i => ({ item_name: i.item_name, item_type: i.item_type, usage_amount: i.usage_amount, cost: i.cost })),
+        total_cost: items.reduce((s, i) => s + (parseFloat(String(i.cost)) || 0), 0),
+        selling_price: recipe.selling_price,
+        printed_at: new Date().toISOString(),
+      };
+      await fetch('http://localhost:3004/api/recipe-print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(printData),
+      });
+    } catch (e) {
+      // DocScannerが起動していなくても印刷は続行
+      console.warn('DocScanner送信スキップ:', e);
+    }
     window.print();
   };
 
@@ -2507,6 +2530,17 @@ Now Expanded or Scrollable */}
             <span>カテゴリ: {recipe.category}</span>
             <span>開発日: {recipe.development_date || "-"}</span>
             <span>ID: {recipe.id.split("-")[0]}</span>
+            {previewingVersionId && (() => {
+              const pv = versions.find(v => v.id === previewingVersionId);
+              return pv ? (
+                <span className="font-bold text-amber-700">
+                  Ver.{pv.version_number}{pv.version_note ? ` (${pv.version_note})` : ''}
+                </span>
+              ) : null;
+            })()}
+            {!previewingVersionId && versions.length > 0 && (
+              <span>最新: v{versions[0]?.version_number}</span>
+            )}
           </div>
         </div>
         {/* Print Specs Row */}
