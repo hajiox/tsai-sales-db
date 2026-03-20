@@ -184,6 +184,7 @@ export default function RecipeDetailPage() {
   const [versionSaving, setVersionSaving] = useState(false);
   const [versionNoteInput, setVersionNoteInput] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
+  const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
 
   const fetchVersions = useCallback(async (recipeId: string) => {
     try {
@@ -264,11 +265,54 @@ export default function RecipeDetailPage() {
         }),
       });
       if (!res.ok) throw new Error('復元に失敗しました');
-      toast.success(`Ver.${version.version_number} に復元しました`);
+      toast.success(`Ver.${version.version_number} を採用しました`);
+      setPreviewingVersionId(null);
+      setHasChanges(false);
       fetchRecipe(recipe.id);
     } catch (error: any) {
       toast.error(error.message || '復元に失敗しました');
     }
+  };
+
+  const deleteVersion = async (version: RecipeVersion) => {
+    if (!recipe) return;
+    if (!confirm(`Ver.${version.version_number}${version.version_note ? ` (${version.version_note})` : ''} を削除しますか？`)) return;
+    try {
+      const res = await fetch(`/api/recipe/versions?id=${version.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('削除に失敗しました');
+      toast.success(`Ver.${version.version_number} を削除しました`);
+      if (previewingVersionId === version.id) {
+        setPreviewingVersionId(null);
+        fetchRecipe(recipe.id);
+      }
+      fetchVersions(recipe.id);
+    } catch (error: any) {
+      toast.error(error.message || '削除に失敗しました');
+    }
+  };
+
+  const previewVersion = (version: RecipeVersion) => {
+    if (!recipe) return;
+    // 既に同じバージョンをプレビュー中ならプレビュー解除（元に戻す）
+    if (previewingVersionId === version.id) {
+      setPreviewingVersionId(null);
+      setHasChanges(false);
+      fetchRecipe(recipe.id);
+      return;
+    }
+    // スナップショットデータをローカルstateに読み込み
+    const snap = version.snapshot_recipe;
+    setRecipe(prev => prev ? {
+      ...prev,
+      ...snap,
+      id: prev.id, // IDは元のまま
+    } : prev);
+    setItems(version.snapshot_items.map((si: any) => ({
+      ...si,
+      id: si.id || `preview-${Math.random().toString(36).slice(2)}`,
+    })));
+    setPreviewingVersionId(version.id);
+    setHasChanges(true);
   };
 
   useEffect(() => {
@@ -778,9 +822,10 @@ export default function RecipeDetailPage() {
 
   const cancelChanges = () => {
     if (!recipe) return;
-    if (hasChanges && !confirm('変更を破棄しますか？')) return;
+    if (hasChanges && !previewingVersionId && !confirm('変更を破棄しますか？')) return;
     setDeletedItemIds(new Set());
     setHasChanges(false);
+    setPreviewingVersionId(null);
     fetchRecipe(recipe.id);
   };
 
@@ -948,60 +993,18 @@ export default function RecipeDetailPage() {
             </>
           )}
           <div className="border-l pl-3 ml-1 flex items-center gap-2">
-            {versions.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setVersionPanelOpen(!versionPanelOpen)}
-                className="text-xs text-gray-500 hover:text-gray-700 gap-1"
-              >
-                <History className="w-3 h-3" />
-                <ChevronDown className={`w-3 h-3 transition-transform ${versionPanelOpen ? 'rotate-180' : ''}`} />
-                履歴 (v{versions[0]?.version_number})
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/recipe')}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              <Printer className="w-3 h-3 mr-1" />
+              印刷
+            </Button>
           </div>
         </div>
       </header>
-      {/* バージョン履歴パネル */}
-      {versionPanelOpen && versions.length > 0 && (
-        <div className="bg-amber-50/80 border-b border-amber-200 px-6 py-3 print:hidden">
-          <div className="max-w-[1400px] mx-auto">
-            <div className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2">
-              <History className="w-3 h-3" />
-              変更履歴（{versions.length}件）
-            </div>
-            <div className="space-y-1 max-h-[200px] overflow-y-auto">
-              {versions.map((v) => (
-                <div key={v.id} className="flex items-center justify-between bg-white/80 rounded px-3 py-1.5 border border-amber-200/60 hover:border-amber-400 transition-colors group">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
-                      v{v.version_number}
-                    </span>
-                    <span className="text-xs text-gray-500 font-mono">
-                      {new Date(v.created_at).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    {v.version_note && (
-                      <span className="text-xs text-gray-700">{v.version_note}</span>
-                    )}
-                    <span className="text-[10px] text-gray-400">
-                      材料{v.snapshot_items?.length || 0}件
-                      {v.snapshot_recipe?.total_cost != null && ` / 原価¥${Math.round(v.snapshot_recipe.total_cost).toLocaleString()}`}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => restoreVersion(v)}
-                    className="text-[10px] text-amber-700 hover:text-amber-900 font-bold px-2 py-1 rounded hover:bg-amber-100 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    復元
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
       {/* Main Content - Screen Only */}
       <main className="max-w-[1400px] mx-auto p-8 print:hidden">
         {/* Header Section */}
@@ -1811,8 +1814,37 @@ Now Expanded or Scrollable */}
                 <span className="font-mono text-gray-400">
                   {items.length} FILES
                 </span>
-                {/* 履歴保存ボタン */}
-                <div className="flex items-center gap-2 print:hidden">
+                {/* 履歴バッジ・履歴保存ボタン */}
+                <div className="flex items-center gap-2 print:hidden flex-wrap">
+                  {/* 保存済み履歴バッジ */}
+                  {versions.map((v) => (
+                    <div
+                      key={v.id}
+                      className="relative group"
+                    >
+                      <button
+                        onClick={() => previewVersion(v)}
+                        className={`h-8 px-3 text-xs font-bold rounded border transition-colors flex items-center gap-1.5 pr-5 group-hover:pr-6 ${
+                          previewingVersionId === v.id
+                            ? 'border-blue-500 bg-blue-100 text-blue-800 ring-2 ring-blue-300'
+                            : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400'
+                        }`}
+                        title={`v${v.version_number}${v.version_note ? ` - ${v.version_note}` : ''} | ${new Date(v.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} | クリックでプレビュー`}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        v{v.version_number}
+                        {v.version_note && <span className="font-normal max-w-[80px] truncate">{v.version_note}</span>}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteVersion(v); }}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        title="この履歴を削除"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {/* 履歴保存ボタン */}
                   {showNoteInput ? (
                     <div className="flex items-center gap-1">
                       <input
@@ -1821,36 +1853,31 @@ Now Expanded or Scrollable */}
                         onChange={(e) => setVersionNoteInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') saveVersion(versionNoteInput); if (e.key === 'Escape') { setShowNoteInput(false); setVersionNoteInput(''); } }}
                         placeholder="変更内容メモ（任意）"
-                        className="h-7 w-44 px-2 text-xs border border-gray-300 rounded focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                        className="h-8 w-48 px-2 text-xs border border-gray-300 rounded focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
                         autoFocus
                       />
                       <button
                         onClick={() => saveVersion(versionNoteInput)}
                         disabled={versionSaving}
-                        className="h-7 px-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded flex items-center gap-1 disabled:opacity-50"
+                        className="h-8 px-3 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded flex items-center gap-1 disabled:opacity-50"
                       >
-                        {versionSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        {versionSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                         確定
                       </button>
                       <button
                         onClick={() => { setShowNoteInput(false); setVersionNoteInput(''); }}
-                        className="h-7 px-1 text-gray-400 hover:text-gray-600"
+                        className="h-8 px-1 text-gray-400 hover:text-gray-600"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ) : (
                     <button
                       onClick={() => setShowNoteInput(true)}
-                      className="h-7 px-3 text-xs font-bold border border-amber-500 text-amber-700 hover:bg-amber-50 rounded flex items-center gap-1.5 transition-colors"
+                      className="h-8 px-3 text-xs font-bold border border-dashed border-amber-400 text-amber-600 hover:bg-amber-50 rounded flex items-center gap-1.5 transition-colors"
                     >
-                      <History className="w-3.5 h-3.5" />
-                      履歴保存
-                      {versions.length > 0 && (
-                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">
-                          v{versions[0]?.version_number}
-                        </span>
-                      )}
+                      <History className="w-4 h-4" />
+                      + 保存
                     </button>
                   )}
                 </div>
@@ -2430,11 +2457,14 @@ Now Expanded or Scrollable */}
       </main>
       {/* 下部固定 保存/キャンセルバー */}
       {hasChanges && (
-        <div className="sticky bottom-0 z-20 bg-white/95 backdrop-blur border-t border-blue-200 px-6 py-3 print:hidden shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
+        <div className={`sticky bottom-0 z-20 backdrop-blur border-t px-6 py-3 print:hidden shadow-[0_-2px_10px_rgba(0,0,0,0.08)] ${previewingVersionId ? 'bg-blue-50/95 border-blue-300' : 'bg-white/95 border-blue-200'}`}>
           <div className="max-w-[1400px] mx-auto flex justify-between items-center">
-            <div className="text-sm text-amber-600 font-medium flex items-center gap-2">
-              <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-              未保存の変更があります
+            <div className={`text-sm font-medium flex items-center gap-2 ${previewingVersionId ? 'text-blue-700' : 'text-amber-600'}`}>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${previewingVersionId ? 'bg-blue-500' : 'bg-amber-500'}`} />
+              {previewingVersionId
+                ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} をプレビュー中`
+                : '未保存の変更があります'
+              }
             </div>
             <div className="flex items-center gap-3">
               <Button
@@ -2444,15 +2474,25 @@ Now Expanded or Scrollable */}
                 className="gap-2 text-gray-500 hover:text-gray-700"
               >
                 <X className="w-4 h-4" />
-                キャンセル
+                {previewingVersionId ? '戻る' : 'キャンセル'}
               </Button>
               <Button
                 size="sm"
-                onClick={saveChanges}
-                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6"
+                onClick={() => {
+                  if (previewingVersionId) {
+                    const ver = versions.find(v => v.id === previewingVersionId);
+                    restoreVersion(ver!);
+                  } else {
+                    saveChanges();
+                  }
+                }}
+                className={`gap-2 text-white px-6 ${previewingVersionId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
                 <Save className="w-4 h-4" />
-                保存
+                {previewingVersionId
+                  ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} を採用して保存`
+                  : '保存'
+                }
               </Button>
             </div>
           </div>

@@ -137,3 +137,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// DELETE: バージョンを削除
+export async function DELETE(request: Request) {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const { searchParams } = new URL(request.url);
+  const versionId = searchParams.get("id");
+
+  if (!versionId) {
+    return NextResponse.json(
+      { error: "idが必要です" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const { error } = await supabase
+      .from("recipe_versions")
+      .delete()
+      .eq("id", versionId);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
