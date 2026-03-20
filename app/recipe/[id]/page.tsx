@@ -867,27 +867,23 @@ export default function RecipeDetailPage() {
 
   const handlePrint = async () => {
     if (!recipe) return;
-    // DocScannerにレシピ印刷データを送信
+    // Supabase に印刷ログを書き込み（DocScannerがポーリングで取得）
     try {
       const previewVer = previewingVersionId ? versions.find(v => v.id === previewingVersionId) : null;
-      const printData = {
-        recipe_name: recipe.name,
+      await supabase.from('recipe_print_logs').insert({
         recipe_id: recipe.id,
+        recipe_name: recipe.name,
         category: recipe.category,
-        version: previewVer ? { number: previewVer.version_number, note: previewVer.version_note } : null,
+        version_number: previewVer?.version_number ?? null,
+        version_note: previewVer?.version_note ?? null,
         items: items.map(i => ({ item_name: i.item_name, item_type: i.item_type, usage_amount: i.usage_amount, cost: i.cost })),
         total_cost: items.reduce((s, i) => s + (parseFloat(String(i.cost)) || 0), 0),
         selling_price: recipe.selling_price,
         printed_at: new Date().toISOString(),
-      };
-      await fetch('http://localhost:3004/api/recipe-print', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(printData),
+        processed: false,
       });
     } catch (e) {
-      // DocScannerが起動していなくても印刷は続行
-      console.warn('DocScanner送信スキップ:', e);
+      console.warn('印刷ログ書き込みスキップ:', e);
     }
     window.print();
   };
