@@ -1863,7 +1863,7 @@ Now Expanded or Scrollable */}
                       </button>
                     </div>
                   ))}
-                  {/* 履歴保存ボタン */}
+                  {/* 履歴作成ボタン */}
                   {showNoteInput ? (
                     <div className="flex items-center gap-1">
                       <input
@@ -1881,7 +1881,7 @@ Now Expanded or Scrollable */}
                         className="h-8 px-3 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded flex items-center gap-1 disabled:opacity-50"
                       >
                         {versionSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                        確定
+                        作成
                       </button>
                       <button
                         onClick={() => { setShowNoteInput(false); setVersionNoteInput(''); }}
@@ -1896,7 +1896,7 @@ Now Expanded or Scrollable */}
                       className="h-8 px-3 text-xs font-bold border border-dashed border-amber-400 text-amber-600 hover:bg-amber-50 rounded flex items-center gap-1.5 transition-colors"
                     >
                       <History className="w-4 h-4" />
-                      + 保存
+                      + 履歴作成
                     </button>
                   )}
                 </div>
