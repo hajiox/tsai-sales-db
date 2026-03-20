@@ -185,6 +185,7 @@ export default function RecipeDetailPage() {
   const [versionNoteInput, setVersionNoteInput] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
+  const [pendingVersions, setPendingVersions] = useState<{ note: string | null; snapshot_recipe: any; snapshot_items: any[] }[]>([]);
 
   const fetchVersions = useCallback(async (recipeId: string) => {
     try {
@@ -200,30 +201,16 @@ export default function RecipeDetailPage() {
     if (recipe?.id) fetchVersions(recipe.id);
   }, [recipe?.id, fetchVersions]);
 
-  const saveVersion = async (note?: string) => {
+  const saveVersion = (note?: string) => {
     if (!recipe) return;
-    setVersionSaving(true);
-    try {
-      // まず未保存の変更があれば先に保存
-      if (hasChanges) {
-        await saveChanges();
-      }
-      const res = await fetch('/api/recipe/versions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipeId: recipe.id, note: note || null }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      toast.success(`Ver.${data.version.version_number} を保存しました`);
-      setShowNoteInput(false);
-      setVersionNoteInput("");
-      fetchVersions(recipe.id);
-    } catch (error: any) {
-      toast.error(error.message || '履歴保存に失敗しました');
-    } finally {
-      setVersionSaving(false);
-    }
+    // ローカルstateに一時保存（DBには保存しない。最終保存ボタンでDBに保存）
+    const snapshot_recipe = { ...recipe };
+    const snapshot_items = items.map(i => ({ ...i }));
+    setPendingVersions(prev => [...prev, { note: note || null, snapshot_recipe, snapshot_items }]);
+    setShowNoteInput(false);
+    setVersionNoteInput("");
+    setHasChanges(true);
+    toast.success(`履歴を作成しました（保存ボタンで確定）`);
   };
 
   const restoreVersion = async (version: RecipeVersion) => {
@@ -813,7 +800,26 @@ export default function RecipeDetailPage() {
       setDeletedItemIds(new Set());
       setHasChanges(false);
       toast.success("保存しました");
+
+      // ペンディング履歴があればDBに保存
+      if (pendingVersions.length > 0) {
+        for (const pv of pendingVersions) {
+          try {
+            await fetch('/api/recipe/versions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipeId: recipe.id, note: pv.note }),
+            });
+          } catch (e) {
+            console.error('履歴保存エラー:', e);
+          }
+        }
+        setPendingVersions([]);
+        toast.success(`${pendingVersions.length}件の履歴も保存しました`);
+      }
+
       fetchRecipe(recipe.id);
+      fetchVersions(recipe.id);
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "保存に失敗しました");
@@ -826,6 +832,7 @@ export default function RecipeDetailPage() {
     setDeletedItemIds(new Set());
     setHasChanges(false);
     setPreviewingVersionId(null);
+    setPendingVersions([]);
     fetchRecipe(recipe.id);
   };
 
@@ -1863,6 +1870,26 @@ Now Expanded or Scrollable */}
                       </button>
                     </div>
                   ))}
+                  {/* 未確定（ペンディング）履歴バッジ */}
+                  {pendingVersions.map((pv, idx) => (
+                    <div key={`pending-${idx}`} className="relative group">
+                      <span
+                        className="h-8 px-3 text-xs font-bold rounded border-2 border-dashed border-green-400 bg-green-50 text-green-700 flex items-center gap-1.5 pr-5"
+                        title={`未確定: ${pv.note || 'メモなし'}（保存ボタンで確定）`}
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        新{idx + 1}
+                        {pv.note && <span className="font-normal max-w-[80px] truncate">{pv.note}</span>}
+                      </span>
+                      <button
+                        onClick={() => setPendingVersions(prev => prev.filter((_, i) => i !== idx))}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        title="この未確定履歴を削除"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
                   {/* 履歴作成ボタン */}
                   {showNoteInput ? (
                     <div className="flex items-center gap-1">
@@ -2287,7 +2314,7 @@ Now Expanded or Scrollable */}
                                       (parseFloat(String(i.usage_amount)) || 0),
                                     0,
                                   ),
-                                  0,
+                                  2,
                                 )}{(group.type === "product" || group.type === "intermediate") ? "個" : "g"}
                                 {(group.type === "intermediate" || group.type === "product") && (
                                   <div className="text-[9px] text-purple-500 font-normal mt-0.5">
@@ -2317,7 +2344,7 @@ Now Expanded or Scrollable */}
                                     batchSize1,
                                   0,
                                 ),
-                                0,
+                                2,
                               ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
                               : "-"}
                           </td>
@@ -2334,7 +2361,7 @@ Now Expanded or Scrollable */}
                                     batchSize2,
                                   0,
                                 ),
-                                0,
+                                2,
                               ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
                               : "-"}
                           </td>
