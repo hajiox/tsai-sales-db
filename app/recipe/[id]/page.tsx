@@ -829,14 +829,14 @@ export default function RecipeDetailPage() {
     fetchRecipe(recipe.id);
   };
 
-  const formatNumber = (value?: number | null, decimals = 1, suffix = "") => {
+  const formatNumber = (value?: number | null, decimals = 2, suffix = "") => {
     if (value === undefined || value === null) return "-";
-    return `${value.toLocaleString(undefined, { maximumFractionDigits: decimals })}${suffix}`;
+    return `${value.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix}`;
   };
 
   const formatCurrency = (value?: number | null) => {
     if (value === undefined || value === null) return "-";
-    return `¥${Math.round(value).toLocaleString()}`;
+    return `¥${(Math.round(value * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   // Amazon手数料の計算（販売価格 × 手数料率%）
@@ -2159,7 +2159,7 @@ Now Expanded or Scrollable */}
                                     <input
                                       type="number"
                                       className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                                      value={item.usage_amount || ""}
+                                      value={item.usage_amount ? Math.round(parseFloat(String(item.usage_amount)) * 100) / 100 : ""}
                                       onChange={(e) =>
                                         handleItemChange(
                                           item.id,
@@ -2177,7 +2177,7 @@ Now Expanded or Scrollable */}
                                 ) : (
                                   <>
                                     <span className="font-bold">
-                                      {formatNumber(unitUsage, 1)}
+                                      {formatNumber(unitUsage, 2)}
                                     </span>
                                     <span className="text-[10px] text-gray-400 block">
                                       {group.type === "product" || group.type === "intermediate" ? "個" : isMaterialGroup ? "個" : "g"}
