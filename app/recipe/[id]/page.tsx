@@ -88,6 +88,8 @@ interface Recipe {
   case_quantity?: number | null;
   case_size?: string | null;
   shelf_life?: string | null;
+  web_description?: string | null;
+  product_points?: string | null;
 }
 
 interface RecipeItem {
@@ -788,6 +790,8 @@ export default function RecipeDetailPage() {
             series_code: recipe.series_code,
             series: recipe.series,
             product_code: recipe.product_code,
+            web_description: recipe.web_description,
+            product_points: recipe.product_points,
           },
         }),
       });
@@ -2981,6 +2985,43 @@ Now Expanded or Scrollable */}
               <p className="text-xs text-gray-400">複数ファイル対応・自動で200-300KBに圧縮</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── Web商品説明 & 商品ポイント セクション (PC用・印刷非表示) ── */}
+      <div className="print:hidden mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <h3 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-4">
+          📝 Web商品説明 & 商品ポイント
+        </h3>
+        <div className="space-y-4">
+          {/* Web商品説明 */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Web商品説明</label>
+            <textarea
+              value={recipe.web_description || ''}
+              onChange={(e) => {
+                setRecipe(prev => prev ? { ...prev, web_description: e.target.value } : null);
+                setHasChanges(true);
+              }}
+              rows={5}
+              placeholder="ECサイト等に掲載する商品説明文を入力..."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+            />
+          </div>
+          {/* 商品ポイント */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">商品ポイント</label>
+            <textarea
+              value={recipe.product_points || ''}
+              onChange={(e) => {
+                setRecipe(prev => prev ? { ...prev, product_points: e.target.value } : null);
+                setHasChanges(true);
+              }}
+              rows={4}
+              placeholder="商品の特徴やアピールポイントを入力..."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+            />
+          </div>
         </div>
       </div>
       <style jsx global>
