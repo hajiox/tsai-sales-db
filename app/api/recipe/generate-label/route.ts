@@ -536,7 +536,7 @@ JSON出力のみ:
 
         // ---- DB保存 & レスポンス ----
 
-        await supabase.from("recipes").update({ ingredient_label: label }).eq("id", recipeId);
+        await supabase.from("recipes").update({ ai_ingredient_label: label }).eq("id", recipeId);
 
         return NextResponse.json({
             label,
