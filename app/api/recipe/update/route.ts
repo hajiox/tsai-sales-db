@@ -20,7 +20,7 @@ export async function PATCH(request: Request) {
         const allowedFields = [
             "name", "category", "is_intermediate", "development_date",
             "selling_price", "series", "series_code", "product_code",
-            "linked_product_id", "ingredient_label",
+            "linked_product_id", "ingredient_label", "ai_ingredient_label",
             "manufacturing_notes", "filling_quantity",
             "storage_method", "label_quantity",
             "sterilization_method", "sterilization_temperature", "sterilization_time",
