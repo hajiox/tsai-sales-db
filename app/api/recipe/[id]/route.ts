@@ -20,7 +20,6 @@ export async function GET(
             .from("recipes")
             .select(`
         *,
-        category:recipe_categories(*),
         ingredients:recipe_ingredients(
           *,
           ingredient:ingredients(*)

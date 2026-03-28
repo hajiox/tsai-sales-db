@@ -117,40 +117,18 @@ export default function DatabasePage() {
     const fetchData = async () => {
         setLoading(true);
 
-        // 食材
-        const { data: ingData } = await supabase
-            .from("ingredients")
-            .select("*")
-            .order("name");
-        if (ingData) {
-            setIngredients(ingData.map(i => ({ ...i, tax_included: i.tax_included ?? true })));
-        }
+        // 4テーブルを並列取得（直列比 約4倍高速化）
+        const [ingRes, matRes, intRes, expRes] = await Promise.all([
+            supabase.from("ingredients").select("*").order("name"),
+            supabase.from("materials").select("*").order("name"),
+            supabase.from("recipes").select("id, name, category, selling_price, source_file").eq("is_intermediate", true).order("name"),
+            supabase.from("expenses").select("*").order("name"),
+        ]);
 
-        // 資材
-        const { data: matData } = await supabase
-            .from("materials")
-            .select("*")
-            .order("name");
-        if (matData) {
-            setMaterials(matData.map(m => ({ ...m, tax_included: m.tax_included ?? true })));
-        }
-
-        // 中間部品
-        const { data: intData } = await supabase
-            .from("recipes")
-            .select("id, name, category, selling_price, source_file")
-            .eq("is_intermediate", true)
-            .order("name");
-        if (intData) setIntermediates(intData);
-
-        // 諸経費
-        const { data: expData } = await supabase
-            .from("expenses")
-            .select("*")
-            .order("name");
-        if (expData) {
-            setExpenses(expData.map(e => ({ ...e, tax_included: e.tax_included ?? false })));
-        }
+        if (ingRes.data) setIngredients(ingRes.data.map((i: any) => ({ ...i, tax_included: i.tax_included ?? true })));
+        if (matRes.data) setMaterials(matRes.data.map((m: any) => ({ ...m, tax_included: m.tax_included ?? true })));
+        if (intRes.data) setIntermediates(intRes.data);
+        if (expRes.data) setExpenses(expRes.data.map((e: any) => ({ ...e, tax_included: e.tax_included ?? false })));
 
         setLoading(false);
     };
@@ -204,38 +182,53 @@ export default function DatabasePage() {
             }
         }
 
+        // price フィールド: ユーザー入力は税別 → DB保存値は tax_included=true なら × 税率
+        let dbValue = parsedValue;
+        if (field === 'price' && parsedValue != null) {
+            const currentList = type === "ingredient" ? ingredients : type === "material" ? materials : expenses;
+            const currentItem = currentList.find(i => i.id === id);
+            if (currentItem && (currentItem as any).tax_included !== false) {
+                const rate = type === 'ingredient' ? (1 + taxRates.ingredient / 100) : (1 + taxRates.material / 100);
+                dbValue = Math.round(parsedValue * rate * 100) / 100;
+            }
+        }
+
         // 現在の値と比較して変更がなければスキップ
         const currentList = type === "ingredient" ? ingredients : type === "material" ? materials : expenses;
         const currentItem = currentList.find(i => i.id === id);
-        if (currentItem && (currentItem as any)[field] === parsedValue) {
-            return;
+        if (field === 'price') {
+            if (currentItem && (currentItem as any).price === dbValue) return;
+        } else {
+            if (currentItem && (currentItem as any)[field] === parsedValue) return;
         }
 
-        // 1. UI更新 (Optimistic)
+        // 1. UI更新 (Optimistic) — priceはDB値(税込)で更新
+        const uiValue = field === 'price' ? dbValue : parsedValue;
         if (type === "ingredient") {
             setIngredients(prev => prev.map(item =>
-                item.id === id ? { ...item, [field]: parsedValue } : item
+                item.id === id ? { ...item, [field]: uiValue } : item
             ));
         } else if (type === "material") {
             setMaterials(prev => prev.map(item =>
-                item.id === id ? { ...item, [field]: parsedValue } : item
+                item.id === id ? { ...item, [field]: uiValue } : item
             ));
         } else {
             setExpenses(prev => prev.map(item =>
-                item.id === id ? { ...item, [field]: parsedValue } : item
+                item.id === id ? { ...item, [field]: uiValue } : item
             ));
         }
 
-        // 2. DB更新
+        // 2. DB更新 — priceはDB値(税込可能性あり)で保存
         let table = "";
         if (type === "ingredient") table = "ingredients";
         else if (type === "material") table = "materials";
         else table = "expenses";
+        const saveValue = field === 'price' ? dbValue : parsedValue;
         try {
             const res = await fetch('/api/recipe/db-write', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ operation: 'update', table, id, data: { [field]: parsedValue } }),
+                body: JSON.stringify({ operation: 'update', table, id, data: { [field]: saveValue } }),
             });
             if (!res.ok) {
                 const data = await res.json();
@@ -406,7 +399,13 @@ export default function DatabasePage() {
     // 食材編集モーダルを開く
     const openEditModal = (ing: Ingredient) => {
         setEditModal(ing);
+        // 税別価格に変換して表示
+        const taxExPrice = ing.price != null
+            ? (ing.tax_included !== false ? Math.round(ing.price / (1 + taxRates.ingredient / 100)) : ing.price)
+            : null;
         setEditForm({
+            price: taxExPrice != null ? String(taxExPrice) : '',
+            unit_quantity: ing.unit_quantity != null ? String(ing.unit_quantity) : '',
             raw_materials: ing.raw_materials || '',
             allergens: ing.allergens || '',
             origin: ing.origin || '',
@@ -419,9 +418,21 @@ export default function DatabasePage() {
     // 食材編集保存
     const saveEditModal = async () => {
         if (!editModal) return;
-        const updates: Record<string, string | null> = {};
+        const updates: Record<string, any> = {};
         for (const [key, val] of Object.entries(editForm)) {
-            updates[key] = val.trim() || null;
+            if (key === 'price') {
+                // 入力は税別 → DB保存は tax_included=true なら × 税率
+                const numVal = val ? parseFloat(val) : null;
+                if (numVal != null && editModal.tax_included !== false) {
+                    updates[key] = Math.round(numVal * (1 + taxRates.ingredient / 100) * 100) / 100;
+                } else {
+                    updates[key] = numVal;
+                }
+            } else if (key === 'unit_quantity') {
+                updates[key] = val ? parseFloat(val) : null;
+            } else {
+                updates[key] = val.trim() || null;
+            }
         }
         try {
             const res = await fetch('/api/recipe/db-write', {
@@ -728,21 +739,13 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'unit_quantity', formatNumber(ing.unit_quantity, 0), 'ingredient')}</td>
-                                        {/* 税別単価 = 税込価格 ÷ 1.08（食材の元の軽減税率）→ 固定 */}
-                                        <td className="px-2 py-1 text-right">
-                                            {ing.tax_included !== false
-                                                ? <span className="text-xs">{ing.price != null ? `¥${Math.round(ing.price / 1.08).toLocaleString()}` : '-'}</span>
-                                                : renderEditableCell(ing, 'price', formatNumber(ing.price, 0), 'ingredient')
-                                            }
+                                        {/* 税別単価 = 編集可能（ユーザーはここに入力） */}
+                                        <td className="px-0 py-1 text-right">
+                                            {renderEditableCell(ing, 'price', ing.price != null ? `¥${Math.round(ing.tax_included !== false ? ing.price / (1 + taxRates.ingredient / 100) : ing.price).toLocaleString()}` : '-', 'ingredient')}
                                         </td>
-                                        {/* 税込単価 = 税別 × (1 + 現在の設定税率) → 税率変更で即座に変わる */}
+                                        {/* 税込単価 = 自動計算表示 */}
                                         <td className="px-2 py-1 text-right">
-                                            {ing.price != null
-                                                ? <span className="text-blue-600 font-medium text-xs">
-                                                    ¥{Math.round((ing.tax_included !== false ? ing.price / 1.08 : ing.price) * (1 + taxRates.ingredient / 100)).toLocaleString()}
-                                                  </span>
-                                                : '-'
-                                            }
+                                            <span className="text-blue-600 font-medium text-xs">{ing.price != null ? `¥${Math.round(ing.tax_included !== false ? ing.price : ing.price * (1 + taxRates.ingredient / 100)).toLocaleString()}` : '-'}</span>
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'calories', formatNumber(ing.calories, 1), 'ingredient')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'protein', formatNumber(ing.protein, 1), 'ingredient')}</td>
@@ -796,21 +799,13 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'unit_quantity', mat.unit_quantity || '', 'material', 'w-36')}</td>
-                                        {/* 税別単価 = 税込価格 ÷ 1.10（資材の元の標準税率）→ 固定 */}
-                                        <td className="px-2 py-1 text-right">
-                                            {mat.tax_included !== false
-                                                ? <span className="text-xs">{mat.price != null ? `¥${Math.round(mat.price / 1.10 * 100) / 100}` : '-'}</span>
-                                                : renderEditableCell(mat, 'price', formatNumber(mat.price, 0), 'material')
-                                            }
+                                        {/* 税別単価 = 編集可能（ユーザーはここに入力） */}
+                                        <td className="px-0 py-1 text-right">
+                                            {renderEditableCell(mat, 'price', mat.price != null ? `¥${Math.round(mat.tax_included !== false ? mat.price / (1 + taxRates.material / 100) : mat.price).toLocaleString()}` : '-', 'material')}
                                         </td>
-                                        {/* 税込単価 = 税別 × (1 + 現在の設定税率) → 税率変更で即座に変わる */}
+                                        {/* 税込単価 = 自動計算表示 */}
                                         <td className="px-2 py-1 text-right">
-                                            {mat.price != null
-                                                ? <span className="text-blue-600 font-medium text-xs">
-                                                    ¥{(Math.round((mat.tax_included !== false ? mat.price / 1.10 : mat.price) * (1 + taxRates.material / 100) * 100) / 100).toLocaleString()}
-                                                  </span>
-                                                : '-'
-                                            }
+                                            <span className="text-blue-600 font-medium text-xs">{mat.price != null ? `¥${Math.round(mat.tax_included !== false ? mat.price : mat.price * (1 + taxRates.material / 100)).toLocaleString()}` : '-'}</span>
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'supplier', mat.supplier || '', 'material', 'w-24')}</td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'notes', mat.notes || '', 'material', 'w-36')}</td>
@@ -935,6 +930,29 @@ export default function DatabasePage() {
                             </Button>
                         </div>
                         <div className="px-6 py-4 space-y-4">
+                            {/* 価格・入数フィールド */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">単価（税別） <span className="text-xs text-gray-400">※税込は税率設定から自動計算</span></label>
+                                    <input
+                                        type="number"
+                                        value={editForm['price'] || ''}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, price: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="例: 1080"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">入数(g)</label>
+                                    <input
+                                        type="number"
+                                        value={editForm['unit_quantity'] || ''}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, unit_quantity: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="例: 1000"
+                                    />
+                                </div>
+                            </div>
                             {[
                                 { key: 'raw_materials', label: '原材料', rows: 4 },
                                 { key: 'allergens', label: 'アレルゲン', rows: 2 },

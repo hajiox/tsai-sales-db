@@ -24,20 +24,28 @@ export async function GET(request: NextRequest) {
         id,
         name,
         development_date,
-        selling_price_incl_tax,
-        selling_price_excl_tax,
-        production_quantity,
-        unit_cost,
+        selling_price,
+        category,
+        is_intermediate,
+        series_code,
+        jan_code,
+        shelf_life,
+        storage_method,
+        case_quantity,
+        case_size,
+        lot_size,
         total_cost,
-        status,
-        category:recipe_categories(id, name),
+        total_weight,
+        production_quantity,
+        label_quantity,
+        net_content_unit,
         recipe_ingredients(count)
       `, { count: "exact" })
             .order("name")
             .range(offset, offset + limit - 1);
 
         if (category && category !== "all") {
-            query = query.eq("category_id", category);
+            query = query.eq("category", category);
         }
 
         if (search) {
@@ -54,15 +62,23 @@ export async function GET(request: NextRequest) {
         // Calculate profit margin
         const processed = data?.map((r: any) => ({
             ...r,
-            category_name: r.category?.name,
+            category_name: r.category,
             ingredient_count: r.recipe_ingredients?.[0]?.count || 0,
-            profit_margin: r.selling_price_incl_tax && r.unit_cost
-                ? ((r.selling_price_incl_tax - r.unit_cost) / r.selling_price_incl_tax * 100)
+            // 後方互換性: selling_price_incl_tax = selling_price
+            selling_price_incl_tax: r.selling_price,
+            selling_price_excl_tax: r.selling_price ? Math.round(r.selling_price / 1.08) : null,
+            unit_cost: r.total_cost && r.production_quantity
+                ? r.total_cost / r.production_quantity
+                : r.total_cost || null,
+            profit_margin: r.selling_price && r.total_cost
+                ? ((r.selling_price - (r.total_cost / (r.production_quantity || 400))) / r.selling_price * 100)
                 : null,
         }));
 
         return NextResponse.json({
             data: processed,
+            // 見積連携用: recipesキーでも返す
+            recipes: processed,
             pagination: {
                 page,
                 limit,

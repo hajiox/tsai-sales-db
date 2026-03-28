@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, X, Plus, RefreshCw, FileText, ChevronDown, ChevronRight, Search, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, X, Plus, RefreshCw, FileText, ChevronDown, ChevronRight, Search, Sparkles, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -402,6 +402,42 @@ export default function EstimatesPage() {
         }
     };
 
+    const handleRestore = async (item: PendingEstimateItem) => {
+        setItems(prev => prev.filter(i => i.id !== item.id));
+        try {
+            const res = await fetch("/api/recipe/estimates", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "restore", itemId: item.id }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            toast.success(`${item.item_name} → 未処理に復活`);
+        } catch (e: any) {
+            toast.error(e.message);
+            fetchData();
+        }
+    };
+
+    const handleRestoreGroup = async (group: EstimateGroup) => {
+        const skippedInGroup = group.items.filter(i => i.status === "skipped" || i.status === "rejected");
+        if (skippedInGroup.length === 0) return;
+        const restoreIds = skippedInGroup.map(i => i.id);
+        const restoreSet = new Set(restoreIds);
+        setItems(prev => prev.filter(i => !restoreSet.has(i.id)));
+        try {
+            const res = await fetch("/api/recipe/estimates", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "bulk_restore", itemIds: restoreIds }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            toast.success(`${group.counterpartyName} を未処理に復活しました（${skippedInGroup.length}品目）`);
+        } catch (e: any) {
+            toast.error("復活に失敗しました");
+            fetchData();
+        }
+    };
+
     const handleSkipAll = async () => {
         const pendingItems = items.filter(i => i.status === "pending");
         if (pendingItems.length === 0) return;
@@ -538,6 +574,17 @@ export default function EstimatesPage() {
                                                 この見積をスキップ
                                             </Button>
                                         )}
+                                        {statusFilter === "rejected" && group.items.some(i => i.status === "skipped" || i.status === "rejected") && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={(e) => { e.stopPropagation(); handleRestoreGroup(group); }}
+                                                className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 text-xs"
+                                            >
+                                                <Undo2 className="w-3 h-3 mr-1" />
+                                                この見積を復活
+                                            </Button>
+                                        )}
                                         <span className="text-xs text-gray-400">
                                             受信: {new Date(group.createdAt).toLocaleString("ja-JP")}
                                         </span>
@@ -600,7 +647,10 @@ export default function EstimatesPage() {
                                                             </div>
                                                         )}
                                                         {(item.status === "rejected" || item.status === "skipped") && (
-                                                            <div className="mt-1 text-xs text-gray-400">✕ スキップ済み</div>
+                                                            <div className="mt-1 text-xs text-gray-400 flex items-center gap-2">
+                                                                ✕ スキップ済み
+                                                                {item.applied_at && <span>({new Date(item.applied_at).toLocaleString("ja-JP")})</span>}
+                                                            </div>
                                                         )}
                                                     </div>
 
@@ -636,6 +686,18 @@ export default function EstimatesPage() {
                                                                 <X className="w-3 h-3" />
                                                             </Button>
                                                         </div>
+                                                    )}
+                                                    {/* 復活ボタン（スキップ済み表示時） */}
+                                                    {(item.status === "skipped" || item.status === "rejected") && (
+                                                        <Button
+                                                            size="sm" variant="outline"
+                                                            className="h-7 text-xs border-blue-300 text-blue-600 hover:bg-blue-50 shrink-0"
+                                                            onClick={() => handleRestore(item)}
+                                                            disabled={processing === item.id}
+                                                        >
+                                                            <Undo2 className="w-3 h-3 mr-1" />
+                                                            復活
+                                                        </Button>
                                                     )}
                                                 </div>
                                             </div>

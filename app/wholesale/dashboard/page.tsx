@@ -193,10 +193,15 @@ function WholesaleDashboardContent() {
 
   // データ取得関数（簡素化のため一部のみ記載）
   const fetchProducts = async () => {
+    // 商品データとレシピ紐付け情報を並列取得
+    const [productsRes, linkRes] = await Promise.all([
+      fetch('/api/wholesale/products'),
+      fetch('/api/recipe/sync-wholesale'),
+    ]);
+
     try {
-      const response = await fetch('/api/wholesale/products');
-      if (response.ok) {
-        const data = await response.json();
+      if (productsRes.ok) {
+        const data = await productsRes.json();
         if (data.success && Array.isArray(data.products)) {
           setProducts(data.products);
         }
@@ -204,9 +209,8 @@ function WholesaleDashboardContent() {
     } catch (error) {
       console.error('商品データ取得エラー:', error);
     }
-    // レシピ紐付け情報も取得（サーバーサイドAPI経由でRLSバイパス）
+
     try {
-      const linkRes = await fetch('/api/recipe/sync-wholesale');
       if (linkRes.ok) {
         const linkData = await linkRes.json();
         if (linkData.recipes) {

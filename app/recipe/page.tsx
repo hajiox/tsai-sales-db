@@ -201,42 +201,33 @@ export default function RecipePage() {
     };
 
     const fetchStats = async () => {
-        // レシピ総数
-        const { count: recipeCount } = await supabase
-            .from("recipes")
-            .select("*", { count: "exact", head: true });
+        const categories = ["ネット専用", "自社", "OEM", "試作", "Shopee", "終売", "中間部品"];
 
-        // カテゴリ別カウント
-        const categories: string[] = ["ネット専用", "自社", "OEM", "試作", "Shopee", "終売", "中間部品"];
+        // 全10クエリを並列実行（直列比 約10倍高速化）
+        const [totalRes, ingRes, matRes, ...catResults] = await Promise.all([
+            supabase.from("recipes").select("*", { count: "exact", head: true }),
+            supabase.from("ingredients").select("*", { count: "exact", head: true }),
+            supabase.from("materials").select("*", { count: "exact", head: true }),
+            ...categories.map(cat =>
+                supabase.from("recipes").select("*", { count: "exact", head: true }).eq("category", cat)
+            ),
+        ]);
+
         const categoryCounts: Record<string, number> = {};
-
-        for (const cat of categories) {
-            const { count } = await supabase
-                .from("recipes")
-                .select("*", { count: "exact", head: true })
-                .eq("category", cat);
-            categoryCounts[cat] = count || 0;
-        }
-
-        // 食材・資材カウント
-        const { count: ingredientCount } = await supabase
-            .from("ingredients")
-            .select("*", { count: "exact", head: true });
-
-        const { count: materialCount } = await supabase
-            .from("materials")
-            .select("*", { count: "exact", head: true });
+        categories.forEach((cat, i) => {
+            categoryCounts[cat] = catResults[i].count || 0;
+        });
 
         setStats({
-            total: recipeCount || 0,
+            total: totalRes.count || 0,
             ネット専用: categoryCounts["ネット専用"] || 0,
             自社: categoryCounts["自社"] || 0,
             OEM: categoryCounts["OEM"] || 0,
             試作: categoryCounts["試作"] || 0,
             中間部品: categoryCounts["中間部品"] || 0,
             終売: categoryCounts["終売"] || 0,
-            ingredients: ingredientCount || 0,
-            materials: materialCount || 0,
+            ingredients: ingRes.count || 0,
+            materials: matRes.count || 0,
         });
     };
 

@@ -114,11 +114,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || "pending";
 
-    const { data, error } = await supabase
+    // 「rejected」タブでは skipped と rejected の両方を取得
+    let query = supabase
         .from("pending_estimate_items")
         .select("*")
-        .eq("status", status)
         .order("created_at", { ascending: false });
+
+    if (status === "rejected") {
+        query = query.in("status", ["rejected", "skipped"]);
+    } else {
+        query = query.eq("status", status);
+    }
+
+    const { data, error } = await query;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -347,6 +355,47 @@ export async function PATCH(request: NextRequest) {
             }
 
             return NextResponse.json({ success: true, action });
+        }
+
+        // 復活: skipped/rejected → pending に戻す
+        if (action === "restore") {
+            const { error: statusErr } = await supabase
+                .from("pending_estimate_items")
+                .update({
+                    status: "pending",
+                    applied_action: null,
+                    applied_at: null,
+                    notes: null,
+                })
+                .eq("id", itemId);
+
+            if (statusErr) {
+                console.error("[Estimates PATCH] restore failed:", statusErr.message);
+                return NextResponse.json({ error: `復活失敗: ${statusErr.message}` }, { status: 500 });
+            }
+
+            return NextResponse.json({ success: true, action: "restored" });
+        }
+
+        // 一括復活
+        if (action === "bulk_restore") {
+            const itemIds: string[] = body.itemIds || [];
+            if (itemIds.length === 0) {
+                return NextResponse.json({ error: "itemIds is required" }, { status: 400 });
+            }
+            const { error } = await supabase
+                .from("pending_estimate_items")
+                .update({
+                    status: "pending",
+                    applied_action: null,
+                    applied_at: null,
+                    notes: null,
+                })
+                .in("id", itemIds);
+            if (error) {
+                return NextResponse.json({ error: error.message }, { status: 500 });
+            }
+            return NextResponse.json({ success: true, restored: itemIds.length });
         }
 
         return NextResponse.json({ error: "不明なaction" }, { status: 400 });
