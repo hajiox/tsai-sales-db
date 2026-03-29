@@ -1255,6 +1255,13 @@ export default function RecipeDetailPage() {
                             >
                               ✎ 編集
                             </button>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(labelText); toast.success('コピーしました'); }}
+                              className="text-[10px] text-gray-500 hover:text-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-100"
+                              title="クリップボードにコピー"
+                            >
+                              📋 コピー
+                            </button>
                           </>
                         )}
                         {!labelEditing && !labelText && (
@@ -1348,6 +1355,13 @@ export default function RecipeDetailPage() {
                               className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50 flex items-center gap-0.5"
                             >
                               📋 採用
+                            </button>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(aiLabelText); toast.success('コピーしました'); }}
+                              className="text-[10px] text-gray-500 hover:text-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-100"
+                              title="クリップボードにコピー"
+                            >
+                              📋 コピー
                             </button>
                           </>
                         )}
