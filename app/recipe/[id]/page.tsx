@@ -3063,43 +3063,72 @@ Now Expanded or Scrollable */}
       </div>
 
       {/* ── Web商品説明 & 商品ポイント セクション (PC用・印刷非表示) ── */}
-      <div className="print:hidden mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-        <h3 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-4">
-          📝 Web商品説明 & 商品ポイント
-        </h3>
-        <div className="space-y-4">
-          {/* Web商品説明 */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Web商品説明</label>
-            <textarea
-              value={recipe.web_description || ''}
-              onChange={(e) => {
-                setRecipe(prev => prev ? { ...prev, web_description: e.target.value } : null);
-                setHasChanges(true);
-              }}
-              rows={12}
-              placeholder="ECサイト等に掲載する商品説明文を入力..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none overflow-hidden"
-              style={{ fieldSizing: 'content' as any, minHeight: '180px' }}
-            />
-          </div>
-          {/* 商品ポイント */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">商品ポイント</label>
-            <textarea
-              value={recipe.product_points || ''}
-              onChange={(e) => {
-                setRecipe(prev => prev ? { ...prev, product_points: e.target.value } : null);
-                setHasChanges(true);
-              }}
-              rows={8}
-              placeholder="商品の特徴やアピールポイントを入力..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none overflow-hidden"
-              style={{ fieldSizing: 'content' as any, minHeight: '120px' }}
-            />
-          </div>
-        </div>
-      </div>
+      {(() => {
+        const totalChars = (recipe.product_points || '').length + (recipe.web_description || '').length;
+        const isOver = totalChars > 500;
+        const overCount = totalChars - 500;
+        return (
+          <details className="print:hidden mt-6 bg-white rounded-xl border border-gray-200 shadow-sm group">
+            <summary className="cursor-pointer select-none px-5 py-4 flex items-center justify-between hover:bg-gray-50 rounded-xl transition-colors list-none [&::-webkit-details-marker]:hidden">
+              <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                📝 商品ポイント & Web商品説明
+              </h3>
+              <div className="flex items-center gap-3">
+                <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${isOver ? 'bg-red-100 text-red-600 font-bold' : 'bg-gray-100 text-gray-500'}`}>
+                  {totalChars}文字
+                  {isOver && <span className="ml-1">（{overCount}文字超過）</span>}
+                </span>
+                <ChevronDown className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180" />
+              </div>
+            </summary>
+            <div className="px-5 pb-5 space-y-4 border-t border-gray-100 pt-4">
+              {/* 商品ポイント — 2カラム横並び */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">商品ポイント</label>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 左: 編集用（■マーカー） */}
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1 font-medium">✏️ 編集</div>
+                    <textarea
+                      value={recipe.product_points || ''}
+                      onChange={(e) => {
+                        setRecipe(prev => prev ? { ...prev, product_points: e.target.value } : null);
+                        setHasChanges(true);
+                      }}
+                      rows={8}
+                      placeholder="■ 商品の特徴を入力...&#10;■ アピールポイントを入力..."
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none overflow-hidden"
+                      style={{ fieldSizing: 'content' as any, minHeight: '120px' }}
+                    />
+                  </div>
+                  {/* 右: 自動プレビュー（■→✅️） */}
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1 font-medium">👁️ プレビュー（✅️版・自動生成）</div>
+                    <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm whitespace-pre-wrap min-h-[120px] text-gray-700 leading-relaxed">
+                      {(recipe.product_points || '').replace(/■/g, '✅️') || <span className="text-gray-300">左の入力が自動反映されます</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* Web商品説明 */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Web商品説明</label>
+                <textarea
+                  value={recipe.web_description || ''}
+                  onChange={(e) => {
+                    setRecipe(prev => prev ? { ...prev, web_description: e.target.value } : null);
+                    setHasChanges(true);
+                  }}
+                  rows={12}
+                  placeholder="ECサイト等に掲載する商品説明文を入力..."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none overflow-hidden"
+                  style={{ fieldSizing: 'content' as any, minHeight: '180px' }}
+                />
+              </div>
+            </div>
+          </details>
+        );
+      })()}
       <style jsx global>
         {`
           @media print {
