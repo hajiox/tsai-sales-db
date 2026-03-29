@@ -166,6 +166,7 @@ export default function RecipeDetailPage() {
   const [labelGenerating, setLabelGenerating] = useState(false);
   const [labelWarnings, setLabelWarnings] = useState<string[]>([]);
   const [labelMissing, setLabelMissing] = useState<string[]>([]);
+  const [labelCarryover, setLabelCarryover] = useState<string[]>([]);
   const [labelEditing, setLabelEditing] = useState(false);
 
   // 商品写真
@@ -1354,7 +1355,7 @@ export default function RecipeDetailPage() {
                           onClick={async () => {
                             if (!recipe) return;
                             setLabelGenerating(true);
-                            setLabelWarnings([]); setLabelMissing([]);
+                            setLabelWarnings([]); setLabelMissing([]); setLabelCarryover([]);
                             try {
                               const res = await fetch('/api/recipe/generate-label', {
                                 method: 'POST',
@@ -1368,6 +1369,7 @@ export default function RecipeDetailPage() {
                                 setRecipe(prev => prev ? { ...prev, ai_ingredient_label: data.label || null } : prev);
                                 setLabelWarnings(data.warnings || []);
                                 setLabelMissing(data.missing_info || []);
+                                setLabelCarryover(data.carryover || []);
                                 toast.success('AI原材料表示を生成しました');
                               }
                             } catch (err: any) { toast.error('生成に失敗しました: ' + err.message); }
@@ -1412,6 +1414,17 @@ export default function RecipeDetailPage() {
                           </div>
                           <ul className="text-[10px] text-red-700 space-y-0.5">
                             {labelMissing.map((m, i) => <li key={i}>• {m}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {labelCarryover.length > 0 && (
+                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <span className="text-[10px]">🔄</span>
+                            <span className="text-[10px] font-bold text-blue-800">キャリーオーバー省略</span>
+                          </div>
+                          <ul className="text-[10px] text-blue-700 space-y-0.5">
+                            {labelCarryover.map((c, i) => <li key={i}>• {c}</li>)}
                           </ul>
                         </div>
                       )}

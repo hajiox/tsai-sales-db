@@ -1,6 +1,6 @@
 // /api/recipe/generate-label/route.ts
-// AI原材料表示生成API v6 — 体系的再設計版
-// パイプライン: 食材分類 → raw_materialsパース → 添加物統合 → ラベル組立 → AIレビュー
+// AI原材料表示生成API v7 — 重複排除+キャリーオーバー対応版
+// パイプライン: 食材分類 → raw_materialsパース → 添加物統合 → 重複排除 → キャリーオーバー除外 → ラベル組立 → AIレビュー
 
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
@@ -402,8 +402,25 @@ export async function POST(request: Request) {
         const allAllergens: string[] = [];
         const missingData: string[] = [];
 
+        // キャリーオーバー判定用: 全体重量と主要原材料（5%以上）の添加物追跡
+        const totalWeight = recipeItems
+            .filter(i => ["ingredient", "intermediate"].includes(i.item_type))
+            .reduce((sum, i) => sum + (parseFloat(String(i.usage_amount)) || 0), 0);
+        const majorAdditiveSet = new Set<string>();
+
+        /** 添加物を追跡。主要食材（全体の5%以上）由来の場合はmajorAdditiveSetにも登録 */
+        const trackAdditives = (additives: string[], isMajor: boolean) => {
+            allAdditives.push(...additives);
+            if (isMajor) {
+                additives.forEach(a => majorAdditiveSet.add(normalizeParen(a.trim())));
+            }
+        };
+
         for (const item of recipeItems) {
             const master = masterMap[item.item_name] || null;
+            const usage = parseFloat(String(item.usage_amount)) || 0;
+            const weightPercent = totalWeight > 0 ? (usage / totalWeight) * 100 : 100;
+            const isMajorSource = weightPercent >= 5;
             const { itemClass, parsed } = classifyItem(item.item_name, item.item_type, master);
             const displayName = cleanItemName(item.item_name);
 
@@ -418,7 +435,7 @@ export async function POST(request: Request) {
                     labelParts.push(displayName);
                     // parsedがあれば添加物・アレルゲンだけ収集
                     if (parsed) {
-                        allAdditives.push(...parsed.additives);
+                        trackAdditives(parsed.additives, isMajorSource);
                         allAllergens.push(...parsed.allergens);
                     }
                     break;
@@ -428,14 +445,14 @@ export async function POST(request: Request) {
                     const subIng = p.ingredients.filter(i => !isAdditive(i));
                     const subAdd = [...p.ingredients.filter(i => isAdditive(i)), ...p.additives];
                     labelParts.push(`${displayName}(${subIng.join("、")})`);
-                    allAdditives.push(...subAdd);
+                    trackAdditives(subAdd, isMajorSource);
                     allAllergens.push(...p.allergens);
                     break;
                 }
 
                 case "all_additive": {
                     const p = parsed!;
-                    allAdditives.push(...p.ingredients, ...p.additives);
+                    trackAdditives([...p.ingredients, ...p.additives], isMajorSource);
                     allAllergens.push(...p.allergens);
                     break;
                 }
@@ -467,12 +484,14 @@ export async function POST(request: Request) {
                             }
                             if (siMaster?.allergens) allAllergens.push(siMaster.allergens);
                         }
-                        if (subIng.length > 0) {
-                            labelParts.push(`${displayName}(${subIng.join("、")})`);
+                        // 中間部品内のサブ原材料を重複排除
+                        const uniqueSubIng = [...new Set(subIng)];
+                        if (uniqueSubIng.length > 0) {
+                            labelParts.push(`${displayName}(${uniqueSubIng.join("、")})`);
                         } else {
                             labelParts.push(displayName);
                         }
-                        allAdditives.push(...subAdd);
+                        trackAdditives(subAdd, isMajorSource);
                     } else {
                         labelParts.push(displayName);
                     }
@@ -486,16 +505,37 @@ export async function POST(request: Request) {
             }
         }
 
-        // ---- 添加物統合 & アレルゲン統合 ----
+        // ---- トップレベル原材料の重複排除 ----
+
+        const seenParts = new Set<string>();
+        const uniqueLabelParts = labelParts.filter(part => {
+            const key = part.trim();
+            if (seenParts.has(key)) return false;
+            seenParts.add(key);
+            return true;
+        });
+
+        // ---- 添加物統合 & キャリーオーバー除外 ----
 
         const consolidatedAdditives = consolidateAdditives(allAdditives);
+        const carryoverAdditives: string[] = [];
+        const finalAdditiveList: string[] = [];
+
+        for (const a of consolidatedAdditives) {
+            if (majorAdditiveSet.has(normalizeParen(a))) {
+                finalAdditiveList.push(a);
+            } else {
+                carryoverAdditives.push(a);
+            }
+        }
+
         const consolidatedAllergens = consolidateAllergens(allAllergens);
 
         // ---- ラベル組み立て ----
 
-        const labelIngredients = labelParts.join("、");
-        const labelAdditivesPart = consolidatedAdditives.length > 0
-            ? "／" + consolidatedAdditives.join("、")
+        const labelIngredients = uniqueLabelParts.join("、");
+        const labelAdditivesPart = finalAdditiveList.length > 0
+            ? "／" + finalAdditiveList.join("、")
             : "";
         const finalLabel = labelIngredients + labelAdditivesPart;
         const finalAllergens = consolidatedAllergens.length > 0
@@ -542,6 +582,7 @@ JSON出力のみ:
             label,
             warnings: aiWarnings,
             missing_info: missingData.map(n => `「${n}」の原材料データが未登録です。食材データベースで登録してください。`),
+            carryover: carryoverAdditives.map(a => `「${a}」— 全て重量5%未満の原材料由来のためキャリーオーバーとして省略`),
         });
     } catch (error: any) {
         console.error("Label Generation Error:", error);
