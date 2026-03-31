@@ -1,10 +1,10 @@
-// /app/links/page.tsx ver.8 (サーバー制御機能付き)
+// /app/links/page.tsx ver.9 (ドラッグ&ドロップ画像アップロード対応)
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Upload, Power, PowerOff } from "lucide-react"
+import { Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Power, PowerOff } from "lucide-react"
 
 interface CompanyLink {
   id: string
@@ -70,7 +70,9 @@ export default function LinksPage() {
   const [fetchingOgp, setFetchingOgp] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounterRef = useRef(0)
   const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({})
   const [controllingServer, setControllingServer] = useState<string | null>(null)
 
@@ -206,17 +208,12 @@ export default function LinksPage() {
     setShowModal(true)
   }
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // ファイルサイズチェック (5MB制限)
+  // 画像アップロード共通処理（ファイル選択・D&D 両方から呼ぶ）
+  const uploadImageFile = useCallback(async (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
       alert("ファイルサイズは5MB以下にしてください")
       return
     }
-
-    // 画像ファイルかチェック
     if (!file.type.startsWith("image/")) {
       alert("画像ファイルを選択してください")
       return
@@ -243,12 +240,45 @@ export default function LinksPage() {
       alert("アップロードに失敗しました")
     } finally {
       setUploading(false)
-      // ファイル入力をリセット
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
-      }
+      if (fileInputRef.current) fileInputRef.current.value = ""
     }
-  }
+  }, [])
+
+  // ファイル選択ハンドラ
+  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) uploadImageFile(file)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }, [uploadImageFile])
+
+  // D&Dハンドラ
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    dragCounterRef.current = 0
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) uploadImageFile(files[0])
+  }, [uploadImageFile])
 
   const handleSave = async () => {
     if (!formUrl) {
@@ -537,34 +567,87 @@ export default function LinksPage() {
 
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">OGP画像</label>
-                <div className="flex gap-2">
-                  <Input
-                    value={formOgImage}
-                    onChange={(e) => setFormOgImage(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className="flex-1"
-                  />
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleImageUpload}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
+
+                {/* URLテキスト入力 */}
+                <Input
+                  value={formOgImage}
+                  onChange={(e) => setFormOgImage(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="mb-2"
+                />
+
+                {/* 非表示ファイル入力 */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+
+                {/* 画像プレビュー or D&Dゾーン */}
+                {formOgImage ? (
+                  <div className="relative group w-full h-36 rounded-md overflow-hidden border border-gray-200">
+                    <img
+                      src={formOgImage}
+                      alt="プレビュー"
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+                    />
+                    {/* ホバーオーバーレイ */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 bg-white text-gray-800 rounded text-sm font-medium hover:bg-gray-100 transition"
+                      >
+                        📷 変更
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormOgImage("")}
+                        className="px-3 py-1.5 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600 transition"
+                      >
+                        🗑️ 削除
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    className={[
+                      "w-full h-36 rounded-md border-2 border-dashed cursor-pointer",
+                      "flex flex-col items-center justify-center gap-1.5 transition-all duration-200",
+                      isDragging
+                        ? "border-blue-500 bg-blue-50 scale-[1.01]"
+                        : "border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/40",
+                      uploading ? "pointer-events-none opacity-60" : "",
+                    ].join(" ")}
                   >
-                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    <span className="ml-1">アップロード</span>
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">URLを入力するか、画像をアップロードしてください（5MB以下）</p>
-                {formOgImage && (
-                  <div className="mt-2 w-32 h-20 bg-gray-100 rounded overflow-hidden">
-                    <img src={formOgImage} alt="プレビュー" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+                    {uploading ? (
+                      <>
+                        <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
+                        <span className="text-sm text-blue-600 font-medium">アップロード中...</span>
+                      </>
+                    ) : isDragging ? (
+                      <>
+                        <span className="text-3xl">📥</span>
+                        <span className="text-sm text-blue-600 font-medium">ここにドロップ</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-2xl text-gray-400">🖼️</span>
+                        <span className="text-sm text-gray-500">
+                          ドラッグ&amp;ドロップ または{" "}
+                          <span className="text-blue-600 font-medium underline">クリックで選択</span>
+                        </span>
+                        <span className="text-xs text-gray-400">5MB以下の画像（JPEG / PNG / WebP 等）</span>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
