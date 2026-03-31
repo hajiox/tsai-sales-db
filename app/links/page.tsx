@@ -1,4 +1,4 @@
-// /app/links/page.tsx ver.9 (ドラッグ&ドロップ画像アップロード対応)
+// /app/links/page.tsx ver.10 (ドラッグ&ドロップ・ペースト画像アップロード対応)
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
@@ -279,6 +279,25 @@ export default function LinksPage() {
     const files = e.dataTransfer.files
     if (files && files.length > 0) uploadImageFile(files[0])
   }, [uploadImageFile])
+
+  // ペーストハンドラ（モーダル表示中に Ctrl+V で画像アップロード）
+  useEffect(() => {
+    if (!showModal) return
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          e.preventDefault()
+          const file = items[i].getAsFile()
+          if (file) uploadImageFile(file)
+          return
+        }
+      }
+    }
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [showModal, uploadImageFile])
 
   const handleSave = async () => {
     if (!formUrl) {
@@ -642,10 +661,10 @@ export default function LinksPage() {
                       <>
                         <span className="text-2xl text-gray-400">🖼️</span>
                         <span className="text-sm text-gray-500">
-                          ドラッグ&amp;ドロップ または{" "}
+                          ドラッグ&amp;ドロップ・ペースト または{" "}
                           <span className="text-blue-600 font-medium underline">クリックで選択</span>
                         </span>
-                        <span className="text-xs text-gray-400">5MB以下の画像（JPEG / PNG / WebP 等）</span>
+                        <span className="text-xs text-gray-400">5MB以下の画像（JPEG / PNG / WebP 等）・Ctrl+Vでペースト可</span>
                       </>
                     )}
                   </div>
