@@ -32,3 +32,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+
+# 開発経過ドキュメント（機密情報を含むためリモートにプッシュしない）
+全体開発.md
+TSA開発.md
+implementation_plan.md
+*開発.md
