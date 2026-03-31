@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, FileText, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Bell } from "lucide-react";
+import { Search, FileSpreadsheet, FileText, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Bell, Barcode } from "lucide-react";
 import { toast } from "sonner";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 
@@ -355,12 +355,22 @@ export default function RecipePage() {
     return (
         <div>
             {/* Header */}
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                    <ChefHat className="w-8 h-8" />
-                    レシピ管理システム
-                </h1>
-                <p className="text-gray-600 mt-1">製造レシピの一元管理・原価計算</p>
+            <div className="mb-6 flex items-start justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+                        <ChefHat className="w-8 h-8" />
+                        レシピ管理システム
+                    </h1>
+                    <p className="text-gray-600 mt-1">製造レシピの一元管理・原価計算</p>
+                </div>
+                <Button
+                    variant="outline"
+                    onClick={() => router.push("/recipe/jan-codes")}
+                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                    <Barcode className="w-4 h-4 mr-2" />
+                    JANコード管理
+                </Button>
             </div>
 
             {/* 見積書データ待機アラート */}
