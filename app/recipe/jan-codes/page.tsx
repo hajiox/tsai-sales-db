@@ -72,7 +72,7 @@ export default function JanCodesPage() {
             return;
         }
 
-        if (!confirm(【】で新しいJANコードを発行しますか？)) return;
+        if (!confirm('【】で新しいJANコードを発行しますか？')) return;
 
         setIsGenerating(true);
         try {
@@ -93,7 +93,7 @@ export default function JanCodesPage() {
             }
 
             const result = await res.json();
-            toast.success(新しいJANコード【】を発行しました);
+            toast.success('新しいJANコード【】を発行しました');
             
             // Reset form
             setNewProductName("");
@@ -133,7 +133,7 @@ export default function JanCodesPage() {
                 
             if (error) throw error;
         } catch (e: any) {
-            toast.error(保存失敗: );
+            toast.error('保存失敗:');
             fetchJanCodes(); // revert
         }
     };
@@ -172,13 +172,13 @@ export default function JanCodesPage() {
                         }
                         if (e.key === 'Escape') setEditingCell(null);
                     }}
-                    className={h-full px-2 py-1 border border-blue-500 rounded text-sm focus:outline-none bg-white }
+                    className="h-full px-2 py-1 border border-blue-500 rounded text-sm focus:outline-none bg-white"
                 />
             );
         }
         return (
             <div
-                className={px-2 py-1 cursor-pointer hover:bg-blue-50 rounded min-h-[1.5rem] break-all }
+                className="px-2 py-1 cursor-pointer hover:bg-blue-50 rounded min-h-[1.5rem] break-all"
                 onClick={() => setEditingCell({ id: item.id, field })}
                 title="ダブルクリックまたはタップで編集"
             >
@@ -323,7 +323,7 @@ export default function JanCodesPage() {
                                        </span>
                                     </td>
                                     <td className="px-3 py-1">
-                                        <span className={px-2 py-0.5 rounded text-xs font-bold \}>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.category === '食品' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
                                             {item.category}
                                         </span>
                                     </td>
