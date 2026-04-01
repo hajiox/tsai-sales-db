@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown } from "lucide-react";
+import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -728,6 +728,95 @@ export default function RecipeDetailPage() {
     setHasChanges(true);
   };
 
+  // 中間部品を食材DBに挿入
+  const handleInsertToIngredientDB = async () => {
+    if (!recipe) return;
+    if (recipe.category !== '中間部品') {
+      toast.error('この機能は中間部品カテゴリのレシピのみ使用できます');
+      return;
+    }
+
+    // 栄養成分計算（NutritionDisplayと同じロジック）
+    const nutritionItems = items.filter(i =>
+      i.item_type === 'ingredient' && i.usage_amount && parseFloat(String(i.usage_amount)) > 0
+    );
+    const totalWeight = items.reduce((sum, item) => {
+      if (item.item_type === 'material' || item.item_type === 'expense') return sum;
+      return sum + (parseFloat(String(item.usage_amount)) || 0);
+    }, 0);
+    const totalNutrition = nutritionItems.reduce((acc, item) => {
+      const amount = parseFloat(String(item.usage_amount)) || 0;
+      const nut = nutritionMap[item.item_name];
+      if (!nut) return acc;
+      return {
+        calories: acc.calories + (nut.calories || 0) * amount / 100,
+        protein: acc.protein + (nut.protein || 0) * amount / 100,
+        fat: acc.fat + (nut.fat || 0) * amount / 100,
+        carbohydrate: acc.carbohydrate + (nut.carbohydrate || 0) * amount / 100,
+        sodium: acc.sodium + (nut.sodium || 0) * amount / 100,
+      };
+    }, { calories: 0, protein: 0, fat: 0, carbohydrate: 0, sodium: 0 });
+
+    // 100gあたりに変換
+    const per100g = {
+      calories: totalWeight ? totalNutrition.calories / totalWeight * 100 : 0,
+      protein: totalWeight ? totalNutrition.protein / totalWeight * 100 : 0,
+      fat: totalWeight ? totalNutrition.fat / totalWeight * 100 : 0,
+      carbohydrate: totalWeight ? totalNutrition.carbohydrate / totalWeight * 100 : 0,
+      sodium: totalWeight ? totalNutrition.sodium / totalWeight * 100 : 0,
+    };
+
+    const yieldRate = recipe.yield_rate ?? 1.0;
+    const actualWeight = totalWeight * yieldRate;
+    const totalCost = items.reduce((sum, i) => sum + (parseFloat(String(i.cost)) || 0), 0);
+    const costExTax = Math.round(totalCost / taxRates.ingredient);
+
+    const msg = `「${recipe.name}」を食材DBに挿入します。\n\n` +
+      `入数（総量）: ${actualWeight.toFixed(1)}g\n` +
+      `税込原価: ¥${totalCost.toLocaleString()}\n` +
+      `税抜原価: ¥${costExTax.toLocaleString()}\n` +
+      `熱量: ${per100g.calories.toFixed(1)} kcal/100g\n` +
+      `タンパク: ${per100g.protein.toFixed(1)} g/100g\n` +
+      `脂質: ${per100g.fat.toFixed(1)} g/100g\n` +
+      `炭水化物: ${per100g.carbohydrate.toFixed(1)} g/100g\n` +
+      `食塩: ${per100g.sodium.toFixed(1)} g/100g\n\n` +
+      `よろしいですか？`;
+
+    if (!confirm(msg)) return;
+
+    try {
+      const res = await fetch('/api/recipe/db-write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation: 'insert',
+          table: 'ingredients',
+          data: {
+            name: recipe.name,
+            unit_quantity: parseFloat(actualWeight.toFixed(1)),
+            price: totalCost,
+            calories: parseFloat(per100g.calories.toFixed(2)),
+            protein: parseFloat(per100g.protein.toFixed(2)),
+            fat: parseFloat(per100g.fat.toFixed(2)),
+            carbohydrate: parseFloat(per100g.carbohydrate.toFixed(2)),
+            sodium: parseFloat(per100g.sodium.toFixed(2)),
+            tax_included: true,
+            nutrition_per: '100g',
+          },
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '挿入に失敗しました');
+      }
+      toast.success(`「${recipe.name}」を食材DBに登録しました`);
+      // マスターデータを再取得して即時反映
+      fetchMasterData();
+    } catch (error: any) {
+      toast.error(error.message || '食材DB挿入に失敗しました');
+    }
+  };
+
   const saveChanges = async () => {
     if (!recipe) return;
 
@@ -1007,6 +1096,17 @@ export default function RecipeDetailPage() {
             <Printer className="w-4 h-4" />
             A4印刷
           </Button>
+          {recipe.category === '中間部品' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleInsertToIngredientDB}
+              className="gap-2 border-purple-400 text-purple-700 hover:bg-purple-50"
+            >
+              <Database className="w-4 h-4" />
+              食材DBに挿入
+            </Button>
+          )}
           {hasChanges && (
             <>
               <Button
