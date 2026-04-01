@@ -25,7 +25,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";
 
 ### 2. SQLの実行
 ```powershell
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User"); $env:PGPASSWORD="WAmas0831"; $env:PAGER=""; psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.zrerpexdsaxqztqqrwwv -d postgres --no-psqlrc -P pager=off -c "<SQL文をここに入力>"
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User"); $env:PGPASSWORD=(Get-Content .env.local | Select-String 'DATABASE_URL' | ForEach-Object { ($_ -split ':')[2] -replace '@.*','' }); $env:PAGER=""; psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.zrerpexdsaxqztqqrwwv -d postgres --no-psqlrc -P pager=off -c "<SQL文をここに入力>"
 ```
 
 ## 注意事項
