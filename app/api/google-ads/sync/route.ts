@@ -93,8 +93,8 @@ export async function POST(request: NextRequest) {
         // 1. アクセストークン取得
         const accessToken = await getAccessToken()
 
-        // 2. アセットグループの日次パフォーマンスデータを取得
-        const query = `
+        // 2a. アセットグループの日次パフォーマンスデータを取得（P-MAXキャンペーン）
+        const assetGroupQuery = `
       SELECT
         campaign.name,
         asset_group.name,
@@ -110,10 +110,36 @@ export async function POST(request: NextRequest) {
       ORDER BY segments.date DESC, metrics.cost_micros DESC
     `
 
-        const result = await queryGoogleAds(accessToken, query)
-        const rows = result.results || []
+        const assetGroupResult = await queryGoogleAds(accessToken, assetGroupQuery)
+        const assetGroupRows = assetGroupResult.results || []
 
-        console.log(`Fetched ${rows.length} rows from Google Ads API`)
+        // 2b. キャンペーンレベルの日次パフォーマンスデータを取得（検索・ディスプレイ等、全キャンペーン）
+        const campaignQuery = `
+      SELECT
+        campaign.name,
+        campaign.status,
+        campaign.advertising_channel_type,
+        segments.date,
+        metrics.cost_micros,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.conversions,
+        metrics.conversions_value
+      FROM campaign
+      WHERE segments.date BETWEEN '${start}' AND '${end}'
+        AND campaign.advertising_channel_type != 'PERFORMANCE_MAX'
+      ORDER BY segments.date DESC, metrics.cost_micros DESC
+    `
+
+        let campaignRows: any[] = []
+        try {
+            const campaignResult = await queryGoogleAds(accessToken, campaignQuery)
+            campaignRows = campaignResult.results || []
+        } catch (e) {
+            console.warn('Campaign level query failed (non-fatal):', e)
+        }
+
+        console.log(`Fetched ${assetGroupRows.length} asset group rows + ${campaignRows.length} campaign rows from Google Ads API`)
 
         // 3. シリーズマッピングを取得
         const seriesMapping = await getSeriesMapping()
@@ -122,7 +148,8 @@ export async function POST(request: NextRequest) {
         let insertedCount = 0
         let errorCount = 0
 
-        for (const row of rows) {
+        // 4a. アセットグループデータ（P-MAX）
+        for (const row of assetGroupRows) {
             const campaignName = row.campaign?.name || ''
             const assetGroupName = row.assetGroup?.name || ''
             const assetGroupStatus = row.assetGroup?.status || ''
@@ -133,7 +160,6 @@ export async function POST(request: NextRequest) {
             const conversions = Number(row.metrics?.conversions || 0)
             const conversionsValue = Number(row.metrics?.conversionsValue || 0)
 
-            // シリーズコードを自動マッピング
             const seriesCode = seriesMapping.get(assetGroupName) || null
 
             const { error } = await supabase
@@ -162,13 +188,54 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // 4b. キャンペーンレベルデータ（検索・ディスプレイ等）
+        for (const row of campaignRows) {
+            const campaignName = row.campaign?.name || ''
+            const channelType = row.campaign?.advertisingChannelType || ''
+            const campaignStatus = row.campaign?.status || ''
+            const reportDate = row.segments?.date || ''
+            const costMicros = Number(row.metrics?.costMicros || 0)
+            const impressions = Number(row.metrics?.impressions || 0)
+            const clicks = Number(row.metrics?.clicks || 0)
+            const conversions = Number(row.metrics?.conversions || 0)
+            const conversionsValue = Number(row.metrics?.conversionsValue || 0)
+
+            // キャンペーン名でシリーズマッピングを試みる
+            const seriesCode = seriesMapping.get(campaignName) || null
+
+            const { error } = await supabase
+                .from('google_ads_performance')
+                .upsert({
+                    campaign_name: campaignName,
+                    asset_group_name: `[${channelType}] ${campaignName}`,
+                    asset_group_status: campaignStatus,
+                    report_date: reportDate,
+                    cost_micros: costMicros,
+                    impressions,
+                    clicks,
+                    conversions,
+                    conversions_value: conversionsValue,
+                    series_code: seriesCode,
+                    synced_at: new Date().toISOString(),
+                }, {
+                    onConflict: 'campaign_name,asset_group_name,report_date'
+                })
+
+            if (error) {
+                console.error(`Insert error for campaign ${campaignName} on ${reportDate}:`, error.message)
+                errorCount++
+            } else {
+                insertedCount++
+            }
+        }
+
         // 5. advertising_costs の google_cost を自動更新
         await updateAdvertisingCosts(start, end)
 
         return NextResponse.json({
             success: true,
             message: `Synced ${insertedCount} rows (${errorCount} errors)`,
-            totalFetched: rows.length,
+            totalFetched: assetGroupRows.length + campaignRows.length,
             inserted: insertedCount,
             errors: errorCount,
             period: { start, end },
