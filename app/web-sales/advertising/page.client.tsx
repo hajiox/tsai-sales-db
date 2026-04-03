@@ -115,8 +115,8 @@ export default function AdvertisingDashboard() {
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [aiTarget, setAiTarget] = useState<string | null>(null)
-    // 取り込み済み状態
-    const [isImported, setIsImported] = useState(false)
+    // 取り込み済み状態（プラットフォーム別）
+    const [importedPlatforms, setImportedPlatforms] = useState<{ google: boolean; meta: boolean; amazon: boolean; rakuten: boolean; yahoo: boolean }>({ google: false, meta: false, amazon: false, rakuten: false, yahoo: false })
 
     // データ取得
     const fetchData = useCallback(async () => {
@@ -219,11 +219,15 @@ export default function AdvertisingDashboard() {
                 setPlatformCosts(pCosts)
             }
 
-            // 広告費取り込み済みチェック
-            if (adCostData && adCostData.some((r: any) => (r.google_cost || 0) > 0)) {
-                setIsImported(true)
-            } else {
-                setIsImported(false)
+            // 広告費取り込み済みチェック（プラットフォーム別）
+            if (adCostData) {
+                setImportedPlatforms({
+                    google: adCostData.some((r: any) => (r.google_cost || 0) > 0),
+                    meta: adCostData.some((r: any) => (r.meta_cost || 0) > 0),
+                    amazon: adCostData.some((r: any) => (r.amazon_cost || 0) > 0),
+                    rakuten: adCostData.some((r: any) => (r.rakuten_cost || 0) > 0),
+                    yahoo: adCostData.some((r: any) => (r.yahoo_cost || 0) > 0),
+                })
             }
 
             // 最終同期日時
@@ -394,13 +398,13 @@ export default function AdvertisingDashboard() {
     }
 
     // ===== タブ定義 =====
-    const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
+    const tabs: { id: TabType; label: string; icon: React.ReactNode; imported?: boolean }[] = [
         { id: 'overview', label: '概要', icon: <LayoutDashboard size={16} /> },
-        { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span> },
-        { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span> },
-        { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span> },
-        { id: 'yahoo', label: 'Yahoo!広告', icon: <span className="text-xs font-bold text-purple-600">Y</span> },
-        { id: 'amazon', label: 'Amazon広告', icon: <span className="text-xs font-bold text-orange-500">A</span> },
+        { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span>, imported: importedPlatforms.google },
+        { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span>, imported: importedPlatforms.meta },
+        { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span>, imported: importedPlatforms.rakuten },
+        { id: 'yahoo', label: 'Yahoo!広告', icon: <span className="text-xs font-bold text-purple-600">Y</span>, imported: importedPlatforms.yahoo },
+        { id: 'amazon', label: 'Amazon広告', icon: <span className="text-xs font-bold text-orange-500">A</span>, imported: importedPlatforms.amazon },
     ]
 
     return (
@@ -433,6 +437,7 @@ export default function AdvertisingDashboard() {
                     <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                         {tab.icon}{tab.label}
+                        {tab.imported && <CheckCircle size={14} className="text-green-500" />}
                     </button>
                 ))}
             </div>
@@ -561,8 +566,8 @@ export default function AdvertisingDashboard() {
                             <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />{isSyncing ? '同期中...' : `${month}を同期`}
                         </button>
                         <button onClick={openImportPanel} disabled={assetGroups.length === 0}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${isImported ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400'}`}>
-                            {isImported ? <><CheckCircle size={16} />マッチ済み</> : <><Download size={16} />商品マッチング</>}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${importedPlatforms.google ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400'}`}>
+                            {importedPlatforms.google ? <><CheckCircle size={16} />マッチ済み</> : <><Download size={16} />商品マッチング</>}
                         </button>
                         <button onClick={() => handleAiAnalysis()} disabled={isAnalyzing || assetGroups.length === 0}
                             className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-gray-400 transition-colors text-sm font-medium">

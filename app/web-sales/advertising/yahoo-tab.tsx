@@ -51,6 +51,7 @@ export default function YahooTab({ month }: { month: string }) {
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
     const [showAnalysis, setShowAnalysis] = useState(false)
     const [mappingChanges, setMappingChanges] = useState<Map<number, number | null>>(new Map())
+    const [isCostImported, setIsCostImported] = useState(false)
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -75,6 +76,15 @@ export default function YahooTab({ month }: { month: string }) {
             }
         })
         setSeriesOptions(options.sort((a, b) => a.series_code - b.series_code))
+
+        // 取り込み済みチェック
+        const reportMonth = `${month}-01`
+        const { data: adCostData } = await supabase
+            .from('advertising_costs')
+            .select('yahoo_cost')
+            .eq('report_month', reportMonth)
+        setIsCostImported(adCostData?.some((r: any) => (r.yahoo_cost || 0) > 0) || false)
+
         setIsLoading(false)
     }, [month, supabase])
 
@@ -255,8 +265,8 @@ export default function YahooTab({ month }: { month: string }) {
                                 {hasMappings && (
                                     <>
                                         <button onClick={handleImportCosts} disabled={isImporting}
-                                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium">
-                                            <Download size={16} /> {isImporting ? '取り込み中...' : '広告費取り込み'}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${isCostImported ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'}`}>
+                                            {isCostImported ? <><CheckCircle size={16} /> 取り込み済み</> : <><Download size={16} /> {isImporting ? '取り込み中...' : '広告費取り込み'}</>}
                                         </button>
                                         <button onClick={handleClearMappings}
                                             className="flex items-center gap-2 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm">

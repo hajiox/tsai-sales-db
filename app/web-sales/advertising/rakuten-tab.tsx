@@ -62,6 +62,7 @@ export default function RakutenTab({ month }: Props) {
     const [productNameMap, setProductNameMap] = useState<Map<string, string>>(new Map())
     const [newProductNames, setNewProductNames] = useState<Map<string, string>>(new Map())
     const [isSavingNames, setIsSavingNames] = useState(false)
+    const [isCostImported, setIsCostImported] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const fetchData = useCallback(async () => {
@@ -90,6 +91,15 @@ export default function RakutenTab({ month }: Props) {
         })
         setSeriesOptions(opts)
         setSeriesMap(sMap)
+
+        // 取り込み済みチェック
+        const reportMonth = `${month}-01`
+        const { data: adCostData } = await supabase
+            .from('advertising_costs')
+            .select('rakuten_cost')
+            .eq('report_month', reportMonth)
+        setIsCostImported(adCostData?.some((r: any) => (r.rakuten_cost || 0) > 0) || false)
+
         setIsLoading(false)
     }, [month, supabase])
 
@@ -286,9 +296,8 @@ export default function RakutenTab({ month }: Props) {
                         )}
                         {allMapped && (
                             <button onClick={handleImportCosts} disabled={isImporting}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-emerald-300 transition-colors font-medium">
-                                <Download size={16} />
-                                {isImporting ? '取り込み中...' : '広告費取り込み'}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors font-medium ${isCostImported ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-300'}`}>
+                                {isCostImported ? <><CheckCircle size={16} />取り込み済み</> : <><Download size={16} />{isImporting ? '取り込み中...' : '広告費取り込み'}</>}
                             </button>
                         )}
                         <button onClick={handleAiAnalysis} disabled={isAnalyzing}
