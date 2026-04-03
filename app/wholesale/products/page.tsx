@@ -287,14 +287,24 @@ export default function ProductsPage() {
 
   // === 新規登録 ===
   const handleAddNew = async () => {
+    if (!newForm.product_name.trim()) {
+      alert('商品名を入力してください');
+      return;
+    }
+    const priceNum = parseInt(newForm.price);
+    if (isNaN(priceNum)) {
+      alert('正しい卸価格を入力してください');
+      return;
+    }
+
     try {
       const response = await fetch('/api/wholesale/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_name: newForm.product_name,
-          price: parseInt(newForm.price),
-          profit_rate: parseFloat(newForm.profit_rate),
+          price: priceNum,
+          profit_rate: parseFloat(newForm.profit_rate) || 0,
           product_type: newForm.product_type,
           customer_id: newForm.customer_id || null,
         })
@@ -304,10 +314,13 @@ export default function ProductsPage() {
         await fetchProducts();
         setShowNewForm(false);
         setNewForm({ product_name: '', price: '', profit_rate: '20.00', product_type: '通常卸', customer_id: '' });
+      } else {
+        const data = await response.json();
+        alert(`登録に失敗しました: ${data.error || '不明なエラー'}`);
       }
     } catch (error) {
       console.error('登録エラー:', error);
-      alert('登録に失敗しました');
+      alert('通信エラーが発生しました');
     }
   };
 

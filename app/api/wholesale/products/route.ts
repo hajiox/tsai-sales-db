@@ -55,9 +55,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { product_code, product_name, price, profit_rate = 20.00, product_type = '通常卸', customer_id } = body;
 
-    if (!product_name || price === undefined) {
+    if (!product_name || price === undefined || price === null || isNaN(parseInt(price))) {
       return NextResponse.json(
-        { success: false, error: '必須項目が入力されていません' },
+        { success: false, error: '商品名および正しい卸価格は必須です' },
         { status: 400 }
       );
     }
