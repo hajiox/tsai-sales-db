@@ -93,7 +93,27 @@ export async function POST(request: NextRequest) {
         // 1. アクセストークン取得
         const accessToken = await getAccessToken()
 
-        // 2a. アセットグループの日次パフォーマンスデータを取得（P-MAXキャンペーン）
+        // 2. 全キャンペーンの日次データを取得（P-MAX含む）
+        const campaignQuery = `
+      SELECT
+        campaign.name,
+        campaign.status,
+        campaign.advertising_channel_type,
+        segments.date,
+        metrics.cost_micros,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.conversions,
+        metrics.conversions_value
+      FROM campaign
+      WHERE segments.date BETWEEN '${start}' AND '${end}'
+      ORDER BY segments.date DESC, metrics.cost_micros DESC
+    `
+
+        const campaignResult = await queryGoogleAds(accessToken, campaignQuery)
+        const campaignRows = campaignResult.results || []
+
+        // 3. P-MAXキャンペーンのアセットグループ内訳も取得
         const assetGroupQuery = `
       SELECT
         campaign.name,
@@ -110,45 +130,76 @@ export async function POST(request: NextRequest) {
       ORDER BY segments.date DESC, metrics.cost_micros DESC
     `
 
-        const assetGroupResult = await queryGoogleAds(accessToken, assetGroupQuery)
-        const assetGroupRows = assetGroupResult.results || []
-
-        // 2b. キャンペーンレベルの日次パフォーマンスデータを取得（検索・ディスプレイ等、全キャンペーン）
-        const campaignQuery = `
-      SELECT
-        campaign.name,
-        campaign.status,
-        campaign.advertising_channel_type,
-        segments.date,
-        metrics.cost_micros,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.conversions,
-        metrics.conversions_value
-      FROM campaign
-      WHERE segments.date BETWEEN '${start}' AND '${end}'
-        AND campaign.advertising_channel_type != 'PERFORMANCE_MAX'
-      ORDER BY segments.date DESC, metrics.cost_micros DESC
-    `
-
-        let campaignRows: any[] = []
+        let assetGroupRows: any[] = []
         try {
-            const campaignResult = await queryGoogleAds(accessToken, campaignQuery)
-            campaignRows = campaignResult.results || []
+            const assetGroupResult = await queryGoogleAds(accessToken, assetGroupQuery)
+            assetGroupRows = assetGroupResult.results || []
         } catch (e) {
-            console.warn('Campaign level query failed (non-fatal):', e)
+            console.warn('Asset group query failed (non-fatal):', e)
         }
 
-        console.log(`Fetched ${assetGroupRows.length} asset group rows + ${campaignRows.length} campaign rows from Google Ads API`)
+        console.log(`Fetched ${campaignRows.length} campaign rows + ${assetGroupRows.length} asset group rows`)
 
-        // 3. シリーズマッピングを取得
+        // 4. シリーズマッピングを取得
         const seriesMapping = await getSeriesMapping()
 
-        // 4. DBに保存（upsert）
+        // 5. DBに保存（upsert）
         let insertedCount = 0
         let errorCount = 0
 
-        // 4a. アセットグループデータ（P-MAX）
+        // P-MAXキャンペーンの日次費用を集計（キャンペーン名+日付 → 費用）
+        const pmaxCampaignCosts = new Map<string, { costMicros: number; impressions: number; clicks: number; conversions: number; conversionsValue: number }>()
+        // P-MAXアセットグループの日次費用を集計（キャンペーン名+日付 → アセットグループ費用合計）
+        const pmaxAssetGroupCostSum = new Map<string, number>()
+
+        // 5a. 非P-MAXキャンペーンをキャンペーン名で保存
+        for (const row of campaignRows) {
+            const campaignName = row.campaign?.name || ''
+            const channelType = row.campaign?.advertisingChannelType || ''
+            const campaignStatus = row.campaign?.status || ''
+            const reportDate = row.segments?.date || ''
+            const costMicros = Number(row.metrics?.costMicros || 0)
+            const impressions = Number(row.metrics?.impressions || 0)
+            const clicks = Number(row.metrics?.clicks || 0)
+            const conversions = Number(row.metrics?.conversions || 0)
+            const conversionsValue = Number(row.metrics?.conversionsValue || 0)
+
+            if (channelType === 'PERFORMANCE_MAX') {
+                // P-MAXの全体費用を記録（後でアセットグループとの差分計算に使う）
+                const key = `${campaignName}|${reportDate}`
+                pmaxCampaignCosts.set(key, { costMicros, impressions, clicks, conversions, conversionsValue })
+                continue
+            }
+
+            // 非P-MAXキャンペーンはそのまま保存
+            const seriesCode = seriesMapping.get(campaignName) || null
+            const { error } = await supabase
+                .from('google_ads_performance')
+                .upsert({
+                    campaign_name: campaignName,
+                    asset_group_name: `[${channelType}] ${campaignName}`,
+                    asset_group_status: campaignStatus,
+                    report_date: reportDate,
+                    cost_micros: costMicros,
+                    impressions,
+                    clicks,
+                    conversions,
+                    conversions_value: conversionsValue,
+                    series_code: seriesCode,
+                    synced_at: new Date().toISOString(),
+                }, {
+                    onConflict: 'campaign_name,asset_group_name,report_date'
+                })
+
+            if (error) {
+                console.error(`Insert error for ${campaignName} on ${reportDate}:`, error.message)
+                errorCount++
+            } else {
+                insertedCount++
+            }
+        }
+
+        // 5b. P-MAXアセットグループデータを保存し、費用合計を集計
         for (const row of assetGroupRows) {
             const campaignName = row.campaign?.name || ''
             const assetGroupName = row.assetGroup?.name || ''
@@ -159,6 +210,10 @@ export async function POST(request: NextRequest) {
             const clicks = Number(row.metrics?.clicks || 0)
             const conversions = Number(row.metrics?.conversions || 0)
             const conversionsValue = Number(row.metrics?.conversionsValue || 0)
+
+            // アセットグループ費用合計を集計
+            const key = `${campaignName}|${reportDate}`
+            pmaxAssetGroupCostSum.set(key, (pmaxAssetGroupCostSum.get(key) || 0) + costMicros)
 
             const seriesCode = seriesMapping.get(assetGroupName) || null
 
@@ -188,54 +243,49 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 4b. キャンペーンレベルデータ（検索・ディスプレイ等）
-        for (const row of campaignRows) {
-            const campaignName = row.campaign?.name || ''
-            const channelType = row.campaign?.advertisingChannelType || ''
-            const campaignStatus = row.campaign?.status || ''
-            const reportDate = row.segments?.date || ''
-            const costMicros = Number(row.metrics?.costMicros || 0)
-            const impressions = Number(row.metrics?.impressions || 0)
-            const clicks = Number(row.metrics?.clicks || 0)
-            const conversions = Number(row.metrics?.conversions || 0)
-            const conversionsValue = Number(row.metrics?.conversionsValue || 0)
+        // 5c. P-MAXの未帰属費用（キャンペーン全体 - アセットグループ合計）を記録
+        for (const [key, campaignData] of pmaxCampaignCosts.entries()) {
+            const [campaignName, reportDate] = key.split('|')
+            const assetGroupTotal = pmaxAssetGroupCostSum.get(key) || 0
+            const unattributedCost = campaignData.costMicros - assetGroupTotal
 
-            // キャンペーン名でシリーズマッピングを試みる
-            const seriesCode = seriesMapping.get(campaignName) || null
+            if (unattributedCost > 0) {
+                // 未帰属のインプレッション・クリック等も比例配分
+                const ratio = assetGroupTotal > 0 ? unattributedCost / campaignData.costMicros : 1
+                const { error } = await supabase
+                    .from('google_ads_performance')
+                    .upsert({
+                        campaign_name: campaignName,
+                        asset_group_name: `[P-MAX自動配信] ${campaignName}`,
+                        asset_group_status: 'ENABLED',
+                        report_date: reportDate,
+                        cost_micros: unattributedCost,
+                        impressions: Math.round(campaignData.impressions * ratio),
+                        clicks: Math.round(campaignData.clicks * ratio),
+                        conversions: Math.round(campaignData.conversions * ratio * 100) / 100,
+                        conversions_value: Math.round(campaignData.conversionsValue * ratio * 100) / 100,
+                        series_code: null,
+                        synced_at: new Date().toISOString(),
+                    }, {
+                        onConflict: 'campaign_name,asset_group_name,report_date'
+                    })
 
-            const { error } = await supabase
-                .from('google_ads_performance')
-                .upsert({
-                    campaign_name: campaignName,
-                    asset_group_name: `[${channelType}] ${campaignName}`,
-                    asset_group_status: campaignStatus,
-                    report_date: reportDate,
-                    cost_micros: costMicros,
-                    impressions,
-                    clicks,
-                    conversions,
-                    conversions_value: conversionsValue,
-                    series_code: seriesCode,
-                    synced_at: new Date().toISOString(),
-                }, {
-                    onConflict: 'campaign_name,asset_group_name,report_date'
-                })
-
-            if (error) {
-                console.error(`Insert error for campaign ${campaignName} on ${reportDate}:`, error.message)
-                errorCount++
-            } else {
-                insertedCount++
+                if (error) {
+                    console.error(`Insert error for P-MAX unattributed on ${reportDate}:`, error.message)
+                    errorCount++
+                } else {
+                    insertedCount++
+                }
             }
         }
 
-        // 5. advertising_costs の google_cost を自動更新
+        // 6. advertising_costs の google_cost を自動更新
         await updateAdvertisingCosts(start, end)
 
         return NextResponse.json({
             success: true,
             message: `Synced ${insertedCount} rows (${errorCount} errors)`,
-            totalFetched: assetGroupRows.length + campaignRows.length,
+            totalFetched: campaignRows.length + assetGroupRows.length,
             inserted: insertedCount,
             errors: errorCount,
             period: { start, end },
