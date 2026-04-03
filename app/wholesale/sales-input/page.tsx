@@ -147,7 +147,10 @@ function SalesInputContent() {
   const fetchProducts = async () => {
     const response = await fetch('/api/wholesale/products?type=通常卸');
     const data = await response.json();
-    if (data.success) setProducts(data.products);
+    if (data.success) {
+      // is_activeがtrue（表示設定）のものだけを日別売上入力に表示
+      setProducts(data.products.filter((p: any) => p.is_active));
+    }
   };
 
   const fetchSalesData = async () => {
