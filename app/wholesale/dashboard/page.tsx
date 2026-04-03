@@ -275,27 +275,15 @@ function WholesaleDashboardContent() {
 
   const fetchOemSalesData = async (month: string) => {
     try {
-      const startDate = `${month}-01`;
-      const [year, monthNum] = month.split('-').map(Number);
-      const lastDay = new Date(year, monthNum, 0).getDate();
-      const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
-
-      const supabase = getSupabaseBrowserClient();
-      const { data: sales, error } = await supabase
-        .from('wholesale_sales')
-        .select('*')
-        .not('customer_id', 'is', null)
-        .gte('sale_date', startDate)
-        .lte('sale_date', endDate)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('OEM売上データ取得エラー:', error);
+      // OEM売上はoem_salesテーブルに保存されている（APIと同じデータソース）
+      const response = await fetch(`/api/wholesale/oem-sales?month=${month}`);
+      if (response.ok) {
+        const data = await response.json();
+        setOemSales(data.sales || []);
+      } else {
+        console.error('OEM売上データ取得エラー: HTTPステータス', response.status);
         setOemSales([]);
-        return;
       }
-
-      setOemSales(sales || []);
     } catch (error) {
       console.error('OEM売上データ取得エラー:', error);
       setOemSales([]);
