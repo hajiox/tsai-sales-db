@@ -52,13 +52,12 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const {
-      product_id,
-      customer_id,
-      sale_date,
-      quantity,
-      unit_price
-    } = body;
+    // フロントエンドはcamelCase、旧APIはsnake_caseで送信 — 両方対応
+    const product_id = body.product_id || body.productId;
+    const customer_id = body.customer_id || body.customerId;
+    const sale_date = body.sale_date || body.saleDate;
+    const quantity = body.quantity;
+    const unit_price = body.unit_price || body.unitPrice;
 
     if (!product_id || !customer_id || !sale_date || !quantity || !unit_price) {
       return NextResponse.json({
