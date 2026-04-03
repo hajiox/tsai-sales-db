@@ -79,11 +79,13 @@ export async function POST(request: Request) {
         if (fetchError) throw fetchError;
         if (!original) throw new Error("レシピが見つかりません");
 
-        // 2. Create new recipe (remove id, timestamps, linked_product_id)
-        const { id, created_at, updated_at, linked_product_id, ...rest } = original;
+        // 2. Create new recipe (remove id, timestamps, linked_product_id, product_image_url)
+        // product_image_url はrecipe_imagesテーブルで管理されるため、コピーしない
+        // （URLだけコピーするとrecipe_imagesにレコードがなく削除できなくなる）
+        const { id, created_at, updated_at, linked_product_id, product_image_url, ...rest } = original;
         const { data: newRecipe, error: createError } = await supabase
             .from("recipes")
-            .insert({ ...rest, name: `${original.name} (コピー)`, linked_product_id: null })
+            .insert({ ...rest, name: `${original.name} (コピー)`, linked_product_id: null, product_image_url: null })
             .select()
             .single();
 
