@@ -91,22 +91,15 @@ export default function WebSalesDataTable({
 
         if (error) throw error
 
-        // 楽天・Yahoo広告費の均等配分を計算
-        const seriesCount = new Set(productMaster.map(p => p.series_code)).size || 1
-        const totalRakutenCost = data?.reduce((sum, item) => sum + (item.rakuten_cost || 0), 0) || 0
-        const totalYahooCost = data?.reduce((sum, item) => sum + (item.yahoo_cost || 0), 0) || 0
-        const rakutenPerSeries = Math.round(totalRakutenCost / seriesCount)
-        const yahooPerSeries = Math.round(totalYahooCost / seriesCount)
-
-        // シリーズごとの合計広告費を計算
+        // シリーズごとの合計広告費を計算（各プラットフォームの実データを合算）
         const adCostBySeriesMap = new Map<number, number>()
 
         data?.forEach(item => {
           const totalCost = (item.amazon_cost || 0) +
             (item.google_cost || 0) +
-            (item.other_cost || 0) +
-            rakutenPerSeries +
-            yahooPerSeries
+            (item.rakuten_cost || 0) +
+            (item.yahoo_cost || 0) +
+            (item.other_cost || 0)
           adCostBySeriesMap.set(item.series_code, totalCost)
         })
 
