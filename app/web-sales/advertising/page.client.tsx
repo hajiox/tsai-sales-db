@@ -297,9 +297,12 @@ export default function AdvertisingDashboard() {
         const mapping = mappings[index]; if (mapping.series_code === null) return
         setSavingMapping(mapping.asset_group_name)
         try {
-            const { error } = await supabase.from('google_ads_series_mapping').upsert({ asset_group_name: mapping.asset_group_name, series_code: mapping.series_code }, { onConflict: 'asset_group_name' })
-            if (error) throw error
-            await supabase.from('google_ads_performance').update({ series_code: mapping.series_code }).eq('asset_group_name', mapping.asset_group_name)
+            const res = await fetch('/api/google-ads/learn-mapping', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ asset_group_name: mapping.asset_group_name, series_code: mapping.series_code }),
+            })
+            const data = await res.json()
+            if (!data.success) throw new Error(data.error)
             setMappings(prev => prev.map((m, i) => i === index ? { ...m, isLearned: true, isConfirmed: true } : m))
         } catch (error) { console.error('学習エラー:', error); alert('学習に失敗しました') }
         finally { setSavingMapping(null) }
@@ -559,7 +562,7 @@ export default function AdvertisingDashboard() {
                         </button>
                         <button onClick={openImportPanel} disabled={assetGroups.length === 0}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${isImported ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400'}`}>
-                            {isImported ? <><CheckCircle size={16} />取り込み済み</> : <><Download size={16} />広告費取り込み</>}
+                            {isImported ? <><CheckCircle size={16} />マッチ済み</> : <><Download size={16} />商品マッチング</>}
                         </button>
                         <button onClick={() => handleAiAnalysis()} disabled={isAnalyzing || assetGroups.length === 0}
                             className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
@@ -571,7 +574,7 @@ export default function AdvertisingDashboard() {
                     {showImportPanel && (
                         <div ref={importPanelRef} className="bg-white border-2 border-emerald-300 rounded-xl p-6 space-y-5">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-lg font-bold flex items-center gap-2"><Download className="text-emerald-600" size={22} />Google広告費取り込み — {month}</h2>
+                                <h2 className="text-lg font-bold flex items-center gap-2"><Download className="text-emerald-600" size={22} />Google広告 商品マッチング — {month}</h2>
                                 <button onClick={() => setShowImportPanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">閉じる</button>
                             </div>
                             <p className="text-sm text-gray-600">アセットグループ名と商品グループ（シリーズ）を紐付けます。変更後は「学習」で記憶。</p>
