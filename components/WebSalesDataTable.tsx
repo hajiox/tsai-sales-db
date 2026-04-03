@@ -463,8 +463,11 @@ export default function WebSalesDataTable({
     sites.forEach(site => { siteCounts[site.key] = 0 })
     let totalCount = 0
     let totalAmount = 0
-    let totalAdCost = 0
     let totalProfit = 0
+
+    // シリーズの広告費は1回だけ取得（商品ごとに加算しない）
+    const seriesCode = items.length > 0 && getProductSeriesCode ? getProductSeriesCode(items[0].product_id) : 0
+    const seriesAdCost = adCostData.find(item => item.series_code === seriesCode)?.total_ad_cost || 0
 
     items.forEach(row => {
       const price = getProductPrice(row.product_id)
@@ -481,12 +484,10 @@ export default function WebSalesDataTable({
       const amount = rowTotal * price
       totalAmount += amount
       const profitAmount = Math.round(amount * (profitRate / 100))
-      const adCost = getAdCostForProduct(row.product_id)
-      totalAdCost += adCost
-      totalProfit += profitAmount - adCost
+      totalProfit += profitAmount
     })
 
-    return { siteCounts, totalCount, totalAmount, totalAdCost, totalProfit }
+    return { siteCounts, totalCount, totalAmount, totalAdCost: seriesAdCost, totalProfit: totalProfit - seriesAdCost }
   }
 
   return (
@@ -606,8 +607,6 @@ export default function WebSalesDataTable({
                         const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
                         const totalAmount = totalCount * price
                         const profitAmount = Math.round(totalAmount * (profitRate / 100))
-                        const adCost = getAdCostForProduct(row.product_id)
-                        const finalProfit = profitAmount - adCost
 
                         return (
                           <tr key={row.product_id} className="hover:bg-gray-50 bg-white">
@@ -678,12 +677,12 @@ export default function WebSalesDataTable({
                             <td className="px-4 py-4 text-center font-semibold">
                               ¥{formatNumber(totalAmount)}
                             </td>
-                            <td className="px-4 py-4 text-center text-red-600 font-semibold">
-                              ¥{formatNumber(adCost)}
+                            <td className="px-4 py-4 text-center text-gray-400 text-sm">
+                              -
                             </td>
-                            <td className={`px-4 py-4 text-center font-semibold ${finalProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                            <td className={`px-4 py-4 text-center font-semibold ${profitAmount >= 0 ? 'text-green-600' : 'text-red-600'
                               }`}>
-                              ¥{formatNumber(finalProfit)}
+                              ¥{formatNumber(profitAmount)}
                             </td>
                             <td className="px-4 py-4 text-center">
                               <div className="flex items-center justify-center gap-1">
