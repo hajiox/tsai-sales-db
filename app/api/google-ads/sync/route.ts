@@ -1,7 +1,13 @@
 // /app/api/google-ads/sync/route.ts
 // Google Ads API からアセットグループのパフォーマンスデータを取得してDBに保存
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// サーバーサイドAPI用: service_role_keyでRLSバイパス
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 const API_VERSION = 'v23'
 const GOOGLE_ADS_API_BASE = `https://googleads.googleapis.com/${API_VERSION}`
