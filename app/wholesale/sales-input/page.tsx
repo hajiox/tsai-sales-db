@@ -3,6 +3,7 @@
 
 import { Suspense } from 'react';
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Upload, Save, Link2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -60,7 +61,9 @@ function ColorPalette({ currentColor, onSelect, onClose, anchorEl }: {
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose, anchorEl]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       ref={ref}
       style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
@@ -82,7 +85,8 @@ function ColorPalette({ currentColor, onSelect, onClose, anchorEl }: {
       >
         ✕
       </button>
-    </div>
+    </div>,
+    document.body
   );
 }
 
