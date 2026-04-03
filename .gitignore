@@ -39,3 +39,6 @@ next-env.d.ts
 TSA開発.md
 implementation_plan.md
 *開発.md
+
+.vercel_token_tmp
+sync_body.json

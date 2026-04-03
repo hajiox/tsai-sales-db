@@ -126,7 +126,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, product_code, product_name, price, profit_rate, is_active, product_type, customer_id } = body;
+    const { id, product_code, product_name, price, profit_rate, is_active, product_type, customer_id, row_color } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -143,6 +143,7 @@ export async function PUT(request: Request) {
     if (is_active !== undefined) updateData.is_active = is_active;
     if (product_type !== undefined) updateData.product_type = product_type;
     if (customer_id !== undefined) updateData.customer_id = customer_id || null;
+    if (row_color !== undefined) updateData.row_color = row_color;
 
     const { data, error } = await supabase
       .from('wholesale_products')

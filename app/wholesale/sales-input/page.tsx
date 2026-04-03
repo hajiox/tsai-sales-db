@@ -1,4 +1,4 @@
-// /app/wholesale/sales-input/page.tsx ver.1 — フルワイド日別売上入力画面
+// /app/wholesale/sales-input/page.tsx ver.2 — 行背景色機能付き日別売上入力
 "use client"
 
 import { Suspense } from 'react';
@@ -8,6 +8,18 @@ import { ArrowLeft, Upload, Save, Link2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 
+// 行背景色の定義（5色 + クリア）
+const ROW_COLORS: { key: string; label: string; bg: string; bgCell: string; bgSticky: string; dot: string }[] = [
+  { key: 'yellow',  label: '黄',   bg: 'bg-yellow-50',  bgCell: 'bg-yellow-50',  bgSticky: 'bg-yellow-50',  dot: 'bg-yellow-300' },
+  { key: 'green',   label: '緑',   bg: 'bg-green-50',   bgCell: 'bg-green-50',   bgSticky: 'bg-green-50',   dot: 'bg-green-300'  },
+  { key: 'blue',    label: '青',   bg: 'bg-blue-50',    bgCell: 'bg-blue-50',    bgSticky: 'bg-blue-50',    dot: 'bg-blue-300'   },
+  { key: 'pink',    label: 'ピンク', bg: 'bg-pink-50',  bgCell: 'bg-pink-50',    bgSticky: 'bg-pink-50',    dot: 'bg-pink-300'   },
+  { key: 'purple',  label: '紫',   bg: 'bg-purple-50',  bgCell: 'bg-purple-50',  bgSticky: 'bg-purple-50',  dot: 'bg-purple-300' },
+];
+
+const COLOR_MAP: Record<string, typeof ROW_COLORS[0]> = {};
+ROW_COLORS.forEach(c => { COLOR_MAP[c.key] = c; });
+
 interface Product {
   id: string;
   product_name: string;
@@ -15,11 +27,50 @@ interface Product {
   price: number;
   profit_rate: number;
   product_type: string;
+  row_color?: string | null;
   [key: string]: any;
 }
 
 interface SalesData {
   [productId: string]: { [day: string]: { quantity: number; unit_price: number; amount: number } | undefined; };
+}
+
+// カラーパレットポップオーバー
+function ColorPalette({ currentColor, onSelect, onClose }: {
+  currentColor: string | null | undefined;
+  onSelect: (color: string | null) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div ref={ref} className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex items-center gap-1.5">
+      {ROW_COLORS.map(c => (
+        <button
+          key={c.key}
+          onClick={() => { onSelect(c.key); onClose(); }}
+          className={`w-6 h-6 rounded-full ${c.dot} border-2 transition-all hover:scale-110 ${currentColor === c.key ? 'border-gray-700 ring-2 ring-offset-1 ring-gray-400' : 'border-white'}`}
+          title={c.label}
+        />
+      ))}
+      {/* クリアボタン */}
+      <button
+        onClick={() => { onSelect(null); onClose(); }}
+        className={`w-6 h-6 rounded-full bg-white border-2 border-gray-300 transition-all hover:scale-110 flex items-center justify-center text-gray-400 text-[10px] font-bold ${!currentColor ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+        title="色なし"
+      >
+        ✕
+      </button>
+    </div>
+  );
 }
 
 function SalesInputContent() {
@@ -37,6 +88,7 @@ function SalesInputContent() {
   const [yearOptions, setYearOptions] = useState<string[]>([]);
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
+  const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null); // productId or null
 
   useEffect(() => {
     setMounted(true);
@@ -177,6 +229,24 @@ function SalesInputContent() {
       }
     });
     return { totalQuantity, totalAmount };
+  };
+
+  // 行の背景色変更
+  const handleRowColorChange = async (productId: string, color: string | null) => {
+    // ローカルstate即時反映
+    setProducts(prev => prev.map(p =>
+      p.id === productId ? { ...p, row_color: color } : p
+    ));
+    // DB保存
+    try {
+      await fetch('/api/wholesale/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: productId, row_color: color })
+      });
+    } catch (error) {
+      console.error('行色保存エラー:', error);
+    }
   };
 
   // CSV読み込み
@@ -367,20 +437,45 @@ function SalesInputContent() {
                 </tr>
               ) : products.map((product) => {
                 const { totalQuantity, totalAmount } = calculateTotals(product.id);
+                const colorDef = product.row_color ? COLOR_MAP[product.row_color] : null;
+                const rowBg = colorDef ? colorDef.bg : '';
+                const stickyBg = colorDef ? colorDef.bgSticky : 'bg-white';
+                const totalBg = colorDef ? colorDef.bgCell : 'bg-blue-50';
                 return (
-                  <tr key={product.id} className="border-b hover:bg-gray-50">
-                    <td className="p-2 border-r sticky left-0 bg-white z-10">
-                      <div className="font-medium text-gray-800 flex items-center gap-1">
-                        {product.product_name}
-                        {linkedProductIds.has(product.id) && (
-                          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium" title="レシピ紐付済">
-                            <Link2 className="h-2.5 w-2.5" />
-                          </span>
-                        )}
+                  <tr key={product.id} className={`border-b hover:bg-gray-50/50 ${rowBg}`}>
+                    <td className={`p-2 border-r sticky left-0 z-10 ${stickyBg}`}>
+                      <div className="flex items-center gap-1.5">
+                        {/* カラーインジケータ */}
+                        <div className="relative flex-shrink-0">
+                          <button
+                            onClick={() => setColorPickerOpen(colorPickerOpen === product.id ? null : product.id)}
+                            className={`w-3.5 h-3.5 rounded-full border transition-all hover:scale-125 ${
+                              colorDef ? `${colorDef.dot} border-gray-400` : 'bg-gray-200 border-gray-300 hover:bg-gray-300'
+                            }`}
+                            title="行の色を変更"
+                          />
+                          {colorPickerOpen === product.id && (
+                            <ColorPalette
+                              currentColor={product.row_color}
+                              onSelect={(color) => handleRowColorChange(product.id, color)}
+                              onClose={() => setColorPickerOpen(null)}
+                            />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-800 flex items-center gap-1">
+                            {product.product_name}
+                            {linkedProductIds.has(product.id) && (
+                              <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium" title="レシピ紐付済">
+                                <Link2 className="h-2.5 w-2.5" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-gray-500">¥{product.price.toLocaleString()}</div>
+                        </div>
                       </div>
-                      <div className="text-gray-500">¥{product.price.toLocaleString()}</div>
                     </td>
-                    <td className="p-1 border-l text-center bg-blue-50 font-medium">
+                    <td className={`p-1 border-l text-center font-medium ${totalBg}`}>
                       <div className="text-gray-800">{totalQuantity || ''}</div>
                       <div className="text-[10px] text-gray-500">{totalAmount > 0 ? `¥${totalAmount.toLocaleString()}` : ''}</div>
                     </td>
@@ -396,7 +491,7 @@ function SalesInputContent() {
                             onChange={(e) => handleQuantityChange(product.id, day, e.target.value)}
                             onBlur={() => saveSalesData(product.id, day)}
                             onKeyDown={(e) => handleInputKeyDown(e, product.id, day)}
-                            className="w-full h-full p-1 text-center bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-blue-50"
+                            className={`w-full h-full p-1 text-center bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-blue-50`}
                             aria-label={`${product.product_name} ${day}日`}
                           />
                         </td>
