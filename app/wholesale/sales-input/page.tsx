@@ -35,24 +35,37 @@ interface SalesData {
   [productId: string]: { [day: string]: { quantity: number; unit_price: number; amount: number } | undefined; };
 }
 
-// カラーパレットポップオーバー
-function ColorPalette({ currentColor, onSelect, onClose }: {
+// カラーパレットポップオーバー（fixed positioning でテーブル行に隠れない）
+function ColorPalette({ currentColor, onSelect, onClose, anchorEl }: {
   currentColor: string | null | undefined;
   onSelect: (color: string | null) => void;
   onClose: () => void;
+  anchorEl: HTMLElement | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (anchorEl) {
+      const rect = anchorEl.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left });
+    }
+  }, [anchorEl]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (ref.current && !ref.current.contains(e.target as Node) && anchorEl && !anchorEl.contains(e.target as Node)) onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  }, [onClose, anchorEl]);
 
   return (
-    <div ref={ref} className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex items-center gap-1.5">
+    <div
+      ref={ref}
+      style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+      className="bg-white border border-gray-200 rounded-lg shadow-xl p-2 flex items-center gap-1.5"
+    >
       {ROW_COLORS.map(c => (
         <button
           key={c.key}
@@ -88,7 +101,7 @@ function SalesInputContent() {
   const [yearOptions, setYearOptions] = useState<string[]>([]);
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
-  const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null); // productId or null
+  const [colorPickerOpen, setColorPickerOpen] = useState<{ productId: string; anchorEl: HTMLElement } | null>(null); // カラーパレット開閉
 
   useEffect(() => {
     setMounted(true);
@@ -446,19 +459,24 @@ function SalesInputContent() {
                     <td className={`p-2 border-r sticky left-0 z-10 ${stickyBg}`}>
                       <div className="flex items-center gap-1.5">
                         {/* カラーインジケータ */}
-                        <div className="relative flex-shrink-0">
+                        <div className="flex-shrink-0">
                           <button
-                            onClick={() => setColorPickerOpen(colorPickerOpen === product.id ? null : product.id)}
+                            onClick={(e) => setColorPickerOpen(
+                              colorPickerOpen?.productId === product.id
+                                ? null
+                                : { productId: product.id, anchorEl: e.currentTarget }
+                            )}
                             className={`w-3.5 h-3.5 rounded-full border transition-all hover:scale-125 ${
                               colorDef ? `${colorDef.dot} border-gray-400` : 'bg-gray-200 border-gray-300 hover:bg-gray-300'
                             }`}
                             title="行の色を変更"
                           />
-                          {colorPickerOpen === product.id && (
+                          {colorPickerOpen?.productId === product.id && (
                             <ColorPalette
                               currentColor={product.row_color}
                               onSelect={(color) => handleRowColorChange(product.id, color)}
                               onClose={() => setColorPickerOpen(null)}
+                              anchorEl={colorPickerOpen.anchorEl}
                             />
                           )}
                         </div>
