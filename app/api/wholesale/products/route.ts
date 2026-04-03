@@ -1,4 +1,5 @@
 // /api/wholesale/products/route.ts ver.7 統合版 — product_type更新・バッチ削除対応
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 

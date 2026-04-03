@@ -1,4 +1,5 @@
 // /app/api/wholesale/oem-products/route.ts ver.2 自動採番対応版
+export const dynamic = 'force-dynamic';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
