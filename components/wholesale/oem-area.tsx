@@ -65,14 +65,12 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
     const sales = oemSales.filter(sale => sale.product_id === product.id);
     const totalQuantity = sales.reduce((sum, sale) => sum + sale.quantity, 0);
     const totalAmount = sales.reduce((sum, sale) => sum + sale.amount, 0);
-    const unitPrices = [...new Set(sales.map(s => s.unit_price))];
-    const displayPrice = unitPrices.length === 1 ? unitPrices[0] : (totalQuantity > 0 ? Math.round(totalAmount / totalQuantity) : product.price);
 
     return {
       product,
       totalQuantity,
       totalAmount,
-      displayPrice
+      displayPrice: product.price  // マスター価格を表示
     };
   }).filter(item => item.totalAmount > 0)
     .sort((a, b) => b.totalAmount - a.totalAmount);
