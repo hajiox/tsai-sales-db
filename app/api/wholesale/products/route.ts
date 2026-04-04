@@ -65,14 +65,27 @@ export async function POST(request: Request) {
     // 商品コード自動採番（未指定の場合）
     let finalProductCode = product_code;
     if (!finalProductCode) {
-      const { data: maxCodeData } = await supabase
+      const { data: allCodes } = await supabase
         .from('wholesale_products')
-        .select('product_code')
-        .order('product_code', { ascending: false })
-        .limit(1);
-      const maxCode = maxCodeData?.[0]?.product_code;
-      const nextNum = maxCode ? parseInt(maxCode, 10) + 1 : 1;
-      finalProductCode = String(nextNum).padStart(4, '0');
+        .select('product_code');
+      // 全コードから数値に変換できるものの最大値を求める
+      let maxNum = 0;
+      if (allCodes) {
+        for (const row of allCodes) {
+          const num = parseInt(row.product_code, 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      }
+      finalProductCode = String(maxNum + 1).padStart(4, '0');
+      // 万が一まだ重複する場合はタイムスタンプ付き
+      const { data: existing } = await supabase
+        .from('wholesale_products')
+        .select('id')
+        .eq('product_code', finalProductCode)
+        .maybeSingle();
+      if (existing) {
+        finalProductCode = String(maxNum + 1) + '-' + Date.now().toString(36).slice(-4);
+      }
     }
 
     // 既存商品の最大display_orderを取得
