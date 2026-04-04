@@ -5,7 +5,7 @@ import { Suspense } from 'react';
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Upload, Save, Link2 } from 'lucide-react';
+import { ArrowLeft, Upload, Save, Link2, GripVertical } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 
@@ -106,6 +106,10 @@ function SalesInputContent() {
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
   const [colorPickerOpen, setColorPickerOpen] = useState<{ productId: string; anchorEl: HTMLElement } | null>(null); // カラーパレット開閉
+
+  // ドラッグ&ドロップ
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -266,6 +270,58 @@ function SalesInputContent() {
       });
     } catch (error) {
       console.error('行色保存エラー:', error);
+    }
+  };
+
+  // === ドラッグ&ドロップ並び替え ===
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.4';
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
+    setDragId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(id);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropId: string) => {
+    e.preventDefault();
+    if (!dragId || dragId === dropId) {
+      setDragId(null);
+      setDragOverId(null);
+      return;
+    }
+    const currentList = [...products];
+    const dragIndex = currentList.findIndex(p => p.id === dragId);
+    const dropIndex = currentList.findIndex(p => p.id === dropId);
+    if (dragIndex === -1 || dropIndex === -1) return;
+    const [dragged] = currentList.splice(dragIndex, 1);
+    currentList.splice(dropIndex, 0, dragged);
+    setProducts(currentList);
+    setDragId(null);
+    setDragOverId(null);
+    // サーバーに保存
+    try {
+      await fetch('/api/wholesale/products/reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds: currentList.map(p => p.id) })
+      });
+    } catch (error) {
+      console.error('並び替え保存エラー:', error);
+      await fetchProducts();
     }
   };
 
@@ -435,8 +491,8 @@ function SalesInputContent() {
           <table className="w-full text-xs border-collapse">
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-100 border-b">
-                <th className="p-2 text-left font-semibold text-gray-700 min-w-[200px] border-r sticky left-0 bg-gray-100 z-20">
-                  商品情報
+                <th className="p-2 text-left font-semibold text-gray-700 min-w-[220px] border-r sticky left-0 bg-gray-100 z-20">
+                  <span className="ml-5">商品情報</span>
                 </th>
                 <th className="p-1.5 text-center font-semibold text-gray-700 min-w-[50px] border-l bg-blue-50">
                   合計
@@ -462,9 +518,21 @@ function SalesInputContent() {
                 const stickyBg = colorDef ? colorDef.bgSticky : 'bg-white';
                 const totalBg = colorDef ? colorDef.bgCell : 'bg-blue-50';
                 return (
-                  <tr key={product.id} className={`border-b hover:bg-gray-50/50 ${rowBg}`}>
+                  <tr
+                    key={product.id}
+                    className={`border-b hover:bg-gray-50/50 ${rowBg} ${dragOverId === product.id && dragId !== product.id ? 'border-t-2 border-t-blue-400' : ''}`}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, product.id)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleDragOver(e, product.id)}
+                    onDrop={(e) => handleDrop(e, product.id)}
+                  >
                     <td className={`p-2 border-r sticky left-0 z-10 ${stickyBg}`}>
                       <div className="flex items-center gap-1.5">
+                        {/* ドラッグハンドル */}
+                        <div className="cursor-grab active:cursor-grabbing flex-shrink-0">
+                          <GripVertical className="w-3.5 h-3.5 text-gray-400" />
+                        </div>
                         {/* カラーインジケータ */}
                         <div className="flex-shrink-0">
                           <button
