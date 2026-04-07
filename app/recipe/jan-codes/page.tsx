@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Search, Save, Copy, Package, Box, Tag, Key } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import BarcodeImage from "@/components/barcode-image";
 
 interface JanCode {
     id: string;
@@ -307,13 +308,14 @@ export default function JanCodesPage() {
                             <th className="px-2 py-2 text-left min-w-[250px]">商品名</th>
                             <th className="px-2 py-2 text-right w-24">税抜価格</th>
                             <th className="px-2 py-2 text-left w-64">備考</th>
+                            <th className="px-2 py-2 text-center w-36">バーコード</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={7} className="text-center py-8 text-gray-500">読み込み中...</td></tr>
+                            <tr><td colSpan={8} className="text-center py-8 text-gray-500">読み込み中...</td></tr>
                         ) : filtered.length === 0 ? (
-                            <tr><td colSpan={7} className="text-center py-8 text-gray-500">データがありません</td></tr>
+                            <tr><td colSpan={8} className="text-center py-8 text-gray-500">データがありません</td></tr>
                         ) : (
                             filtered.map((item) => (
                                 <tr key={item.id} className="border-b hover:bg-gray-50">
@@ -346,6 +348,9 @@ export default function JanCodesPage() {
                                     </td>
                                     <td className="px-2 py-1 text-gray-600">
                                         {renderEditableCell(item, 'memo', item.memo || "", 'min-w-[200px]')}
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                        <BarcodeImage code={item.jan_code} scale={4} />
                                     </td>
                                 </tr>
                             ))
