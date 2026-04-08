@@ -16,7 +16,7 @@ import { SalesAdjustmentHistoryModal } from '@/components/brand-store/SalesAdjus
 import { CategoryRankingCard } from '@/components/brand-store/CategoryRankingCard'
 import { ProductRankingCard } from '@/components/brand-store/ProductRankingCard'
 import { ProductSalesTable } from '@/components/brand-store/ProductSalesTable'
-import { TrendingUp, Package, Settings, Edit, History } from 'lucide-react'
+import { TrendingUp, Package, Settings, Edit, History, Target } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import ClientOnly from '@/components/common/ClientOnly' // ver.10 (2025-08-19 JST) - client-only charts
@@ -34,6 +34,7 @@ function BrandStoreAnalysisContent() {
   const [data, setData] = useState<any>(null)
   const [chartData, setChartData] = useState<any[]>([])
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0)
+  const [storeTarget, setStoreTarget] = useState<number>(0)
   const [loading, setLoading] = useState(false)
   const supabase = getSupabaseBrowserClient()
 
@@ -85,6 +86,19 @@ function BrandStoreAnalysisContent() {
     } catch (error) {
       console.error('修正額取得エラー:', error)
       return 0
+    }
+  }
+
+  const fetchStoreTarget = async () => {
+    try {
+      const formattedMonth = String(selectedMonth).padStart(2, '0')
+      const response = await fetch(`/api/kpi/store-target?month=${selectedYear}-${formattedMonth}`)
+      if (response.ok) {
+        const data = await response.json()
+        setStoreTarget(data.target || 0)
+      }
+    } catch (error) {
+      console.error('ブランド館の目標取得エラー:', error)
     }
   }
 
@@ -264,6 +278,7 @@ function BrandStoreAnalysisContent() {
 
   useEffect(() => {
     fetchData()
+    fetchStoreTarget()
   }, [selectedYear, selectedMonth])
 
   const handleYearChange = (value: string) => {
@@ -331,7 +346,35 @@ function BrandStoreAnalysisContent() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
+
+                {storeTarget > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2 text-blue-600 text-sm">
+                        <Target className="w-4 h-4" />
+                        <span>目標</span>
+                      </div>
+                      <div className="text-sm font-semibold text-blue-800">
+                        {formatCurrency(storeTarget)}
+                      </div>
+                    </div>
+                    {(() => {
+                      const rate = Math.round((adjustedTotalSales / storeTarget) * 1000) / 10;
+                      const rateColor = rate >= 100 ? 'text-blue-600' : rate >= 50 ? 'text-blue-500' : 'text-blue-400';
+                      const bgColor = rate >= 100 ? 'bg-blue-500' : rate >= 50 ? 'bg-blue-400' : 'bg-blue-300';
+                      return (
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className={`h-full ${bgColor} rounded-full transition-all duration-500`} style={{ width: `${Math.min(rate, 100)}%` }} />
+                          </div>
+                          <span className={`text-sm font-bold ${rateColor}`}>{rate}%</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between mt-2">
                   <div className="flex items-center gap-2">
                     <Package className="h-4 w-4 text-green-600" />
                     <span className="text-sm text-muted-foreground">販売個数</span>
