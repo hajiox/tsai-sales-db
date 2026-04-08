@@ -12,7 +12,7 @@ import { CategoryRankingCard } from "@/components/food-store/CategoryRankingCard
 import { ProductRankingCard } from "@/components/food-store/ProductRankingCard"
 import { ProductSalesTable } from "@/components/food-store/ProductSalesTable"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, Package, Settings, Link } from "lucide-react"
+import { TrendingUp, Package, Settings, Link, Target } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import ClientOnly from '@/components/common/ClientOnly' // ver.11 (2025-08-19 JST) - client-only charts
@@ -28,6 +28,7 @@ function FoodStoreAnalysisContent() {
  const [showMappingModal, setShowMappingModal] = useState(false)
  const [data, setData] = useState<any>(null)
  const [chartData, setChartData] = useState<any[]>([])
+ const [shokuTarget, setShokuTarget] = useState<number>(0)
  const [loading, setLoading] = useState(false)
  const supabase = getSupabaseBrowserClient()
 
@@ -62,6 +63,19 @@ function FoodStoreAnalysisContent() {
  ).reverse()
 
  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
+
+ const fetchShokuTarget = async () => {
+   try {
+     const formattedMonth = String(selectedMonth).padStart(2, '0')
+     const response = await fetch(`/api/kpi/shoku-target?month=${selectedYear}-${formattedMonth}`)
+     if (response.ok) {
+       const data = await response.json()
+       setShokuTarget(data.target || 0)
+     }
+   } catch (error) {
+     console.error('食のブランド館目標取得エラー:', error)
+   }
+ }
 
  const fetchData = async () => {
    setLoading(true)
@@ -251,6 +265,7 @@ function FoodStoreAnalysisContent() {
 
  useEffect(() => {
    fetchData()
+   fetchShokuTarget()
  }, [selectedYear, selectedMonth])
 
  const handleYearChange = (value: string) => {
