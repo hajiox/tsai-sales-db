@@ -1,10 +1,10 @@
-// /components/websales-summary-cards.tsx ver.16 (TikTok対応版)
+// /components/websales-summary-cards.tsx ver.17 (目標達成率対応版)
 "use client"
 
 import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
-import { TrendingUp } from "lucide-react"
+import { TrendingUp, Target } from "lucide-react"
 
 const SITES = [
   { key: "amazon", name: "Amazon", bgColor: "bg-green-50", borderColor: "border-green-200" },
@@ -56,6 +56,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const [loading, setLoading] = useState(true);
   const [rpcTotalAdCost, setRpcTotalAdCost] = useState(0);
   const [rpcTotalFinalProfit, setRpcTotalFinalProfit] = useState(0);
+  const [webTarget, setWebTarget] = useState(0);
 
   const [hoveredItem, setHoveredItem] = useState<HoveredItem | null>(null);
   const [trendData, setTrendData] = useState<Record<string, TrendData[]>>({});
@@ -117,13 +118,15 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [financialRes, seriesRes] = await Promise.all([
+        const [financialRes, seriesRes, targetRes] = await Promise.all([
           supabase.rpc('get_monthly_financial_summary', { target_month: month }),
-          supabase.rpc('get_monthly_series_summary', { target_month: month })
+          supabase.rpc('get_monthly_series_summary', { target_month: month }),
+          fetch(`/api/kpi/web-target?month=${month}`).then(r => r.json()).catch(() => ({ target: 0 }))
         ]);
 
         if (financialRes.error) throw financialRes.error;
         if (seriesRes.error) throw seriesRes.error;
+        setWebTarget(targetRes.target ?? 0);
 
         const financialData = financialRes.data;
         if (financialData && financialData.length > 0) {
@@ -233,7 +236,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     <div className="space-y-6 relative" ref={containerRef}>
       <div className="grid grid-cols-4 md:grid-cols-8 gap-4 relative">
         <Card
-          className="text-center bg-gray-50 border-gray-200 cursor-pointer"
+          className="text-center bg-gray-50 border-gray-200 cursor-pointer col-span-1"
           onMouseEnter={(e) => handleMouseEnter({ type: 'total', key: 'grandTotal', name: '総合計' }, e)}
           onMouseLeave={handleMouseLeave}
         >
@@ -243,6 +246,32 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             <div className="text-sm text-gray-600">売上: ¥{formatNumber(grandTotalSales)}</div>
             <div className="text-sm text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
             <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
+            {webTarget > 0 && (
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
+                  <Target className="w-3 h-3" />
+                  <span>目標: ¥{formatNumber(webTarget)}</span>
+                </div>
+                {(() => {
+                  const rate = Math.round((grandTotalSales / webTarget) * 1000) / 10;
+                  const rateColor = rate >= 100 ? 'text-green-600' : rate >= 50 ? 'text-yellow-600' : 'text-red-600';
+                  const bgColor = rate >= 100 ? 'bg-green-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500';
+                  return (
+                    <>
+                      <div className={`text-lg font-bold ${rateColor}`}>
+                        {rate}%
+                      </div>
+                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${bgColor} rounded-full transition-all duration-500`}
+                          style={{ width: `${Math.min(rate, 100)}%` }}
+                        />
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </CardContent>
         </Card>
 
