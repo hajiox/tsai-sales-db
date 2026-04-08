@@ -1,8 +1,8 @@
-// /components/wholesale/summary-cards.tsx ver.6 利益率表示追加
+// /components/wholesale/summary-cards.tsx ver.7 目標達成率追加
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, Package, FileText, Calendar, CalendarDays } from 'lucide-react';
+import { TrendingUp, Package, FileText, Calendar, CalendarDays, Target } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface Product {
@@ -38,11 +38,26 @@ export default function SummaryCards({
     months12: { count: 0, amount: 0, profit: 0 }
   });
   const [loading, setLoading] = useState(true);
+  const [wholesaleTarget, setWholesaleTarget] = useState(0);
 
   useEffect(() => {
     if (!selectedYear || !selectedMonth) return;
     fetchHistoricalData();
+    fetchTarget();
   }, [selectedYear, selectedMonth]);
+
+  const fetchTarget = async () => {
+    try {
+      const formattedMonth = selectedMonth.padStart(2, '0');
+      const response = await fetch(`/api/kpi/wholesale-target?year=${selectedYear}&month=${selectedYear}-${formattedMonth}`);
+      if (response.ok) {
+        const data = await response.json();
+        setWholesaleTarget(data.target || 0);
+      }
+    } catch (error) {
+      console.error('卸目標取得エラー:', error);
+    }
+  };
 
   const fetchHistoricalData = async () => {
     setLoading(true);
@@ -140,6 +155,27 @@ export default function SummaryCards({
             利益: ¥{totalProfit.toLocaleString()}
             <span className="ml-1 text-[10px]">({totalAmount > 0 ? (totalProfit / totalAmount * 100).toFixed(1) : '0.0'}%)</span>
           </div>
+          {wholesaleTarget > 0 && (
+            <div className="mt-2 pt-2 border-t border-blue-200">
+              <div className="flex items-center justify-center gap-1 text-xs text-blue-500 mb-1">
+                <Target className="w-3 h-3" />
+                <span>目標: ¥{wholesaleTarget.toLocaleString()}</span>
+              </div>
+              {(() => {
+                const rate = Math.round((totalAmount / wholesaleTarget) * 1000) / 10;
+                const rateColor = rate >= 100 ? 'text-blue-600' : rate >= 50 ? 'text-blue-500' : 'text-blue-400';
+                const bgColor = rate >= 100 ? 'bg-blue-500' : rate >= 50 ? 'bg-blue-400' : 'bg-blue-300';
+                return (
+                  <>
+                    <div className={`text-lg font-bold ${rateColor}`}>{rate}%</div>
+                    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className={`h-full ${bgColor} rounded-full transition-all duration-500`} style={{ width: `${Math.min(rate, 100)}%` }} />
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
           <div className="text-[10px] text-blue-400">
             卸+OEM
           </div>
