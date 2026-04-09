@@ -45,6 +45,34 @@ function FoodStoreAnalysisContent() {
        setSelectedYear(year)
        setSelectedMonth(month)
      }
+   } else {
+     // パラメータがない場合、データのある最新月を取得
+     const fetchLatestMonth = async () => {
+       try {
+         const { data, error } = await supabase
+           .from('food_store_sales')
+           .select('report_month')
+           .order('report_month', { ascending: false })
+           .limit(1)
+
+         if (!error && data && data.length > 0) {
+           const raw = String(data[0].report_month) // 'YYYY-MM-01'
+           const latestYear = parseInt(raw.substring(0, 4))
+           const latestMonth = parseInt(raw.substring(5, 7))
+           setSelectedYear(latestYear)
+           setSelectedMonth(latestMonth)
+           
+           // URLを更新
+           const params = new URLSearchParams()
+           params.set('year', latestYear.toString())
+           params.set('month', latestMonth.toString())
+           router.replace(`/food-store-analysis?${params.toString()}`)
+         }
+       } catch (error) {
+         console.error('最新月の取得エラー:', error)
+       }
+     }
+     fetchLatestMonth()
    }
  }, [searchParams])
 

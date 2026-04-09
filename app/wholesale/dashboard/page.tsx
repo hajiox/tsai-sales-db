@@ -138,6 +138,12 @@ function WholesaleDashboardContent() {
             const latestMonth = String(latestDate.getUTCMonth() + 1).padStart(2, '0');
             setSelectedYear(latestYear);
             setSelectedMonth(latestMonth);
+            
+            // 最新月のURLパラメータをセット
+            const params = new URLSearchParams();
+            params.set('year', latestYear);
+            params.set('month', latestMonth);
+            router.replace(`/wholesale/dashboard?${params.toString()}`);
           } else {
             // データがない場合は当月
             setSelectedYear(String(now.getFullYear()));
