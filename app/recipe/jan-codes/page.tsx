@@ -35,8 +35,7 @@ export default function JanCodesPage() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [newProductName, setNewProductName] = useState("");
     const [newCategory, setNewCategory] = useState("食品");
-    const [newPrice, setNewPrice] = useState("");
-    const [newMemo, setNewMemo] = useState("");
+
 
     // Edit state
     const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
@@ -83,8 +82,6 @@ export default function JanCodesPage() {
                 body: JSON.stringify({
                     product_name: newProductName,
                     category: newCategory,
-                    price_excl_tax: newPrice ? Number(newPrice) : null,
-                    memo: newMemo
                 }),
             });
 
@@ -98,8 +95,6 @@ export default function JanCodesPage() {
             
             // Reset form
             setNewProductName("");
-            setNewPrice("");
-            setNewMemo("");
             
             // Refetch
             fetchJanCodes();
@@ -236,27 +231,6 @@ export default function JanCodesPage() {
                             className="w-full bg-white"
                         />
                     </div>
-                    
-                    <div className="flex-1 w-full space-y-2">
-                        <label className="text-xs font-bold text-gray-600">価格（税抜）※任意</label>
-                        <Input
-                            type="number"
-                            placeholder="例: 1000"
-                            value={newPrice}
-                            onChange={(e) => setNewPrice(e.target.value)}
-                            className="full bg-white text-right"
-                        />
-                    </div>
-
-                    <div className="flex-[2] w-full space-y-2">
-                        <label className="text-xs font-bold text-gray-600">備考 ※任意</label>
-                        <Input
-                            placeholder="例: 賞味期限など"
-                            value={newMemo}
-                            onChange={(e) => setNewMemo(e.target.value)}
-                            className="full bg-white"
-                        />
-                    </div>
 
                     <div className="w-full md:w-auto">
                         <Button 
@@ -306,16 +280,14 @@ export default function JanCodesPage() {
                             <th className="px-3 py-2 text-left w-36">JANコード</th>
                             <th className="px-3 py-2 text-center w-10">CD</th>
                             <th className="px-2 py-2 text-left min-w-[250px]">商品名</th>
-                            <th className="px-2 py-2 text-right w-24">税抜価格</th>
-                            <th className="px-2 py-2 text-left w-64">備考</th>
                             <th className="px-2 py-2 text-center w-36">バーコード</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={8} className="text-center py-8 text-gray-500">読み込み中...</td></tr>
+                            <tr><td colSpan={6} className="text-center py-8 text-gray-500">読み込み中...</td></tr>
                         ) : filtered.length === 0 ? (
-                            <tr><td colSpan={8} className="text-center py-8 text-gray-500">データがありません</td></tr>
+                            <tr><td colSpan={6} className="text-center py-8 text-gray-500">データがありません</td></tr>
                         ) : (
                             filtered.map((item) => (
                                 <tr key={item.id} className="border-b hover:bg-gray-50">
@@ -342,12 +314,6 @@ export default function JanCodesPage() {
                                     </td>
                                     <td className="px-2 py-1 font-medium">
                                         {renderEditableCell(item, 'product_name', item.product_name, 'min-w-[200px]')}
-                                    </td>
-                                    <td className="px-2 py-1 text-right">
-                                        {renderEditableCell(item, 'price_excl_tax', item.price_excl_tax != null ? String(item.price_excl_tax) : "", 'w-20 text-right')}
-                                    </td>
-                                    <td className="px-2 py-1 text-gray-600">
-                                        {renderEditableCell(item, 'memo', item.memo || "", 'min-w-[200px]')}
                                     </td>
                                     <td className="px-2 py-2 text-center">
                                         <BarcodeImage code={item.jan_code} scale={4} />
