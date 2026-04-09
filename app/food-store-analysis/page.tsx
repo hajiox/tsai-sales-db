@@ -320,7 +320,35 @@ function FoodStoreAnalysisContent() {
                  </div>
                  <div className="text-xl font-bold">{formatCurrency(data.totalSales)}</div>
                </div>
-               <div className="flex items-center justify-between">
+
+               {shokuTarget > 0 && (
+                 <div className="mt-2 pt-2 border-t border-gray-100">
+                   <div className="flex items-center justify-between mb-1">
+                     <div className="flex items-center gap-2 text-blue-600 text-sm">
+                       <Target className="w-4 h-4" />
+                       <span>目標</span>
+                     </div>
+                     <div className="text-sm font-semibold text-blue-800">
+                       {formatCurrency(shokuTarget)}
+                     </div>
+                   </div>
+                   {(() => {
+                     const rate = Math.round((data.totalSales / shokuTarget) * 1000) / 10;
+                     const rateColor = rate >= 100 ? 'text-blue-600' : rate >= 50 ? 'text-blue-500' : 'text-blue-400';
+                     const bgColor = rate >= 100 ? 'bg-blue-500' : rate >= 50 ? 'bg-blue-400' : 'bg-blue-300';
+                     return (
+                       <div className="flex items-center gap-2">
+                         <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                           <div className={`h-full ${bgColor} rounded-full transition-all duration-500`} style={{ width: `${Math.min(rate, 100)}%` }} />
+                         </div>
+                         <span className={`text-sm font-bold ${rateColor}`}>{rate}%</span>
+                       </div>
+                     );
+                   })()}
+                 </div>
+               )}
+
+               <div className="flex items-center justify-between mt-2">
                  <div className="flex items-center gap-2">
                    <Package className="h-4 w-4 text-green-600" />
                    <span className="text-sm text-muted-foreground">販売個数</span>
