@@ -293,6 +293,7 @@ export default function RecipeDetailPage() {
       return;
     }
     // スナップショットデータをローカルstateに読み込み
+    // 重要: 全アイテムにtemp-IDを付与して「新規」として扱う（DBの既存アイテムと混同させない）
     const snap = version.snapshot_recipe;
     setRecipe(prev => prev ? {
       ...prev,
@@ -301,7 +302,7 @@ export default function RecipeDetailPage() {
     } : prev);
     setItems(version.snapshot_items.map((si: any) => ({
       ...si,
-      id: si.id || `preview-${Math.random().toString(36).slice(2)}`,
+      id: `temp-preview-${Math.random().toString(36).slice(2)}`,
     })));
     setPreviewingVersionId(version.id);
     setHasChanges(true);
@@ -828,8 +829,27 @@ export default function RecipeDetailPage() {
     if (!recipe) return;
 
     try {
-      const newItemsList = items.filter((i) => i.id.startsWith("temp-"));
-      const existingItemsList = items.filter((i) => !i.id.startsWith("temp-"));
+      // previewモードの場合、全アイテムがtemp-IDなので、既存DBアイテムを全削除する必要がある
+      const allItemsAreNew = items.every(i => i.id.startsWith('temp-'));
+      let newItemsList: typeof items;
+      let existingItemsList: typeof items;
+      let finalDeletedIds: string[];
+
+      if (allItemsAreNew || previewingVersionId) {
+        // プレビュー復元 or 全新規: DBの既存アイテムを全削除してから全挿入
+        newItemsList = items;
+        existingItemsList = [];
+        // 現在DBにあるアイテムIDを取得して全削除対象にする
+        const { data: currentDbItems } = await supabase
+          .from('recipe_items')
+          .select('id')
+          .eq('recipe_id', recipe.id);
+        finalDeletedIds = (currentDbItems || []).map((i: { id: string }) => i.id);
+      } else {
+        newItemsList = items.filter((i) => i.id.startsWith('temp-'));
+        existingItemsList = items.filter((i) => !i.id.startsWith('temp-'));
+        finalDeletedIds = Array.from(deletedItemIds);
+      }
 
       // Amazon手数料をitems内の expense から除外して計算
       const itemsWithoutAmazonFee = items.filter(
@@ -862,7 +882,7 @@ export default function RecipeDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipeId: recipe.id,
-          deletedItemIds: Array.from(deletedItemIds),
+          deletedItemIds: finalDeletedIds,
           newItems: newItemsList,
           existingItems: existingItemsList,
           recipeUpdates: {
