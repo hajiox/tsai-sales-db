@@ -2413,7 +2413,7 @@ Now Expanded or Scrollable */}
                                               setTimeout(() => handleItemChange(item.id, 'usage_amount', grams || 0), 0);
                                             }
                                           }}
-                                          className={`text-[10px] px-1.5 py-0.5 rounded border font-medium transition ${
+                                          className={`text-[10px] px-1.5 py-0.5 rounded border font-medium transition whitespace-nowrap ${
                                             parseFloat(String(item.unit_quantity)) === -1
                                               ? 'bg-purple-100 text-purple-700 border-purple-300'
                                               : 'bg-gray-100 text-gray-600 border-gray-300'
