@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import FaxPushNotification from "@/components/FaxPushNotification";
 
 type Module =
   | "sales"
@@ -65,8 +66,11 @@ export default function MainSidebar() {
 
   return (
     <div className="w-64 bg-slate-800 text-white flex flex-col">
-      <div className="p-6 border-b border-slate-700">
+      <div className="p-6 pb-4 border-b border-slate-700">
         <h1 className="text-xl font-bold">TSAシステム</h1>
+        <div className="mt-2">
+          <FaxPushNotification />
+        </div>
       </div>
 
       <nav className="flex-1 p-4 space-y-2">

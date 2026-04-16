@@ -567,8 +567,15 @@ export default function RecipeDetailPage() {
             const isMat = updatedItem.item_type === "material" || updatedItem.item_type === "expense";
 
             if (isIntermediate) {
-              // 中間加工品/商品: usage_amount(個数) × unit_price(元レシピの原価)
-              updatedItem.cost = Math.round(usage * price);
+              // 中間加工品/商品
+              const isGramMode = parseFloat(String(updatedItem.unit_quantity)) === -1;
+              if (isGramMode && (updatedItem.unit_weight || 0) > 0) {
+                // グラムモード: usage_amount(g) / unit_weight(1個分のg) × unit_price
+                updatedItem.cost = Math.round((usage / (updatedItem.unit_weight || 1)) * price);
+              } else {
+                // 個数モード: usage_amount(個数) × unit_price(元レシピの原価)
+                updatedItem.cost = Math.round(usage * price);
+              }
             } else {
               const rate =
                 updatedItem.item_type === "ingredient" &&
@@ -2385,6 +2392,40 @@ Now Expanded or Scrollable */}
                               <td className="py-2 text-right font-mono text-gray-800 bg-gray-50/30 align-top">
                                 {isEditing ? (
                                   <div>
+                                    {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
+                                      <div className="flex items-center gap-1 mb-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const isCurrentlyGram = parseFloat(String(item.unit_quantity)) === -1;
+                                            if (isCurrentlyGram) {
+                                              // グラム→個に切替: グラム数を個数に変換
+                                              const grams = parseFloat(String(item.usage_amount)) || 0;
+                                              const perUnit = item.unit_weight || 1;
+                                              const units = Math.round((grams / perUnit) * 100) / 100;
+                                              handleItemChange(item.id, 'unit_quantity', 1);
+                                              setTimeout(() => handleItemChange(item.id, 'usage_amount', units || 1), 0);
+                                            } else {
+                                              // 個→グラムに切替: 個数をグラムに変換
+                                              const units = parseFloat(String(item.usage_amount)) || 0;
+                                              const grams = Math.round(units * (item.unit_weight || 0));
+                                              handleItemChange(item.id, 'unit_quantity', -1);
+                                              setTimeout(() => handleItemChange(item.id, 'usage_amount', grams || 0), 0);
+                                            }
+                                          }}
+                                          className={`text-[10px] px-1.5 py-0.5 rounded border font-medium transition ${
+                                            parseFloat(String(item.unit_quantity)) === -1
+                                              ? 'bg-purple-100 text-purple-700 border-purple-300'
+                                              : 'bg-gray-100 text-gray-600 border-gray-300'
+                                          }`}
+                                        >
+                                          {parseFloat(String(item.unit_quantity)) === -1 ? 'g指定' : '個指定'}
+                                        </button>
+                                        <span className="text-[9px] text-gray-400">
+                                          (1個={formatNumber(item.unit_weight, 1)}g)
+                                        </span>
+                                      </div>
+                                    )}
                                     <input
                                       type="number"
                                       className="w-full text-right border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
@@ -2399,7 +2440,10 @@ Now Expanded or Scrollable */}
                                     />
                                     {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
                                       <div className="text-[9px] text-purple-500 mt-0.5">
-                                        元レシピ: {formatNumber(item.unit_weight, 1)}g → {formatNumber((parseFloat(String(item.usage_amount)) || 0) * (item.unit_weight || 0), 1)}g
+                                        {parseFloat(String(item.unit_quantity)) === -1
+                                          ? `${formatNumber(parseFloat(String(item.usage_amount)) || 0, 0)}g ≒ ${formatNumber((parseFloat(String(item.usage_amount)) || 0) / (item.unit_weight || 1), 2)}個分`
+                                          : `元レシピ: ${formatNumber(item.unit_weight, 1)}g → ${formatNumber((parseFloat(String(item.usage_amount)) || 0) * (item.unit_weight || 0), 1)}g`
+                                        }
                                       </div>
                                     )}
                                   </div>
@@ -2409,11 +2453,16 @@ Now Expanded or Scrollable */}
                                       {formatNumber(unitUsage, 2)}
                                     </span>
                                     <span className="text-[10px] text-gray-400 block">
-                                      {group.type === "product" || group.type === "intermediate" ? "個" : isMaterialGroup ? "個" : "g"}
+                                      {(group.type === "product" || group.type === "intermediate")
+                                        ? (parseFloat(String(item.unit_quantity)) === -1 ? "g" : "個")
+                                        : isMaterialGroup ? "個" : "g"}
                                     </span>
                                     {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
                                       <span className="text-[9px] text-purple-500 block">
-                                        ({formatNumber(item.unit_weight, 1)}g/個 = {formatNumber(unitUsage * (item.unit_weight || 0), 1)}g)
+                                        {parseFloat(String(item.unit_quantity)) === -1
+                                          ? `(${formatNumber(unitUsage, 0)}g ≈ ${formatNumber(unitUsage / (item.unit_weight || 1), 2)}個分)`
+                                          : `(${formatNumber(item.unit_weight, 1)}g/個 = ${formatNumber(unitUsage * (item.unit_weight || 0), 1)}g)`
+                                        }
                                       </span>
                                     )}
                                   </>
@@ -2450,7 +2499,9 @@ Now Expanded or Scrollable */}
                                   <div className="font-bold">
                                     {formatNumber(b1Usage, 0)}
                                     <span className="text-[10px] font-normal ml-0.5">
-                                      {group.type === "product" || group.type === "intermediate" || isMaterialGroup ? "個" : "g"}
+                                      {(group.type === "product" || group.type === "intermediate")
+                                        ? (parseFloat(String(item.unit_quantity)) === -1 ? "g" : "個")
+                                        : isMaterialGroup ? "個" : "g"}
                                     </span>
                                   </div>
                                   {b1Bags > 0 &&
@@ -2472,7 +2523,9 @@ Now Expanded or Scrollable */}
                                   <div className="font-bold">
                                     {formatNumber(b2Usage, 0)}
                                     <span className="text-[10px] font-normal ml-0.5">
-                                      {isMaterialGroup ? "個" : "g"}
+                                      {(group.type === "product" || group.type === "intermediate")
+                                        ? (parseFloat(String(item.unit_quantity)) === -1 ? "g" : "個")
+                                        : isMaterialGroup ? "個" : "g"}
                                     </span>
                                   </div>
                                   {b2Bags > 0 &&
@@ -2516,27 +2569,25 @@ Now Expanded or Scrollable */}
                               group.type === "intermediate" ||
                               group.type === "product"
                               ? <>
-                                {formatNumber(
-                                  group.items.reduce(
-                                    (sum, i) =>
-                                      sum +
-                                      (parseFloat(String(i.usage_amount)) || 0),
-                                    0,
-                                  ),
-                                  2,
-                                )}{(group.type === "product" || group.type === "intermediate") ? "個" : "g"}
-                                {(group.type === "intermediate" || group.type === "product") && (
-                                  <div className="text-[9px] text-purple-500 font-normal mt-0.5">
-                                    {formatNumber(
-                                      group.items.reduce(
-                                        (sum, i) =>
-                                          sum + (parseFloat(String(i.usage_amount)) || 0) * (i.unit_weight || 0),
-                                        0,
-                                      ),
-                                      1,
-                                    )}g
-                                  </div>
-                                )}
+                                {(() => {
+                                  // 中間部品TOTAL: グラムモードの場合はg表示、個モードの場合は個表示
+                                  const hasGramItems = (group.type === "intermediate" || group.type === "product")
+                                    && group.items.some(i => parseFloat(String(i.unit_quantity)) === -1);
+                                  const totalUsage = group.items.reduce(
+                                    (sum, i) => sum + (parseFloat(String(i.usage_amount)) || 0), 0);
+                                  const totalWeightG = group.items.reduce((sum, i) => {
+                                    const usage = parseFloat(String(i.usage_amount)) || 0;
+                                    const isGram = parseFloat(String(i.unit_quantity)) === -1;
+                                    return sum + (isGram ? usage : usage * (i.unit_weight || 0));
+                                  }, 0);
+                                  if (group.type === "intermediate" || group.type === "product") {
+                                    return <>
+                                      <span className="font-bold">{formatNumber(totalWeightG, 1)}g</span>
+                                      {!hasGramItems && <div className="text-[9px] text-purple-500 font-normal">{formatNumber(totalUsage, 2)}個</div>}
+                                    </>;
+                                  }
+                                  return <>{formatNumber(totalUsage, 2)}g</>;
+                                })()}
                               </>
                               : "-"}
                           </td>
