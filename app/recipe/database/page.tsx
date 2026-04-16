@@ -7,7 +7,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X } from "lucide-react";
+import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X, Copy } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -341,6 +341,63 @@ export default function DatabasePage() {
                     toast.error(`削除失敗: ${e.message}`);
                 }
             }
+        }
+    };
+
+    const duplicateIngredient = async (ing: Ingredient) => {
+        try {
+            const newData: Record<string, any> = {
+                name: `${ing.name}（コピー）`,
+                unit_quantity: ing.unit_quantity,
+                price: ing.price,
+                tax_included: ing.tax_included,
+                calories: ing.calories,
+                protein: ing.protein,
+                fat: ing.fat,
+                carbohydrate: ing.carbohydrate,
+                sodium: ing.sodium,
+                raw_materials: ing.raw_materials || null,
+                allergens: ing.allergens || null,
+                origin: ing.origin || null,
+                manufacturer: ing.manufacturer || null,
+            };
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'insert', table: 'ingredients', data: newData }),
+            });
+            if (!res.ok) throw new Error('コピー失敗');
+            const result = await res.json();
+            setIngredients(prev => [{ ...result.data, isNew: true }, ...prev]);
+            setEditingCell({ id: result.data.id, field: 'name' });
+            toast.success('コピーしました');
+        } catch (e: any) {
+            toast.error(`コピー失敗: ${e.message}`);
+        }
+    };
+
+    const duplicateMaterial = async (mat: Material) => {
+        try {
+            const newData: Record<string, any> = {
+                name: `${mat.name}（コピー）`,
+                price: mat.price,
+                tax_included: mat.tax_included,
+                unit_quantity: mat.unit_quantity || null,
+                supplier: mat.supplier || null,
+                notes: mat.notes || null,
+            };
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'insert', table: 'materials', data: newData }),
+            });
+            if (!res.ok) throw new Error('コピー失敗');
+            const result = await res.json();
+            setMaterials(prev => [{ ...result.data, isNew: true }, ...prev]);
+            setEditingCell({ id: result.data.id, field: 'name' });
+            toast.success('コピーしました');
+        } catch (e: any) {
+            toast.error(`コピー失敗: ${e.message}`);
         }
     };
 
@@ -754,10 +811,13 @@ export default function DatabasePage() {
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'sodium', formatNumber(ing.sodium, 2), 'ingredient')}</td>
                                         <td className="px-2 py-1">
                                             <div className="flex items-center gap-0.5">
-                                                <Button variant="ghost" size="sm" onClick={() => openEditModal(ing)} className="h-6 w-6 p-0 text-gray-400 hover:text-blue-500">
+                                                <Button variant="ghost" size="sm" onClick={() => openEditModal(ing)} className="h-6 w-6 p-0 text-gray-400 hover:text-blue-500" title="編集">
                                                     <Pencil className="w-3 h-3" />
                                                 </Button>
-                                                <Button variant="ghost" size="sm" onClick={() => deleteIngredient(ing.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
+                                                <Button variant="ghost" size="sm" onClick={() => duplicateIngredient(ing)} className="h-6 w-6 p-0 text-gray-400 hover:text-green-500" title="コピー">
+                                                    <Copy className="w-3 h-3" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => deleteIngredient(ing.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500" title="削除">
                                                     <Trash2 className="w-3 h-3" />
                                                 </Button>
                                             </div>
@@ -818,7 +878,10 @@ export default function DatabasePage() {
                                                 >
                                                     →諸経費
                                                 </button>
-                                                <Button variant="ghost" size="sm" onClick={() => deleteMaterial(mat.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500">
+                                                <Button variant="ghost" size="sm" onClick={() => duplicateMaterial(mat)} className="h-6 w-6 p-0 text-gray-400 hover:text-green-500" title="コピー">
+                                                    <Copy className="w-3 h-3" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => deleteMaterial(mat.id)} className="h-6 w-6 p-0 text-gray-400 hover:text-red-500" title="削除">
                                                     <Trash2 className="w-3 h-3" />
                                                 </Button>
                                             </div>

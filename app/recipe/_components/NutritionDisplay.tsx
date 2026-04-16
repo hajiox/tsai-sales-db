@@ -16,6 +16,8 @@ export interface ItemWithNutrition {
     item_name: string;
     item_type: string;
     usage_amount: number | null;
+    unit_quantity?: number | null; // -1 = gram mode (intermediate)
+    unit_weight?: number | null;   // weight per unit (intermediate)
     nutrition?: NutritionData; // マスターデータから取得した栄養成分（100gあたり）
 }
 
@@ -28,9 +30,9 @@ interface NutritionDisplayProps {
 export default function NutritionDisplay({ items, compact = false, fillingQuantity }: NutritionDisplayProps) {
     if (!items || items.length === 0) return null;
 
-    // 食材(ingredient)のみ対象にする（中間部品はデータがないため一旦除外、将来的に対応必要）
+    // 食材(ingredient)と中間部品(intermediate)を対象にする
     const targetItems = items.filter(i =>
-        i.item_type === 'ingredient' && i.nutrition && i.usage_amount && i.usage_amount > 0
+        (i.item_type === 'ingredient' || i.item_type === 'intermediate') && i.nutrition && i.usage_amount && i.usage_amount > 0
     );
 
     if (targetItems.length === 0) return null;
@@ -38,21 +40,33 @@ export default function NutritionDisplay({ items, compact = false, fillingQuanti
     // 全体の重量（栄養成分不明なものも含める）
     const totalRecipeWeight = items.reduce((sum, item) => {
         if (item.item_type === 'material' || item.item_type === 'expense') return sum;
+        // 中間部品: 個数モードならusage_amount×unit_weight、グラムモードならusage_amountがそのままg
+        if (item.item_type === 'intermediate') {
+            const isGram = (item.unit_quantity ?? 0) === -1;
+            return sum + (isGram ? (item.usage_amount || 0) : (item.usage_amount || 0) * (item.unit_weight || 0));
+        }
         return sum + (item.usage_amount || 0);
     }, 0);
 
     // 栄養成分合計 (1食あたり)
     const totalNutrition = targetItems.reduce((acc, item) => {
-        const amount = item.usage_amount || 0;
+        // 中間部品の実効グラム数を計算
+        let effectiveGrams: number;
+        if (item.item_type === 'intermediate') {
+            const isGram = (item.unit_quantity ?? 0) === -1;
+            effectiveGrams = isGram ? (item.usage_amount || 0) : (item.usage_amount || 0) * (item.unit_weight || 0);
+        } else {
+            effectiveGrams = item.usage_amount || 0;
+        }
         // 栄養成分は100gあたりの値
         if (!item.nutrition) return acc;
 
         return {
-            calories: acc.calories + (item.nutrition.calories || 0) * amount / 100,
-            protein: acc.protein + (item.nutrition.protein || 0) * amount / 100,
-            fat: acc.fat + (item.nutrition.fat || 0) * amount / 100,
-            carbohydrate: acc.carbohydrate + (item.nutrition.carbohydrate || 0) * amount / 100,
-            sodium: acc.sodium + (item.nutrition.sodium || 0) * amount / 100,
+            calories: acc.calories + (item.nutrition.calories || 0) * effectiveGrams / 100,
+            protein: acc.protein + (item.nutrition.protein || 0) * effectiveGrams / 100,
+            fat: acc.fat + (item.nutrition.fat || 0) * effectiveGrams / 100,
+            carbohydrate: acc.carbohydrate + (item.nutrition.carbohydrate || 0) * effectiveGrams / 100,
+            sodium: acc.sodium + (item.nutrition.sodium || 0) * effectiveGrams / 100,
         };
     }, { calories: 0, protein: 0, fat: 0, carbohydrate: 0, sodium: 0 });
 
@@ -142,7 +156,11 @@ export default function NutritionDisplay({ items, compact = false, fillingQuanti
                 </CardTitle>
                 <p className="text-xs text-slate-500 font-normal mt-1">
                     ※登録されている食材データの100gあたり成分から算出しています。
-                    {hasIntermediate && <span className="text-orange-500 block font-bold">※中間部品の栄養成分は含まれていません。</span>}
+                    {hasIntermediate && (
+                        <span className="text-purple-600 block font-bold">
+                            ※中間部品の栄養成分は食材DBの登録データから算出しています。
+                        </span>
+                    )}
                 </p>
             </CardHeader>
             <CardContent className="pt-4">

@@ -2755,6 +2755,8 @@ Now Expanded or Scrollable */}
                   item_name: item.item_name,
                   item_type: item.item_type,
                   usage_amount: parseFloat(String(item.usage_amount)) || 0,
+                  unit_quantity: parseFloat(String(item.unit_quantity)) || 0,
+                  unit_weight: item.unit_weight || 0,
                   nutrition: nutritionMap[item.item_name],
                 }))}
                 compact={true}
