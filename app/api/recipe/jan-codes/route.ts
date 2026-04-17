@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { product_name, category, price_excl_tax, ingredients, memo, recipe_id } = body;
+        const { product_name, category, price_excl_tax, ingredients, memo } = body;
 
         let company_prefix = "457131862"; // default 物品
         if (category === "食品") {
@@ -61,7 +61,6 @@ export async function POST(request: Request) {
             price_excl_tax: price_excl_tax ? Number(price_excl_tax) : null,
             ingredients: ingredients || null,
             memo: memo || null,
-            recipe_id: recipe_id || null
         };
 
         const { data: newRow, error: insertError } = await supabase
