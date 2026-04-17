@@ -347,6 +347,7 @@ export default function WebSalesEditableTable({
         getProductProfitRate={getProductProfitRate}
         getProductSeriesCode={getProductSeriesCode}
         getProductSeries={getProductSeries}
+        getProductProductCode={getProductNumber}
         onEdit={handleEditStart}
         onSave={handleSave}
         onEditValueChange={setEditedValue}

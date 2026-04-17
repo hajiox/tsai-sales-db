@@ -1,10 +1,10 @@
-// /components/WebSalesDataTable.tsx ver.17 (シリーズ別アコーディオン)
+// /components/WebSalesDataTable.tsx ver.18 (商品番号表示＋ドラッグ並び替え)
 "use client"
 
 import React, { useState, useRef, useEffect, useMemo } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, Edit, EyeOff, Link2, ChevronRight, ChevronDown, ChevronsUpDown } from "lucide-react"
+import { Plus, Trash2, Edit, EyeOff, Link2, ChevronRight, ChevronDown, ChevronsUpDown, GripVertical } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import ProductEditModal from "./ProductEditModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
@@ -18,6 +18,7 @@ interface WebSalesDataTableProps {
   getProductProfitRate?: (productId: string) => number
   getProductSeriesCode?: (productId: string) => number
   getProductSeries?: (productId: string) => string
+  getProductProductCode?: (productId: string) => number
   onEdit: (productId: string, ecSite: string) => void
   onSave: (productId: string, ecSite: string) => void
   onEditValueChange: (value: string) => void
@@ -41,6 +42,7 @@ export default function WebSalesDataTable({
   getProductProfitRate,
   getProductSeriesCode,
   getProductSeries,
+  getProductProductCode,
   onEdit,
   onSave,
   onEditValueChange,
@@ -55,6 +57,74 @@ export default function WebSalesDataTable({
   const [isEditingProduct, setIsEditingProduct] = useState(false)
   const [editingProductData, setEditingProductData] = useState<any>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // ドラッグ並び替え用
+  const [dragProductId, setDragProductId] = useState<string | null>(null)
+  const [dragOverProductId, setDragOverProductId] = useState<string | null>(null)
+  const [isDragSaving, setIsDragSaving] = useState(false)
+
+  const handleDragStart = (e: React.DragEvent, productId: string) => {
+    setDragProductId(productId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', productId)
+  }
+
+  const handleDragOver = (e: React.DragEvent, productId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverProductId(productId)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverProductId(null)
+  }
+
+  const handleDrop = async (e: React.DragEvent, targetProductId: string, seriesItems: WebSalesData[]) => {
+    e.preventDefault()
+    setDragOverProductId(null)
+    const sourceProductId = dragProductId
+    setDragProductId(null)
+
+    if (!sourceProductId || sourceProductId === targetProductId) return
+
+    // 並び順を計算（現在のアイテム順序に基づいて）
+    const ordered = [...seriesItems]
+    const fromIdx = ordered.findIndex(r => r.product_id === sourceProductId)
+    const toIdx = ordered.findIndex(r => r.product_id === targetProductId)
+    if (fromIdx === -1 || toIdx === -1) return
+
+    // 移動
+    const [moved] = ordered.splice(fromIdx, 1)
+    ordered.splice(toIdx, 0, moved)
+
+    // product_codeを1から連番で振り直し
+    setIsDragSaving(true)
+    try {
+      const updates = ordered.map((item, idx) => ({
+        id: item.product_id,
+        product_code: idx + 1,
+      }))
+
+      for (const u of updates) {
+        await supabase
+          .from('products')
+          .update({ product_code: u.product_code })
+          .eq('id', u.id)
+      }
+
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      console.error('並び替え保存エラー:', err)
+      alert('並び替えの保存に失敗しました')
+    } finally {
+      setIsDragSaving(false)
+    }
+  }
+
+  const handleDragEnd = () => {
+    setDragProductId(null)
+    setDragOverProductId(null)
+  }
 
   // シリーズ折りたたみ状態（デフォルト: 全て折りたたみ）
   const [expandedSeries, setExpandedSeries] = useState<Set<number>>(new Set())
@@ -516,6 +586,9 @@ export default function WebSalesDataTable({
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
+                <th className="px-1 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider w-[30px]">
+                  No.
+                </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider w-[150px]">
                   商品名
                 </th>
@@ -550,7 +623,7 @@ export default function WebSalesDataTable({
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={sites.length + 7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={sites.length + 8} className="px-6 py-12 text-center text-gray-500">
                     データがありません
                   </td>
                 </tr>
@@ -566,7 +639,7 @@ export default function WebSalesDataTable({
                         className="bg-slate-100 hover:bg-slate-200 cursor-pointer select-none border-t-2 border-slate-300"
                         onClick={() => toggleSeries(seriesCode)}
                       >
-                        <td className="px-4 py-3 text-sm font-bold text-slate-800" colSpan={1}>
+                        <td className="px-4 py-3 text-sm font-bold text-slate-800" colSpan={2}>
                           <div className="flex items-center gap-2">
                             {isExpanded ? (
                               <ChevronDown className="h-4 w-4 text-slate-500 flex-shrink-0" />
@@ -603,14 +676,34 @@ export default function WebSalesDataTable({
                       {isExpanded && group.items.map((row) => {
                         const price = getProductPrice(row.product_id)
                         const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
+                        const productCode = getProductProductCode ? getProductProductCode(row.product_id) : (row.product_code || 0)
 
                         const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
                         const totalAmount = totalCount * price
                         const profitAmount = Math.round(totalAmount * (profitRate / 100))
 
+                        const isDragTarget = dragOverProductId === row.product_id && dragProductId !== row.product_id
+
                         return (
-                          <tr key={row.product_id} className="hover:bg-gray-50 bg-white">
-                            <td className="px-4 py-4 text-sm text-gray-900 pl-10">
+                          <tr
+                            key={row.product_id}
+                            className={`hover:bg-gray-50 bg-white transition-colors ${
+                              dragProductId === row.product_id ? 'opacity-40' : ''
+                            } ${isDragTarget ? 'border-t-2 border-blue-400' : ''}`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, row.product_id)}
+                            onDragOver={(e) => handleDragOver(e, row.product_id)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, row.product_id, group.items)}
+                            onDragEnd={handleDragEnd}
+                          >
+                            <td className="px-1 py-4 text-center text-xs text-gray-400 cursor-grab active:cursor-grabbing select-none w-[30px]">
+                              <div className="flex items-center justify-center gap-0.5">
+                                <GripVertical className="h-3 w-3 text-gray-300" />
+                                <span className="font-mono">{productCode || '—'}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-sm text-gray-900 pl-6">
                               <div className="flex items-center gap-1">
                                 <div
                                   className="font-medium cursor-pointer hover:text-blue-600 hover:underline flex-1"
