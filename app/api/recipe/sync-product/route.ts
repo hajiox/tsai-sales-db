@@ -290,18 +290,37 @@ export async function POST(request: Request) {
 
         // ─── Create and Link mode: 商品を新規作成して紐付け ───
         if (body.createAndLink) {
-            const { recipeId, recipeName, recipePrice } = body;
+            const { recipeId, recipeName, recipePrice, series, seriesCode } = body;
             if (!recipeId || !recipeName) {
                 return NextResponse.json({ error: "recipeId and recipeName are required" }, { status: 400 });
             }
 
             // productsテーブルに新規作成（priceはintegerなので四捨五入）
             const insertPrice = recipePrice ? Math.round(recipePrice) : null;
+
+            // product_code自動採番: 同一series_code内の最大値+1
+            let autoProductCode = 1;
+            if (seriesCode !== undefined && seriesCode !== null) {
+                const { data: existingProducts } = await supabase
+                    .from("products")
+                    .select("product_code")
+                    .eq("series_code", seriesCode)
+                    .order("product_code", { ascending: false })
+                    .limit(1);
+
+                if (existingProducts && existingProducts.length > 0 && existingProducts[0].product_code) {
+                    autoProductCode = existingProducts[0].product_code + 1;
+                }
+            }
+
             const { data: newProduct, error: insertError } = await supabase
                 .from("products")
                 .insert({
                     name: recipeName,
                     price: insertPrice,
+                    series: series || null,
+                    series_code: seriesCode !== undefined ? seriesCode : null,
+                    product_code: autoProductCode,
                 })
                 .select()
                 .single();

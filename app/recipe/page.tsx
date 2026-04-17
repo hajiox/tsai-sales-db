@@ -83,6 +83,15 @@ export default function RecipePage() {
     const [wholesaleProducts, setWholesaleProducts] = useState<{id: string; name: string; price: number | null}[]>([]);
     const [linkingId, setLinkingId] = useState<string | null>(null);
 
+    // シリーズ選択モーダル用
+    const [seriesModalOpen, setSeriesModalOpen] = useState(false);
+    const [seriesModalData, setSeriesModalData] = useState<{
+        recipeId: string; recipeName: string; recipePrice: number | null; type: 'web' | 'wholesale';
+    } | null>(null);
+    const [selectedSeriesCode, setSelectedSeriesCode] = useState<string>('');
+    const [newSeriesName, setNewSeriesName] = useState('');
+    const [newSeriesCode, setNewSeriesCode] = useState('');
+
     // 紐づけ先商品名を取得
     useEffect(() => {
         const fetchLinkedProductNames = async () => {
@@ -179,19 +188,81 @@ export default function RecipePage() {
     };
 
     const handleInlineCreateAndLink = async (recipeId: string, recipeName: string, recipePrice: number | null, type: 'web' | 'wholesale') => {
-        const label = type === 'web' ? 'WEB販売' : '卸販売';
-        if (!confirm(`${label}管理に「${recipeName}」を新規作成して紐付けます。\nよろしいですか？`)) return;
-        const endpoint = type === 'web' ? '/api/recipe/sync-product' : '/api/recipe/sync-wholesale';
+        if (type === 'web') {
+            // WEBの場合はシリーズ選択モーダルを表示
+            setSeriesModalData({ recipeId, recipeName, recipePrice, type });
+            setSelectedSeriesCode('');
+            setNewSeriesName('');
+            setNewSeriesCode('');
+            setSeriesModalOpen(true);
+        } else {
+            // 卸の場合は従来通り
+            const label = '卸販売';
+            if (!confirm(`${label}管理に「${recipeName}」を新規作成して紐付けます。\nよろしいですか？`)) return;
+            const endpoint = '/api/recipe/sync-wholesale';
+            try {
+                setLinkingId(recipeId + type);
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ createAndLink: true, recipeId, recipeName, recipePrice }),
+                });
+                if (!res.ok) throw new Error('作成に失敗');
+                const result = await res.json();
+                toast.success(`「${result.productName}」を${label}に新規作成して紐付けました`);
+                fetchRecipes();
+                fetchLinkableProducts();
+            } catch (e: any) { toast.error(e.message); }
+            finally { setLinkingId(null); }
+        }
+    };
+
+    // シリーズ選択モーダルから呼ばれる実際のAPI送信
+    const executeCreateAndLinkWithSeries = async () => {
+        if (!seriesModalData) return;
+        const { recipeId, recipeName, recipePrice } = seriesModalData;
+
+        let series: string | null = null;
+        let seriesCode: number | null = null;
+
+        if (selectedSeriesCode === '__new__') {
+            // 新規シリーズ
+            if (!newSeriesName.trim() || !newSeriesCode.trim()) {
+                toast.error('シリーズ名とシリーズ番号を入力してください');
+                return;
+            }
+            series = newSeriesName.trim();
+            seriesCode = parseInt(newSeriesCode, 10);
+            if (isNaN(seriesCode)) {
+                toast.error('シリーズ番号は数値で入力してください');
+                return;
+            }
+        } else if (selectedSeriesCode) {
+            // 既存シリーズ
+            const found = seriesList.find(s => s.code === parseInt(selectedSeriesCode, 10));
+            if (found) {
+                series = found.name;
+                seriesCode = found.code;
+            }
+        } else {
+            toast.error('シリーズを選択してください');
+            return;
+        }
+
+        setSeriesModalOpen(false);
         try {
-            setLinkingId(recipeId + type);
-            const res = await fetch(endpoint, {
+            setLinkingId(recipeId + 'web');
+            const res = await fetch('/api/recipe/sync-product', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ createAndLink: true, recipeId, recipeName, recipePrice }),
+                body: JSON.stringify({ createAndLink: true, recipeId, recipeName, recipePrice, series, seriesCode }),
             });
-            if (!res.ok) throw new Error('作成に失敗');
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || '作成に失敗');
+            }
             const result = await res.json();
-            toast.success(`「${result.productName}」を${label}に新規作成して紐付けました`);
+            toast.success(`「${result.productName}」をWEB販売に新規作成して紐付けました（${series}）`);
             fetchRecipes();
             fetchLinkableProducts();
         } catch (e: any) { toast.error(e.message); }
@@ -904,6 +975,93 @@ export default function RecipePage() {
                     </TableBody>
                 </Table>
             </div>
+
+            {/* === シリーズ選択モーダル === */}
+            {seriesModalOpen && seriesModalData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSeriesModalOpen(false)}>
+                    <div className="bg-white rounded-xl shadow-2xl w-[440px] max-w-[95vw] p-6" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold text-gray-900 mb-1">WEB販売に新規作成</h3>
+                        <p className="text-sm text-gray-500 mb-4">
+                            「{seriesModalData.recipeName}」を登録するシリーズを選択してください。
+                        </p>
+
+                        <div className="space-y-4">
+                            {/* シリーズ選択 */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">シリーズ</label>
+                                <select
+                                    value={selectedSeriesCode}
+                                    onChange={(e) => setSelectedSeriesCode(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">-- シリーズを選択 --</option>
+                                    {seriesList.map(s => (
+                                        <option key={s.code} value={String(s.code)}>
+                                            {s.code}. {s.name}
+                                        </option>
+                                    ))}
+                                    <option value="__new__">＋ 新規シリーズを作成</option>
+                                </select>
+                            </div>
+
+                            {/* 新規シリーズ入力 */}
+                            {selectedSeriesCode === '__new__' && (
+                                <div className="space-y-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">新規シリーズ名</label>
+                                        <input
+                                            type="text"
+                                            value={newSeriesName}
+                                            onChange={(e) => setNewSeriesName(e.target.value)}
+                                            placeholder="例: パーフェクトラーメン新味"
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">シリーズ番号</label>
+                                        <input
+                                            type="number"
+                                            value={newSeriesCode}
+                                            onChange={(e) => setNewSeriesCode(e.target.value)}
+                                            placeholder="例: 26"
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <p className="text-[10px] text-gray-400 mt-1">
+                                            既存の最大番号: {Math.max(...seriesList.map(s => s.code), 0)}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 選択プレビュー */}
+                            {selectedSeriesCode && selectedSeriesCode !== '__new__' && (
+                                <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-sm">
+                                    <span className="font-medium text-green-800">
+                                        ✅ 「{seriesList.find(s => s.code === parseInt(selectedSeriesCode))?.name}」シリーズに追加されます
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ボタン */}
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setSeriesModalOpen(false)}
+                                className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                            >
+                                キャンセル
+                            </button>
+                            <button
+                                onClick={executeCreateAndLinkWithSeries}
+                                disabled={!selectedSeriesCode}
+                                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                作成して紐付け
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }
