@@ -79,6 +79,9 @@ export default function RecipePage() {
     });
     const [usageMap, setUsageMap] = useState<Record<string, string[]>>({});
     const [linkedProductNames, setLinkedProductNames] = useState<Record<string, string>>({});
+    const [webProducts, setWebProducts] = useState<{id: string; name: string; price: number | null}[]>([]);
+    const [wholesaleProducts, setWholesaleProducts] = useState<{id: string; name: string; price: number | null}[]>([]);
+    const [linkingId, setLinkingId] = useState<string | null>(null);
 
     // 紐づけ先商品名を取得
     useEffect(() => {
@@ -128,18 +131,88 @@ export default function RecipePage() {
     useEffect(() => {
         fetchRecipes();
         fetchStats();
+        fetchLinkableProducts();
         // 見積書pending件数を取得
         fetch('/api/recipe/estimates?status=pending')
             .then(r => r.json())
             .then(d => {
                 setPendingEstimateCount(d.pendingCount || 0);
-                // グループ数（見積書の社数）を算出
                 const items = d.items || [];
                 const docIds = new Set(items.map((i: any) => i.doc_scanner_doc_id));
                 setPendingEstimateGroups(docIds.size);
             })
             .catch(() => { });
     }, []);
+
+    const fetchLinkableProducts = async () => {
+        try {
+            const [webRes, wholesaleRes] = await Promise.all([
+                fetch('/api/recipe/sync-product'),
+                fetch('/api/recipe/sync-wholesale'),
+            ]);
+            if (webRes.ok) {
+                const data = await webRes.json();
+                setWebProducts(data.products || []);
+            }
+            if (wholesaleRes.ok) {
+                const data = await wholesaleRes.json();
+                setWholesaleProducts(data.products || []);
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const handleInlineLink = async (recipeId: string, type: 'web' | 'wholesale', productId: string) => {
+        const endpoint = type === 'web' ? '/api/recipe/sync-product' : '/api/recipe/sync-wholesale';
+        try {
+            setLinkingId(recipeId + type);
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipeId, productId }),
+            });
+            if (!res.ok) throw new Error('紐付けに失敗');
+            toast.success('紐付けしました');
+            fetchRecipes();
+            fetchLinkableProducts();
+        } catch (e: any) { toast.error(e.message); }
+        finally { setLinkingId(null); }
+    };
+
+    const handleInlineCreateAndLink = async (recipeId: string, recipeName: string, recipePrice: number | null, type: 'web' | 'wholesale') => {
+        const label = type === 'web' ? 'WEB販売' : '卸販売';
+        if (!confirm(`${label}管理に「${recipeName}」を新規作成して紐付けます。\nよろしいですか？`)) return;
+        const endpoint = type === 'web' ? '/api/recipe/sync-product' : '/api/recipe/sync-wholesale';
+        try {
+            setLinkingId(recipeId + type);
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ createAndLink: true, recipeId, recipeName, recipePrice }),
+            });
+            if (!res.ok) throw new Error('作成に失敗');
+            const result = await res.json();
+            toast.success(`「${result.productName}」を${label}に新規作成して紐付けました`);
+            fetchRecipes();
+            fetchLinkableProducts();
+        } catch (e: any) { toast.error(e.message); }
+        finally { setLinkingId(null); }
+    };
+
+    const handleInlineUnlink = async (recipeId: string, type: 'web' | 'wholesale') => {
+        if (!confirm('紐付けを解除しますか？')) return;
+        const endpoint = type === 'web' ? '/api/recipe/sync-product' : '/api/recipe/sync-wholesale';
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipeId, productId: null }),
+            });
+            if (!res.ok) throw new Error('解除に失敗');
+            toast.success('紐付けを解除しました');
+            fetchRecipes();
+            fetchLinkableProducts();
+        } catch (e: any) { toast.error(e.message); }
+    };
 
     const fetchRecipes = async () => {
         setLoading(true);
@@ -655,20 +728,68 @@ export default function RecipePage() {
                                                 </span>
                                             )}
                                             <span className="flex-1">{recipe.name}</span>
-                                            {recipe.linked_product_id && (
+                                            {/* WEB販売リンク */}
+                                            {recipe.linked_product_id ? (
                                                 <span
-                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium cursor-help"
-                                                    title={`WEB販売紐付済: ${linkedProductNames[recipe.linked_product_id] || '取得中...'}`}
+                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium cursor-pointer hover:bg-blue-200 transition"
+                                                    title={`WEB販売紐付済: ${linkedProductNames[recipe.linked_product_id] || '取得中...'} (クリックで解除)`}
+                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'web'); }}
                                                 >
                                                     <Link2 className="h-3 w-3" />WEB
                                                 </span>
+                                            ) : recipe.category !== '中間部品' && recipe.category !== '終売' && (
+                                                <span className="flex-shrink-0 inline-flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                                                    <select
+                                                        className="h-5 text-[10px] border border-blue-200 rounded bg-blue-50/50 text-blue-600 pl-1 pr-0.5 cursor-pointer appearance-auto max-w-[90px]"
+                                                        defaultValue=""
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val === '__create__') {
+                                                                handleInlineCreateAndLink(recipe.id, recipe.name, recipe.selling_price, 'web');
+                                                            } else if (val) {
+                                                                handleInlineLink(recipe.id, 'web', val);
+                                                            }
+                                                            e.target.value = '';
+                                                        }}
+                                                    >
+                                                        <option value="">+WEB</option>
+                                                        <option value="__create__">＋ 新規作成</option>
+                                                        {webProducts.filter(p => !recipes.some(r => r.linked_product_id === p.id)).map(p => (
+                                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </span>
                                             )}
-                                            {recipe.linked_wholesale_product_id && (
+                                            {/* 卸販売リンク */}
+                                            {recipe.linked_wholesale_product_id ? (
                                                 <span
-                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium cursor-help"
-                                                    title="卸販売紐付済"
+                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium cursor-pointer hover:bg-green-200 transition"
+                                                    title="卸販売紐付済 (クリックで解除)"
+                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'wholesale'); }}
                                                 >
                                                     <Link2 className="h-3 w-3" />卸
+                                                </span>
+                                            ) : recipe.category !== '中間部品' && recipe.category !== '終売' && recipe.category !== 'OEM' && (
+                                                <span className="flex-shrink-0 inline-flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                                                    <select
+                                                        className="h-5 text-[10px] border border-green-200 rounded bg-green-50/50 text-green-600 pl-1 pr-0.5 cursor-pointer appearance-auto max-w-[80px]"
+                                                        defaultValue=""
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val === '__create__') {
+                                                                handleInlineCreateAndLink(recipe.id, recipe.name, recipe.selling_price, 'wholesale');
+                                                            } else if (val) {
+                                                                handleInlineLink(recipe.id, 'wholesale', val);
+                                                            }
+                                                            e.target.value = '';
+                                                        }}
+                                                    >
+                                                        <option value="">+卸</option>
+                                                        <option value="__create__">＋ 新規作成</option>
+                                                        {wholesaleProducts.filter(p => !recipes.some(r => r.linked_wholesale_product_id === p.id)).map(p => (
+                                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                                        ))}
+                                                    </select>
                                                 </span>
                                             )}
                                             {recipe.linked_oem_product_id && (
