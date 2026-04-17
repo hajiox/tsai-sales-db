@@ -88,7 +88,6 @@ export async function GET(request: Request) {
         const { data: recipes, error: recipesError } = await supabase
             .from("recipes")
             .select("id, name, selling_price, total_cost, linked_wholesale_product_id, category")
-            .eq("category", "自社")
             .order("name");
 
         if (recipesError) throw recipesError;

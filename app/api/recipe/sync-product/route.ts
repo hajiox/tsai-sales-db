@@ -130,8 +130,7 @@ export async function GET(request: Request) {
     try {
         const { data: recipes, error: recipesError } = await supabase
             .from("recipes")
-            .select("id, name, selling_price, total_cost, linked_product_id, category")
-            .eq("category", "ネット専用")
+            .select("id, name, selling_price, total_cost, linked_product_id, linked_wholesale_product_id, category")
             .order("name");
 
         if (recipesError) throw recipesError;

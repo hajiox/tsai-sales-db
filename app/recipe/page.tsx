@@ -518,12 +518,7 @@ export default function RecipePage() {
 
                     <Button variant="outline" onClick={() => router.push("/recipe/product-link")} className="border-blue-300 text-blue-700 hover:bg-blue-50">
                         <LinkIcon className="w-4 h-4 mr-2" />
-                        WEB販売紐付け
-                    </Button>
-
-                    <Button variant="outline" onClick={() => router.push("/recipe/wholesale-link")} className="border-green-300 text-green-700 hover:bg-green-50">
-                        <LinkIcon className="w-4 h-4 mr-2" />
-                        卸販売紐付け
+                        商品紐付け
                     </Button>
 
                     <Button variant="outline" onClick={() => router.push("/recipe/oem-link")} className="border-purple-300 text-purple-700 hover:bg-purple-50">
