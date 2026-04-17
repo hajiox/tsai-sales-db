@@ -1697,18 +1697,16 @@ function RecipeDetailContent() {
                     <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                       JANコード
                     </div>
-                    {!recipe.jan_code && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const encodedName = encodeURIComponent(recipe.name);
-                          router.push(`/recipe/jan-codes?from_recipe=${recipe.id}&product_name=${encodedName}`);
-                        }}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
-                      >
-                        JAN新規発行
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const encodedName = encodeURIComponent(recipe.name);
+                        router.push(`/recipe/jan-codes?from_recipe=${recipe.id}&product_name=${encodedName}`);
+                      }}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
+                    >
+                      {recipe.jan_code ? 'JAN再発行' : 'JAN新規発行'}
+                    </button>
                   </div>
                   <div className="flex-1 flex items-center">
                     <InlineEdit
