@@ -4,7 +4,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, Edit, EyeOff, Link2, ChevronRight, ChevronDown, ChevronsUpDown, GripVertical } from "lucide-react"
+import { Plus, Trash2, Edit, EyeOff, Link2, ChevronRight, ChevronDown, ChevronsUpDown, GripVertical, Search, X } from "lucide-react"
 import ProductAddModal from "./ProductAddModal"
 import ProductEditModal from "./ProductEditModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
@@ -57,6 +57,9 @@ export default function WebSalesDataTable({
   const [isEditingProduct, setIsEditingProduct] = useState(false)
   const [editingProductData, setEditingProductData] = useState<any>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // 商品検索
+  const [searchQuery, setSearchQuery] = useState('')
 
   // ドラッグ並び替え用
   const [dragProductId, setDragProductId] = useState<string | null>(null)
@@ -487,11 +490,21 @@ export default function WebSalesDataTable({
     'tiktok_count': 'TikTok',
   }
 
-  // シリーズ別にグループ化
+  // シリーズ別にグループ化（検索フィルタ付き）
   const seriesGroups = useMemo(() => {
     const groups = new Map<number, { seriesName: string; items: WebSalesData[] }>()
 
-    filteredItems.forEach(row => {
+    // 検索フィルタ適用
+    const query = searchQuery.trim().toLowerCase()
+    const itemsToGroup = query
+      ? filteredItems.filter(row => {
+          const name = (getProductName ? getProductName(row.product_id) : (row.product_name || '')).toLowerCase()
+          const series = (getProductSeries ? getProductSeries(row.product_id) : (row.series || '')).toLowerCase()
+          return name.includes(query) || series.includes(query)
+        })
+      : filteredItems
+
+    itemsToGroup.forEach(row => {
       const code = getProductSeriesCode ? getProductSeriesCode(row.product_id) : (row.series_code || 0)
       const name = getProductSeries ? getProductSeries(row.product_id) : (row.series || `シリーズ ${code}`)
 
@@ -503,7 +516,7 @@ export default function WebSalesDataTable({
 
     // series_codeの昇順で返す
     return Array.from(groups.entries()).sort((a, b) => a[0] - b[0])
-  }, [filteredItems, getProductSeriesCode, getProductSeries])
+  }, [filteredItems, getProductSeriesCode, getProductSeries, searchQuery, getProductName])
 
   const toggleSeries = (seriesCode: number) => {
     setExpandedSeries(prev => {
@@ -562,23 +575,48 @@ export default function WebSalesDataTable({
 
   return (
     <div ref={containerRef} className="relative">
-      {/* ボタン群 */}
-      <div className="mb-4 flex justify-end gap-2">
-        <button
-          onClick={toggleAll}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors border border-gray-300"
-          title={expandedSeries.size === seriesGroups.length ? '全て折りたたむ' : '全て展開'}
-        >
-          <ChevronsUpDown className="h-4 w-4" />
-          {expandedSeries.size === seriesGroups.length ? '全て折りたたむ' : '全て展開'}
-        </button>
-        <button
-          onClick={() => setIsAddingProduct(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          新規登録
-        </button>
+      {/* 検索窓 + ボタン群 */}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="商品名・シリーズ名で検索..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-9 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {searchQuery && (
+          <span className="text-sm text-gray-500 whitespace-nowrap">
+            {seriesGroups.reduce((sum, [, g]) => sum + g.items.length, 0)}件ヒット
+          </span>
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={toggleAll}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors border border-gray-300"
+            title={expandedSeries.size === seriesGroups.length ? '全て折りたたむ' : '全て展開'}
+          >
+            <ChevronsUpDown className="h-4 w-4" />
+            {expandedSeries.size === seriesGroups.length ? '全て折りたたむ' : '全て展開'}
+          </button>
+          <button
+            onClick={() => setIsAddingProduct(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            新規登録
+          </button>
+        </div>
       </div>
 
       <div className="overflow-auto border border-gray-300 rounded-lg">
