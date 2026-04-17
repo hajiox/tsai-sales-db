@@ -2413,36 +2413,51 @@ Now Expanded or Scrollable */}
                                 {isEditing ? (
                                   <div>
                                     {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const isCurrentlyGram = parseFloat(String(item.unit_quantity)) === -1;
-                                            if (isCurrentlyGram) {
-                                              // グラム→個に切替: グラム数を個数に変換
-                                              const grams = parseFloat(String(item.usage_amount)) || 0;
-                                              const perUnit = item.unit_weight || 1;
-                                              const units = Math.round((grams / perUnit) * 100) / 100;
-                                              handleItemChange(item.id, 'unit_quantity', 1);
-                                              setTimeout(() => handleItemChange(item.id, 'usage_amount', units || 1), 0);
-                                            } else {
-                                              // 個→グラムに切替: 個数をグラムに変換
-                                              const units = parseFloat(String(item.usage_amount)) || 0;
-                                              const grams = Math.round(units * (item.unit_weight || 0));
-                                              handleItemChange(item.id, 'unit_quantity', -1);
-                                              setTimeout(() => handleItemChange(item.id, 'usage_amount', grams || 0), 0);
-                                            }
-                                          }}
-                                          className={`text-[10px] px-1.5 py-0.5 rounded border font-medium transition whitespace-nowrap ${
-                                            parseFloat(String(item.unit_quantity)) === -1
-                                              ? 'bg-purple-100 text-purple-700 border-purple-300'
-                                              : 'bg-gray-100 text-gray-600 border-gray-300'
-                                          }`}
-                                        >
-                                          {parseFloat(String(item.unit_quantity)) === -1 ? 'g指定' : '個指定'}
-                                        </button>
-                                        <span className="text-[9px] text-gray-400">
-                                          (1個={formatNumber(item.unit_weight, 1)}g)
+                                      <div className="mb-1.5">
+                                        {/* セグメントコントロール: 個 / g */}
+                                        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (parseFloat(String(item.unit_quantity)) === -1) {
+                                                // g→個に切替
+                                                const grams = parseFloat(String(item.usage_amount)) || 0;
+                                                const perUnit = item.unit_weight || 1;
+                                                const units = Math.round((grams / perUnit) * 100) / 100;
+                                                handleItemChange(item.id, 'unit_quantity', 1);
+                                                setTimeout(() => handleItemChange(item.id, 'usage_amount', units || 1), 0);
+                                              }
+                                            }}
+                                            className={`text-[10px] px-2 py-0.5 font-medium transition-colors ${
+                                              parseFloat(String(item.unit_quantity)) !== -1
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-white text-gray-500 hover:bg-gray-50'
+                                            }`}
+                                          >
+                                            個
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (parseFloat(String(item.unit_quantity)) !== -1) {
+                                                // 個→gに切替
+                                                const units = parseFloat(String(item.usage_amount)) || 0;
+                                                const grams = Math.round(units * (item.unit_weight || 0));
+                                                handleItemChange(item.id, 'unit_quantity', -1);
+                                                setTimeout(() => handleItemChange(item.id, 'usage_amount', grams || 0), 0);
+                                              }
+                                            }}
+                                            className={`text-[10px] px-2 py-0.5 font-medium border-l border-gray-300 transition-colors ${
+                                              parseFloat(String(item.unit_quantity)) === -1
+                                                ? 'bg-purple-600 text-white'
+                                                : 'bg-white text-gray-500 hover:bg-gray-50'
+                                            }`}
+                                          >
+                                            g
+                                          </button>
+                                        </div>
+                                        <span className="text-[9px] text-gray-400 ml-1.5">
+                                          1個={formatNumber(item.unit_weight, 1)}g
                                         </span>
                                       </div>
                                     )}
@@ -2457,12 +2472,13 @@ Now Expanded or Scrollable */}
                                           e.target.value,
                                         )
                                       }
+                                      placeholder={parseFloat(String(item.unit_quantity)) === -1 ? 'g' : '個'}
                                     />
                                     {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
                                       <div className="text-[9px] text-purple-500 mt-0.5">
                                         {parseFloat(String(item.unit_quantity)) === -1
-                                          ? `${formatNumber(parseFloat(String(item.usage_amount)) || 0, 0)}g ≒ ${formatNumber((parseFloat(String(item.usage_amount)) || 0) / (item.unit_weight || 1), 2)}個分`
-                                          : `元レシピ: ${formatNumber(item.unit_weight, 1)}g → ${formatNumber((parseFloat(String(item.usage_amount)) || 0) * (item.unit_weight || 0), 1)}g`
+                                          ? `≒ ${formatNumber((parseFloat(String(item.usage_amount)) || 0) / (item.unit_weight || 1), 2)}個分`
+                                          : `= ${formatNumber((parseFloat(String(item.usage_amount)) || 0) * (item.unit_weight || 0), 1)}g`
                                         }
                                       </div>
                                     )}
@@ -2480,8 +2496,8 @@ Now Expanded or Scrollable */}
                                     {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
                                       <span className="text-[9px] text-purple-500 block">
                                         {parseFloat(String(item.unit_quantity)) === -1
-                                          ? `(${formatNumber(unitUsage, 0)}g ≈ ${formatNumber(unitUsage / (item.unit_weight || 1), 2)}個分)`
-                                          : `(${formatNumber(item.unit_weight, 1)}g/個 = ${formatNumber(unitUsage * (item.unit_weight || 0), 1)}g)`
+                                          ? `≒ ${formatNumber(unitUsage / (item.unit_weight || 1), 2)}個分`
+                                          : `= ${formatNumber(unitUsage * (item.unit_weight || 0), 1)}g`
                                         }
                                       </span>
                                     )}
@@ -2510,7 +2526,24 @@ Now Expanded or Scrollable */}
                                     }
                                   />
                                 ) : (
-                                  formatCurrency(itemCost)
+                                  <>
+                                    {formatCurrency(itemCost)}
+                                    {(group.type === "intermediate" || group.type === "product")
+                                      && parseFloat(String(item.unit_quantity)) !== -1
+                                      && unitUsage > 0
+                                      && unitUsage !== 1 && (
+                                      <div className="text-[9px] text-gray-400">
+                                        1個=¥{(itemCost / unitUsage).toFixed(2)}
+                                      </div>
+                                    )}
+                                    {(group.type === "intermediate" || group.type === "product")
+                                      && parseFloat(String(item.unit_quantity)) === -1
+                                      && (item.unit_weight || 0) > 0 && (
+                                      <div className="text-[9px] text-gray-400">
+                                        1個=¥{((item.unit_weight || 0) > 0 ? ((parseFloat(String(item.unit_price)) || 0)).toFixed(2) : '-')}
+                                      </div>
+                                    )}
+                                  </>
                                 )}
                               </td>
                               {/* Batch 1 */}
