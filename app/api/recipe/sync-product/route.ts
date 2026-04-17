@@ -295,12 +295,13 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: "recipeId and recipeName are required" }, { status: 400 });
             }
 
-            // productsテーブルに新規作成
+            // productsテーブルに新規作成（priceはintegerなので四捨五入）
+            const insertPrice = recipePrice ? Math.round(recipePrice) : null;
             const { data: newProduct, error: insertError } = await supabase
                 .from("products")
                 .insert({
                     name: recipeName,
-                    price: recipePrice || null,
+                    price: insertPrice,
                 })
                 .select()
                 .single();
