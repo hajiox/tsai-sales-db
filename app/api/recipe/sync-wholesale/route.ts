@@ -252,13 +252,30 @@ export async function POST(request: Request) {
             }
 
             // 7掛の卸価格
-            const wholesalePrice = recipePrice ? Math.round(recipePrice * 0.7) : null;
+            // 7掛の卸価格
+            const wholesalePrice = recipePrice ? Math.round(recipePrice * 0.7) : 0;
+
+            // product_code自動採番: W+連番（既存の最大値+1）
+            const { data: maxCodeRow } = await supabase
+                .from("wholesale_products")
+                .select("product_code")
+                .like("product_code", "W%")
+                .order("product_code", { ascending: false })
+                .limit(1);
+
+            let nextCode = 1;
+            if (maxCodeRow && maxCodeRow.length > 0) {
+                const match = maxCodeRow[0].product_code.match(/W(\d+)/);
+                if (match) nextCode = parseInt(match[1], 10) + 1;
+            }
+            const autoProductCode = `W${String(nextCode).padStart(3, '0')}`;
 
             // wholesale_productsテーブルに新規作成
             const { data: newProduct, error: insertError } = await supabase
                 .from("wholesale_products")
                 .insert({
                     product_name: recipeName,
+                    product_code: autoProductCode,
                     price: wholesalePrice,
                     product_type: '通常卸',
                 })
