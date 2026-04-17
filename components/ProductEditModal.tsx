@@ -1,8 +1,9 @@
-// /app/components/ProductEditModal.tsx ver.2
+// /app/components/ProductEditModal.tsx ver.3 (シリーズ選択ドロップダウン)
 "use client"
 
 import React, { useState, useEffect } from "react"
 import { X } from "lucide-react"
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 
 interface ProductEditModalProps {
   isOpen: boolean
@@ -27,12 +28,18 @@ interface ProductEditModalProps {
   }
 }
 
+interface SeriesOption {
+  series_code: number
+  series_name: string
+}
+
 export default function ProductEditModal({
   isOpen,
   onClose,
   onUpdate,
   product
 }: ProductEditModalProps) {
+  const supabase = getSupabaseBrowserClient()
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -41,6 +48,31 @@ export default function ProductEditModal({
     product_code: "",
     series: ""
   })
+  const [seriesOptions, setSeriesOptions] = useState<SeriesOption[]>([])
+
+  // 既存シリーズ一覧を取得
+  useEffect(() => {
+    const fetchSeries = async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('series_code, series')
+        .not('series_code', 'is', null)
+        .not('series', 'is', null)
+
+      if (!error && data) {
+        const seen = new Set<number>()
+        const opts: SeriesOption[] = []
+        for (const p of data) {
+          if (p.series_code && !seen.has(p.series_code)) {
+            seen.add(p.series_code)
+            opts.push({ series_code: p.series_code, series_name: p.series })
+          }
+        }
+        setSeriesOptions(opts.sort((a, b) => a.series_code - b.series_code))
+      }
+    }
+    if (isOpen) fetchSeries()
+  }, [isOpen])
 
   useEffect(() => {
     if (product) {
@@ -54,6 +86,19 @@ export default function ProductEditModal({
       })
     }
   }, [product])
+
+  const handleSeriesSelect = (value: string) => {
+    if (value === "__custom__") {
+      // カスタム入力 — フィールドをクリアして手入力可能に
+      setFormData({ ...formData, series: "", series_code: "" })
+      return
+    }
+    const code = parseInt(value)
+    const opt = seriesOptions.find(s => s.series_code === code)
+    if (opt) {
+      setFormData({ ...formData, series: opt.series_name, series_code: String(opt.series_code) })
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -158,42 +203,53 @@ export default function ProductEditModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              シリーズ名
+              カテゴリ（シリーズ）
             </label>
-            <input
-              type="text"
-              value={formData.series}
-              onChange={(e) => setFormData({ ...formData, series: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <select
+              value={seriesOptions.some(s => s.series_code === parseInt(formData.series_code)) ? formData.series_code : "__custom__"}
+              onChange={(e) => handleSeriesSelect(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+            >
+              {seriesOptions.map(s => (
+                <option key={s.series_code} value={String(s.series_code)}>
+                  {s.series_name}
+                </option>
+              ))}
+              <option value="__custom__">— その他（手動入力）—</option>
+            </select>
+            {/* 現在の選択表示 / カスタム入力 */}
+            {!seriesOptions.some(s => s.series_code === parseInt(formData.series_code)) && (
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={formData.series}
+                  onChange={(e) => setFormData({ ...formData, series: e.target.value })}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="シリーズ名"
+                />
+                <input
+                  type="number"
+                  value={formData.series_code}
+                  onChange={(e) => setFormData({ ...formData, series_code: e.target.value })}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="番号"
+                  min="0"
+                />
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                シリーズ番号
-              </label>
-              <input
-                type="number"
-                value={formData.series_code}
-                onChange={(e) => setFormData({ ...formData, series_code: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                min="0"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                商品番号
-              </label>
-              <input
-                type="number"
-                value={formData.product_code}
-                onChange={(e) => setFormData({ ...formData, product_code: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                min="0"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              商品番号
+            </label>
+            <input
+              type="number"
+              value={formData.product_code}
+              onChange={(e) => setFormData({ ...formData, product_code: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              min="0"
+            />
           </div>
 
           <div className="flex justify-end gap-2 mt-6">
@@ -216,3 +272,4 @@ export default function ProductEditModal({
     </div>
   )
 }
+
