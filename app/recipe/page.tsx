@@ -91,6 +91,8 @@ export default function RecipePage() {
     const [selectedSeriesCode, setSelectedSeriesCode] = useState<string>('');
     const [newSeriesName, setNewSeriesName] = useState('');
     const [newSeriesCode, setNewSeriesCode] = useState('');
+    const [modalProductName, setModalProductName] = useState('');
+    const [modalPrice, setModalPrice] = useState<number>(0);
 
     // 紐づけ先商品名を取得
     useEffect(() => {
@@ -194,6 +196,8 @@ export default function RecipePage() {
             setSelectedSeriesCode('');
             setNewSeriesName('');
             setNewSeriesCode('');
+            setModalProductName(recipeName);
+            setModalPrice(recipePrice ? Math.round(recipePrice) : 0);
             setSeriesModalOpen(true);
         } else {
             // 卸の場合は従来通り
@@ -249,13 +253,16 @@ export default function RecipePage() {
             return;
         }
 
+        const finalProductName = modalProductName.trim() || recipeName;
+        const finalPrice = modalPrice;
+
         setSeriesModalOpen(false);
         try {
             setLinkingId(recipeId + 'web');
             const res = await fetch('/api/recipe/sync-product', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ createAndLink: true, recipeId, recipeName, recipePrice, series, seriesCode }),
+                body: JSON.stringify({ createAndLink: true, recipeId, recipeName: finalProductName, recipePrice: finalPrice, series, seriesCode }),
             });
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
@@ -976,19 +983,48 @@ export default function RecipePage() {
                 </Table>
             </div>
 
-            {/* === シリーズ選択モーダル === */}
+            {/* === WEB販売商品新規作成モーダル === */}
             {seriesModalOpen && seriesModalData && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSeriesModalOpen(false)}>
-                    <div className="bg-white rounded-xl shadow-2xl w-[440px] max-w-[95vw] p-6" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold text-gray-900 mb-1">WEB販売に新規作成</h3>
-                        <p className="text-sm text-gray-500 mb-4">
-                            「{seriesModalData.recipeName}」を登録するシリーズを選択してください。
-                        </p>
+                    <div className="bg-white rounded-xl shadow-2xl w-[520px] max-w-[95vw] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b">
+                            <h3 className="text-lg font-bold text-gray-900">WEB販売商品 新規登録</h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                                レシピ「{seriesModalData.recipeName}」をWEB販売商品として登録します
+                            </p>
+                        </div>
 
-                        <div className="space-y-4">
+                        <div className="p-6 space-y-4">
+                            {/* 商品名 */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">商品名 *</label>
+                                <input
+                                    type="text"
+                                    value={modalProductName}
+                                    onChange={(e) => setModalProductName(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="WEB販売に登録する商品名"
+                                    required
+                                />
+                            </div>
+
+                            {/* 価格 */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">価格（円） *</label>
+                                <input
+                                    type="number"
+                                    value={modalPrice}
+                                    onChange={(e) => setModalPrice(parseInt(e.target.value) || 0)}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="商品価格"
+                                    min="0"
+                                    required
+                                />
+                            </div>
+
                             {/* シリーズ選択 */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">シリーズ</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">シリーズ *</label>
                                 <select
                                     value={selectedSeriesCode}
                                     onChange={(e) => setSelectedSeriesCode(e.target.value)}
@@ -1037,23 +1073,23 @@ export default function RecipePage() {
                             {selectedSeriesCode && selectedSeriesCode !== '__new__' && (
                                 <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-sm">
                                     <span className="font-medium text-green-800">
-                                        ✅ 「{seriesList.find(s => s.code === parseInt(selectedSeriesCode))?.name}」シリーズに追加されます
+                                        ✅ 「{seriesList.find(s => s.code === parseInt(selectedSeriesCode))?.name}」シリーズに追加されます（商品番号は自動採番）
                                     </span>
                                 </div>
                             )}
                         </div>
 
                         {/* ボタン */}
-                        <div className="flex justify-end gap-3 mt-6">
+                        <div className="flex justify-end gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
                             <button
                                 onClick={() => setSeriesModalOpen(false)}
-                                className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                                className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
                             >
                                 キャンセル
                             </button>
                             <button
                                 onClick={executeCreateAndLinkWithSeries}
-                                disabled={!selectedSeriesCode}
+                                disabled={!selectedSeriesCode || !modalProductName.trim()}
                                 className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                                 作成して紐付け
