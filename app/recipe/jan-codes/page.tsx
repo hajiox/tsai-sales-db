@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Search, Save, Copy, Package, Box, Tag, Key } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import BarcodeImage from "@/components/barcode-image";
 
@@ -26,6 +26,9 @@ interface JanCode {
 
 export default function JanCodesPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const fromRecipeId = searchParams.get('from_recipe');
+    const prefilledName = searchParams.get('product_name');
     const [janCodes, setJanCodes] = useState<JanCode[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
@@ -33,7 +36,7 @@ export default function JanCodesPage() {
     
     // New JAN form state
     const [isGenerating, setIsGenerating] = useState(false);
-    const [newProductName, setNewProductName] = useState("");
+    const [newProductName, setNewProductName] = useState(prefilledName || "");
     const [newCategory, setNewCategory] = useState("食品");
 
 
@@ -72,7 +75,10 @@ export default function JanCodesPage() {
             return;
         }
 
-        if (!confirm('【】で新しいJANコードを発行しますか？')) return;
+        const confirmMsg = fromRecipeId
+            ? `「${newProductName}」の新しいJANコードを発行し、レシピに自動挿入します。\nよろしいですか？`
+            : `新しいJANコードを発行しますか？`;
+        if (!confirm(confirmMsg)) return;
 
         setIsGenerating(true);
         try {
@@ -91,7 +97,16 @@ export default function JanCodesPage() {
             }
 
             const result = await res.json();
-            toast.success('新しいJANコード【】を発行しました');
+            const newJanCode = result.data?.jan_code;
+
+            // レシピからの遷移の場合、JANコードを持ってレシピページに戻る
+            if (fromRecipeId && newJanCode) {
+                toast.success(`JANコード ${newJanCode} を発行しました。レシピに戻ります...`);
+                router.push(`/recipe/${fromRecipeId}?jan_code=${newJanCode}`);
+                return;
+            }
+
+            toast.success(`新しいJANコード ${newJanCode || ''} を発行しました`);
             
             // Reset form
             setNewProductName("");
@@ -206,6 +221,11 @@ export default function JanCodesPage() {
                 <div className="flex items-center gap-2 mb-4 border-b pb-2">
                     <Tag className="w-5 h-5 text-blue-600" />
                     <h2 className="text-lg font-bold text-gray-800">新規JANコード発番</h2>
+                    {fromRecipeId && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                            レシピからの発行 → 発行後自動挿入
+                        </span>
+                    )}
                 </div>
                 
                 <div className="flex flex-col md:flex-row gap-4 items-end">

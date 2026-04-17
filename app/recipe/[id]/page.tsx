@@ -4,7 +4,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -308,6 +308,8 @@ export default function RecipeDetailPage() {
     setHasChanges(true);
   };
 
+  const searchParams = useSearchParams();
+
   useEffect(() => {
     if (params.id) {
       fetchRecipe(params.id as string);
@@ -316,6 +318,20 @@ export default function RecipeDetailPage() {
     // シリーズをDBから取得
     fetchSeriesList().then(setSeriesList);
   }, [params.id]);
+
+  // JAN発行ページからの自動挿入: ?jan_code=xxx を検出
+  useEffect(() => {
+    const janFromUrl = searchParams.get('jan_code');
+    if (janFromUrl && recipe) {
+      handleRecipeChange('jan_code', janFromUrl);
+      setHasChanges(true);
+      toast.success(`JANコード ${janFromUrl} を挿入しました。保存ボタンで確定してください。`);
+      // URLからパラメータを除去（履歴汚染防止）
+      const url = new URL(window.location.href);
+      url.searchParams.delete('jan_code');
+      window.history.replaceState({}, '', url.pathname);
+    }
+  }, [searchParams, recipe?.id]);
 
   // 原材料表示テキストをレシピデータから初期化
   useEffect(() => {
@@ -1677,8 +1693,22 @@ export default function RecipeDetailPage() {
                 </div>
                 {/* JANコード・賞味期限 */}
                 <div className="p-2 bg-gray-50 rounded border border-gray-100 min-h-[52px] flex flex-col">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                    JANコード
+                  <div className="flex items-center justify-between mb-0.5">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      JANコード
+                    </div>
+                    {!recipe.jan_code && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const encodedName = encodeURIComponent(recipe.name);
+                          router.push(`/recipe/jan-codes?from_recipe=${recipe.id}&product_name=${encodedName}`);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
+                      >
+                        JAN新規発行
+                      </button>
+                    )}
                   </div>
                   <div className="flex-1 flex items-center">
                     <InlineEdit
