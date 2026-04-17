@@ -132,6 +132,28 @@ export default function ProductLinkPage() {
         }
     };
 
+    // 商品を新規作成して紐付け
+    const handleCreateAndLink = async (recipeId: string, recipeName: string, recipePrice: number | null) => {
+        if (!confirm(`WEB販売管理に「${recipeName}」を新規作成して紐付けます。\nよろしいですか？`)) return;
+        try {
+            const res = await fetch("/api/recipe/sync-product", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ createAndLink: true, recipeId, recipeName, recipePrice }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "作成に失敗しました");
+            }
+            const result = await res.json();
+            toast.success(`「${result.productName}」を新規作成して紐付けました`);
+            setSuggestions(prev => prev.filter(s => s.recipeId !== recipeId));
+            fetchData();
+        } catch (error: any) {
+            toast.error(error.message);
+        }
+    };
+
     // 全解除
     const handleUnlinkAll = async () => {
         if (!confirm(`紐付け済み${linkedCount}件を全て解除しますか？\nこの操作は元に戻せません。`)) return;
@@ -520,16 +542,28 @@ export default function ProductLinkPage() {
                                                     : getConfidenceBadge(s.confidence, s.score)}
                                             </TableCell>
                                             <TableCell>
-                                                {effectiveProductId && (
-                                                    <Button
-                                                        size="sm"
-                                                        className="h-7 text-xs bg-green-600 hover:bg-green-700"
-                                                        onClick={() => handleLinkOne(s.recipeId, effectiveProductId)}
-                                                    >
-                                                        <Link2 className="w-3 h-3 mr-1" />
-                                                        紐づけ
-                                                    </Button>
-                                                )}
+                                                <div className="flex gap-1">
+                                                    {effectiveProductId && (
+                                                        <Button
+                                                            size="sm"
+                                                            className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                                                            onClick={() => handleLinkOne(s.recipeId, effectiveProductId)}
+                                                        >
+                                                            <Link2 className="w-3 h-3 mr-1" />
+                                                            紐づけ
+                                                        </Button>
+                                                    )}
+                                                    {!effectiveProductId && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-7 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                                                            onClick={() => handleCreateAndLink(s.recipeId, s.recipeName, s.recipePrice)}
+                                                        >
+                                                            ＋ 新規作成
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     );

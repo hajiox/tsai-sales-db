@@ -238,12 +238,44 @@ async function syncPriceToWholesaleProduct(
     }
 }
 
-// POST: Link/unlink or batch-link
+// POST: Link/unlink, batch-link, or create-and-link
 export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
         const body = await request.json();
+
+        // ─── Create and Link mode: 卸商品を新規作成して紐付け ───
+        if (body.createAndLink) {
+            const { recipeId, recipeName, recipePrice } = body;
+            if (!recipeId || !recipeName) {
+                return NextResponse.json({ error: "recipeId and recipeName are required" }, { status: 400 });
+            }
+
+            // 7掛の卸価格
+            const wholesalePrice = recipePrice ? Math.round(recipePrice * 0.7) : null;
+
+            // wholesale_productsテーブルに新規作成
+            const { data: newProduct, error: insertError } = await supabase
+                .from("wholesale_products")
+                .insert({
+                    product_name: recipeName,
+                    price: wholesalePrice,
+                    product_type: '通常卸',
+                })
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+
+            // 紐付け
+            await linkRecipeToWholesaleProduct(supabase, recipeId, newProduct.id);
+
+            // 価格同期
+            await syncPriceToWholesaleProduct(supabase, recipeId, newProduct.id);
+
+            return NextResponse.json({ success: true, productId: newProduct.id, productName: newProduct.product_name });
+        }
 
         if (body.batch && Array.isArray(body.links)) {
             let linked = 0;

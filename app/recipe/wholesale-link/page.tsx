@@ -108,6 +108,28 @@ export default function WholesaleLinkPage() {
         } catch (error: any) { toast.error(error.message); }
     };
 
+    // 卸商品を新規作成して紐付け
+    const handleCreateAndLink = async (recipeId: string, recipeName: string, recipePrice: number | null) => {
+        if (!confirm(`卸販売管理に「${recipeName}」を新規作成して紐付けます。\nよろしいですか？`)) return;
+        try {
+            const res = await fetch("/api/recipe/sync-wholesale", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ createAndLink: true, recipeId, recipeName, recipePrice }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "作成に失敗しました");
+            }
+            const result = await res.json();
+            toast.success(`「${result.productName}」を新規作成して紐付けました`);
+            setSuggestions(prev => prev.filter(s => s.recipeId !== recipeId));
+            fetchData();
+        } catch (error: any) {
+            toast.error(error.message);
+        }
+    };
+
     // 一括紐づけ
     const handleBatchLink = async () => {
         const toLink = suggestions.filter(s => {
@@ -349,11 +371,23 @@ export default function WholesaleLinkPage() {
                                             <TableCell className="text-right text-sm">{formatCurrency(effectiveProduct?.price || null)}</TableCell>
                                             <TableCell>{s.overrideProductId ? <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">🔧 手動</span> : getConfidenceBadge(s.confidence, s.score)}</TableCell>
                                             <TableCell>
-                                                {effectiveProductId && (
-                                                    <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700" onClick={() => handleLinkOne(s.recipeId, effectiveProductId)}>
-                                                        <Link2 className="w-3 h-3 mr-1" /> 紐づけ
-                                                    </Button>
-                                                )}
+                                                <div className="flex gap-1">
+                                                    {effectiveProductId && (
+                                                        <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700" onClick={() => handleLinkOne(s.recipeId, effectiveProductId)}>
+                                                            <Link2 className="w-3 h-3 mr-1" /> 紐づけ
+                                                        </Button>
+                                                    )}
+                                                    {!effectiveProductId && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                                                            onClick={() => handleCreateAndLink(s.recipeId, s.recipeName, s.recipePrice)}
+                                                        >
+                                                            ＋ 新規作成
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     );

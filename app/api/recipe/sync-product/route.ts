@@ -282,12 +282,40 @@ async function syncPriceToProduct(
     }
 }
 
-// POST: Link/unlink or batch-link（1:1制約付き）
+// POST: Link/unlink, batch-link, or create-and-link（1:1制約付き）
 export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
         const body = await request.json();
+
+        // ─── Create and Link mode: 商品を新規作成して紐付け ───
+        if (body.createAndLink) {
+            const { recipeId, recipeName, recipePrice } = body;
+            if (!recipeId || !recipeName) {
+                return NextResponse.json({ error: "recipeId and recipeName are required" }, { status: 400 });
+            }
+
+            // productsテーブルに新規作成
+            const { data: newProduct, error: insertError } = await supabase
+                .from("products")
+                .insert({
+                    name: recipeName,
+                    price: recipePrice || null,
+                })
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+
+            // 紐付け
+            await linkRecipeToProduct(supabase, recipeId, newProduct.id);
+
+            // 価格同期
+            await syncPriceToProduct(supabase, recipeId, newProduct.id);
+
+            return NextResponse.json({ success: true, productId: newProduct.id, productName: newProduct.name });
+        }
 
         // Batch link mode
         if (body.batch && Array.isArray(body.links)) {
