@@ -104,7 +104,7 @@ function SalesInputContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [yearOptions, setYearOptions] = useState<string[]>([]);
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
-  const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
+  const [linkedProductMap, setLinkedProductMap] = useState<Map<string, string>>(new Map());
   const [colorPickerOpen, setColorPickerOpen] = useState<{ productId: string; anchorEl: HTMLElement } | null>(null); // カラーパレット開閉
 
   // ドラッグ&ドロップ
@@ -184,11 +184,11 @@ function SalesInputContent() {
       if (res.ok) {
         const data = await res.json();
         if (data.recipes) {
-          const linked = new Set<string>();
-          data.recipes.forEach((r: { linked_wholesale_product_id: string | null }) => {
-            if (r.linked_wholesale_product_id) linked.add(r.linked_wholesale_product_id);
+          const linked = new Map<string, string>();
+          data.recipes.forEach((r: { name: string; linked_wholesale_product_id: string | null }) => {
+            if (r.linked_wholesale_product_id) linked.set(r.linked_wholesale_product_id, r.name);
           });
-          setLinkedProductIds(linked);
+          setLinkedProductMap(linked);
         }
       }
     } catch (error) {
@@ -558,9 +558,15 @@ function SalesInputContent() {
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-800 flex items-center gap-1">
                             {product.product_name}
-                            {linkedProductIds.has(product.id) && (
-                              <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium" title="レシピ紐付済">
-                                <Link2 className="h-2.5 w-2.5" />
+                            {linkedProductMap.has(product.id) && (
+                              <span className="relative group/wlink">
+                                <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium cursor-help">
+                                  <Link2 className="h-2.5 w-2.5" />
+                                </span>
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg shadow-lg whitespace-nowrap opacity-0 invisible group-hover/wlink:opacity-100 group-hover/wlink:visible transition-all duration-200 pointer-events-none z-[100]">
+                                  🔗 {linkedProductMap.get(product.id)}
+                                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800"></span>
+                                </span>
                               </span>
                             )}
                           </div>

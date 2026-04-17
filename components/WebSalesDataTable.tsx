@@ -713,11 +713,14 @@ export default function WebSalesDataTable({
                                   {getProductName(row.product_id)}
                                 </div>
                                 {recipeLinks[row.product_id] && (
-                                  <span
-                                    className="flex-shrink-0 text-emerald-500 cursor-help"
-                                    title={`レシピ連携済: ${recipeLinks[row.product_id]}`}
-                                  >
-                                    <Link2 className="h-3.5 w-3.5" />
+                                  <span className="relative flex-shrink-0 group/link">
+                                    <span className="text-emerald-500 cursor-help">
+                                      <Link2 className="h-3.5 w-3.5" />
+                                    </span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg shadow-lg whitespace-nowrap opacity-0 invisible group-hover/link:opacity-100 group-hover/link:visible transition-all duration-200 pointer-events-none z-50">
+                                      🔗 {recipeLinks[row.product_id]}
+                                      <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800"></span>
+                                    </span>
                                   </span>
                                 )}
                               </div>
