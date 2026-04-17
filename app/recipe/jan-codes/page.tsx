@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ interface JanCode {
     created_at: string;
 }
 
-export default function JanCodesPage() {
+function JanCodesContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const fromRecipeId = searchParams.get('from_recipe');
@@ -345,5 +345,13 @@ export default function JanCodesPage() {
                 </table>
             </div>
         </div>
+    );
+}
+
+export default function JanCodesPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-center text-gray-500">読み込み中...</div>}>
+            <JanCodesContent />
+        </Suspense>
     );
 }

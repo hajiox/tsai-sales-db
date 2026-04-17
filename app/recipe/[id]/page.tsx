@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -107,7 +107,7 @@ interface RecipeItem {
   intermediate_recipe_id?: string | null;
 }
 
-export default function RecipeDetailPage() {
+function RecipeDetailContent() {
   const params = useParams();
   const router = useRouter();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
@@ -3417,5 +3417,13 @@ Now Expanded or Scrollable */}
 
 
     </div>
+  );
+}
+
+export default function RecipeDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">読み込み中...</div>}>
+      <RecipeDetailContent />
+    </Suspense>
   );
 }
