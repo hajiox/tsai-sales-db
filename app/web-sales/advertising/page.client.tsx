@@ -338,12 +338,18 @@ export default function AdvertisingDashboard() {
 
     // ===== Google AIチャットコンテキスト生成 =====
     const getGoogleChatContext = () => {
+        const cpa = totalConversions > 0 ? Math.round(totalCost / totalConversions) : 0
         const topGroups = seriesSummary().slice(0, 5).map(([sc, d]) => {
             const name = sc === 0 ? '未分類' : seriesMap.get(sc) || `シリーズ${sc}`
-            const roas = d.cost > 0 ? (d.conversionsValue / d.cost).toFixed(2) : '0'
-            return `${name}(広告費¥${Math.round(d.cost)} クリック${d.clicks} CV${d.conversions.toFixed(1)} ROAS${roas})`
+            const groupCpa = d.conversions > 0 ? Math.round(d.cost / d.conversions) : 0
+            const groupCvr = d.clicks > 0 ? (d.conversions / d.clicks * 100).toFixed(2) : '0'
+            return `${name}(広告費¥${Math.round(d.cost)} クリック${d.clicks} CV${d.conversions.toFixed(1)} CVR${groupCvr}% CPA¥${groupCpa})`
         }).join(', ')
-        return `${month} Google広告(P-MAX)サマリー: 総広告費¥${Math.round(totalCost).toLocaleString()} / 表示${totalImpressions.toLocaleString()} / クリック${totalClicks.toLocaleString()} / CTR${avgCtr.toFixed(2)}% / CPC¥${Math.round(avgCpc)} / CV${totalConversions.toFixed(1)} / CVR${avgCvr.toFixed(2)}% / CV値¥${Math.round(totalConversionsValue).toLocaleString()} / ${assetGroups.length}アセットグループ\nシリーズTOP5: ${topGroups}`
+        // 注意: conversions_valueはGoogle Adsのコンバージョン値設定に依存し、EC売上と一致しない場合がある
+        const cvValueNote = totalConversionsValue > 0 && totalConversionsValue < totalCost * 0.5
+            ? '（※CV値はGoogle Adsの設定上の値であり、実際のEC売上とは異なる可能性があります。CV数・CVR・CPAで成果を判断してください）'
+            : ''
+        return `${month} Google広告(P-MAX)サマリー: 総広告費¥${Math.round(totalCost).toLocaleString()} / 表示${totalImpressions.toLocaleString()} / クリック${totalClicks.toLocaleString()} / CTR${avgCtr.toFixed(2)}% / CPC¥${Math.round(avgCpc)} / CV${totalConversions.toFixed(1)} / CVR${avgCvr.toFixed(2)}% / CPA¥${cpa} / CV値¥${Math.round(totalConversionsValue).toLocaleString()}${cvValueNote} / ${assetGroups.length}アセットグループ\nシリーズTOP5: ${topGroups}`
     }
 
     // ===== 表示用ユーティリティ =====
