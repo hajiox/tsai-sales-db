@@ -8,8 +8,9 @@ import {
     Upload, Download, RefreshCw, Brain, Save,
     CheckCircle, AlertCircle, ChevronDown, ChevronUp,
     TrendingUp, Eye, MousePointerClick, Target, DollarSign,
-    FileText, ExternalLink, Trash2
+    FileText, ExternalLink, Trash2, Sparkles
 } from "lucide-react"
+import AdChatWindow from "@/components/AdChatWindow"
 
 interface MetaAdSet {
     id: number
@@ -52,8 +53,7 @@ export default function MetaTab({ month }: Props) {
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [uploadResult, setUploadResult] = useState<string | null>(null)
     const [importResult, setImportResult] = useState<string | null>(null)
-    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
-    const [showAnalysis, setShowAnalysis] = useState(false)
+    const [showChat, setShowChat] = useState(false)
     const [mappingChanges, setMappingChanges] = useState<Map<number, number | null>>(new Map())
     const [isAutoMatching, setIsAutoMatching] = useState(false)
     const [autoMatchResult, setAutoMatchResult] = useState<string | null>(null)
@@ -181,27 +181,12 @@ export default function MetaTab({ month }: Props) {
         setIsImporting(false)
     }
 
-    // AI分析
-    const handleAiAnalysis = async (adSetName?: string) => {
-        setIsAnalyzing(true)
-        setShowAnalysis(true)
-        setAiAnalysis(null)
-        try {
-            const res = await fetch('/api/meta-ads/ai-analysis', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ month, adSetName }),
-            })
-            const data = await res.json()
-            if (data.success) {
-                setAiAnalysis(data.analysis)
-            } else {
-                setAiAnalysis(`エラー: ${data.error}`)
-            }
-        } catch (err: any) {
-            setAiAnalysis(`エラー: ${err.message}`)
-        }
-        setIsAnalyzing(false)
+    // AIチャットコンテキスト生成
+    const getChatContext = () => {
+        const topSets = metaData.slice(0, 10).map(d => 
+            `${d.ad_set_name}(広告費¥${Math.round(d.amount_spent)} クリック${d.clicks} CPC¥${Math.round(d.cpc)} 結果${d.results.toFixed(0)} 結果単価¥${d.results > 0 ? Math.round(d.amount_spent / d.results) : '-'})`
+        ).join(', ')
+        return `${month} Meta広告サマリー: 総広告費¥${Math.round(totalSpent).toLocaleString()} / インプレッション${totalImpressions.toLocaleString()} / リーチ${totalReach.toLocaleString()} / クリック${totalClicks.toLocaleString()} / CTR${avgCtr.toFixed(2)}% / CPC¥${Math.round(avgCpc)} / CPM¥${Math.round(avgCpm)} / 結果${totalResults.toFixed(0)} / Freq${avgFreq.toFixed(2)} / ${metaData.length}広告セット\n上位10広告セット: ${topSets}`
     }
 
     // AI自動紐付け
@@ -299,11 +284,7 @@ export default function MetaTab({ month }: Props) {
                                 {isCostImported ? <><CheckCircle size={16} />取り込み済み</> : <><Download size={16} />{isImporting ? '取り込み中...' : '広告費取り込み'}</>}
                             </button>
                         )}
-                        <button onClick={() => handleAiAnalysis()} disabled={isAnalyzing}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-violet-300 transition-colors font-medium">
-                            <Brain size={16} />
-                            AI分析
-                        </button>
+
                         {hasMapped && (
                             <button onClick={handleClearMappings}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium">
@@ -321,10 +302,18 @@ export default function MetaTab({ month }: Props) {
                     </span>
                 )}
 
-                <a href="/docs/meta-csv-guide" target="_blank" rel="noopener noreferrer"
-                    className="ml-auto flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600">
-                    <FileText size={14} />CSVエクスポートガイド<ExternalLink size={12} />
-                </a>
+                <div className="ml-auto flex items-center gap-3">
+                    <a href="/docs/meta-csv-guide" target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600">
+                        <FileText size={14} />CSVエクスポートガイド<ExternalLink size={12} />
+                    </a>
+                    {hasData && (
+                        <button onClick={() => setShowChat(!showChat)}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors text-sm font-medium ${showChat ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:opacity-90'}`}>
+                            <Sparkles size={16} /> {showChat ? 'AIチャットを閉じる' : 'AIに質問'}
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* 結果メッセージ */}
@@ -414,7 +403,6 @@ export default function MetaTab({ month }: Props) {
                                     <col style={{ width: '7%' }} />
                                     <col style={{ width: '6%' }} />
                                     <col style={{ width: '13%' }} />
-                                    <col style={{ width: '5%' }} />
                                 </colgroup>
                                 <thead>
                                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
@@ -429,7 +417,6 @@ export default function MetaTab({ month }: Props) {
                                         <th className="text-right px-3 py-3 font-medium">結果</th>
                                         <th className="text-right px-3 py-3 font-medium">結果単価</th>
                                         <th className="text-center px-2 py-3 font-medium">シリーズ紐付け</th>
-                                        <th className="text-center px-2 py-3 font-medium">AI</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -471,14 +458,6 @@ export default function MetaTab({ month }: Props) {
                                                         ))}
                                                     </select>
                                                 </td>
-                                                <td className="text-center px-2 py-3">
-                                                    <button onClick={() => handleAiAnalysis(d.ad_set_name)}
-                                                        disabled={isAnalyzing}
-                                                        title={`「${d.ad_set_name}」をAI分析`}
-                                                        className="p-1.5 rounded-lg hover:bg-violet-100 text-violet-500 hover:text-violet-700 disabled:text-gray-300 transition-colors">
-                                                        <Brain size={14} />
-                                                    </button>
-                                                </td>
                                             </tr>
                                         )
                                     })}
@@ -494,40 +473,19 @@ export default function MetaTab({ month }: Props) {
                                         <td className="text-right px-3 py-3">{totalResults.toFixed(0)}</td>
                                         <td className="text-right px-3 py-3">{totalResults > 0 ? formatCurrency(totalSpent / totalResults) : '—'}</td>
                                         <td></td>
-                                        <td></td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    {/* AI分析結果 */}
-                    {showAnalysis && (
-                        <div className="bg-white border rounded-xl overflow-hidden">
-                            <div className="p-5 border-b flex items-center justify-between">
-                                <h2 className="text-lg font-semibold flex items-center gap-2">
-                                    <Brain size={20} className="text-violet-500" />
-                                    AI分析レポート
-                                </h2>
-                                <button onClick={() => setShowAnalysis(false)} className="text-sm text-gray-400 hover:text-gray-600">閉じる</button>
-                            </div>
-                            <div className="p-6">
-                                {isAnalyzing ? (
-                                    <div className="flex items-center gap-3 text-violet-600">
-                                        <RefreshCw size={20} className="animate-spin" />
-                                        <span>Gemini 2.5 Flashで分析中...</span>
-                                    </div>
-                                ) : aiAnalysis ? (
-                                    <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{
-                                        __html: aiAnalysis
-                                            .replace(/^## /gm, '<h2 class="text-lg font-bold mt-6 mb-2">')
-                                            .replace(/^### /gm, '<h3 class="text-md font-semibold mt-4 mb-1">')
-                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                            .replace(/\n/g, '<br/>')
-                                    }} />
-                                ) : null}
-                            </div>
-                        </div>
+                    {/* AIチャットウィンドウ */}
+                    {showChat && (
+                        <AdChatWindow
+                            platform="meta"
+                            context={getChatContext()}
+                            onClose={() => setShowChat(false)}
+                        />
                     )}
                 </>
             )}

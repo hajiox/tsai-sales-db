@@ -16,6 +16,7 @@ import MetaTab from "./meta-tab"
 import RakutenTab from "./rakuten-tab"
 import YahooTab from "./yahoo-tab"
 import AmazonTab from "./amazon-tab"
+import AdChatWindow from "@/components/AdChatWindow"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -112,9 +113,9 @@ export default function AdvertisingDashboard() {
     const [seriesAdCosts, setSeriesAdCosts] = useState<AdCostRow[]>([])
 
     // AI分析
-    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [aiTarget, setAiTarget] = useState<string | null>(null)
+    const [showGoogleChat, setShowGoogleChat] = useState(false)
     // 取り込み済み状態（プラットフォーム別）
     const [importedPlatforms, setImportedPlatforms] = useState<{ google: boolean; meta: boolean; amazon: boolean; rakuten: boolean; yahoo: boolean }>({ google: false, meta: false, amazon: false, rakuten: false, yahoo: false })
 
@@ -335,22 +336,14 @@ export default function AdvertisingDashboard() {
         finally { setIsImporting(false) }
     }
 
-    // ===== AI分析 =====
-    const handleAiAnalysis = async (assetGroupName?: string) => {
-        setIsAnalyzing(true); setAiAnalysis(null)
-        setAiTarget(assetGroupName || null)
-        try {
-            const body: any = { month }
-            if (assetGroupName) body.assetGroupName = assetGroupName
-            const res = await fetch('/api/google-ads/ai-analysis', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            })
-            const data = await res.json()
-            if (data.success) { setAiAnalysis(data.analysis) }
-            else { setAiAnalysis(`分析エラー: ${data.error}`) }
-        } catch (error: any) { setAiAnalysis(`分析エラー: ${error.message}`) }
-        finally { setIsAnalyzing(false) }
+    // ===== Google AIチャットコンテキスト生成 =====
+    const getGoogleChatContext = () => {
+        const topGroups = seriesSummary().slice(0, 5).map(([sc, d]) => {
+            const name = sc === 0 ? '未分類' : seriesMap.get(sc) || `シリーズ${sc}`
+            const roas = d.cost > 0 ? (d.conversionsValue / d.cost).toFixed(2) : '0'
+            return `${name}(広告費¥${Math.round(d.cost)} クリック${d.clicks} CV${d.conversions.toFixed(1)} ROAS${roas})`
+        }).join(', ')
+        return `${month} Google広告(P-MAX)サマリー: 総広告費¥${Math.round(totalCost).toLocaleString()} / 表示${totalImpressions.toLocaleString()} / クリック${totalClicks.toLocaleString()} / CTR${avgCtr.toFixed(2)}% / CPC¥${Math.round(avgCpc)} / CV${totalConversions.toFixed(1)} / CVR${avgCvr.toFixed(2)}% / CV値¥${Math.round(totalConversionsValue).toLocaleString()} / ${assetGroups.length}アセットグループ\nシリーズTOP5: ${topGroups}`
     }
 
     // ===== 表示用ユーティリティ =====
@@ -560,19 +553,23 @@ export default function AdvertisingDashboard() {
             {activeTab === 'google' && (
                 <>
                     {/* アクションボタン */}
-                    <div className="flex gap-3">
-                        <button onClick={handleSync} disabled={isSyncing}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
-                            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />{isSyncing ? '同期中...' : `${month}を同期`}
-                        </button>
-                        <button onClick={openImportPanel} disabled={assetGroups.length === 0}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${importedPlatforms.google ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400'}`}>
-                            {importedPlatforms.google ? <><CheckCircle size={16} />マッチ済み</> : <><Download size={16} />商品マッチング</>}
-                        </button>
-                        <button onClick={() => handleAiAnalysis()} disabled={isAnalyzing || assetGroups.length === 0}
-                            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
-                            <Brain size={16} className={isAnalyzing && !aiTarget ? 'animate-pulse' : ''} />{isAnalyzing && !aiTarget ? '分析中...' : 'AI分析'}
-                        </button>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex gap-3">
+                            <button onClick={handleSync} disabled={isSyncing}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
+                                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />{isSyncing ? '同期中...' : `${month}を同期`}
+                            </button>
+                            <button onClick={openImportPanel} disabled={assetGroups.length === 0}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${importedPlatforms.google ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400'}`}>
+                                {importedPlatforms.google ? <><CheckCircle size={16} />マッチ済み</> : <><Download size={16} />商品マッチング</>}
+                            </button>
+                        </div>
+                        {assetGroups.length > 0 && (
+                            <button onClick={() => setShowGoogleChat(!showGoogleChat)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showGoogleChat ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:opacity-90'}`}>
+                                <Sparkles size={16} /> {showGoogleChat ? 'AIチャットを閉じる' : 'AIに質問'}
+                            </button>
+                        )}
                     </div>
 
                     {/* 取り込みパネル */}
@@ -637,40 +634,13 @@ export default function AdvertisingDashboard() {
                         </div>
                     )}
 
-                    {/* AI分析結果パネル（Googleタブ内） */}
-                    {(aiAnalysis || isAnalyzing) && (
-                        <div className="bg-white border-2 border-violet-200 rounded-xl overflow-hidden">
-                            <div className="bg-gradient-to-r from-violet-50 to-blue-50 p-4 border-b border-violet-200 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Sparkles className="text-violet-600" size={20} />
-                                    <h2 className="font-bold text-gray-900">
-                                        AI分析 — {aiTarget ? `「${aiTarget}」` : 'Google広告全体'}
-                                    </h2>
-                                    <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">Gemini 2.5 Flash</span>
-                                </div>
-                                <button onClick={() => { setAiAnalysis(null); setAiTarget(null) }} className="text-gray-400 hover:text-gray-600 text-sm">閉じる</button>
-                            </div>
-                            {isAnalyzing && (
-                                <div className="flex items-center gap-3 py-10 justify-center">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-300 border-t-violet-600" />
-                                    <span className="text-violet-700 font-medium">{aiTarget ? `「${aiTarget}」を分析中...` : '全体データを分析中...'}</span>
-                                </div>
-                            )}
-                            {aiAnalysis && (
-                                <div className="p-6">
-                                    <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700">
-                                        {aiAnalysis.split('\n').map((line, i) => {
-                                            if (line.startsWith('## ')) return <h2 key={i} className="text-lg font-bold mt-6 mb-3 pb-2 border-b border-gray-100">{line.replace('## ', '')}</h2>
-                                            if (line.startsWith('### ')) return <h3 key={i} className="text-base font-semibold mt-4 mb-2">{line.replace('### ', '')}</h3>
-                                            if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-4 mb-1 text-sm leading-relaxed">{line.replace(/^[-*]\s/, '')}</li>
-                                            if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-semibold text-sm my-2">{line.replace(/\*\*/g, '')}</p>
-                                            if (line.trim() === '') return <br key={i} />
-                                            return <p key={i} className="text-sm leading-relaxed mb-2">{line}</p>
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                    {/* AIチャットウィンドウ（Google広告） */}
+                    {showGoogleChat && (
+                        <AdChatWindow
+                            platform="google"
+                            context={getGoogleChatContext()}
+                            onClose={() => setShowGoogleChat(false)}
+                        />
                     )}
 
                     {/* Google広告 シリーズ別パフォーマンス */}
@@ -783,34 +753,7 @@ export default function AdvertisingDashboard() {
                         </div>
                     </div>
 
-                    {/* AI分析結果 */}
-                    {(aiAnalysis || isAnalyzing) && (
-                        <div className="bg-white border rounded-xl overflow-hidden">
-                            <div className="p-5 border-b flex items-center justify-between">
-                                <h2 className="text-lg font-semibold flex items-center gap-2">
-                                    <Brain size={20} className="text-violet-500" />
-                                    AI分析レポート{aiTarget ? ` — ${aiTarget}` : ''}
-                                </h2>
-                                <button onClick={() => { setAiAnalysis(null); setAiTarget(null) }} className="text-sm text-gray-400 hover:text-gray-600">閉じる</button>
-                            </div>
-                            <div className="p-6">
-                                {isAnalyzing ? (
-                                    <div className="flex items-center gap-3 text-violet-600">
-                                        <RefreshCw size={20} className="animate-spin" />
-                                        <span>Gemini 2.5 Flashで分析中...</span>
-                                    </div>
-                                ) : aiAnalysis ? (
-                                    <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{
-                                        __html: aiAnalysis
-                                            .replace(/^## /gm, '<h2 class="text-lg font-bold mt-6 mb-2">')
-                                            .replace(/^### /gm, '<h3 class="text-md font-semibold mt-4 mb-1">')
-                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                            .replace(/\n/g, '<br/>')
-                                    }} />
-                                ) : null}
-                            </div>
-                        </div>
-                    )}
+
                 </>
             )}
 

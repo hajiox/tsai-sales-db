@@ -7,7 +7,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import {
     Upload, Download, RefreshCw, Brain, Save,
     CheckCircle, AlertCircle, Target, DollarSign,
-    ExternalLink, Trash2
+    ExternalLink, Trash2, Sparkles
 } from "lucide-react"
 import AdChatWindow from "@/components/AdChatWindow"
 
@@ -49,8 +49,7 @@ export default function AmazonTab({ month }: { month: string }) {
     const [uploadResult, setUploadResult] = useState<string | null>(null)
     const [matchResult, setMatchResult] = useState<string | null>(null)
     const [importResult, setImportResult] = useState<string | null>(null)
-    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
-    const [showAnalysis, setShowAnalysis] = useState(false)
+    const [showChat, setShowChat] = useState(false)
     const [mappingChanges, setMappingChanges] = useState<Map<string, number | null>>(new Map()) // key=campaign_name
     const [isCostImported, setIsCostImported] = useState(false)
 
@@ -227,20 +226,12 @@ export default function AmazonTab({ month }: { month: string }) {
         setIsImporting(false)
     }
 
-    const handleAiAnalysis = async () => {
-        setIsAnalyzing(true)
-        setShowAnalysis(true)
-        setAiAnalysis(null)
-        try {
-            const res = await fetch('/api/amazon-ads/ai-analysis', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ month }),
-            })
-            const result = await res.json()
-            if (result.success) setAiAnalysis(result.analysis)
-        } catch { }
-        setIsAnalyzing(false)
+    // AIチャットコンテキスト生成
+    const getChatContext = () => {
+        const topCampaigns = campaignGroups.slice(0, 5).map(g => 
+            `${g.campaign_name}(広告費¥${Math.round(g.cost)} 売上¥${Math.round(g.sales)} ROAS${g.cost > 0 ? (g.sales / g.cost).toFixed(2) : '0'})`
+        ).join(', ')
+        return `${month} Amazon SP広告サマリー: 総広告費¥${Math.round(totalCost).toLocaleString()} / クリック${totalClicks.toLocaleString()} / 平均CPC¥${Math.round(avgCpc)} / 売上¥${Math.round(totalSales).toLocaleString()} / 注文${totalOrders}件 / ROAS${overallRoas.toFixed(2)} / ACOS${(overallAcos * 100).toFixed(1)}% / ${campaignGroups.length}キャンペーン(${data.length}ASIN)\nキャンペーンTOP5: ${topCampaigns}`
     }
 
     const handleClearMappings = async () => {
@@ -322,9 +313,9 @@ export default function AmazonTab({ month }: { month: string }) {
                             <ExternalLink size={14} /> ダウンロードガイド
                         </a>
                         {data.length > 0 && (
-                            <button onClick={handleAiAnalysis} disabled={isAnalyzing}
-                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-medium">
-                                <Brain size={16} /> AI分析
+                            <button onClick={() => setShowChat(!showChat)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showChat ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:opacity-90'}`}>
+                                <Sparkles size={16} /> {showChat ? 'AIチャットを閉じる' : 'AIに質問'}
                             </button>
                         )}
                     </div>
@@ -448,24 +439,13 @@ export default function AmazonTab({ month }: { month: string }) {
                         </div>
                     </div>
 
-                    {showAnalysis && (
-                        <>
-                            {isAnalyzing ? (
-                                <div className="bg-white border rounded-xl p-6">
-                                    <div className="flex items-center gap-3 text-orange-600">
-                                        <RefreshCw size={20} className="animate-spin" />
-                                        <span>Gemini 2.5 Flashで分析中...</span>
-                                    </div>
-                                </div>
-                            ) : (
-                                <AdChatWindow
-                                    platform="amazon"
-                                    context={`${month} Amazon SP広告サマリー: 総広告費¥${Math.round(totalCost).toLocaleString()} / 総クリック${totalClicks.toLocaleString()} / 平均CPC¥${Math.round(avgCpc)} / 総売上¥${Math.round(totalSales).toLocaleString()} / 注文${totalOrders}件 / ROAS${overallRoas.toFixed(2)} / ACOS${(overallAcos * 100).toFixed(1)}% / ${campaignGroups.length}キャンペーン(${data.length}ASIN)\nキャンペーンTOP5: ${campaignGroups.slice(0, 5).map(g => `${g.campaign_name}(広告費¥${Math.round(g.cost)} 売上¥${Math.round(g.sales)} ROAS${g.cost > 0 ? (g.sales / g.cost).toFixed(2) : '0'})`).join(', ')}`}
-                                    analysisResult={aiAnalysis}
-                                    onClose={() => setShowAnalysis(false)}
-                                />
-                            )}
-                        </>
+                    {/* AIチャットウィンドウ */}
+                    {showChat && (
+                        <AdChatWindow
+                            platform="amazon"
+                            context={getChatContext()}
+                            onClose={() => setShowChat(false)}
+                        />
                     )}
                 </>
             )}

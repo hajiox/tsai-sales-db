@@ -7,8 +7,9 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import {
     Upload, Download, RefreshCw, Brain, Save,
     CheckCircle, AlertCircle, Target, DollarSign,
-    ExternalLink, Trash2
+    ExternalLink, Trash2, Sparkles
 } from "lucide-react"
+import AdChatWindow from "@/components/AdChatWindow"
 
 interface YahooAdData {
     id: number
@@ -48,8 +49,7 @@ export default function YahooTab({ month }: { month: string }) {
     const [uploadResult, setUploadResult] = useState<string | null>(null)
     const [matchResult, setMatchResult] = useState<string | null>(null)
     const [importResult, setImportResult] = useState<string | null>(null)
-    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
-    const [showAnalysis, setShowAnalysis] = useState(false)
+    const [showChat, setShowChat] = useState(false)
     const [mappingChanges, setMappingChanges] = useState<Map<number, number | null>>(new Map())
     const [isCostImported, setIsCostImported] = useState(false)
 
@@ -184,23 +184,12 @@ export default function YahooTab({ month }: { month: string }) {
         setIsImporting(false)
     }
 
-    // AI分析
-    const handleAiAnalysis = async () => {
-        setIsAnalyzing(true)
-        setShowAnalysis(true)
-        setAiAnalysis(null)
-        try {
-            const res = await fetch('/api/yahoo-ads/ai-analysis', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ month }),
-            })
-            const result = await res.json()
-            if (result.success) {
-                setAiAnalysis(result.analysis)
-            }
-        } catch { }
-        setIsAnalyzing(false)
+    // AIチャットコンテキスト生成
+    const getChatContext = () => {
+        const topItems = data.slice(0, 10).map(d => 
+            `${d.product_name || d.product_code}(広告費¥${Math.round(d.amount_spent)} クリック${d.clicks} CPC¥${Math.round(d.cpc)} 売上¥${Math.round(d.sales_amount)} ROAS${d.roas.toFixed(0)}%)`
+        ).join(', ')
+        return `${month} Yahoo!アイテムリーチ広告サマリー: 総広告費¥${Math.round(totalSpent).toLocaleString()} / 表示${totalImpressions.toLocaleString()} / クリック${totalClicks.toLocaleString()} / CTR${avgCtr.toFixed(2)}% / CPC¥${Math.round(avgCpc)} / 売上¥${Math.round(totalSales).toLocaleString()} / 注文${totalOrders}件 / ROAS${overallRoas.toFixed(0)}% / ${data.length}商品\n上位10商品: ${topItems}`
     }
 
     // 紐付けクリア
@@ -283,9 +272,9 @@ export default function YahooTab({ month }: { month: string }) {
                             <ExternalLink size={14} /> CSVガイド
                         </a>
                         {data.length > 0 && (
-                            <button onClick={handleAiAnalysis} disabled={isAnalyzing}
-                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-medium">
-                                <Brain size={16} /> AI分析
+                            <button onClick={() => setShowChat(!showChat)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showChat ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:opacity-90'}`}>
+                                <Sparkles size={16} /> {showChat ? 'AIチャットを閉じる' : 'AIに質問'}
                             </button>
                         )}
                     </div>
@@ -406,33 +395,13 @@ export default function YahooTab({ month }: { month: string }) {
                         </div>
                     </div>
 
-                    {/* AI分析結果 */}
-                    {showAnalysis && (
-                        <div className="bg-white border rounded-xl overflow-hidden">
-                            <div className="p-5 border-b flex items-center justify-between">
-                                <h2 className="text-lg font-semibold flex items-center gap-2">
-                                    <Brain size={20} className="text-violet-500" />
-                                    AI分析レポート
-                                </h2>
-                                <button onClick={() => setShowAnalysis(false)} className="text-sm text-gray-400 hover:text-gray-600">閉じる</button>
-                            </div>
-                            <div className="p-6">
-                                {isAnalyzing ? (
-                                    <div className="flex items-center gap-3 text-violet-600">
-                                        <RefreshCw size={20} className="animate-spin" />
-                                        <span>Gemini 2.5 Flashで分析中...</span>
-                                    </div>
-                                ) : aiAnalysis ? (
-                                    <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{
-                                        __html: aiAnalysis
-                                            .replace(/^## /gm, '<h2 class="text-lg font-bold mt-6 mb-2">')
-                                            .replace(/^### /gm, '<h3 class="text-md font-semibold mt-4 mb-1">')
-                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                            .replace(/\n/g, '<br/>')
-                                    }} />
-                                ) : null}
-                            </div>
-                        </div>
+                    {/* AIチャットウィンドウ */}
+                    {showChat && (
+                        <AdChatWindow
+                            platform="yahoo"
+                            context={getChatContext()}
+                            onClose={() => setShowChat(false)}
+                        />
                     )}
                 </>
             )}
