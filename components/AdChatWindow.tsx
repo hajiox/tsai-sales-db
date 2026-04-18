@@ -145,20 +145,24 @@ export default function AdChatWindow({ platform, context, analysisResult, onClos
     }
 
     return (
-        <div className="bg-white border rounded-xl overflow-hidden flex flex-col" style={{ maxHeight: '600px' }}>
+        <div className="bg-white border rounded-xl shadow-sm overflow-hidden flex flex-col" style={{ maxHeight: '600px' }}>
             {/* ヘッダー */}
-            <div className={`px-5 py-3 border-b flex items-center justify-between bg-gradient-to-r ${colors.gradient}`}>
-                <div className="flex items-center gap-2 text-white">
-                    <Sparkles size={18} />
-                    <h3 className="font-semibold text-sm">AI アドバイザー</h3>
-                    <span className="text-xs opacity-75">— Gemini 2.5 Flash</span>
+            <div className="px-5 py-4 border-b flex items-center justify-between bg-white">
+                <div className="flex items-center gap-2">
+                    <div className={`p-1.5 rounded-lg ${colors.bg}`}>
+                        <Sparkles size={18} className={colors.accent} />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-gray-900 text-sm">AI アドバイザー</h3>
+                        <p className="text-xs text-gray-400">Gemini 2.5 Flash</p>
+                    </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={handleReset} className="text-white/70 hover:text-white transition-colors" title="会話リセット">
+                    <button onClick={handleReset} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="会話リセット">
                         <RefreshCw size={15} />
                     </button>
                     {onClose && (
-                        <button onClick={onClose} className="text-white/70 hover:text-white transition-colors">
+                        <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
                             <X size={15} />
                         </button>
                     )}
@@ -166,17 +170,17 @@ export default function AdChatWindow({ platform, context, analysisResult, onClos
             </div>
 
             {/* メッセージ一覧 */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px]" style={{ maxHeight: '400px' }}>
+            <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-gray-50/50 min-h-[200px]" style={{ maxHeight: '400px' }}>
                 {messages.length === 0 ? (
-                    <div className="text-center py-8">
-                        <MessageCircle size={32} className={`mx-auto mb-3 ${colors.accent} opacity-40`} />
-                        <p className="text-gray-500 text-sm mb-4">広告データについて何でも質問できます</p>
-                        <div className="flex flex-wrap gap-2 justify-center">
+                    <div className="text-center py-10">
+                        <MessageCircle size={36} className={`mx-auto mb-4 ${colors.accent} opacity-30`} />
+                        <p className="text-gray-500 text-sm mb-5 font-medium">広告データについて何でも質問できます</p>
+                        <div className="flex flex-wrap gap-2 justify-center max-w-sm mx-auto">
                             {(suggestedQuestions[platform] || []).map((q, i) => (
                                 <button
                                     key={i}
                                     onClick={() => sendMessage(q)}
-                                    className={`text-xs px-3 py-1.5 rounded-full border hover:${colors.bg} ${colors.accent} transition-colors`}
+                                    className="text-xs px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
                                 >
                                     {q}
                                 </button>
@@ -186,15 +190,15 @@ export default function AdChatWindow({ platform, context, analysisResult, onClos
                 ) : (
                     messages.map((msg, i) => (
                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm ${msg.role === 'user'
-                                    ? `bg-gradient-to-r ${colors.gradient} text-white`
-                                    : `${colors.bg} text-gray-800`
+                            <div className={`max-w-[85%] rounded-2xl px-5 py-3 text-sm shadow-sm ${msg.role === 'user'
+                                    ? `bg-gray-900 text-white`
+                                    : `bg-white border text-gray-800`
                                 }`}>
                                 {msg.role === 'user' ? (
-                                    <p>{msg.text}</p>
+                                    <p className="whitespace-pre-wrap">{msg.text}</p>
                                 ) : (
                                     <div
-                                        className="prose prose-sm max-w-none [&_li]:my-0.5 [&_h2]:text-base [&_h3]:text-sm"
+                                        className="prose prose-sm max-w-none text-gray-700 [&_li]:my-1 [&_ul]:pl-5 [&_h2]:text-base [&_h3]:text-sm [&_strong]:text-gray-900"
                                         dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
                                     />
                                 )}
@@ -205,10 +209,10 @@ export default function AdChatWindow({ platform, context, analysisResult, onClos
 
                 {isLoading && (
                     <div className="flex justify-start">
-                        <div className={`rounded-xl px-4 py-3 ${colors.bg}`}>
+                        <div className="rounded-2xl px-5 py-3 bg-white border shadow-sm">
                             <div className="flex items-center gap-2">
-                                <RefreshCw size={14} className={`animate-spin ${colors.accent}`} />
-                                <span className="text-sm text-gray-500">考え中...</span>
+                                <RefreshCw size={14} className="animate-spin text-gray-400" />
+                                <span className="text-sm text-gray-500 font-medium">分析中...</span>
                             </div>
                         </div>
                     </div>
@@ -217,28 +221,28 @@ export default function AdChatWindow({ platform, context, analysisResult, onClos
             </div>
 
             {/* 入力エリア */}
-            <div className="border-t p-3">
-                <div className="flex items-center gap-2">
+            <div className="border-t p-3 bg-white">
+                <div className="flex items-center gap-2 bg-gray-50 rounded-xl p-1 border focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-transparent transition-all">
                     <input
                         ref={inputRef}
                         type="text"
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="質問を入力... (Enterで送信)"
+                        placeholder="AIに質問する... (Enterで送信)"
                         disabled={isLoading}
-                        className="flex-1 px-4 py-2 border rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:bg-gray-50"
+                        className="flex-1 px-3 py-2 bg-transparent text-sm focus:outline-none disabled:opacity-50"
                     />
                     <button
                         onClick={() => sendMessage(input)}
                         disabled={!input.trim() || isLoading}
-                        className={`p-2 rounded-full bg-gradient-to-r ${colors.gradient} text-white disabled:opacity-30 hover:opacity-90 transition-opacity`}
+                        className={`p-2 rounded-lg bg-gray-900 text-white disabled:opacity-30 disabled:bg-gray-400 hover:bg-gray-800 transition-colors`}
                     >
                         <Send size={16} />
                     </button>
                 </div>
                 {messages.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div className="flex flex-wrap gap-1.5 mt-2 px-1">
                         {(suggestedQuestions[platform] || [])
                             .filter(q => !messages.some(m => m.text === q))
                             .slice(0, 3)
@@ -247,7 +251,7 @@ export default function AdChatWindow({ platform, context, analysisResult, onClos
                                     key={i}
                                     onClick={() => sendMessage(q)}
                                     disabled={isLoading}
-                                    className="text-xs px-2.5 py-1 rounded-full border text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                                    className="text-xs px-3 py-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-50 transition-colors"
                                 >
                                     {q}
                                 </button>
