@@ -178,6 +178,9 @@ export async function POST(request: NextRequest) {
             }
 
             // 非P-MAXキャンペーンはそのまま保存
+            const isStoreAd = campaignName.includes('ブランド館') || channelType === 'LOCAL';
+            if (isStoreAd) continue;
+
             const seriesCode = seriesMapping.get(campaignName) || null
             const { error } = await supabase
                 .from('google_ads_performance')
@@ -220,6 +223,9 @@ export async function POST(request: NextRequest) {
             // アセットグループ費用合計を集計
             const key = `${campaignName}|${reportDate}`
             pmaxAssetGroupCostSum.set(key, (pmaxAssetGroupCostSum.get(key) || 0) + costMicros)
+
+            const isStoreAd = campaignName.includes('ブランド館') || assetGroupName.includes('ブランド館');
+            if (isStoreAd) continue;
 
             const seriesCode = seriesMapping.get(assetGroupName) || null
 
