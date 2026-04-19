@@ -69,6 +69,7 @@ interface PlatformCosts {
 interface AdCostRow {
     series_code: number
     google_cost: number
+    meta_cost: number
     amazon_cost: number
     rakuten_cost: number
     yahoo_cost: number
@@ -111,6 +112,7 @@ export default function AdvertisingDashboard() {
     // プラットフォーム別広告費
     const [platformCosts, setPlatformCosts] = useState<PlatformCosts>({ google: 0, meta: 0, amazon: 0, rakuten: 0, yahoo: 0, other: 0 })
     const [seriesAdCosts, setSeriesAdCosts] = useState<AdCostRow[]>([])
+    const [seriesSalesMap, setSeriesSalesMap] = useState<Map<number, number>>(new Map())
 
     // AI分析
     const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -229,6 +231,29 @@ export default function AdvertisingDashboard() {
                     rakuten: adCostData.some((r: any) => (r.rakuten_cost || 0) > 0),
                     yahoo: adCostData.some((r: any) => (r.yahoo_cost || 0) > 0),
                 })
+            }
+
+            // シリーズ別売上データ取得（web_sales_summary + products JOIN）
+            const { data: salesData } = await supabase
+                .from('web_sales_summary')
+                .select('product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count, tiktok_count, unit_price, base_amount')
+                .eq('report_month', `${month}-01`)
+            const { data: productList } = await supabase
+                .from('products')
+                .select('id, series_code')
+                .not('series_code', 'is', null)
+            if (salesData && productList) {
+                const pidToSeries = new Map<string, number>()
+                productList.forEach((p: any) => pidToSeries.set(p.id, p.series_code))
+                const salesMap = new Map<number, number>()
+                salesData.forEach((row: any) => {
+                    const sc = pidToSeries.get(row.product_id)
+                    if (!sc) return
+                    const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + (row.yahoo_count || 0) + (row.mercari_count || 0) + (row.base_count || 0) + (row.qoo10_count || 0) + (row.tiktok_count || 0)
+                    const sales = totalCount * (row.unit_price || 0) + (row.base_amount || 0)
+                    salesMap.set(sc, (salesMap.get(sc) || 0) + sales)
+                })
+                setSeriesSalesMap(salesMap)
             }
 
             // 最終同期日時
@@ -488,38 +513,60 @@ export default function AdvertisingDashboard() {
                                         <tr className="bg-gray-50 text-xs text-gray-500">
                                             <th className="text-left px-5 py-3 font-medium">シリーズ</th>
                                             <th className="text-right px-4 py-3 font-medium">Google</th>
+                                            <th className="text-right px-4 py-3 font-medium">Meta</th>
                                             <th className="text-right px-4 py-3 font-medium">Amazon</th>
                                             <th className="text-right px-4 py-3 font-medium">楽天</th>
                                             <th className="text-right px-4 py-3 font-medium">Yahoo</th>
                                             <th className="text-right px-4 py-3 font-medium">その他</th>
-                                            <th className="text-right px-4 py-3 font-medium font-bold">合計</th>
+                                            <th className="text-right px-4 py-3 font-medium font-bold">広告費計</th>
+                                            <th className="text-right px-4 py-3 font-medium text-blue-600">総売上</th>
+                                            <th className="text-right px-4 py-3 font-medium text-amber-600">広告費率</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {seriesAdCosts.sort((a, b) => (b.google_cost + b.amazon_cost + b.rakuten_cost + b.yahoo_cost + b.other_cost) - (a.google_cost + a.amazon_cost + a.rakuten_cost + a.yahoo_cost + a.other_cost)).map(row => {
-                                            const total = (row.google_cost || 0) + (row.amazon_cost || 0) + (row.rakuten_cost || 0) + (row.yahoo_cost || 0) + (row.other_cost || 0)
-                                            if (total === 0) return null
+                                        {(() => {
+                                            let grandTotalSales = 0
+                                            const rows = seriesAdCosts.sort((a, b) => ((b.google_cost || 0) + (b.meta_cost || 0) + (b.amazon_cost || 0) + (b.rakuten_cost || 0) + (b.yahoo_cost || 0) + (b.other_cost || 0)) - ((a.google_cost || 0) + (a.meta_cost || 0) + (a.amazon_cost || 0) + (a.rakuten_cost || 0) + (a.yahoo_cost || 0) + (a.other_cost || 0))).map(row => {
+                                                const total = (row.google_cost || 0) + (row.meta_cost || 0) + (row.amazon_cost || 0) + (row.rakuten_cost || 0) + (row.yahoo_cost || 0) + (row.other_cost || 0)
+                                                if (total === 0) return null
+                                                const sales = seriesSalesMap.get(row.series_code) || 0
+                                                grandTotalSales += sales
+                                                const adRatio = sales > 0 ? (total / sales * 100) : 0
+                                                return (
+                                                    <tr key={row.series_code} className="border-t hover:bg-gray-50">
+                                                        <td className="px-5 py-2.5 text-sm font-medium">{seriesMap.get(row.series_code) || `シリーズ${row.series_code}`}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm">{row.google_cost > 0 ? formatCurrency(row.google_cost) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm text-gray-400">{(row.meta_cost || 0) > 0 ? formatCurrency(row.meta_cost) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.amazon_cost > 0 ? formatCurrency(row.amazon_cost) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.rakuten_cost > 0 ? formatCurrency(row.rakuten_cost) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.yahoo_cost > 0 ? formatCurrency(row.yahoo_cost) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.other_cost > 0 ? formatCurrency(row.other_cost) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm font-bold text-emerald-700">{formatCurrency(total)}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm font-semibold text-blue-700">{sales > 0 ? formatCurrency(sales) : '—'}</td>
+                                                        <td className={`text-right px-4 py-2.5 text-sm font-medium ${adRatio > 30 ? 'text-red-600' : adRatio > 15 ? 'text-amber-600' : 'text-green-600'}`}>{sales > 0 ? `${adRatio.toFixed(1)}%` : '—'}</td>
+                                                    </tr>
+                                                )
+                                            })
+                                            const totalSalesAll = grandTotalSales
+                                            const totalAdRatio = totalSalesAll > 0 ? (totalPlatformCost / totalSalesAll * 100) : 0
                                             return (
-                                                <tr key={row.series_code} className="border-t hover:bg-gray-50">
-                                                    <td className="px-5 py-2.5 text-sm font-medium">{seriesMap.get(row.series_code) || `シリーズ${row.series_code}`}</td>
-                                                    <td className="text-right px-4 py-2.5 text-sm">{row.google_cost > 0 ? formatCurrency(row.google_cost) : '—'}</td>
-                                                    <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.amazon_cost > 0 ? formatCurrency(row.amazon_cost) : '—'}</td>
-                                                    <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.rakuten_cost > 0 ? formatCurrency(row.rakuten_cost) : '—'}</td>
-                                                    <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.yahoo_cost > 0 ? formatCurrency(row.yahoo_cost) : '—'}</td>
-                                                    <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.other_cost > 0 ? formatCurrency(row.other_cost) : '—'}</td>
-                                                    <td className="text-right px-4 py-2.5 text-sm font-bold text-emerald-700">{formatCurrency(total)}</td>
-                                                </tr>
+                                                <>
+                                                    {rows}
+                                                    <tr className="border-t-2 bg-gray-100 font-bold">
+                                                        <td className="px-5 py-2.5 text-sm">合計</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm">{formatCurrency(platformCosts.google)}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm">{platformCosts.meta > 0 ? formatCurrency(platformCosts.meta) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm">{platformCosts.amazon > 0 ? formatCurrency(platformCosts.amazon) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm">{platformCosts.rakuten > 0 ? formatCurrency(platformCosts.rakuten) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm">{platformCosts.yahoo > 0 ? formatCurrency(platformCosts.yahoo) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm">{platformCosts.other > 0 ? formatCurrency(platformCosts.other) : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm font-bold text-emerald-700">{formatCurrency(totalPlatformCost)}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm font-bold text-blue-700">{totalSalesAll > 0 ? formatCurrency(totalSalesAll) : '—'}</td>
+                                                        <td className={`text-right px-4 py-2.5 text-sm font-bold ${totalAdRatio > 30 ? 'text-red-600' : totalAdRatio > 15 ? 'text-amber-600' : 'text-green-600'}`}>{totalSalesAll > 0 ? `${totalAdRatio.toFixed(1)}%` : '—'}</td>
+                                                    </tr>
+                                                </>
                                             )
-                                        })}
-                                        <tr className="border-t-2 bg-gray-100 font-bold">
-                                            <td className="px-5 py-2.5 text-sm">合計</td>
-                                            <td className="text-right px-4 py-2.5 text-sm">{formatCurrency(platformCosts.google)}</td>
-                                            <td className="text-right px-4 py-2.5 text-sm">{platformCosts.amazon > 0 ? formatCurrency(platformCosts.amazon) : '—'}</td>
-                                            <td className="text-right px-4 py-2.5 text-sm">{platformCosts.rakuten > 0 ? formatCurrency(platformCosts.rakuten) : '—'}</td>
-                                            <td className="text-right px-4 py-2.5 text-sm">{platformCosts.yahoo > 0 ? formatCurrency(platformCosts.yahoo) : '—'}</td>
-                                            <td className="text-right px-4 py-2.5 text-sm">{platformCosts.other > 0 ? formatCurrency(platformCosts.other) : '—'}</td>
-                                            <td className="text-right px-4 py-2.5 text-sm font-bold text-emerald-700">{formatCurrency(totalPlatformCost)}</td>
-                                        </tr>
+                                        })()}
                                     </tbody>
                                 </table>
                             </div>
