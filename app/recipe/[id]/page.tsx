@@ -91,6 +91,7 @@ interface Recipe {
   shelf_life?: string | null;
   web_description?: string | null;
   product_points?: string | null;
+  ec_product_name?: string | null;
 }
 
 interface RecipeItem {
@@ -928,6 +929,7 @@ function RecipeDetailContent() {
             product_code: recipe.product_code,
             web_description: recipe.web_description,
             product_points: recipe.product_points,
+            ec_product_name: recipe.ec_product_name,
           },
         }),
       });
@@ -3343,6 +3345,29 @@ Now Expanded or Scrollable */}
               </div>
             </summary>
             <div className="px-5 pb-5 space-y-4 border-t border-gray-100 pt-4">
+              {/* EC用商品名 */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-semibold text-gray-700">🏷️ EC用商品名</label>
+                  <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${(recipe.ec_product_name || '').length > 75 ? 'bg-red-100 text-red-600 font-bold' : (recipe.ec_product_name || '').length > 60 ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
+                    {(recipe.ec_product_name || '').length} / 75文字
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={recipe.ec_product_name || ''}
+                  onChange={(e) => {
+                    setRecipe(prev => prev ? { ...prev, ec_product_name: e.target.value } : null);
+                    setHasChanges(true);
+                  }}
+                  maxLength={75}
+                  placeholder="ECサイトに掲載する商品名を入力（最大75文字）"
+                  className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none ${(recipe.ec_product_name || '').length > 75 ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+                />
+                {(recipe.ec_product_name || '').length > 60 && (recipe.ec_product_name || '').length <= 75 && (
+                  <p className="text-xs text-amber-500 mt-1">残り{75 - (recipe.ec_product_name || '').length}文字</p>
+                )}
+              </div>
               {/* 商品ポイント — 2カラム横並び */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">商品ポイント</label>
