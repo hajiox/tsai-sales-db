@@ -72,28 +72,32 @@ export default function LpTrackingInlineTab() {
   )
 
   const generateInstructions = (t: LpTarget) => {
-    const activeLinks = t.links?.filter(l => l.is_tracking_target && l.is_active) || []
-    const linkInstructions = activeLinks.map(l => `
-購入先：
-${l.destination_name}
+    const activeLinks = (t.links || [])
+      .filter(l => l.is_tracking_target && l.is_active && l.url && l.url.trim() !== '')
 
-URL：
-${l.url || '未設定'}
+    const linkInstructions = activeLinks.map(l => {
+      const destLabel = l.destination_name === 'rakuten' ? '楽天' :
+        l.destination_name === 'amazon' ? 'Amazon' :
+        l.destination_name === 'yahoo' ? 'Yahoo' :
+        l.destination_name === 'base' ? 'BASE' :
+        l.destination_name === 'own_ec' ? '自社EC' : l.destination_name
+      return `
+${destLabel} URL：
+${l.url}
 
-このURLへ移動するリンクをクリックした時に、以下のMetaイベントを発火してください。
+このURLと一致する既存リンクをクリックした時に、以下のMetaイベントを発火してください。
 
 fbq('trackCustom', 'MallClick', {
   product: '${t.product_value || ''}',
   destination: '${l.destination_name}',
-  url: '${l.url || ''}'
-});`).join("\n")
+  url: '${l.url}'
+});`
+    }).join("\n")
 
     return `対象ページ：
 ${t.lp_url}
 
 このページにMetaピクセルと購入先クリック計測を追加してください。
-
-やることは以下です。
 
 1. 指定Metaピクセルを埋め込む
 
@@ -108,22 +112,24 @@ ${t.meta_pixel_id || '未設定'}
 ページ表示時に以下のイベントを発火してください。
 
 fbq('track', 'ViewContent', {
-  content_name: '${t.management_name}',
+  content_name: '${t.product_value || ''}',
   content_category: 'product_lp'
 });
 
-3. 購入先クリックでMallClickを発火する
+3. 既存の購入先クリックで MallClick を発火する
 
-以下の購入先リンクをクリックした時に、それぞれMetaイベントを発火してください。
+ページ内にすでに存在する購入ボタン／購入リンクを対象にしてください。
+新しいボタンや新しいリンクは作成しないでください。
+ページのデザイン、文言、リンク先URLは変更しないでください。
 ${linkInstructions}
 
 注意点：
-・ページのデザインや文言は変更しないでください。
-・リンク先URLも変更しないでください。
 ・Googleタグマネージャーは使わず、ページ内に直接実装してください。
+・既存のリンク挙動はできるだけ維持してください。
 ・外部リンクへ移動する前にイベントが送信されるようにしてください。
 ・可能ならクリック後300ms待ってから遷移してください。
 ・PageView、ViewContent、MallClickが二重発火しないようにしてください。
+・window.fbq が存在しない場合にエラーでページが止まらないようにしてください。
 `
   }
 
