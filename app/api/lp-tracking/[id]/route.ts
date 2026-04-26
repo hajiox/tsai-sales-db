@@ -1,11 +1,15 @@
 // app/api/lp-tracking/[id]/route.ts
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+) {
+  const params = await props.params;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { data, error } = await supabase
     .from("lp_tracking_targets")
@@ -17,7 +21,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
   return NextResponse.json({ data });
 }
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+) {
+  const params = await props.params;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const body = await request.json();
   const { management_name, lp_url, product_value, meta_pixel_id, status, test_status, memo, is_active, links } = body;
@@ -40,8 +48,6 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   if (targetError) return NextResponse.json({ error: targetError.message }, { status: 500 });
 
   if (links) {
-    // Upsert links: For simplicity, delete existing and re-insert, or upsert by ID.
-    // Given we may have deleted links on client side, deleting all and re-inserting is easiest for now.
     await supabase.from("lp_tracking_links").delete().eq("target_id", params.id);
     
     if (links.length > 0) {
@@ -64,7 +70,11 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   return NextResponse.json({ success: true });
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+) {
+  const params = await props.params;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { error } = await supabase.from("lp_tracking_targets").delete().eq("id", params.id);
   
