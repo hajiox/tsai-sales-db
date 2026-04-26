@@ -2,17 +2,14 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LpTrackingTarget, LpTrackingLink, LP_STATUS_OPTIONS, DESTINATION_OPTIONS } from "../types";
+import { ArrowLeft, Plus, Trash2, Copy, Check, ExternalLink, Crosshair } from "lucide-react";
 
 export default function LpTrackingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  // Unwrap params using React.use()
   const resolvedParams = use(params);
   const id = resolvedParams.id;
   const isNew = id === "new";
@@ -30,11 +27,11 @@ export default function LpTrackingDetailPage({ params }: { params: Promise<{ id:
   const [links, setLinks] = useState<Partial<LpTrackingLink>[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!isNew) {
-      fetchTarget();
-    }
+    if (!isNew) fetchTarget();
   }, [id, isNew]);
 
   const fetchTarget = async () => {
@@ -57,37 +54,42 @@ export default function LpTrackingDetailPage({ params }: { params: Promise<{ id:
       alert("管理名とLP URLは必須です");
       return;
     }
-
     setSaving(true);
     try {
       const url = isNew ? "/api/lp-tracking" : `/api/lp-tracking/${id}`;
       const method = isNew ? "POST" : "PUT";
-      
-      const payload = {
-        ...target,
-        links
-      };
-
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...target, links })
       });
-
       if (!res.ok) throw new Error("Failed to save");
-      
-      alert("保存しました");
       if (isNew) {
         const { data } = await res.json();
         router.push(`/lp-tracking/${data.id}`);
       } else {
-        fetchTarget();
+        await fetchTarget();
       }
     } catch (err) {
       console.error(err);
       alert("保存に失敗しました");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("このLP計測対象を削除しますか？関連する購入先リンクもすべて削除されます。")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/lp-tracking/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      router.push("/web-sales/advertising");
+    } catch (err) {
+      console.error(err);
+      alert("削除に失敗しました");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -110,13 +112,13 @@ export default function LpTrackingDetailPage({ params }: { params: Promise<{ id:
   };
 
   const removeLink = (index: number) => {
-    const newLinks = [...links];
-    newLinks.splice(index, 1);
-    setLinks(newLinks);
+    setLinks(links.filter((_, i) => i !== index));
   };
 
   const generateInstructions = () => {
-    let linkInstructions = links.filter(l => l.is_tracking_target && l.is_active).map(l => `
+    const linkInstructions = links
+      .filter(l => l.is_tracking_target && l.is_active)
+      .map(l => `
 購入先：
 ${l.destination_name}
 
@@ -129,8 +131,7 @@ fbq('trackCustom', 'MallClick', {
   product: '${target.product_value || ''}',
   destination: '${l.destination_value || l.destination_name}',
   url: '${l.url || ''}'
-});
-`).join("\n");
+});`).join("\n");
 
     return `対象ページ：
 ${target.lp_url}
@@ -171,130 +172,155 @@ ${linkInstructions}
 `;
   };
 
-  if (loading) return <div className="p-8">読み込み中...</div>;
+  const handleCopy = () => {
+    navigator.clipboard.writeText(generateInstructions());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (loading) return <div className="p-8 text-gray-500">読み込み中...</div>;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">{isNew ? "新規LP登録" : "LP計測・実装指示管理 詳細"}</h1>
-        <div className="space-x-2">
-          <Button variant="outline" onClick={() => router.push("/lp-tracking")}>一覧へ戻る</Button>
-          <Button onClick={handleSave} disabled={saving}>{saving ? "保存中..." : "保存"}</Button>
+    <div className="p-8 max-w-4xl mx-auto space-y-0">
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push("/web-sales/advertising")} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <ArrowLeft size={20} />
+          </button>
+          <Crosshair className="text-teal-600" size={24} />
+          <h1 className="text-xl font-bold">{isNew ? "新規LP登録" : target.management_name}</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isNew && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={15} />{deleting ? "削除中..." : "削除"}
+            </button>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors disabled:bg-gray-400"
+          >
+            {saving ? "保存中..." : "保存"}
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader><CardTitle>基本情報</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>管理名 <span className="text-red-500">*</span></Label>
+      {/* 統合フォーム */}
+      <div className="bg-white border rounded-xl divide-y">
+        {/* 基本情報 */}
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600">管理名 <span className="text-red-500">*</span></label>
               <Input value={target.management_name || ""} onChange={e => setTarget({...target, management_name: e.target.value})} placeholder="例: ラーメンLP 2026年版" />
             </div>
-            <div className="space-y-2">
-              <Label>LP URL <span className="text-red-500">*</span></Label>
-              <Input value={target.lp_url || ""} onChange={e => setTarget({...target, lp_url: e.target.value})} placeholder="https://..." />
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600">LP URL <span className="text-red-500">*</span></label>
+              <div className="flex gap-2">
+                <Input className="flex-1" value={target.lp_url || ""} onChange={e => setTarget({...target, lp_url: e.target.value})} placeholder="https://..." />
+                {target.lp_url && (
+                  <a href={target.lp_url} target="_blank" rel="noopener noreferrer" className="p-2 border rounded-lg hover:bg-gray-50 text-gray-400 hover:text-blue-600 transition-colors flex-shrink-0">
+                    <ExternalLink size={16} />
+                  </a>
+                )}
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>product値 (イベント用)</Label>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600">product値 (イベントパラメータ)</label>
               <Input value={target.product_value || ""} onChange={e => setTarget({...target, product_value: e.target.value})} placeholder="例: ramen_800g" />
             </div>
-            <div className="space-y-2">
-              <Label>MetaピクセルID</Label>
-              <Input value={target.meta_pixel_id || ""} onChange={e => setTarget({...target, meta_pixel_id: e.target.value})} placeholder="123456789012345" />
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600">MetaピクセルID</label>
+              <Input value={target.meta_pixel_id || ""} onChange={e => setTarget({...target, meta_pixel_id: e.target.value})} placeholder="123456789012345" className="font-mono" />
             </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>実装状況</Label>
-                <Select value={target.status} onValueChange={v => setTarget({...target, status: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {LP_STATUS_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>テスト状況</Label>
-                <Input value={target.test_status || ""} onChange={e => setTarget({...target, test_status: e.target.value})} placeholder="例: 未テスト" />
-              </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600">実装状況</label>
+              <Select value={target.status} onValueChange={v => setTarget({...target, status: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LP_STATUS_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            
-            <div className="space-y-2">
-              <Label>備考</Label>
-              <Textarea value={target.memo || ""} onChange={e => setTarget({...target, memo: e.target.value})} rows={3} />
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600">テスト状況</label>
+              <Input value={target.test_status || ""} onChange={e => setTarget({...target, test_status: e.target.value})} placeholder="例: 未テスト" />
             </div>
-          </CardContent>
-        </Card>
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600">備考</label>
+              <Input value={target.memo || ""} onChange={e => setTarget({...target, memo: e.target.value})} placeholder="メモ" />
+            </div>
+          </div>
+        </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>購入先リンク管理</CardTitle>
-              <Button variant="secondary" size="sm" onClick={addLink}>+ 購入先追加</Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {links.length === 0 && <p className="text-slate-500 text-sm">購入先リンクが登録されていません。</p>}
-              {links.map((link, index) => (
-                <div key={index} className="border p-4 rounded-md space-y-3 bg-slate-50 relative">
-                  <Button variant="ghost" size="sm" className="absolute top-2 right-2 text-red-500" onClick={() => removeLink(index)}>✕</Button>
-                  
-                  <div className="grid grid-cols-2 gap-3 pr-8">
-                    <div className="space-y-1">
-                      <Label className="text-xs">購入先名</Label>
-                      <Select value={link.destination_name} onValueChange={v => updateLink(index, "destination_name", v)}>
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {DESTINATION_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">destination値</Label>
-                      <Input className="h-8" value={link.destination_value || ""} onChange={e => updateLink(index, "destination_value", e.target.value)} placeholder="例: rakuten_shop" />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <Label className="text-xs">URL</Label>
-                    <Input className="h-8" value={link.url || ""} onChange={e => updateLink(index, "url", e.target.value)} placeholder="https://..." />
-                  </div>
-                  
-                  <div className="flex items-center space-x-4 pt-1">
-                    <label className="flex items-center space-x-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={link.is_tracking_target} onChange={e => updateLink(index, "is_tracking_target", e.target.checked)} className="rounded border-gray-300" />
-                      <span>計測対象</span>
-                    </label>
-                    <label className="flex items-center space-x-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={link.is_tested} onChange={e => updateLink(index, "is_tested", e.target.checked)} className="rounded border-gray-300" />
-                      <span>テスト済</span>
-                    </label>
-                  </div>
+        {/* 購入先リンク */}
+        <div className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700">購入先リンク</h3>
+            <button onClick={addLink} className="flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors">
+              <Plus size={14} />追加
+            </button>
+          </div>
+          {links.length === 0 && <p className="text-xs text-gray-400 py-2">購入先リンクが未登録です。「追加」ボタンで登録してください。</p>}
+          {links.map((link, index) => (
+            <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="grid grid-cols-3 gap-3 flex-1">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">購入先名</label>
+                  <Select value={link.destination_name} onValueChange={v => updateLink(index, "destination_name", v)}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {DESTINATION_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">destination値</label>
+                  <Input className="h-8 text-sm" value={link.destination_value || ""} onChange={e => updateLink(index, "destination_value", e.target.value)} placeholder="rakuten_shop" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">URL</label>
+                  <Input className="h-8 text-sm" value={link.url || ""} onChange={e => updateLink(index, "url", e.target.value)} placeholder="https://..." />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 pt-5 flex-shrink-0">
+                <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input type="checkbox" checked={link.is_tracking_target} onChange={e => updateLink(index, "is_tracking_target", e.target.checked)} className="rounded border-gray-300" />
+                  計測
+                </label>
+                <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input type="checkbox" checked={link.is_tested} onChange={e => updateLink(index, "is_tested", e.target.checked)} className="rounded border-gray-300" />
+                  テスト済
+                </label>
+                <button onClick={() => removeLink(index)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
 
-          {!isNew && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>v0実装指示文 (自動生成)</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => {
-                  navigator.clipboard.writeText(generateInstructions());
-                  alert("コピーしました");
-                }}>
-                  📋 コピー
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <Textarea 
-                  readOnly 
-                  value={generateInstructions()} 
-                  className="font-mono text-xs bg-slate-900 text-green-400 h-64"
-                />
-              </CardContent>
-            </Card>
-          )}
+        {/* v0実装指示文 */}
+        <div className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700">v0実装指示文 (自動生成)</h3>
+            <button onClick={handleCopy} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${copied ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {copied ? <><Check size={13} />コピー済!</> : <><Copy size={13} />コピー</>}
+            </button>
+          </div>
+          <pre className="text-[11px] font-mono bg-slate-900 text-green-400 p-4 rounded-lg overflow-auto max-h-64 whitespace-pre-wrap leading-relaxed">
+            {generateInstructions()}
+          </pre>
         </div>
       </div>
     </div>
