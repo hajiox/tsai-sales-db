@@ -10,13 +10,14 @@ import {
     DollarSign, Eye, MousePointerClick, Target,
     BarChart3, Zap, ChevronDown, ChevronUp,
     Download, Check, Save, AlertCircle, ArrowRight,
-    Brain, Sparkles, LayoutDashboard, CheckCircle
+    Brain, Sparkles, LayoutDashboard, CheckCircle, Crosshair
 } from "lucide-react"
 import MetaTab from "./meta-tab"
 import RakutenTab from "./rakuten-tab"
 import YahooTab from "./yahoo-tab"
 import AmazonTab from "./amazon-tab"
 import AdChatWindow from "@/components/AdChatWindow"
+import LpTrackingInlineTab from "./lp-tracking-tab"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -76,7 +77,7 @@ interface AdCostRow {
     other_cost: number
 }
 
-type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'yahoo' | 'amazon'
+type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'yahoo' | 'amazon' | 'lp-tracking'
 
 // ===== メインコンポーネント =====
 export default function AdvertisingDashboard() {
@@ -429,6 +430,7 @@ export default function AdvertisingDashboard() {
         { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span>, imported: importedPlatforms.rakuten },
         { id: 'yahoo', label: 'Yahoo!広告', icon: <span className="text-xs font-bold text-purple-600">Y</span>, imported: importedPlatforms.yahoo },
         { id: 'amazon', label: 'Amazon広告', icon: <span className="text-xs font-bold text-orange-500">A</span>, imported: importedPlatforms.amazon },
+        { id: 'lp-tracking', label: 'LP計測', icon: <Crosshair size={16} className="text-teal-600" /> },
     ]
 
     return (
@@ -825,9 +827,13 @@ export default function AdvertisingDashboard() {
                 <YahooTab month={month} />
             )}
 
-            {/* ===== Amazonタブ ===== */}
             {activeTab === 'amazon' && (
                 <AmazonTab month={month} />
+            )}
+
+            {/* ===== LP計測タブ ===== */}
+            {activeTab === 'lp-tracking' && (
+                <LpTrackingInlineTab />
             )}
 
 

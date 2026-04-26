@@ -17,8 +17,7 @@ type Module =
   | "kpi"
   | "recipe"
   | "links"
-  | "ai-tools"
-  | "lp-tracking";
+  | "ai-tools";
 
 export default function MainSidebar() {
   const pathname = usePathname();
@@ -38,7 +37,6 @@ export default function MainSidebar() {
     else if (pathname.startsWith("/recipe")) setActiveModule("recipe");
     else if (pathname.startsWith("/links")) setActiveModule("links");
     else if (pathname.startsWith("/ai-tools")) setActiveModule("ai-tools");
-    else if (pathname.startsWith("/lp-tracking")) setActiveModule("lp-tracking");
     else setActiveModule("sales");
   }, [pathname]);
 
@@ -55,7 +53,6 @@ export default function MainSidebar() {
       recipe: "/recipe",
       links: "/links",
       "ai-tools": "/ai-tools",
-      "lp-tracking": "/lp-tracking",
     } as const;
     router.push(map[module]);
   };
@@ -164,14 +161,6 @@ export default function MainSidebar() {
             onClick={() => goto("ai-tools")}
           >
             使用可能AI
-          </Button>
-
-          <Button
-            variant={activeVariant("lp-tracking")}
-            className={baseBtn("lp-tracking")}
-            onClick={() => goto("lp-tracking")}
-          >
-            LP計測管理
           </Button>
         </div>
       </nav>
