@@ -1,0 +1,302 @@
+"use client";
+
+import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LpTrackingTarget, LpTrackingLink, LP_STATUS_OPTIONS, DESTINATION_OPTIONS } from "../types";
+
+export default function LpTrackingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter();
+  // Unwrap params using React.use()
+  const resolvedParams = use(params);
+  const id = resolvedParams.id;
+  const isNew = id === "new";
+
+  const [target, setTarget] = useState<Partial<LpTrackingTarget>>({
+    management_name: "",
+    lp_url: "",
+    product_value: "",
+    meta_pixel_id: "",
+    status: "未実装",
+    test_status: "テスト未",
+    memo: "",
+    is_active: true,
+  });
+  const [links, setLinks] = useState<Partial<LpTrackingLink>[]>([]);
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isNew) {
+      fetchTarget();
+    }
+  }, [id, isNew]);
+
+  const fetchTarget = async () => {
+    try {
+      const res = await fetch(`/api/lp-tracking/${id}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const { data } = await res.json();
+      setTarget(data);
+      setLinks(data.links || []);
+    } catch (err) {
+      console.error(err);
+      alert("データの取得に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!target.management_name || !target.lp_url) {
+      alert("管理名とLP URLは必須です");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const url = isNew ? "/api/lp-tracking" : `/api/lp-tracking/${id}`;
+      const method = isNew ? "POST" : "PUT";
+      
+      const payload = {
+        ...target,
+        links
+      };
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Failed to save");
+      
+      alert("保存しました");
+      if (isNew) {
+        const { data } = await res.json();
+        router.push(`/lp-tracking/${data.id}`);
+      } else {
+        fetchTarget();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("保存に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addLink = () => {
+    setLinks([...links, {
+      destination_name: "rakuten",
+      destination_value: "",
+      url: "",
+      is_active: true,
+      is_tracking_target: true,
+      is_tested: false,
+      memo: ""
+    }]);
+  };
+
+  const updateLink = (index: number, field: string, value: any) => {
+    const newLinks = [...links];
+    newLinks[index] = { ...newLinks[index], [field]: value };
+    setLinks(newLinks);
+  };
+
+  const removeLink = (index: number) => {
+    const newLinks = [...links];
+    newLinks.splice(index, 1);
+    setLinks(newLinks);
+  };
+
+  const generateInstructions = () => {
+    let linkInstructions = links.filter(l => l.is_tracking_target && l.is_active).map(l => `
+購入先：
+${l.destination_name}
+
+URL：
+${l.url || '未設定'}
+
+このURLへ移動するリンクをクリックした時に、以下のMetaイベントを発火してください。
+
+fbq('trackCustom', 'MallClick', {
+  product: '${target.product_value || ''}',
+  destination: '${l.destination_value || l.destination_name}',
+  url: '${l.url || ''}'
+});
+`).join("\n");
+
+    return `対象ページ：
+${target.lp_url}
+
+このページにMetaピクセルと購入先クリック計測を追加してください。
+
+やることは以下です。
+
+1. 指定Metaピクセルを埋め込む
+
+MetaピクセルID：
+${target.meta_pixel_id || '未設定'}
+
+ページ表示時に PageView が発火するようにしてください。
+すでに同じMetaピクセルが入っている場合は、二重設置しないでください。
+
+2. ViewContentを発火する
+
+ページ表示時に以下のイベントを発火してください。
+
+fbq('track', 'ViewContent', {
+  content_name: '${target.management_name}',
+  content_category: 'product_lp'
+});
+
+3. 購入先クリックでMallClickを発火する
+
+以下の購入先リンクをクリックした時に、それぞれMetaイベントを発火してください。
+${linkInstructions}
+
+注意点：
+・ページのデザインや文言は変更しないでください。
+・リンク先URLも変更しないでください。
+・Googleタグマネージャーは使わず、ページ内に直接実装してください。
+・外部リンクへ移動する前にイベントが送信されるようにしてください。
+・可能ならクリック後300ms待ってから遷移してください。
+・PageView、ViewContent、MallClickが二重発火しないようにしてください。
+`;
+  };
+
+  if (loading) return <div className="p-8">読み込み中...</div>;
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">{isNew ? "新規LP登録" : "LP計測・実装指示管理 詳細"}</h1>
+        <div className="space-x-2">
+          <Button variant="outline" onClick={() => router.push("/lp-tracking")}>一覧へ戻る</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? "保存中..." : "保存"}</Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader><CardTitle>基本情報</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>管理名 <span className="text-red-500">*</span></Label>
+              <Input value={target.management_name || ""} onChange={e => setTarget({...target, management_name: e.target.value})} placeholder="例: ラーメンLP 2026年版" />
+            </div>
+            <div className="space-y-2">
+              <Label>LP URL <span className="text-red-500">*</span></Label>
+              <Input value={target.lp_url || ""} onChange={e => setTarget({...target, lp_url: e.target.value})} placeholder="https://..." />
+            </div>
+            <div className="space-y-2">
+              <Label>product値 (イベント用)</Label>
+              <Input value={target.product_value || ""} onChange={e => setTarget({...target, product_value: e.target.value})} placeholder="例: ramen_800g" />
+            </div>
+            <div className="space-y-2">
+              <Label>MetaピクセルID</Label>
+              <Input value={target.meta_pixel_id || ""} onChange={e => setTarget({...target, meta_pixel_id: e.target.value})} placeholder="123456789012345" />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>実装状況</Label>
+                <Select value={target.status} onValueChange={v => setTarget({...target, status: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LP_STATUS_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>テスト状況</Label>
+                <Input value={target.test_status || ""} onChange={e => setTarget({...target, test_status: e.target.value})} placeholder="例: 未テスト" />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>備考</Label>
+              <Textarea value={target.memo || ""} onChange={e => setTarget({...target, memo: e.target.value})} rows={3} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>購入先リンク管理</CardTitle>
+              <Button variant="secondary" size="sm" onClick={addLink}>+ 購入先追加</Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {links.length === 0 && <p className="text-slate-500 text-sm">購入先リンクが登録されていません。</p>}
+              {links.map((link, index) => (
+                <div key={index} className="border p-4 rounded-md space-y-3 bg-slate-50 relative">
+                  <Button variant="ghost" size="sm" className="absolute top-2 right-2 text-red-500" onClick={() => removeLink(index)}>✕</Button>
+                  
+                  <div className="grid grid-cols-2 gap-3 pr-8">
+                    <div className="space-y-1">
+                      <Label className="text-xs">購入先名</Label>
+                      <Select value={link.destination_name} onValueChange={v => updateLink(index, "destination_name", v)}>
+                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {DESTINATION_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">destination値</Label>
+                      <Input className="h-8" value={link.destination_value || ""} onChange={e => updateLink(index, "destination_value", e.target.value)} placeholder="例: rakuten_shop" />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <Label className="text-xs">URL</Label>
+                    <Input className="h-8" value={link.url || ""} onChange={e => updateLink(index, "url", e.target.value)} placeholder="https://..." />
+                  </div>
+                  
+                  <div className="flex items-center space-x-4 pt-1">
+                    <label className="flex items-center space-x-2 text-sm cursor-pointer">
+                      <input type="checkbox" checked={link.is_tracking_target} onChange={e => updateLink(index, "is_tracking_target", e.target.checked)} className="rounded border-gray-300" />
+                      <span>計測対象</span>
+                    </label>
+                    <label className="flex items-center space-x-2 text-sm cursor-pointer">
+                      <input type="checkbox" checked={link.is_tested} onChange={e => updateLink(index, "is_tested", e.target.checked)} className="rounded border-gray-300" />
+                      <span>テスト済</span>
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {!isNew && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>v0実装指示文 (自動生成)</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => {
+                  navigator.clipboard.writeText(generateInstructions());
+                  alert("コピーしました");
+                }}>
+                  📋 コピー
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <Textarea 
+                  readOnly 
+                  value={generateInstructions()} 
+                  className="font-mono text-xs bg-slate-900 text-green-400 h-64"
+                />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
