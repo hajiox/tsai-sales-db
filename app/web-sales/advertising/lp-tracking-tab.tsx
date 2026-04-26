@@ -84,7 +84,7 @@ ${l.url || '未設定'}
 
 fbq('trackCustom', 'MallClick', {
   product: '${t.product_value || ''}',
-  destination: '${l.destination_value || l.destination_name}',
+  destination: '${l.destination_name}',
   url: '${l.url || ''}'
 });`).join("\n")
 

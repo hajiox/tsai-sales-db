@@ -18,7 +18,7 @@ export default function LpTrackingDetailPage({ params }: { params: Promise<{ id:
     management_name: "",
     lp_url: "",
     product_value: "",
-    meta_pixel_id: "",
+    meta_pixel_id: "3741108852688541",
     status: "未実装",
     test_status: "テスト未",
     memo: "",
@@ -96,7 +96,7 @@ export default function LpTrackingDetailPage({ params }: { params: Promise<{ id:
   const addLink = () => {
     setLinks([...links, {
       destination_name: "rakuten",
-      destination_value: "",
+      destination_value: "rakuten",
       url: "",
       is_active: true,
       is_tracking_target: true,
@@ -108,6 +108,10 @@ export default function LpTrackingDetailPage({ params }: { params: Promise<{ id:
   const updateLink = (index: number, field: string, value: any) => {
     const newLinks = [...links];
     newLinks[index] = { ...newLinks[index], [field]: value };
+    // 購入先名変更時はdestination_valueも自動連動
+    if (field === "destination_name") {
+      newLinks[index].destination_value = value;
+    }
     setLinks(newLinks);
   };
 
@@ -129,7 +133,7 @@ ${l.url || '未設定'}
 
 fbq('trackCustom', 'MallClick', {
   product: '${target.product_value || ''}',
-  destination: '${l.destination_value || l.destination_name}',
+  destination: '${l.destination_name}',
   url: '${l.url || ''}'
 });`).join("\n");
 
@@ -274,19 +278,15 @@ ${linkInstructions}
           {links.length === 0 && <p className="text-xs text-gray-400 py-2">購入先リンクが未登録です。「追加」ボタンで登録してください。</p>}
           {links.map((link, index) => (
             <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="grid grid-cols-3 gap-3 flex-1">
+              <div className="grid grid-cols-2 gap-3 flex-1">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-gray-500">購入先名</label>
+                  <label className="text-[11px] text-gray-500">購入先名 → destination: <span className="font-mono text-teal-600">{link.destination_name}</span></label>
                   <Select value={link.destination_name} onValueChange={v => updateLink(index, "destination_name", v)}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {DESTINATION_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-gray-500">destination値</label>
-                  <Input className="h-8 text-sm" value={link.destination_value || ""} onChange={e => updateLink(index, "destination_value", e.target.value)} placeholder="rakuten_shop" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[11px] text-gray-500">URL</label>
