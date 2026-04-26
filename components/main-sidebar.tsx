@@ -163,6 +163,16 @@ export default function MainSidebar() {
             使用可能AI
           </Button>
         </div>
+
+        <div className="border-t border-slate-700 my-2 pt-2 px-4">
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-slate-200 hover:bg-slate-700 hover:text-white"
+            onClick={() => window.open("https://naisyoku.aizubrandhall.com/dashboard", "_blank")}
+          >
+            内職管理システム
+          </Button>
+        </div>
       </nav>
 
       {session && (
