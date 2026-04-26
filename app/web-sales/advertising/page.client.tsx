@@ -627,6 +627,41 @@ export default function AdvertisingDashboard() {
                         )}
                     </div>
 
+                    {/* Google広告 KPIサマリー */}
+                    {assetGroups.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <div className="bg-white border rounded-lg p-4">
+                                <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><DollarSign size={14} />広告費</div>
+                                <div className="text-xl font-bold text-emerald-700">{formatCurrency(totalCost)}</div>
+                                {costChange !== null && (
+                                    <div className={`text-[10px] flex items-center gap-0.5 mt-0.5 ${costChange >= 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                        {costChange >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}{Math.abs(costChange).toFixed(1)}% 前月比
+                                    </div>
+                                )}
+                            </div>
+                            <div className="bg-white border rounded-lg p-4">
+                                <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><Eye size={14} />表示回数</div>
+                                <div className="text-xl font-bold text-blue-700">{formatNumber(totalImpressions)}</div>
+                                <div className="text-[10px] text-gray-400">CTR: {formatPercent(avgCtr)}</div>
+                            </div>
+                            <div className="bg-white border rounded-lg p-4">
+                                <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><MousePointerClick size={14} />クリック</div>
+                                <div className="text-xl font-bold text-purple-700">{formatNumber(totalClicks)}</div>
+                                <div className="text-[10px] text-gray-400">CPC: {formatCurrency(avgCpc)}</div>
+                            </div>
+                            <div className="bg-white border rounded-lg p-4">
+                                <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><Target size={14} />コンバージョン</div>
+                                <div className="text-xl font-bold text-orange-700">{totalConversions.toFixed(1)}</div>
+                                <div className="text-[10px] text-gray-400">CVR: {formatPercent(avgCvr)}</div>
+                            </div>
+                            <div className="bg-white border rounded-lg p-4">
+                                <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><TrendingUp size={14} />CPA</div>
+                                <div className="text-xl font-bold text-amber-700">{totalConversions > 0 ? formatCurrency(totalCost / totalConversions) : '—'}</div>
+                                <div className="text-[10px] text-gray-400">CV値: {formatCurrency(totalConversionsValue)}</div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* 取り込みパネル */}
                     {showImportPanel && (
                         <div ref={importPanelRef} className="bg-white border-2 border-emerald-300 rounded-xl p-6 space-y-5">
