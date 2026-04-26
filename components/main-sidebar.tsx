@@ -164,7 +164,7 @@ export default function MainSidebar() {
           </Button>
         </div>
 
-        <div className="border-t border-slate-700 my-2 pt-2 px-4">
+        <div className="border-t border-slate-700 my-2 pt-2">
           <Button
             variant="ghost"
             className="w-full justify-start text-slate-200 hover:bg-slate-700 hover:text-white"
