@@ -121,64 +121,18 @@ export default function LpTrackingDetailPage({ params }: { params: Promise<{ id:
 
   const generateInstructions = () => {
     const activeLinks = links
-      .filter(l => l.is_tracking_target && l.is_active && l.url && l.url.trim() !== '');
+      .filter(l => l.is_active && l.url && l.url.trim() !== '');
 
-    const linkInstructions = activeLinks.map(l => {
+    const linkList = activeLinks.map(l => {
       const destLabel = l.destination_name === 'rakuten' ? '楽天' :
         l.destination_name === 'amazon' ? 'Amazon' :
         l.destination_name === 'yahoo' ? 'Yahoo' :
         l.destination_name === 'base' ? 'BASE' :
         l.destination_name === 'own_ec' ? '自社EC' : l.destination_name;
-      return `
-${destLabel} URL：
-${l.url}
+      return `${destLabel}：\n${l.url}`;
+    }).join("\n\n");
 
-このURLと一致する既存リンクをクリックした時に、以下のMetaイベントを発火してください。
-
-fbq('trackCustom', 'MallClick', {
-  product: '${target.product_value || ''}',
-  destination: '${l.destination_name}',
-  url: '${l.url}'
-});`;
-    }).join("\n");
-
-    return `対象ページ：
-${target.lp_url}
-
-このページにMetaピクセルと購入先クリック計測を追加してください。
-
-1. 指定Metaピクセルを埋め込む
-
-MetaピクセルID：
-${target.meta_pixel_id || '未設定'}
-
-ページ表示時に PageView が発火するようにしてください。
-すでに同じMetaピクセルが入っている場合は、二重設置しないでください。
-
-2. ViewContentを発火する
-
-ページ表示時に以下のイベントを発火してください。
-
-fbq('track', 'ViewContent', {
-  content_name: '${target.product_value || ''}',
-  content_category: 'product_lp'
-});
-
-3. 既存の購入先クリックで MallClick を発火する
-
-ページ内にすでに存在する購入ボタン／購入リンクを対象にしてください。
-新しいボタンや新しいリンクは作成しないでください。
-ページのデザイン、文言、リンク先URLは変更しないでください。
-${linkInstructions}
-
-注意点：
-・Googleタグマネージャーは使わず、ページ内に直接実装してください。
-・既存のリンク挙動はできるだけ維持してください。
-・外部リンクへ移動する前にイベントが送信されるようにしてください。
-・可能ならクリック後300ms待ってから遷移してください。
-・PageView、ViewContent、MallClickが二重発火しないようにしてください。
-・window.fbq が存在しない場合にエラーでページが止まらないようにしてください。
-`;
+    return `対象ページ：\n${target.lp_url}\n\nこのページにMetaピクセルと購入先クリック計測を追加してください。\n\nMeta広告では購入先別の分析は行いません。\n楽天・Amazon・Yahooなど、どの購入先ボタンをクリックしても、共通イベント MallClick だけを送信してください。\nEC別の分析はGoogle Analytics側で行います。\n\n1. 指定Metaピクセルを埋め込む\n\nMetaピクセルID：\n${target.meta_pixel_id || '未設定'}\n\nページ表示時に PageView が発火するようにしてください。\nすでに同じMetaピクセルが入っている場合は、二重設置しないでください。\n\n2. ViewContentを発火する\n\nページ表示時に以下のイベントを発火してください。\n\nfbq('track', 'ViewContent', {\n  content_name: '${target.product_value || ''}',\n  content_category: 'product_lp'\n});\n\n3. 既存の購入先クリックで MallClick を発火する\n\nページ内にすでに存在する購入ボタン／購入リンクを対象にしてください。\n新しいボタンや新しいリンクは作成しないでください。\nページのデザイン、文言、リンク先URLは変更しないでください。\n\n対象にする既存購入リンク：\n${linkList}\n\n上記リンク、または同じ商品コードを含む既存の購入リンクがクリックされた時に、以下のMetaイベントを1回だけ発火してください。\n\nfbq('trackCustom', 'MallClick', {\n  product: '${target.product_value || ''}'\n});\n\n注意点：\n・Googleタグマネージャーは使わず、ページ内に直接実装してください。\n・購入先別のイベント名は作らないでください。\n・destination パラメータは送らないでください。\n・url パラメータは送らないでください。\n・OutboundPurchaseClick は使わないでください。\n・PageView、ViewContent、MallClick が二重発火しないようにしてください。\n・外部リンクへ移動する前にイベントが送信されるようにしてください。\n・可能ならクリック後300ms～500ms待ってから遷移してください。\n・window.fbq が存在しない場合でもページがエラーで止まらないようにしてください。\n・実装後、どのファイルを変更したか簡潔に報告してください。\n`;
   };
 
   const handleCopy = () => {
@@ -282,10 +236,10 @@ ${linkInstructions}
           </div>
           {links.length === 0 && <p className="text-xs text-gray-400 py-2">購入先リンクが未登録です。「追加」ボタンで登録してください。</p>}
           {links.map((link, index) => (
-            <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
               <div className="grid grid-cols-2 gap-3 flex-1">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-gray-500">購入先名 → destination: <span className="font-mono text-teal-600">{link.destination_name}</span></label>
+                  <label className="text-[11px] text-gray-500">購入先名</label>
                   <Select value={link.destination_name} onValueChange={v => updateLink(index, "destination_name", v)}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -298,19 +252,9 @@ ${linkInstructions}
                   <Input className="h-8 text-sm" value={link.url || ""} onChange={e => updateLink(index, "url", e.target.value)} placeholder="https://..." />
                 </div>
               </div>
-              <div className="flex items-center gap-3 pt-5 flex-shrink-0">
-                <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <input type="checkbox" checked={link.is_tracking_target} onChange={e => updateLink(index, "is_tracking_target", e.target.checked)} className="rounded border-gray-300" />
-                  計測
-                </label>
-                <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <input type="checkbox" checked={link.is_tested} onChange={e => updateLink(index, "is_tested", e.target.checked)} className="rounded border-gray-300" />
-                  テスト済
-                </label>
-                <button onClick={() => removeLink(index)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </div>
+              <button onClick={() => removeLink(index)} className="p-1 text-gray-400 hover:text-red-500 transition-colors mt-4">
+                <Trash2 size={14} />
+              </button>
             </div>
           ))}
         </div>
