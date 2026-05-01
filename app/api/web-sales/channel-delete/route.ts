@@ -34,7 +34,6 @@ export async function POST(request: NextRequest) {
             const { data, error } = await supabase
                 .from('web_sales_summary')
                 .update({
-                    csv_count: 0,
                     amazon_count: 0,
                     rakuten_count: 0,
                     yahoo_count: 0,
@@ -63,8 +62,29 @@ export async function POST(request: NextRequest) {
                 updatedCount,
             })
         }
+        // csv チャネルの場合は全レコード削除（csv_countカラムは存在しない）
+        if (channel === 'csv') {
+            const { error } = await supabase
+                .from('web_sales_summary')
+                .delete()
+                .eq('report_month', reportMonth)
 
-        const columnName = channel === 'csv' ? 'csv_count' : `${channel}_count`
+            if (error) {
+                console.error('CSV一括削除エラー:', error)
+                return NextResponse.json(
+                    { error: 'データの削除に失敗しました', details: error.message },
+                    { status: 500 }
+                )
+            }
+
+            return NextResponse.json({
+                success: true,
+                message: `${month}の全レコードを削除しました`,
+                updatedCount: 0,
+            })
+        }
+
+        const columnName = `${channel}_count`
 
         // サービスロールキーでRLSをバイパスして更新
         const { data, error, count } = await supabase
