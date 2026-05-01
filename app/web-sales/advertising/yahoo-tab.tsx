@@ -229,61 +229,73 @@ export default function YahooTab({ month }: { month: string }) {
     ]
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-5">
             {/* アクションバー */}
-            <div className="bg-white border rounded-xl p-4">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
-                        <button onClick={() => fileInputRef.current?.click()} disabled={isUploading}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 text-sm font-medium">
-                            <Upload size={16} /> {isUploading ? 'アップロード中...' : 'CSVアップロード'}
+            <div className="flex flex-wrap items-center gap-3">
+                <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
+                <button onClick={() => fileInputRef.current?.click()} disabled={isUploading}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-300 transition-colors font-medium">
+                    <Upload size={16} /> {isUploading ? 'アップロード中...' : 'CSVアップロード'}
+                </button>
+
+                {data.length > 0 && (
+                    <>
+                        <button onClick={handleAutoMatch} disabled={isMatching}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-amber-300 transition-colors font-medium">
+                            <Brain size={16} /> {isMatching ? '紐付け中...' : 'AI自動紐付け'}
                         </button>
-                        {data.length > 0 && (
-                            <>
-                                <button onClick={handleAutoMatch} disabled={isMatching}
-                                    className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 text-sm font-medium">
-                                    <Brain size={16} /> {isMatching ? '紐付け中...' : 'AI自動紐付け'}
-                                </button>
-                                {mappingChanges.size > 0 && (
-                                    <button onClick={handleSaveMappings}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
-                                        <Save size={16} /> 保存 ({mappingChanges.size})
-                                    </button>
-                                )}
-                                {hasMappings && (
-                                    <>
-                                        <button onClick={handleImportCosts} disabled={isImporting}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${isCostImported ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'}`}>
-                                            {isCostImported ? <><CheckCircle size={16} /> 取り込み済み</> : <><Download size={16} /> {isImporting ? '取り込み中...' : '広告費取り込み'}</>}
-                                        </button>
-                                        <button onClick={handleClearMappings}
-                                            className="flex items-center gap-2 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm">
-                                            <Trash2 size={14} /> 紐付けクリア
-                                        </button>
-                                    </>
-                                )}
-                            </>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <a href="/docs/yahoo-itemreach-guide" target="_blank"
-                            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
-                            <ExternalLink size={14} /> CSVガイド
-                        </a>
-                        {data.length > 0 && (
-                            <button onClick={() => setShowChat(!showChat)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showChat ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:opacity-90'}`}>
-                                <Sparkles size={16} /> {showChat ? 'AIチャットを閉じる' : 'AIに質問'}
+                        {mappingChanges.size > 0 && (
+                            <button onClick={handleSaveMappings}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                                <Save size={16} /> 保存 ({mappingChanges.size})
                             </button>
                         )}
-                    </div>
+                        {hasMappings && (
+                            <>
+                                <button onClick={handleImportCosts} disabled={isImporting}
+                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors font-medium ${isCostImported ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-300'}`}>
+                                    {isCostImported ? <><CheckCircle size={16} /> 取り込み済み</> : <><Download size={16} /> {isImporting ? '取り込み中...' : '広告費取り込み'}</>}
+                                </button>
+                                <button onClick={handleClearMappings}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium">
+                                    <Trash2 size={16} /> 紐付けクリア
+                                </button>
+                            </>
+                        )}
+                    </>
+                )}
+
+                {data.length > 0 && (
+                    <span className="text-sm text-gray-500 flex items-center gap-1">
+                        <CheckCircle size={14} className="text-green-500" />
+                        {data.length}件取り込み済み
+                    </span>
+                )}
+
+                <div className="ml-auto flex items-center gap-3">
+                    <a href="/docs/yahoo-itemreach-guide" target="_blank"
+                        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600">
+                        <ExternalLink size={14} /> CSVガイド
+                    </a>
+                    {data.length > 0 && (
+                        <button onClick={() => setShowChat(!showChat)}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${showChat ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:opacity-90'}`}>
+                            <Sparkles size={16} /> {showChat ? 'AIチャットを閉じる' : 'AIに質問'}
+                        </button>
+                    )}
                 </div>
-                {/* メッセージ表示 */}
-                {uploadResult && <div className="mt-3 text-sm">{uploadResult}</div>}
-                {matchResult && <div className="mt-3 text-sm">{matchResult}</div>}
-                {importResult && <div className="mt-3 text-sm">{importResult}</div>}
             </div>
+
+            {/* 結果メッセージ */}
+            {uploadResult && (
+                <div className={`px-4 py-2 rounded-lg text-sm ${uploadResult.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{uploadResult}</div>
+            )}
+            {matchResult && (
+                <div className={`px-4 py-2 rounded-lg text-sm ${matchResult.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{matchResult}</div>
+            )}
+            {importResult && (
+                <div className={`px-4 py-2 rounded-lg text-sm ${importResult.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{importResult}</div>
+            )}
 
             {isLoading ? (
                 <div className="text-center py-12 text-gray-500">
