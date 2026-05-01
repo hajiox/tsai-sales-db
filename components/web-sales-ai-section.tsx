@@ -1,228 +1,191 @@
-// /components/web-sales-ai-section.tsx ver.12 (3項目特化版)
+// /components/web-sales-ai-section.tsx
 "use client"
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  TrendingUp,
-  Calendar,
-  Sparkles,
-  Target,
-  BarChart2
-} from 'lucide-react';
+import { Sparkles, Target, Send, Bot, User } from 'lucide-react';
 
 interface WebSalesAISectionProps {
   month: string;
 }
 
-interface AnalysisResult {
-  seriesAnalysis: string;
-  yoyEvaluation: string;
-  productTrends: string;
+interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
 }
 
 export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const executeAnalysis = async () => {
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const userMessage: ChatMessage = { role: 'user', text: input };
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    setInput('');
     setIsLoading(true);
-    setError(null);
-    setAnalysisResult(null);
 
     try {
-      const response = await fetch('/api/web-sales-analyze', {
+      const response = await fetch('/api/web-sales-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month })
+        body: JSON.stringify({ messages: newMessages, month })
       });
 
       const data = await response.json();
 
-      if (data.ok && data.result) {
-        const sections = parseAIResult(data.result);
-        setAnalysisResult(sections);
+      if (data.success && data.reply) {
+        setMessages(prev => [...prev, { role: 'model', text: data.reply }]);
       } else {
-        setError(data.error || '分析に失敗しました');
+        setMessages(prev => [...prev, { role: 'model', text: `エラーが発生しました: ${data.error || '不明なエラー'}` }]);
       }
     } catch (err) {
-      setError('分析中にエラーが発生しました');
-      console.error('AI分析エラー:', err);
+      console.error('Chat Error:', err);
+      setMessages(prev => [...prev, { role: 'model', text: '通信エラーが発生しました。' }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const parseAIResult = (result: string): AnalysisResult => {
-    if (!result || typeof result !== 'string') {
-      return {
-        seriesAnalysis: 'データなし',
-        yoyEvaluation: 'データなし',
-        productTrends: 'データなし',
-      };
-    }
-
-    try {
-      return {
-        seriesAnalysis: extractSection(result, '① 直近3ヶ月のシリーズ別特異点') || 'データを分析中です',
-        yoyEvaluation: extractSection(result, '② シリーズ別 前年比の評価') || 'データを分析中です',
-        productTrends: extractSection(result, '③ 急上昇・急落商品の解説') || 'データを分析中です',
-      };
-    } catch (error) {
-      console.error('AI結果パースエラー:', error);
-      return {
-        seriesAnalysis: result,
-        yoyEvaluation: '',
-        productTrends: '',
-      };
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   };
 
-  const extractSection = (text: string, sectionTitle: string): string => {
-    if (!text || !sectionTitle) return '';
-
-    try {
-      // 厳密な正規表現ではなく、柔軟にマッチさせる
-      const escapedTitle = sectionTitle.replace(/[①②③]/g, (match) => `\\${match}`);
-      const regex = new RegExp(`##\\s*${escapedTitle}([\\s\\S]*?)(?=##\\s*[①②③]|$)`, 'i');
-      const match = text.match(regex);
-      return match && match[1] ? match[1].trim() : '';
-    } catch (error) {
-      console.error('セクション抽出エラー:', error);
-      return '';
-    }
+  // 内部Markdown簡易パース（太字と見出しとリスト）
+  const renderText = (text: string) => {
+    return text.split('\n').map((line, i) => {
+      // 簡易的なマークダウン処理
+      let parsedLine = line;
+      // Bold: **text**
+      parsedLine = parsedLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      // Heading: ## text or ### text
+      if (parsedLine.startsWith('### ')) {
+        return <h3 key={i} className="text-md font-bold mt-3 mb-1" dangerouslySetInnerHTML={{ __html: parsedLine.substring(4) }} />;
+      }
+      if (parsedLine.startsWith('## ')) {
+        return <h2 key={i} className="text-lg font-bold mt-4 mb-2 border-b pb-1" dangerouslySetInnerHTML={{ __html: parsedLine.substring(3) }} />;
+      }
+      // List item
+      if (parsedLine.trim().startsWith('- ')) {
+        return <li key={i} className="ml-4 list-disc" dangerouslySetInnerHTML={{ __html: parsedLine.substring(2) }} />;
+      }
+      if (parsedLine.trim().startsWith('* ')) {
+        return <li key={i} className="ml-4 list-disc" dangerouslySetInnerHTML={{ __html: parsedLine.substring(2) }} />;
+      }
+      
+      return (
+        <span key={i}>
+          <span dangerouslySetInnerHTML={{ __html: parsedLine }} />
+          <br />
+        </span>
+      );
+    });
   };
-
-  const analysisItems = [
-    {
-      id: 'seriesAnalysis',
-      title: '直近3ヶ月のシリーズ別特異点',
-      icon: BarChart2,
-      color: 'bg-blue-50 border-blue-200',
-      iconColor: 'text-blue-600',
-      content: analysisResult?.seriesAnalysis
-    },
-    {
-      id: 'yoyEvaluation',
-      title: 'シリーズ別 前年比の評価',
-      icon: Calendar,
-      color: 'bg-purple-50 border-purple-200',
-      iconColor: 'text-purple-600',
-      content: analysisResult?.yoyEvaluation
-    },
-    {
-      id: 'productTrends',
-      title: '急上昇・急落商品の解説',
-      icon: TrendingUp,
-      color: 'bg-green-50 border-green-200',
-      iconColor: 'text-green-600',
-      content: analysisResult?.productTrends
-    }
-  ];
 
   return (
     <div id="ai-analysis-section" className="space-y-6">
-      <Card className="bg-gradient-to-r from-indigo-50 to-cyan-50 border-indigo-200">
-        <CardHeader className="text-center">
-          <CardTitle className="flex items-center justify-center gap-2 text-2xl font-bold text-indigo-800">
-            <Sparkles className="w-8 h-8 text-yellow-500" />
-            WEB販売 AI分析レポート (Gemini 2.0)
-            <Target className="w-8 h-8 text-indigo-600" />
+      <Card className="bg-white border-indigo-200 shadow-sm flex flex-col h-[600px]">
+        <CardHeader className="bg-gradient-to-r from-indigo-50 to-cyan-50 border-b border-indigo-100 py-4">
+          <CardTitle className="flex items-center gap-2 text-xl font-bold text-indigo-800">
+            <Sparkles className="w-6 h-6 text-yellow-500" />
+            WEB販売 AIデータアナリスト (Gemini 2.5 Pro)
+            <Target className="w-6 h-6 text-indigo-600 ml-auto opacity-20" />
           </CardTitle>
-          <p className="text-indigo-600 font-medium">{month} の売上データを3つの重要観点で徹底分析</p>
+          <p className="text-sm text-indigo-600 font-medium mt-1">
+            {month} を基準とした過去6ヶ月のDBデータを読み込んでいます。自由に質問してください。
+          </p>
         </CardHeader>
-        <CardContent className="text-center">
-          <Button
-            onClick={executeAnalysis}
-            disabled={isLoading}
-            size="lg"
-            className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white px-8 py-3 text-lg font-semibold shadow-lg transform transition hover:scale-105"
-          >
-            {isLoading ? (
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-6 h-6 border-2 border-white/30 rounded-full animate-spin"></div>
-                  <div className="absolute inset-1 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
-                    style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
-                </div>
-                <span>Gemini Pro 分析中...</span>
+        
+        <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 text-gray-500">
+              <Bot className="w-16 h-16 text-indigo-200" />
+              <p>過去6ヶ月の売上データ、商品トレンドを把握しています。</p>
+              <div className="flex flex-wrap justify-center gap-2 mt-4">
+                <Button variant="outline" size="sm" onClick={() => setInput('今月の売上が最も良かったシリーズとその理由を推測して')}>
+                  売上の良かったシリーズは？
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setInput('過去6ヶ月で急激に衰退している商品はある？対策は？')}>
+                  衰退している商品は？
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setInput('来月の売上を伸ばすための具体的なアクションを3つ提案して')}>
+                  売上を伸ばすアクションは？
+                </Button>
               </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5" />
-                AI分析を実行
-              </div>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-red-800">
-              <span className="font-medium">エラー: {error}</span>
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {analysisResult && (
-        <div className="grid grid-cols-1 gap-6">
-          {analysisItems.map((item) => {
-            const IconComponent = item.icon;
-            return (
-              <Card key={item.id} className={`${item.color} transition-all duration-300 hover:shadow-lg`}>
-                <CardHeader className="pb-3 border-b border-gray-100/50">
-                  <CardTitle className="flex items-center gap-3 text-xl font-bold">
-                    <div className={`p-2 rounded-lg bg-white/80 ${item.iconColor} shadow-sm`}>
-                      <IconComponent className="w-6 h-6" />
-                    </div>
-                    {item.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-4">
-                  <div className="prose prose-sm max-w-none">
-                    {item.content && item.content.trim() ? (
-                      <div className="whitespace-pre-line leading-relaxed text-gray-800 text-base">
-                        {item.content}
-                      </div>
-                    ) : (
-                      <div className="text-gray-500 italic">
-                        分析中...
-                      </div>
-                    )}
+          ) : (
+            messages.map((msg, index) => (
+              <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1 ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'}`}>
+                    {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {isLoading && !analysisResult && (
-        <div className="space-y-6">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="bg-white animate-pulse border-gray-100">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-200 rounded-lg"></div>
-                  <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="h-4 bg-gray-200 rounded w-full"></div>
-                  <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-                  <div className="h-4 bg-gray-200 rounded w-4/6"></div>
+                  <div className={`p-4 rounded-2xl ${msg.role === 'user' ? 'bg-indigo-50 text-indigo-900 rounded-tr-sm' : 'bg-gray-50 text-gray-800 border border-gray-200 rounded-tl-sm'}`}>
+                    <div className="text-sm leading-relaxed space-y-1">
+                      {msg.role === 'user' ? (
+                        <div className="whitespace-pre-wrap">{msg.text}</div>
+                      ) : (
+                        renderText(msg.text)
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            ))
+          )}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] flex gap-3 flex-row">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white flex items-center justify-center mt-1">
+                  <Bot size={16} />
+                </div>
+                <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200 rounded-tl-sm flex items-center gap-2 h-12">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </CardContent>
+
+        <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+          <div className="flex gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="AIに自由に質問・分析依頼を入力してください (Shift+Enterで改行)"
+              className="flex-1 resize-none rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[60px] max-h-[120px] text-sm"
+              rows={2}
+            />
+            <Button 
+              onClick={handleSend} 
+              disabled={isLoading || !input.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 h-auto px-6"
+            >
+              <Send className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
-      )}
+      </Card>
     </div>
   );
 }
