@@ -57,6 +57,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const [rpcTotalAdCost, setRpcTotalAdCost] = useState(0);
   const [rpcTotalFinalProfit, setRpcTotalFinalProfit] = useState(0);
   const [webTarget, setWebTarget] = useState(0);
+  const [lastYearTotals, setLastYearTotals] = useState<Totals | null>(null);
 
   const [hoveredItem, setHoveredItem] = useState<HoveredItem | null>(null);
   const [trendData, setTrendData] = useState<Record<string, TrendData[]>>({});
@@ -118,10 +119,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [financialRes, seriesRes, targetRes] = await Promise.all([
+        const lastYearMonth = `${parseInt(month.split('-')[0]) - 1}-${month.split('-')[1]}`;
+        const [financialRes, seriesRes, targetRes, lastYearRes] = await Promise.all([
           supabase.rpc('get_monthly_financial_summary', { target_month: month }),
           supabase.rpc('get_monthly_series_summary', { target_month: month }),
-          fetch(`/api/kpi/web-target?month=${month}`).then(r => r.json()).catch(() => ({ target: 0 }))
+          fetch(`/api/kpi/web-target?month=${month}`).then(r => r.json()).catch(() => ({ target: 0 })),
+          supabase.rpc('get_monthly_financial_summary', { target_month: lastYearMonth })
         ]);
 
         if (financialRes.error) throw financialRes.error;
@@ -159,6 +162,24 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           setTotals(siteTotals);
         }
 
+        const lastYearData = lastYearRes.data;
+        if (lastYearData && lastYearData.length > 0) {
+          const financialLY = lastYearData[0];
+          const siteTotalsLY: Totals = {};
+          SITES.forEach(s => {
+            siteTotalsLY[s.key] = {
+              count: financialLY[`${s.key}_count`] ?? 0,
+              amount: financialLY[`${s.key}_amount`] ?? 0,
+              profit: financialLY[`${s.key}_profit`] ?? 0,
+              adCost: financialLY[`${s.key}_ad_cost`] ?? 0,
+              finalProfit: financialLY[`${s.key}_final_profit`] ?? 0,
+            }
+          });
+          setLastYearTotals(siteTotalsLY);
+        } else {
+          setLastYearTotals(null);
+        }
+
         const seriesData = seriesRes.data;
         if (seriesData && seriesData.length > 0) {
           const seriesSummaryData = seriesData
@@ -190,6 +211,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           };
         });
         setTotals(siteTotals);
+        setLastYearTotals(null);
         setSeriesSummary([]);
       } finally {
         setLoading(false);
@@ -229,6 +251,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
   const grandTotalAdCost = rpcTotalAdCost || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0);
   const grandTotalFinalProfit = rpcTotalFinalProfit || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0);
+  const grandTotalSalesLastYear = lastYearTotals ? SITES.reduce((sum, s) => sum + (lastYearTotals[s.key]?.amount ?? 0), 0) : 0;
 
   const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
 
@@ -236,61 +259,89 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     <div className="space-y-6 relative" ref={containerRef}>
       <div className="grid grid-cols-4 md:grid-cols-8 gap-4 relative">
         <Card
-          className="text-center bg-gray-50 border-gray-200 cursor-pointer col-span-1"
+          className="text-center bg-gray-50 border-gray-200 cursor-pointer flex flex-col justify-between col-span-1"
           onMouseEnter={(e) => handleMouseEnter({ type: 'total', key: 'grandTotal', name: '総合計' }, e)}
           onMouseLeave={handleMouseLeave}
         >
-          <CardHeader><CardTitle className="text-sm">総合計</CardTitle></CardHeader>
-          <CardContent className="space-y-1">
-            <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
-            <div className="text-sm text-gray-600">売上: ¥{formatNumber(grandTotalSales)}</div>
-            <div className="text-sm text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
-            <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
-            {webTarget > 0 && (
-              <div className="mt-2 pt-2 border-t border-gray-200">
-                <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
-                  <Target className="w-3 h-3" />
-                  <span>目標: ¥{formatNumber(webTarget)}</span>
+          <div>
+            <CardHeader><CardTitle className="text-sm">総合計</CardTitle></CardHeader>
+            <CardContent className="space-y-1">
+              <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
+              <div className="text-sm text-gray-600">売上: ¥{formatNumber(grandTotalSales)}</div>
+              <div className="text-sm text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
+              <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
+              {webTarget > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-200">
+                  <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
+                    <Target className="w-3 h-3" />
+                    <span>目標: ¥{formatNumber(webTarget)}</span>
+                  </div>
+                  {(() => {
+                    const rate = Math.round((grandTotalSales / webTarget) * 1000) / 10;
+                    const rateColor = rate >= 100 ? 'text-green-600' : rate >= 50 ? 'text-yellow-600' : 'text-red-600';
+                    const bgColor = rate >= 100 ? 'bg-green-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500';
+                    return (
+                      <>
+                        <div className={`text-lg font-bold ${rateColor}`}>
+                          {rate}%
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${bgColor} rounded-full transition-all duration-500`}
+                            style={{ width: `${Math.min(rate, 100)}%` }}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
-                {(() => {
-                  const rate = Math.round((grandTotalSales / webTarget) * 1000) / 10;
-                  const rateColor = rate >= 100 ? 'text-green-600' : rate >= 50 ? 'text-yellow-600' : 'text-red-600';
-                  const bgColor = rate >= 100 ? 'bg-green-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500';
-                  return (
-                    <>
-                      <div className={`text-lg font-bold ${rateColor}`}>
-                        {rate}%
-                      </div>
-                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${bgColor} rounded-full transition-all duration-500`}
-                          style={{ width: `${Math.min(rate, 100)}%` }}
-                        />
-                      </div>
-                    </>
-                  );
-                })()}
+              )}
+            </CardContent>
+          </div>
+          {grandTotalSalesLastYear > 0 && (
+            <div className="px-4 pb-4">
+              <div className="pt-2 mt-1 border-t border-gray-300">
+                <div className="text-xs text-gray-500">前年度売上: ¥{formatNumber(grandTotalSalesLastYear)}</div>
+                <div className={`text-sm font-bold ${grandTotalSales >= grandTotalSalesLastYear ? 'text-blue-600' : 'text-red-600'}`}>
+                  前年比: {Math.round((grandTotalSales / grandTotalSalesLastYear) * 100)}%
+                </div>
               </div>
-            )}
-          </CardContent>
+            </div>
+          )}
         </Card>
 
-        {SITES.map((s) => (
+        {SITES.map((s) => {
+          const currentSales = totals ? (totals[s.key]?.amount ?? 0) : 0;
+          const lySales = lastYearTotals ? (lastYearTotals[s.key]?.amount ?? 0) : 0;
+          
+          return (
           <Card
             key={s.key}
-            className={`text-center ${s.bgColor} ${s.borderColor} cursor-pointer`}
+            className={`text-center flex flex-col justify-between ${s.bgColor} ${s.borderColor} cursor-pointer`}
             onMouseEnter={(e) => handleMouseEnter({ type: 'site', key: s.key, name: s.name }, e)}
             onMouseLeave={handleMouseLeave}
           >
-            <CardHeader><CardTitle className="text-sm">{s.name}</CardTitle></CardHeader>
-            <CardContent className="space-y-1">
-              <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
-              <div className="text-xs text-gray-500">売上: ¥{totals ? formatNumber(totals[s.key]?.amount ?? 0) : "-"}</div>
-              <div className="text-xs text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
-              <div className="text-xs font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
-            </CardContent>
+            <div>
+              <CardHeader><CardTitle className="text-sm">{s.name}</CardTitle></CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
+                <div className="text-xs text-gray-500">売上: ¥{formatNumber(currentSales)}</div>
+                <div className="text-xs text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
+                <div className="text-xs font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
+              </CardContent>
+            </div>
+            {lySales > 0 && (
+              <div className="px-4 pb-4">
+                <div className={`pt-2 mt-1 border-t ${s.borderColor} opacity-60`}>
+                  <div className="text-[10px] text-gray-500">前年売上: ¥{formatNumber(lySales)}</div>
+                  <div className={`text-xs font-bold ${currentSales >= lySales ? 'text-blue-600' : 'text-red-500'}`}>
+                    前年比: {Math.round((currentSales / lySales) * 100)}%
+                  </div>
+                </div>
+              </div>
+            )}
           </Card>
-        ))}
+        )})}
       </div>
 
       <Card>
