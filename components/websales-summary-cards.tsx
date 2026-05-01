@@ -119,96 +119,141 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     const fetchData = async () => {
       setLoading(true);
       try {
-        const lastYearMonth = `${parseInt(month.split('-')[0]) - 1}-${month.split('-')[1]}`;
-        const [financialRes, seriesRes, targetRes, lastYearRes] = await Promise.all([
-          supabase.rpc('get_monthly_financial_summary', { target_month: month }),
-          supabase.rpc('get_monthly_series_summary', { target_month: month }),
-          fetch(`/api/kpi/web-target?month=${month}`).then(r => r.json()).catch(() => ({ target: 0 })),
-          supabase.rpc('get_monthly_financial_summary', { target_month: lastYearMonth })
-        ]);
-
-        if (financialRes.error) throw financialRes.error;
-        if (seriesRes.error) throw seriesRes.error;
-        setWebTarget(targetRes.target ?? 0);
-
-        const financialData = financialRes.data;
-        if (financialData && financialData.length > 0) {
-          const financial = financialData[0];
-          // RPCのtotal値を保存（サイト別合計では拾えないGoogle広告費等を含む）
-          setRpcTotalAdCost(financial.total_ad_cost ?? 0);
-          setRpcTotalFinalProfit(financial.total_final_profit ?? 0);
-          const siteTotals: Totals = {};
-          SITES.forEach(s => {
-            siteTotals[s.key] = {
-              count: financial[`${s.key}_count`] ?? 0,
-              amount: financial[`${s.key}_amount`] ?? 0,
-              profit: financial[`${s.key}_profit`] ?? 0,
-              adCost: financial[`${s.key}_ad_cost`] ?? 0,
-              finalProfit: financial[`${s.key}_final_profit`] ?? 0,
-            }
+        if (viewMode === 'period') {
+          // 期間集計APIを呼び出す
+          const res = await fetch('/api/web-sales-period', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base_month: month, period_months: periodMonths })
           });
-          setTotals(siteTotals);
-        } else {
-          const siteTotals: Totals = {};
-          SITES.forEach(s => {
-            siteTotals[s.key] = {
-              count: 0,
-              amount: 0,
+          const periodData = await res.json();
+          
+          if (periodData.totals) {
+            const siteTotals: Totals = {};
+            SITES.forEach(s => {
+              const ch = s.key;
+              siteTotals[ch] = {
+                count: periodData.totals[ch]?.count ?? 0,
+                amount: periodData.totals[ch]?.amount ?? 0,
+                profit: 0, // 期間集計では現在未対応
+                adCost: 0, // 期間集計では現在未対応
+                finalProfit: 0 // 期間集計では現在未対応
+              };
+            });
+            setTotals(siteTotals);
+          } else {
+            const siteTotals: Totals = {};
+            SITES.forEach(s => {
+              siteTotals[s.key] = { count: 0, amount: 0, profit: 0, adCost: 0, finalProfit: 0 };
+            });
+            setTotals(siteTotals);
+          }
+          
+          if (periodData.seriesSummary) {
+            setSeriesSummary(periodData.seriesSummary.map((s: any) => ({
+              seriesName: s.seriesName,
+              seriesCode: 0,
+              count: s.count,
+              sales: s.sales,
               profit: 0,
               adCost: 0,
               finalProfit: 0
-            };
-          });
-          setTotals(siteTotals);
-        }
-
-        const lastYearData = lastYearRes.data;
-        if (lastYearData && lastYearData.length > 0) {
-          const financialLY = lastYearData[0];
-          const siteTotalsLY: Totals = {};
-          SITES.forEach(s => {
-            siteTotalsLY[s.key] = {
-              count: financialLY[`${s.key}_count`] ?? 0,
-              amount: financialLY[`${s.key}_amount`] ?? 0,
-              profit: financialLY[`${s.key}_profit`] ?? 0,
-              adCost: financialLY[`${s.key}_ad_cost`] ?? 0,
-              finalProfit: financialLY[`${s.key}_final_profit`] ?? 0,
-            }
-          });
-          setLastYearTotals(siteTotalsLY);
-        } else {
+            })));
+          } else {
+            setSeriesSummary([]);
+          }
+          
+          // 期間表示時は目標値と前年比は非表示にする
+          setWebTarget(0);
+          setRpcTotalAdCost(0);
+          setRpcTotalFinalProfit(0);
           setLastYearTotals(null);
-        }
-
-        const seriesData = seriesRes.data;
-        if (seriesData && seriesData.length > 0) {
-          const seriesSummaryData = seriesData
-            .map((s: any) => ({
-              seriesName: s.series_name || '未分類',
-              seriesCode: s.series_code || 0,
-              count: s.series_count || 0,
-              sales: s.series_amount || 0,
-              profit: s.series_profit || 0,
-              adCost: s.series_ad_cost || 0,
-              finalProfit: s.series_final_profit || 0,
-            }))
-            .sort((a, b) => b.sales - a.sales);
-          setSeriesSummary(seriesSummaryData);
         } else {
-          setSeriesSummary([]);
-        }
+          // 月別表示（既存ロジック）
+          const lastYearMonth = `${parseInt(month.split('-')[0]) - 1}-${month.split('-')[1]}`;
+          const [financialRes, seriesRes, targetRes, lastYearRes] = await Promise.all([
+            supabase.rpc('get_monthly_financial_summary', { target_month: month }),
+            supabase.rpc('get_monthly_series_summary', { target_month: month }),
+            fetch(`/api/kpi/web-target?month=${month}`).then(r => r.json()).catch(() => ({ target: 0 })),
+            supabase.rpc('get_monthly_financial_summary', { target_month: lastYearMonth })
+          ]);
 
+          if (financialRes.error) throw financialRes.error;
+          if (seriesRes.error) throw seriesRes.error;
+          setWebTarget(targetRes.target ?? 0);
+
+          const financialData = financialRes.data;
+          if (financialData && financialData.length > 0) {
+            const financial = financialData[0];
+            // RPCのtotal値を保存（サイト別合計では拾えないGoogle広告費等を含む）
+            setRpcTotalAdCost(financial.total_ad_cost ?? 0);
+            setRpcTotalFinalProfit(financial.total_final_profit ?? 0);
+            const siteTotals: Totals = {};
+            SITES.forEach(s => {
+              siteTotals[s.key] = {
+                count: financial[`${s.key}_count`] ?? 0,
+                amount: financial[`${s.key}_amount`] ?? 0,
+                profit: financial[`${s.key}_profit`] ?? 0,
+                adCost: financial[`${s.key}_ad_cost`] ?? 0,
+                finalProfit: financial[`${s.key}_final_profit`] ?? 0,
+              }
+            });
+            setTotals(siteTotals);
+          } else {
+            const siteTotals: Totals = {};
+            SITES.forEach(s => {
+              siteTotals[s.key] = {
+                count: 0,
+                amount: 0,
+                profit: 0,
+                adCost: 0,
+                finalProfit: 0
+              };
+            });
+            setTotals(siteTotals);
+          }
+
+          const lastYearData = lastYearRes.data;
+          if (lastYearData && lastYearData.length > 0) {
+            const financialLY = lastYearData[0];
+            const siteTotalsLY: Totals = {};
+            SITES.forEach(s => {
+              siteTotalsLY[s.key] = {
+                count: financialLY[`${s.key}_count`] ?? 0,
+                amount: financialLY[`${s.key}_amount`] ?? 0,
+                profit: financialLY[`${s.key}_profit`] ?? 0,
+                adCost: financialLY[`${s.key}_ad_cost`] ?? 0,
+                finalProfit: financialLY[`${s.key}_final_profit`] ?? 0,
+              }
+            });
+            setLastYearTotals(siteTotalsLY);
+          } else {
+            setLastYearTotals(null);
+          }
+
+          const seriesData = seriesRes.data;
+          if (seriesData && seriesData.length > 0) {
+            const seriesSummaryData = seriesData
+              .map((s: any) => ({
+                seriesName: s.series_name || '未分類',
+                seriesCode: s.series_code || 0,
+                count: s.series_count || 0,
+                sales: s.series_amount || 0,
+                profit: s.series_profit || 0,
+                adCost: s.series_ad_cost || 0,
+                finalProfit: s.series_final_profit || 0,
+              }))
+              .sort((a, b) => b.sales - a.sales);
+            setSeriesSummary(seriesSummaryData);
+          } else {
+            setSeriesSummary([]);
+          }
+        }
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
         const siteTotals: Totals = {};
         SITES.forEach(s => {
-          siteTotals[s.key] = {
-            count: 0,
-            amount: 0,
-            profit: 0,
-            adCost: 0,
-            finalProfit: 0
-          };
+          siteTotals[s.key] = { count: 0, amount: 0, profit: 0, adCost: 0, finalProfit: 0 };
         });
         setTotals(siteTotals);
         setLastYearTotals(null);
@@ -219,7 +264,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     };
 
     fetchData();
-  }, [month, refreshTrigger]);
+  }, [month, refreshTrigger, viewMode, periodMonths]);
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
@@ -268,9 +313,13 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             <CardContent className="space-y-1">
               <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
               <div className="text-sm text-gray-600">売上: ¥{formatNumber(grandTotalSales)}</div>
-              <div className="text-sm text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
-              <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
-              {webTarget > 0 && (
+              {viewMode === 'month' && (
+                <>
+                  <div className="text-sm text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
+                  <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
+                </>
+              )}
+              {viewMode === 'month' && webTarget > 0 && (
                 <div className="mt-2 pt-2 border-t border-gray-200">
                   <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
                     <Target className="w-3 h-3" />
@@ -326,8 +375,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               <CardContent className="space-y-1">
                 <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
                 <div className="text-xs text-gray-500">売上: ¥{formatNumber(currentSales)}</div>
-                <div className="text-xs text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
-                <div className="text-xs font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
+                {viewMode === 'month' && (
+                  <>
+                    <div className="text-xs text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
+                    <div className="text-xs font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
+                  </>
+                )}
               </CardContent>
             </div>
             {lySales > 0 && (
@@ -357,8 +410,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
               <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
               <p className="text-xs text-gray-500">売上: ¥{formatNumber(series.sales)}</p>
-              <p className="text-xs text-red-600">広告: ¥{formatNumber(series.adCost)}</p>
-              <p className="text-xs font-bold text-green-600">利益: ¥{formatNumber(series.finalProfit)}</p>
+              {viewMode === 'month' && (
+                <>
+                  <p className="text-xs text-red-600">広告: ¥{formatNumber(series.adCost)}</p>
+                  <p className="text-xs font-bold text-green-600">利益: ¥{formatNumber(series.finalProfit)}</p>
+                </>
+              )}
             </div>
           ))}
         </CardContent>
