@@ -244,6 +244,26 @@ export default function MetaTab({ month }: Props) {
         }
     }
 
+    const handleDeleteData = async () => {
+        if (!confirm(`${month} のMeta広告データを全て削除しますか？\nこの操作は取り消しできません。`)) return
+        try {
+            const res = await fetch('/api/meta-ads/delete-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month }),
+            })
+            const result = await res.json()
+            if (result.success) {
+                setUploadResult(`✅ ${result.deleted}件のデータを削除しました`)
+                fetchData()
+            } else {
+                setUploadResult(`❌ ${result.error}`)
+            }
+        } catch (err: any) {
+            setUploadResult(`❌ ${err.message}`)
+        }
+    }
+
     const formatCurrency = (n: number) => `¥${Math.round(n).toLocaleString()}`
     const formatNumber = (n: number) => Math.round(n).toLocaleString()
     const formatPercent = (n: number) => `${n.toFixed(2)}%`
@@ -287,7 +307,7 @@ export default function MetaTab({ month }: Props) {
                                 {isAutoMatching ? 'AI紐付け中...' : 'AI自動紐付け'}
                             </button>
                         )}
-                        {allMapped && (
+                        {hasMapped && (
                             <button onClick={handleImportCosts} disabled={isImporting}
                                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors font-medium ${isCostImported ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-300'}`}>
                                 {isCostImported ? <><CheckCircle size={16} />取り込み済み</> : <><Download size={16} />{isImporting ? '取り込み中...' : '広告費取り込み'}</>}
@@ -301,6 +321,12 @@ export default function MetaTab({ month }: Props) {
                                 紐付けクリア
                             </button>
                         )}
+
+                        <button onClick={handleDeleteData}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium text-sm">
+                            <Trash2 size={14} />
+                            データ削除
+                        </button>
                     </>
                 )}
 

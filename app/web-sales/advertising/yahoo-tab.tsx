@@ -212,6 +212,26 @@ export default function YahooTab({ month }: { month: string }) {
         fetchData()
     }
 
+    const handleDeleteData = async () => {
+        if (!confirm(`${month} のYahoo広告データを全て削除しますか？\nこの操作は取り消しできません。`)) return
+        try {
+            const res = await fetch('/api/yahoo-ads/delete-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month }),
+            })
+            const result = await res.json()
+            if (result.success) {
+                setUploadResult(`✅ ${result.deleted}件のデータを削除しました`)
+                fetchData()
+            } else {
+                setUploadResult(`❌ ${result.error}`)
+            }
+        } catch (err: any) {
+            setUploadResult(`❌ ${err.message}`)
+        }
+    }
+
     const formatNumber = (n: number) => n.toLocaleString()
     const formatCurrency = (n: number) => `¥${Math.round(n).toLocaleString()}`
     const formatPercent = (n: number) => `${n.toFixed(1)}%`
@@ -271,6 +291,11 @@ export default function YahooTab({ month }: { month: string }) {
                                 </button>
                             </>
                         )}
+
+                        <button onClick={handleDeleteData}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium text-sm">
+                            <Trash2 size={14} /> データ削除
+                        </button>
                     </>
                 )}
 
