@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { usePathname } from 'next/navigation'
 import MainSidebar from "@/components/main-sidebar"
 
@@ -17,12 +17,20 @@ const FULL_SCREEN_ROUTES = [
 export default function MainDashboard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [activeModule, setActiveModule] = useState<'sales' | 'web'>('sales')
+  const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (pathname.startsWith('/web-sales')) {
       setActiveModule('web')
     } else {
       setActiveModule('sales')
+    }
+  }, [pathname])
+
+  // ページ遷移時にmainコンテナのスクロールをトップに戻す
+  useEffect(() => {
+    if (mainRef.current) {
+      mainRef.current.scrollTop = 0
     }
   }, [pathname])
 
@@ -40,10 +48,11 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
         <MainSidebar />
       </div>
 
-      <main className="flex-grow p-6 overflow-auto print:p-0 print:overflow-visible">
+      <main ref={mainRef} className="flex-grow p-6 overflow-auto print:p-0 print:overflow-visible">
         {children}
       </main>
 
     </div>
   )
 }
+
