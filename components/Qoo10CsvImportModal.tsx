@@ -1,4 +1,4 @@
-﻿// /components/Qoo10CsvImportModal.tsx ver.1 (修正UI実装版 - BASEからの移植)
+// /components/Qoo10CsvImportModal.tsx ver.1 (修正UI実装版 - BASEからの移植)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,23 +20,27 @@ interface Qoo10CsvImportModalProps {
   onClose: () => void;
   onSuccess: () => void;
   products: Product[];
+  defaultMonth?: string;
 }
 
 export default function Qoo10CsvImportModal({
   isOpen,
   onClose,
   onSuccess,
-  products
+  products,
+  defaultMonth
 }: Qoo10CsvImportModalProps) {
   const [step, setStep] = useState(1);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [saleMonth, setSaleMonth] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [saleMonth, setSaleMonth] = useState<string>(
+    defaultMonth || (() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    })()
+  );
 
   // マッチング修正用の状態
   const [allMappings, setAllMappings] = useState<Array<{

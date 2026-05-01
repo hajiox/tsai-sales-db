@@ -1,4 +1,4 @@
-﻿// /components/YahooCsvImportModal.tsx ver.6 (修正UI実装版 - 両パターン対応)
+// /components/YahooCsvImportModal.tsx ver.6 (修正UI実装版 - 両パターン対応)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,23 +20,27 @@ interface YahooCsvImportModalProps {
   onClose: () => void;
   onSuccess: () => void;
   products: Product[];
+  defaultMonth?: string;
 }
 
 export default function YahooCsvImportModal({
   isOpen,
   onClose,
   onSuccess,
-  products
+  products,
+  defaultMonth
 }: YahooCsvImportModalProps) {
   const [step, setStep] = useState(1);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [saleMonth, setSaleMonth] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [saleMonth, setSaleMonth] = useState<string>(
+    defaultMonth || (() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    })()
+  );
 
   // マッチング修正用の状態
   const [allMappings, setAllMappings] = useState<Array<{

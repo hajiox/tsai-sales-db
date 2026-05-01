@@ -20,23 +20,27 @@ interface RakutenCsvImportModalProps {
   onClose: () => void;
   onSuccess: () => void;
   products: Product[];
+  defaultMonth?: string;
 }
 
 export default function RakutenCsvImportModal({
   isOpen,
   onClose,
   onSuccess,
-  products
+  products,
+  defaultMonth
 }: RakutenCsvImportModalProps) {
   const [step, setStep] = useState(1);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [saleMonth, setSaleMonth] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [saleMonth, setSaleMonth] = useState<string>(
+    defaultMonth || (() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    })()
+  );
 
   // マッチング修正用の状態
   const [allMappings, setAllMappings] = useState<Array<{

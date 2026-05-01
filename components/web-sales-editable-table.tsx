@@ -433,6 +433,7 @@ export default function WebSalesEditableTable({
           onClose={() => setIsAmazonCsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+          defaultMonth={month}
         />
       )}
 
@@ -442,6 +443,7 @@ export default function WebSalesEditableTable({
           onClose={() => setIsRakutenCsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+          defaultMonth={month}
         />
       )}
 
@@ -451,6 +453,7 @@ export default function WebSalesEditableTable({
           onClose={() => setIsYahooCsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+          defaultMonth={month}
         />
       )}
 
@@ -460,6 +463,7 @@ export default function WebSalesEditableTable({
           onClose={() => setIsMercariCsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+          defaultMonth={month}
         />
       )}
 
@@ -469,6 +473,7 @@ export default function WebSalesEditableTable({
           onClose={() => setIsBaseCsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+          defaultMonth={month}
         />
       )}
 
@@ -478,6 +483,7 @@ export default function WebSalesEditableTable({
           onClose={() => setIsQoo10CsvModalOpen(false)}
           onSuccess={handleImportSuccess}
           products={productMasterList}
+          defaultMonth={month}
         />
       )}
 
@@ -487,6 +493,7 @@ export default function WebSalesEditableTable({
           onClose={() => setIsTiktokCsvModalOpen(false)}
           onImportComplete={handleImportSuccess}
           products={productMasterList}
+          defaultMonth={month}
         />
       )}
     </div>
