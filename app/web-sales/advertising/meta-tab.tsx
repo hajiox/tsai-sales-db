@@ -58,6 +58,7 @@ export default function MetaTab({ month }: Props) {
     const [isAutoMatching, setIsAutoMatching] = useState(false)
     const [autoMatchResult, setAutoMatchResult] = useState<string | null>(null)
     const [isCostImported, setIsCostImported] = useState(false)
+    const [matchSourceMap, setMatchSourceMap] = useState<Map<string, string>>(new Map()) // ad_set_name -> source
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // データ取得
@@ -94,6 +95,14 @@ export default function MetaTab({ month }: Props) {
             .select('meta_cost')
             .eq('report_month', reportMonth)
         setIsCostImported(adCostData?.some((r: any) => (r.meta_cost || 0) > 0) || false)
+
+        // マッチソース取得
+        const { data: mappingSources } = await supabase
+            .from('meta_adset_series_map')
+            .select('ad_set_name, source')
+        const srcMap = new Map<string, string>()
+        mappingSources?.forEach((m: any) => srcMap.set(m.ad_set_name, m.source || 'manual'))
+        setMatchSourceMap(srcMap)
 
         setIsLoading(false)
     }, [month, supabase])
@@ -444,19 +453,30 @@ export default function MetaTab({ month }: Props) {
                                                 <td className="text-right px-3 py-3 font-medium">{d.results.toFixed(0)}</td>
                                                 <td className="text-right px-3 py-3 text-sm">{formatCurrency(costPerResult)}</td>
                                                 <td className="px-2 py-3">
-                                                    <select
-                                                        value={currentMapping ?? ''}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value ? parseInt(e.target.value) : null
-                                                            setMappingChanges(prev => new Map(prev).set(d.id, val))
-                                                        }}
-                                                        className="w-full text-xs border rounded px-1.5 py-1 bg-white"
-                                                    >
-                                                        <option value="">未設定</option>
-                                                        {seriesOptions.map(s => (
-                                                            <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
-                                                        ))}
-                                                    </select>
+                                                    <div className="flex flex-col gap-1">
+                                                        <select
+                                                            value={currentMapping ?? ''}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value ? parseInt(e.target.value) : null
+                                                                setMappingChanges(prev => new Map(prev).set(d.id, val))
+                                                            }}
+                                                            className="w-full text-xs border rounded px-1.5 py-1 bg-white"
+                                                        >
+                                                            <option value="">未設定</option>
+                                                            {seriesOptions.map(s => (
+                                                                <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
+                                                            ))}
+                                                        </select>
+                                                        {d.series_code !== null && (
+                                                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full text-center ${
+                                                                matchSourceMap.get(d.ad_set_name) === 'ai'
+                                                                    ? 'bg-purple-100 text-purple-700'
+                                                                    : 'bg-blue-100 text-blue-700'
+                                                            }`}>
+                                                                {matchSourceMap.get(d.ad_set_name) === 'ai' ? '🤖 AI' : '📚 学習済'}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         )

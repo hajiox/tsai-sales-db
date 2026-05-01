@@ -52,6 +52,7 @@ export default function YahooTab({ month }: { month: string }) {
     const [showChat, setShowChat] = useState(false)
     const [mappingChanges, setMappingChanges] = useState<Map<number, number | null>>(new Map())
     const [isCostImported, setIsCostImported] = useState(false)
+    const [matchSourceMap, setMatchSourceMap] = useState<Map<string, string>>(new Map()) // product_code -> source
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -84,6 +85,14 @@ export default function YahooTab({ month }: { month: string }) {
             .select('yahoo_cost')
             .eq('report_month', reportMonth)
         setIsCostImported(adCostData?.some((r: any) => (r.yahoo_cost || 0) > 0) || false)
+
+        // マッチソース取得
+        const { data: mappingSources } = await supabase
+            .from('yahoo_code_series_map')
+            .select('product_code, source')
+        const srcMap = new Map<string, string>()
+        mappingSources?.forEach((m: any) => srcMap.set(m.product_code, m.source || 'manual'))
+        setMatchSourceMap(srcMap)
 
         setIsLoading(false)
     }, [month, supabase])
@@ -372,19 +381,30 @@ export default function YahooTab({ month }: { month: string }) {
                                             <td className="px-3 py-2 text-right">{item.orders}</td>
                                             <td className="px-3 py-2 text-right">{formatPercent(item.roas)}</td>
                                             <td className="px-3 py-2">
-                                                <select
-                                                    value={mappingChanges.has(item.id) ? (mappingChanges.get(item.id) ?? '') : (item.series_code ?? '')}
-                                                    onChange={e => {
-                                                        const v = e.target.value ? parseInt(e.target.value) : null
-                                                        setMappingChanges(prev => new Map(prev).set(item.id, v))
-                                                    }}
-                                                    className="w-full text-xs border rounded px-1.5 py-1"
-                                                >
-                                                    <option value="">未設定</option>
-                                                    {seriesOptions.map(s => (
-                                                        <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
-                                                    ))}
-                                                </select>
+                                                <div className="flex flex-col gap-1">
+                                                    <select
+                                                        value={mappingChanges.has(item.id) ? (mappingChanges.get(item.id) ?? '') : (item.series_code ?? '')}
+                                                        onChange={e => {
+                                                            const v = e.target.value ? parseInt(e.target.value) : null
+                                                            setMappingChanges(prev => new Map(prev).set(item.id, v))
+                                                        }}
+                                                        className="w-full text-xs border rounded px-1.5 py-1"
+                                                    >
+                                                        <option value="">未設定</option>
+                                                        {seriesOptions.map(s => (
+                                                            <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
+                                                        ))}
+                                                    </select>
+                                                    {item.series_code !== null && (
+                                                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full text-center ${
+                                                            matchSourceMap.get(item.product_code) === 'ai'
+                                                                ? 'bg-purple-100 text-purple-700'
+                                                                : 'bg-blue-100 text-blue-700'
+                                                        }`}>
+                                                            {matchSourceMap.get(item.product_code) === 'ai' ? '🤖 AI' : '📚 学習済'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

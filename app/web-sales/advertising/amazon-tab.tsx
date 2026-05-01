@@ -52,6 +52,7 @@ export default function AmazonTab({ month }: { month: string }) {
     const [showChat, setShowChat] = useState(false)
     const [mappingChanges, setMappingChanges] = useState<Map<string, number | null>>(new Map()) // key=campaign_name
     const [isCostImported, setIsCostImported] = useState(false)
+    const [matchSourceMap, setMatchSourceMap] = useState<Map<string, string>>(new Map()) // asin -> source
 
     // キャンペーン単位で集約
     interface CampaignGroup {
@@ -97,6 +98,14 @@ export default function AmazonTab({ month }: { month: string }) {
             .select('amazon_cost')
             .eq('report_month', reportMonth)
         setIsCostImported(adCostData?.some((r: any) => (r.amazon_cost || 0) > 0) || false)
+
+        // マッチソース取得
+        const { data: mappingSources } = await supabase
+            .from('amazon_code_series_map')
+            .select('asin, source')
+        const srcMap = new Map<string, string>()
+        mappingSources?.forEach((m: any) => srcMap.set(m.asin, m.source || 'manual'))
+        setMatchSourceMap(srcMap)
 
         setIsLoading(false)
     }, [month, supabase])
@@ -416,19 +425,34 @@ export default function AmazonTab({ month }: { month: string }) {
                                                 <td className="px-3 py-2 text-right">{fmtPct(acos)}</td>
                                                 <td className="px-3 py-2 text-right">{roas.toFixed(2)}</td>
                                                 <td className="px-3 py-2">
-                                                    <select
-                                                        value={currentSc ?? ''}
-                                                        onChange={e => {
-                                                            const v = e.target.value ? parseInt(e.target.value) : null
-                                                            setMappingChanges(prev => new Map(prev).set(g.campaign_name, v))
-                                                        }}
-                                                        className="w-full text-xs border rounded px-1.5 py-1"
-                                                    >
-                                                        <option value="">未設定</option>
-                                                        {seriesOptions.map(s => (
-                                                            <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
-                                                        ))}
-                                                    </select>
+                                                    <div className="flex flex-col gap-1">
+                                                        <select
+                                                            value={currentSc ?? ''}
+                                                            onChange={e => {
+                                                                const v = e.target.value ? parseInt(e.target.value) : null
+                                                                setMappingChanges(prev => new Map(prev).set(g.campaign_name, v))
+                                                            }}
+                                                            className="w-full text-xs border rounded px-1.5 py-1"
+                                                        >
+                                                            <option value="">未設定</option>
+                                                            {seriesOptions.map(s => (
+                                                                <option key={s.series_code} value={s.series_code}>{s.series_name}</option>
+                                                            ))}
+                                                        </select>
+                                                        {g.series_code !== null && (() => {
+                                                            const asinSource = g.asins.find(a => matchSourceMap.has(a))
+                                                            const source = asinSource ? matchSourceMap.get(asinSource) : undefined
+                                                            return (
+                                                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full text-center ${
+                                                                    source === 'ai'
+                                                                        ? 'bg-purple-100 text-purple-700'
+                                                                        : 'bg-blue-100 text-blue-700'
+                                                                }`}>
+                                                                    {source === 'ai' ? '🤖 AI' : '📚 学習済'}
+                                                                </span>
+                                                            )
+                                                        })()}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         )
