@@ -77,7 +77,7 @@ export function extractImportantKeywords(title: string): string[] {
 /* ------------------------------------------------------------------ */
 /* 4. ★★★【重要修正】シンプル類似度マッチング（正規化対応）★★★   */
 /* ------------------------------------------------------------------ */
-const specialMatchingRules = [{ keywords: ['炊き込み', 'チャーシュー'], productName: 'チャーシュー 炊き込みご飯の素', priority: 100 },];
+const specialMatchingRules = [{ keywords: ['炊き込み', 'チャーシュー'], excludeKeywords: ['悪魔', 'BUTA', 'カレー'], productName: 'チャーシュー 炊き込みご飯の素', priority: 100 },];
 
 type Channel = 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10';
 
@@ -96,7 +96,8 @@ export function findBestMatchSimplified(
   // 0. 特定キーワードによる専用マッチング
   for (const rule of specialMatchingRules) {
     const hasAllKeywords = rule.keywords.every(keyword => normalizedTitle.includes(keyword));
-    if (hasAllKeywords) {
+    const hasExcludeKeyword = rule.excludeKeywords?.some(keyword => normalizedTitle.includes(keyword));
+    if (hasAllKeywords && !hasExcludeKeyword) {
       const specialProduct = products.find(p => p.name.includes(rule.productName) && (allowDuplicate || !matchedIds.has(p.id)));
       if (specialProduct) {
         matchedIds.add(specialProduct.id);
