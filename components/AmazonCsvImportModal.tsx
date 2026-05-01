@@ -346,6 +346,22 @@ export default function AmazonCsvImportModal({
                 </Card>
               </div>
 
+              {stats.unmatched > 0 && (
+                <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-md">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-red-700">
+                        ⚠️ 未マッチの商品が {stats.unmatched} 件あります
+                      </p>
+                      <p className="text-xs text-red-600 mt-1">
+                        紐付けされていない商品はインポートされません。「マッチング結果を修正」から商品を紐付けてください。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {error && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
@@ -357,13 +373,20 @@ export default function AmazonCsvImportModal({
                 <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />戻る
                 </Button>
-                <Button onClick={() => setStep(3)} className="flex-1">
-                  <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
-                </Button>
+                {stats.unmatched > 0 ? (
+                  <Button onClick={() => setStep(3)} className="flex-1 bg-orange-600 hover:bg-orange-700">
+                    <AlertTriangle className="h-4 w-4 mr-2" />未マッチ {stats.unmatched} 件を修正する
+                  </Button>
+                ) : (
+                  <Button onClick={() => setStep(3)} variant="outline" className="flex-1">
+                    <Edit2 className="h-4 w-4 mr-2" />マッチング結果を修正
+                  </Button>
+                )}
                 <Button
                   onClick={handleConfirm}
-                  disabled={isLoading || stats.matched === 0}
+                  disabled={isLoading || stats.matched === 0 || stats.unmatched > 0}
                   className="flex-1"
+                  title={stats.unmatched > 0 ? '未マッチ商品があるためインポートできません' : ''}
                 >
                   {isLoading ? '処理中...' : 'インポート実行'}
                 </Button>
