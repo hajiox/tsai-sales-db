@@ -149,7 +149,6 @@ export default function LpTrackingInlineTab() {
           {filteredTargets.map(t => {
             const isExpanded = expandedId === t.id
             const activeLinks = t.links?.filter(l => l.is_active) || []
-            const trackingLinks = t.links?.filter(l => l.is_tracking_target && l.is_active) || []
 
             return (
               <div key={t.id} className={`bg-white border rounded-xl overflow-hidden transition-shadow ${isExpanded ? 'shadow-md border-teal-300' : 'hover:shadow-sm'}`}>
@@ -215,13 +214,12 @@ export default function LpTrackingInlineTab() {
                     {/* 購入先リンク一覧 */}
                     {activeLinks.length > 0 && (
                       <div>
-                        <div className="text-xs font-semibold text-gray-600 mb-2">購入先リンク ({trackingLinks.length}/{activeLinks.length} 計測対象)</div>
+                        <div className="text-xs font-semibold text-gray-600 mb-2">購入先リンク（{activeLinks.length}件 / MallClick対象）</div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           {activeLinks.map(l => (
-                            <div key={l.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${l.is_tracking_target ? 'bg-white border-teal-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
+                            <div key={l.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs bg-white border-teal-200">
                               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${l.is_tested ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
                               <span className="font-medium">{l.destination_name}</span>
-                              <span className="text-gray-400 font-mono truncate flex-1">{l.destination_value || "-"}</span>
                               {l.url && (
                                 <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 flex-shrink-0">
                                   <ExternalLink size={12} />
