@@ -29,16 +29,24 @@ interface LpLink {
   is_tested: boolean
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  "公開済": "bg-green-100 text-green-700",
-  "実装済": "bg-green-50 text-green-600",
-  "テスト済": "bg-blue-100 text-blue-700",
-  "テスト中": "bg-yellow-100 text-yellow-700",
-  "実装中": "bg-orange-100 text-orange-700",
-  "要修正": "bg-red-100 text-red-700",
-  "停止中": "bg-gray-200 text-gray-600",
-  "未実装": "bg-gray-100 text-gray-500",
-}
+const STATUS_OPTIONS = [
+  { value: "未実装", bg: "bg-gray-100 text-gray-500" },
+  { value: "実装中", bg: "bg-orange-100 text-orange-700" },
+  { value: "実装済", bg: "bg-green-50 text-green-600" },
+  { value: "公開済", bg: "bg-green-100 text-green-700" },
+  { value: "要修正", bg: "bg-red-100 text-red-700" },
+  { value: "停止中", bg: "bg-gray-200 text-gray-600" },
+]
+
+const TEST_OPTIONS = [
+  { value: "テスト未", bg: "bg-gray-100 text-gray-500" },
+  { value: "テスト中", bg: "bg-yellow-100 text-yellow-700" },
+  { value: "テスト済", bg: "bg-blue-100 text-blue-700" },
+]
+
+const STATUS_COLORS: Record<string, string> = Object.fromEntries(
+  [...STATUS_OPTIONS, ...TEST_OPTIONS].map(o => [o.value, o.bg])
+)
 
 export default function LpTrackingInlineTab() {
   const router = useRouter()
@@ -62,6 +70,36 @@ export default function LpTrackingInlineTab() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleInlineUpdate = async (id: string, field: "status" | "test_status", value: string) => {
+    // Optimistic UI update
+    setTargets(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
+    try {
+      // GET current data then PUT with updated field
+      const res = await fetch(`/api/lp-tracking/${id}`)
+      if (!res.ok) throw new Error("fetch failed")
+      const { data: current } = await res.json()
+      const putRes = await fetch(`/api/lp-tracking/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          management_name: current.management_name,
+          lp_url: current.lp_url,
+          product_value: current.product_value,
+          meta_pixel_id: current.meta_pixel_id,
+          status: field === "status" ? value : current.status,
+          test_status: field === "test_status" ? value : current.test_status,
+          memo: current.memo,
+          is_active: current.is_active,
+          links: current.links,
+        }),
+      })
+      if (!putRes.ok) throw new Error("update failed")
+    } catch {
+      // Revert on error
+      fetchTargets()
     }
   }
 
@@ -160,9 +198,14 @@ export default function LpTrackingInlineTab() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3">
                       <span className="font-semibold text-sm">{t.management_name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[t.status] || 'bg-gray-100 text-gray-500'}`}>
-                        {t.status}
-                      </span>
+                      <select
+                        value={t.status}
+                        onChange={(e) => { e.stopPropagation(); handleInlineUpdate(t.id, 'status', e.target.value) }}
+                        onClick={(e) => e.stopPropagation()}
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium border-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-teal-400 ${STATUS_COLORS[t.status] || 'bg-gray-100 text-gray-500'}`}
+                      >
+                        {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.value}</option>)}
+                      </select>
                       {!t.is_active && <span className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full">無効</span>}
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5 truncate">{t.lp_url}</div>
@@ -170,7 +213,14 @@ export default function LpTrackingInlineTab() {
                   <div className="flex items-center gap-4 flex-shrink-0 text-xs text-gray-500">
                     <div title="product値">{t.product_value || "-"}</div>
                     <div title="購入先数" className="bg-gray-100 px-2 py-0.5 rounded">{activeLinks.length}リンク</div>
-                    <div title="テスト">{t.test_status}</div>
+                    <select
+                      value={t.test_status}
+                      onChange={(e) => { e.stopPropagation(); handleInlineUpdate(t.id, 'test_status', e.target.value) }}
+                      onClick={(e) => e.stopPropagation()}
+                      className={`text-xs px-2 py-0.5 rounded font-medium border-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-teal-400 ${STATUS_COLORS[t.test_status] || 'bg-gray-100 text-gray-500'}`}
+                    >
+                      {TEST_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.value}</option>)}
+                    </select>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button
