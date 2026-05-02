@@ -170,7 +170,8 @@ export default function DatabasePage() {
     };
 
     const handleCellChange = async (id: string, field: string, value: string, type: "ingredient" | "material" | "expense") => {
-        const numericFields = ['unit_quantity', 'price', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
+        const numericFields = ['unit_quantity', 'price', 'price_tax_included', 'unit_price', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
+        const actualField = (field === 'price_tax_included') ? 'price' : field;
         let parsedValue: any = value;
 
         if (numericFields.includes(field)) {
@@ -182,53 +183,60 @@ export default function DatabasePage() {
             }
         }
 
-        // price フィールド: ユーザー入力は税別 → DB保存値は tax_included=true なら × 税率
+        // 価格→DB値の変換
         let dbValue = parsedValue;
+        const rate = type === 'ingredient' ? (1 + taxRates.ingredient / 100) : (1 + taxRates.material / 100);
+        const currentList = type === "ingredient" ? ingredients : type === "material" ? materials : expenses;
+        const currentItem = currentList.find(i => i.id === id);
+
         if (field === 'price' && parsedValue != null) {
-            const currentList = type === "ingredient" ? ingredients : type === "material" ? materials : expenses;
-            const currentItem = currentList.find(i => i.id === id);
+            // 税別入力 → DB値変換
             if (currentItem && (currentItem as any).tax_included !== false) {
-                const rate = type === 'ingredient' ? (1 + taxRates.ingredient / 100) : (1 + taxRates.material / 100);
-                dbValue = Math.round(parsedValue * rate * 100) / 100;
+                dbValue = Math.round(parsedValue * rate * 1000) / 1000;
+            }
+        } else if (field === 'price_tax_included' && parsedValue != null) {
+            // 税込入力 → DB値変換
+            if (currentItem && (currentItem as any).tax_included !== false) {
+                dbValue = parsedValue; // 税込設定ならそのまま
+            } else {
+                dbValue = Math.round(parsedValue / rate * 1000) / 1000; // 税抜設定なら割り戻す
             }
         }
 
         // 現在の値と比較して変更がなければスキップ
-        const currentList = type === "ingredient" ? ingredients : type === "material" ? materials : expenses;
-        const currentItem = currentList.find(i => i.id === id);
-        if (field === 'price') {
+        if (actualField === 'price') {
             if (currentItem && (currentItem as any).price === dbValue) return;
         } else {
-            if (currentItem && (currentItem as any)[field] === parsedValue) return;
+            if (currentItem && (currentItem as any)[actualField] === parsedValue) return;
         }
 
-        // 1. UI更新 (Optimistic) — priceはDB値(税込)で更新
-        const uiValue = field === 'price' ? dbValue : parsedValue;
+        // 1. UI更新 (Optimistic)
+        const uiValue = (actualField === 'price') ? dbValue : parsedValue;
         if (type === "ingredient") {
             setIngredients(prev => prev.map(item =>
-                item.id === id ? { ...item, [field]: uiValue } : item
+                item.id === id ? { ...item, [actualField]: uiValue } : item
             ));
         } else if (type === "material") {
             setMaterials(prev => prev.map(item =>
-                item.id === id ? { ...item, [field]: uiValue } : item
+                item.id === id ? { ...item, [actualField]: uiValue } : item
             ));
         } else {
             setExpenses(prev => prev.map(item =>
-                item.id === id ? { ...item, [field]: uiValue } : item
+                item.id === id ? { ...item, [actualField]: uiValue } : item
             ));
         }
 
-        // 2. DB更新 — priceはDB値(税込可能性あり)で保存
+        // 2. DB更新
         let table = "";
         if (type === "ingredient") table = "ingredients";
         else if (type === "material") table = "materials";
         else table = "expenses";
-        const saveValue = field === 'price' ? dbValue : parsedValue;
+        const saveValue = (actualField === 'price') ? dbValue : parsedValue;
         try {
             const res = await fetch('/api/recipe/db-write', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ operation: 'update', table, id, data: { [field]: saveValue } }),
+                body: JSON.stringify({ operation: 'update', table, id, data: { [actualField]: saveValue } }),
             });
             if (!res.ok) {
                 const data = await res.json();
@@ -796,13 +804,13 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'unit_quantity', formatNumber(ing.unit_quantity, 0), 'ingredient')}</td>
-                                        {/* 税別単価 = 編集可能（ユーザーはここに入力） */}
+                                        {/* 税別単価 = 編集可能 */}
                                         <td className="px-0 py-1 text-right">
-                                            {renderEditableCell(ing, 'price', ing.price != null ? `¥${Math.round(ing.tax_included !== false ? ing.price / (1 + taxRates.ingredient / 100) : ing.price).toLocaleString()}` : '-', 'ingredient')}
+                                            {renderEditableCell(ing, 'price', ing.price != null ? `¥${(ing.tax_included !== false ? ing.price / (1 + taxRates.ingredient / 100) : ing.price).toFixed(1)}` : '-', 'ingredient')}
                                         </td>
-                                        {/* 税込単価 = 自動計算表示 */}
-                                        <td className="px-2 py-1 text-right">
-                                            <span className="text-blue-600 font-medium text-xs">{ing.price != null ? `¥${Math.round(ing.tax_included !== false ? ing.price : ing.price * (1 + taxRates.ingredient / 100)).toLocaleString()}` : '-'}</span>
+                                        {/* 税込単価 = 編集可能 */}
+                                        <td className="px-0 py-1 text-right">
+                                            {renderEditableCell(ing, 'price_tax_included', ing.price != null ? `¥${(ing.tax_included !== false ? ing.price : ing.price * (1 + taxRates.ingredient / 100)).toFixed(1)}` : '-', 'ingredient')}
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'calories', formatNumber(ing.calories, 1), 'ingredient')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'protein', formatNumber(ing.protein, 1), 'ingredient')}</td>
@@ -859,13 +867,13 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'unit_quantity', mat.unit_quantity || '', 'material', 'w-36')}</td>
-                                        {/* 税別単価 = 編集可能（ユーザーはここに入力） */}
+                                        {/* 税別単価 = 編集可能 */}
                                         <td className="px-0 py-1 text-right">
-                                            {renderEditableCell(mat, 'price', mat.price != null ? `¥${Math.round(mat.tax_included !== false ? mat.price / (1 + taxRates.material / 100) : mat.price).toLocaleString()}` : '-', 'material')}
+                                            {renderEditableCell(mat, 'price', mat.price != null ? `¥${(mat.tax_included !== false ? mat.price / (1 + taxRates.material / 100) : mat.price).toFixed(1)}` : '-', 'material')}
                                         </td>
-                                        {/* 税込単価 = 自動計算表示 */}
-                                        <td className="px-2 py-1 text-right">
-                                            <span className="text-blue-600 font-medium text-xs">{mat.price != null ? `¥${Math.round(mat.tax_included !== false ? mat.price : mat.price * (1 + taxRates.material / 100)).toLocaleString()}` : '-'}</span>
+                                        {/* 税込単価 = 編集可能 */}
+                                        <td className="px-0 py-1 text-right">
+                                            {renderEditableCell(mat, 'price_tax_included', mat.price != null ? `¥${(mat.tax_included !== false ? mat.price : mat.price * (1 + taxRates.material / 100)).toFixed(1)}` : '-', 'material')}
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'supplier', mat.supplier || '', 'material', 'w-24')}</td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'notes', mat.notes || '', 'material', 'w-36')}</td>
@@ -919,7 +927,7 @@ export default function DatabasePage() {
                                                 {exp.tax_included ? '税込' : '税抜'}
                                             </button>
                                         </td>
-                                        <td className="px-0 py-1 text-right">{renderEditableCell(exp, 'unit_price', formatNumber(exp.unit_price, 0), 'expense')}</td>
+                                        <td className="px-0 py-1 text-right">{renderEditableCell(exp, 'unit_price', formatNumber(exp.unit_price, 1), 'expense')}</td>
                                         <td className="px-0 py-1">{renderEditableCell(exp, 'notes', exp.notes || '', 'expense', 'w-36')}</td>
                                         <td className="px-2 py-1">
                                             <div className="flex items-center gap-0.5">
