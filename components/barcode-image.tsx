@@ -131,15 +131,75 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
         }
     };
 
-    const downloadImage = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const url = canvas.toDataURL("image/png");
+    const downloadEPS = () => {
+        if (code.length !== 13) return;
+
+        const barWidth = 2;  // points (1pt = 1/72 inch)
+        const barHeight = 70;
+        const quietZone = 10;
+        const fontSize = 10;
+
+        const encoded = encodeEAN13(code);
+        if (encoded.length === 0) return;
+
+        const binaryStr = encoded.join("");
+        const totalWidth = binaryStr.length * barWidth + quietZone * 2;
+        const textHeight = fontSize + 6;
+        const totalHeight = barHeight + textHeight;
+
+        // EPS header
+        let eps = `%!PS-Adobe-3.0 EPSF-3.0\n`;
+        eps += `%%BoundingBox: 0 0 ${totalWidth} ${totalHeight}\n`;
+        eps += `%%Title: Barcode ${code}\n`;
+        eps += `%%Creator: TSA Barcode Generator\n`;
+        eps += `%%EndComments\n\n`;
+
+        // Draw bars (PostScript origin is bottom-left, Y goes up)
+        let x = quietZone;
+        for (let i = 0; i < binaryStr.length; i++) {
+            if (binaryStr[i] === "1") {
+                eps += `${x} ${textHeight} ${barWidth} ${barHeight} rectfill\n`;
+            }
+            x += barWidth;
+        }
+
+        // rectfill procedure
+        eps = eps.replace(`%%EndComments\n\n`,
+            `%%EndComments\n\n/rectfill { /h exch def /w exch def /y exch def /x exch def newpath x y moveto w 0 rlineto 0 h rlineto w neg 0 rlineto closepath fill } def\n\n`
+        );
+
+        // Draw text
+        eps += `\n/Courier-Bold findfont ${fontSize} scalefont setfont\n`;
+
+        // First digit
+        const firstDigitX = quietZone - fontSize * 0.6;
+        eps += `${firstDigitX} 0 moveto (${code[0]}) show\n`;
+
+        // Left group
+        const leftStart = quietZone + 3 * barWidth;
+        const leftGroupWidth = 6 * 7 * barWidth;
+        const leftGroupCenter = leftStart + leftGroupWidth / 2;
+        const leftText = code.substring(1, 7);
+        eps += `(${leftText}) stringwidth pop 2 div neg ${leftGroupCenter} add 0 moveto (${leftText}) show\n`;
+
+        // Right group
+        const rightStart = leftStart + leftGroupWidth + 5 * barWidth;
+        const rightGroupWidth = 6 * 7 * barWidth;
+        const rightGroupCenter = rightStart + rightGroupWidth / 2;
+        const rightText = code.substring(7);
+        eps += `(${rightText}) stringwidth pop 2 div neg ${rightGroupCenter} add 0 moveto (${rightText}) show\n`;
+
+        eps += `\n%%EOF\n`;
+
+        // Download
+        const blob = new Blob([eps], { type: "application/postscript" });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `barcode_${code}.png`;
+        a.download = `barcode_${code}.eps`;
         a.click();
-        toast.success("バーコード画像をダウンロードしました");
+        URL.revokeObjectURL(url);
+        toast.success("バーコードEPSをダウンロードしました");
     };
 
     if (code.length !== 13) return null;
@@ -160,11 +220,11 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
                     📋 コピー
                 </button>
                 <button
-                    onClick={downloadImage}
-                    title="PNG保存"
+                    onClick={downloadEPS}
+                    title="EPS保存（ベクター形式）"
                     className="px-1.5 py-0.5 text-[10px] bg-gray-50 hover:bg-gray-100 text-gray-600 rounded border border-gray-200 transition"
                 >
-                    💾 保存
+                    💾 EPS保存
                 </button>
             </div>
         </div>
