@@ -1074,12 +1074,15 @@ export default function DatabasePage() {
                             <Button
                                 variant="outline"
                                 onClick={() => {
-                                    const printContent = document.getElementById('edit-modal-printable');
-                                    if (!printContent) return;
-                                    const printWindow = window.open('', '_blank', 'width=800,height=600');
-                                    if (!printWindow) return;
-                                    printWindow.document.write(`
-                                        <html><head><title>${editModal.name} - 食材情報</title>
+                                    const fields = [
+                                        {k:'raw_materials',l:'原材料'},
+                                        {k:'allergens',l:'アレルゲン'},
+                                        {k:'origin',l:'原産地'},
+                                        {k:'manufacturer',l:'製造者'},
+                                        {k:'product_description',l:'商品説明'},
+                                        {k:'nutrition_per',l:'栄養成分基準量'},
+                                    ];
+                                    const html = `<html><head><title>${editModal.name} - 食材情報</title>
                                         <style>
                                             body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; padding: 24px; color: #1a1a1a; }
                                             h2 { font-size: 20px; margin-bottom: 16px; border-bottom: 2px solid #333; padding-bottom: 8px; }
@@ -1094,12 +1097,29 @@ export default function DatabasePage() {
                                             <div class="field"><div class="field-label">単価（税別）</div><div class="field-value">${editForm['price'] || '-'} 円</div></div>
                                             <div class="field"><div class="field-label">入数</div><div class="field-value">${editForm['unit_quantity'] || '-'} g</div></div>
                                         </div>
-                                        ${[{k:'raw_materials',l:'原材料'},{k:'allergens',l:'アレルゲン'},{k:'origin',l:'原産地'},{k:'manufacturer',l:'製造者'},{k:'product_description',l:'商品説明'},{k:'nutrition_per',l:'栄養成分基準量'}].map(f => `<div class="field"><div class="field-label">${f.l}</div><div class="field-value">${editForm[f.k] || '-'}</div></div>`).join('')}
-                                        </body></html>
-                                    `);
-                                    printWindow.document.close();
-                                    printWindow.focus();
-                                    setTimeout(() => { printWindow.print(); }, 300);
+                                        ${fields.map(f => `<div class="field"><div class="field-label">${f.l}</div><div class="field-value">${(editForm[f.k] || '-').replace(/</g, '&lt;')}</div></div>`).join('')}
+                                        </body></html>`;
+                                    // hidden iframe 方式（ポップアップブロッカー回避）
+                                    let iframe = document.getElementById('print-iframe') as HTMLIFrameElement;
+                                    if (!iframe) {
+                                        iframe = document.createElement('iframe');
+                                        iframe.id = 'print-iframe';
+                                        iframe.style.position = 'fixed';
+                                        iframe.style.left = '-9999px';
+                                        iframe.style.top = '-9999px';
+                                        iframe.style.width = '0';
+                                        iframe.style.height = '0';
+                                        document.body.appendChild(iframe);
+                                    }
+                                    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                                    if (!doc) return;
+                                    doc.open();
+                                    doc.write(html);
+                                    doc.close();
+                                    setTimeout(() => {
+                                        iframe.contentWindow?.focus();
+                                        iframe.contentWindow?.print();
+                                    }, 200);
                                 }}
                                 className="gap-2"
                             >
