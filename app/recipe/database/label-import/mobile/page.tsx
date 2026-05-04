@@ -368,6 +368,37 @@ function MobileLabelImportContent() {
         setStep(4);
     };
 
+    // ─── Upload Label Images to Vercel Blob ───
+    const uploadLabelImages = async (ingredientId: string) => {
+        if (!labelFiles.length) return;
+        try {
+            const formData = new FormData();
+            formData.append("ingredient_id", ingredientId);
+            for (const lf of labelFiles) {
+                let fileToSend: File | Blob = lf.file;
+                // 1MB以上は圧縮
+                if (lf.file.size > 1 * 1024 * 1024) {
+                    try {
+                        const compressed = await compressImage(lf.file);
+                        fileToSend = new File([compressed], lf.file.name || "photo.jpg", { type: "image/jpeg" });
+                    } catch { /* 元ファイルで続行 */ }
+                }
+                formData.append("files", fileToSend);
+                formData.append("types", lf.type);
+            }
+            const res = await fetch("/api/label/upload-images", {
+                method: "POST",
+                body: formData,
+            });
+            if (res.ok) {
+                const result = await res.json();
+                showToast(`ラベル画像 ${result.uploaded}枚を保存`, "success");
+            }
+        } catch (e) {
+            console.error("Label image upload error:", e);
+        }
+    };
+
     // ─── Save ───
     const handleSave = async () => {
         const updates: Record<string, any> = {};
@@ -384,6 +415,8 @@ function MobileLabelImportContent() {
 
         setIsSaving(true);
         try {
+            let savedIngredientId: string | null = null;
+
             if (actionMode === "update" && selectedCandidate) {
                 const res = await fetch("/api/label/update", {
                     method: "POST",
@@ -400,6 +433,7 @@ function MobileLabelImportContent() {
                 }
 
                 const result = await res.json();
+                savedIngredientId = selectedCandidate.id;
                 showToast(`「${selectedCandidate.name}」を更新しました`, "success");
             } else if (actionMode === "create") {
                 // Create new ingredient via server-side API (bypasses RLS)
@@ -416,7 +450,14 @@ function MobileLabelImportContent() {
                     const errData = await res.json();
                     throw new Error(errData.error || '登録に失敗しました');
                 }
+                const createResult = await res.json();
+                savedIngredientId = createResult.data?.id || createResult.id || null;
                 showToast(`「${updates.name || "新規食材"}」を登録しました`, "success");
+            }
+
+            // Upload label images to Vercel Blob
+            if (savedIngredientId && labelFiles.length > 0) {
+                await uploadLabelImages(savedIngredientId);
             }
 
             setStep(5);

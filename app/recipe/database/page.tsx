@@ -7,7 +7,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X, Copy } from "lucide-react";
+import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X, Copy, Camera } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -28,6 +28,7 @@ interface Ingredient {
     product_description?: string | null;
     nutrition_per?: string | null;
     tax_included?: boolean;
+    label_images?: { type: string; url: string; uploaded_at: string }[];
     isNew?: boolean;
     isModified?: boolean;
 }
@@ -77,6 +78,7 @@ export default function DatabasePage() {
     const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
     const [editModal, setEditModal] = useState<Ingredient | null>(null);
     const [editForm, setEditForm] = useState<Record<string, string>>({});
+    const [labelPreview, setLabelPreview] = useState<{ name: string; images: { type: string; url: string; uploaded_at: string }[] } | null>(null);
 
     const [taxRates, setTaxRates] = useState({
         ingredient: 8,
@@ -793,6 +795,16 @@ export default function DatabasePage() {
                                                         原材料済
                                                     </span>
                                                 )}
+                                                {ing.label_images && ing.label_images.length > 0 && (
+                                                    <button
+                                                        onClick={() => setLabelPreview({ name: ing.name, images: ing.label_images! })}
+                                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700 whitespace-nowrap hover:bg-blue-200 transition cursor-pointer"
+                                                        title="ラベル画像を表示"
+                                                    >
+                                                        <Camera className="w-3 h-3" />
+                                                        {ing.label_images.length}枚
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-2 py-1 text-center">
@@ -1060,6 +1072,47 @@ export default function DatabasePage() {
                                 <Save className="w-4 h-4 mr-2" />
                                 保存
                             </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ラベル画像プレビューモーダル */}
+            {labelPreview && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setLabelPreview(null)}>
+                    <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">📷 ラベル画像</h3>
+                                <p className="text-sm text-gray-500">{labelPreview.name}</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setLabelPreview(null)}>
+                                <X className="w-5 h-5" />
+                            </Button>
+                        </div>
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {labelPreview.images.map((img, i) => {
+                                const typeLabels: Record<string, string> = {
+                                    front_label: "🏷️ 表ラベル",
+                                    ingredients_label: "📋 原材料表示",
+                                    nutrition_label: "🧪 栄養成分表示",
+                                };
+                                return (
+                                    <div key={i} className="border rounded-lg overflow-hidden">
+                                        <div className="px-3 py-2 bg-gray-50 border-b flex items-center justify-between">
+                                            <span className="text-sm font-medium">{typeLabels[img.type] || img.type}</span>
+                                            <span className="text-[10px] text-gray-400">
+                                                {new Date(img.uploaded_at).toLocaleDateString('ja-JP')}
+                                            </span>
+                                        </div>
+                                        <img
+                                            src={img.url}
+                                            alt={img.type}
+                                            className="w-full object-contain max-h-[400px] bg-white"
+                                        />
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>

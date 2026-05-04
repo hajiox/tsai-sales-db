@@ -268,6 +268,30 @@ function LabelImportContent() {
         setSelectedFields(newSelectedFields);
     };
 
+    const uploadLabelImages = async (ingredientId: string) => {
+        if (!labelFiles.length) return;
+        try {
+            const formData = new FormData();
+            formData.append("ingredient_id", ingredientId);
+            labelFiles.forEach((lf) => {
+                formData.append("files", lf.file);
+                formData.append("types", lf.type);
+            });
+            const res = await fetch("/api/label/upload-images", {
+                method: "POST",
+                body: formData,
+            });
+            if (res.ok) {
+                const result = await res.json();
+                toast.success(`ラベル画像 ${result.uploaded}枚を保存しました`);
+            } else {
+                console.error("Label image upload failed");
+            }
+        } catch (e) {
+            console.error("Label image upload error:", e);
+        }
+    };
+
     const handleSave = async () => {
         const updates: Record<string, any> = {};
         for (const [key, isSelected] of Object.entries(selectedFields)) {
@@ -283,6 +307,8 @@ function LabelImportContent() {
 
         setIsSaving(true);
         try {
+            let savedIngredientId: string | null = null;
+
             if (actionMode === "update" && selectedCandidate) {
                 // Update existing
                 const res = await fetch("/api/label/update", {
@@ -300,6 +326,7 @@ function LabelImportContent() {
                 }
 
                 const result = await res.json();
+                savedIngredientId = selectedCandidate.id;
                 toast.success(`「${selectedCandidate.name}」の${result.updated_fields.length}件の項目を更新しました`);
             } else if (actionMode === "create") {
                 // Create new ingredient via server-side API (bypasses RLS)
@@ -316,7 +343,14 @@ function LabelImportContent() {
                     const errData = await res.json();
                     throw new Error(errData.error || '登録に失敗しました');
                 }
+                const createResult = await res.json();
+                savedIngredientId = createResult.data?.id || createResult.id || null;
                 toast.success(`「${updates.name || "新規食材"}」を新規登録しました`);
+            }
+
+            // Upload label images to Vercel Blob
+            if (savedIngredientId && labelFiles.length > 0) {
+                await uploadLabelImages(savedIngredientId);
             }
 
             // Reset state
