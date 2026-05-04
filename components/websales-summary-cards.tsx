@@ -284,15 +284,6 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
   const handleMouseLeave = () => setHoveredItem(null);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-40">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900"></div>
-        <p className="ml-4 text-gray-600">サマリーデータを読み込み中...</p>
-      </div>
-    );
-  }
-
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
   const grandTotalAdCost = rpcTotalAdCost || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0);
@@ -312,6 +303,16 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   }, [webTarget, grandTotalSales, viewMode]);
 
   const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900"></div>
+        <p className="ml-4 text-gray-600">サマリーデータを読み込み中...</p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="space-y-3 relative" ref={containerRef}>
