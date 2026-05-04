@@ -7,7 +7,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X, Copy, Camera } from "lucide-react";
+import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X, Copy, Camera, Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -790,10 +790,14 @@ export default function DatabasePage() {
                                             <div className="flex items-center gap-1.5">
                                                 {renderEditableCell(ing, 'name', ing.name, 'ingredient', 'min-w-[180px]')}
                                                 {ing.raw_materials && (
-                                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700 whitespace-nowrap" title={`原材料: ${ing.raw_materials}`}>
+                                                    <button
+                                                        onClick={() => openEditModal(ing)}
+                                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700 whitespace-nowrap hover:bg-emerald-200 transition cursor-pointer"
+                                                        title={`原材料: ${ing.raw_materials}`}
+                                                    >
                                                         <FlaskConical className="w-3 h-3" />
                                                         原材料済
-                                                    </span>
+                                                    </button>
                                                 )}
                                                 {ing.label_images && ing.label_images.length > 0 && (
                                                     <button
@@ -1066,12 +1070,49 @@ export default function DatabasePage() {
                                 </div>
                             ))}
                         </div>
-                        <div className="flex justify-end gap-2 px-6 py-4 border-t bg-gray-50 rounded-b-xl">
-                            <Button variant="outline" onClick={() => setEditModal(null)}>キャンセル</Button>
-                            <Button onClick={saveEditModal} className="bg-blue-600 hover:bg-blue-700 text-white">
-                                <Save className="w-4 h-4 mr-2" />
-                                保存
+                        <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50 rounded-b-xl">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    const printContent = document.getElementById('edit-modal-printable');
+                                    if (!printContent) return;
+                                    const printWindow = window.open('', '_blank', 'width=800,height=600');
+                                    if (!printWindow) return;
+                                    printWindow.document.write(`
+                                        <html><head><title>${editModal.name} - 食材情報</title>
+                                        <style>
+                                            body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; padding: 24px; color: #1a1a1a; }
+                                            h2 { font-size: 20px; margin-bottom: 16px; border-bottom: 2px solid #333; padding-bottom: 8px; }
+                                            .field { margin-bottom: 12px; }
+                                            .field-label { font-size: 11px; font-weight: bold; color: #666; margin-bottom: 2px; }
+                                            .field-value { font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+                                            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+                                            @media print { body { padding: 0; } }
+                                        </style></head><body>
+                                        <h2>${editModal.name}</h2>
+                                        <div class="grid">
+                                            <div class="field"><div class="field-label">単価（税別）</div><div class="field-value">${editForm['price'] || '-'} 円</div></div>
+                                            <div class="field"><div class="field-label">入数</div><div class="field-value">${editForm['unit_quantity'] || '-'} g</div></div>
+                                        </div>
+                                        ${[{k:'raw_materials',l:'原材料'},{k:'allergens',l:'アレルゲン'},{k:'origin',l:'原産地'},{k:'manufacturer',l:'製造者'},{k:'product_description',l:'商品説明'},{k:'nutrition_per',l:'栄養成分基準量'}].map(f => `<div class="field"><div class="field-label">${f.l}</div><div class="field-value">${editForm[f.k] || '-'}</div></div>`).join('')}
+                                        </body></html>
+                                    `);
+                                    printWindow.document.close();
+                                    printWindow.focus();
+                                    setTimeout(() => { printWindow.print(); }, 300);
+                                }}
+                                className="gap-2"
+                            >
+                                <Printer className="w-4 h-4" />
+                                印刷
                             </Button>
+                            <div className="flex gap-2">
+                                <Button variant="outline" onClick={() => setEditModal(null)}>キャンセル</Button>
+                                <Button onClick={saveEditModal} className="bg-blue-600 hover:bg-blue-700 text-white">
+                                    <Save className="w-4 h-4 mr-2" />
+                                    保存
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>
