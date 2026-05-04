@@ -299,10 +299,15 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const grandTotalFinalProfit = rpcTotalFinalProfit || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0);
   const grandTotalSalesLastYear = lastYearTotals ? SITES.reduce((sum, s) => sum + (lastYearTotals[s.key]?.amount ?? 0), 0) : 0;
 
-  // 目標データを親コンポーネントに通知
+  // 目標データを親コンポーネントに通知（前回値と比較して変化時のみ）
+  const prevTargetRef = useRef<{ target: number; sales: number }>({ target: 0, sales: 0 });
   useEffect(() => {
     if (onTargetDataReady && viewMode === 'month') {
-      onTargetDataReady({ target: webTarget, sales: grandTotalSales });
+      const prev = prevTargetRef.current;
+      if (prev.target !== webTarget || prev.sales !== grandTotalSales) {
+        prevTargetRef.current = { target: webTarget, sales: grandTotalSales };
+        onTargetDataReady({ target: webTarget, sales: grandTotalSales });
+      }
     }
   }, [webTarget, grandTotalSales, viewMode]);
 
