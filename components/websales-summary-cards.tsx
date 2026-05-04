@@ -47,9 +47,10 @@ type WebSalesSummaryCardsProps = {
   refreshTrigger?: number;
   viewMode?: 'month' | 'period';
   periodMonths?: number;
+  onTargetDataReady?: (data: { target: number; sales: number }) => void;
 };
 
-export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode = 'month', periodMonths = 6 }: WebSalesSummaryCardsProps) {
+export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode = 'month', periodMonths = 6, onTargetDataReady }: WebSalesSummaryCardsProps) {
   const supabase = getSupabaseBrowserClient();
   const [totals, setTotals] = useState<Totals | null>(null);
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
@@ -298,60 +299,41 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const grandTotalFinalProfit = rpcTotalFinalProfit || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0);
   const grandTotalSalesLastYear = lastYearTotals ? SITES.reduce((sum, s) => sum + (lastYearTotals[s.key]?.amount ?? 0), 0) : 0;
 
+  // 目標データを親コンポーネントに通知
+  useEffect(() => {
+    if (onTargetDataReady && viewMode === 'month') {
+      onTargetDataReady({ target: webTarget, sales: grandTotalSales });
+    }
+  }, [webTarget, grandTotalSales, viewMode]);
+
   const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
 
   return (
-    <div className="space-y-6 relative" ref={containerRef}>
-      <div className="grid grid-cols-4 md:grid-cols-8 gap-4 relative">
+    <div className="space-y-3 relative" ref={containerRef}>
+      <div className="grid grid-cols-4 md:grid-cols-8 gap-3 relative">
         <Card
           className="text-center bg-gray-50 border-gray-200 cursor-pointer flex flex-col justify-between col-span-1"
           onMouseEnter={(e) => handleMouseEnter({ type: 'total', key: 'grandTotal', name: '総合計' }, e)}
           onMouseLeave={handleMouseLeave}
         >
           <div>
-            <CardHeader><CardTitle className="text-sm">総合計</CardTitle></CardHeader>
-            <CardContent className="space-y-1">
-              <div className="text-2xl font-bold">{formatNumber(grandTotalCount)} 件</div>
-              <div className="text-sm text-gray-600">売上: ¥{formatNumber(grandTotalSales)}</div>
+            <CardHeader className="py-2 px-3"><CardTitle className="text-xs">総合計</CardTitle></CardHeader>
+            <CardContent className="space-y-0.5 py-1 px-3">
+              <div className="text-xl font-bold">{formatNumber(grandTotalCount)} 件</div>
+              <div className="text-xs text-gray-600">売上: ¥{formatNumber(grandTotalSales)}</div>
               {viewMode === 'month' && (
                 <>
-                  <div className="text-sm text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
-                  <div className="text-sm font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
+                  <div className="text-xs text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
+                  <div className="text-xs font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
                 </>
-              )}
-              {viewMode === 'month' && webTarget > 0 && (
-                <div className="mt-2 pt-2 border-t border-gray-200">
-                  <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
-                    <Target className="w-3 h-3" />
-                    <span>目標: ¥{formatNumber(webTarget)}</span>
-                  </div>
-                  {(() => {
-                    const rate = Math.round((grandTotalSales / webTarget) * 1000) / 10;
-                    const rateColor = rate >= 100 ? 'text-green-600' : rate >= 50 ? 'text-yellow-600' : 'text-red-600';
-                    const bgColor = rate >= 100 ? 'bg-green-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500';
-                    return (
-                      <>
-                        <div className={`text-lg font-bold ${rateColor}`}>
-                          {rate}%
-                        </div>
-                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${bgColor} rounded-full transition-all duration-500`}
-                            style={{ width: `${Math.min(rate, 100)}%` }}
-                          />
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
               )}
             </CardContent>
           </div>
           {grandTotalSalesLastYear > 0 && (
-            <div className="px-4 pb-4">
-              <div className="pt-2 mt-1 border-t border-gray-300">
-                <div className="text-xs text-gray-500">前年度売上: ¥{formatNumber(grandTotalSalesLastYear)}</div>
-                <div className={`text-sm font-bold ${grandTotalSales >= grandTotalSalesLastYear ? 'text-blue-600' : 'text-red-600'}`}>
+            <div className="px-3 pb-2">
+              <div className="pt-1 mt-1 border-t border-gray-300">
+                <div className="text-[10px] text-gray-500">前年度売上: ¥{formatNumber(grandTotalSalesLastYear)}</div>
+                <div className={`text-xs font-bold ${grandTotalSales >= grandTotalSalesLastYear ? 'text-blue-600' : 'text-red-600'}`}>
                   前年比: {Math.round((grandTotalSales / grandTotalSalesLastYear) * 100)}%
                 </div>
               </div>
@@ -371,21 +353,21 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             onMouseLeave={handleMouseLeave}
           >
             <div>
-              <CardHeader><CardTitle className="text-sm">{s.name}</CardTitle></CardHeader>
-              <CardContent className="space-y-1">
-                <div className="text-xl font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
-                <div className="text-xs text-gray-500">売上: ¥{formatNumber(currentSales)}</div>
+              <CardHeader className="py-2 px-3"><CardTitle className="text-xs">{s.name}</CardTitle></CardHeader>
+              <CardContent className="space-y-0.5 py-1 px-3">
+                <div className="text-lg font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
+                <div className="text-[11px] text-gray-500">売上: ¥{formatNumber(currentSales)}</div>
                 {viewMode === 'month' && (
                   <>
-                    <div className="text-xs text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
-                    <div className="text-xs font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
+                    <div className="text-[11px] text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
+                    <div className="text-[11px] font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
                   </>
                 )}
               </CardContent>
             </div>
             {lySales > 0 && (
-              <div className="px-4 pb-4">
-                <div className={`pt-2 mt-1 border-t ${s.borderColor} opacity-60`}>
+              <div className="px-3 pb-2">
+                <div className={`pt-1 mt-1 border-t ${s.borderColor} opacity-60`}>
                   <div className="text-[10px] text-gray-500">前年売上: ¥{formatNumber(lySales)}</div>
                   <div className={`text-xs font-bold ${currentSales >= lySales ? 'text-blue-600' : 'text-red-500'}`}>
                     前年比: {Math.round((currentSales / lySales) * 100)}%
@@ -398,8 +380,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
       </div>
 
       <Card>
-        <CardHeader><CardTitle>シリーズ別 売上サマリー</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 relative">
+        <CardHeader className="py-2 px-4"><CardTitle className="text-sm">シリーズ別 売上サマリー</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 relative py-2 px-4">
           {seriesSummary.map((series) => (
             <div
               key={series.seriesName}

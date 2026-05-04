@@ -12,7 +12,7 @@ import ProductAddModal from "@/components/ProductAddModal"
 import AdvertisingCostModal from "@/components/AdvertisingCostModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, DollarSign, EyeOff } from "lucide-react"
+import { Plus, Trash2, DollarSign, EyeOff, Target } from "lucide-react"
 
 type ViewMode = 'month' | 'period';
 
@@ -44,6 +44,7 @@ function WebSalesDashboardContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [productMaster, setProductMaster] = useState<any[]>([])
   const [isAdCostModalOpen, setIsAdCostModalOpen] = useState(false);
+  const [targetData, setTargetData] = useState<{ target: number; sales: number }>({ target: 0, sales: 0 });
 
   const handleMonthChange = useCallback((newMonth: string) => {
     if (newMonth === month) return;
@@ -284,6 +285,40 @@ function WebSalesDashboardContent() {
             >
               過去12ヶ月
             </button>
+
+            {/* 目標達成メーター */}
+            {viewMode === 'month' && targetData.target > 0 && (() => {
+              const rate = Math.round((targetData.sales / targetData.target) * 1000) / 10;
+              const rateColor = rate >= 100 ? '#16a34a' : rate >= 50 ? '#ca8a04' : '#dc2626';
+              const bgColor = rate >= 100 ? '#22c55e' : rate >= 50 ? '#eab308' : '#ef4444';
+              const formatNum = (n: number) => new Intl.NumberFormat('ja-JP').format(n);
+              return (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '6px 14px', backgroundColor: '#fff',
+                  borderRadius: '8px', border: '1px solid #e5e7eb',
+                  marginLeft: '8px'
+                }}>
+                  <Target size={14} style={{ color: '#6b7280' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ fontSize: '10px', color: '#6b7280', lineHeight: 1 }}>目標: ¥{formatNum(targetData.target)}</div>
+                    <div style={{
+                      width: '100px', height: '6px', backgroundColor: '#e5e7eb',
+                      borderRadius: '3px', overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        width: `${Math.min(rate, 100)}%`, height: '100%',
+                        backgroundColor: bgColor, borderRadius: '3px',
+                        transition: 'width 0.5s'
+                      }} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: rateColor, lineHeight: 1 }}>
+                    {rate}%
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* 月選択ボタンと広告費管理ボタン */}
@@ -353,6 +388,7 @@ function WebSalesDashboardContent() {
           refreshTrigger={refreshTrigger}
           viewMode={viewMode}
           periodMonths={periodMonths}
+          onTargetDataReady={setTargetData}
         />
 
         {/* グラフコンポーネントへの月数パラメータを正確に渡す */}
