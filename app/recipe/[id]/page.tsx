@@ -2699,7 +2699,13 @@ Now Expanded or Scrollable */}
                                   0,
                                 ),
                                 2,
-                              ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
+                              ) + (() => {
+                                if (group.type === "product" || group.type === "intermediate") {
+                                  const allGram = group.items.every(i => parseFloat(String(i.unit_quantity)) === -1);
+                                  return allGram ? "g" : "個";
+                                }
+                                return "g";
+                              })()
                               : "-"}
                           </td>
                           {/* バッチ2合計 */}
@@ -2717,7 +2723,13 @@ Now Expanded or Scrollable */}
                                   0,
                                 ),
                                 2,
-                              ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")
+                              ) + (() => {
+                                if (group.type === "product" || group.type === "intermediate") {
+                                  const allGram = group.items.every(i => parseFloat(String(i.unit_quantity)) === -1);
+                                  return allGram ? "g" : "個";
+                                }
+                                return "g";
+                              })()
                               : "-"}
                           </td>
                           {isEditing && <td></td>}
@@ -3003,7 +3015,8 @@ Now Expanded or Scrollable */}
                         const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
                         const b2Usage = unitUsage * batchSize2;
                         const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
-                        const unit = (group.type === "product" || group.type === "intermediate") ? "個" : "g";
+                        const isGramMode = parseFloat(String(item.unit_quantity)) === -1;
+                        const unit = (group.type === "product" || group.type === "intermediate") ? (isGramMode ? "g" : "個") : "g";
 
                         return (
                           <tr
@@ -3067,7 +3080,13 @@ Now Expanded or Scrollable */}
                               0,
                             ),
                             0,
-                          ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
+                          ) + (() => {
+                            if (group.type === "product" || group.type === "intermediate") {
+                              const allGram = group.items.every(i => parseFloat(String(i.unit_quantity)) === -1);
+                              return allGram ? "g" : "個";
+                            }
+                            return "g";
+                          })()}
                         </td>
                         <td className="py-0 text-right font-mono">
                           {formatNumber(
@@ -3079,7 +3098,13 @@ Now Expanded or Scrollable */}
                               0,
                             ),
                             0,
-                          ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
+                          ) + (() => {
+                            if (group.type === "product" || group.type === "intermediate") {
+                              const allGram = group.items.every(i => parseFloat(String(i.unit_quantity)) === -1);
+                              return allGram ? "g" : "個";
+                            }
+                            return "g";
+                          })()}
                         </td>
                         <td className="py-0 text-right font-mono">
                           {formatNumber(
@@ -3091,7 +3116,13 @@ Now Expanded or Scrollable */}
                               0,
                             ),
                             0,
-                          ) + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
+                          ) + (() => {
+                            if (group.type === "product" || group.type === "intermediate") {
+                              const allGram = group.items.every(i => parseFloat(String(i.unit_quantity)) === -1);
+                              return allGram ? "g" : "個";
+                            }
+                            return "g";
+                          })()}
                         </td>
                       </tr>
                     </tfoot>
