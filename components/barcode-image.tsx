@@ -60,8 +60,8 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
         const barWidth = 2 * scale;
         const barHeight = 70 * scale;
         const quietZone = 10 * scale;
-        const textHeight = 14 * scale;
-        const fontSize = 12 * scale;
+        const textHeight = 22 * scale;
+        const fontSize = 18 * scale;
 
         const encoded = encodeEAN13(code);
         if (encoded.length === 0) return;
@@ -137,14 +137,14 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
         const barWidth = 2;  // points (1pt = 1/72 inch)
         const barHeight = 70;
         const quietZone = 10;
-        const fontSize = 10;
+        const fontSize = 14;
 
         const encoded = encodeEAN13(code);
         if (encoded.length === 0) return;
 
         const binaryStr = encoded.join("");
         const totalWidth = binaryStr.length * barWidth + quietZone * 2;
-        const textHeight = fontSize + 6;
+        const textHeight = fontSize + 8;
         const totalHeight = barHeight + textHeight;
 
         // EPS header
@@ -208,7 +208,7 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
         <div className="flex flex-col items-center gap-1">
             <canvas
                 ref={setCanvasRef}
-                className="max-h-[48px]"
+                className="max-h-[60px]"
                 style={{ imageRendering: "pixelated" }}
             />
             <div className="flex gap-1">
