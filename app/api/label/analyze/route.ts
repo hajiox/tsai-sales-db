@@ -99,7 +99,7 @@ ${JSON.stringify(existingNames)}
    - manufacturer: メーカー名（表面に記載がある場合）
 
 2. **原材料表示（ingredients_label）から抽出する情報**:
-   - raw_materials: 原材料名の全文（「/」以降の添加物も含めてそのまま転記）
+   - raw_materials: 原材料名の全文をラベルの記載通りに完全転記
    - allergens: アレルギー表示（「一部に○○を含む」など）
    - origin: 原産国・産地情報
    - manufacturer: 製造者・販売者の名称と住所
@@ -118,11 +118,14 @@ ${JSON.stringify(existingNames)}
 - 名称の揺らぎ（略称、メーカー名の有無、容量違い等）も考慮してください
 - 完全一致がなくても、部分一致や類似名があれば候補に含めてください
 
-【重要な注意事項】
+【重要な注意事項 — 必ず遵守】
+- **原材料表示(raw_materials)は、ラベルに印刷されている文字を一字一句そのまま転記してください**
+- **特に「/」（スラッシュ）は絶対に削除しないでください。** 食品表示法では添加物と原材料の区切りに「/」を使用しており、法的に重要な記号です
+- 「（）」「、」「/」「・」等の記号・句読点もラベル通りにそのまま残してください
+- 改行はスペースまたはそのまま改行で繋げてください（削除しない）
 - 画像が不鮮明な場合でも、文脈から推測して最善の結果を返してください
 - 読み取れない項目は null としてください
 - 栄養成分の数値は全て数値型で返してください（単位は含めない）
-- 原材料表示は省略せず、ラベルに記載されている通りに全文を転記してください
 
 【出力形式】
 以下の形式の純粋なJSON（1つのオブジェクト）のみで返してください。
@@ -131,9 +134,9 @@ ${JSON.stringify(existingNames)}
     "name": "商品名（ラベルから読み取った正式名称）",
     "product_description": "商品説明",
     "unit_quantity": 1000,
-    "raw_materials": "原材料名の全文",
-    "allergens": "アレルギー表示",
-    "origin": "原産国",
+    "raw_materials": "小麦粉(国内製造)、食塩、かんすい/加工デンプン、酸味料、クチナシ色素、(一部に小麦を含む)",
+    "allergens": "小麦",
+    "origin": "日本",
     "manufacturer": "製造者情報",
     "nutrition_per": "100gあたり",
     "calories": 350,
@@ -154,6 +157,7 @@ ${JSON.stringify(existingNames)}
 
 candidatesは該当なしの場合は空配列[]としてください。
 `;
+
 
         const result = await model.generateContent([prompt, ...imageParts]);
         const response = await result.response;
