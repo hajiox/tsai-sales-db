@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database } from "lucide-react";
+import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database, ClipboardCopy } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -92,6 +92,7 @@ interface Recipe {
   web_description?: string | null;
   product_points?: string | null;
   ec_product_name?: string | null;
+  catchcopy?: string | null;
 }
 
 interface RecipeItem {
@@ -930,6 +931,7 @@ function RecipeDetailContent() {
             web_description: recipe.web_description,
             product_points: recipe.product_points,
             ec_product_name: recipe.ec_product_name,
+            catchcopy: recipe.catchcopy,
           },
         }),
       });
@@ -3380,9 +3382,15 @@ Now Expanded or Scrollable */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm font-semibold text-gray-700">🏷️ EC用商品名</label>
-                  <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${(recipe.ec_product_name || '').length > 75 ? 'bg-red-100 text-red-600 font-bold' : (recipe.ec_product_name || '').length > 60 ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
-                    {(recipe.ec_product_name || '').length} / 75文字
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${(recipe.ec_product_name || '').length > 75 ? 'bg-red-100 text-red-600 font-bold' : (recipe.ec_product_name || '').length > 60 ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
+                      {(recipe.ec_product_name || '').length} / 75文字
+                    </span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(recipe.ec_product_name || ''); toast.success('EC用商品名をコピーしました'); }}
+                      className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="コピー"
+                    ><ClipboardCopy className="w-3.5 h-3.5" /></button>
+                  </div>
                 </div>
                 <input
                   type="text"
@@ -3399,9 +3407,37 @@ Now Expanded or Scrollable */}
                   <p className="text-xs text-amber-500 mt-1">残り{75 - (recipe.ec_product_name || '').length}文字</p>
                 )}
               </div>
+              {/* キャッチコピー（楽天・Yahoo用） */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    ✨ キャッチコピー <span className="text-xs font-normal text-amber-500">※楽天・Yahooのみ</span>
+                  </label>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(recipe.catchcopy || ''); toast.success('キャッチコピーをコピーしました'); }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="コピー"
+                  ><ClipboardCopy className="w-3.5 h-3.5" /></button>
+                </div>
+                <input
+                  type="text"
+                  value={recipe.catchcopy || ''}
+                  onChange={(e) => {
+                    setRecipe(prev => prev ? { ...prev, catchcopy: e.target.value } : null);
+                    setHasChanges(true);
+                  }}
+                  placeholder="商品のキャッチコピーを入力（楽天・Yahoo掲載用）"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
               {/* 商品ポイント — 2カラム横並び */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">商品ポイント</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-semibold text-gray-700">商品ポイント</label>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(recipe.product_points || ''); toast.success('商品ポイントをコピーしました'); }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="コピー"
+                  ><ClipboardCopy className="w-3.5 h-3.5" /></button>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   {/* 左: 編集用（■マーカー） */}
                   <div>
@@ -3420,7 +3456,13 @@ Now Expanded or Scrollable */}
                   </div>
                   {/* 右: 自動プレビュー（■→✅️） */}
                   <div>
-                    <div className="text-xs text-gray-400 mb-1 font-medium">👁️ プレビュー（✅️版・自動生成）</div>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-xs text-gray-400 font-medium">👁️ プレビュー（✅️版・自動生成）</div>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText((recipe.product_points || '').replace(/■/g, '✅️')); toast.success('✅️版をコピーしました'); }}
+                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="✅️版をコピー"
+                      ><ClipboardCopy className="w-3.5 h-3.5" /></button>
+                    </div>
                     <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm whitespace-pre-wrap min-h-[120px] text-gray-700 leading-relaxed">
                       {(recipe.product_points || '').replace(/■/g, '✅️') || <span className="text-gray-300">左の入力が自動反映されます</span>}
                     </div>
@@ -3429,7 +3471,13 @@ Now Expanded or Scrollable */}
               </div>
               {/* Web商品説明 */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Web商品説明</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-semibold text-gray-700">Web商品説明</label>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(recipe.web_description || ''); toast.success('Web商品説明をコピーしました'); }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="コピー"
+                  ><ClipboardCopy className="w-3.5 h-3.5" /></button>
+                </div>
                 <textarea
                   value={recipe.web_description || ''}
                   onChange={(e) => {
