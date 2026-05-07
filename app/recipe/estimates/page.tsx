@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, X, Plus, RefreshCw, FileText, ChevronDown, ChevronRight, Search, Sparkles, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, X, Plus, RefreshCw, FileText, ChevronDown, ChevronRight, Search, Sparkles, Undo2, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -239,6 +239,8 @@ export default function EstimatesPage() {
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [selectedIngredient, setSelectedIngredient] = useState<Record<string, string>>({});
     const [aiMatching, setAiMatching] = useState(false);
+    const [impactData, setImpactData] = useState<Record<string, any>>({});
+    const [impactLoading, setImpactLoading] = useState<Record<string, boolean>>({});
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -307,6 +309,34 @@ export default function EstimatesPage() {
             }
         } catch (e: any) { toast.error(e.message); }
         setAiMatching(false);
+    };
+
+    // 影響プレビュー取得
+    const fetchImpact = async (itemId: string, ingredientId: string, item: PendingEstimateItem) => {
+        if (!ingredientId) {
+            setImpactData(prev => { const next = { ...prev }; delete next[itemId]; return next; });
+            return;
+        }
+        setImpactLoading(prev => ({ ...prev, [itemId]: true }));
+        try {
+            const selectedIng = ingredients.find(i => i.id === ingredientId);
+            const targetTable = selectedIng?.type === "material" ? "material" : "ingredient";
+            // 税込価格を計算（見積書は税別）
+            const taxRate = item.tax_rate || 0.1;
+            const newPriceTaxIncl = item.unit_price != null
+                ? Math.round(item.unit_price * (1 + taxRate) * 100) / 100
+                : 0;
+            const res = await fetch(
+                `/api/recipe/estimates/impact?ingredientId=${ingredientId}&newPrice=${newPriceTaxIncl}&targetTable=${targetTable}`
+            );
+            if (res.ok) {
+                const data = await res.json();
+                setImpactData(prev => ({ ...prev, [itemId]: data }));
+            }
+        } catch (e) {
+            console.error("Impact fetch error:", e);
+        }
+        setImpactLoading(prev => ({ ...prev, [itemId]: false }));
     };
 
     const handleUpdatePrice = async (item: PendingEstimateItem, ingredientId: string) => {
@@ -635,8 +665,49 @@ export default function EstimatesPage() {
                                                                 matchedName={item.matched_ingredient_name}
                                                                 ingredients={ingredients}
                                                                 selectedId={selectedIngredient[item.id]}
-                                                                onSelect={(id) => setSelectedIngredient(p => ({ ...p, [item.id]: id }))}
+                                                                onSelect={(id) => {
+                                                                    setSelectedIngredient(p => ({ ...p, [item.id]: id }));
+                                                                    fetchImpact(item.id, id, item);
+                                                                }}
                                                             />
+                                                        )}
+
+                                                        {/* 影響プレビュー */}
+                                                        {selectedIngredient[item.id] && impactData[item.id] && (
+                                                            <div className="mt-2 border border-amber-200 rounded-lg bg-amber-50/50 px-3 py-2">
+                                                                <div className="flex items-center gap-1.5 mb-1.5">
+                                                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                                                                    <span className="text-xs font-semibold text-amber-700">影響プレビュー</span>
+                                                                    <span className="text-[10px] text-amber-500">
+                                                                        {impactData[item.id].ingredientName}: ¥{impactData[item.id].currentPrice?.toLocaleString()} → ¥{impactData[item.id].newPrice?.toLocaleString()}
+                                                                        <span className={`ml-1 font-bold ${impactData[item.id].priceDiff > 0 ? 'text-red-500' : impactData[item.id].priceDiff < 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                                                            ({impactData[item.id].priceDiff > 0 ? '+' : ''}{impactData[item.id].priceDiff?.toLocaleString()}円)
+                                                                        </span>
+                                                                    </span>
+                                                                </div>
+                                                                {impactData[item.id].affectedRecipes?.length === 0 ? (
+                                                                    <div className="text-[10px] text-gray-400">この材料を使用しているレシピはありません</div>
+                                                                ) : (
+                                                                    <div className="space-y-0.5">
+                                                                        {impactData[item.id].affectedRecipes?.map((r: any) => (
+                                                                            <div key={r.recipeId} className="flex items-center justify-between text-[11px] py-0.5">
+                                                                                <span className="text-gray-700 truncate max-w-[280px]" title={r.recipeName}>
+                                                                                    {r.isIntermediate ? '🔧' : '📦'} {r.recipeName}
+                                                                                </span>
+                                                                                <span className={`font-mono font-bold shrink-0 ml-2 ${r.costDiff > 0 ? 'text-red-600' : r.costDiff < 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                                                                    {r.costDiff > 0 ? '+' : ''}{r.costDiff?.toLocaleString()}円
+                                                                                    <span className="text-[9px] font-normal text-gray-400 ml-1">
+                                                                                        (¥{r.currentCostFromItem?.toLocaleString()} → ¥{r.newCostFromItem?.toLocaleString()})
+                                                                                    </span>
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {selectedIngredient[item.id] && impactLoading[item.id] && (
+                                                            <div className="mt-2 text-[10px] text-gray-400 animate-pulse">影響レシピを分析中...</div>
                                                         )}
 
                                                         {/* 適用済み/スキップ済み表示 */}
