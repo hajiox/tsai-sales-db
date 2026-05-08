@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRef, useCallback } from "react";
 import { toast } from "sonner";
@@ -26,27 +26,37 @@ function encodeEAN13(code: string): string[] {
     const digits = code.split("").map(Number);
     const parity = PARITY_PATTERNS[digits[0]];
     const bars: string[] = [];
-    // Start guard
     bars.push("101");
-    // Left 6 digits
     for (let i = 0; i < 6; i++) {
         const d = digits[i + 1];
         bars.push(parity[i] === "L" ? L_PATTERNS[d] : G_PATTERNS[d]);
     }
-    // Center guard
     bars.push("01010");
-    // Right 6 digits
     for (let i = 0; i < 6; i++) {
         bars.push(R_PATTERNS[digits[i + 7]]);
     }
-    // End guard
     bars.push("101");
     return bars;
 }
 
+// ガードバー判定：EAN-13の固定ビット位置
+// start guard  : bits  0 -  2  (3 bits: "101")
+// center guard : bits 45 - 49  (5 bits: "01010") = 3 + 6x7
+// end guard    : bits 92 - 94  (3 bits: "101")   = 45 + 5 + 6x7
+const GUARD_CENTER_START = 3 + 6 * 7;            // 45
+const GUARD_CENTER_END   = GUARD_CENTER_START + 4; // 49
+const GUARD_END_START    = GUARD_CENTER_END + 1 + 6 * 7; // 92
+const GUARD_END_END      = GUARD_END_START + 2;   // 94
+
+function isGuardBit(i: number): boolean {
+    return (i >= 0 && i <= 2) ||
+           (i >= GUARD_CENTER_START && i <= GUARD_CENTER_END) ||
+           (i >= GUARD_END_START    && i <= GUARD_END_END);
+}
+
 interface BarcodeImageProps {
     code: string;
-    scale?: number; // multiplier for print quality (default 4 = ~600dpi print quality)
+    scale?: number;
 }
 
 export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
@@ -57,55 +67,64 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        const barWidth = 2 * scale;
-        const barHeight = 70 * scale;
-        const quietZone = 10 * scale;
-        const textHeight = 22 * scale;
-        const fontSize = 18 * scale;
+        const barWidth    = 2 * scale;
+        const barHeight   = 70 * scale;      // 通常バーの高さ
+        const guardExtra  = 10 * scale;      // ガードバーが下に突き出す追加分
+        const guardHeight = barHeight + guardExtra;
+        const quietZone   = 10 * scale;
+        const fontSize    = 12 * scale;
+        const textPad     = 2 * scale;
 
         const encoded = encodeEAN13(code);
         if (encoded.length === 0) return;
 
-        // Calculate total width
         const binaryStr = encoded.join("");
-        const totalBars = binaryStr.length;
-        const width = totalBars * barWidth + quietZone * 2;
-        const height = barHeight + textHeight + 4 * scale;
 
-        canvas.width = width;
-        canvas.height = height;
+        // 先頭1桁のための左側スペース
+        const firstDigitWidth = fontSize * 1.0;
+        const totalWidth  = quietZone + firstDigitWidth + binaryStr.length * barWidth + quietZone;
+        const totalHeight = guardHeight + textPad + fontSize + 4 * scale;
 
-        // Transparent background
-        ctx.clearRect(0, 0, width, height);
+        canvas.width  = totalWidth;
+        canvas.height = totalHeight;
 
-        // Draw bars
-        let x = quietZone;
+        // 白背景
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, totalWidth, totalHeight);
+
+        // バー描画（ガードバーは guardHeight、通常バーは barHeight）
+        const barsOriginX = quietZone + firstDigitWidth;
+        let x = barsOriginX;
         for (let i = 0; i < binaryStr.length; i++) {
+            const h = isGuardBit(i) ? guardHeight : barHeight;
             if (binaryStr[i] === "1") {
                 ctx.fillStyle = "#000000";
-                ctx.fillRect(x, 0, barWidth, barHeight);
+                ctx.fillRect(x, 0, barWidth, h);
             }
             x += barWidth;
         }
 
-        // Draw text below bars
-        ctx.fillStyle = "#000000";
-        ctx.font = `bold ${fontSize}px 'Courier New', monospace`;
-        ctx.textAlign = "center";
+        // テキスト描画（ガードバー延長部の下に揃える）
+        ctx.fillStyle    = "#000000";
         ctx.textBaseline = "top";
+        const textY = guardHeight + textPad;
+        ctx.font = `${fontSize}px 'Courier New', monospace`;
 
-        // First digit (left of start guard)
-        ctx.fillText(code[0], quietZone - fontSize * 0.5, barHeight + 2 * scale);
+        // 先頭1桁: start guard の左外側
+        ctx.textAlign = "right";
+        ctx.fillText(code[0], barsOriginX - 1 * scale, textY);
 
-        // Left group (digits 1-6)
-        const leftStart = quietZone + 3 * barWidth; // after start guard
-        const leftGroupWidth = 6 * 7 * barWidth;
-        ctx.fillText(code.substring(1, 7), leftStart + leftGroupWidth / 2, barHeight + 2 * scale);
+        // 左グループ (digits 1-6): start guard(3bits) 直後 〜 center guard 直前
+        const leftGroupXStart = barsOriginX + 3 * barWidth;
+        const leftGroupXEnd   = barsOriginX + (3 + 6 * 7) * barWidth;
+        ctx.textAlign = "center";
+        ctx.fillText(code.substring(1, 7), (leftGroupXStart + leftGroupXEnd) / 2, textY);
 
-        // Right group (digits 7-12 + check digit)
-        const rightStart = leftStart + leftGroupWidth + 5 * barWidth; // after center guard
-        const rightGroupWidth = 6 * 7 * barWidth;
-        ctx.fillText(code.substring(7), rightStart + rightGroupWidth / 2, barHeight + 2 * scale);
+        // 右グループ (digits 7-12): center guard(5bits) 直後 〜 end guard 直前
+        const rightGroupXStart = barsOriginX + (3 + 6 * 7 + 5) * barWidth;
+        const rightGroupXEnd   = barsOriginX + (3 + 6 * 7 + 5 + 6 * 7) * barWidth;
+        ctx.fillText(code.substring(7), (rightGroupXStart + rightGroupXEnd) / 2, textY);
+
     }, [code, scale]);
 
     const setCanvasRef = useCallback((node: HTMLCanvasElement | null) => {
@@ -134,68 +153,67 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
     const downloadEPS = () => {
         if (code.length !== 13) return;
 
-        const barWidth = 2;  // points (1pt = 1/72 inch)
+        const barWidth  = 2;   // points
         const barHeight = 70;
+        const guardExtra = 10; // ガードバー延長分
+        const guardBarH = barHeight + guardExtra;
         const quietZone = 10;
-        const fontSize = 14;
+        const fontSize  = 14;
+        const textHeight = fontSize + 8;
 
         const encoded = encodeEAN13(code);
         if (encoded.length === 0) return;
 
         const binaryStr = encoded.join("");
-        const totalWidth = binaryStr.length * barWidth + quietZone * 2;
-        const textHeight = fontSize + 8;
-        const totalHeight = barHeight + textHeight;
+        const firstDigitWidth = fontSize;
+        const totalWidth  = quietZone + firstDigitWidth + binaryStr.length * barWidth + quietZone;
+        const totalHeight = guardBarH + textHeight;
 
-        // EPS header
         let eps = `%!PS-Adobe-3.0 EPSF-3.0\n`;
         eps += `%%BoundingBox: 0 0 ${totalWidth} ${totalHeight}\n`;
         eps += `%%Title: Barcode ${code}\n`;
         eps += `%%Creator: TSA Barcode Generator\n`;
         eps += `%%EndComments\n\n`;
+        eps += `/rf { /h exch def /w exch def /y exch def /x exch def newpath x y moveto w 0 rlineto 0 h rlineto w neg 0 rlineto closepath fill } def\n\n`;
 
-        // Draw bars (PostScript origin is bottom-left, Y goes up)
-        let x = quietZone;
+        // バー描画（PostScriptはY軸が下から上）
+        let x = quietZone + firstDigitWidth;
         for (let i = 0; i < binaryStr.length; i++) {
             if (binaryStr[i] === "1") {
-                eps += `${x} ${textHeight} ${barWidth} ${barHeight} rectfill\n`;
+                const h = isGuardBit(i) ? guardBarH : barHeight;
+                const yBase = textHeight; // テキスト領域の上からバー開始
+                eps += `${x} ${yBase} ${barWidth} ${h} rf\n`;
             }
             x += barWidth;
         }
 
-        // rectfill procedure
-        eps = eps.replace(`%%EndComments\n\n`,
-            `%%EndComments\n\n/rectfill { /h exch def /w exch def /y exch def /x exch def newpath x y moveto w 0 rlineto 0 h rlineto w neg 0 rlineto closepath fill } def\n\n`
-        );
+        // テキスト描画
+        eps += `\n/Courier findfont ${fontSize} scalefont setfont\n`;
 
-        // Draw text
-        eps += `\n/Courier-Bold findfont ${fontSize} scalefont setfont\n`;
+        // 先頭1桁
+        const d0x = quietZone + firstDigitWidth - fontSize * 0.8;
+        eps += `${d0x} 0 moveto (${code[0]}) show\n`;
 
-        // First digit
-        const firstDigitX = quietZone - fontSize * 0.6;
-        eps += `${firstDigitX} 0 moveto (${code[0]}) show\n`;
-
-        // Left group
-        const leftStart = quietZone + 3 * barWidth;
+        // 左グループ
+        const leftStart      = quietZone + firstDigitWidth + 3 * barWidth;
         const leftGroupWidth = 6 * 7 * barWidth;
-        const leftGroupCenter = leftStart + leftGroupWidth / 2;
-        const leftText = code.substring(1, 7);
-        eps += `(${leftText}) stringwidth pop 2 div neg ${leftGroupCenter} add 0 moveto (${leftText}) show\n`;
+        const leftCenter     = leftStart + leftGroupWidth / 2;
+        const leftText       = code.substring(1, 7);
+        eps += `(${leftText}) stringwidth pop 2 div neg ${leftCenter} add 0 moveto (${leftText}) show\n`;
 
-        // Right group
-        const rightStart = leftStart + leftGroupWidth + 5 * barWidth;
+        // 右グループ
+        const rightStart      = leftStart + leftGroupWidth + 5 * barWidth;
         const rightGroupWidth = 6 * 7 * barWidth;
-        const rightGroupCenter = rightStart + rightGroupWidth / 2;
-        const rightText = code.substring(7);
-        eps += `(${rightText}) stringwidth pop 2 div neg ${rightGroupCenter} add 0 moveto (${rightText}) show\n`;
+        const rightCenter     = rightStart + rightGroupWidth / 2;
+        const rightText       = code.substring(7);
+        eps += `(${rightText}) stringwidth pop 2 div neg ${rightCenter} add 0 moveto (${rightText}) show\n`;
 
         eps += `\n%%EOF\n`;
 
-        // Download
         const blob = new Blob([eps], { type: "application/postscript" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
         a.download = `barcode_${code}.eps`;
         a.click();
         URL.revokeObjectURL(url);
