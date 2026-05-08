@@ -39,21 +39,6 @@ function encodeEAN13(code: string): string[] {
     return bars;
 }
 
-// ガードバー判定（EAN-13固定ビット位置）
-// start guard  : bits  0 -  2  (3 bits: "101")
-// center guard : bits 45 - 49  (5 bits: "01010") = 3 + 6x7
-// end guard    : bits 92 - 94  (3 bits: "101")   = 45 + 5 + 6x7
-const GUARD_CENTER_START = 3 + 6 * 7;
-const GUARD_CENTER_END   = GUARD_CENTER_START + 4;
-const GUARD_END_START    = GUARD_CENTER_END + 1 + 6 * 7;
-const GUARD_END_END      = GUARD_END_START + 2;
-
-function isGuardBit(i: number): boolean {
-    return (i >= 0 && i <= 2) ||
-           (i >= GUARD_CENTER_START && i <= GUARD_CENTER_END) ||
-           (i >= GUARD_END_START    && i <= GUARD_END_END);
-}
-
 interface BarcodeImageProps {
     code: string;
     scale?: number;
@@ -67,24 +52,22 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        const barWidth    = 2 * scale;
-        const barHeight   = 70 * scale;
-        const guardExtra  = 10 * scale;      // ガードバーが下に突き出す追加分
-        const guardHeight = barHeight + guardExtra;
-        const quietZone   = 10 * scale;
-        const fontSize    = 18 * scale;      // 元の大きいフォントサイズ
-        const textPad     = 2 * scale;
+        const barWidth  = 2 * scale;
+        const barHeight = 70 * scale;   // 全バー同じ高さ（ガードバー突き出しなし）
+        const quietZone = 8 * scale;
+        const fontSize  = 18 * scale;
+        const textPad   = 0;            // バーと数字の隙間なし（密着）
 
         const encoded = encodeEAN13(code);
         if (encoded.length === 0) return;
 
         const binaryStr = encoded.join("");
 
-        // 左余白: 先頭1桁が収まるだけの幅（余分なスペースなし）
-        const leftQuiet = Math.max(quietZone, Math.ceil(fontSize * 0.75));
+        // 左余白: 先頭1桁が収まる最小幅
+        const leftQuiet = Math.max(quietZone, Math.ceil(fontSize * 0.7));
 
         const totalWidth  = leftQuiet + binaryStr.length * barWidth + quietZone;
-        const totalHeight = guardHeight + textPad + fontSize + 4 * scale;
+        const totalHeight = barHeight + textPad + fontSize + 2 * scale;
 
         canvas.width  = totalWidth;
         canvas.height = totalHeight;
@@ -93,35 +76,34 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, totalWidth, totalHeight);
 
-        // バー描画（ガードバーは guardHeight、通常バーは barHeight）
+        // バー描画（全バー同じ高さ）
         const barsOriginX = leftQuiet;
         let x = barsOriginX;
         for (let i = 0; i < binaryStr.length; i++) {
-            const h = isGuardBit(i) ? guardHeight : barHeight;
             if (binaryStr[i] === "1") {
                 ctx.fillStyle = "#000000";
-                ctx.fillRect(x, 0, barWidth, h);
+                ctx.fillRect(x, 0, barWidth, barHeight);
             }
             x += barWidth;
         }
 
-        // テキスト描画（ガードバー延長部の下に揃える）
+        // テキスト描画（バー直下）
         ctx.fillStyle    = "#000000";
         ctx.textBaseline = "top";
-        const textY = guardHeight + textPad;
+        const textY = barHeight + textPad;
         ctx.font = `${fontSize}px 'Courier New', monospace`;
 
-        // 先頭1桁: start guard の左外側（右揃え）
+        // 先頭1桁: start guard の左外側
         ctx.textAlign = "right";
         ctx.fillText(code[0], barsOriginX - 2 * scale, textY);
 
-        // 左グループ (digits 1-6): start guard 直後 〜 center guard 直前
+        // 左グループ (digits 1-6)
         const leftGroupXStart = barsOriginX + 3 * barWidth;
         const leftGroupXEnd   = barsOriginX + (3 + 6 * 7) * barWidth;
         ctx.textAlign = "center";
         ctx.fillText(code.substring(1, 7), (leftGroupXStart + leftGroupXEnd) / 2, textY);
 
-        // 右グループ (digits 7-12): center guard 直後 〜 end guard 直前
+        // 右グループ (digits 7-12)
         const rightGroupXStart = barsOriginX + (3 + 6 * 7 + 5) * barWidth;
         const rightGroupXEnd   = barsOriginX + (3 + 6 * 7 + 5 + 6 * 7) * barWidth;
         ctx.fillText(code.substring(7), (rightGroupXStart + rightGroupXEnd) / 2, textY);
@@ -156,19 +138,17 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
 
         const barWidth   = 2;
         const barHeight  = 70;
-        const guardExtra = 10;
-        const guardBarH  = barHeight + guardExtra;
-        const quietZone  = 10;
+        const quietZone  = 8;
         const fontSize   = 14;
-        const textHeight = fontSize + 8;
+        const textHeight = fontSize + 4;
 
         const encoded = encodeEAN13(code);
         if (encoded.length === 0) return;
 
-        const binaryStr     = encoded.join("");
-        const leftQuiet     = Math.max(quietZone, Math.ceil(fontSize * 0.75));
-        const totalWidth    = leftQuiet + binaryStr.length * barWidth + quietZone;
-        const totalHeight   = guardBarH + textHeight;
+        const binaryStr  = encoded.join("");
+        const leftQuiet  = Math.max(quietZone, Math.ceil(fontSize * 0.7));
+        const totalWidth = leftQuiet + binaryStr.length * barWidth + quietZone;
+        const totalHeight = barHeight + textHeight;
 
         let eps = `%!PS-Adobe-3.0 EPSF-3.0\n`;
         eps += `%%BoundingBox: 0 0 ${totalWidth} ${totalHeight}\n`;
@@ -180,8 +160,7 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
         let x = leftQuiet;
         for (let i = 0; i < binaryStr.length; i++) {
             if (binaryStr[i] === "1") {
-                const h = isGuardBit(i) ? guardBarH : barHeight;
-                eps += `${x} ${textHeight} ${barWidth} ${h} rf\n`;
+                eps += `${x} ${textHeight} ${barWidth} ${barHeight} rf\n`;
             }
             x += barWidth;
         }
