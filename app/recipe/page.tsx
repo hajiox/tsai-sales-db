@@ -56,6 +56,7 @@ interface Recipe {
 }
 
 type TabType = "all" | "ネット専用" | "自社" | "OEM" | "中間部品" | "試作" | "終売";
+type LinkType = "web" | "wholesale" | "oem";
 
 export default function RecipePage() {
     const router = useRouter();
@@ -81,6 +82,7 @@ export default function RecipePage() {
     const [linkedProductNames, setLinkedProductNames] = useState<Record<string, string>>({});
     const [webProducts, setWebProducts] = useState<{id: string; name: string; price: number | null}[]>([]);
     const [wholesaleProducts, setWholesaleProducts] = useState<{id: string; name: string; price: number | null}[]>([]);
+    const [oemProducts, setOemProducts] = useState<{id: string; name: string; price: number | null}[]>([]);
     const [linkingId, setLinkingId] = useState<string | null>(null);
 
     // シリーズ選択モーダル用
@@ -157,9 +159,10 @@ export default function RecipePage() {
 
     const fetchLinkableProducts = async () => {
         try {
-            const [webRes, wholesaleRes] = await Promise.all([
+            const [webRes, wholesaleRes, oemRes] = await Promise.all([
                 fetch('/api/recipe/sync-product'),
                 fetch('/api/recipe/sync-wholesale'),
+                fetch('/api/recipe/sync-oem'),
             ]);
             if (webRes.ok) {
                 const data = await webRes.json();
@@ -169,11 +172,21 @@ export default function RecipePage() {
                 const data = await wholesaleRes.json();
                 setWholesaleProducts(data.products || []);
             }
+            if (oemRes.ok) {
+                const data = await oemRes.json();
+                setOemProducts(data.products || []);
+            }
         } catch (e) { console.error(e); }
     };
 
-    const handleInlineLink = async (recipeId: string, type: 'web' | 'wholesale', productId: string) => {
-        const endpoint = type === 'web' ? '/api/recipe/sync-product' : '/api/recipe/sync-wholesale';
+    const getLinkEndpoint = (type: LinkType) => {
+        if (type === 'web') return '/api/recipe/sync-product';
+        if (type === 'oem') return '/api/recipe/sync-oem';
+        return '/api/recipe/sync-wholesale';
+    };
+
+    const handleInlineLink = async (recipeId: string, type: LinkType, productId: string) => {
+        const endpoint = getLinkEndpoint(type);
         try {
             setLinkingId(recipeId + type);
             const res = await fetch(endpoint, {
@@ -276,9 +289,9 @@ export default function RecipePage() {
         finally { setLinkingId(null); }
     };
 
-    const handleInlineUnlink = async (recipeId: string, type: 'web' | 'wholesale') => {
+    const handleInlineUnlink = async (recipeId: string, type: LinkType) => {
         if (!confirm('紐付けを解除しますか？')) return;
-        const endpoint = type === 'web' ? '/api/recipe/sync-product' : '/api/recipe/sync-wholesale';
+        const endpoint = getLinkEndpoint(type);
         try {
             const res = await fetch(endpoint, {
                 method: 'POST',
@@ -726,7 +739,7 @@ export default function RecipePage() {
                             <TableHead>カテゴリ</TableHead>
                             {activeTab !== "中間部品" && <TableHead className="text-right">販売価格</TableHead>}
                             <TableHead className="text-right">原価</TableHead>
-                            {activeTab !== "中間部品" && <TableHead className="text-right w-[80px]">{activeTab === "自社" ? "利益率（７掛）" : "利益率"}</TableHead>}
+                            {activeTab !== "中間部品" && <TableHead className="text-right w-[80px]">{activeTab === "自社" || activeTab === "OEM" ? "利益率（７掛）" : "利益率"}</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -815,7 +828,7 @@ export default function RecipePage() {
                                                 >
                                                     <Link2 className="h-3 w-3" />WEB
                                                 </span>
-                                            ) : recipe.category !== '中間部品' && recipe.category !== '終売' && (
+                                            ) : recipe.category === 'ネット専用' && (
                                                 <span className="flex-shrink-0 inline-flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         className="h-5 text-[10px] border border-blue-200 rounded bg-blue-50/50 text-blue-600 pl-1 pr-0.5 cursor-pointer appearance-auto max-w-[90px]"
@@ -847,7 +860,7 @@ export default function RecipePage() {
                                                 >
                                                     <Link2 className="h-3 w-3" />卸
                                                 </span>
-                                            ) : recipe.category !== '中間部品' && recipe.category !== '終売' && recipe.category !== 'OEM' && (
+                                            ) : recipe.category === '自社' && (
                                                 <span className="flex-shrink-0 inline-flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         className="h-5 text-[10px] border border-green-200 rounded bg-green-50/50 text-green-600 pl-1 pr-0.5 cursor-pointer appearance-auto max-w-[80px]"
@@ -870,12 +883,32 @@ export default function RecipePage() {
                                                     </select>
                                                 </span>
                                             )}
-                                            {recipe.linked_oem_product_id && (
+                                            {recipe.linked_oem_product_id ? (
                                                 <span
-                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-medium cursor-help"
-                                                    title="OEM紐付済"
+                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-medium cursor-pointer hover:bg-purple-200 transition"
+                                                    title={`OEM卸販売紐付済: ${oemProducts.find(p => p.id === recipe.linked_oem_product_id)?.name || '取得中...'} (クリックで解除)`}
+                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'oem'); }}
                                                 >
                                                     <Link2 className="h-3 w-3" />OEM
+                                                </span>
+                                            ) : recipe.category === 'OEM' && (
+                                                <span className="flex-shrink-0 inline-flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                                                    <select
+                                                        className="h-5 text-[10px] border border-purple-200 rounded bg-purple-50/50 text-purple-600 pl-1 pr-0.5 cursor-pointer appearance-auto max-w-[80px]"
+                                                        defaultValue=""
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val) {
+                                                                handleInlineLink(recipe.id, 'oem', val);
+                                                            }
+                                                            e.target.value = '';
+                                                        }}
+                                                    >
+                                                        <option value="">+OEM</option>
+                                                        {oemProducts.filter(p => !recipes.some(r => r.linked_oem_product_id === p.id)).map(p => (
+                                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                                        ))}
+                                                    </select>
                                                 </span>
                                             )}
                                         </div>
@@ -922,7 +955,7 @@ export default function RecipePage() {
                                     <TableCell className="text-right">
                                         {(() => {
                                             if (!recipe.selling_price || !recipe.total_cost) return <span className="text-gray-300">-</span>;
-                                            if (activeTab === "自社") {
+                                            if (activeTab === "自社" || activeTab === "OEM") {
                                                 const wholesalePrice = Math.round(recipe.selling_price * 0.7);
                                                 const wholesaleProfit = wholesalePrice - recipe.total_cost;
                                                 const rate = wholesalePrice > 0 ? (wholesaleProfit / wholesalePrice) * 100 : 0;

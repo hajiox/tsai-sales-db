@@ -70,6 +70,8 @@ function RecipeRow({
 
     const linkedWeb = recipe.linked_product_id ? webProducts.find(p => p.id === recipe.linked_product_id) : null;
     const linkedWholesale = recipe.linked_wholesale_product_id ? wholesaleProducts.find(p => p.id === recipe.linked_wholesale_product_id) : null;
+    const canLinkWeb = recipe.category === "ネット専用";
+    const canLinkWholesale = recipe.category === "自社";
 
     return (
         <TableRow>
@@ -84,7 +86,11 @@ function RecipeRow({
             <TableCell className="text-right text-sm">{formatCurrency(recipe.selling_price)}</TableCell>
             {/* WEB販売 紐付け */}
             <TableCell>
-                {linkedWeb ? (
+                {!canLinkWeb && !linkedWeb ? (
+                    <span className="text-xs text-gray-400">
+                        {recipe.category === "OEM" ? "OEM紐付け画面で管理" : "対象外"}
+                    </span>
+                ) : linkedWeb ? (
                     <div className="flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                         <span className="text-xs text-blue-700 font-medium truncate max-w-[160px]" title={linkedWeb.name}>{linkedWeb.name}</span>
@@ -122,7 +128,11 @@ function RecipeRow({
             </TableCell>
             {/* 卸販売 紐付け */}
             <TableCell>
-                {linkedWholesale ? (
+                {!canLinkWholesale && !linkedWholesale ? (
+                    <span className="text-xs text-gray-400">
+                        {recipe.category === "OEM" ? "OEM紐付け画面で管理" : "対象外"}
+                    </span>
+                ) : linkedWholesale ? (
                     <div className="flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
                         <span className="text-xs text-green-700 font-medium truncate max-w-[160px]" title={linkedWholesale.name}>{linkedWholesale.name}</span>
@@ -304,7 +314,7 @@ export default function ProductLinkPage() {
                         商品紐付け管理
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        レシピごとにWEB販売商品・卸販売商品を手動選択、または新規作成して紐付け
+                        ネット専用レシピはWEB販売、自社レシピは卸販売に紐付けます。OEMは専用のOEM紐付け画面で管理します。
                     </p>
                 </div>
                 <div className="flex gap-2">

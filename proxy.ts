@@ -1,4 +1,4 @@
-// middleware.ts
+// proxy.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
@@ -6,7 +6,7 @@ import { getToken } from "next-auth/jwt";
 const KPI_PREFIX = "/kpi";
 const KPI_PASS_COOKIE = "kpi_pass_ok";
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const token = await getToken({ req });
   const isLoggedIn = token && token.email === "aizubrandhall@gmail.com";
   // ① まずは既存のログイン要件

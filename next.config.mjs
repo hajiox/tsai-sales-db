@@ -3,9 +3,6 @@
 const nextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ['puppeteer'],
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
