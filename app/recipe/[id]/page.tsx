@@ -1931,8 +1931,12 @@ function RecipeDetailContent() {
                             <button
                               onClick={async () => {
                                 if (!recipe) return;
-                                const { error } = await supabase.from('recipes').update({ ingredient_label: labelText || null }).eq('id', recipe.id);
-                                if (error) { toast.error('保存に失敗しました'); }
+                                const res = await fetch('/api/recipe/update', {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ recipeId: recipe.id, updates: { ingredient_label: labelText || null } }),
+                                });
+                                if (!res.ok) { toast.error('保存に失敗しました'); }
                                 else { toast.success('保存しました'); setRecipe(prev => prev ? { ...prev, ingredient_label: labelText || null } : prev); setLabelEditing(false); }
                               }}
                               className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center gap-1"
