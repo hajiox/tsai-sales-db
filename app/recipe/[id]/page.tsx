@@ -1594,7 +1594,6 @@ function RecipeDetailContent() {
                   )}
               </div>
             </div>
-          </div>
             {/* 原材料名 */}
             <div>
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">
@@ -1860,6 +1859,7 @@ function RecipeDetailContent() {
                 </div>
               </div>
             </div>
+          </div>
           {/* Right Column: Pricing & Simulation */}
           <div>
             {recipe.is_intermediate ? (
