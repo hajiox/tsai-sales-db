@@ -1332,268 +1332,6 @@ function RecipeDetailContent() {
                 )}
               </div>
             </div>
-            {/* 原材料表示（インライン） */}
-            <div className="ml-4 flex-shrink-0 w-[420px]">
-              <div className="border border-gray-200 rounded-lg bg-white shadow-sm">
-                {/* ヘッダー */}
-                <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 bg-gray-50 rounded-t-lg">
-                  <div className="flex items-center gap-1.5">
-                    <FlaskConical className="w-3 h-3 text-emerald-600" />
-                    <span className="text-[11px] font-bold text-gray-700">原材料名</span>
-                  </div>
-                </div>
-                {/* タブ切替 */}
-                <div className="flex border-b border-gray-200">
-                  <button
-                    onClick={() => setLabelTab('manual')}
-                    className={`flex-1 text-[10px] font-semibold py-1.5 text-center transition-colors ${
-                      labelTab === 'manual'
-                        ? 'text-blue-700 border-b-2 border-blue-600 bg-blue-50/50'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    📝 手動入力
-                    {labelText && <span className="ml-1 text-[8px] bg-blue-100 text-blue-600 px-1 rounded-full">✓</span>}
-                  </button>
-                  <button
-                    onClick={() => setLabelTab('ai')}
-                    className={`flex-1 text-[10px] font-semibold py-1.5 text-center transition-colors ${
-                      labelTab === 'ai'
-                        ? 'text-emerald-700 border-b-2 border-emerald-600 bg-emerald-50/50'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    🤖 AI生成
-                    {aiLabelText && <span className="ml-1 text-[8px] bg-emerald-100 text-emerald-600 px-1 rounded-full">✓</span>}
-                  </button>
-                </div>
-                {/* コンテンツ */}
-                <div className="px-3 py-2">
-                  {labelTab === 'manual' ? (
-                    /* ===== 手動入力タブ ===== */
-                    <>
-                      <div className="flex items-center justify-end gap-1 mb-1.5">
-                        {!labelEditing && labelText && (
-                          <>
-                            <button
-                              onClick={async () => {
-                                if (!confirm('手動原材料を削除してもよろしいですか？')) return;
-                                if (!recipe) return;
-                                try {
-                                  const res = await fetch('/api/recipe/update', {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ recipeId: recipe.id, updates: { ingredient_label: null } }),
-                                  });
-                                  if (!res.ok) throw new Error('削除に失敗しました');
-                                  toast.success('削除しました');
-                                  setRecipe(prev => prev ? { ...prev, ingredient_label: null } : prev);
-                                  setLabelText("");
-                                } catch { toast.error('削除に失敗しました'); }
-                              }}
-                              className="text-[10px] text-red-500 hover:text-red-700 px-1 py-0.5 rounded hover:bg-red-50"
-                              title="削除"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => setLabelEditing(true)}
-                              className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
-                            >
-                              ✎ 編集
-                            </button>
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(labelText); toast.success('コピーしました'); }}
-                              className="text-[10px] text-gray-500 hover:text-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-100"
-                              title="クリップボードにコピー"
-                            >
-                              📋 コピー
-                            </button>
-                          </>
-                        )}
-                        {!labelEditing && !labelText && (
-                          <button
-                            onClick={() => setLabelEditing(true)}
-                            className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
-                          >
-                            ✎ 入力
-                          </button>
-                        )}
-                      </div>
-                      {labelEditing ? (
-                        <div className="space-y-1.5">
-                          <textarea
-                            value={labelText}
-                            onChange={(e) => setLabelText(e.target.value)}
-                            rows={5}
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-[11px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono leading-relaxed"
-                            placeholder="原材料を入力またはペースト..."
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => { setLabelEditing(false); setLabelText(recipe?.ingredient_label || ""); }}
-                              className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200"
-                            >
-                              キャンセル
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (!recipe) return;
-                                const { error } = await supabase.from('recipes').update({ ingredient_label: labelText || null }).eq('id', recipe.id);
-                                if (error) { toast.error('保存に失敗しました'); }
-                                else { toast.success('保存しました'); setRecipe(prev => prev ? { ...prev, ingredient_label: labelText || null } : prev); setLabelEditing(false); }
-                              }}
-                              className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center gap-1"
-                            >
-                              <Save className="w-3 h-3" />保存
-                            </button>
-                          </div>
-                        </div>
-                      ) : labelText ? (
-                        <div className="text-[11px] leading-relaxed text-gray-700 whitespace-pre-wrap bg-gray-50 rounded p-2 border border-gray-100">
-                          {labelText}
-                        </div>
-                      ) : (
-                        <div className="text-[11px] text-gray-400 text-center py-4 bg-gray-50 rounded border border-dashed border-gray-200">
-                          手動入力またはラベルインポートで登録
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    /* ===== AIタブ ===== */
-                    <>
-                      <div className="flex items-center justify-end gap-1 mb-1.5">
-                        {aiLabelText && (
-                          <>
-                            <button
-                              onClick={async () => {
-                                if (!confirm('AI生成ラベルを削除してもよろしいですか？')) return;
-                                if (!recipe) return;
-                                try {
-                                  const res = await fetch('/api/recipe/update', {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ recipeId: recipe.id, updates: { ai_ingredient_label: null } }),
-                                  });
-                                  if (!res.ok) throw new Error('削除に失敗しました');
-                                  toast.success('削除しました');
-                                  setRecipe(prev => prev ? { ...prev, ai_ingredient_label: null } : prev);
-                                  setAiLabelText("");
-                                  setLabelWarnings([]); setLabelMissing([]);
-                                } catch { toast.error('削除に失敗しました'); }
-                              }}
-                              className="text-[10px] text-red-500 hover:text-red-700 px-1 py-0.5 rounded hover:bg-red-50"
-                              title="削除"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (!recipe || !aiLabelText) return;
-                                const { error } = await supabase.from('recipes').update({ ingredient_label: aiLabelText }).eq('id', recipe.id);
-                                if (error) { toast.error('採用に失敗しました'); }
-                                else {
-                                  toast.success('AI生成ラベルを手動側に採用しました');
-                                  setLabelText(aiLabelText);
-                                  setRecipe(prev => prev ? { ...prev, ingredient_label: aiLabelText } : prev);
-                                  setLabelTab('manual');
-                                }
-                              }}
-                              className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50 flex items-center gap-0.5"
-                            >
-                              📋 採用
-                            </button>
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(aiLabelText); toast.success('コピーしました'); }}
-                              className="text-[10px] text-gray-500 hover:text-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-100"
-                              title="クリップボードにコピー"
-                            >
-                              📋 コピー
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={async () => {
-                            if (!recipe) return;
-                            setLabelGenerating(true);
-                            setLabelWarnings([]); setLabelMissing([]); setLabelCarryover([]);
-                            try {
-                              const res = await fetch('/api/recipe/generate-label', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ recipeId: recipe.id }),
-                              });
-                              const data = await res.json();
-                              if (data.error) { toast.error(data.error); }
-                              else {
-                                setAiLabelText(data.label || '');
-                                setRecipe(prev => prev ? { ...prev, ai_ingredient_label: data.label || null } : prev);
-                                setLabelWarnings(data.warnings || []);
-                                setLabelMissing(data.missing_info || []);
-                                setLabelCarryover(data.carryover || []);
-                                toast.success('AI原材料表示を生成しました');
-                              }
-                            } catch (err: any) { toast.error('生成に失敗しました: ' + err.message); }
-                            finally { setLabelGenerating(false); }
-                          }}
-                          disabled={labelGenerating}
-                          className="text-[10px] text-emerald-600 hover:text-emerald-800 font-medium px-1.5 py-0.5 rounded hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-0.5"
-                        >
-                          {labelGenerating ? (
-                            <><Loader2 className="w-3 h-3 animate-spin" />生成中...</>
-                          ) : (
-                            <><FlaskConical className="w-3 h-3" />{aiLabelText ? '再生成' : 'AI生成'}</>
-                          )}
-                        </button>
-                      </div>
-                      {aiLabelText ? (
-                        <div className="text-[11px] leading-relaxed text-gray-700 whitespace-pre-wrap bg-emerald-50/50 rounded p-2 border border-emerald-100">
-                          {aiLabelText}
-                        </div>
-                      ) : (
-                        <div className="text-[11px] text-gray-400 text-center py-4 bg-gray-50 rounded border border-dashed border-gray-200">
-                          「AI生成」で原材料表示を自動生成
-                        </div>
-                      )}
-                      {/* AI警告 */}
-                      {labelWarnings.length > 0 && (
-                        <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-1.5">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <AlertTriangle className="w-3 h-3 text-yellow-600" />
-                            <span className="text-[10px] font-bold text-yellow-800">注意</span>
-                          </div>
-                          <ul className="text-[10px] text-yellow-700 space-y-0.5">
-                            {labelWarnings.map((w, i) => <li key={i}>• {w}</li>)}
-                          </ul>
-                        </div>
-                      )}
-                      {labelMissing.length > 0 && (
-                        <div className="mt-2 bg-red-50 border border-red-200 rounded p-1.5">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <AlertTriangle className="w-3 h-3 text-red-600" />
-                            <span className="text-[10px] font-bold text-red-800">不足</span>
-                          </div>
-                          <ul className="text-[10px] text-red-700 space-y-0.5">
-                            {labelMissing.map((m, i) => <li key={i}>• {m}</li>)}
-                          </ul>
-                        </div>
-                      )}
-                      {labelCarryover.length > 0 && (
-                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded p-1.5">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <span className="text-[10px]">🔄</span>
-                            <span className="text-[10px] font-bold text-blue-800">キャリーオーバー省略</span>
-                          </div>
-                          <ul className="text-[10px] text-blue-700 space-y-0.5">
-                            {labelCarryover.map((c, i) => <li key={i}>• {c}</li>)}
-                          </ul>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
@@ -1857,6 +1595,271 @@ function RecipeDetailContent() {
               </div>
             </div>
           </div>
+            {/* 原材料名 */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">
+                原材料名
+              </h3>
+              <div className="border border-gray-200 rounded-lg bg-white shadow-sm">
+                {/* ヘッダー */}
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                  <div className="flex items-center gap-1.5">
+                    <FlaskConical className="w-3 h-3 text-emerald-600" />
+                    <span className="text-sm font-bold text-gray-700">原材料名</span>
+                  </div>
+                </div>
+                {/* タブ切替 */}
+                <div className="flex border-b border-gray-200">
+                  <button
+                    onClick={() => setLabelTab('manual')}
+                    className={`flex-1 text-xs font-semibold py-2.5 text-center transition-colors ${
+                      labelTab === 'manual'
+                        ? 'text-blue-700 border-b-2 border-blue-600 bg-blue-50/50'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    📝 手動入力
+                    {labelText && <span className="ml-1 text-[10px] bg-blue-100 text-blue-600 px-1 rounded-full">✓</span>}
+                  </button>
+                  <button
+                    onClick={() => setLabelTab('ai')}
+                    className={`flex-1 text-xs font-semibold py-2.5 text-center transition-colors ${
+                      labelTab === 'ai'
+                        ? 'text-emerald-700 border-b-2 border-emerald-600 bg-emerald-50/50'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    🤖 AI生成
+                    {aiLabelText && <span className="ml-1 text-[10px] bg-emerald-100 text-emerald-600 px-1 rounded-full">✓</span>}
+                  </button>
+                </div>
+                {/* コンテンツ */}
+                <div className="px-4 py-3">
+                  {labelTab === 'manual' ? (
+                    /* ===== 手動入力タブ ===== */
+                    <>
+                      <div className="flex items-center justify-end gap-1 mb-1.5">
+                        {!labelEditing && labelText && (
+                          <>
+                            <button
+                              onClick={async () => {
+                                if (!confirm('手動原材料を削除してもよろしいですか？')) return;
+                                if (!recipe) return;
+                                try {
+                                  const res = await fetch('/api/recipe/update', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ recipeId: recipe.id, updates: { ingredient_label: null } }),
+                                  });
+                                  if (!res.ok) throw new Error('削除に失敗しました');
+                                  toast.success('削除しました');
+                                  setRecipe(prev => prev ? { ...prev, ingredient_label: null } : prev);
+                                  setLabelText("");
+                                } catch { toast.error('削除に失敗しました'); }
+                              }}
+                              className="text-xs text-red-500 hover:text-red-700 px-1 py-0.5 rounded hover:bg-red-50"
+                              title="削除"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => setLabelEditing(true)}
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
+                            >
+                              ✎ 編集
+                            </button>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(labelText); toast.success('コピーしました'); }}
+                              className="text-xs text-gray-500 hover:text-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-100"
+                              title="クリップボードにコピー"
+                            >
+                              📋 コピー
+                            </button>
+                          </>
+                        )}
+                        {!labelEditing && !labelText && (
+                          <button
+                            onClick={() => setLabelEditing(true)}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
+                          >
+                            ✎ 入力
+                          </button>
+                        )}
+                      </div>
+                      {labelEditing ? (
+                        <div className="space-y-1.5">
+                          <textarea
+                            value={labelText}
+                            onChange={(e) => setLabelText(e.target.value)}
+                            rows={8}
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono leading-relaxed"
+                            placeholder="原材料を入力またはペースト..."
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => { setLabelEditing(false); setLabelText(recipe?.ingredient_label || ""); }}
+                              className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200"
+                            >
+                              キャンセル
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!recipe) return;
+                                const { error } = await supabase.from('recipes').update({ ingredient_label: labelText || null }).eq('id', recipe.id);
+                                if (error) { toast.error('保存に失敗しました'); }
+                                else { toast.success('保存しました'); setRecipe(prev => prev ? { ...prev, ingredient_label: labelText || null } : prev); setLabelEditing(false); }
+                              }}
+                              className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center gap-1"
+                            >
+                              <Save className="w-3 h-3" />保存
+                            </button>
+                          </div>
+                        </div>
+                      ) : labelText ? (
+                        <div className="text-sm leading-relaxed text-gray-700 whitespace-pre-wrap bg-gray-50 rounded p-2 border border-gray-100">
+                          {labelText}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-400 text-center py-4 bg-gray-50 rounded border border-dashed border-gray-200">
+                          手動入力またはラベルインポートで登録
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* ===== AIタブ ===== */
+                    <>
+                      <div className="flex items-center justify-end gap-1 mb-1.5">
+                        {aiLabelText && (
+                          <>
+                            <button
+                              onClick={async () => {
+                                if (!confirm('AI生成ラベルを削除してもよろしいですか？')) return;
+                                if (!recipe) return;
+                                try {
+                                  const res = await fetch('/api/recipe/update', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ recipeId: recipe.id, updates: { ai_ingredient_label: null } }),
+                                  });
+                                  if (!res.ok) throw new Error('削除に失敗しました');
+                                  toast.success('削除しました');
+                                  setRecipe(prev => prev ? { ...prev, ai_ingredient_label: null } : prev);
+                                  setAiLabelText("");
+                                  setLabelWarnings([]); setLabelMissing([]);
+                                } catch { toast.error('削除に失敗しました'); }
+                              }}
+                              className="text-xs text-red-500 hover:text-red-700 px-1 py-0.5 rounded hover:bg-red-50"
+                              title="削除"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!recipe || !aiLabelText) return;
+                                const { error } = await supabase.from('recipes').update({ ingredient_label: aiLabelText }).eq('id', recipe.id);
+                                if (error) { toast.error('採用に失敗しました'); }
+                                else {
+                                  toast.success('AI生成ラベルを手動側に採用しました');
+                                  setLabelText(aiLabelText);
+                                  setRecipe(prev => prev ? { ...prev, ingredient_label: aiLabelText } : prev);
+                                  setLabelTab('manual');
+                                }
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50 flex items-center gap-0.5"
+                            >
+                              📋 採用
+                            </button>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(aiLabelText); toast.success('コピーしました'); }}
+                              className="text-xs text-gray-500 hover:text-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-100"
+                              title="クリップボードにコピー"
+                            >
+                              📋 コピー
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (!recipe) return;
+                            setLabelGenerating(true);
+                            setLabelWarnings([]); setLabelMissing([]); setLabelCarryover([]);
+                            try {
+                              const res = await fetch('/api/recipe/generate-label', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ recipeId: recipe.id }),
+                              });
+                              const data = await res.json();
+                              if (data.error) { toast.error(data.error); }
+                              else {
+                                setAiLabelText(data.label || '');
+                                setRecipe(prev => prev ? { ...prev, ai_ingredient_label: data.label || null } : prev);
+                                setLabelWarnings(data.warnings || []);
+                                setLabelMissing(data.missing_info || []);
+                                setLabelCarryover(data.carryover || []);
+                                toast.success('AI原材料表示を生成しました');
+                              }
+                            } catch (err: any) { toast.error('生成に失敗しました: ' + err.message); }
+                            finally { setLabelGenerating(false); }
+                          }}
+                          disabled={labelGenerating}
+                          className="text-xs text-emerald-600 hover:text-emerald-800 font-medium px-1.5 py-0.5 rounded hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-0.5"
+                        >
+                          {labelGenerating ? (
+                            <><Loader2 className="w-3 h-3 animate-spin" />生成中...</>
+                          ) : (
+                            <><FlaskConical className="w-3 h-3" />{aiLabelText ? '再生成' : 'AI生成'}</>
+                          )}
+                        </button>
+                      </div>
+                      {aiLabelText ? (
+                        <div className="text-sm leading-relaxed text-gray-700 whitespace-pre-wrap bg-emerald-50/50 rounded p-2 border border-emerald-100">
+                          {aiLabelText}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-400 text-center py-4 bg-gray-50 rounded border border-dashed border-gray-200">
+                          「AI生成」で原材料表示を自動生成
+                        </div>
+                      )}
+                      {/* AI警告 */}
+                      {labelWarnings.length > 0 && (
+                        <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <AlertTriangle className="w-3 h-3 text-yellow-600" />
+                            <span className="text-xs font-bold text-yellow-800">注意</span>
+                          </div>
+                          <ul className="text-xs text-yellow-700 space-y-0.5">
+                            {labelWarnings.map((w, i) => <li key={i}>• {w}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {labelMissing.length > 0 && (
+                        <div className="mt-2 bg-red-50 border border-red-200 rounded p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <AlertTriangle className="w-3 h-3 text-red-600" />
+                            <span className="text-xs font-bold text-red-800">不足</span>
+                          </div>
+                          <ul className="text-xs text-red-700 space-y-0.5">
+                            {labelMissing.map((m, i) => <li key={i}>• {m}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {labelCarryover.length > 0 && (
+                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <span className="text-xs">🔄</span>
+                            <span className="text-xs font-bold text-blue-800">キャリーオーバー省略</span>
+                          </div>
+                          <ul className="text-xs text-blue-700 space-y-0.5">
+                            {labelCarryover.map((c, i) => <li key={i}>• {c}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           {/* Right Column: Pricing & Simulation */}
           <div>
             {recipe.is_intermediate ? (
