@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         net_content_unit,
         linked_wholesale_product_id,
         linked_oem_product_id,
-        recipe_ingredients(count)
+        recipe_items!recipe_items_recipe_id_fkey(count)
       `, { count: "exact" })
             .order("name")
             .range(offset, offset + limit - 1);
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
         const processed = data?.map((r: any) => ({
             ...r,
             category_name: r.category,
-            ingredient_count: r.recipe_ingredients?.[0]?.count || 0,
+            ingredient_count: r.recipe_items?.[0]?.count || 0,
             // 後方互換性: selling_price_incl_tax = selling_price
             selling_price_incl_tax: r.selling_price,
             selling_price_excl_tax: r.selling_price ? Math.round(r.selling_price / 1.08) : null,
