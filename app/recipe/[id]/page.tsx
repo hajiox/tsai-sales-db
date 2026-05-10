@@ -2511,7 +2511,11 @@ Now Expanded or Scrollable */}
                                           e.target.value,
                                         )
                                       }
-                                      placeholder={parseFloat(String(item.unit_quantity)) === -1 ? 'g' : '個'}
+                                      placeholder={
+                                        (group.type === "product" || group.type === "intermediate")
+                                          ? (parseFloat(String(item.unit_quantity)) === -1 ? 'g' : '個')
+                                          : isMaterialGroup ? '個' : 'g'
+                                      }
                                     />
                                     {(group.type === "intermediate" || group.type === "product") && (item.unit_weight || 0) > 0 && (
                                       <div className="text-[9px] text-purple-500 mt-0.5">
