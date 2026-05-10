@@ -212,6 +212,7 @@ async function linkRecipeToOemProduct(
 }
 
 // Helper: Sync recipe price to OEM wholesale product
+// OEMの場合はレシピ販売価格 = 卸価格（7掛け不要）
 async function syncPriceToOemProduct(
     supabase: any,
     recipeId: string,
@@ -224,8 +225,8 @@ async function syncPriceToOemProduct(
         .single();
 
     if (recipe && recipe.selling_price) {
-        // OEM商品は7掛ベースの卸価格
-        const wholesalePrice = Math.round(recipe.selling_price * 0.7);
+        // OEM商品はレシピ販売価格をそのまま卸価格にする
+        const wholesalePrice = Math.round(recipe.selling_price);
         const profitRate = recipe.total_cost
             ? ((wholesalePrice - recipe.total_cost) / wholesalePrice) * 100
             : null;
@@ -304,7 +305,8 @@ export async function PUT() {
         for (const recipe of linkedRecipes || []) {
             if (!recipe.linked_oem_product_id || !recipe.selling_price) continue;
 
-            const wholesalePrice = Math.round(recipe.selling_price * 0.7);
+            // OEM商品はレシピ販売価格をそのまま卸価格にする
+            const wholesalePrice = Math.round(recipe.selling_price);
             const profitRate = recipe.total_cost
                 ? ((wholesalePrice - recipe.total_cost) / wholesalePrice) * 100
                 : null;
