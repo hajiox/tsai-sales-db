@@ -237,6 +237,12 @@ async function syncPriceToOemProduct(
                 profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
             })
             .eq("id", productId);
+
+        // oem_productsテーブルも同時に同期（OEM売上入力用）
+        await supabase
+            .from("oem_products")
+            .update({ price: wholesalePrice })
+            .eq("id", productId);
     }
 }
 
@@ -317,6 +323,12 @@ export async function PUT() {
                     price: wholesalePrice,
                     profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
                 })
+                .eq("id", recipe.linked_oem_product_id);
+
+            // oem_productsテーブルも同時に同期（OEM売上入力用）
+            await supabase
+                .from("oem_products")
+                .update({ price: wholesalePrice })
                 .eq("id", recipe.linked_oem_product_id);
 
             if (!updateError) synced++;
