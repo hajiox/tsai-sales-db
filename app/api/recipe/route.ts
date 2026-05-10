@@ -36,9 +36,10 @@ export async function GET(request: NextRequest) {
         lot_size,
         total_cost,
         total_weight,
-        production_quantity,
+        filling_quantity,
         label_quantity,
         net_content_unit,
+        linked_product_id,
         linked_wholesale_product_id,
         linked_oem_product_id,
         recipe_items!recipe_items_recipe_id_fkey(count)
@@ -66,14 +67,15 @@ export async function GET(request: NextRequest) {
             ...r,
             category_name: r.category,
             ingredient_count: r.recipe_items?.[0]?.count || 0,
-            // 後方互換性: selling_price_incl_tax = selling_price
+            // 後方互換性
+            production_quantity: r.filling_quantity || 400,
             selling_price_incl_tax: r.selling_price,
             selling_price_excl_tax: r.selling_price ? Math.round(r.selling_price / 1.08) : null,
-            unit_cost: r.total_cost && r.production_quantity
-                ? r.total_cost / r.production_quantity
+            unit_cost: r.total_cost && r.filling_quantity
+                ? r.total_cost / r.filling_quantity
                 : r.total_cost || null,
             profit_margin: r.selling_price && r.total_cost
-                ? ((r.selling_price - (r.total_cost / (r.production_quantity || 400))) / r.selling_price * 100)
+                ? ((r.selling_price - (r.total_cost / (r.filling_quantity || 400))) / r.selling_price * 100)
                 : null,
         }));
 
