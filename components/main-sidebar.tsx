@@ -75,6 +75,14 @@ export default function MainSidebar() {
 
       <nav className="flex-1 p-4 space-y-2">
         <Button
+          variant="ghost"
+          className="w-full justify-start text-emerald-400 font-bold hover:bg-slate-700 hover:text-emerald-300"
+          onClick={() => window.open("https://v0-line-blush.vercel.app", "_blank")}
+        >
+          TS Groupware
+        </Button>
+
+        <Button
           variant={activeVariant("sales")}
           className={baseBtn("sales")}
           onClick={() => goto("sales")}
