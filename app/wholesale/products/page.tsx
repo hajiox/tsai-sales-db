@@ -1,4 +1,4 @@
-// /app/wholesale/products/page.tsx ver.7 インライン編集+D&D並び替え
+// /app/wholesale/products/page.tsx ver.8 レシピ紐付けリンクマーク表示
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GripVertical, Plus, Trash2, Search } from 'lucide-react';
+import { GripVertical, Plus, Trash2, Search, Link2 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Product {
   id: string;
@@ -31,6 +32,13 @@ interface OEMCustomer {
 
 type FilterType = 'all' | '通常卸' | 'OEM';
 
+// レシピ紐付け情報（卸商品ID → レシピ情報）
+interface RecipeLink {
+  recipe_id: string;
+  recipe_name: string;
+  link_type: '自社' | 'OEM';
+}
+
 // インライン編集中のセル情報
 type EditingCell = {
   id: string;
@@ -38,7 +46,9 @@ type EditingCell = {
 } | null;
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
+  const [recipeLinks, setRecipeLinks] = useState<Map<string, RecipeLink>>(new Map());
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +76,7 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchProducts();
     fetchOemCustomers();
+    fetchRecipeLinks();
   }, []);
 
   // 編集セルに切り替わったらフォーカス
@@ -98,6 +109,36 @@ export default function ProductsPage() {
       console.error('商品データ取得エラー:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // レシピ紐付け情報を取得（linked_wholesale_product_id / linked_oem_product_id から逆引き）
+  const fetchRecipeLinks = async () => {
+    try {
+      const response = await fetch('/api/recipe?limit=500');
+      const data = await response.json();
+      if (data.data) {
+        const linkMap = new Map<string, RecipeLink>();
+        for (const r of data.data) {
+          if (r.linked_wholesale_product_id) {
+            linkMap.set(r.linked_wholesale_product_id, {
+              recipe_id: r.id,
+              recipe_name: r.name,
+              link_type: '自社',
+            });
+          }
+          if (r.linked_oem_product_id) {
+            linkMap.set(r.linked_oem_product_id, {
+              recipe_id: r.id,
+              recipe_name: r.name,
+              link_type: 'OEM',
+            });
+          }
+        }
+        setRecipeLinks(linkMap);
+      }
+    } catch (error) {
+      console.error('レシピ紐付け取得エラー:', error);
     }
   };
 
@@ -574,7 +615,7 @@ export default function ProductsPage() {
                   )}
                 </TableCell>
 
-                {/* 商品名：クリックで編集 */}
+                {/* 商品名：クリックで編集 + レシピ紐付けマーク */}
                 <TableCell
                   className="cursor-text"
                   onClick={() => {
@@ -593,9 +634,28 @@ export default function ProductsPage() {
                       className="h-8 text-sm"
                     />
                   ) : (
-                    <span className="text-sm hover:text-blue-600 transition-colors">
-                      {product.product_name}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm hover:text-blue-600 transition-colors">
+                        {product.product_name}
+                      </span>
+                      {recipeLinks.has(product.id) && (
+                        <span
+                          className={`flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition ${
+                            recipeLinks.get(product.id)!.link_type === 'OEM'
+                              ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                              : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          }`}
+                          title={`レシピ紐付済: ${recipeLinks.get(product.id)!.recipe_name}\nクリックでレシピ詳細を開く`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/recipe/${recipeLinks.get(product.id)!.recipe_id}`);
+                          }}
+                        >
+                          <Link2 className="h-3 w-3" />
+                          {recipeLinks.get(product.id)!.link_type === 'OEM' ? 'OEMレシピ' : 'レシピ'}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </TableCell>
 
@@ -677,6 +737,9 @@ export default function ProductsPage() {
       <div className="mt-3 text-sm text-gray-500">
         表示: {filteredProducts.length}件 / 全{products.length}件
         {selectedIds.size > 0 && <span className="ml-3 text-blue-600 font-medium">{selectedIds.size}件選択中</span>}
+        <span className="ml-3 text-emerald-600 font-medium">
+          レシピ紐付: {Array.from(recipeLinks.keys()).filter(id => products.some(p => p.id === id)).length}件
+        </span>
         <span className="ml-3 text-gray-400">💡 商品名・卸価格・利益率はクリックで直接編集、Enterで保存  |  ⠿ をドラッグして並び替え</span>
       </div>
     </div>

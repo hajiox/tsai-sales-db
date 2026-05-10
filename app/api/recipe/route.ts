@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
         production_quantity,
         label_quantity,
         net_content_unit,
+        linked_wholesale_product_id,
+        linked_oem_product_id,
         recipe_ingredients(count)
       `, { count: "exact" })
             .order("name")
