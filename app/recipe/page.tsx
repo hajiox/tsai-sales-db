@@ -680,15 +680,6 @@ export default function RecipePage() {
                         </div>
                     </div>
 
-                    <Button variant="outline" onClick={() => router.push("/recipe/product-link")} className="border-blue-300 text-blue-700 hover:bg-blue-50">
-                        <LinkIcon className="w-4 h-4 mr-2" />
-                        商品紐付け
-                    </Button>
-
-                    <Button variant="outline" onClick={() => router.push("/recipe/oem-link")} className="border-purple-300 text-purple-700 hover:bg-purple-50">
-                        <LinkIcon className="w-4 h-4 mr-2" />
-                        OEM紐付け
-                    </Button>
 
                     <Button variant="outline" onClick={() => router.push("/recipe/database")}>
                         <Package className="w-4 h-4 mr-2" />
@@ -828,7 +819,7 @@ export default function RecipePage() {
                                                 >
                                                     <Link2 className="h-3 w-3" />WEB
                                                 </span>
-                                            ) : recipe.category === 'ネット専用' && (
+                                            ) : (recipe.category === 'ネット専用' || recipe.category === '自社') && (
                                                 <span className="flex-shrink-0 inline-flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         className="h-5 text-[10px] border border-blue-200 rounded bg-blue-50/50 text-blue-600 pl-1 pr-0.5 cursor-pointer appearance-auto max-w-[90px]"
