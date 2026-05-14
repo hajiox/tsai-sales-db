@@ -3468,7 +3468,10 @@ Now Expanded or Scrollable */}
                   {/* 右: 自動プレビュー（■→✅️） */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <div className="text-xs text-gray-400 font-medium">👁️ プレビュー（✅️版・自動生成）</div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="text-xs text-gray-400 font-medium">👁️ プレビュー（✅️版・自動生成）</div>
+                        <span className="text-[11px] text-amber-600 font-medium">※Yahoo・楽天は✅️は使用できません</span>
+                      </div>
                       <button
                         onClick={() => { navigator.clipboard.writeText((recipe.product_points || '').replace(/■/g, '✅️')); toast.success('✅️版をコピーしました'); }}
                         className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="✅️版をコピー"
