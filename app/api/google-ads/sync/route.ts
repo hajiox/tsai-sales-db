@@ -12,6 +12,19 @@ const supabase = createClient(
 const API_VERSION = 'v23'
 const GOOGLE_ADS_API_BASE = `https://googleads.googleapis.com/${API_VERSION}`
 
+class GoogleAdsReauthRequiredError extends Error {
+    constructor(message = 'Google広告の認証期限が切れています。Google広告を再連携してください。') {
+        super(message)
+        this.name = 'GoogleAdsReauthRequiredError'
+    }
+}
+
+function isRefreshTokenExpired(data: any) {
+    const error = String(data?.error || '').toLowerCase()
+    const description = String(data?.error_description || '').toLowerCase()
+    return error === 'invalid_grant' || description.includes('expired') || description.includes('revoked')
+}
+
 // アクセストークンを取得
 async function getAccessToken(): Promise<string> {
     const clientId = process.env.GOOGLE_CLIENT_ID
@@ -39,6 +52,9 @@ async function getAccessToken(): Promise<string> {
     const data = await response.json()
     if (data.error) {
         console.error('OAuth token error details:', JSON.stringify(data))
+        if (isRefreshTokenExpired(data)) {
+            throw new GoogleAdsReauthRequiredError()
+        }
         throw new Error(`Token error: ${data.error_description || data.error}`)
     }
     return data.access_token
@@ -305,6 +321,17 @@ export async function POST(request: NextRequest) {
 
     } catch (error: any) {
         console.error('Google Ads sync error:', error)
+        if (error instanceof GoogleAdsReauthRequiredError) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    code: 'GOOGLE_ADS_REAUTH_REQUIRED',
+                    reauthRequired: true,
+                    error: error.message,
+                },
+                { status: 401 }
+            )
+        }
         return NextResponse.json(
             { success: false, error: error.message },
             { status: 500 }

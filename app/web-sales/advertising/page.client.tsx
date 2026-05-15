@@ -78,6 +78,7 @@ interface AdCostRow {
 }
 
 type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'yahoo' | 'amazon' | 'lp-tracking'
+type SyncResultType = 'success' | 'warning' | 'error'
 
 // ===== メインコンポーネント =====
 export default function AdvertisingDashboard() {
@@ -101,6 +102,7 @@ export default function AdvertisingDashboard() {
     const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
     const [expandedSeries, setExpandedSeries] = useState<Set<number>>(new Set())
     const [syncResult, setSyncResult] = useState<string | null>(null)
+    const [syncResultType, setSyncResultType] = useState<SyncResultType>('success')
 
     // 広告費取り込み関連
     const [showImportPanel, setShowImportPanel] = useState(false)
@@ -278,7 +280,7 @@ export default function AdvertisingDashboard() {
 
     // 手動同期
     const handleSync = async () => {
-        setIsSyncing(true); setSyncResult(null)
+        setIsSyncing(true); setSyncResult(null); setSyncResultType('success')
         try {
             const startDate = `${month}-01`
             const y = parseInt(month.split('-')[0]); const m = parseInt(month.split('-')[1])
@@ -289,9 +291,21 @@ export default function AdvertisingDashboard() {
                 body: JSON.stringify({ startDate, endDate }),
             })
             const data = await res.json()
-            if (data.success) { setSyncResult(`${month} のデータを同期しました（${data.inserted}件）`); await fetchData() }
-            else { setSyncResult(`同期エラー: ${data.error}`) }
-        } catch (error: any) { setSyncResult(`同期エラー: ${error.message}`) }
+            if (data.success) {
+                setSyncResultType('success')
+                setSyncResult(`${month} のデータを同期しました（${data.inserted}件）`)
+                await fetchData()
+            } else if (data.reauthRequired || data.code === 'GOOGLE_ADS_REAUTH_REQUIRED') {
+                setSyncResultType('warning')
+                setSyncResult('Google広告の認証期限が切れています。保存済みデータは表示できますが、新しく同期するにはGoogle広告の再連携が必要です。')
+            } else {
+                setSyncResultType('error')
+                setSyncResult(`同期エラー: ${data.error || '同期に失敗しました'}`)
+            }
+        } catch (error: any) {
+            setSyncResultType('error')
+            setSyncResult(`同期エラー: ${error.message}`)
+        }
         finally { setIsSyncing(false) }
     }
 
@@ -454,7 +468,14 @@ export default function AdvertisingDashboard() {
                     </div>
                 </div>
 
-                {syncResult && (<div className={`mt-3 px-4 py-2 rounded-lg text-sm ${syncResult.includes('エラー') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{syncResult}</div>)}
+                {syncResult && (
+                    <div className={`mt-3 px-4 py-2 rounded-lg text-sm ${syncResultType === 'error'
+                        ? 'bg-red-50 text-red-700'
+                        : syncResultType === 'warning'
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-green-50 text-green-700'
+                        }`}>{syncResult}</div>
+                )}
             </header>
 
             {/* タブナビゲーション */}
