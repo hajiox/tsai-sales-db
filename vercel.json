@@ -1,1 +1,9 @@
-{"installCommand": "npm install --legacy-peer-deps"}
+{
+  "installCommand": "npm install --legacy-peer-deps",
+  "crons": [
+    {
+      "path": "/api/cron/google-ads-token-health",
+      "schedule": "0 19 * * *"
+    }
+  ]
+}
