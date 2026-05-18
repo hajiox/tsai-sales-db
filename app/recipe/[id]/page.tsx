@@ -138,6 +138,7 @@ function RecipeDetailContent() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [nutritionMap, setNutritionMap] = useState<
     Record<string, NutritionData>
   >({});
@@ -221,8 +222,9 @@ function RecipeDetailContent() {
   };
 
   const restoreVersion = async (version: RecipeVersion) => {
-    if (!recipe) return;
+    if (!recipe || isSaving) return;
     if (!confirm(`Ver.${version.version_number} に復元しますか？\n現在の変更は失われます。`)) return;
+    setIsSaving(true);
     try {
       // レシピメタデータを復元
       const snap = version.snapshot_recipe;
@@ -233,12 +235,18 @@ function RecipeDetailContent() {
         'jan_code', 'lot_size', 'case_quantity', 'case_size', 'shelf_life'];
       fieldsToRestore.forEach(f => { if (f in snap) restoreFields[f] = snap[f]; });
 
+      const { data: currentDbItems, error: currentDbItemsError } = await supabase
+        .from('recipe_items')
+        .select('id')
+        .eq('recipe_id', recipe.id);
+      if (currentDbItemsError) throw currentDbItemsError;
+
       const res = await fetch('/api/recipe/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipeId: recipe.id,
-          deletedItemIds: items.filter(i => !i.id.startsWith('temp-')).map(i => i.id),
+          deletedItemIds: (currentDbItems || []).map((i: { id: string }) => i.id),
           newItems: version.snapshot_items.map((si: any) => ({
             item_name: si.item_name,
             item_type: si.item_type,
@@ -265,6 +273,8 @@ function RecipeDetailContent() {
       fetchRecipe(recipe.id);
     } catch (error: any) {
       toast.error(error.message || '復元に失敗しました');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -844,7 +854,8 @@ function RecipeDetailContent() {
   };
 
   const saveChanges = async () => {
-    if (!recipe) return;
+    if (!recipe || isSaving) return;
+    setIsSaving(true);
 
     try {
       // previewモードの場合、全アイテムがtemp-IDなので、既存DBアイテムを全削除する必要がある
@@ -967,6 +978,8 @@ function RecipeDetailContent() {
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "保存に失敗しました");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1160,6 +1173,7 @@ function RecipeDetailContent() {
                 size="sm"
                 variant="outline"
                 onClick={cancelChanges}
+                disabled={isSaving}
                 className="gap-2 text-gray-500 hover:text-gray-700"
               >
                 <X className="w-4 h-4" />
@@ -1168,10 +1182,11 @@ function RecipeDetailContent() {
               <Button
                 size="sm"
                 onClick={saveChanges}
+                disabled={isSaving}
                 className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
               >
-                <Save className="w-4 h-4" />
-                保存
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving ? '保存中...' : '保存'}
               </Button>
             </>
           )}
@@ -2890,6 +2905,7 @@ Now Expanded or Scrollable */}
                 size="sm"
                 variant="outline"
                 onClick={cancelChanges}
+                disabled={isSaving}
                 className="gap-2 text-gray-500 hover:text-gray-700"
               >
                 <X className="w-4 h-4" />
@@ -2898,6 +2914,7 @@ Now Expanded or Scrollable */}
               <Button
                 size="sm"
                 onClick={() => {
+                  if (isSaving) return;
                   if (previewingVersionId) {
                     const ver = versions.find(v => v.id === previewingVersionId);
                     restoreVersion(ver!);
@@ -2905,12 +2922,15 @@ Now Expanded or Scrollable */}
                     saveChanges();
                   }
                 }}
+                disabled={isSaving}
                 className={`gap-2 text-white px-6 ${previewingVersionId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
-                <Save className="w-4 h-4" />
-                {previewingVersionId
-                  ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} を採用して保存`
-                  : '保存'
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving
+                  ? '保存中...'
+                  : previewingVersionId
+                    ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} を採用して保存`
+                    : '保存'
                 }
               </Button>
             </div>

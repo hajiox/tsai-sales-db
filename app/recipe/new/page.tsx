@@ -3,18 +3,18 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 export default function NewRecipePage() {
     const router = useRouter();
-    const [creating, setCreating] = useState(false);
+    const creatingRef = useRef(false);
 
     useEffect(() => {
         const createAndRedirect = async () => {
-            if (creating) return;
-            setCreating(true);
+            if (creatingRef.current) return;
+            creatingRef.current = true;
 
             try {
                 const res = await fetch('/api/recipe/db-write', {
@@ -44,7 +44,7 @@ export default function NewRecipePage() {
         };
 
         createAndRedirect();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [router]);
 
     return (
         <div className="flex justify-center items-center h-screen text-gray-400">
