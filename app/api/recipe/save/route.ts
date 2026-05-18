@@ -10,14 +10,21 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { recipeId, deletedItemIds, newItems, existingItems, recipeUpdates } = body;
+        const { recipeId, deletedItemIds, newItems, existingItems, recipeUpdates, replaceAllItems } = body;
 
         if (!recipeId) {
             return NextResponse.json({ error: "recipeIdが必要です" }, { status: 400 });
         }
 
-        // 1. Delete removed items
-        if (deletedItemIds && deletedItemIds.length > 0) {
+        // 1. Delete removed items. Version restore uses a recipe-scoped full replace
+        // so it cannot accidentally insert a snapshot on top of existing rows.
+        if (replaceAllItems) {
+            const { error: delError } = await supabase
+                .from("recipe_items")
+                .delete()
+                .eq("recipe_id", recipeId);
+            if (delError) throw delError;
+        } else if (deletedItemIds && deletedItemIds.length > 0) {
             const { error: delError } = await supabase
                 .from("recipe_items")
                 .delete()

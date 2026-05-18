@@ -236,18 +236,13 @@ function RecipeDetailContent() {
         'jan_code', 'lot_size', 'case_quantity', 'case_size', 'shelf_life'];
       fieldsToRestore.forEach(f => { if (f in snap) restoreFields[f] = snap[f]; });
 
-      const { data: currentDbItems, error: currentDbItemsError } = await supabase
-        .from('recipe_items')
-        .select('id')
-        .eq('recipe_id', recipe.id);
-      if (currentDbItemsError) throw currentDbItemsError;
-
       const res = await fetch('/api/recipe/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipeId: recipe.id,
-          deletedItemIds: (currentDbItems || []).map((i: { id: string }) => i.id),
+          replaceAllItems: true,
+          deletedItemIds: [],
           newItems: version.snapshot_items.map((si: any) => ({
             item_name: si.item_name,
             item_type: si.item_type,
@@ -856,25 +851,32 @@ function RecipeDetailContent() {
 
   const saveChanges = async () => {
     if (!recipe || isSaving) return;
+
+    if (previewingVersionId) {
+      const version = versions.find(v => v.id === previewingVersionId);
+      if (!version) {
+        toast.error("プレビュー中の履歴が見つかりません");
+        return;
+      }
+      await restoreVersion(version);
+      return;
+    }
+
     setIsSaving(true);
 
     try {
-      // previewモードの場合、全アイテムがtemp-IDなので、既存DBアイテムを全削除する必要がある
       const allItemsAreNew = items.every(i => i.id.startsWith('temp-'));
       let newItemsList: typeof items;
       let existingItemsList: typeof items;
       let finalDeletedIds: string[];
+      let replaceAllItems = false;
 
-      if (allItemsAreNew || previewingVersionId) {
-        // プレビュー復元 or 全新規: DBの既存アイテムを全削除してから全挿入
+      if (allItemsAreNew) {
+        // 全新規状態ではDB上の現在明細をrecipe_id単位で全置換する。
         newItemsList = items;
         existingItemsList = [];
-        // 現在DBにあるアイテムIDを取得して全削除対象にする
-        const { data: currentDbItems } = await supabase
-          .from('recipe_items')
-          .select('id')
-          .eq('recipe_id', recipe.id);
-        finalDeletedIds = (currentDbItems || []).map((i: { id: string }) => i.id);
+        finalDeletedIds = [];
+        replaceAllItems = true;
       } else {
         newItemsList = items.filter((i) => i.id.startsWith('temp-'));
         existingItemsList = items.filter((i) => !i.id.startsWith('temp-'));
@@ -912,6 +914,7 @@ function RecipeDetailContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipeId: recipe.id,
+          replaceAllItems,
           deletedItemIds: finalDeletedIds,
           newItems: newItemsList,
           existingItems: existingItemsList,
@@ -1178,7 +1181,7 @@ function RecipeDetailContent() {
                 className="gap-2 text-gray-500 hover:text-gray-700"
               >
                 <X className="w-4 h-4" />
-                キャンセル
+                {previewingVersionId ? '戻る' : 'キャンセル'}
               </Button>
               <Button
                 size="sm"
@@ -1187,7 +1190,11 @@ function RecipeDetailContent() {
                 className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {isSaving ? '保存中...' : '保存'}
+                {isSaving
+                  ? '保存中...'
+                  : previewingVersionId
+                    ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number}を採用`
+                    : '保存'}
               </Button>
             </>
           )}
