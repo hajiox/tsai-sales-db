@@ -192,6 +192,7 @@ ${contextString}
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents }),
+                signal: request.signal,
             }
         );
 
@@ -206,6 +207,9 @@ ${contextString}
 
         return NextResponse.json({ success: true, reply });
     } catch (error: any) {
+        if (error?.name === 'AbortError') {
+            return NextResponse.json({ success: false, error: '回答生成を中止しました' }, { status: 499 });
+        }
         console.error('WebSales AI Chat Error:', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }

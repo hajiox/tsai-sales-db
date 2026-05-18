@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Target, Send, Bot, User } from 'lucide-react';
+import { Sparkles, Target, Send, Bot, User, Square } from 'lucide-react';
 
 interface WebSalesAISectionProps {
   month: string;
@@ -20,6 +20,8 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const wasCancelledRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -29,6 +31,12 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -37,12 +45,17 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
     setMessages(newMessages);
     setInput('');
     setIsLoading(true);
+    wasCancelledRef.current = false;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       const response = await fetch('/api/web-sales-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages, month })
+        body: JSON.stringify({ messages: newMessages, month }),
+        signal: controller.signal
       });
 
       const data = await response.json();
@@ -53,11 +66,25 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
         setMessages(prev => [...prev, { role: 'model', text: `エラーが発生しました: ${data.error || '不明なエラー'}` }]);
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        if (wasCancelledRef.current) {
+          setMessages(prev => [...prev, { role: 'model', text: '回答生成を中止しました。' }]);
+        }
+        return;
+      }
       console.error('Chat Error:', err);
       setMessages(prev => [...prev, { role: 'model', text: '通信エラーが発生しました。' }]);
     } finally {
+      abortControllerRef.current = null;
+      wasCancelledRef.current = false;
       setIsLoading(false);
     }
+  };
+
+  const handleCancel = () => {
+    if (!isLoading) return;
+    wasCancelledRef.current = true;
+    abortControllerRef.current?.abort();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -118,13 +145,13 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
               <Bot className="w-16 h-16 text-indigo-200" />
               <p>過去6ヶ月の売上データ、商品トレンドを把握しています。</p>
               <div className="flex flex-wrap justify-center gap-2 mt-4">
-                <Button variant="outline" size="sm" onClick={() => setInput('今月の途中経過として、売上が良いシリーズと月末着地見込みを教えて')}>
+                <Button variant="outline" size="sm" disabled={isLoading} onClick={() => setInput('今月の途中経過として、売上が良いシリーズと月末着地見込みを教えて')}>
                   売上の良かったシリーズは？
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setInput('途中データを月末確定値と単純比較せず、過去6ヶ月で本当に衰退傾向の商品があるか見て')}>
+                <Button variant="outline" size="sm" disabled={isLoading} onClick={() => setInput('途中データを月末確定値と単純比較せず、過去6ヶ月で本当に衰退傾向の商品があるか見て')}>
                   衰退している商品は？
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setInput('来月の売上を伸ばすための具体的なアクションを3つ提案して')}>
+                <Button variant="outline" size="sm" disabled={isLoading} onClick={() => setInput('来月の売上を伸ばすための具体的なアクションを3つ提案して')}>
                   売上を伸ばすアクションは？
                 </Button>
               </div>
@@ -175,14 +202,26 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
               placeholder="AIに自由に質問・分析依頼を入力してください (Shift+Enterで改行)"
               className="flex-1 resize-none rounded-lg border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[60px] max-h-[120px] text-sm"
               rows={2}
+              disabled={isLoading}
             />
-            <Button 
-              onClick={handleSend} 
-              disabled={isLoading || !input.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700 h-auto px-6"
-            >
-              <Send className="w-5 h-5" />
-            </Button>
+            {isLoading ? (
+              <Button
+                onClick={handleCancel}
+                variant="outline"
+                className="h-auto px-5 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <Square className="w-4 h-4 mr-2 fill-current" />
+                中止
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSend}
+                disabled={!input.trim()}
+                className="bg-indigo-600 hover:bg-indigo-700 h-auto px-6"
+              >
+                <Send className="w-5 h-5" />
+              </Button>
+            )}
           </div>
         </div>
       </Card>
