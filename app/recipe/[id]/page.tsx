@@ -212,13 +212,14 @@ function RecipeDetailContent() {
   const saveVersion = (note?: string) => {
     if (!recipe) return;
     // ローカルstateに一時保存（DBには保存しない。最終保存ボタンでDBに保存）
+    // 最終保存方式では1回の保存につき履歴は1つに絞る。
     const snapshot_recipe = { ...recipe };
     const snapshot_items = items.map(i => ({ ...i }));
-    setPendingVersions(prev => [...prev, { note: note || null, snapshot_recipe, snapshot_items }]);
+    setPendingVersions([{ note: note || null, snapshot_recipe, snapshot_items }]);
     setShowNoteInput(false);
     setVersionNoteInput("");
     setHasChanges(true);
-    toast.success(`履歴を作成しました（保存ボタンで確定）`);
+    toast.success(`保存時に履歴を1件作成します`);
   };
 
   const restoreVersion = async (version: RecipeVersion) => {
@@ -970,7 +971,7 @@ function RecipeDetailContent() {
           }
         }
         setPendingVersions([]);
-        toast.success(`${pendingVersions.length}件の履歴も保存しました`);
+        toast.success(`履歴も保存しました`);
       }
 
       fetchRecipe(recipe.id);
@@ -2152,10 +2153,10 @@ Now Expanded or Scrollable */}
                     <div key={`pending-${idx}`} className="relative group">
                       <span
                         className="h-8 px-3 text-xs font-bold rounded border-2 border-dashed border-green-400 bg-green-50 text-green-700 flex items-center gap-1.5 pr-5"
-                        title={`未確定: ${pv.note || 'メモなし'}（保存ボタンで確定）`}
+                        title={`未確定: ${pv.note || 'メモなし'}（次の保存ボタンで確定）`}
                       >
                         <Save className="w-3.5 h-3.5" />
-                        新{idx + 1}
+                        履歴
                         {pv.note && <span className="font-normal max-w-[80px] truncate">{pv.note}</span>}
                       </span>
                       <button
@@ -2175,7 +2176,7 @@ Now Expanded or Scrollable */}
                         value={versionNoteInput}
                         onChange={(e) => setVersionNoteInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') saveVersion(versionNoteInput); if (e.key === 'Escape') { setShowNoteInput(false); setVersionNoteInput(''); } }}
-                        placeholder="変更内容メモ（任意）"
+                        placeholder="保存時に残す履歴メモ"
                         className="h-8 w-48 px-2 text-xs border border-gray-300 rounded focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
                         autoFocus
                       />
@@ -2200,7 +2201,7 @@ Now Expanded or Scrollable */}
                       className="h-8 px-3 text-xs font-bold border border-dashed border-amber-400 text-amber-600 hover:bg-amber-50 rounded flex items-center gap-1.5 transition-colors"
                     >
                       <History className="w-4 h-4" />
-                      + 履歴作成
+                      + 履歴メモ
                     </button>
                   )}
                 </div>
