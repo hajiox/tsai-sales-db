@@ -195,84 +195,6 @@ function RecipeDetailContent() {
   const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
   const [pendingVersions, setPendingVersions] = useState<{ note: string | null; snapshot_recipe: any; snapshot_items: any[] }[]>([]);
 
-  const parseNumeric = (value: number | string | null | undefined, fallback = 0) => {
-    const parsed = parseFloat(String(value ?? ""));
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-
-  const roundCost = (value: number) => Math.round(value * 10000) / 10000;
-
-  const getTaxMultiplier = (itemType: string, taxIncluded?: boolean) => {
-    if (taxIncluded !== false) return 1.0;
-    if (itemType === "material") return taxRates.material;
-    if (itemType === "ingredient") return taxRates.ingredient;
-    return 1.0;
-  };
-
-  const getIngredientUnitPrice = (item: RecipeItem) => {
-    const qty = parseNumeric(item.unit_quantity);
-    const price = parseNumeric(item.unit_price);
-    if (qty <= 0 || price <= 0) return 0;
-    return roundCost((price / qty) * getTaxMultiplier(item.item_type, item.tax_included));
-  };
-
-  const calculateItemCost = (item: RecipeItem) => {
-    const usage = parseNumeric(item.usage_amount);
-    const qty = parseNumeric(item.unit_quantity, 1);
-    const price = parseNumeric(item.unit_price);
-    const isIntermediate = item.item_type === "intermediate" || item.item_type === "product";
-    const isMaterialLike = item.item_type === "material" || item.item_type === "expense";
-
-    if (usage <= 0 || price <= 0) return 0;
-
-    if (isIntermediate) {
-      const isGramMode = parseNumeric(item.unit_quantity) === -1;
-      if (isGramMode && (item.unit_weight || 0) > 0) {
-        return roundCost((usage / (item.unit_weight || 1)) * price);
-      }
-      return roundCost(usage * price);
-    }
-
-    if (isMaterialLike) {
-      return roundCost(usage * price * getTaxMultiplier(item.item_type, item.tax_included));
-    }
-
-    if (qty <= 0) return 0;
-    return roundCost(usage * (price / qty) * getTaxMultiplier(item.item_type, item.tax_included));
-  };
-
-  const normalizeLoadedRecipeItem = (
-    item: RecipeItem,
-    ingredientMasterMap: Map<string, { unit_quantity: number | null; price: number | null; tax_included: boolean | null }>,
-  ): RecipeItem => {
-    if (item.item_type !== "ingredient") return item;
-
-    const master = ingredientMasterMap.get(item.item_name);
-    const normalized: RecipeItem = { ...item };
-
-    if (master) {
-      if (parseNumeric(normalized.unit_price) <= 0 && master.price != null) {
-        normalized.unit_price = master.price;
-      }
-      if (parseNumeric(normalized.unit_quantity) <= 0 && master.unit_quantity != null) {
-        normalized.unit_quantity = master.unit_quantity;
-      }
-      if (normalized.tax_included == null) {
-        normalized.tax_included = master.tax_included ?? true;
-      }
-    }
-
-    if (
-      parseNumeric(normalized.usage_amount) > 0 &&
-      parseNumeric(normalized.unit_price) > 0 &&
-      parseNumeric(normalized.unit_quantity) > 0
-    ) {
-      normalized.cost = calculateItemCost(normalized);
-    }
-
-    return normalized;
-  };
-
   const fetchVersions = useCallback(async (recipeId: string) => {
     try {
       const res = await fetch(`/api/recipe/versions?recipeId=${recipeId}`);
@@ -558,36 +480,9 @@ function RecipeDetailContent() {
       .order("id");
 
     if (itemsData) {
-      const ingredientItems = itemsData.filter((i) => i.item_type === "ingredient");
-      let ingredientMasterMap = new Map<
-        string,
-        { unit_quantity: number | null; price: number | null; tax_included: boolean | null }
-      >();
+      setItems(itemsData);
 
-      if (ingredientItems.length > 0) {
-        const { data: ingredientMasterData } = await supabase
-          .from("ingredients")
-          .select("name, unit_quantity, price, tax_included")
-          .in("name", Array.from(new Set(ingredientItems.map((i) => i.item_name))));
-
-        ingredientMasterMap = new Map(
-          (ingredientMasterData || []).map((i) => [
-            i.name,
-            {
-              unit_quantity: i.unit_quantity,
-              price: i.price,
-              tax_included: i.tax_included,
-            },
-          ]),
-        );
-      }
-
-      const normalizedItems = itemsData.map((item) =>
-        normalizeLoadedRecipeItem(item as RecipeItem, ingredientMasterMap),
-      );
-      setItems(normalizedItems);
-
-      const ingredientNames = normalizedItems
+      const ingredientNames = itemsData
         .filter(
           (i) => i.item_type === "ingredient" || i.item_type === "intermediate",
         )
@@ -695,7 +590,38 @@ function RecipeDetailContent() {
           const updatedItem = { ...item, [field]: value };
 
           if (["usage_amount", "unit_quantity", "unit_price", "tax_included"].includes(field)) {
-            updatedItem.cost = calculateItemCost(updatedItem);
+            const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
+            const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
+            const price = parseFloat(String(updatedItem.unit_price)) || 0;
+            const isIntermediate = updatedItem.item_type === "intermediate" || updatedItem.item_type === "product";
+            const isMat = updatedItem.item_type === "material" || updatedItem.item_type === "expense";
+
+            if (isIntermediate) {
+              // 中間加工品/商品
+              const isGramMode = parseFloat(String(updatedItem.unit_quantity)) === -1;
+              if (isGramMode && (updatedItem.unit_weight || 0) > 0) {
+                // グラムモード: usage_amount(g) / unit_weight(1個分のg) × unit_price
+                updatedItem.cost = Math.round((usage / (updatedItem.unit_weight || 1)) * price);
+              } else {
+                // 個数モード: usage_amount(個数) × unit_price(元レシピの原価)
+                updatedItem.cost = Math.round(usage * price);
+              }
+            } else {
+              const rate =
+                updatedItem.item_type === "ingredient" &&
+                  !updatedItem.tax_included
+                  ? (1 + (taxRates.ingredient / 100))
+                  : updatedItem.item_type === "material" &&
+                    !updatedItem.tax_included
+                    ? (1 + (taxRates.material / 100))
+                    : 1.0;
+
+              // 資材・経費: priceは1個単価なのでそのまま掛ける
+              // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
+              updatedItem.cost = isMat
+                ? Math.round(usage * price * rate)
+                : Math.round(usage * (price / qty) * rate);
+            }
           }
           return updatedItem;
         }
@@ -799,7 +725,25 @@ function RecipeDetailContent() {
               updatedItem.usage_amount &&
               updatedItem.unit_price
             ) {
-              updatedItem.cost = calculateItemCost(updatedItem);
+              const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
+              const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
+              const price = parseFloat(String(updatedItem.unit_price)) || 0;
+              const isMat = updatedItem.item_type === "material" || updatedItem.item_type === "expense";
+
+              const rate =
+                updatedItem.item_type === "ingredient" &&
+                  !updatedItem.tax_included
+                  ? (1 + (taxRates.ingredient / 100))
+                  : updatedItem.item_type === "material" &&
+                    !updatedItem.tax_included
+                    ? (1 + (taxRates.material / 100))
+                    : 1.0;
+
+              // 資材・経費: priceは1個単価なのでそのまま掛ける
+              // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
+              updatedItem.cost = isMat
+                ? Math.round(usage * price * rate)
+                : Math.round(usage * (price / qty) * rate);
             }
           }
           return updatedItem;
@@ -2337,8 +2281,8 @@ Now Expanded or Scrollable */}
                                           if (origUsage !== undefined) {
                                             const qty = parseFloat(String(item.unit_quantity)) || 1;
                                             const price = parseFloat(String(item.unit_price)) || 0;
-                                            const rate = !item.tax_included ? taxRates.ingredient : 1.0;
-                                            const cost = roundCost(origUsage * (price / qty) * rate);
+                                            const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                            const cost = Math.round(origUsage * (price / qty) * rate);
                                             return { ...item, usage_amount: origUsage, cost };
                                           }
                                           return item;
@@ -2373,8 +2317,8 @@ Now Expanded or Scrollable */}
                                               if (origUsage !== undefined) {
                                                 const qty = parseFloat(String(item.unit_quantity)) || 1;
                                                 const price = parseFloat(String(item.unit_price)) || 0;
-                                                const rate = !item.tax_included ? taxRates.ingredient : 1.0;
-                                                const cost = roundCost(origUsage * (price / qty) * rate);
+                                                const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                                const cost = Math.round(origUsage * (price / qty) * rate);
                                                 return { ...item, usage_amount: origUsage, cost };
                                               }
                                               return item;
@@ -2405,8 +2349,8 @@ Now Expanded or Scrollable */}
 
                                           const qty = parseFloat(String(item.unit_quantity)) || 1;
                                           const price = parseFloat(String(item.unit_price)) || 0;
-                                          const rate = !item.tax_included ? taxRates.ingredient : 1.0;
-                                          const cost = roundCost(newUsage * (price / qty) * rate);
+                                          const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
+                                          const cost = Math.round(newUsage * (price / qty) * rate);
 
                                           return { ...item, usage_amount: newUsage, cost };
                                         }),
@@ -2622,7 +2566,7 @@ Now Expanded or Scrollable */}
                               {/* 1g単価 - 原材料のみ */}
                               {group.type === 'ingredient' && (
                                 <td className="py-2 text-right font-mono text-gray-400 align-top">
-                                  {getIngredientUnitPrice(item) > 0 ? `¥${getIngredientUnitPrice(item).toFixed(2)}` : '-'}
+                                  {unitUsage > 0 ? `¥${(itemCost / unitUsage).toFixed(2)}` : '-'}
                                 </td>
                               )}
                               {/* Cost */}
