@@ -8,6 +8,51 @@ interface ChatMessage {
     text: string;
 }
 
+function getMonthStatus(targetMonth: string) {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const dayOfMonth = now.getDate();
+    const [year, monthNum] = targetMonth.split('-').map(Number);
+    const daysInTargetMonth = new Date(year, monthNum, 0).getDate();
+    const isCurrentMonth = targetMonth === currentMonth;
+
+    if (!isCurrentMonth) {
+        return {
+            isPartial: false,
+            label: '月末確定データ',
+            asOfDay: daysInTargetMonth,
+            daysInMonth: daysInTargetMonth,
+            progressRate: 1,
+            projectionMultiplier: 1,
+            instruction: '対象月は過去月のため、月末確定データとして扱ってください。'
+        };
+    }
+
+    if (dayOfMonth >= 15) {
+        const asOfDay = 15;
+        return {
+            isPartial: true,
+            label: '15日取り込み時点の途中データ',
+            asOfDay,
+            daysInMonth: daysInTargetMonth,
+            progressRate: asOfDay / daysInTargetMonth,
+            projectionMultiplier: daysInTargetMonth / asOfDay,
+            instruction: '対象月は15日取り込み時点の途中データです。前月・前年同月の月末確定値と単純比較して「半減」「急落」「大変」などと断定してはいけません。比較する場合は、まず途中経過であることを明記し、必要に応じて月末着地見込み（現時点値×日数補正）で慎重に評価してください。'
+        };
+    }
+
+    const asOfDay = Math.max(dayOfMonth, 1);
+    return {
+        isPartial: true,
+        label: '月初取り込み後の途中データ',
+        asOfDay,
+        daysInMonth: daysInTargetMonth,
+        progressRate: asOfDay / daysInTargetMonth,
+        projectionMultiplier: daysInTargetMonth / asOfDay,
+        instruction: '対象月は月初から月中までの途中データです。月末確定値と単純比較して悪化と断定してはいけません。必ず途中経過として扱い、着地見込みで慎重に評価してください。'
+    };
+}
+
 export async function POST(request: NextRequest) {
     try {
         const { messages, month } = await request.json() as {
@@ -55,18 +100,39 @@ export async function POST(request: NextRequest) {
             target_month: month
         });
 
+        const monthStatus = getMonthStatus(month);
+
+        const chartRows = chartData?.map((d: any) => ({
+            月: d.month_label,
+            Amazon: d.amazon_count,
+            楽天: d.rakuten_count,
+            Yahoo: d.yahoo_count,
+            合計販売数: d.total_count
+        })) || [];
+        const targetMonthRow = chartRows.find((d: any) => String(d.月).startsWith(month));
+        const projectedTargetTotal = targetMonthRow && monthStatus.isPartial
+            ? Math.round((targetMonthRow.合計販売数 || 0) * monthStatus.projectionMultiplier)
+            : targetMonthRow?.合計販売数;
+
         // コンテキストの文字列化
         const contextString = `
 ## 分析対象月: ${month} (過去6ヶ月: ${startMonth6} 〜 ${month})
 
+### データ鮮度・取り込みサイクル
+${JSON.stringify({
+    対象月データ状態: monthStatus.label,
+    対象月は途中データか: monthStatus.isPartial,
+    取り込み運用: 'WEB販売管理システムは原則として15日頃と月初の月2回データを取り込む',
+    評価対象日数: `${monthStatus.asOfDay}/${monthStatus.daysInMonth}日`,
+    月内進捗率: `${Math.round(monthStatus.progressRate * 100)}%`,
+    着地見込み係数: Number(monthStatus.projectionMultiplier.toFixed(2)),
+    対象月現時点販売数: targetMonthRow?.合計販売数 ?? null,
+    対象月月末着地見込み販売数: projectedTargetTotal ?? null,
+    分析上の絶対ルール: monthStatus.instruction
+}, null, 2)}
+
 ### 過去6ヶ月の月次売上推移
-${JSON.stringify(chartData?.map((d: any) => ({
-    月: d.month_label,
-    Amazon: d.amazon_count,
-    楽天: d.rakuten_count,
-    Yahoo: d.yahoo_count,
-    合計販売数: d.total_count
-})), null, 2)}
+${JSON.stringify(chartRows, null, 2)}
 
 ### 急上昇・急落商品 (対象月: ${month})
 ${JSON.stringify((trendData || []).filter((d: any) => ['新規成長', '大幅成長', '成長', '急激衰退', '大幅衰退', '衰退'].includes(d.trend_type)).map((d: any) => ({
@@ -97,6 +163,9 @@ ${contextString}
 - 質問に対して的確かつ具体的に回答してください。
 - 提供されたデータに基づいた分析・提案を行ってください（推測の場合はその旨を明記）。
 - 数値やパーセンテージを具体的に引用して説得力を持たせてください。
+- 対象月が途中データの場合、前月や前年同月の月末確定値と単純比較して「売上半減」「急落」「危機的」などと断定しないでください。
+- 対象月が途中データの場合、最初に「15日取り込み時点の途中経過です」と説明し、必要なら月末着地見込みで比較してください。
+- 途中データの未補正値を使う場合は「現時点累計」と明記してください。
 - チャット形式なので、長すぎず、会話として自然な長さに留めてください（必要に応じて箇条書きを活用）。
 - 経営者向けの鋭い視点と、実用的な改善アクションを提案してください。`;
 

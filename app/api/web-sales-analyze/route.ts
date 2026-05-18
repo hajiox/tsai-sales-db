@@ -8,6 +8,33 @@ const GEMINI_MODEL = "gemini-2.0-flash";
 
 export const dynamic = 'force-dynamic';
 
+function getMonthStatus(targetMonth: string) {
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentDay = now.getDate();
+  const [year, monthNum] = targetMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+
+  if (targetMonth !== currentMonth) {
+    return {
+      isPartial: false,
+      label: '月末確定データ',
+      asOfDay: daysInMonth,
+      daysInMonth,
+      projectionMultiplier: 1
+    };
+  }
+
+  const asOfDay = currentDay >= 15 ? 15 : Math.max(currentDay, 1);
+  return {
+    isPartial: true,
+    label: currentDay >= 15 ? '15日取り込み時点の途中データ' : '月初取り込み後の途中データ',
+    asOfDay,
+    daysInMonth,
+    projectionMultiplier: daysInMonth / asOfDay
+  };
+}
+
 export async function POST(req: Request) {
   try {
     // ------- input -------
@@ -85,7 +112,8 @@ export async function POST(req: Request) {
       productsMap,
       targetMonth,
       prevYearMonth,
-      startMonth3
+      startMonth3,
+      getMonthStatus(targetMonth)
     );
 
     // プロンプト生成
@@ -134,7 +162,8 @@ function organize3ItemsAnalysis(
   productsMap: Map<string, any>,
   targetMonth: string,
   prevYearMonth: string,
-  startMonth3: string
+  startMonth3: string,
+  monthStatus: any
 ) {
   // ① シリーズ別3ヶ月推移の集計
   // periodSalesData は期間合計なので、月ごとの推移を見るには各月のデータが必要だが、
@@ -208,6 +237,7 @@ function organize3ItemsAnalysis(
     targetMonth,
     prevYearMonth,
     startMonth3,
+    monthStatus,
     series3MonthsAnalysis,
     seriesYearOverYear,
     soaringProducts,
@@ -218,6 +248,15 @@ function organize3ItemsAnalysis(
 function generate3ItemsPrompt(data: any): string {
   return `あなたはEC売上分析のプロフェッショナルです。以下のデータを基に、経営者向けの鋭い分析レポートを作成してください。
 対象月: ${data.targetMonth}
+
+【データ鮮度】
+${JSON.stringify(data.monthStatus, null, 2)}
+
+【重要ルール】
+- WEB販売管理システムは原則として15日頃と月初の月2回データを取り込みます。
+- 対象月が途中データの場合、前月・前年同月の月末確定値と単純比較して「半減」「急落」「危機的」と断定しないでください。
+- 対象月が途中データの場合、必ず「15日取り込み時点の途中経過」または「月初から月中までの途中経過」と明記してください。
+- 比較する場合は、現時点累計と月末着地見込みを分けて評価してください。
 
 【データソース】
 1. 直近3ヶ月(${data.startMonth3}〜${data.targetMonth})のシリーズ別実績:

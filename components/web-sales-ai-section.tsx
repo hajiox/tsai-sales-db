@@ -108,7 +108,7 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
             <Target className="w-6 h-6 text-indigo-600 ml-auto opacity-20" />
           </CardTitle>
           <p className="text-sm text-indigo-600 font-medium mt-1">
-            {month} を基準とした過去6ヶ月のDBデータを読み込んでいます。自由に質問してください。
+            {month} を基準とした過去6ヶ月のDBデータを読み込んでいます。15日取り込み時点の当月データは途中経過として扱います。
           </p>
         </CardHeader>
         
@@ -118,10 +118,10 @@ export default function WebSalesAISection({ month }: WebSalesAISectionProps) {
               <Bot className="w-16 h-16 text-indigo-200" />
               <p>過去6ヶ月の売上データ、商品トレンドを把握しています。</p>
               <div className="flex flex-wrap justify-center gap-2 mt-4">
-                <Button variant="outline" size="sm" onClick={() => setInput('今月の売上が最も良かったシリーズとその理由を推測して')}>
+                <Button variant="outline" size="sm" onClick={() => setInput('今月の途中経過として、売上が良いシリーズと月末着地見込みを教えて')}>
                   売上の良かったシリーズは？
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setInput('過去6ヶ月で急激に衰退している商品はある？対策は？')}>
+                <Button variant="outline" size="sm" onClick={() => setInput('途中データを月末確定値と単純比較せず、過去6ヶ月で本当に衰退傾向の商品があるか見て')}>
                   衰退している商品は？
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => setInput('来月の売上を伸ばすための具体的なアクションを3つ提案して')}>
