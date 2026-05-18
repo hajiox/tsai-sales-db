@@ -189,11 +189,9 @@ function RecipeDetailContent() {
   }
   const [versions, setVersions] = useState<RecipeVersion[]>([]);
   const [versionPanelOpen, setVersionPanelOpen] = useState(false);
-  const [versionSaving, setVersionSaving] = useState(false);
-  const [versionNoteInput, setVersionNoteInput] = useState("");
-  const [showNoteInput, setShowNoteInput] = useState(false);
   const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
-  const [pendingVersions, setPendingVersions] = useState<{ note: string | null; snapshot_recipe: any; snapshot_items: any[] }[]>([]);
+  const [draftMode, setDraftMode] = useState(false);
+  const [draftVersionNote, setDraftVersionNote] = useState("");
 
   const fetchVersions = useCallback(async (recipeId: string) => {
     try {
@@ -209,17 +207,15 @@ function RecipeDetailContent() {
     if (recipe?.id) fetchVersions(recipe.id);
   }, [recipe?.id, fetchVersions]);
 
-  const saveVersion = (note?: string) => {
+  const startDraftRevision = () => {
     if (!recipe) return;
-    // ローカルstateに一時保存（DBには保存しない。最終保存ボタンでDBに保存）
-    // 最終保存方式では1回の保存につき履歴は1つに絞る。
-    const snapshot_recipe = { ...recipe };
-    const snapshot_items = items.map(i => ({ ...i }));
-    setPendingVersions([{ note: note || null, snapshot_recipe, snapshot_items }]);
-    setShowNoteInput(false);
-    setVersionNoteInput("");
-    setHasChanges(true);
-    toast.success(`保存時に履歴を1件作成します`);
+    if (previewingVersionId) {
+      toast.error("過去版のプレビュー中は修正版を作れません。先に戻ってください。");
+      return;
+    }
+    setDraftMode(true);
+    setDraftVersionNote("");
+    toast.success("修正版の編集を開始しました");
   };
 
   const restoreVersion = async (version: RecipeVersion) => {
@@ -265,6 +261,8 @@ function RecipeDetailContent() {
       if (!res.ok) throw new Error('復元に失敗しました');
       toast.success(`Ver.${version.version_number} を採用しました`);
       setPreviewingVersionId(null);
+      setDraftMode(false);
+      setDraftVersionNote("");
       setHasChanges(false);
       fetchRecipe(recipe.id);
     } catch (error: any) {
@@ -299,6 +297,11 @@ function RecipeDetailContent() {
       setHasChanges(false);
       fetchRecipe(recipe.id);
       return;
+    }
+    if (!previewingVersionId && hasChanges) {
+      if (!confirm("未保存の変更を破棄して過去版をプレビューしますか？")) return;
+      setDraftMode(false);
+      setDraftVersionNote("");
     }
     // スナップショットデータをローカルstateに読み込み
     // 重要: 全アイテムにtemp-IDを付与して「新規」として扱う（DBの既存アイテムと混同させない）
@@ -960,21 +963,23 @@ function RecipeDetailContent() {
       setHasChanges(false);
       toast.success("保存しました");
 
-      // ペンディング履歴があればDBに保存
-      if (pendingVersions.length > 0) {
-        for (const pv of pendingVersions) {
-          try {
-            await fetch('/api/recipe/versions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recipeId: recipe.id, note: pv.note }),
-            });
-          } catch (e) {
-            console.error('履歴保存エラー:', e);
-          }
+      if (draftMode) {
+        try {
+          const versionRes = await fetch('/api/recipe/versions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipeId: recipe.id,
+              note: draftVersionNote.trim() || null,
+            }),
+          });
+          if (!versionRes.ok) throw new Error('バージョン保存に失敗しました');
+          setDraftMode(false);
+          setDraftVersionNote("");
+          toast.success("修正版を正式版として保存しました");
+        } catch (e: any) {
+          toast.error(e.message || 'バージョン保存に失敗しました');
         }
-        setPendingVersions([]);
-        toast.success(`履歴も保存しました`);
       }
 
       fetchRecipe(recipe.id);
@@ -993,7 +998,8 @@ function RecipeDetailContent() {
     setDeletedItemIds(new Set());
     setHasChanges(false);
     setPreviewingVersionId(null);
-    setPendingVersions([]);
+    setDraftMode(false);
+    setDraftVersionNote("");
     setCurrentScalePercent(null);
     setOriginalUsageMap({});
     fetchRecipe(recipe.id);
@@ -1194,7 +1200,9 @@ function RecipeDetailContent() {
                   ? '保存中...'
                   : previewingVersionId
                     ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number}を採用`
-                    : '保存'}
+                    : draftMode
+                      ? '正式版として保存'
+                      : '保存'}
               </Button>
             </>
           )}
@@ -2125,95 +2133,80 @@ Now Expanded or Scrollable */}
                 <span className="font-mono text-gray-400">
                   {items.length} FILES
                 </span>
-                {/* 履歴バッジ・履歴保存ボタン */}
                 <div className="flex items-center gap-2 print:hidden flex-wrap">
-                  {/* 保存済み履歴バッジ */}
-                  {versions.map((v) => (
-                    <div
-                      key={v.id}
-                      className="relative group"
-                    >
-                      <button
-                        onClick={() => previewVersion(v)}
-                        className={`h-8 px-3 text-xs font-bold rounded border transition-colors flex items-center gap-1.5 pr-5 group-hover:pr-6 ${
-                          previewingVersionId === v.id
-                            ? 'border-blue-500 bg-blue-100 text-blue-800 ring-2 ring-blue-300'
-                            : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400'
-                        }`}
-                        title={`v${v.version_number}${v.version_note ? ` - ${v.version_note}` : ''} | ${new Date(v.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} | クリックでプレビュー`}
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        v{v.version_number}
-                        {v.version_note && <span className="font-normal max-w-[80px] truncate">{v.version_note}</span>}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteVersion(v); }}
-                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                        title="この履歴を削除"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  {/* 未確定（ペンディング）履歴バッジ */}
-                  {pendingVersions.map((pv, idx) => (
-                    <div key={`pending-${idx}`} className="relative group">
-                      <span
-                        className="h-8 px-3 text-xs font-bold rounded border-2 border-dashed border-green-400 bg-green-50 text-green-700 flex items-center gap-1.5 pr-5"
-                        title={`未確定: ${pv.note || 'メモなし'}（次の保存ボタンで確定）`}
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        履歴
-                        {pv.note && <span className="font-normal max-w-[80px] truncate">{pv.note}</span>}
-                      </span>
-                      <button
-                        onClick={() => setPendingVersions(prev => prev.filter((_, i) => i !== idx))}
-                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                        title="この未確定履歴を削除"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  {/* 履歴作成ボタン */}
-                  {showNoteInput ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={versionNoteInput}
-                        onChange={(e) => setVersionNoteInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') saveVersion(versionNoteInput); if (e.key === 'Escape') { setShowNoteInput(false); setVersionNoteInput(''); } }}
-                        placeholder="保存時に残す履歴メモ"
-                        className="h-8 w-48 px-2 text-xs border border-gray-300 rounded focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => saveVersion(versionNoteInput)}
-                        disabled={versionSaving}
-                        className="h-8 px-3 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded flex items-center gap-1 disabled:opacity-50"
-                      >
-                        {versionSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                        作成
-                      </button>
-                      <button
-                        onClick={() => { setShowNoteInput(false); setVersionNoteInput(''); }}
-                        className="h-8 px-1 text-gray-400 hover:text-gray-600"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
+                  <span className="h-8 px-3 text-xs font-bold rounded border border-gray-300 bg-gray-50 text-gray-700 flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5" />
+                    現在の正式版
+                    <span className="font-mono text-gray-500">v{versions[0]?.version_number ?? 0}</span>
+                  </span>
+                  <button
+                    onClick={startDraftRevision}
+                    disabled={draftMode || !!previewingVersionId || isSaving}
+                    className={`h-8 px-3 text-xs font-bold rounded flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
+                      draftMode
+                        ? 'bg-green-100 text-green-700 border border-green-300'
+                        : 'bg-green-600 hover:bg-green-700 text-white'
+                    }`}
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    {draftMode ? '修正版を編集中' : '修正版を作る'}
+                  </button>
+                  {draftMode && (
+                    <input
+                      type="text"
+                      value={draftVersionNote}
+                      onChange={(e) => setDraftVersionNote(e.target.value)}
+                      placeholder="変更メモ 例: ウニ2K・うに味噌3K"
+                      className="h-8 w-72 px-2 text-xs border border-green-300 rounded focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none bg-white"
+                    />
+                  )}
+                  {versions.length > 0 && (
                     <button
-                      onClick={() => setShowNoteInput(true)}
-                      className="h-8 px-3 text-xs font-bold border border-dashed border-amber-400 text-amber-600 hover:bg-amber-50 rounded flex items-center gap-1.5 transition-colors"
+                      onClick={() => setVersionPanelOpen(prev => !prev)}
+                      className="h-8 px-3 text-xs font-bold rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 flex items-center gap-1.5"
                     >
-                      <History className="w-4 h-4" />
-                      + 履歴メモ
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      過去版 {versions.length}件
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${versionPanelOpen ? 'rotate-180' : ''}`} />
                     </button>
                   )}
                 </div>
               </div>
             </div>
+            {versionPanelOpen && versions.length > 0 && (
+              <div className="mb-4 print:hidden border border-amber-200 bg-amber-50/70 rounded p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-bold text-amber-800">過去版</div>
+                  <div className="text-[11px] text-amber-700">クリックで内容確認、採用は下部の保存ボタン</div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {versions.map((v) => (
+                    <div key={v.id} className="relative group">
+                      <button
+                        onClick={() => previewVersion(v)}
+                        className={`h-8 px-3 text-xs font-bold rounded border transition-colors flex items-center gap-1.5 pr-5 group-hover:pr-6 ${
+                          previewingVersionId === v.id
+                            ? 'border-blue-500 bg-blue-100 text-blue-800 ring-2 ring-blue-300'
+                            : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 hover:border-amber-400'
+                        }`}
+                        title={`v${v.version_number}${v.version_note ? ` - ${v.version_note}` : ''} | ${new Date(v.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        v{v.version_number}
+                        {v.version_note && <span className="font-normal max-w-[140px] truncate">{v.version_note}</span>}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteVersion(v); }}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        title="この過去版を削除"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Batch Settings (Only visible in edit/interact mode, but printed values persist) */}
             <div className="flex gap-4 mb-4 bg-gray-50 p-2 rounded print:hidden">
               <div className="flex items-center gap-2">
@@ -2899,13 +2892,15 @@ Now Expanded or Scrollable */}
       </main>
       {/* 下部固定 保存/キャンセルバー */}
       {hasChanges && (
-        <div className={`sticky bottom-0 z-20 backdrop-blur border-t px-6 py-3 print:hidden shadow-[0_-2px_10px_rgba(0,0,0,0.08)] ${previewingVersionId ? 'bg-blue-50/95 border-blue-300' : 'bg-white/95 border-blue-200'}`}>
+        <div className={`sticky bottom-0 z-20 backdrop-blur border-t px-6 py-3 print:hidden shadow-[0_-2px_10px_rgba(0,0,0,0.08)] ${previewingVersionId ? 'bg-blue-50/95 border-blue-300' : draftMode ? 'bg-green-50/95 border-green-300' : 'bg-white/95 border-blue-200'}`}>
           <div className="max-w-[1400px] mx-auto flex justify-between items-center">
-            <div className={`text-sm font-medium flex items-center gap-2 ${previewingVersionId ? 'text-blue-700' : 'text-amber-600'}`}>
-              <div className={`w-2 h-2 rounded-full animate-pulse ${previewingVersionId ? 'bg-blue-500' : 'bg-amber-500'}`} />
+            <div className={`text-sm font-medium flex items-center gap-2 ${previewingVersionId ? 'text-blue-700' : draftMode ? 'text-green-700' : 'text-amber-600'}`}>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${previewingVersionId ? 'bg-blue-500' : draftMode ? 'bg-green-500' : 'bg-amber-500'}`} />
               {previewingVersionId
                 ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} をプレビュー中`
-                : '未保存の変更があります'
+                : draftMode
+                  ? '修正版の編集中 - 保存すると新しい正式版として履歴に残ります'
+                  : '未保存の変更があります'
               }
             </div>
             <div className="flex items-center gap-3">
@@ -2938,7 +2933,9 @@ Now Expanded or Scrollable */}
                   ? '保存中...'
                   : previewingVersionId
                     ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} を採用して保存`
-                    : '保存'
+                    : draftMode
+                      ? '正式版として保存'
+                      : '保存'
                 }
               </Button>
             </div>
