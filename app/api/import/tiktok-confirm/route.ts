@@ -11,6 +11,7 @@ interface ConfirmItem {
   count: number;
   saleDate: string;
   productId: string;
+  amount?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -25,33 +26,55 @@ export async function POST(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 商品IDごとに集計
-    const productSummary = new Map<string, { count: number; saleDate: string }>();
+    // 商品ID・月ごとに集計（月次WEB販売管理用）
+    const productSummary = new Map<string, { productId: string; count: number; reportMonth: string }>();
+    // 売上日ごとに集計（DocScanner日別速報用）
+    const dailySummary = new Map<string, { count: number; amount: number }>();
 
     items.forEach((item: ConfirmItem) => {
-      if (productSummary.has(item.productId)) {
-        const existing = productSummary.get(item.productId)!;
+      const normalizedDate = normalizeSaleDate(item.saleDate);
+      const reportMonth = `${normalizedDate.slice(0, 7)}-01`;
+      const monthKey = `${item.productId}::${reportMonth}`;
+
+      if (productSummary.has(monthKey)) {
+        const existing = productSummary.get(monthKey)!;
         existing.count += item.count;
       } else {
-        productSummary.set(item.productId, {
+        productSummary.set(monthKey, {
+          productId: item.productId,
           count: item.count,
-          saleDate: item.saleDate
+          reportMonth
         });
       }
+
+      const existingDaily = dailySummary.get(normalizedDate) || { count: 0, amount: 0 };
+      existingDaily.count += item.count;
+      existingDaily.amount += Number(item.amount || 0);
+      dailySummary.set(normalizedDate, existingDaily);
     });
 
     console.log(`[TikTok Confirm] 商品ID別集計: ${productSummary.size}件`);
 
     // web_sales_summaryに保存（upsert方式）
     // 新規挿入時にunit_priceを保存するため、商品価格を一括取得
-    const productIds = Array.from(productSummary.keys());
+    const productIds = Array.from(new Set(Array.from(productSummary.values()).map(data => data.productId)));
     const unitPriceMap = await getBulkProductUnitPrices(supabase, productIds);
 
-    const upsertPromises = Array.from(productSummary.entries()).map(
-      async ([productId, data]) => {
-        const reportMonth = data.saleDate + '-01'; // YYYY-MM-01形式に変換
+    // CSV側の金額が取れない古いデータでも日別金額が出るよう、商品単価で補完する。
+    items.forEach((item: ConfirmItem) => {
+      const normalizedDate = normalizeSaleDate(item.saleDate);
+      const daily = dailySummary.get(normalizedDate);
+      if (!daily || Number(item.amount || 0) > 0) return;
+      const unitPrice = unitPriceMap.get(item.productId)?.unit_price || 0;
+      daily.amount += unitPrice * item.count;
+    });
+
+    const upsertPromises = Array.from(productSummary.values()).map(
+      async (data) => {
+        const productId = data.productId;
+        const reportMonth = data.reportMonth;
         // report_dateは売上月の末日を設定
-        const reportDate = getMonthEndDate(data.saleDate);
+        const reportDate = getMonthEndDate(reportMonth.slice(0, 7));
 
         console.log(`[TikTok Confirm] 処理中: product_id=${productId}, report_month=${reportMonth}, report_date=${reportDate}`);
 
@@ -117,6 +140,24 @@ export async function POST(request: NextRequest) {
 
     await Promise.all(upsertPromises);
 
+    const dailyUpsertRows = Array.from(dailySummary.entries()).map(([date, data]) => ({
+      date,
+      tiktok_count: data.count,
+      tiktok_amount: Math.round(data.amount),
+    }));
+
+    if (dailyUpsertRows.length > 0) {
+      const { error: dailyError } = await supabase
+        .from('daily_sales_report')
+        .upsert(dailyUpsertRows, { onConflict: 'date' });
+
+      if (dailyError) {
+        console.error('[TikTok Confirm] 日別売上保存エラー:', dailyError);
+        throw dailyError;
+      }
+      console.log(`[TikTok Confirm] 日別売上保存: ${dailyUpsertRows.length}日分`);
+    }
+
     console.log(`[TikTok Confirm] 確定処理完了`);
 
     return NextResponse.json({
@@ -135,6 +176,13 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : String(error)
     }, { status: 500 });
   }
+}
+
+function normalizeSaleDate(value: string): string {
+  const trimmed = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return `${trimmed}-01`;
+  return new Date().toISOString().slice(0, 10);
 }
 
 // 月末日を取得する関数

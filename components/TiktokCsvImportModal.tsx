@@ -48,6 +48,8 @@ export default function TiktokCsvImportModal({
     productId: string;
     productName: string;
     quantity: number;
+    saleDate: string;
+    amount: number;
     isLearned?: boolean;
   }>>([]);
   const [savingMapping, setSavingMapping] = useState<string | null>(null);
@@ -87,6 +89,8 @@ export default function TiktokCsvImportModal({
           productId: '',
           productName: '',
           quantity: item.count,
+          saleDate: item.saleDate || '',
+          amount: item.amount || 0,
           isLearned: false
         })),
         ...learned.map((item: any) => ({
@@ -94,6 +98,8 @@ export default function TiktokCsvImportModal({
           productId: item.productId || '',
           productName: products.find(p => p.id === item.productId)?.name || '',
           quantity: item.count,
+          saleDate: item.saleDate || '',
+          amount: item.amount || 0,
           isLearned: false
         })),
       ];
@@ -208,8 +214,9 @@ export default function TiktokCsvImportModal({
       const items = validMappings.map(item => ({
         title: item.tiktokTitle,
         count: item.quantity,
-        saleDate: saleMonth,
-        productId: item.productId
+        saleDate: item.saleDate || `${saleMonth}-01`,
+        productId: item.productId,
+        amount: item.amount || 0
       }));
 
       const response = await fetch('/api/import/tiktok-confirm', {
@@ -394,7 +401,9 @@ export default function TiktokCsvImportModal({
                             <div className="mt-1 p-2 bg-white rounded border text-sm break-words">
                               {mapping.tiktokTitle}
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">数量: {mapping.quantity}個</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              売上日: {mapping.saleDate || '未取得'} / 数量: {mapping.quantity}個 / 金額: ¥{Number(mapping.amount || 0).toLocaleString()}
+                            </div>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-gray-700">マスタ商品</label>

@@ -52,8 +52,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`[TikTok Parse] 学習データ件数: ${learningMap.size}`);
 
-    // 商品ごとに集計
-    const productMap = new Map<string, { count: number; saleDate: string }>();
+    // 商品・日付ごとに集計。日別速報で使うため、支払い日を日単位で保持する。
+    const productMap = new Map<string, { title: string; count: number; saleDate: string; amount: number }>();
 
     for (let i = 1; i < lines.length; i++) {
       // CSVの値を正しく分割（ダブルクォートで囲まれた値に対応）
@@ -88,7 +88,9 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 日付をYYYY-MM形式に変換
+      const amount = parseYenAmount(orderAmount);
+
+      // 日付をYYYY-MM-DD形式に変換
       let formattedDate = '';
       if (paymentDate) {
         // MM/DD/YYYY HH:MM:SS AM/PM 形式を解析
@@ -97,18 +99,22 @@ export async function POST(request: NextRequest) {
           const month = dateMatch[1].padStart(2, '0');
           const day = dateMatch[2].padStart(2, '0');
           const year = dateMatch[3];
-          formattedDate = `${year}-${month}`;
+          formattedDate = `${year}-${month}-${day}`;
         }
       }
 
       // 既存データがある場合は加算、ない場合は新規追加
-      if (productMap.has(productName)) {
-        const existing = productMap.get(productName)!;
+      const key = `${productName}::${formattedDate || 'unknown'}`;
+      if (productMap.has(key)) {
+        const existing = productMap.get(key)!;
         existing.count += quantity;
+        existing.amount += amount;
       } else {
-        productMap.set(productName, {
+        productMap.set(key, {
+          title: productName,
           count: quantity,
-          saleDate: formattedDate
+          saleDate: formattedDate,
+          amount
         });
       }
     }
@@ -116,13 +122,15 @@ export async function POST(request: NextRequest) {
     console.log(`[TikTok Parse] 集計結果: ${productMap.size}商品`);
 
     // 結果を配列に変換
-    const results = Array.from(productMap.entries()).map(([title, data]) => {
+    const results = Array.from(productMap.values()).map((data) => {
+      const title = data.title;
       const learnedProductId = learningMap.get(title);
       
       return {
         title,
         count: data.count,
         saleDate: data.saleDate,
+        amount: data.amount,
         productId: learnedProductId || null,
         isLearned: !!learnedProductId
       };
@@ -154,6 +162,12 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : String(error)
     }, { status: 500 });
   }
+}
+
+function parseYenAmount(value: string): number {
+  const cleaned = String(value || '').replace(/[^\d.-]/g, '');
+  const amount = Number.parseFloat(cleaned);
+  return Number.isFinite(amount) ? Math.round(amount) : 0;
 }
 
 // CSV行をパースする関数（ダブルクォートで囲まれた値に対応）
