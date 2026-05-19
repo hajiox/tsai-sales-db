@@ -1175,6 +1175,14 @@ function RecipeDetailContent() {
       candidates: expenses,
     },
   ];
+  const fromTab = searchParams.get("fromTab");
+  const recipeTabs = ["all", "ネット専用", "自社", "OEM", "中間部品", "試作", "終売"];
+  const backTab = fromTab && recipeTabs.includes(fromTab)
+    ? fromTab
+    : recipe?.category && recipeTabs.includes(recipe.category)
+      ? recipe.category
+      : null;
+  const backToListUrl = backTab ? `/recipe?tab=${encodeURIComponent(backTab)}` : "/recipe";
 
   return (
     <div className="min-h-screen bg-white text-gray-800 font-sans print:p-0">
@@ -1184,7 +1192,7 @@ function RecipeDetailContent() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.push("/recipe")}
+            onClick={() => router.push(backToListUrl)}
             className="text-gray-500 hover:text-gray-900"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />

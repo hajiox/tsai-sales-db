@@ -58,6 +58,10 @@ interface Recipe {
 type TabType = "all" | "ネット専用" | "自社" | "OEM" | "中間部品" | "試作" | "終売";
 type LinkType = "web" | "wholesale" | "oem";
 
+const isRecipeTab = (value: string | null): value is TabType => {
+    return ["all", "ネット専用", "自社", "OEM", "中間部品", "試作", "終売"].includes(value || "");
+};
+
 export default function RecipePage() {
     const router = useRouter();
     const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -95,6 +99,20 @@ export default function RecipePage() {
     const [newSeriesCode, setNewSeriesCode] = useState('');
     const [modalProductName, setModalProductName] = useState('');
     const [modalPrice, setModalPrice] = useState<number>(0);
+
+    useEffect(() => {
+        const tab = new URLSearchParams(window.location.search).get("tab");
+        if (isRecipeTab(tab)) {
+            setActiveTab(tab);
+        }
+    }, []);
+
+    const handleTabChange = (tab: TabType) => {
+        setActiveTab(tab);
+        const url = new URL(window.location.href);
+        url.searchParams.set("tab", tab);
+        window.history.replaceState({}, "", `${url.pathname}?${url.searchParams.toString()}`);
+    };
 
     // 紐づけ先商品名を取得
     useEffect(() => {
@@ -648,7 +666,7 @@ export default function RecipePage() {
                     return (
                         <button
                             key={tab.key}
-                            onClick={() => setActiveTab(tab.key)}
+                            onClick={() => handleTabChange(tab.key)}
                             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-t border-l border-r rounded-t-lg -mb-px whitespace-nowrap transition ${activeTab === tab.key
                                 ? "bg-white border-gray-300 text-gray-900"
                                 : "bg-gray-100 border-transparent text-gray-500 hover:text-gray-700"
@@ -751,7 +769,7 @@ export default function RecipePage() {
                                 <TableRow
                                     key={recipe.id}
                                     className="cursor-pointer hover:bg-gray-50"
-                                    onClick={() => router.push(`/recipe/${recipe.id}`)}
+                                    onClick={() => router.push(`/recipe/${recipe.id}?fromTab=${encodeURIComponent(activeTab)}`)}
                                 >
                                     <TableCell onClick={(e) => e.stopPropagation()} className="text-xs">
                                         <Select
