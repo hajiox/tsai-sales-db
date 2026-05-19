@@ -88,6 +88,7 @@ function getIndexStatusLabel(status: CompanyLink["google_index_status"]) {
 function buildGoogleIndexPrompt(link: CompanyLink) {
   return [
     "TSAシステムの自社リンク集に登録されている以下URLについて、Google Search Consoleでインデックス登録状況を確認してください。",
+    "ブラウザ操作は最初からChrome拡張のログイン済みブラウザで実行してください。Codex内蔵ブラウザは使わないでください。",
     "",
     `タイトル: ${link.title || "(未設定)"}`,
     `URL: ${link.url}`,
@@ -97,7 +98,7 @@ function buildGoogleIndexPrompt(link: CompanyLink) {
     "",
     "作業内容:",
     "1. localシステムではないことを確認する。",
-    "2. URLのドメインに対応するSearch ConsoleプロパティでURL検査する。",
+    "2. browser-useでChrome拡張のブラウザへ接続し、URLのドメインに対応するSearch ConsoleプロパティでURL検査する。",
     "3. 登録済みならTSAのcompany_linksへ google_index_status='indexed' と確認日時を反映する。",
     "4. 未登録ならSearch Consoleでインデックス登録をリクエストし、TSAへ google_index_status='requested' と確認日時を反映する。",
     "5. 権限不足・プロパティ外・第三者サイトの場合は登録操作せず、その理由を google_index_note に残す。",
