@@ -116,6 +116,7 @@ export default function LinksPage() {
   const [formOgImage, setFormOgImage] = useState("")
   const [formMemo, setFormMemo] = useState("")
   const [formSortOrder, setFormSortOrder] = useState(0)
+  const [formGoogleIndexStatus, setFormGoogleIndexStatus] = useState<CompanyLink["google_index_status"]>(null)
   const [fetchingOgp, setFetchingOgp] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -242,6 +243,7 @@ export default function LinksPage() {
     setFormDescription("")
     setFormOgImage("")
     setFormMemo("")
+    setFormGoogleIndexStatus(null)
     const maxOrder = links.length > 0 ? Math.max(...links.map(l => l.sort_order)) : -1
     setFormSortOrder(maxOrder + 1)
     setShowModal(true)
@@ -255,6 +257,7 @@ export default function LinksPage() {
     setFormOgImage(link.og_image || "")
     setFormMemo(link.memo || "")
     setFormSortOrder(link.sort_order)
+    setFormGoogleIndexStatus(link.google_index_status)
     setShowModal(true)
   }
 
@@ -363,6 +366,9 @@ export default function LinksPage() {
         og_image: formOgImage,
         memo: formMemo,
         sort_order: formSortOrder,
+        google_index_status: formGoogleIndexStatus,
+        google_index_checked_at: editingLink && formGoogleIndexStatus !== editingLink.google_index_status ? new Date().toISOString() : editingLink?.google_index_checked_at ?? null,
+        google_index_note: editingLink && formGoogleIndexStatus !== editingLink.google_index_status ? "Manual status update from links editor" : editingLink?.google_index_note ?? null,
       }
 
       console.log("Saving link...", { editingLink, payload })
@@ -777,6 +783,21 @@ export default function LinksPage() {
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">メモ</label>
                 <textarea value={formMemo} onChange={(e) => setFormMemo(e.target.value)} placeholder="自由にメモを入力" className="w-full border rounded-md px-3 py-2 text-sm min-h-[60px]" />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">検索登録ステータス</label>
+                <select
+                  value={formGoogleIndexStatus || ""}
+                  onChange={(e) => setFormGoogleIndexStatus(e.target.value ? e.target.value as CompanyLink["google_index_status"] : null)}
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">未確認</option>
+                  <option value="indexed">Google登録済み</option>
+                  <option value="requested">登録リクエスト済み</option>
+                  <option value="not_indexed">未登録</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500">手動で変更した場合は確認日時も更新されます。</p>
               </div>
 
               <div className="flex justify-end gap-2">
