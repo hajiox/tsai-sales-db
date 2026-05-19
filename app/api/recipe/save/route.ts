@@ -45,6 +45,8 @@ export async function POST(request: Request) {
                     usage_amount: item.usage_amount,
                     cost: item.cost,
                     tax_included: item.tax_included ?? true,
+                    ingredient_id: item.ingredient_id || null,
+                    material_id: item.material_id || null,
                     intermediate_recipe_id: item.intermediate_recipe_id || null,
                 }))
             );
@@ -64,6 +66,8 @@ export async function POST(request: Request) {
                         usage_amount: item.usage_amount,
                         cost: item.cost,
                         tax_included: item.tax_included ?? true,
+                        ingredient_id: item.ingredient_id || null,
+                        material_id: item.material_id || null,
                         intermediate_recipe_id: item.intermediate_recipe_id || null,
                     })
                     .eq("id", item.id);

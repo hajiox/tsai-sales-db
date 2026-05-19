@@ -100,13 +100,15 @@ interface RecipeItem {
   recipe_id: string;
   item_name: string;
   item_type: string;
+  ingredient_id?: string | null;
+  material_id?: string | null;
+  intermediate_recipe_id?: string | null;
   unit_quantity: number | string | null;
   unit_price: number | string | null;
   unit_weight: number | null;
   usage_amount: number | string | null;
   cost: number | string | null;
   tax_included?: boolean;
-  intermediate_recipe_id?: string | null;
 }
 
 function RecipeDetailContent() {
@@ -142,6 +144,13 @@ function RecipeDetailContent() {
   const [nutritionMap, setNutritionMap] = useState<
     Record<string, NutritionData>
   >({});
+
+  const getItemNutrition = (item: RecipeItem) => {
+    return (
+      nutritionMap[`name:${item.item_name}`] ||
+      (item.ingredient_id ? nutritionMap[`id:${item.ingredient_id}`] : undefined)
+    );
+  };
 
   // Deletion tracking
   const [deletedItemIds, setDeletedItemIds] = useState<Set<string>>(new Set());
@@ -480,32 +489,59 @@ function RecipeDetailContent() {
     if (itemsData) {
       setItems(itemsData);
 
-      const ingredientNames = itemsData
+      const ingredientItems = itemsData.filter(
+        (i) => i.item_type === "ingredient" || i.item_type === "intermediate",
+      );
+      const ingredientNames = ingredientItems
         .filter(
-          (i) => i.item_type === "ingredient" || i.item_type === "intermediate",
+          (i) => i.item_name,
         )
         .map((i) => i.item_name);
+      const ingredientIds = ingredientItems
+        .map((i) => i.ingredient_id)
+        .filter(Boolean);
 
+      const nutritionQueries = [];
       if (ingredientNames.length > 0) {
-        const { data: nutritionData } = await supabase
-          .from("ingredients")
-          .select("name, calories, protein, fat, carbohydrate, sodium")
-          .in("name", ingredientNames);
+        nutritionQueries.push(
+          supabase
+            .from("ingredients")
+            .select("id, name, calories, protein, fat, carbohydrate, sodium")
+            .in("name", ingredientNames),
+        );
+      }
+      if (ingredientIds.length > 0) {
+        nutritionQueries.push(
+          supabase
+            .from("ingredients")
+            .select("id, name, calories, protein, fat, carbohydrate, sodium")
+            .in("id", ingredientIds),
+        );
+      }
 
-        if (nutritionData) {
-          const map: Record<string, NutritionData> = {};
+      if (nutritionQueries.length > 0) {
+        const nutritionResults = await Promise.all(nutritionQueries);
+        const nutritionData = nutritionResults.flatMap((result) => result.data || []);
+        const map: Record<string, NutritionData> = {};
+        if (nutritionData.length > 0) {
           nutritionData.forEach((n) => {
-            map[n.name] = {
+            const nutrition = {
               calories: n.calories,
               protein: n.protein,
               fat: n.fat,
               carbohydrate: n.carbohydrate,
               sodium: n.sodium,
             };
+            map[`id:${n.id}`] = nutrition;
+            map[`name:${n.name}`] = nutrition;
           });
-          setNutritionMap(map);
         }
+        setNutritionMap(map);
+      } else {
+        setNutritionMap({});
       }
+    } else {
+      setNutritionMap({});
     }
 
     setLoading(false);
@@ -669,7 +705,12 @@ function RecipeDetailContent() {
         if (item.id === itemId) {
           let updates: Partial<RecipeItem> = {};
           if (typeof selected === "string") {
-            updates = { item_name: selected };
+            updates = {
+              item_name: selected,
+              ingredient_id: null,
+              material_id: null,
+              intermediate_recipe_id: null,
+            };
           } else {
             const isIntermediate = item.item_type === "intermediate" || item.item_type === "product";
 
@@ -683,6 +724,8 @@ function RecipeDetailContent() {
                 usage_amount: 1, // デフォルト1個（倍率）
                 cost: Math.round(parseFloat(String(selected.unit_price)) || 0), // 1個分の原価
                 intermediate_recipe_id: selected.id,
+                ingredient_id: null,
+                material_id: null,
                 tax_included: true,
               };
             } else {
@@ -696,6 +739,15 @@ function RecipeDetailContent() {
                     : parseFloat(String(selected.unit_quantity)) || 0,
                 tax_included: selected.tax_included !== false, // default true
               };
+              if (item.item_type === "ingredient") {
+                updates.ingredient_id = selected.id || null;
+                updates.material_id = null;
+                updates.intermediate_recipe_id = null;
+              } else if (item.item_type === "material") {
+                updates.material_id = selected.id || null;
+                updates.ingredient_id = null;
+                updates.intermediate_recipe_id = null;
+              }
 
               if (selected.name === "Amazon手数料" && recipe?.selling_price) {
                 updates.cost = Math.round(recipe.selling_price * (taxRates.amazon_fee / 100));
@@ -781,7 +833,7 @@ function RecipeDetailContent() {
     }, 0);
     const totalNutrition = nutritionItems.reduce((acc, item) => {
       const amount = parseFloat(String(item.usage_amount)) || 0;
-      const nut = nutritionMap[item.item_name];
+      const nut = getItemNutrition(item);
       if (!nut) return acc;
       return {
         calories: acc.calories + (nut.calories || 0) * amount / 100,
@@ -2881,7 +2933,7 @@ Now Expanded or Scrollable */}
                   usage_amount: parseFloat(String(item.usage_amount)) || 0,
                   unit_quantity: parseFloat(String(item.unit_quantity)) || 0,
                   unit_weight: item.unit_weight || 0,
-                  nutrition: nutritionMap[item.item_name],
+                  nutrition: getItemNutrition(item),
                 }))}
                 compact={true}
                 fillingQuantity={Number(recipe.filling_quantity)}

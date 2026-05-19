@@ -2,7 +2,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity } from "lucide-react";
+import { Activity, AlertTriangle } from "lucide-react";
 
 export interface NutritionData {
     calories: number | null;
@@ -30,12 +30,23 @@ interface NutritionDisplayProps {
 export default function NutritionDisplay({ items, compact = false, fillingQuantity }: NutritionDisplayProps) {
     if (!items || items.length === 0) return null;
 
+    const hasNutritionValue = (nutrition?: NutritionData) => {
+        if (!nutrition) return false;
+        return ["calories", "protein", "fat", "carbohydrate", "sodium"].some((key) => {
+            const value = nutrition[key as keyof NutritionData];
+            return value !== null && value !== undefined;
+        });
+    };
+
     // 食材(ingredient)と中間部品(intermediate)を対象にする
     const targetItems = items.filter(i =>
-        (i.item_type === 'ingredient' || i.item_type === 'intermediate') && i.nutrition && i.usage_amount && i.usage_amount > 0
+        (i.item_type === 'ingredient' || i.item_type === 'intermediate') && hasNutritionValue(i.nutrition) && i.usage_amount && i.usage_amount > 0
+    );
+    const missingNutritionItems = items.filter(i =>
+        (i.item_type === 'ingredient' || i.item_type === 'intermediate') && i.usage_amount && i.usage_amount > 0 && !hasNutritionValue(i.nutrition)
     );
 
-    if (targetItems.length === 0) return null;
+    if (targetItems.length === 0 && missingNutritionItems.length === 0) return null;
 
     // 全体の重量（栄養成分不明なものも含める）
     const totalRecipeWeight = items.reduce((sum, item) => {
@@ -83,6 +94,17 @@ export default function NutritionDisplay({ items, compact = false, fillingQuanti
     if (compact) {
         return (
             <div className="space-y-4">
+                {missingNutritionItems.length > 0 && (
+                    <div className="rounded border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-800">
+                        <div className="flex items-center gap-1 font-bold">
+                            <AlertTriangle className="h-3 w-3" />
+                            栄養未登録
+                        </div>
+                        <div className="mt-1 leading-relaxed">
+                            {missingNutritionItems.map((item) => item.item_name).join("、")}
+                        </div>
+                    </div>
+                )}
                 <div>
                     <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
                         100g あたり
@@ -164,6 +186,17 @@ export default function NutritionDisplay({ items, compact = false, fillingQuanti
                 </p>
             </CardHeader>
             <CardContent className="pt-4">
+                {missingNutritionItems.length > 0 && (
+                    <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                        <div className="flex items-center gap-2 font-bold">
+                            <AlertTriangle className="h-4 w-4" />
+                            栄養未登録の材料があります
+                        </div>
+                        <div className="mt-1 text-xs leading-relaxed">
+                            {missingNutritionItems.map((item) => item.item_name).join("、")}
+                        </div>
+                    </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* 100gあたり (重要) */}
                     <div className="bg-slate-50 p-4 rounded-lg">
