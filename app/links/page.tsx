@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { BadgeCheck, Clock3, Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Power, PowerOff } from "lucide-react"
+import { BadgeCheck, Bot, Check, Clock3, Copy, Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Power, PowerOff } from "lucide-react"
 
 interface CompanyLink {
   id: string
@@ -78,6 +78,33 @@ function getGoogleIndexBadge(link: CompanyLink) {
   return null
 }
 
+function getIndexStatusLabel(status: CompanyLink["google_index_status"]) {
+  if (status === "indexed") return "Google登録済み"
+  if (status === "requested") return "登録リクエスト済み"
+  if (status === "not_indexed") return "未登録"
+  return "未確認"
+}
+
+function buildGoogleIndexPrompt(link: CompanyLink) {
+  return [
+    "TSAシステムの自社リンク集に登録されている以下URLについて、Google Search Consoleでインデックス登録状況を確認してください。",
+    "",
+    `タイトル: ${link.title || "(未設定)"}`,
+    `URL: ${link.url}`,
+    `現在のTSA表示ステータス: ${getIndexStatusLabel(link.google_index_status)}`,
+    link.google_index_checked_at ? `前回確認日時: ${new Date(link.google_index_checked_at).toLocaleString("ja-JP")}` : "前回確認日時: 未確認",
+    link.google_index_note ? `前回メモ: ${link.google_index_note}` : "前回メモ: なし",
+    "",
+    "作業内容:",
+    "1. localシステムではないことを確認する。",
+    "2. URLのドメインに対応するSearch ConsoleプロパティでURL検査する。",
+    "3. 登録済みならTSAのcompany_linksへ google_index_status='indexed' と確認日時を反映する。",
+    "4. 未登録ならSearch Consoleでインデックス登録をリクエストし、TSAへ google_index_status='requested' と確認日時を反映する。",
+    "5. 権限不足・プロパティ外・第三者サイトの場合は登録操作せず、その理由を google_index_note に残す。",
+    "6. 最後に結果を短く報告する。",
+  ].join("\n")
+}
+
 export default function LinksPage() {
   const [links, setLinks] = useState<CompanyLink[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,6 +124,7 @@ export default function LinksPage() {
   const dragCounterRef = useRef(0)
   const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({})
   const [controllingServer, setControllingServer] = useState<string | null>(null)
+  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null)
 
   const fetchLinks = async () => {
     try {
@@ -392,6 +420,18 @@ export default function LinksPage() {
     }
   }
 
+  const handleCopyAgentPrompt = async (link: CompanyLink) => {
+    const prompt = buildGoogleIndexPrompt(link)
+    try {
+      await navigator.clipboard.writeText(prompt)
+      setCopiedPromptId(link.id)
+      window.setTimeout(() => setCopiedPromptId(current => current === link.id ? null : current), 1800)
+    } catch (error) {
+      console.error("プロンプトコピーエラー:", error)
+      alert("プロンプトのコピーに失敗しました")
+    }
+  }
+
   const handleMoveUp = async (index: number) => {
     if (index === 0) return
     const currentLink = links[index]
@@ -437,7 +477,7 @@ export default function LinksPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="max-w-full overflow-x-hidden p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">自社リンク集</h1>
         <Button onClick={openNewModal}>
@@ -470,10 +510,10 @@ export default function LinksPage() {
             const isOnline = serverStatus?.status === 'online' || serverStatus?.status === 'starting'
 
             return (
-              <div key={link.id} className={`bg-white border rounded-lg p-4 flex gap-4 hover:shadow-md transition-shadow ${isInternal && serverStatus?.status === 'online' ? 'border-l-4 border-l-emerald-400' :
+              <div key={link.id} className={`bg-white border rounded-lg p-4 flex flex-col gap-4 overflow-hidden hover:shadow-md transition-shadow lg:flex-row ${isInternal && serverStatus?.status === 'online' ? 'border-l-4 border-l-emerald-400' :
                 isInternal && serverStatus?.status === 'stopped' ? 'border-l-4 border-l-red-300' : ''
                 }`}>
-                <div className="flex-shrink-0 flex flex-col justify-center gap-1">
+                <div className="flex flex-shrink-0 justify-center gap-1 lg:flex-col">
                   <Button variant="ghost" size="sm" onClick={() => handleMoveUp(index)} disabled={index === 0} className="h-6 w-6 p-0">
                     <ChevronUp className="w-4 h-4" />
                   </Button>
@@ -482,7 +522,7 @@ export default function LinksPage() {
                   </Button>
                 </div>
 
-                <div className="flex-shrink-0 w-32 h-20 bg-gray-100 rounded overflow-hidden relative">
+                <div className="relative h-20 w-32 flex-shrink-0 overflow-hidden rounded bg-gray-100">
                   {link.og_image ? (
                     <img src={link.og_image} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
                   ) : (
@@ -498,9 +538,9 @@ export default function LinksPage() {
                   )}
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-lg font-semibold text-blue-600 hover:underline truncate">{link.title || link.url}</a>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="min-w-0 max-w-full truncate text-lg font-semibold text-blue-600 hover:underline">{link.title || link.url}</a>
                     {/* インラインステータスバッジ */}
                     {isInternal && serverStatus?.controllable && (
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${serverStatus.status === 'online' ? 'bg-emerald-100 text-emerald-700' :
@@ -530,11 +570,11 @@ export default function LinksPage() {
                   {link.memo && (
                     <p className="text-sm text-orange-600 mt-1 bg-orange-50 px-2 py-1 rounded inline-block">メモ: {link.memo}</p>
                   )}
-                  <div className="flex items-center gap-3 mt-2">
-                    <p className="text-xs text-gray-400 truncate">{link.url}</p>
+                  <div className="mt-2 flex min-w-0 flex-wrap items-center gap-3">
+                    <p className="min-w-0 max-w-full break-all text-xs text-gray-400">{link.url}</p>
                     {/* サーバー詳細情報 */}
                     {isInternal && serverStatus?.controllable && serverStatus.status === 'online' && (
-                      <span className="text-[10px] text-gray-400 flex-shrink-0">
+                      <span className="flex-shrink-0 text-[10px] text-gray-400">
                         {serverStatus.memory ? formatMemory(serverStatus.memory) : ''}
                         {serverStatus.uptime ? ` · 稼働${formatUptime(serverStatus.uptime)}` : ''}
                       </span>
@@ -543,7 +583,7 @@ export default function LinksPage() {
                 </div>
 
                 {/* QRコード */}
-                <div className="flex-shrink-0 w-20 h-20 bg-white rounded border border-gray-200 overflow-hidden flex items-center justify-center" title={link.url}>
+                <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded border border-gray-200 bg-white" title={link.url}>
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(link.url)}`}
                     alt={`QR: ${link.url}`}
@@ -552,7 +592,7 @@ export default function LinksPage() {
                   />
                 </div>
 
-                <div className="flex-shrink-0 flex flex-col gap-2 items-center">
+                <div className="flex flex-shrink-0 flex-row items-center gap-2 lg:flex-col">
                   {/* サーバー制御ボタン */}
                   {isInternal && serverStatus?.controllable && (
                     <Button
@@ -578,6 +618,15 @@ export default function LinksPage() {
                   <Button variant="outline" size="sm" onClick={() => openEditModal(link)}>
                     <Pencil className="w-4 h-4" />
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyAgentPrompt(link)}
+                    className="h-8 w-8 p-0 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                    title="AI確認プロンプトをコピー"
+                  >
+                    {copiedPromptId === link.id ? <Check className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => handleDelete(link.id)} className="text-red-500 hover:text-red-700">
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -591,20 +640,42 @@ export default function LinksPage() {
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="mx-4 max-h-[90vh] w-full max-w-xl overflow-hidden rounded-lg bg-white">
+            <div className="max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h2 className="text-xl font-bold mb-4">{editingLink ? "リンク編集" : "リンク追加"}</h2>
 
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">URL *</label>
-                <div className="flex gap-2">
-                  <Input value={formUrl} onChange={(e) => setFormUrl(e.target.value)} placeholder="https://example.com" className="flex-1" />
-                  <Button type="button" variant="outline" onClick={handleFetchOgp} disabled={fetchingOgp || !formUrl}>
+                <div className="flex min-w-0 gap-2">
+                  <Input value={formUrl} onChange={(e) => setFormUrl(e.target.value)} placeholder="https://example.com" className="min-w-0 flex-1" />
+                  <Button type="button" variant="outline" onClick={handleFetchOgp} disabled={fetchingOgp || !formUrl} className="flex-shrink-0">
                     {fetchingOgp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                     <span className="ml-1">取得</span>
                   </Button>
                 </div>
               </div>
+
+              {editingLink && (
+                <div className="mb-4 rounded-md border border-blue-100 bg-blue-50 p-3">
+                  <div className="flex min-w-0 items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-blue-900">AI確認プロンプト</p>
+                      <p className="mt-0.5 text-xs text-blue-700">このリンクだけをSearch Consoleで確認・登録する依頼文をコピーします。</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopyAgentPrompt(editingLink)}
+                      className="flex-shrink-0 border-blue-200 bg-white text-blue-700 hover:bg-blue-100"
+                    >
+                      {copiedPromptId === editingLink.id ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+                      {copiedPromptId === editingLink.id ? "コピー済み" : "コピー"}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">タイトル</label>
@@ -715,6 +786,7 @@ export default function LinksPage() {
                   {editingLink ? "更新" : "追加"}
                 </Button>
               </div>
+            </div>
             </div>
           </div>
         </div>
