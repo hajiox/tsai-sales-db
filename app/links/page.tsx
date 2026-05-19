@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Power, PowerOff } from "lucide-react"
+import { BadgeCheck, Clock3, Plus, ExternalLink, Pencil, Trash2, Loader2, Search, ChevronUp, ChevronDown, Power, PowerOff } from "lucide-react"
 
 interface CompanyLink {
   id: string
@@ -14,6 +14,9 @@ interface CompanyLink {
   og_image: string | null
   memo: string | null
   sort_order: number
+  google_index_status: "indexed" | "requested" | "not_indexed" | null
+  google_index_checked_at: string | null
+  google_index_note: string | null
   created_at: string
   updated_at: string
 }
@@ -54,6 +57,25 @@ function formatUptime(timestamp: number): string {
   }
   if (hours > 0) return `${hours}時間${minutes}分`
   return `${minutes}分`
+}
+
+function getGoogleIndexBadge(link: CompanyLink) {
+  if (isInternalServer(link.url)) return null
+  if (link.google_index_status === "indexed") {
+    return {
+      icon: BadgeCheck,
+      label: "Google登録済み",
+      className: "bg-blue-50 text-blue-700 border-blue-200",
+    }
+  }
+  if (link.google_index_status === "requested") {
+    return {
+      icon: Clock3,
+      label: "登録リクエスト済み",
+      className: "bg-amber-50 text-amber-700 border-amber-200",
+    }
+  }
+  return null
 }
 
 export default function LinksPage() {
@@ -436,6 +458,7 @@ export default function LinksPage() {
         <div className="grid gap-4">
           {links.map((link, index) => {
             const isInternal = isInternalServer(link.url)
+            const googleBadge = getGoogleIndexBadge(link)
             const serverStatus = serverStatuses[link.url]
             const isControlling = controllingServer === link.url
             const statusColor = serverStatus?.status === 'online' ? 'bg-emerald-400' :
@@ -489,6 +512,15 @@ export default function LinksPage() {
                         {serverStatus.status === 'online' ? '稼働中' :
                           serverStatus.status === 'starting' ? '起動中' :
                             serverStatus.status === 'stopped' ? '停止' : '不明'}
+                      </span>
+                    )}
+                    {googleBadge && (
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${googleBadge.className}`}
+                        title={link.google_index_checked_at ? `確認日: ${new Date(link.google_index_checked_at).toLocaleString("ja-JP")}` : undefined}
+                      >
+                        <googleBadge.icon className="w-3 h-3" />
+                        {googleBadge.label}
                       </span>
                     )}
                   </div>

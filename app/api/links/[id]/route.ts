@@ -33,20 +33,30 @@ export async function PUT(
     const body = await request.json()
     console.log('[API PUT] Request body:', JSON.stringify(body, null, 2))
 
-    const { url, title, description, og_image, memo, sort_order } = body
+    const allowedFields = [
+      'url',
+      'title',
+      'description',
+      'og_image',
+      'memo',
+      'sort_order',
+      'google_index_status',
+      'google_index_checked_at',
+      'google_index_note',
+    ]
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+    for (const field of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        updates[field] = body[field]
+      }
+    }
 
     console.log(`[API PUT] About to update with ID: "${id}"`)
     const { data, error } = await supabase
       .from('company_links')
-      .update({
-        url,
-        title,
-        description,
-        og_image,
-        memo,
-        sort_order,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', id)
       .select()
       .single()
