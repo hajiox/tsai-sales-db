@@ -18,6 +18,7 @@ import YahooTab from "./yahoo-tab"
 import AmazonTab from "./amazon-tab"
 import AdChatWindow from "@/components/AdChatWindow"
 import LpTrackingInlineTab from "./lp-tracking-tab"
+import RakutenSearchRequestTab from "./rakuten-search-request-tab"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -77,7 +78,7 @@ interface AdCostRow {
     other_cost: number
 }
 
-type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'yahoo' | 'amazon' | 'lp-tracking'
+type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'rakuten-search' | 'yahoo' | 'amazon' | 'lp-tracking'
 type SyncResultType = 'success' | 'warning' | 'error'
 
 // ===== メインコンポーネント =====
@@ -442,6 +443,7 @@ export default function AdvertisingDashboard() {
         { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span>, imported: importedPlatforms.google },
         { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span>, imported: importedPlatforms.meta },
         { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span>, imported: importedPlatforms.rakuten },
+        { id: 'rakuten-search', label: '楽天サーチ申請', icon: <Target size={16} className="text-red-600" /> },
         { id: 'yahoo', label: 'Yahoo!広告', icon: <span className="text-xs font-bold text-purple-600">Y</span>, imported: importedPlatforms.yahoo },
         { id: 'amazon', label: 'Amazon広告', icon: <span className="text-xs font-bold text-orange-500">A</span>, imported: importedPlatforms.amazon },
         { id: 'lp-tracking', label: 'LP計測', icon: <Crosshair size={16} className="text-teal-600" /> },
@@ -876,6 +878,11 @@ export default function AdvertisingDashboard() {
             {/* ===== 楽天タブ ===== */}
             {activeTab === 'rakuten' && (
                 <RakutenTab month={month} />
+            )}
+
+            {/* ===== 楽天サーチ申請タブ ===== */}
+            {activeTab === 'rakuten-search' && (
+                <RakutenSearchRequestTab />
             )}
 
             {/* ===== Yahoo!タブ ===== */}
