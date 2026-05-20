@@ -430,12 +430,16 @@ export default function RakutenSearchRequestTab() {
 
   const visibleProducts = useMemo(() => {
     if (includeNoSalesCandidates) return products
-    return products.filter((product) => rakutenSalesProductIds.has(product.id))
-  }, [products, includeNoSalesCandidates, rakutenSalesProductIds])
+    return products.filter((product) => rakutenSalesProductIds.has(product.id) || recipeJanByProductId.has(product.id))
+  }, [products, includeNoSalesCandidates, rakutenSalesProductIds, recipeJanByProductId])
 
   const rakutenSalesCount = useMemo(() => {
     return products.filter((product) => rakutenSalesProductIds.has(product.id)).length
   }, [products, rakutenSalesProductIds])
+
+  const newCandidateCount = useMemo(() => {
+    return products.filter((product) => !rakutenSalesProductIds.has(product.id) && recipeJanByProductId.has(product.id)).length
+  }, [products, rakutenSalesProductIds, recipeJanByProductId])
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = normalizeText(query)
@@ -562,8 +566,7 @@ export default function RakutenSearchRequestTab() {
               楽天RMSで価格変更・販売期間設定・イベント商品申請を実行するためのCodex指示文を生成します。
             </p>
             <p className="mt-1 text-xs text-gray-500">
-              通常は過去の楽天販売実績がある商品だけを表示します。新商品は「販売実績なしも表示」で検索して選択できます。
-              コード未設定の商品だけ、レシピ側JANコードで補完します。
+              通常は楽天販売実績ありの商品と、レシピJANがある新商品候補を表示します。コード未設定の商品だけ、レシピ側JANコードで補完します。
             </p>
           </div>
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -635,7 +638,7 @@ export default function RakutenSearchRequestTab() {
               onClick={() => setIncludeNoSalesCandidates((value) => !value)}
               className={`rounded-md border px-3 py-2 text-sm ${includeNoSalesCandidates ? "border-amber-300 bg-amber-50 text-amber-800" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
             >
-              販売実績なしも表示
+              全WEB商品を表示
             </button>
             <button
               type="button"
@@ -673,6 +676,7 @@ export default function RakutenSearchRequestTab() {
                 const candidate = candidatesByProductId.get(product.id)
                 const selected = selectedIds.has(product.id)
                 const hasRakutenSales = rakutenSalesProductIds.has(product.id)
+                const hasRecipeJan = recipeJanByProductId.has(product.id)
                 const discountRate = coerceDiscountRate(Number(discounts.get(product.id) ?? MIN_DISCOUNT_RATE))
                 const managementNumber = manualNumbers.get(product.id) ?? candidate?.productCode ?? ""
                 const salePrice = calculateSalePrice(product.price, discountRate)
@@ -689,7 +693,12 @@ export default function RakutenSearchRequestTab() {
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap items-center gap-2 font-medium text-gray-900">
                         <span>{product.name}</span>
-                        {!hasRakutenSales && (
+                        {!hasRakutenSales && hasRecipeJan && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                            新商品候補
+                          </span>
+                        )}
+                        {!hasRakutenSales && !hasRecipeJan && (
                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
                             販売実績なし
                           </span>
@@ -745,7 +754,7 @@ export default function RakutenSearchRequestTab() {
           </table>
         </div>
         <div className="border-t bg-gray-50 px-4 py-2 text-xs text-gray-500">
-          表示中 {filteredProducts.length}件 / 楽天販売実績あり {rakutenSalesCount}件 / 全WEB商品 {products.length}件
+          表示中 {filteredProducts.length}件 / 楽天販売実績あり {rakutenSalesCount}件 / 新商品候補 {newCandidateCount}件 / 全WEB商品 {products.length}件
         </div>
       </div>
 
