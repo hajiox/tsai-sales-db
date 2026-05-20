@@ -6,10 +6,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import {
   AlertCircle,
+  Ban,
   Check,
   ClipboardCopy,
   FileText,
+  History,
   Loader2,
+  RotateCcw,
   Search,
   ShieldCheck,
   Sparkles,
@@ -59,6 +62,13 @@ interface RakutenSalesRow {
   rakuten_count: number | null
 }
 
+interface RakutenSearchExclusion {
+  product_id: string
+  product_name: string | null
+  reason: string | null
+  created_at: string | null
+}
+
 interface RakutenCandidate {
   productCode: string
   productUrl: string | null
@@ -74,6 +84,27 @@ interface SelectedPromptItem {
   salePrice: number
   rakutenName: string | null
   rakutenUrl: string | null
+}
+
+interface SearchHistoryItem {
+  productId: string
+  productName: string
+  managementNumber: string
+  rakutenName: string | null
+  regularPrice: number
+  discountRate: number
+  salePrice: number
+  rakutenUrl: string | null
+}
+
+interface RakutenSearchRequestHistory {
+  id: string
+  title: string | null
+  item_count: number
+  prompt: string
+  restore_prompt: string
+  items: SearchHistoryItem[]
+  created_at: string | null
 }
 
 const MIN_DISCOUNT_RATE = 10
@@ -115,6 +146,19 @@ function calculateSalePrice(price: number | null, discountRate: number): number 
 function formatCurrency(value: number | null): string {
   if (value === null || Number.isNaN(value)) return "-"
   return `¥${Math.round(value).toLocaleString()}`
+}
+
+function formatDateTimeLabel(value: string | null): string {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 function digitsOnly(value: string): string {
@@ -300,6 +344,58 @@ function buildPrompt(params: {
   ].join("\n")
 }
 
+function buildRestorePrompt(params: {
+  items: SelectedPromptItem[]
+}): string {
+  const tableRows = params.items.map((item, index) => {
+    const regularPrice = item.product.price || 0
+    return [
+      String(index + 1),
+      item.product.name,
+      item.managementNumber,
+      regularPrice > 0 ? String(Math.round(regularPrice)) : "-",
+      `${item.discountRate}%`,
+      item.salePrice > 0 ? String(item.salePrice) : "-",
+      item.rakutenName || "-",
+      item.rakutenUrl || "-",
+    ].join(" | ")
+  })
+
+  return [
+    "TSAの楽天サーチ申請でSALE設定した商品について、楽天RMSでSALE後の設定解除・通常販売復旧を実行してください。",
+    "ブラウザ操作は最初からChrome拡張のログイン済みブラウザで実行してください。Codex内蔵ブラウザは使わないでください。",
+    "",
+    "重要:",
+    "- この作業はAPIでは実行できないため、楽天RMS画面を実際に操作してください。",
+    "- 価格を通常価格へ戻し、SALE用に設定した販売期間を解除または通常販売できる状態に戻してください。",
+    "- 販売期間終了の影響で商品が販売不可・倉庫状態になっている場合は、通常販売できる状態へ戻してください。",
+    "- ただし、作業前から倉庫商品/販売停止商品だった疑いがある商品、RMS上の状態が判断できない商品は推測で変更せず、保留してユーザーに確認してください。",
+    "- 価格・販売期間・販売状態以外の不要な項目は変更しないでください。",
+    "",
+    "復旧対象商品:",
+    "No | TSA商品名 | 楽天商品管理番号 | 戻す通常価格 | SALE割引率 | SALE価格 | 楽天商品名候補 | 楽天URL候補",
+    "--- | --- | --- | --- | --- | --- | --- | ---",
+    ...tableRows,
+    "",
+    "作業手順:",
+    "1. 楽天RMSトップから、店舗設定 → 商品管理 → 商品一覧・登録へ進む。",
+    "2. 対象商品を楽天商品管理番号で検索し、商品編集画面を開く。",
+    "3. 現在の販売価格、表示価格、販売期間、倉庫/販売状態、対象SKUがある場合はSKU価格を記録する。",
+    "4. 販売価格を上記の通常価格へ戻す。SKUごとに価格がある場合は対象SKUも通常価格に戻す。",
+    "5. SALE用に設定した販売期間を解除する。解除できない形式の場合は、通常販売できる状態になるよう販売期間設定を修正する。",
+    "6. 倉庫/販売状態がSALE期間終了によって販売不可になっている場合のみ、通常販売できる状態へ戻す。",
+    "7. 商品編集内容を保存し、エラーが出ないことを確認する。",
+    "8. 対象商品すべてについて、通常価格・販売可能状態に戻っていることを商品一覧または商品編集画面で確認する。",
+    "",
+    "完了報告:",
+    "- 復旧完了した商品管理番号",
+    "- 保留した商品と理由",
+    "- 各商品の変更前価格/変更後価格",
+    "- 各商品の変更前販売期間/変更後販売期間",
+    "- 倉庫/販売状態を変更した場合は、その変更内容",
+  ].join("\n")
+}
+
 export default function RakutenSearchRequestTab() {
   const supabase = getSupabaseBrowserClient()
   const [products, setProducts] = useState<ProductRow[]>([])
@@ -308,22 +404,28 @@ export default function RakutenSearchRequestTab() {
   const [adRows, setAdRows] = useState<RakutenAdRow[]>([])
   const [recipeJanRows, setRecipeJanRows] = useState<RecipeJanRow[]>([])
   const [rakutenSalesProductIds, setRakutenSalesProductIds] = useState<Set<string>>(new Set())
+  const [excludedProductIds, setExcludedProductIds] = useState<Set<string>>(new Set())
+  const [histories, setHistories] = useState<RakutenSearchRequestHistory[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [discounts, setDiscounts] = useState<Map<string, string>>(new Map())
   const [manualNumbers, setManualNumbers] = useState<Map<string, string>>(new Map())
   const [query, setQuery] = useState("")
   const [onlySelected, setOnlySelected] = useState(false)
   const [includeNoSalesCandidates, setIncludeNoSalesCandidates] = useState(false)
+  const [showExcludedProducts, setShowExcludedProducts] = useState(false)
   const [bulkDiscount, setBulkDiscount] = useState("10")
   const [isLoading, setIsLoading] = useState(true)
+  const [isSavingHistory, setIsSavingHistory] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [copiedRestore, setCopiedRestore] = useState(false)
+  const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const [productsRes, mappingsRes, namesRes, adsRes, recipesRes, salesRows] = await Promise.all([
+      const [productsRes, mappingsRes, namesRes, adsRes, recipesRes, exclusionsRes, historiesRes, salesRows] = await Promise.all([
         supabase
           .from("products")
           .select("id,name,series,series_code,product_code,product_number,global_product_id,price,profit_rate,is_hidden")
@@ -342,6 +444,12 @@ export default function RakutenSearchRequestTab() {
           .select("linked_product_id,jan_code,name,category")
           .not("linked_product_id", "is", null)
           .not("jan_code", "is", null),
+        supabase.from("rakuten_search_exclusions").select("product_id,product_name,reason,created_at"),
+        supabase
+          .from("rakuten_search_request_histories")
+          .select("id,title,item_count,prompt,restore_prompt,items,created_at")
+          .order("created_at", { ascending: false })
+          .limit(20),
         fetchAllRakutenSalesRows(supabase),
       ])
 
@@ -350,12 +458,16 @@ export default function RakutenSearchRequestTab() {
       if (namesRes.error) throw namesRes.error
       if (adsRes.error) throw adsRes.error
       if (recipesRes.error) throw recipesRes.error
+      if (exclusionsRes.error) throw exclusionsRes.error
+      if (historiesRes.error) throw historiesRes.error
 
       setProducts((productsRes.data || []) as ProductRow[])
       setProductMappings((mappingsRes.data || []) as RakutenProductMapping[])
       setProductNames((namesRes.data || []) as RakutenProductName[])
       setAdRows((adsRes.data || []) as RakutenAdRow[])
       setRecipeJanRows((recipesRes.data || []) as RecipeJanRow[])
+      setExcludedProductIds(new Set(((exclusionsRes.data || []) as RakutenSearchExclusion[]).map((row) => row.product_id)))
+      setHistories((historiesRes.data || []) as RakutenSearchRequestHistory[])
       const soldProductIds = (salesRows || [])
         .map((row) => row.product_id)
         .filter((productId): productId is string => Boolean(productId))
@@ -429,17 +541,22 @@ export default function RakutenSearchRequestTab() {
   }, [products, productMappings, productNamesByCode, latestAdsByCode, recipeJanByProductId, adCodesBySeries])
 
   const visibleProducts = useMemo(() => {
-    if (includeNoSalesCandidates) return products
-    return products.filter((product) => rakutenSalesProductIds.has(product.id) || recipeJanByProductId.has(product.id))
-  }, [products, includeNoSalesCandidates, rakutenSalesProductIds, recipeJanByProductId])
+    const baseProducts = includeNoSalesCandidates
+      ? products
+      : products.filter((product) => rakutenSalesProductIds.has(product.id) || recipeJanByProductId.has(product.id))
+    if (showExcludedProducts) return baseProducts
+    return baseProducts.filter((product) => !excludedProductIds.has(product.id))
+  }, [products, includeNoSalesCandidates, showExcludedProducts, rakutenSalesProductIds, recipeJanByProductId, excludedProductIds])
 
   const rakutenSalesCount = useMemo(() => {
     return products.filter((product) => rakutenSalesProductIds.has(product.id)).length
   }, [products, rakutenSalesProductIds])
 
   const newCandidateCount = useMemo(() => {
-    return products.filter((product) => !rakutenSalesProductIds.has(product.id) && recipeJanByProductId.has(product.id)).length
-  }, [products, rakutenSalesProductIds, recipeJanByProductId])
+    return products.filter((product) => !rakutenSalesProductIds.has(product.id) && recipeJanByProductId.has(product.id) && !excludedProductIds.has(product.id)).length
+  }, [products, rakutenSalesProductIds, recipeJanByProductId, excludedProductIds])
+
+  const excludedCount = excludedProductIds.size
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = normalizeText(query)
@@ -485,6 +602,13 @@ export default function RakutenSearchRequestTab() {
     })
   }, [canCopyPrompt, selectedPromptItems])
 
+  const restorePrompt = useMemo(() => {
+    if (!canCopyPrompt) return ""
+    return buildRestorePrompt({
+      items: selectedPromptItems,
+    })
+  }, [canCopyPrompt, selectedPromptItems])
+
   const toggleProduct = (productId: string) => {
     setSelectedIds((current) => {
       const next = new Set(current)
@@ -522,7 +646,7 @@ export default function RakutenSearchRequestTab() {
     const ids = new Set<string>()
     filteredProducts.forEach((product) => {
       const candidate = candidatesByProductId.get(product.id)
-      if (candidate?.productCode) ids.add(product.id)
+      if (candidate?.productCode && !excludedProductIds.has(product.id)) ids.add(product.id)
     })
     setSelectedIds(ids)
   }
@@ -537,11 +661,113 @@ export default function RakutenSearchRequestTab() {
     })
   }
 
+  const buildHistoryItems = (): SearchHistoryItem[] => {
+    return selectedPromptItems.map((item) => ({
+      productId: item.product.id,
+      productName: item.product.name,
+      managementNumber: item.managementNumber,
+      rakutenName: item.rakutenName,
+      regularPrice: item.product.price || 0,
+      discountRate: item.discountRate,
+      salePrice: item.salePrice,
+      rakutenUrl: item.rakutenUrl,
+    }))
+  }
+
+  const saveCurrentHistory = async (): Promise<RakutenSearchRequestHistory> => {
+    const createdAt = new Date().toISOString()
+    const history: RakutenSearchRequestHistory = {
+      id: crypto.randomUUID(),
+      title: `楽天サーチ申請 ${selectedPromptItems.length}件`,
+      item_count: selectedPromptItems.length,
+      prompt,
+      restore_prompt: restorePrompt,
+      items: buildHistoryItems(),
+      created_at: createdAt,
+    }
+
+    const { error: saveError } = await supabase.from("rakuten_search_request_histories").insert({
+      id: history.id,
+      title: history.title,
+      item_count: history.item_count,
+      prompt: history.prompt,
+      restore_prompt: history.restore_prompt,
+      items: history.items,
+      created_at: history.created_at,
+    })
+    if (saveError) throw saveError
+
+    setHistories((current) => [history, ...current].slice(0, 20))
+    return history
+  }
+
   const handleCopyPrompt = async () => {
     if (!prompt) return
-    await navigator.clipboard.writeText(prompt)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+    setIsSavingHistory(true)
+    setError(null)
+    try {
+      await saveCurrentHistory()
+      await navigator.clipboard.writeText(prompt)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "履歴保存またはコピーに失敗しました"
+      setError(message)
+    } finally {
+      setIsSavingHistory(false)
+    }
+  }
+
+  const handleCopyRestorePrompt = async () => {
+    if (!restorePrompt) return
+    await navigator.clipboard.writeText(restorePrompt)
+    setCopiedRestore(true)
+    window.setTimeout(() => setCopiedRestore(false), 1800)
+  }
+
+  const handleCopyHistoryRestorePrompt = async (history: RakutenSearchRequestHistory) => {
+    await navigator.clipboard.writeText(history.restore_prompt)
+    setCopiedHistoryId(history.id)
+    window.setTimeout(() => setCopiedHistoryId(null), 1800)
+  }
+
+  const excludeProduct = async (product: ProductRow) => {
+    if (!window.confirm(`${product.name} を楽天サーチ申請の新商品候補から除外しますか？`)) return
+    const { error: saveError } = await supabase.from("rakuten_search_exclusions").upsert(
+      {
+        product_id: product.id,
+        product_name: product.name,
+        reason: "not_new_candidate",
+      },
+      { onConflict: "product_id" }
+    )
+    if (saveError) {
+      setError(saveError.message)
+      return
+    }
+    setExcludedProductIds((current) => {
+      const next = new Set(current)
+      next.add(product.id)
+      return next
+    })
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      next.delete(product.id)
+      return next
+    })
+  }
+
+  const restoreExcludedProduct = async (product: ProductRow) => {
+    const { error: deleteError } = await supabase.from("rakuten_search_exclusions").delete().eq("product_id", product.id)
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
+    setExcludedProductIds((current) => {
+      const next = new Set(current)
+      next.delete(product.id)
+      return next
+    })
   }
 
   if (isLoading) {
@@ -566,7 +792,7 @@ export default function RakutenSearchRequestTab() {
               楽天RMSで価格変更・販売期間設定・イベント商品申請を実行するためのCodex指示文を生成します。
             </p>
             <p className="mt-1 text-xs text-gray-500">
-              通常は楽天販売実績ありの商品と、レシピJANがある新商品候補を表示します。コード未設定の商品だけ、レシピ側JANコードで補完します。
+              通常は楽天販売実績ありの商品と、レシピJANがある新商品候補を表示します。候補除外した商品は一覧から外れます。
             </p>
           </div>
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -642,6 +868,13 @@ export default function RakutenSearchRequestTab() {
             </button>
             <button
               type="button"
+              onClick={() => setShowExcludedProducts((value) => !value)}
+              className={`rounded-md border px-3 py-2 text-sm ${showExcludedProducts ? "border-gray-500 bg-gray-100 text-gray-900" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+            >
+              除外済みも表示
+            </button>
+            <button
+              type="button"
               onClick={selectProductsWithRakutenCode}
               className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
@@ -658,7 +891,7 @@ export default function RakutenSearchRequestTab() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-sm">
+          <table className="w-full min-w-[1240px] text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500">
               <tr>
                 <th className="w-12 px-3 py-3 text-center">選択</th>
@@ -669,6 +902,7 @@ export default function RakutenSearchRequestTab() {
                 <th className="w-24 px-3 py-3 text-right">通常価格</th>
                 <th className="w-24 px-3 py-3 text-right">割引率</th>
                 <th className="w-28 px-3 py-3 text-right">セール価格</th>
+                <th className="w-28 px-3 py-3 text-center">候補</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -677,22 +911,29 @@ export default function RakutenSearchRequestTab() {
                 const selected = selectedIds.has(product.id)
                 const hasRakutenSales = rakutenSalesProductIds.has(product.id)
                 const hasRecipeJan = recipeJanByProductId.has(product.id)
+                const isExcluded = excludedProductIds.has(product.id)
                 const discountRate = coerceDiscountRate(Number(discounts.get(product.id) ?? MIN_DISCOUNT_RATE))
                 const managementNumber = manualNumbers.get(product.id) ?? candidate?.productCode ?? ""
                 const salePrice = calculateSalePrice(product.price, discountRate)
                 return (
-                  <tr key={product.id} className={selected ? "bg-red-50/40" : "bg-white"}>
+                  <tr key={product.id} className={selected ? "bg-red-50/40" : isExcluded ? "bg-gray-50 text-gray-500" : "bg-white"}>
                     <td className="px-3 py-3 text-center">
                       <input
                         type="checkbox"
                         checked={selected}
+                        disabled={isExcluded}
                         onChange={() => toggleProduct(product.id)}
-                        className="h-4 w-4 rounded border-gray-300 text-red-600"
+                        className="h-4 w-4 rounded border-gray-300 text-red-600 disabled:opacity-40"
                       />
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap items-center gap-2 font-medium text-gray-900">
                         <span>{product.name}</span>
+                        {isExcluded && (
+                          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-700">
+                            除外済み
+                          </span>
+                        )}
                         {!hasRakutenSales && hasRecipeJan && (
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
                             新商品候補
@@ -747,6 +988,29 @@ export default function RakutenSearchRequestTab() {
                     <td className="px-3 py-3 text-right font-semibold tabular-nums text-red-700">
                       {salePrice > 0 ? formatCurrency(salePrice) : "-"}
                     </td>
+                    <td className="px-3 py-3 text-center">
+                      {isExcluded ? (
+                        <button
+                          type="button"
+                          onClick={() => restoreExcludedProduct(product)}
+                          className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-white"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          戻す
+                        </button>
+                      ) : !hasRakutenSales && hasRecipeJan ? (
+                        <button
+                          type="button"
+                          onClick={() => excludeProduct(product)}
+                          className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                        >
+                          <Ban className="h-3 w-3" />
+                          除外
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -754,32 +1018,43 @@ export default function RakutenSearchRequestTab() {
           </table>
         </div>
         <div className="border-t bg-gray-50 px-4 py-2 text-xs text-gray-500">
-          表示中 {filteredProducts.length}件 / 楽天販売実績あり {rakutenSalesCount}件 / 新商品候補 {newCandidateCount}件 / 全WEB商品 {products.length}件
+          表示中 {filteredProducts.length}件 / 楽天販売実績あり {rakutenSalesCount}件 / 新商品候補 {newCandidateCount}件 / 除外済み {excludedCount}件 / 全WEB商品 {products.length}件
         </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="rounded-lg border bg-white p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <h3 className="flex items-center gap-2 font-semibold">
               <FileText className="h-4 w-4 text-red-600" />
               生成プロンプト
             </h3>
-            <button
-              type="button"
-              onClick={handleCopyPrompt}
-              disabled={!canCopyPrompt}
-              className="flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:bg-gray-300"
-            >
-              {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
-              {copied ? "コピー済み" : "プロンプトをコピー"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleCopyPrompt}
+                disabled={!canCopyPrompt || isSavingHistory}
+                className="flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:bg-gray-300"
+              >
+                {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+                {copied ? "保存済み" : isSavingHistory ? "保存中..." : "申請を保存してコピー"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyRestorePrompt}
+                disabled={!canCopyPrompt}
+                className="flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                {copiedRestore ? <Check className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                {copiedRestore ? "コピー済み" : "解除をコピー"}
+              </button>
+            </div>
           </div>
 
           {!canCopyPrompt && (
             <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               <AlertCircle className="mr-1 inline h-4 w-4" />
-              商品選択、楽天商品管理番号、イベント名、販売期間を入力するとプロンプトを生成できます。
+              商品選択と楽天商品管理番号の入力が終わると、申請プロンプトとSALE後解除プロンプトを生成できます。
             </div>
           )}
 
@@ -789,12 +1064,26 @@ export default function RakutenSearchRequestTab() {
             </div>
           )}
 
-          <textarea
-            value={prompt}
-            readOnly
-            placeholder="ここにCodexへ渡す楽天RMS操作プロンプトが表示されます。"
-            className="h-[420px] w-full resize-none rounded-md border border-gray-300 bg-gray-50 p-3 font-mono text-xs leading-relaxed text-gray-800"
-          />
+          <div className="space-y-4">
+            <div>
+              <div className="mb-1 text-xs font-medium text-gray-600">サーチ申請プロンプト</div>
+              <textarea
+                value={prompt}
+                readOnly
+                placeholder="ここにCodexへ渡す楽天RMS操作プロンプトが表示されます。"
+                className="h-[300px] w-full resize-none rounded-md border border-gray-300 bg-gray-50 p-3 font-mono text-xs leading-relaxed text-gray-800"
+              />
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-gray-600">SALE後解除プロンプト</div>
+              <textarea
+                value={restorePrompt}
+                readOnly
+                placeholder="ここにSALE終了後に使う復旧プロンプトが表示されます。"
+                className="h-[260px] w-full resize-none rounded-md border border-gray-300 bg-gray-50 p-3 font-mono text-xs leading-relaxed text-gray-800"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="rounded-lg border bg-white p-4">
@@ -825,6 +1114,35 @@ export default function RakutenSearchRequestTab() {
                 </div>
               ))
             )}
+          </div>
+
+          <div className="mt-5 border-t pt-4">
+            <h3 className="flex items-center gap-2 font-semibold">
+              <History className="h-4 w-4 text-gray-600" />
+              設定履歴
+            </h3>
+            <div className="mt-3 max-h-[300px] space-y-2 overflow-y-auto pr-1">
+              {histories.length === 0 ? (
+                <p className="text-sm text-gray-500">まだ保存された履歴はありません。</p>
+              ) : (
+                histories.map((history) => (
+                  <div key={history.id} className="rounded-md border border-gray-200 p-3 text-sm">
+                    <div className="font-medium text-gray-900">{history.title || "楽天サーチ申請"}</div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      {formatDateTimeLabel(history.created_at)} / {history.item_count}件
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyHistoryRestorePrompt(history)}
+                      className="mt-2 inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      {copiedHistoryId === history.id ? <Check className="h-3 w-3" /> : <RotateCcw className="h-3 w-3" />}
+                      {copiedHistoryId === history.id ? "コピー済み" : "解除プロンプト"}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
