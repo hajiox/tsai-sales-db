@@ -117,11 +117,6 @@ function formatCurrency(value: number | null): string {
   return `¥${Math.round(value).toLocaleString()}`
 }
 
-function formatDateTimeForPrompt(value: string): string {
-  if (!value) return ""
-  return value.replace("T", " ")
-}
-
 function digitsOnly(value: string): string {
   return value.replace(/\D/g, "")
 }
@@ -242,9 +237,6 @@ async function fetchAllRakutenSalesRows(
 }
 
 function buildPrompt(params: {
-  eventName: string
-  saleStart: string
-  saleEnd: string
   items: SelectedPromptItem[]
 }): string {
   const tableRows = params.items.map((item, index) => {
@@ -273,9 +265,9 @@ function buildPrompt(params: {
     "- 申請送信・価格変更・販売期間変更以外の不要な項目は変更しないでください。",
     "",
     "対象イベント:",
-    `- イベント名: ${params.eventName}`,
-    `- 販売開始日時: ${formatDateTimeForPrompt(params.saleStart)}`,
-    `- 販売終了日時: ${formatDateTimeForPrompt(params.saleEnd)}`,
+    "- 楽天RMSの 店舗設定 → 商品管理 → イベント商品申請 を開き、画面に表示されている直近/受付中のイベントを対象にしてください。",
+    "- この画面に対象イベントが1つだけ表示される前提です。表示されているイベント名・販売期間を読み取り、商品の販売期間設定にも同じ開始日時/終了日時を使ってください。",
+    "- イベント名または販売期間が読めない場合、または複数イベントが表示された場合は、推測せず作業を止めてユーザーに確認してください。",
     "- 割引率は10%未満にしないでください。",
     "- セール価格はTSAで算出済みです。RMSで税設定やSKU設定により差異が出る場合は、10%以上の割引になる価格を優先してください。",
     "",
@@ -285,17 +277,19 @@ function buildPrompt(params: {
     ...tableRows,
     "",
     "作業手順:",
-    "1. 楽天RMSトップから、店舗設定 → 商品管理 → 商品一覧・登録へ進む。",
-    "2. 対象商品を楽天商品管理番号で検索し、商品編集画面を開く。",
-    "3. 変更前の販売価格、表示価格、販売期間、倉庫/販売状態、対象SKUがある場合はSKU価格を記録する。",
-    "4. 販売価格を上記のセール価格に変更する。",
-    "5. 販売期間を上記の開始日時・終了日時に設定する。",
-    "6. 二重価格表示の項目がある場合は、元値が現在の通常価格として扱われる設定になっているか確認する。必要な場合のみ当店通常価格を元値にする。",
-    "7. 商品編集内容を保存し、エラーが出ないことを確認する。",
-    "8. 全商品の価格・販売期間設定が終わったら、店舗設定 → 商品管理 → イベント商品申請へ進む。",
-    "9. 個別申請または一括申請で、対象商品の楽天商品管理番号を登録する。RMSで一括申請CSVが必要な場合は、対象商品の楽天商品管理番号を使ってCSVを作成しアップロードしてよい。",
-    "10. 確認事項が表示された場合は、内容を読み、対象商品に問題がない場合のみ同意して申請を送信する。",
-    "11. 申請完了画面または結果一覧で、申請が受け付けられたことを確認する。",
+    "1. 楽天RMSトップから、店舗設定 → 商品管理 → イベント商品申請へ進む。",
+    "2. 画面に表示されている対象イベントのイベント名・販売開始日時・販売終了日時を読み取り、作業メモに記録する。",
+    "3. 店舗設定 → 商品管理 → 商品一覧・登録へ進む。",
+    "4. 対象商品を楽天商品管理番号で検索し、商品編集画面を開く。",
+    "5. 変更前の販売価格、表示価格、販売期間、倉庫/販売状態、対象SKUがある場合はSKU価格を記録する。",
+    "6. 販売価格を上記のセール価格に変更する。",
+    "7. 販売期間をRMSイベント商品申請画面で読み取った開始日時・終了日時に設定する。",
+    "8. 二重価格表示の項目がある場合は、元値が現在の通常価格として扱われる設定になっているか確認する。必要な場合のみ当店通常価格を元値にする。",
+    "9. 商品編集内容を保存し、エラーが出ないことを確認する。",
+    "10. 全商品の価格・販売期間設定が終わったら、店舗設定 → 商品管理 → イベント商品申請へ戻る。",
+    "11. 個別申請または一括申請で、対象商品の楽天商品管理番号を登録する。RMSで一括申請CSVが必要な場合は、対象商品の楽天商品管理番号を使ってCSVを作成しアップロードしてよい。",
+    "12. 確認事項が表示された場合は、内容を読み、対象商品に問題がない場合のみ同意して申請を送信する。",
+    "13. 申請完了画面または結果一覧で、申請が受け付けられたことを確認する。",
     "",
     "完了報告:",
     "- 申請送信済みの商品管理番号",
@@ -319,10 +313,8 @@ export default function RakutenSearchRequestTab() {
   const [manualNumbers, setManualNumbers] = useState<Map<string, string>>(new Map())
   const [query, setQuery] = useState("")
   const [onlySelected, setOnlySelected] = useState(false)
+  const [includeNoSalesCandidates, setIncludeNoSalesCandidates] = useState(false)
   const [bulkDiscount, setBulkDiscount] = useState("10")
-  const [eventName, setEventName] = useState("楽天スーパーSALE")
-  const [saleStart, setSaleStart] = useState("2026-06-03T20:00")
-  const [saleEnd, setSaleEnd] = useState("2026-06-11T01:59")
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -425,24 +417,29 @@ export default function RakutenSearchRequestTab() {
     return map
   }, [recipeJanRows])
 
-  const rakutenProducts = useMemo(() => {
-    return products.filter((product) => rakutenSalesProductIds.has(product.id))
-  }, [products, rakutenSalesProductIds])
-
   const candidatesByProductId = useMemo(() => {
     const map = new Map<string, RakutenCandidate | null>()
-    rakutenProducts.forEach((product) => {
+    products.forEach((product) => {
       map.set(
         product.id,
         resolveRakutenCandidate(product, productMappings, productNamesByCode, latestAdsByCode, recipeJanByProductId, adCodesBySeries)
       )
     })
     return map
-  }, [rakutenProducts, productMappings, productNamesByCode, latestAdsByCode, recipeJanByProductId, adCodesBySeries])
+  }, [products, productMappings, productNamesByCode, latestAdsByCode, recipeJanByProductId, adCodesBySeries])
+
+  const visibleProducts = useMemo(() => {
+    if (includeNoSalesCandidates) return products
+    return products.filter((product) => rakutenSalesProductIds.has(product.id))
+  }, [products, includeNoSalesCandidates, rakutenSalesProductIds])
+
+  const rakutenSalesCount = useMemo(() => {
+    return products.filter((product) => rakutenSalesProductIds.has(product.id)).length
+  }, [products, rakutenSalesProductIds])
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = normalizeText(query)
-    return rakutenProducts.filter((product) => {
+    return visibleProducts.filter((product) => {
       if (onlySelected && !selectedIds.has(product.id)) return false
       if (!normalizedQuery) return true
       const candidate = candidatesByProductId.get(product.id)
@@ -455,10 +452,10 @@ export default function RakutenSearchRequestTab() {
       ].join(" "))
       return searchText.includes(normalizedQuery)
     })
-  }, [rakutenProducts, query, onlySelected, selectedIds, candidatesByProductId])
+  }, [visibleProducts, query, onlySelected, selectedIds, candidatesByProductId])
 
   const selectedPromptItems = useMemo(() => {
-    return rakutenProducts
+    return products
       .filter((product) => selectedIds.has(product.id))
       .map((product) => {
         const candidate = candidatesByProductId.get(product.id)
@@ -473,19 +470,16 @@ export default function RakutenSearchRequestTab() {
           rakutenUrl: candidate?.productUrl || null,
         }
       })
-  }, [rakutenProducts, selectedIds, candidatesByProductId, manualNumbers, discounts])
+  }, [products, selectedIds, candidatesByProductId, manualNumbers, discounts])
 
   const missingNumberItems = selectedPromptItems.filter((item) => !item.managementNumber)
-  const canCopyPrompt = selectedPromptItems.length > 0 && missingNumberItems.length === 0 && saleStart && saleEnd && eventName.trim()
+  const canCopyPrompt = selectedPromptItems.length > 0 && missingNumberItems.length === 0
   const prompt = useMemo(() => {
     if (!canCopyPrompt) return ""
     return buildPrompt({
-      eventName: eventName.trim(),
-      saleStart,
-      saleEnd,
       items: selectedPromptItems,
     })
-  }, [canCopyPrompt, eventName, saleStart, saleEnd, selectedPromptItems])
+  }, [canCopyPrompt, selectedPromptItems])
 
   const toggleProduct = (productId: string) => {
     setSelectedIds((current) => {
@@ -522,7 +516,7 @@ export default function RakutenSearchRequestTab() {
 
   const selectProductsWithRakutenCode = () => {
     const ids = new Set<string>()
-    rakutenProducts.forEach((product) => {
+    filteredProducts.forEach((product) => {
       const candidate = candidatesByProductId.get(product.id)
       if (candidate?.productCode) ids.add(product.id)
     })
@@ -568,7 +562,8 @@ export default function RakutenSearchRequestTab() {
               楽天RMSで価格変更・販売期間設定・イベント商品申請を実行するためのCodex指示文を生成します。
             </p>
             <p className="mt-1 text-xs text-gray-500">
-              商品一覧は過去に楽天販売実績がある商品だけを表示します。コード未設定の商品だけ、レシピ側JANコードで補完します。
+              通常は過去の楽天販売実績がある商品だけを表示します。新商品は「販売実績なしも表示」で検索して選択できます。
+              コード未設定の商品だけ、レシピ側JANコードで補完します。
             </p>
           </div>
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -584,33 +579,14 @@ export default function RakutenSearchRequestTab() {
           </div>
         )}
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-4">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">イベント名</span>
-            <input
-              value={eventName}
-              onChange={(e) => setEventName(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">販売開始日時</span>
-            <input
-              type="datetime-local"
-              value={saleStart}
-              onChange={(e) => setSaleStart(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">販売終了日時</span>
-            <input
-              type="datetime-local"
-              value={saleEnd}
-              onChange={(e) => setSaleEnd(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-          </label>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+            <div className="text-xs font-medium text-gray-600">対象イベント</div>
+            <div className="mt-1 text-sm font-medium text-gray-900">RMSイベント商品申請ページに表示されているイベント</div>
+            <div className="mt-1 text-xs text-gray-500">
+              生成プロンプト側でCodexにイベント名・販売期間を読み取らせ、その期間で商品販売期間も設定させます。
+            </div>
+          </div>
           <div>
             <span className="mb-1 block text-xs font-medium text-gray-600">一括割引率</span>
             <div className="flex gap-2">
@@ -656,10 +632,17 @@ export default function RakutenSearchRequestTab() {
             </button>
             <button
               type="button"
+              onClick={() => setIncludeNoSalesCandidates((value) => !value)}
+              className={`rounded-md border px-3 py-2 text-sm ${includeNoSalesCandidates ? "border-amber-300 bg-amber-50 text-amber-800" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+            >
+              販売実績なしも表示
+            </button>
+            <button
+              type="button"
               onClick={selectProductsWithRakutenCode}
               className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
-              楽天番号ありを選択
+              表示中の番号ありを選択
             </button>
             <button
               type="button"
@@ -689,6 +672,7 @@ export default function RakutenSearchRequestTab() {
               {filteredProducts.map((product) => {
                 const candidate = candidatesByProductId.get(product.id)
                 const selected = selectedIds.has(product.id)
+                const hasRakutenSales = rakutenSalesProductIds.has(product.id)
                 const discountRate = coerceDiscountRate(Number(discounts.get(product.id) ?? MIN_DISCOUNT_RATE))
                 const managementNumber = manualNumbers.get(product.id) ?? candidate?.productCode ?? ""
                 const salePrice = calculateSalePrice(product.price, discountRate)
@@ -703,7 +687,14 @@ export default function RakutenSearchRequestTab() {
                       />
                     </td>
                     <td className="px-3 py-3">
-                      <div className="font-medium text-gray-900">{product.name}</div>
+                      <div className="flex flex-wrap items-center gap-2 font-medium text-gray-900">
+                        <span>{product.name}</span>
+                        {!hasRakutenSales && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                            販売実績なし
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-0.5 text-xs text-gray-500">{product.series || "シリーズ未設定"}</div>
                       {candidate?.productName && (
                         <div className="mt-1 truncate text-xs text-red-700">楽天候補: {candidate.productName}</div>
@@ -754,7 +745,7 @@ export default function RakutenSearchRequestTab() {
           </table>
         </div>
         <div className="border-t bg-gray-50 px-4 py-2 text-xs text-gray-500">
-          表示中 {filteredProducts.length}件 / 楽天販売実績あり {rakutenProducts.length}件 / 全WEB商品 {products.length}件
+          表示中 {filteredProducts.length}件 / 楽天販売実績あり {rakutenSalesCount}件 / 全WEB商品 {products.length}件
         </div>
       </div>
 
