@@ -47,6 +47,18 @@ interface RakutenAdRow {
   series_code: number | null
 }
 
+interface RecipeJanRow {
+  linked_product_id: string
+  jan_code: string
+  name: string | null
+  category: string | null
+}
+
+interface RakutenSalesRow {
+  product_id: string
+  rakuten_count: number | null
+}
+
 interface RakutenCandidate {
   productCode: string
   productUrl: string | null
@@ -110,6 +122,10 @@ function formatDateTimeForPrompt(value: string): string {
   return value.replace("T", " ")
 }
 
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, "")
+}
+
 function compactProductNumber(product: ProductRow): string {
   const values = [product.product_number, product.product_code, product.global_product_id]
     .filter((v) => v !== null && v !== undefined && String(v).trim() !== "")
@@ -139,6 +155,7 @@ function resolveRakutenCandidate(
   productMappings: RakutenProductMapping[],
   productNamesByCode: Map<string, string>,
   latestAdsByCode: Map<string, RakutenAdRow>,
+  recipeJanByProductId: Map<string, RecipeJanRow>,
   adCodesBySeries: Map<number, string[]>
 ): RakutenCandidate | null {
   const candidates = new Map<string, RakutenCandidate>()
@@ -185,8 +202,43 @@ function resolveRakutenCandidate(
     }
   }
 
+  if (candidates.size === 0) {
+    const recipeJan = recipeJanByProductId.get(product.id)
+    const janCode = recipeJan ? digitsOnly(recipeJan.jan_code) : ""
+    if (janCode) {
+      addCandidate({
+        productCode: janCode,
+        productUrl: latestAdsByCode.get(janCode)?.product_url || null,
+        productName: productNamesByCode.get(janCode) || recipeJan?.name || null,
+        source: "レシピJANコードから補完",
+        score: 70,
+      })
+    }
+  }
+
   const sorted = Array.from(candidates.values()).sort((a, b) => b.score - a.score)
   return sorted[0] || null
+}
+
+async function fetchAllRakutenSalesRows(
+  supabase: ReturnType<typeof getSupabaseBrowserClient>
+): Promise<RakutenSalesRow[]> {
+  const rows: RakutenSalesRow[] = []
+  const pageSize = 1000
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("web_sales_summary")
+      .select("product_id,rakuten_count")
+      .gt("rakuten_count", 0)
+      .range(from, from + pageSize - 1)
+
+    if (error) throw error
+    rows.push(...((data || []) as RakutenSalesRow[]))
+    if (!data || data.length < pageSize) break
+  }
+
+  return rows
 }
 
 function buildPrompt(params: {
@@ -260,6 +312,8 @@ export default function RakutenSearchRequestTab() {
   const [productMappings, setProductMappings] = useState<RakutenProductMapping[]>([])
   const [productNames, setProductNames] = useState<RakutenProductName[]>([])
   const [adRows, setAdRows] = useState<RakutenAdRow[]>([])
+  const [recipeJanRows, setRecipeJanRows] = useState<RecipeJanRow[]>([])
+  const [rakutenSalesProductIds, setRakutenSalesProductIds] = useState<Set<string>>(new Set())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [discounts, setDiscounts] = useState<Map<string, string>>(new Map())
   const [manualNumbers, setManualNumbers] = useState<Map<string, string>>(new Map())
@@ -277,7 +331,7 @@ export default function RakutenSearchRequestTab() {
     setIsLoading(true)
     setError(null)
     try {
-      const [productsRes, mappingsRes, namesRes, adsRes] = await Promise.all([
+      const [productsRes, mappingsRes, namesRes, adsRes, recipesRes, salesRows] = await Promise.all([
         supabase
           .from("products")
           .select("id,name,series,series_code,product_code,product_number,global_product_id,price,profit_rate,is_hidden")
@@ -291,17 +345,29 @@ export default function RakutenSearchRequestTab() {
           .select("product_code,product_url,report_month,amount_spent,series_code")
           .order("report_month", { ascending: false })
           .limit(3000),
+        supabase
+          .from("recipes")
+          .select("linked_product_id,jan_code,name,category")
+          .not("linked_product_id", "is", null)
+          .not("jan_code", "is", null),
+        fetchAllRakutenSalesRows(supabase),
       ])
 
       if (productsRes.error) throw productsRes.error
       if (mappingsRes.error) throw mappingsRes.error
       if (namesRes.error) throw namesRes.error
       if (adsRes.error) throw adsRes.error
+      if (recipesRes.error) throw recipesRes.error
 
       setProducts((productsRes.data || []) as ProductRow[])
       setProductMappings((mappingsRes.data || []) as RakutenProductMapping[])
       setProductNames((namesRes.data || []) as RakutenProductName[])
       setAdRows((adsRes.data || []) as RakutenAdRow[])
+      setRecipeJanRows((recipesRes.data || []) as RecipeJanRow[])
+      const soldProductIds = (salesRows || [])
+        .map((row) => row.product_id)
+        .filter((productId): productId is string => Boolean(productId))
+      setRakutenSalesProductIds(new Set(soldProductIds))
     } catch (err) {
       const message = err instanceof Error ? err.message : "データ取得に失敗しました"
       setError(message)
@@ -343,20 +409,40 @@ export default function RakutenSearchRequestTab() {
     return result
   }, [adRows])
 
+  const recipeJanByProductId = useMemo(() => {
+    const sortedRows = [...recipeJanRows].sort((a, b) => {
+      if (a.category === "ネット専用" && b.category !== "ネット専用") return -1
+      if (a.category !== "ネット専用" && b.category === "ネット専用") return 1
+      return 0
+    })
+    const map = new Map<string, RecipeJanRow>()
+    sortedRows.forEach((row) => {
+      const janCode = digitsOnly(row.jan_code || "")
+      if (row.linked_product_id && janCode && !map.has(row.linked_product_id)) {
+        map.set(row.linked_product_id, { ...row, jan_code: janCode })
+      }
+    })
+    return map
+  }, [recipeJanRows])
+
+  const rakutenProducts = useMemo(() => {
+    return products.filter((product) => rakutenSalesProductIds.has(product.id))
+  }, [products, rakutenSalesProductIds])
+
   const candidatesByProductId = useMemo(() => {
     const map = new Map<string, RakutenCandidate | null>()
-    products.forEach((product) => {
+    rakutenProducts.forEach((product) => {
       map.set(
         product.id,
-        resolveRakutenCandidate(product, productMappings, productNamesByCode, latestAdsByCode, adCodesBySeries)
+        resolveRakutenCandidate(product, productMappings, productNamesByCode, latestAdsByCode, recipeJanByProductId, adCodesBySeries)
       )
     })
     return map
-  }, [products, productMappings, productNamesByCode, latestAdsByCode, adCodesBySeries])
+  }, [rakutenProducts, productMappings, productNamesByCode, latestAdsByCode, recipeJanByProductId, adCodesBySeries])
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = normalizeText(query)
-    return products.filter((product) => {
+    return rakutenProducts.filter((product) => {
       if (onlySelected && !selectedIds.has(product.id)) return false
       if (!normalizedQuery) return true
       const candidate = candidatesByProductId.get(product.id)
@@ -369,10 +455,10 @@ export default function RakutenSearchRequestTab() {
       ].join(" "))
       return searchText.includes(normalizedQuery)
     })
-  }, [products, query, onlySelected, selectedIds, candidatesByProductId])
+  }, [rakutenProducts, query, onlySelected, selectedIds, candidatesByProductId])
 
   const selectedPromptItems = useMemo(() => {
-    return products
+    return rakutenProducts
       .filter((product) => selectedIds.has(product.id))
       .map((product) => {
         const candidate = candidatesByProductId.get(product.id)
@@ -387,7 +473,7 @@ export default function RakutenSearchRequestTab() {
           rakutenUrl: candidate?.productUrl || null,
         }
       })
-  }, [products, selectedIds, candidatesByProductId, manualNumbers, discounts])
+  }, [rakutenProducts, selectedIds, candidatesByProductId, manualNumbers, discounts])
 
   const missingNumberItems = selectedPromptItems.filter((item) => !item.managementNumber)
   const canCopyPrompt = selectedPromptItems.length > 0 && missingNumberItems.length === 0 && saleStart && saleEnd && eventName.trim()
@@ -436,7 +522,7 @@ export default function RakutenSearchRequestTab() {
 
   const selectProductsWithRakutenCode = () => {
     const ids = new Set<string>()
-    products.forEach((product) => {
+    rakutenProducts.forEach((product) => {
       const candidate = candidatesByProductId.get(product.id)
       if (candidate?.productCode) ids.add(product.id)
     })
@@ -480,6 +566,9 @@ export default function RakutenSearchRequestTab() {
             </h2>
             <p className="mt-1 text-sm text-gray-600">
               楽天RMSで価格変更・販売期間設定・イベント商品申請を実行するためのCodex指示文を生成します。
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              商品一覧は過去に楽天販売実績がある商品だけを表示します。コード未設定の商品だけ、レシピ側JANコードで補完します。
             </p>
           </div>
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -663,6 +752,9 @@ export default function RakutenSearchRequestTab() {
               })}
             </tbody>
           </table>
+        </div>
+        <div className="border-t bg-gray-50 px-4 py-2 text-xs text-gray-500">
+          表示中 {filteredProducts.length}件 / 楽天販売実績あり {rakutenProducts.length}件 / 全WEB商品 {products.length}件
         </div>
       </div>
 
