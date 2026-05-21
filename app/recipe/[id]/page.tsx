@@ -162,6 +162,11 @@ function RecipeDetailContent() {
   const [products, setProducts] = useState<ItemCandidate[]>([]);
   const [expenses, setExpenses] = useState<ItemCandidate[]>([]);
   const [seriesList, setSeriesList] = useState<SeriesItem[]>(SERIES_LIST);
+  const [janDuplicateInfo, setJanDuplicateInfo] = useState<{
+    recipeCount: number;
+    janMasterCount: number;
+    names: string[];
+  }>({ recipeCount: 0, janMasterCount: 0, names: [] });
 
   // Batch calculation states
   const [batchSize1, setBatchSize1] = useState(400);
@@ -338,6 +343,35 @@ function RecipeDetailContent() {
     // シリーズをDBから取得
     fetchSeriesList().then(setSeriesList);
   }, [params.id]);
+
+  useEffect(() => {
+    const checkJanDuplicates = async () => {
+      if (!recipe?.jan_code) {
+        setJanDuplicateInfo({ recipeCount: 0, janMasterCount: 0, names: [] });
+        return;
+      }
+
+      const [{ data: recipeRows }, { data: janRows }] = await Promise.all([
+        supabase
+          .from("recipes")
+          .select("id, name")
+          .eq("jan_code", recipe.jan_code),
+        supabase
+          .from("jan_codes")
+          .select("id")
+          .eq("jan_code", recipe.jan_code),
+      ]);
+
+      const otherRecipes = (recipeRows || []).filter((row) => row.id !== recipe.id);
+      setJanDuplicateInfo({
+        recipeCount: otherRecipes.length,
+        janMasterCount: Math.max((janRows || []).length - 1, 0),
+        names: otherRecipes.map((row) => row.name).filter(Boolean),
+      });
+    };
+
+    checkJanDuplicates();
+  }, [recipe?.id, recipe?.jan_code]);
 
   // JAN発行ページからの自動挿入: ?jan_code=xxx を検出
   useEffect(() => {
@@ -1542,13 +1576,27 @@ function RecipeDetailContent() {
                     </button>
                   </div>
                   <div className="flex-1 flex items-center">
-                    <InlineEdit
-                      value={recipe.jan_code ?? null}
-                      onSave={(val) => handleRecipeChange("jan_code", val || null)}
-                      className="font-semibold text-sm font-mono"
-                      inputClassName="font-semibold text-sm font-mono w-full"
-                      placeholder="-"
-                    />
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <InlineEdit
+                        value={recipe.jan_code ?? null}
+                        onSave={(val) => handleRecipeChange("jan_code", val || null)}
+                        className="font-semibold text-sm font-mono"
+                        inputClassName="font-semibold text-sm font-mono w-full"
+                        placeholder="-"
+                      />
+                      {(janDuplicateInfo.recipeCount > 0 || janDuplicateInfo.janMasterCount > 0) && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
+                          title={[
+                            janDuplicateInfo.recipeCount > 0 ? `他レシピ: ${janDuplicateInfo.names.join("、")}` : "",
+                            janDuplicateInfo.janMasterCount > 0 ? `JAN管理内の追加重複: ${janDuplicateInfo.janMasterCount}件` : "",
+                          ].filter(Boolean).join(" / ")}
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          重複あり
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="p-2 bg-gray-50 rounded border border-gray-100 min-h-[52px] flex flex-col">

@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Save, Copy, Package, Box, Tag, Key } from "lucide-react";
+import { ArrowLeft, Search, Save, Copy, Package, Box, Tag, Key, AlertTriangle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import BarcodeImage from "@/components/barcode-image";
@@ -162,6 +162,11 @@ function JanCodesContent() {
         }
         return true;
     });
+    const janDuplicateCounts = janCodes.reduce<Record<string, number>>((acc, item) => {
+        if (!item.jan_code) return acc;
+        acc[item.jan_code] = (acc[item.jan_code] || 0) + 1;
+        return acc;
+    }, {});
 
     const renderEditableCell = (item: JanCode, field: string, displayValue: string, width: string = "w-full") => {
         const isEditing = editingCell?.id === item.id && editingCell?.field === field;
@@ -322,8 +327,17 @@ function JanCodesContent() {
                                         </span>
                                     </td>
                                     <td className="px-3 py-1">
-                                        <div className="flex items-center gap-1 font-mono">
+                                        <div className="flex flex-wrap items-center gap-1 font-mono">
                                             <span>{item.jan_code}</span>
+                                            {(janDuplicateCounts[item.jan_code] || 0) > 1 && (
+                                                <span
+                                                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-700"
+                                                    title={`同じJANコードが${janDuplicateCounts[item.jan_code]}件あります`}
+                                                >
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    重複あり
+                                                </span>
+                                            )}
                                             <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => copyToClipboard(item.jan_code)}>
                                                 <Copy className="w-3 h-3 text-gray-400 hover:text-blue-500" />
                                             </Button>
