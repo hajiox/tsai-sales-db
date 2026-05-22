@@ -481,14 +481,17 @@ export default function AdvertisingDashboard() {
             </header>
 
             {/* タブナビゲーション */}
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-                {tabs.map(tab => (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                        {tab.icon}{tab.label}
-                        {tab.imported && <CheckCircle size={14} className="text-green-500" />}
-                    </button>
-                ))}
+            <div className="overflow-x-auto">
+                <div className="flex w-max min-w-full gap-1 rounded-lg bg-gray-100 p-1">
+                    {tabs.map(tab => (
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                            className={`flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                            <span className="shrink-0">{tab.icon}</span>
+                            <span>{tab.label}</span>
+                            {tab.imported && <CheckCircle size={14} className="shrink-0 text-green-500" />}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* ===== 概要タブ ===== */}
