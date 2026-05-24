@@ -8,6 +8,13 @@ import { ArrowLeft, Printer } from 'lucide-react';
 
 const PASSPRNT_APP_STORE_URL = 'https://apps.apple.com/jp/app/star-passprnt/id979827520';
 const MOBILE_DELIVERY_NOTES_PATH = '/wholesale/delivery-notes';
+const ISSUER = {
+  name: '株式会社テクニカルスタッフ',
+  postalCode: '〒965-0044',
+  address: '福島県会津若松市七日町6-15',
+  tel: 'TEL：0242-23-4001',
+  fax: 'FAX：050-3094-7721',
+};
 
 type ReceiptItem = {
   productName: string;
@@ -88,7 +95,10 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
     .item .line { margin-top: 6px; font-size: 24px; }
     .remarks { margin-top: 6px; font-size: 21px; color: #333; }
     .memo { border-top: 2px dashed #000; margin-top: 18px; padding-top: 12px; font-size: 22px; white-space: pre-wrap; }
-    .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 20px; }
+    .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 22px; }
+    .issuer { font-size: 28px; font-weight: 700; }
+    .issuer-detail { margin-top: 5px; font-size: 20px; line-height: 1.35; }
+    .system { margin-top: 7px; font-size: 18px; }
   </style>
 </head>
 <body>
@@ -105,8 +115,12 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
   </div>
   ${note.memo ? `<div class="memo"><strong>メモ</strong><br>${escapeHtml(note.memo)}</div>` : ''}
   <div class="footer">
-    <div>株式会社テクニカルスタッフ</div>
-    <div>AI System（TSA）より発行</div>
+    <div class="issuer">${escapeHtml(ISSUER.name)}</div>
+    <div class="issuer-detail">${escapeHtml(ISSUER.postalCode)}</div>
+    <div class="issuer-detail">${escapeHtml(ISSUER.address)}</div>
+    <div class="issuer-detail">${escapeHtml(ISSUER.tel)}</div>
+    <div class="issuer-detail">${escapeHtml(ISSUER.fax)}</div>
+    <div class="system">AI System（TSA）より発行</div>
   </div>
 </body>
 </html>`;
@@ -255,8 +269,12 @@ export default function DeliveryNoteReceiptPage() {
             )}
 
             <footer className="mt-4 border-t border-black pt-2 text-center text-[9px] leading-relaxed">
-              <div>株式会社テクニカルスタッフ</div>
-              <div>AI System（TSA）より発行</div>
+              <div className="text-[12px] font-bold">{ISSUER.name}</div>
+              <div>{ISSUER.postalCode}</div>
+              <div>{ISSUER.address}</div>
+              <div>{ISSUER.tel}</div>
+              <div>{ISSUER.fax}</div>
+              <div className="mt-1">AI System（TSA）より発行</div>
             </footer>
           </article>
         ) : null}
