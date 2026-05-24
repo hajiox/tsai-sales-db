@@ -116,7 +116,7 @@ async function ensureCustomer(input: DeliveryNoteCreateInput) {
 }
 
 export async function getDeliveryNoteOptions() {
-  const INCLUDE_RECIPE_CATEGORIES = ['自社', 'OEM', 'ネット専用', '試作'];
+  const INCLUDE_RECIPE_CATEGORIES = ['自社'];
   const [customersRes, recipesRes] = await Promise.all([
     supabase
       .from('wholesale_customers')

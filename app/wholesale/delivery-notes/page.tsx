@@ -142,8 +142,7 @@ export default function WholesaleDeliveryNotesMobilePage() {
     const q = productSearch.trim().toLowerCase();
     return products
       .filter(p => p.is_active !== false)
-      .filter(p => !q || p.product_name.toLowerCase().includes(q) || String(p.product_code || '').toLowerCase().includes(q))
-      .slice(0, 30);
+      .filter(p => !q || p.product_name.toLowerCase().includes(q) || String(p.product_code || '').toLowerCase().includes(q));
   }, [products, productSearch]);
 
   const itemCount = useMemo(
