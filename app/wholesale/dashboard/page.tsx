@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Button } from "@/components/ui/button";
-import { Upload, Trash2, Settings, Users, TrendingUp, BarChart3, Edit3 } from 'lucide-react';
+import { Upload, Trash2, Settings, Users, TrendingUp, BarChart3, Edit3, ReceiptText } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SummaryCards from '@/components/wholesale/summary-cards';
@@ -613,6 +613,12 @@ function WholesaleDashboardContent() {
             <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
               <Edit3 className="w-3.5 h-3.5" />
               日別売上入力
+            </Button>
+          </Link>
+          <Link href="/wholesale/delivery-notes">
+            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs bg-cyan-50 border-cyan-300 text-cyan-700 hover:bg-cyan-100">
+              <ReceiptText className="w-3.5 h-3.5" />
+              納品書発行
             </Button>
           </Link>
         </div>

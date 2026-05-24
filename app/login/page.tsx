@@ -5,13 +5,25 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import LoginButton from "./LoginButton";
 import MobileDetectWrapper from "./MobileDetectWrapper";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function getSafeCallbackUrl(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await getServerSession(authOptions);
+  const params = await searchParams;
+  const callbackUrl = getSafeCallbackUrl(params?.callbackUrl) || getSafeCallbackUrl(params?.redirect);
   if (session) {
     const headersList = await headers();
     const ua = headersList.get("user-agent") || "";
     const isMobile = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    redirect(isMobile ? "/mobile" : "/sales/dashboard");
+    redirect(callbackUrl || (isMobile ? "/mobile" : "/sales/dashboard"));
   }
 
   return (

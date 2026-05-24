@@ -12,6 +12,7 @@ const FULL_SCREEN_ROUTES = [
   '/recipe/photo/mobile',
   '/kpi',
   '/wholesale/sales-input',
+  '/wholesale/delivery-notes',
 ]
 
 export default function MainDashboard({ children }: { children: React.ReactNode }) {

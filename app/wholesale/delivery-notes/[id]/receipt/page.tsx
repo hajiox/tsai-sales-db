@@ -1,0 +1,295 @@
+"use client";
+
+export const dynamic = 'force-dynamic';
+
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft, Printer } from 'lucide-react';
+
+type ReceiptItem = {
+  productName: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  amount: number;
+  remarks?: string | null;
+};
+
+type DeliveryNote = {
+  id: string;
+  number: string | null;
+  deliveryDate: string;
+  customerName: string;
+  transactionType: string | null;
+  subtotal: number;
+  memo?: string | null;
+  items: ReceiptItem[];
+};
+
+function formatYen(value: number) {
+  const rounded = Math.round(value || 0);
+  return rounded < 0
+    ? `-¥${Math.abs(rounded).toLocaleString()}`
+    : `¥${rounded.toLocaleString()}`;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
+  const items = note.items.map(item => `
+    <div class="item">
+      <div class="product">${escapeHtml(item.productName)}</div>
+      <div class="line">
+        <span>${escapeHtml(item.quantity)}${escapeHtml(item.unit)} x ${escapeHtml(formatYen(item.unitPrice))}</span>
+        <strong>${escapeHtml(formatYen(item.amount))}</strong>
+      </div>
+      ${item.remarks ? `<div class="remarks">備考: ${escapeHtml(item.remarks)}</div>` : ''}
+    </div>
+  `).join('');
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page { size: 58mm auto; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body {
+      width: 58mm;
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      color: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+    body { padding: 2mm 2.5mm 5mm; }
+    .center { text-align: center; }
+    .title { border-bottom: 1px solid #000; padding-bottom: 2mm; font-size: 14px; font-weight: 700; letter-spacing: 0.2em; }
+    .meta { border-bottom: 1px dashed #000; padding: 2mm 0; }
+    .line { display: flex; justify-content: space-between; gap: 2mm; }
+    .customer { margin-top: 1mm; font-size: 13px; font-weight: 700; }
+    .head { display: grid; grid-template-columns: 1fr 14mm; border-bottom: 1px solid #000; padding-bottom: 1mm; font-weight: 700; }
+    .item { border-bottom: 1px dashed #999; padding: 1.8mm 0; }
+    .product { font-size: 11px; font-weight: 700; word-break: break-word; }
+    .remarks { margin-top: 1mm; font-size: 9px; color: #333; }
+    .total { border-top: 1px solid #000; margin-top: 2mm; padding-top: 2mm; font-size: 13px; font-weight: 700; }
+    .note { margin-top: 1mm; font-size: 9px; color: #333; }
+    .memo { border-top: 1px dashed #000; margin-top: 3mm; padding-top: 2mm; white-space: pre-wrap; }
+    .footer { border-top: 1px solid #000; margin-top: 4mm; padding-top: 2mm; text-align: center; font-size: 9px; }
+  </style>
+</head>
+<body>
+  <div class="title center">納品書</div>
+  <div class="center">${escapeHtml(note.number || '')}</div>
+  <div class="meta">
+    <div class="line"><span>納品日</span><span>${escapeHtml(note.deliveryDate)}</span></div>
+    <div style="margin-top:1mm;">納品先</div>
+    <div class="customer">${escapeHtml(note.customerName)} 御中</div>
+    <div class="line" style="margin-top:1mm;"><span>取引形態</span><span>${note.transactionType === 'consignment' ? '委託' : note.transactionType === 'purchase' ? '買取' : '-'}</span></div>
+  </div>
+  <div style="padding-top:2mm;">
+    <div class="head"><span>品名 / 数量 x 単価</span><span style="text-align:right;">金額</span></div>
+    ${items}
+  </div>
+  <div class="total line"><span>合計</span><span>${escapeHtml(formatYen(note.subtotal))}</span></div>
+  <div class="note">${escapeHtml(taxIncludedNote)}</div>
+  ${note.memo ? `<div class="memo"><strong>メモ</strong><br>${escapeHtml(note.memo)}</div>` : ''}
+  <div class="footer">
+    <div>株式会社テクニカルスタッフ</div>
+    <div>AI System（TSA）より発行</div>
+  </div>
+</body>
+</html>`;
+}
+
+export default function DeliveryNoteReceiptPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const [note, setNote] = useState<DeliveryNote | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/wholesale/delivery-notes/${encodeURIComponent(params.id)}`);
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || '納品書の取得に失敗しました');
+        setNote(data.deliveryNote);
+      } catch (e: any) {
+        setError(e?.message || '納品書の取得に失敗しました');
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (params.id) load();
+  }, [params.id]);
+
+  const taxIncludedNote = '金額は卸販売管理の税込単価を使用しています';
+  const openPassPrnt = () => {
+    if (!note) return;
+    const html = buildPassPrntHtml(note, taxIncludedNote);
+    const uri = [
+      'starpassprnt://v1/print/nopreview?',
+      `back=${encodeURIComponent(window.location.href)}`,
+      `&size=384`,
+      `&html=${encodeURIComponent(html)}`,
+    ].join('');
+    window.location.href = uri;
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 print:bg-white print:text-black">
+      <div className="no-print sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-md items-center justify-between">
+          <button
+            type="button"
+            onClick={() => router.push('/wholesale/delivery-notes')}
+            className="flex min-h-10 items-center gap-2 rounded-full border border-slate-700 px-3 text-sm text-slate-300"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            発行画面
+          </button>
+          <button
+            type="button"
+            onClick={openPassPrnt}
+            disabled={!note}
+            className="flex min-h-10 items-center gap-2 rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            <Printer className="h-4 w-4" />
+            Star印刷
+          </button>
+        </div>
+      </div>
+
+      <main className="mx-auto max-w-md px-4 py-4 print:m-0 print:max-w-none print:p-0">
+        {loading ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-400">読み込み中...</div>
+        ) : error ? (
+          <div className="rounded-2xl border border-rose-900 bg-rose-950/30 p-8 text-center text-sm text-rose-200">{error}</div>
+        ) : note ? (
+          <article className="receipt-paper mx-auto bg-white px-[2.5mm] py-[3mm] text-black shadow-2xl print:shadow-none">
+            <div className="no-print mb-3 rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-3 text-xs leading-relaxed text-cyan-100">
+              Star SM-S210i / 58mm / 384dots 向けの簡易納品書です。iPhone・Androidのブラウザ印刷または共有印刷からプリンターを選択してください。
+            </div>
+            <div className="no-print mb-3 space-y-2 rounded-xl border border-amber-500/40 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+              <div className="font-bold">iPhoneの標準印刷にはAirPrint対応機だけが表示されます。SM-S210iは「Star PassPRNTで印刷」を使ってください。</div>
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={openPassPrnt}
+                  className="min-h-11 rounded-xl bg-emerald-600 px-3 text-sm font-bold text-white"
+                >
+                  Star PassPRNTで印刷
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="min-h-10 rounded-xl border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-900"
+                >
+                  AirPrint対応プリンターで印刷
+                </button>
+              </div>
+              <div>事前にApp StoreでStar PassPRNTを入れ、BluetoothでSM-S210iをペアリングしてPassPRNT側でプリンターを選択してください。</div>
+            </div>
+            <header className="border-b border-black pb-2 text-center">
+              <div className="text-base font-bold tracking-[0.25em]">納品書</div>
+              <div className="mt-1 text-[10px]">{note.number}</div>
+            </header>
+
+            <section className="space-y-1 border-b border-dashed border-black py-3 text-[11px]">
+              <div className="flex justify-between gap-2">
+                <span>納品日</span>
+                <span>{note.deliveryDate}</span>
+              </div>
+              <div>
+                <div className="text-[10px]">納品先</div>
+                <div className="mt-1 text-sm font-bold">{note.customerName} 御中</div>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>取引形態</span>
+                <span>{note.transactionType === 'consignment' ? '委託' : note.transactionType === 'purchase' ? '買取' : '-'}</span>
+              </div>
+            </section>
+
+            <section className="py-2">
+              <div className="grid grid-cols-[1fr_14mm] border-b border-black pb-1 text-[10px] font-bold">
+                <span>品名 / 数量 x 単価</span>
+                <span className="text-right">金額</span>
+              </div>
+              <div className="divide-y divide-dashed divide-gray-400">
+                {note.items.map((item, index) => (
+                  <div key={`${item.productName}-${index}`} className="py-2">
+                    <div className="break-words text-[11px] font-semibold leading-snug">{item.productName}</div>
+                    <div className="mt-1 grid grid-cols-[1fr_14mm] text-[10px]">
+                      <span>{item.quantity}{item.unit} x {formatYen(item.unitPrice)}</span>
+                      <span className="text-right font-semibold">{formatYen(item.amount)}</span>
+                    </div>
+                    {item.remarks && <div className="mt-1 text-[9px] text-gray-700">備考: {item.remarks}</div>}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="border-t border-black pt-2">
+              <div className="flex justify-between text-sm font-bold">
+                <span>合計</span>
+                <span>{formatYen(note.subtotal)}</span>
+              </div>
+              <div className="mt-1 text-[9px] text-gray-700">{taxIncludedNote}</div>
+            </section>
+
+            {note.memo && (
+              <section className="mt-3 border-t border-dashed border-black pt-2 text-[10px]">
+                <div className="font-bold">メモ</div>
+                <div className="mt-1 whitespace-pre-wrap">{note.memo}</div>
+              </section>
+            )}
+
+            <footer className="mt-4 border-t border-black pt-2 text-center text-[9px] leading-relaxed">
+              <div>株式会社テクニカルスタッフ</div>
+              <div>AI System（TSA）より発行</div>
+            </footer>
+          </article>
+        ) : null}
+      </main>
+
+      <style jsx global>{`
+        .receipt-paper {
+          width: 58mm;
+          min-height: 0;
+        }
+        @page {
+          size: 58mm auto;
+          margin: 0;
+        }
+        @media print {
+          html,
+          body {
+            width: 58mm;
+            background: #fff !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .receipt-paper {
+            width: 58mm;
+            min-height: 0;
+            padding: 2mm 2.5mm 5mm;
+            box-shadow: none !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}

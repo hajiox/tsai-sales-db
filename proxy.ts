@@ -9,14 +9,15 @@ const KPI_PASS_COOKIE = "kpi_pass_ok";
 export async function proxy(req: NextRequest) {
   const token = await getToken({ req });
   const isLoggedIn = token && token.email === "aizubrandhall@gmail.com";
+  const { pathname, search } = req.nextUrl;
   // ① まずは既存のログイン要件
   if (!isLoggedIn) {
     const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("callbackUrl", pathname + search);
     return NextResponse.redirect(loginUrl);
   }
 
   // ② KPI だけ追加パスワード保護
-  const { pathname, search } = req.nextUrl;
   const isKpi = pathname.startsWith(KPI_PREFIX);
   const isKpiPasswordPage = pathname === "/kpi/enter-password";
 
