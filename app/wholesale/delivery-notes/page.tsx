@@ -46,23 +46,11 @@ type LineItem = {
   remarks: string;
 };
 
-const RATE_BY_TYPE = {
-  purchase: 0.65,
-  consignment: 0.70,
-} as const;
-
 const SETTINGS_STORAGE_KEY = 'tsa-web-delivery-note-settings-v1';
 
 function todayIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function formatYen(value: number) {
-  const rounded = Math.round(value || 0);
-  return rounded < 0
-    ? `-¥${Math.abs(rounded).toLocaleString()}`
-    : `¥${rounded.toLocaleString()}`;
 }
 
 export default function WholesaleDeliveryNotesMobilePage() {
@@ -78,11 +66,11 @@ export default function WholesaleDeliveryNotesMobilePage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [newCustomerName, setNewCustomerName] = useState('');
-  const [transactionType, setTransactionType] = useState<'purchase' | 'consignment'>('purchase');
-  const [rate, setRate] = useState(0.65);
+  const transactionType = 'purchase';
+  const rate = 0.65;
   const [productSearch, setProductSearch] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
-  const [memo, setMemo] = useState('');
+  const memo = '';
 
   const load = async () => {
     setLoading(true);
@@ -109,9 +97,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
                 setNewCustomerName(saved.customerName);
               }
               if (saved.deliveryDate) setDeliveryDate(String(saved.deliveryDate).slice(0, 10));
-              if (saved.transactionType === 'purchase' || saved.transactionType === 'consignment') setTransactionType(saved.transactionType);
-              if (Number.isFinite(Number(saved.rate))) setRate(Number(saved.rate));
-              if (typeof saved.memo === 'string') setMemo(saved.memo);
             }
           } catch {
             localStorage.removeItem(SETTINGS_STORAGE_KEY);
@@ -134,11 +119,8 @@ export default function WholesaleDeliveryNotesMobilePage() {
       deliveryDate,
       customerId: selectedCustomer?.id || null,
       customerName,
-      transactionType,
-      rate,
-      memo,
     }));
-  }, [deliveryDate, selectedCustomer, newCustomerName, customerSearch, transactionType, rate, memo]);
+  }, [deliveryDate, selectedCustomer, newCustomerName, customerSearch]);
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -164,19 +146,10 @@ export default function WholesaleDeliveryNotesMobilePage() {
       .slice(0, 30);
   }, [products, productSearch]);
 
-  const subtotal = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
-    [items]
-  );
   const itemCount = useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
     [items]
   );
-
-  const changeTransactionType = (type: 'purchase' | 'consignment') => {
-    setTransactionType(type);
-    setRate(RATE_BY_TYPE[type]);
-  };
 
   const addProduct = (product: Product) => {
     let nextQuantity = 1;
@@ -330,31 +303,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
                   className="mt-1 min-h-12 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-base text-white outline-none focus:border-cyan-500"
                 />
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => changeTransactionType('purchase')}
-                  className={`min-h-12 rounded-xl border text-sm font-semibold ${transactionType === 'purchase' ? 'border-cyan-400 bg-cyan-950 text-cyan-100' : 'border-slate-700 bg-slate-800 text-slate-300'}`}
-                >
-                  買取 6.5掛
-                </button>
-                <button
-                  type="button"
-                  onClick={() => changeTransactionType('consignment')}
-                  className={`min-h-12 rounded-xl border text-sm font-semibold ${transactionType === 'consignment' ? 'border-cyan-400 bg-cyan-950 text-cyan-100' : 'border-slate-700 bg-slate-800 text-slate-300'}`}
-                >
-                  委託 7掛
-                </button>
-              </div>
-              <label className="block text-xs text-slate-500">
-                掛率メモ
-                <input
-                  type="number"
-                  value={Math.round(rate * 1000) / 10}
-                  onChange={e => setRate(Number(e.target.value || 0) / 100)}
-                  className="mt-1 min-h-12 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-right text-base text-white outline-none focus:border-cyan-500"
-                />
-              </label>
             </section>
 
             <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
@@ -434,13 +382,12 @@ export default function WholesaleDeliveryNotesMobilePage() {
                     key={product.id}
                     type="button"
                     onClick={() => addProduct(product)}
-                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-left transition active:scale-[0.97] active:bg-slate-700 active:shadow-inner"
+                    className="flex w-full items-center gap-3 rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-left transition active:scale-[0.97] active:shadow-inner"
                   >
                     <span className="min-w-0">
                       <span className="block break-words text-sm font-semibold text-slate-100">{product.product_name}</span>
                       <span className="text-[11px] text-slate-500">{product.product_code || 'コードなし'}</span>
                     </span>
-                    <span className="shrink-0 text-sm font-semibold text-emerald-300">{formatYen(Number(product.price || 0))}</span>
                   </button>
                 ))}
               </div>
@@ -465,7 +412,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="break-words text-sm font-semibold text-white">{item.productName}</div>
-                          <div className="mt-1 text-xs text-emerald-300">{formatYen(item.quantity * item.unitPrice)}</div>
                         </div>
                         <button type="button" onClick={() => removeItem(index)} className="rounded-lg bg-rose-950 p-2 text-rose-300">
                           <Trash2 className="h-4 w-4" />
@@ -485,47 +431,10 @@ export default function WholesaleDeliveryNotesMobilePage() {
                           <Plus className="mx-auto h-4 w-4" />
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <label className="text-xs text-slate-500">
-                          単価
-                          <input
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={e => updateItem(index, { unitPrice: Number(e.target.value || 0) })}
-                            className="mt-1 min-h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-right text-sm text-white outline-none focus:border-cyan-500"
-                          />
-                        </label>
-                        <label className="text-xs text-slate-500">
-                          単位
-                          <input
-                            type="text"
-                            value={item.unit}
-                            onChange={e => updateItem(index, { unit: e.target.value })}
-                            className="mt-1 min-h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm text-white outline-none focus:border-cyan-500"
-                          />
-                        </label>
-                      </div>
-                      <input
-                        type="text"
-                        value={item.remarks}
-                        onChange={e => updateItem(index, { remarks: e.target.value })}
-                        placeholder="備考"
-                        className="min-h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-500"
-                      />
                     </div>
                   ))}
                 </div>
               )}
-              <label className="block text-xs text-slate-500">
-                メモ
-                <textarea
-                  value={memo}
-                  onChange={e => setMemo(e.target.value)}
-                  rows={3}
-                  placeholder="納品書控え用のメモ"
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-500"
-                />
-              </label>
             </section>
 
           </>
@@ -534,10 +443,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
 
       <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto max-w-md space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-400">合計</span>
-            <span className="text-xl font-bold text-emerald-300">{formatYen(subtotal)}</span>
-          </div>
           {message && <div className="rounded-lg bg-slate-800 px-3 py-2 text-center text-xs text-cyan-200">{message}</div>}
           <div className="grid grid-cols-2 gap-2">
             <button

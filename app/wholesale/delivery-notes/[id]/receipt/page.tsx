@@ -20,9 +20,6 @@ type ReceiptItem = {
   productName: string;
   quantity: number;
   unit: string;
-  unitPrice: number;
-  amount: number;
-  remarks?: string | null;
 };
 
 type DeliveryNote = {
@@ -30,18 +27,8 @@ type DeliveryNote = {
   number: string | null;
   deliveryDate: string;
   customerName: string;
-  transactionType: string | null;
-  subtotal: number;
-  memo?: string | null;
   items: ReceiptItem[];
 };
-
-function formatYen(value: number) {
-  const rounded = Math.round(value || 0);
-  return rounded < 0
-    ? `-¥${Math.abs(rounded).toLocaleString()}`
-    : `¥${rounded.toLocaleString()}`;
-}
 
 function escapeHtml(value: unknown) {
   return String(value ?? '')
@@ -52,15 +39,11 @@ function escapeHtml(value: unknown) {
     .replace(/'/g, '&#39;');
 }
 
-function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
+function buildPassPrntHtml(note: DeliveryNote) {
   const items = note.items.map(item => `
     <div class="item">
       <div class="product">${escapeHtml(item.productName)}</div>
-      <div class="line">
-        <span>${escapeHtml(item.quantity)}${escapeHtml(item.unit)} x ${escapeHtml(formatYen(item.unitPrice))}</span>
-        <strong>${escapeHtml(formatYen(item.amount))}</strong>
-      </div>
-      ${item.remarks ? `<div class="remarks">備考: ${escapeHtml(item.remarks)}</div>` : ''}
+      <div class="quantity">${escapeHtml(item.quantity)}${escapeHtml(item.unit)}</div>
     </div>
   `).join('');
 
@@ -89,12 +72,10 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
     .label { font-size: 21px; }
     .line { display: flex; justify-content: space-between; gap: 12px; }
     .customer { margin-top: 6px; font-size: 28px; font-weight: 700; word-break: break-word; }
-    .head { display: grid; grid-template-columns: 1fr 96px; border-bottom: 2px solid #000; padding-bottom: 7px; font-size: 22px; font-weight: 700; }
+    .head { border-bottom: 2px solid #000; padding-bottom: 7px; font-size: 24px; font-weight: 700; }
     .item { border-bottom: 2px dashed #999; padding: 13px 0; }
     .product { font-size: 28px; font-weight: 700; word-break: break-word; }
-    .item .line { margin-top: 6px; font-size: 24px; }
-    .remarks { margin-top: 6px; font-size: 21px; color: #333; }
-    .memo { border-top: 2px dashed #000; margin-top: 18px; padding-top: 12px; font-size: 22px; white-space: pre-wrap; }
+    .quantity { margin-top: 6px; font-size: 28px; font-weight: 700; }
     .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 22px; }
     .issuer { font-size: 28px; font-weight: 700; }
     .issuer-detail { margin-top: 5px; font-size: 20px; line-height: 1.35; }
@@ -110,10 +91,9 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
     <div class="customer">${escapeHtml(note.customerName)} 御中</div>
   </div>
   <div style="padding-top:14px;">
-    <div class="head"><span>品名 / 数量 x 単価</span><span style="text-align:right;">金額</span></div>
+    <div class="head">品名 / 数量</div>
     ${items}
   </div>
-  ${note.memo ? `<div class="memo"><strong>メモ</strong><br>${escapeHtml(note.memo)}</div>` : ''}
   <div class="footer">
     <div class="issuer">${escapeHtml(ISSUER.name)}</div>
     <div class="issuer-detail">${escapeHtml(ISSUER.postalCode)}</div>
@@ -126,8 +106,8 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
 </html>`;
 }
 
-function buildPassPrntUri(note: DeliveryNote, taxIncludedNote: string, backUrl: string) {
-  const html = buildPassPrntHtml(note, taxIncludedNote);
+function buildPassPrntUri(note: DeliveryNote, backUrl: string) {
+  const html = buildPassPrntHtml(note);
   return [
     'starpassprnt://v1/print/nopreview?',
     `back=${encodeURIComponent(backUrl)}`,
@@ -164,8 +144,7 @@ export default function DeliveryNoteReceiptPage() {
     setReturnUrl(new URL(MOBILE_DELIVERY_NOTES_PATH, window.location.origin).href);
   }, []);
 
-  const taxIncludedNote = '金額は卸販売管理の税込単価を使用しています';
-  const passPrntUri = note && returnUrl ? buildPassPrntUri(note, taxIncludedNote, returnUrl) : '#';
+  const passPrntUri = note && returnUrl ? buildPassPrntUri(note, returnUrl) : '#';
   const goBackToMobileIssue = () => {
     window.location.replace(MOBILE_DELIVERY_NOTES_PATH);
   };
@@ -243,30 +222,18 @@ export default function DeliveryNoteReceiptPage() {
             </section>
 
             <section className="py-2">
-              <div className="grid grid-cols-[1fr_14mm] border-b border-black pb-1 text-[10px] font-bold">
-                <span>品名 / 数量 x 単価</span>
-                <span className="text-right">金額</span>
+              <div className="border-b border-black pb-1 text-[10px] font-bold">
+                品名 / 数量
               </div>
               <div className="divide-y divide-dashed divide-gray-400">
                 {note.items.map((item, index) => (
                   <div key={`${item.productName}-${index}`} className="py-2">
                     <div className="break-words text-[11px] font-semibold leading-snug">{item.productName}</div>
-                    <div className="mt-1 grid grid-cols-[1fr_14mm] text-[10px]">
-                      <span>{item.quantity}{item.unit} x {formatYen(item.unitPrice)}</span>
-                      <span className="text-right font-semibold">{formatYen(item.amount)}</span>
-                    </div>
-                    {item.remarks && <div className="mt-1 text-[9px] text-gray-700">備考: {item.remarks}</div>}
+                    <div className="mt-1 text-[11px] font-semibold">{item.quantity}{item.unit}</div>
                   </div>
                 ))}
               </div>
             </section>
-
-            {note.memo && (
-              <section className="mt-3 border-t border-dashed border-black pt-2 text-[10px]">
-                <div className="font-bold">メモ</div>
-                <div className="mt-1 whitespace-pre-wrap">{note.memo}</div>
-              </section>
-            )}
 
             <footer className="mt-4 border-t border-black pt-2 text-center text-[9px] leading-relaxed">
               <div className="text-[12px] font-bold">{ISSUER.name}</div>
