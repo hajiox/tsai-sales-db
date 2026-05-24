@@ -60,7 +60,6 @@ const CATEGORIES = [
 
 type QuantityUnit = string;
 
-const QUANTITY_UNITS: QuantityUnit[] = ["g", "ml"];
 const SELF_SHELF_LIFE_OPTIONS = [
   "製造から12カ月",
   "製造から18カ月",
@@ -69,8 +68,7 @@ const SELF_SHELF_LIFE_OPTIONS = [
 ] as const;
 
 function normalizeQuantityUnit(unit?: string | null): QuantityUnit {
-  if (unit === null || unit === undefined) return "g";
-  return String(unit).trim();
+  return String(unit ?? "").trim();
 }
 
 function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
@@ -100,68 +98,21 @@ function normalizeSelfShelfLife(value?: string | null) {
   return null;
 }
 
-function QuantityUnitToggle({
+function QuantityUnitTextInput({
   value,
   onChange,
 }: {
   value: QuantityUnit;
   onChange: (unit: QuantityUnit) => void;
 }) {
-  const [customOpen, setCustomOpen] = useState(() => !QUANTITY_UNITS.includes(normalizeQuantityUnit(value)));
-  const normalizedValue = normalizeQuantityUnit(value);
-  const isCustom = !QUANTITY_UNITS.includes(normalizedValue);
-
-  useEffect(() => {
-    if (isCustom) setCustomOpen(true);
-  }, [isCustom]);
-
   return (
-    <div className="flex shrink-0 items-center gap-1">
-      <div className="inline-flex overflow-hidden rounded border border-gray-200 bg-white text-[10px] leading-none">
-        {QUANTITY_UNITS.map((unit) => (
-          <button
-            key={unit}
-            type="button"
-            onClick={() => {
-              setCustomOpen(false);
-              onChange(unit);
-            }}
-            className={`h-6 min-w-8 px-2 font-bold transition-colors ${
-              normalizedValue === unit && !customOpen
-                ? "bg-gray-900 text-white"
-                : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-            }`}
-            aria-pressed={normalizedValue === unit && !customOpen}
-          >
-            {unit}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => {
-            setCustomOpen(true);
-            if (!isCustom) onChange("");
-          }}
-          className={`h-6 min-w-12 px-2 font-bold transition-colors ${
-            customOpen
-              ? "bg-gray-900 text-white"
-              : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-          }`}
-          aria-pressed={customOpen}
-        >
-          自由
-        </button>
-      </div>
-      {customOpen && (
-        <input
-          type="text"
-          value={isCustom ? normalizedValue : ""}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="例: 本"
-          className="h-6 w-20 rounded border border-gray-200 bg-white px-2 text-[11px] font-bold text-gray-700 outline-none focus:border-gray-400"
-        />
-      )}
-    </div>
+    <input
+      type="text"
+      value={normalizeQuantityUnit(value)}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="unit"
+      className="h-8 w-16 rounded border border-gray-200 bg-white px-2 text-sm font-bold text-gray-700 outline-none focus:border-gray-400"
+    />
   );
 }
 
@@ -1611,10 +1562,6 @@ function RecipeDetailContent() {
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                       充填量
                     </div>
-                    <QuantityUnitToggle
-                      value={normalizeQuantityUnit(recipe.filling_quantity_unit)}
-                      onChange={(unit) => handleRecipeChange("filling_quantity_unit", unit)}
-                    />
                   </div>
                   <div className="font-bold text-xl flex items-center gap-2">
                     <InlineEdit
@@ -1626,7 +1573,10 @@ function RecipeDetailContent() {
                       className="text-right font-bold text-xl min-w-[3rem] justify-end"
                       inputClassName="text-right font-bold text-xl w-20"
                       placeholder="-"
-                      suffix={normalizeQuantityUnit(recipe.filling_quantity_unit)}
+                    />
+                    <QuantityUnitTextInput
+                      value={normalizeQuantityUnit(recipe.filling_quantity_unit)}
+                      onChange={(unit) => handleRecipeChange("filling_quantity_unit", unit)}
                     />
                   </div>
                 </div>
@@ -1635,22 +1585,23 @@ function RecipeDetailContent() {
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                       内容量（表記量）
                     </div>
-                    <QuantityUnitToggle
+                  </div>
+                  <div className="font-bold text-xl flex items-center gap-2">
+                    <InlineEdit
+                      type="number"
+                      value={recipe.label_quantity}
+                      onSave={(val) =>
+                        handleRecipeChange("label_quantity", String(val))
+                      }
+                      className="font-bold text-xl min-w-[3rem]"
+                      inputClassName="font-bold text-xl w-20"
+                      placeholder="-"
+                    />
+                    <QuantityUnitTextInput
                       value={normalizeQuantityUnit(recipe.net_content_unit)}
                       onChange={(unit) => handleRecipeChange("net_content_unit", unit)}
                     />
                   </div>
-                  <InlineEdit
-                    type="number"
-                    value={recipe.label_quantity}
-                    onSave={(val) =>
-                      handleRecipeChange("label_quantity", String(val))
-                    }
-                    className="font-bold text-xl w-full"
-                    inputClassName="font-bold text-xl w-full"
-                    placeholder="-"
-                    suffix={normalizeQuantityUnit(recipe.net_content_unit)}
-                  />
                 </div>
                 {recipe.is_intermediate && (
                   <div className="p-3 bg-purple-50 rounded border border-purple-200 col-span-2">

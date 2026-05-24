@@ -118,7 +118,7 @@ export async function POST(request: Request) {
             for (const f of ['filling_quantity_unit', 'net_content_unit']) {
                 if (f in sanitized) {
                     const unit = typeof sanitized[f] === 'string' ? sanitized[f].trim() : '';
-                    sanitized[f] = unit || 'g';
+                    sanitized[f] = unit || null;
                 }
             }
             if (sanitized.category === "自社" && "shelf_life" in sanitized) {

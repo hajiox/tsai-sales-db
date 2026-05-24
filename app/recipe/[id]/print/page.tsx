@@ -48,8 +48,7 @@ interface VersionInfo {
 }
 
 function normalizeQuantityUnit(unit?: string | null) {
-  if (unit === null || unit === undefined) return "g";
-  return String(unit).trim();
+  return String(unit ?? "").trim();
 }
 
 function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
