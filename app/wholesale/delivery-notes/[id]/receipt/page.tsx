@@ -71,26 +71,24 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
       background: #fff;
       color: #000;
       font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
-      font-size: 22px;
+      font-size: 26px;
       line-height: 1.35;
     }
-    body { padding: 16px 18px 28px; }
+    body { padding: 14px 14px 28px; }
     .center { text-align: center; }
-    .title { border-bottom: 2px solid #000; padding-bottom: 12px; font-size: 30px; font-weight: 700; letter-spacing: 0.16em; }
-    .number { margin-top: 6px; font-size: 17px; }
+    .title { border-bottom: 2px solid #000; padding-bottom: 12px; font-size: 34px; font-weight: 700; letter-spacing: 0.14em; }
+    .number { margin-top: 6px; font-size: 19px; }
     .meta { border-bottom: 2px dashed #000; padding: 14px 0; }
-    .label { font-size: 18px; }
+    .label { font-size: 21px; }
     .line { display: flex; justify-content: space-between; gap: 12px; }
-    .customer { margin-top: 6px; font-size: 24px; font-weight: 700; word-break: break-word; }
-    .head { display: grid; grid-template-columns: 1fr 86px; border-bottom: 2px solid #000; padding-bottom: 7px; font-size: 18px; font-weight: 700; }
+    .customer { margin-top: 6px; font-size: 28px; font-weight: 700; word-break: break-word; }
+    .head { display: grid; grid-template-columns: 1fr 96px; border-bottom: 2px solid #000; padding-bottom: 7px; font-size: 22px; font-weight: 700; }
     .item { border-bottom: 2px dashed #999; padding: 13px 0; }
-    .product { font-size: 24px; font-weight: 700; word-break: break-word; }
-    .item .line { margin-top: 6px; font-size: 20px; }
-    .remarks { margin-top: 6px; font-size: 18px; color: #333; }
-    .total { border-top: 2px solid #000; margin-top: 14px; padding-top: 13px; font-size: 30px; font-weight: 700; }
-    .note { margin-top: 8px; font-size: 17px; color: #333; }
-    .memo { border-top: 2px dashed #000; margin-top: 18px; padding-top: 12px; font-size: 19px; white-space: pre-wrap; }
-    .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 17px; }
+    .product { font-size: 28px; font-weight: 700; word-break: break-word; }
+    .item .line { margin-top: 6px; font-size: 24px; }
+    .remarks { margin-top: 6px; font-size: 21px; color: #333; }
+    .memo { border-top: 2px dashed #000; margin-top: 18px; padding-top: 12px; font-size: 22px; white-space: pre-wrap; }
+    .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 20px; }
   </style>
 </head>
 <body>
@@ -100,14 +98,11 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
     <div class="line"><span>納品日</span><span>${escapeHtml(note.deliveryDate)}</span></div>
     <div class="label" style="margin-top:8px;">納品先</div>
     <div class="customer">${escapeHtml(note.customerName)} 御中</div>
-    <div class="line" style="margin-top:8px;"><span>取引形態</span><span>${note.transactionType === 'consignment' ? '委託' : note.transactionType === 'purchase' ? '買取' : '-'}</span></div>
   </div>
   <div style="padding-top:14px;">
     <div class="head"><span>品名 / 数量 x 単価</span><span style="text-align:right;">金額</span></div>
     ${items}
   </div>
-  <div class="total line"><span>合計</span><span>${escapeHtml(formatYen(note.subtotal))}</span></div>
-  <div class="note">${escapeHtml(taxIncludedNote)}</div>
   ${note.memo ? `<div class="memo"><strong>メモ</strong><br>${escapeHtml(note.memo)}</div>` : ''}
   <div class="footer">
     <div>株式会社テクニカルスタッフ</div>
@@ -231,10 +226,6 @@ export default function DeliveryNoteReceiptPage() {
                 <div className="text-[10px]">納品先</div>
                 <div className="mt-1 text-sm font-bold">{note.customerName} 御中</div>
               </div>
-              <div className="flex justify-between gap-2">
-                <span>取引形態</span>
-                <span>{note.transactionType === 'consignment' ? '委託' : note.transactionType === 'purchase' ? '買取' : '-'}</span>
-              </div>
             </section>
 
             <section className="py-2">
@@ -254,14 +245,6 @@ export default function DeliveryNoteReceiptPage() {
                   </div>
                 ))}
               </div>
-            </section>
-
-            <section className="border-t border-black pt-2">
-              <div className="flex justify-between text-sm font-bold">
-                <span>合計</span>
-                <span>{formatYen(note.subtotal)}</span>
-              </div>
-              <div className="mt-1 text-[9px] text-gray-700">{taxIncludedNote}</div>
             </section>
 
             {note.memo && (

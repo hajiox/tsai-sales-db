@@ -46,16 +46,6 @@ type LineItem = {
   remarks: string;
 };
 
-type DeliveryNoteSummary = {
-  id: string;
-  number: string | null;
-  deliveryDate: string;
-  customerName: string;
-  itemCount: number;
-  subtotal: number;
-  source: string;
-};
-
 const RATE_BY_TYPE = {
   purchase: 0.65,
   consignment: 0.70,
@@ -80,7 +70,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
   const settingsRestoredRef = useRef(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [recentNotes, setRecentNotes] = useState<DeliveryNoteSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -98,12 +87,8 @@ export default function WholesaleDeliveryNotesMobilePage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [optionsRes, notesRes] = await Promise.all([
-        fetch('/api/wholesale/delivery-notes/options'),
-        fetch('/api/wholesale/delivery-notes?limit=12'),
-      ]);
+      const optionsRes = await fetch('/api/wholesale/delivery-notes/options');
       const optionsData = await optionsRes.json();
-      const notesData = await notesRes.json();
       if (optionsData.success) {
         const loadedCustomers: Customer[] = optionsData.customers || [];
         setCustomers(loadedCustomers);
@@ -135,7 +120,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
           }
         }
       }
-      if (notesData.success) setRecentNotes(notesData.deliveryNotes || []);
     } finally {
       setLoading(false);
     }
@@ -304,17 +288,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const deleteNote = async (note: DeliveryNoteSummary) => {
-    if (!confirm(`${note.number || '納品書'} を削除して卸販売管理の集計からも戻します。よろしいですか？`)) return;
-    const res = await fetch(`/api/wholesale/delivery-notes/${encodeURIComponent(note.id)}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      alert(data.error || '削除に失敗しました');
-      return;
-    }
-    await load();
   };
 
   return (
@@ -555,46 +528,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
               </label>
             </section>
 
-            <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-cyan-300">最近のWEB発行</h2>
-                <button type="button" onClick={load} className="text-xs text-slate-400">更新</button>
-              </div>
-              <div className="space-y-2">
-                {recentNotes.filter(note => note.source === 'tsa_web').slice(0, 8).map(note => (
-                  <div key={note.id} className="rounded-xl border border-slate-700 bg-slate-800 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="break-words text-sm font-semibold text-white">{note.customerName}</div>
-                        <div className="mt-1 text-[11px] text-slate-500">{note.deliveryDate} / {note.number}</div>
-                      </div>
-                      <div className="shrink-0 text-right text-sm font-semibold text-emerald-300">{formatYen(note.subtotal)}</div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/wholesale/delivery-notes/${encodeURIComponent(note.id)}/receipt`)}
-                        className="min-h-10 rounded-xl bg-cyan-700 text-sm font-semibold text-white"
-                      >
-                        印刷
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteNote(note)}
-                        className="min-h-10 rounded-xl bg-rose-950 text-sm font-semibold text-rose-200"
-                      >
-                        削除
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {recentNotes.filter(note => note.source === 'tsa_web').length === 0 && (
-                  <div className="rounded-xl border border-dashed border-slate-700 p-4 text-center text-xs text-slate-500">
-                    WEB発行の履歴はまだありません
-                  </div>
-                )}
-              </div>
-            </section>
           </>
         )}
       </main>
