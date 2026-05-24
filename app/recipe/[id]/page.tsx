@@ -58,8 +58,6 @@ const CATEGORIES = [
   },
 ];
 
-type QuantityUnit = string;
-
 const SELF_SHELF_LIFE_OPTIONS = [
   "製造から12カ月",
   "製造から18カ月",
@@ -67,16 +65,10 @@ const SELF_SHELF_LIFE_OPTIONS = [
   "製造から2カ月",
 ] as const;
 
-function normalizeQuantityUnit(unit?: string | null): QuantityUnit {
-  return String(unit ?? "").trim();
-}
-
-function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
+function formatQuantityText(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === "") return "-";
   const text = String(value).trim();
-  if (/(?:g|ml)$/i.test(text)) return text;
-  const normalizedUnit = normalizeQuantityUnit(unit);
-  return normalizedUnit ? `${text} ${normalizedUnit}` : text;
+  return text || "-";
 }
 
 function normalizeSelfShelfLife(value?: string | null) {
@@ -98,24 +90,6 @@ function normalizeSelfShelfLife(value?: string | null) {
   return null;
 }
 
-function QuantityUnitTextInput({
-  value,
-  onChange,
-}: {
-  value: QuantityUnit;
-  onChange: (unit: QuantityUnit) => void;
-}) {
-  return (
-    <input
-      type="text"
-      value={normalizeQuantityUnit(value)}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder="unit"
-      className="h-8 w-16 rounded border border-gray-200 bg-white px-2 text-sm font-bold text-gray-700 outline-none focus:border-gray-400"
-    />
-  );
-}
-
 interface Recipe {
   id: string;
   name: string;
@@ -123,10 +97,10 @@ interface Recipe {
   is_intermediate: boolean;
   development_date: string | null;
   manufacturing_notes: string | null;
-  filling_quantity: number | null;
-  filling_quantity_unit?: QuantityUnit | null;
+  filling_quantity: string | number | null;
+  filling_quantity_unit?: string | null;
   label_quantity: string | null;
-  net_content_unit?: QuantityUnit | null;
+  net_content_unit?: string | null;
   storage_method: string | null;
   sterilization_method: string | null;
   sterilization_temperature: string | null;
@@ -585,8 +559,6 @@ function RecipeDetailContent() {
     setRecipe({
       ...recipeData,
       amazon_fee_enabled: recipeData.amazon_fee_enabled ?? false,
-      filling_quantity_unit: normalizeQuantityUnit(recipeData.filling_quantity_unit),
-      net_content_unit: normalizeQuantityUnit(recipeData.net_content_unit),
       shelf_life: selfShelfLife,
     });
 
@@ -1093,10 +1065,10 @@ function RecipeDetailContent() {
             total_weight: totalWeight,
             manufacturing_notes: recipe.manufacturing_notes,
             filling_quantity: recipe.filling_quantity,
-            filling_quantity_unit: normalizeQuantityUnit(recipe.filling_quantity_unit),
+            filling_quantity_unit: null,
             storage_method: recipe.storage_method,
             label_quantity: recipe.label_quantity,
-            net_content_unit: normalizeQuantityUnit(recipe.net_content_unit),
+            net_content_unit: null,
             sterilization_method: recipe.sterilization_method,
             sterilization_temperature: recipe.sterilization_temperature,
             sterilization_time: recipe.sterilization_time,
@@ -1565,18 +1537,14 @@ function RecipeDetailContent() {
                   </div>
                   <div className="font-bold text-xl flex items-center gap-2">
                     <InlineEdit
-                      type="number"
+                      type="text"
                       value={recipe.filling_quantity}
                       onSave={(val) =>
                         handleRecipeChange("filling_quantity", val)
                       }
-                      className="text-right font-bold text-xl min-w-[3rem] justify-end"
-                      inputClassName="text-right font-bold text-xl w-20"
+                      className="font-bold text-xl w-full"
+                      inputClassName="font-bold text-xl w-full"
                       placeholder="-"
-                    />
-                    <QuantityUnitTextInput
-                      value={normalizeQuantityUnit(recipe.filling_quantity_unit)}
-                      onChange={(unit) => handleRecipeChange("filling_quantity_unit", unit)}
                     />
                   </div>
                 </div>
@@ -1588,18 +1556,14 @@ function RecipeDetailContent() {
                   </div>
                   <div className="font-bold text-xl flex items-center gap-2">
                     <InlineEdit
-                      type="number"
+                      type="text"
                       value={recipe.label_quantity}
                       onSave={(val) =>
                         handleRecipeChange("label_quantity", String(val))
                       }
-                      className="font-bold text-xl min-w-[3rem]"
-                      inputClassName="font-bold text-xl w-20"
+                      className="font-bold text-xl w-full"
+                      inputClassName="font-bold text-xl w-full"
                       placeholder="-"
-                    />
-                    <QuantityUnitTextInput
-                      value={normalizeQuantityUnit(recipe.net_content_unit)}
-                      onChange={(unit) => handleRecipeChange("net_content_unit", unit)}
                     />
                   </div>
                 </div>
@@ -3125,7 +3089,7 @@ Now Expanded or Scrollable */}
                   nutrition: getItemNutrition(item),
                 }))}
                 compact={true}
-                fillingQuantity={Number(recipe.filling_quantity)}
+                fillingQuantity={Number.parseFloat(String(recipe.filling_quantity))}
               />
             </div>
           </div>
@@ -3212,7 +3176,7 @@ Now Expanded or Scrollable */}
               充填量
             </div>
             <div className="text-xs font-bold leading-tight">
-              {formatQuantityWithUnit(recipe.filling_quantity, recipe.filling_quantity_unit)}
+              {formatQuantityText(recipe.filling_quantity)}
             </div>
           </div>
           <div className="border border-gray-400 rounded px-2 py-0.5">
@@ -3220,7 +3184,7 @@ Now Expanded or Scrollable */}
               内容量（表記量）
             </div>
             <div className="text-xs font-bold leading-tight">
-              {formatQuantityWithUnit(recipe.label_quantity, recipe.net_content_unit)}
+              {formatQuantityText(recipe.label_quantity)}
             </div>
           </div>
           <div className="border border-gray-400 rounded px-2 py-0.5">

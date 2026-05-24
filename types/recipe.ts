@@ -39,7 +39,7 @@ export interface Recipe {
     name: string;
     development_date?: string;
     manufacturing_notes?: string;
-    filling_quantity?: number;
+    filling_quantity?: string | number;
     filling_quantity_unit?: string;
     label_quantity?: string | number;
     net_content_unit?: string;

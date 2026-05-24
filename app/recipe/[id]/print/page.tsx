@@ -14,7 +14,7 @@ interface Recipe {
   is_intermediate: boolean;
   development_date: string | null;
   manufacturing_notes: string | null;
-  filling_quantity: number | null;
+  filling_quantity: string | number | null;
   filling_quantity_unit?: string | null;
   label_quantity: string | null;
   net_content_unit?: string | null;
@@ -47,16 +47,10 @@ interface VersionInfo {
   version_note: string | null;
 }
 
-function normalizeQuantityUnit(unit?: string | null) {
-  return String(unit ?? "").trim();
-}
-
-function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
+function formatQuantityText(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === "") return "-";
   const text = String(value).trim();
-  if (/(?:g|ml)$/i.test(text)) return text;
-  const normalizedUnit = normalizeQuantityUnit(unit);
-  return normalizedUnit ? `${text} ${normalizedUnit}` : text;
+  return text || "-";
 }
 
 export default function RecipePrintPage() {
@@ -146,13 +140,13 @@ export default function RecipePrintPage() {
         <div className="border border-gray-400 rounded px-2 py-0.5">
           <div className="text-[9px] font-bold text-gray-500 mb-0">充填量</div>
           <div className="text-xs font-bold leading-tight">
-            {formatQuantityWithUnit(recipe.filling_quantity, recipe.filling_quantity_unit)}
+            {formatQuantityText(recipe.filling_quantity)}
           </div>
         </div>
         <div className="border border-gray-400 rounded px-2 py-0.5">
           <div className="text-[9px] font-bold text-gray-500 mb-0">内容量（表記量）</div>
           <div className="text-xs font-bold leading-tight">
-            {formatQuantityWithUnit(recipe.label_quantity, recipe.net_content_unit)}
+            {formatQuantityText(recipe.label_quantity)}
           </div>
         </div>
         <div className="border border-gray-400 rounded px-2 py-0.5">

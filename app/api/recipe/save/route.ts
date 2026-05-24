@@ -105,7 +105,7 @@ export async function POST(request: Request) {
         if (recipeUpdates && Object.keys(recipeUpdates).length > 0) {
             // numeric カラムの空文字を null に変換（PostgresのDBエラー防止）
             const numericFields = [
-                'filling_quantity', 'label_quantity', 'selling_price', 'total_cost',
+                'selling_price', 'total_cost',
                 'total_weight', 'sterilization_temperature', 'sterilization_time',
                 'yield_rate', 'lot_size', 'case_quantity', 'series_code', 'product_code',
             ];
