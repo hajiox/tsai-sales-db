@@ -89,6 +89,11 @@ export async function POST(request: Request) {
                     sanitized[f] = null;
                 }
             }
+            for (const f of ['filling_quantity_unit', 'net_content_unit']) {
+                if (f in sanitized && !['g', 'ml'].includes(sanitized[f])) {
+                    sanitized[f] = 'g';
+                }
+            }
 
             const { error: recipeError } = await supabase
                 .from("recipes")

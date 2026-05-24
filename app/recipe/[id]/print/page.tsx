@@ -15,7 +15,9 @@ interface Recipe {
   development_date: string | null;
   manufacturing_notes: string | null;
   filling_quantity: number | null;
+  filling_quantity_unit?: "g" | "ml" | null;
   label_quantity: string | null;
+  net_content_unit?: "g" | "ml" | null;
   storage_method: string | null;
   sterilization_method: string | null;
   sterilization_temperature: string | null;
@@ -43,6 +45,17 @@ interface RecipeItem {
 interface VersionInfo {
   version_number: number;
   version_note: string | null;
+}
+
+function normalizeQuantityUnit(unit?: string | null) {
+  return unit === "ml" ? "ml" : "g";
+}
+
+function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
+  if (value === null || value === undefined || value === "") return "-";
+  const text = String(value).trim();
+  if (/(?:g|ml)$/i.test(text)) return text;
+  return `${text} ${normalizeQuantityUnit(unit)}`;
 }
 
 export default function RecipePrintPage() {
@@ -131,11 +144,15 @@ export default function RecipePrintPage() {
       <div className="flex gap-2 mb-0 text-xs">
         <div className="border border-gray-400 rounded px-2 py-0.5">
           <div className="text-[9px] font-bold text-gray-500 mb-0">充填量</div>
-          <div className="text-xs font-bold leading-tight">{recipe.filling_quantity ?? "-"} g</div>
+          <div className="text-xs font-bold leading-tight">
+            {formatQuantityWithUnit(recipe.filling_quantity, recipe.filling_quantity_unit)}
+          </div>
         </div>
         <div className="border border-gray-400 rounded px-2 py-0.5">
           <div className="text-[9px] font-bold text-gray-500 mb-0">内容量（表記量）</div>
-          <div className="text-xs font-bold leading-tight">{recipe.label_quantity || "-"}</div>
+          <div className="text-xs font-bold leading-tight">
+            {formatQuantityWithUnit(recipe.label_quantity, recipe.net_content_unit)}
+          </div>
         </div>
         <div className="border border-gray-400 rounded px-2 py-0.5">
           <div className="text-[9px] font-bold text-gray-500 mb-0">保存方法</div>

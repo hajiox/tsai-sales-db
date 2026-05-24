@@ -58,6 +58,49 @@ const CATEGORIES = [
   },
 ];
 
+type QuantityUnit = "g" | "ml";
+
+const QUANTITY_UNITS: QuantityUnit[] = ["g", "ml"];
+
+function normalizeQuantityUnit(unit?: string | null): QuantityUnit {
+  return unit === "ml" ? "ml" : "g";
+}
+
+function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
+  if (value === null || value === undefined || value === "") return "-";
+  const text = String(value).trim();
+  if (/(?:g|ml)$/i.test(text)) return text;
+  return `${text} ${normalizeQuantityUnit(unit)}`;
+}
+
+function QuantityUnitToggle({
+  value,
+  onChange,
+}: {
+  value: QuantityUnit;
+  onChange: (unit: QuantityUnit) => void;
+}) {
+  return (
+    <div className="inline-flex shrink-0 overflow-hidden rounded border border-gray-200 bg-white text-[10px] leading-none">
+      {QUANTITY_UNITS.map((unit) => (
+        <button
+          key={unit}
+          type="button"
+          onClick={() => onChange(unit)}
+          className={`h-6 min-w-8 px-2 font-bold transition-colors ${
+            value === unit
+              ? "bg-gray-900 text-white"
+              : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          }`}
+          aria-pressed={value === unit}
+        >
+          {unit}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface Recipe {
   id: string;
   name: string;
@@ -66,7 +109,9 @@ interface Recipe {
   development_date: string | null;
   manufacturing_notes: string | null;
   filling_quantity: number | null;
+  filling_quantity_unit?: QuantityUnit | null;
   label_quantity: string | null;
+  net_content_unit?: QuantityUnit | null;
   storage_method: string | null;
   sterilization_method: string | null;
   sterilization_temperature: string | null;
@@ -240,7 +285,7 @@ function RecipeDetailContent() {
       // レシピメタデータを復元
       const snap = version.snapshot_recipe;
       const restoreFields: Record<string, any> = {};
-      const fieldsToRestore = ['name', 'filling_quantity', 'label_quantity', 'storage_method',
+      const fieldsToRestore = ['name', 'filling_quantity', 'filling_quantity_unit', 'label_quantity', 'net_content_unit', 'storage_method',
         'sterilization_method', 'sterilization_temperature', 'sterilization_time',
         'manufacturing_notes', 'selling_price', 'amazon_fee_enabled', 'yield_rate',
         'jan_code', 'lot_size', 'case_quantity', 'case_size', 'shelf_life'];
@@ -512,6 +557,8 @@ function RecipeDetailContent() {
     setRecipe({
       ...recipeData,
       amazon_fee_enabled: recipeData.amazon_fee_enabled ?? false,
+      filling_quantity_unit: normalizeQuantityUnit(recipeData.filling_quantity_unit),
+      net_content_unit: normalizeQuantityUnit(recipeData.net_content_unit),
     });
 
     const { data: itemsData } = await supabase
@@ -1016,8 +1063,10 @@ function RecipeDetailContent() {
             total_weight: totalWeight,
             manufacturing_notes: recipe.manufacturing_notes,
             filling_quantity: recipe.filling_quantity,
+            filling_quantity_unit: normalizeQuantityUnit(recipe.filling_quantity_unit),
             storage_method: recipe.storage_method,
             label_quantity: recipe.label_quantity,
+            net_content_unit: normalizeQuantityUnit(recipe.net_content_unit),
             sterilization_method: recipe.sterilization_method,
             sterilization_temperature: recipe.sterilization_temperature,
             sterilization_time: recipe.sterilization_time,
@@ -1469,8 +1518,14 @@ function RecipeDetailContent() {
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
-                    充填量 (g)
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      充填量
+                    </div>
+                    <QuantityUnitToggle
+                      value={normalizeQuantityUnit(recipe.filling_quantity_unit)}
+                      onChange={(unit) => handleRecipeChange("filling_quantity_unit", unit)}
+                    />
                   </div>
                   <div className="font-bold text-xl flex items-center gap-2">
                     <InlineEdit
@@ -1482,13 +1537,19 @@ function RecipeDetailContent() {
                       className="text-right font-bold text-xl min-w-[3rem] justify-end"
                       inputClassName="text-right font-bold text-xl w-20"
                       placeholder="-"
-                      suffix="g"
+                      suffix={normalizeQuantityUnit(recipe.filling_quantity_unit)}
                     />
                   </div>
                 </div>
                 <div className="p-3 bg-gray-50 rounded border border-gray-100">
-                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
-                    内容量（表記量）
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      内容量（表記量）
+                    </div>
+                    <QuantityUnitToggle
+                      value={normalizeQuantityUnit(recipe.net_content_unit)}
+                      onChange={(unit) => handleRecipeChange("net_content_unit", unit)}
+                    />
                   </div>
                   <InlineEdit
                     type="number"
@@ -1499,7 +1560,7 @@ function RecipeDetailContent() {
                     className="font-bold text-xl w-full"
                     inputClassName="font-bold text-xl w-full"
                     placeholder="-"
-                    suffix="g"
+                    suffix={normalizeQuantityUnit(recipe.net_content_unit)}
                   />
                 </div>
                 {recipe.is_intermediate && (
@@ -3079,7 +3140,7 @@ Now Expanded or Scrollable */}
               充填量
             </div>
             <div className="text-xs font-bold leading-tight">
-              {recipe.filling_quantity ?? "-"} g
+              {formatQuantityWithUnit(recipe.filling_quantity, recipe.filling_quantity_unit)}
             </div>
           </div>
           <div className="border border-gray-400 rounded px-2 py-0.5">
@@ -3087,7 +3148,7 @@ Now Expanded or Scrollable */}
               内容量（表記量）
             </div>
             <div className="text-xs font-bold leading-tight">
-              {recipe.label_quantity || "-"}
+              {formatQuantityWithUnit(recipe.label_quantity, recipe.net_content_unit)}
             </div>
           </div>
           <div className="border border-gray-400 rounded px-2 py-0.5">

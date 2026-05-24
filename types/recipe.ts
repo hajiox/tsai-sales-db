@@ -40,6 +40,9 @@ export interface Recipe {
     development_date?: string;
     manufacturing_notes?: string;
     filling_quantity?: number;
+    filling_quantity_unit?: 'g' | 'ml';
+    label_quantity?: string | number;
+    net_content_unit?: 'g' | 'ml';
     storage_method?: string;
     selling_price_incl_tax?: number;
     selling_price_excl_tax?: number;

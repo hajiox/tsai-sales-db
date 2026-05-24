@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
         total_cost,
         total_weight,
         filling_quantity,
+        filling_quantity_unit,
         label_quantity,
         net_content_unit,
         linked_product_id,
