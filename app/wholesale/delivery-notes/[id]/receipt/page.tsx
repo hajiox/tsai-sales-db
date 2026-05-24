@@ -80,7 +80,6 @@ function buildPassPrntHtml(note: DeliveryNote) {
     .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 22px; }
     .issuer { font-size: 28px; font-weight: 700; }
     .issuer-detail { margin-top: 5px; font-size: 23px; line-height: 1.35; }
-    .system { margin-top: 7px; font-size: 18px; }
   </style>
 </head>
 <body>
@@ -101,7 +100,6 @@ function buildPassPrntHtml(note: DeliveryNote) {
     <div class="issuer-detail">${escapeHtml(ISSUER.address)}</div>
     <div class="issuer-detail">${escapeHtml(ISSUER.tel)}</div>
     <div class="issuer-detail">${escapeHtml(ISSUER.fax)}</div>
-    <div class="system">AI System（TSA）より発行</div>
   </div>
 </body>
 </html>`;
@@ -245,7 +243,6 @@ export default function DeliveryNoteReceiptPage() {
               <div>{ISSUER.address}</div>
               <div>{ISSUER.tel}</div>
               <div>{ISSUER.fax}</div>
-              <div className="mt-1">AI System（TSA）より発行</div>
             </footer>
           </article>
         ) : null}
