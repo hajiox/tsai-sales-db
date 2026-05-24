@@ -78,7 +78,7 @@ function buildPassPrntHtml(note: DeliveryNote) {
     .quantity { margin-top: 6px; font-size: 28px; font-weight: 700; }
     .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 22px; }
     .issuer { font-size: 28px; font-weight: 700; }
-    .issuer-detail { margin-top: 5px; font-size: 20px; line-height: 1.35; }
+    .issuer-detail { margin-top: 5px; font-size: 23px; line-height: 1.35; }
     .system { margin-top: 7px; font-size: 18px; }
   </style>
 </head>
@@ -235,7 +235,7 @@ export default function DeliveryNoteReceiptPage() {
               </div>
             </section>
 
-            <footer className="mt-4 border-t border-black pt-2 text-center text-[9px] leading-relaxed">
+            <footer className="mt-4 border-t border-black pt-2 text-center text-[11px] leading-relaxed">
               <div className="text-[12px] font-bold">{ISSUER.name}</div>
               <div>{ISSUER.postalCode}</div>
               <div>{ISSUER.address}</div>
