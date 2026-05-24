@@ -69,15 +69,16 @@ const SELF_SHELF_LIFE_OPTIONS = [
 ] as const;
 
 function normalizeQuantityUnit(unit?: string | null): QuantityUnit {
-  const text = String(unit || "").trim();
-  return text || "g";
+  if (unit === null || unit === undefined) return "g";
+  return String(unit).trim();
 }
 
 function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
   if (value === null || value === undefined || value === "") return "-";
   const text = String(value).trim();
   if (/(?:g|ml)$/i.test(text)) return text;
-  return `${text} ${normalizeQuantityUnit(unit)}`;
+  const normalizedUnit = normalizeQuantityUnit(unit);
+  return normalizedUnit ? `${text} ${normalizedUnit}` : text;
 }
 
 function normalizeSelfShelfLife(value?: string | null) {
@@ -137,7 +138,10 @@ function QuantityUnitToggle({
         ))}
         <button
           type="button"
-          onClick={() => setCustomOpen(true)}
+          onClick={() => {
+            setCustomOpen(true);
+            if (!isCustom) onChange("");
+          }}
           className={`h-6 min-w-12 px-2 font-bold transition-colors ${
             customOpen
               ? "bg-gray-900 text-white"

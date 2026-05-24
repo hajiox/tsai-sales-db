@@ -48,15 +48,16 @@ interface VersionInfo {
 }
 
 function normalizeQuantityUnit(unit?: string | null) {
-  const text = String(unit || "").trim();
-  return text || "g";
+  if (unit === null || unit === undefined) return "g";
+  return String(unit).trim();
 }
 
 function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
   if (value === null || value === undefined || value === "") return "-";
   const text = String(value).trim();
   if (/(?:g|ml)$/i.test(text)) return text;
-  return `${text} ${normalizeQuantityUnit(unit)}`;
+  const normalizedUnit = normalizeQuantityUnit(unit);
+  return normalizedUnit ? `${text} ${normalizedUnit}` : text;
 }
 
 export default function RecipePrintPage() {
