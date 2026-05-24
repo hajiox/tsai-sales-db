@@ -116,7 +116,8 @@ async function ensureCustomer(input: DeliveryNoteCreateInput) {
 }
 
 export async function getDeliveryNoteOptions() {
-  const [customersRes, productsRes] = await Promise.all([
+  const INCLUDE_RECIPE_CATEGORIES = ['自社', 'OEM', 'ネット専用', '試作'];
+  const [customersRes, recipesRes] = await Promise.all([
     supabase
       .from('wholesale_customers')
       .select('id, customer_code, customer_name, customer_type, is_active, is_favorite, favorite_order')
@@ -124,19 +125,65 @@ export async function getDeliveryNoteOptions() {
       .order('favorite_order', { ascending: true })
       .order('customer_name', { ascending: true }),
     supabase
-      .from('wholesale_products')
-      .select('id, product_code, product_name, price, product_type, is_active, display_order')
-      .eq('product_type', '通常卸')
-      .order('display_order', { ascending: true })
-      .order('product_code', { ascending: true }),
+      .from('recipes')
+      .select('id, name, category, selling_price, is_intermediate, linked_wholesale_product_id, created_at')
+      .eq('is_intermediate', false)
+      .not('selling_price', 'is', null)
+      .not('linked_wholesale_product_id', 'is', null)
+      .in('category', INCLUDE_RECIPE_CATEGORIES)
+      .order('name', { ascending: true }),
   ]);
 
   if (customersRes.error) throw customersRes.error;
-  if (productsRes.error) throw productsRes.error;
+  if (recipesRes.error) throw recipesRes.error;
+
+  const recipes = recipesRes.data || [];
+  const wholesaleProductIds = Array.from(new Set(
+    recipes
+      .map((recipe: any) => recipe.linked_wholesale_product_id)
+      .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+  ));
+
+  let wholesaleProducts: any[] = [];
+  if (wholesaleProductIds.length > 0) {
+    const { data, error } = await supabase
+      .from('wholesale_products')
+      .select('id, product_code, product_name, price, product_type, is_active, display_order')
+      .in('id', wholesaleProductIds)
+      .eq('product_type', '通常卸')
+      .eq('is_active', true);
+    if (error) throw error;
+    wholesaleProducts = data || [];
+  }
+
+  const wholesaleProductMap = new Map(wholesaleProducts.map(product => [product.id, product]));
+  const products = recipes
+    .map((recipe: any) => {
+      const product = wholesaleProductMap.get(recipe.linked_wholesale_product_id);
+      if (!product) return null;
+      return {
+        id: product.id,
+        product_code: product.product_code,
+        product_name: recipe.name,
+        price: product.price,
+        product_type: product.product_type,
+        is_active: product.is_active,
+        display_order: product.display_order,
+        source_recipe_id: recipe.id,
+        source_recipe_name: recipe.name,
+      };
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => {
+      const orderA = a.display_order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.display_order ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.product_code || '').localeCompare(String(b.product_code || ''), 'ja');
+    });
 
   return {
     customers: customersRes.data || [],
-    products: productsRes.data || [],
+    products,
   };
 }
 

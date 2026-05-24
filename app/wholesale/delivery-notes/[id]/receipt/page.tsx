@@ -40,9 +40,9 @@ function escapeHtml(value: unknown) {
 }
 
 function buildPassPrntHtml(note: DeliveryNote) {
-  const items = note.items.map(item => `
+  const items = note.items.map((item, index) => `
     <div class="item">
-      <div class="product">${escapeHtml(item.productName)}</div>
+      <div class="product"><span class="number">${index + 1}.</span>${escapeHtml(item.productName)}</div>
       <div class="quantity">${escapeHtml(item.quantity)}${escapeHtml(item.unit)}</div>
     </div>
   `).join('');
@@ -75,6 +75,7 @@ function buildPassPrntHtml(note: DeliveryNote) {
     .head { border-bottom: 2px solid #000; padding-bottom: 7px; font-size: 24px; font-weight: 700; }
     .item { border-bottom: 2px dashed #999; padding: 13px 0; }
     .product { font-size: 28px; font-weight: 700; word-break: break-word; }
+    .number { display: inline-block; min-width: 34px; }
     .quantity { margin-top: 6px; font-size: 28px; font-weight: 700; }
     .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 22px; }
     .issuer { font-size: 28px; font-weight: 700; }
@@ -228,7 +229,10 @@ export default function DeliveryNoteReceiptPage() {
               <div className="divide-y divide-dashed divide-gray-400">
                 {note.items.map((item, index) => (
                   <div key={`${item.productName}-${index}`} className="py-2">
-                    <div className="break-words text-[11px] font-semibold leading-snug">{item.productName}</div>
+                    <div className="flex gap-1 break-words text-[11px] font-semibold leading-snug">
+                      <span className="shrink-0">{index + 1}.</span>
+                      <span className="min-w-0">{item.productName}</span>
+                    </div>
                     <div className="mt-1 text-[11px] font-semibold">{item.quantity}{item.unit}</div>
                   </div>
                 ))}
