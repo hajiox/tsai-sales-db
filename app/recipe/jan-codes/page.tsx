@@ -167,6 +167,21 @@ function JanCodesContent() {
         acc[item.jan_code] = (acc[item.jan_code] || 0) + 1;
         return acc;
     }, {});
+    const janDuplicateRows = janCodes.reduce<Record<string, JanCode[]>>((acc, item) => {
+        if (!item.jan_code) return acc;
+        acc[item.jan_code] = [...(acc[item.jan_code] || []), item];
+        return acc;
+    }, {});
+
+    const getDuplicateLines = (item: JanCode) =>
+        (janDuplicateRows[item.jan_code] || [])
+            .filter((row) => row.id !== item.id)
+            .map((row) => {
+                const name = row.product_name || "品名未設定";
+                const category = row.category ? `（${row.category}）` : "";
+                const memo = row.memo ? ` / ${row.memo}` : "";
+                return `${name}${category}${memo}`;
+            });
 
     const renderEditableCell = (item: JanCode, field: string, displayValue: string, width: string = "w-full") => {
         const isEditing = editingCell?.id === item.id && editingCell?.field === field;
@@ -329,15 +344,32 @@ function JanCodesContent() {
                                     <td className="px-3 py-1">
                                         <div className="flex flex-wrap items-center gap-1 font-mono">
                                             <span>{item.jan_code}</span>
-                                            {(janDuplicateCounts[item.jan_code] || 0) > 1 && (
-                                                <span
-                                                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-700"
-                                                    title={`同じJANコードが${janDuplicateCounts[item.jan_code]}件あります`}
-                                                >
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    重複あり
-                                                </span>
-                                            )}
+                                            {(janDuplicateCounts[item.jan_code] || 0) > 1 && (() => {
+                                                const duplicateLines = getDuplicateLines(item);
+                                                return (
+                                                    <span
+                                                        className="group relative inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-700"
+                                                        title={duplicateLines.join("\n")}
+                                                    >
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                        重複あり
+                                                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-80 rounded-md border border-red-200 bg-white p-2 text-left text-[11px] font-normal leading-relaxed text-gray-700 shadow-lg group-hover:block">
+                                                            <span className="mb-1 block font-bold text-red-700">
+                                                                同じJANコードの登録
+                                                            </span>
+                                                            {duplicateLines.length > 0 ? (
+                                                                duplicateLines.map((line, index) => (
+                                                                    <span key={`${line}-${index}`} className="block break-words">
+                                                                        {line}
+                                                                    </span>
+                                                                ))
+                                                            ) : (
+                                                                <span className="block">詳細を取得できませんでした</span>
+                                                            )}
+                                                        </span>
+                                                    </span>
+                                                );
+                                            })()}
                                             <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => copyToClipboard(item.jan_code)}>
                                                 <Copy className="w-3 h-3 text-gray-400 hover:text-blue-500" />
                                             </Button>

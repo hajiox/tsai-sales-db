@@ -231,7 +231,8 @@ function RecipeDetailContent() {
     recipeCount: number;
     janMasterCount: number;
     names: string[];
-  }>({ recipeCount: 0, janMasterCount: 0, names: [] });
+    janMasters: { id: string; product_name: string | null; category: string | null; memo: string | null }[];
+  }>({ recipeCount: 0, janMasterCount: 0, names: [], janMasters: [] });
 
   // Batch calculation states
   const [batchSize1, setBatchSize1] = useState(400);
@@ -412,18 +413,18 @@ function RecipeDetailContent() {
   useEffect(() => {
     const checkJanDuplicates = async () => {
       if (!recipe?.jan_code) {
-        setJanDuplicateInfo({ recipeCount: 0, janMasterCount: 0, names: [] });
+        setJanDuplicateInfo({ recipeCount: 0, janMasterCount: 0, names: [], janMasters: [] });
         return;
       }
 
       const [{ data: recipeRows }, { data: janRows }] = await Promise.all([
         supabase
           .from("recipes")
-          .select("id, name")
+          .select("id, name, category")
           .eq("jan_code", recipe.jan_code),
         supabase
           .from("jan_codes")
-          .select("id")
+          .select("id, product_name, category, memo")
           .eq("jan_code", recipe.jan_code),
       ]);
 
@@ -431,7 +432,15 @@ function RecipeDetailContent() {
       setJanDuplicateInfo({
         recipeCount: otherRecipes.length,
         janMasterCount: Math.max((janRows || []).length - 1, 0),
-        names: otherRecipes.map((row) => row.name).filter(Boolean),
+        names: otherRecipes
+          .map((row) => `${row.name}${row.category ? `（${row.category}）` : ""}`)
+          .filter(Boolean),
+        janMasters: (janRows || []).map((row) => ({
+          id: row.id,
+          product_name: row.product_name || null,
+          category: row.category || null,
+          memo: row.memo || null,
+        })),
       });
     };
 
@@ -1292,6 +1301,16 @@ function RecipeDetailContent() {
       ? recipe.category
       : null;
   const backToListUrl = backTab ? `/recipe?tab=${encodeURIComponent(backTab)}` : "/recipe";
+  const janDuplicateRecipeLines = janDuplicateInfo.names.map((name) => `他レシピ: ${name}`);
+  const janDuplicateMasterLines = janDuplicateInfo.janMasterCount > 0
+    ? janDuplicateInfo.janMasters.map((row) => {
+      const name = row.product_name || "品名未設定";
+      const category = row.category ? `（${row.category}）` : "";
+      const memo = row.memo ? ` / ${row.memo}` : "";
+      return `JAN管理: ${name}${category}${memo}`;
+    })
+    : [];
+  const janDuplicateTooltipLines = [...janDuplicateRecipeLines, ...janDuplicateMasterLines];
 
   return (
     <div className="min-h-screen bg-white text-gray-800 font-sans print:p-0">
@@ -1673,14 +1692,23 @@ function RecipeDetailContent() {
                       />
                       {(janDuplicateInfo.recipeCount > 0 || janDuplicateInfo.janMasterCount > 0) && (
                         <span
-                          className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
-                          title={[
-                            janDuplicateInfo.recipeCount > 0 ? `他レシピ: ${janDuplicateInfo.names.join("、")}` : "",
-                            janDuplicateInfo.janMasterCount > 0 ? `JAN管理内の追加重複: ${janDuplicateInfo.janMasterCount}件` : "",
-                          ].filter(Boolean).join(" / ")}
+                          className="group relative inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
+                          title={janDuplicateTooltipLines.join("\n")}
                         >
                           <AlertTriangle className="h-3 w-3" />
                           重複あり
+                          <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-80 rounded-md border border-red-200 bg-white p-2 text-left text-[11px] font-normal leading-relaxed text-gray-700 shadow-lg group-hover:block">
+                            <span className="mb-1 block font-bold text-red-700">同じJANコードがあります</span>
+                            {janDuplicateTooltipLines.length > 0 ? (
+                              janDuplicateTooltipLines.map((line, index) => (
+                                <span key={`${line}-${index}`} className="block break-words">
+                                  {line}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="block">詳細を取得できませんでした</span>
+                            )}
+                          </span>
                         </span>
                       )}
                     </div>
