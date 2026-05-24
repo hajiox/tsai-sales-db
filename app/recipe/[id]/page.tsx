@@ -86,11 +86,16 @@ function normalizeSelfShelfLife(value?: string | null) {
     .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
     .replace(/ヶ月|か月|ヵ月|ケ月/g, "カ月")
     .replace(/より/g, "から");
-  if (text.includes("60日") || /2\s*カ月/.test(text)) return "製造から2カ月";
-  if (/18\s*カ月/.test(text)) return "製造から18カ月";
-  if (/24\s*カ月/.test(text) || /2\s*年/.test(text)) return "製造から24カ月";
-  if (/12\s*カ月/.test(text) || /1\s*年/.test(text)) return "製造から12カ月";
-  return SELF_SHELF_LIFE_OPTIONS.includes(text as typeof SELF_SHELF_LIFE_OPTIONS[number]) ? text : null;
+  if (SELF_SHELF_LIFE_OPTIONS.includes(text as typeof SELF_SHELF_LIFE_OPTIONS[number])) return text;
+
+  const hasMonth = (month: number) => new RegExp(`(^|[^0-9])${month}\\s*カ月`).test(text);
+  const hasYear = (year: number) => new RegExp(`(^|[^0-9])${year}\\s*年`).test(text);
+
+  if (hasMonth(18)) return "製造から18カ月";
+  if (hasMonth(24) || hasYear(2)) return "製造から24カ月";
+  if (hasMonth(12) || hasYear(1)) return "製造から12カ月";
+  if (text.includes("60日") || hasMonth(2)) return "製造から2カ月";
+  return null;
 }
 
 function QuantityUnitToggle({
