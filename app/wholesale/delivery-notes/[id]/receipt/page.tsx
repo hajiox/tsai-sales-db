@@ -3,10 +3,11 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { ArrowLeft, Printer } from 'lucide-react';
 
 const PASSPRNT_APP_STORE_URL = 'https://apps.apple.com/jp/app/star-passprnt/id979827520';
+const MOBILE_DELIVERY_NOTES_PATH = '/wholesale/delivery-notes';
 
 type ReceiptItem = {
   productName: string;
@@ -61,44 +62,47 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
 <head>
   <meta charset="utf-8">
   <style>
-    @page { size: 58mm auto; margin: 0; }
+    @page { size: 384px auto; margin: 0; }
     * { box-sizing: border-box; }
     html, body {
-      width: 58mm;
+      width: 384px;
       margin: 0;
       padding: 0;
       background: #fff;
       color: #000;
       font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
-      font-size: 10px;
+      font-size: 22px;
       line-height: 1.35;
     }
-    body { padding: 2mm 2.5mm 5mm; }
+    body { padding: 16px 18px 28px; }
     .center { text-align: center; }
-    .title { border-bottom: 1px solid #000; padding-bottom: 2mm; font-size: 14px; font-weight: 700; letter-spacing: 0.2em; }
-    .meta { border-bottom: 1px dashed #000; padding: 2mm 0; }
-    .line { display: flex; justify-content: space-between; gap: 2mm; }
-    .customer { margin-top: 1mm; font-size: 13px; font-weight: 700; }
-    .head { display: grid; grid-template-columns: 1fr 14mm; border-bottom: 1px solid #000; padding-bottom: 1mm; font-weight: 700; }
-    .item { border-bottom: 1px dashed #999; padding: 1.8mm 0; }
-    .product { font-size: 11px; font-weight: 700; word-break: break-word; }
-    .remarks { margin-top: 1mm; font-size: 9px; color: #333; }
-    .total { border-top: 1px solid #000; margin-top: 2mm; padding-top: 2mm; font-size: 13px; font-weight: 700; }
-    .note { margin-top: 1mm; font-size: 9px; color: #333; }
-    .memo { border-top: 1px dashed #000; margin-top: 3mm; padding-top: 2mm; white-space: pre-wrap; }
-    .footer { border-top: 1px solid #000; margin-top: 4mm; padding-top: 2mm; text-align: center; font-size: 9px; }
+    .title { border-bottom: 2px solid #000; padding-bottom: 12px; font-size: 30px; font-weight: 700; letter-spacing: 0.16em; }
+    .number { margin-top: 6px; font-size: 17px; }
+    .meta { border-bottom: 2px dashed #000; padding: 14px 0; }
+    .label { font-size: 18px; }
+    .line { display: flex; justify-content: space-between; gap: 12px; }
+    .customer { margin-top: 6px; font-size: 24px; font-weight: 700; word-break: break-word; }
+    .head { display: grid; grid-template-columns: 1fr 86px; border-bottom: 2px solid #000; padding-bottom: 7px; font-size: 18px; font-weight: 700; }
+    .item { border-bottom: 2px dashed #999; padding: 13px 0; }
+    .product { font-size: 24px; font-weight: 700; word-break: break-word; }
+    .item .line { margin-top: 6px; font-size: 20px; }
+    .remarks { margin-top: 6px; font-size: 18px; color: #333; }
+    .total { border-top: 2px solid #000; margin-top: 14px; padding-top: 13px; font-size: 30px; font-weight: 700; }
+    .note { margin-top: 8px; font-size: 17px; color: #333; }
+    .memo { border-top: 2px dashed #000; margin-top: 18px; padding-top: 12px; font-size: 19px; white-space: pre-wrap; }
+    .footer { border-top: 2px solid #000; margin-top: 22px; padding-top: 12px; text-align: center; font-size: 17px; }
   </style>
 </head>
 <body>
   <div class="title center">納品書</div>
-  <div class="center">${escapeHtml(note.number || '')}</div>
+  <div class="center number">${escapeHtml(note.number || '')}</div>
   <div class="meta">
     <div class="line"><span>納品日</span><span>${escapeHtml(note.deliveryDate)}</span></div>
-    <div style="margin-top:1mm;">納品先</div>
+    <div class="label" style="margin-top:8px;">納品先</div>
     <div class="customer">${escapeHtml(note.customerName)} 御中</div>
-    <div class="line" style="margin-top:1mm;"><span>取引形態</span><span>${note.transactionType === 'consignment' ? '委託' : note.transactionType === 'purchase' ? '買取' : '-'}</span></div>
+    <div class="line" style="margin-top:8px;"><span>取引形態</span><span>${note.transactionType === 'consignment' ? '委託' : note.transactionType === 'purchase' ? '買取' : '-'}</span></div>
   </div>
-  <div style="padding-top:2mm;">
+  <div style="padding-top:14px;">
     <div class="head"><span>品名 / 数量 x 単価</span><span style="text-align:right;">金額</span></div>
     ${items}
   </div>
@@ -125,11 +129,10 @@ function buildPassPrntUri(note: DeliveryNote, taxIncludedNote: string, backUrl: 
 
 export default function DeliveryNoteReceiptPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const [note, setNote] = useState<DeliveryNote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentUrl, setCurrentUrl] = useState('');
+  const [returnUrl, setReturnUrl] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -149,11 +152,14 @@ export default function DeliveryNoteReceiptPage() {
   }, [params.id]);
 
   useEffect(() => {
-    setCurrentUrl(window.location.href);
+    setReturnUrl(new URL(MOBILE_DELIVERY_NOTES_PATH, window.location.origin).href);
   }, []);
 
   const taxIncludedNote = '金額は卸販売管理の税込単価を使用しています';
-  const passPrntUri = note && currentUrl ? buildPassPrntUri(note, taxIncludedNote, currentUrl) : '#';
+  const passPrntUri = note && returnUrl ? buildPassPrntUri(note, taxIncludedNote, returnUrl) : '#';
+  const goBackToMobileIssue = () => {
+    window.location.replace(MOBILE_DELIVERY_NOTES_PATH);
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 print:bg-white print:text-black">
@@ -161,7 +167,7 @@ export default function DeliveryNoteReceiptPage() {
         <div className="mx-auto flex max-w-md items-center justify-between">
           <button
             type="button"
-            onClick={() => router.push('/wholesale/delivery-notes')}
+            onClick={goBackToMobileIssue}
             className="flex min-h-10 items-center gap-2 rounded-full border border-slate-700 px-3 text-sm text-slate-300"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -169,8 +175,8 @@ export default function DeliveryNoteReceiptPage() {
           </button>
           <a
             href={passPrntUri}
-            aria-disabled={!note || !currentUrl}
-            className={`flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white ${note && currentUrl ? 'bg-emerald-600 active:scale-95' : 'pointer-events-none bg-emerald-900 opacity-40'}`}
+            aria-disabled={!note || !returnUrl}
+            className={`flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white ${note && returnUrl ? 'bg-emerald-600 active:scale-95' : 'pointer-events-none bg-emerald-900 opacity-40'}`}
           >
             <Printer className="h-4 w-4" />
             Star印刷
@@ -193,8 +199,8 @@ export default function DeliveryNoteReceiptPage() {
               <div className="grid grid-cols-1 gap-2">
                 <a
                   href={passPrntUri}
-                  aria-disabled={!currentUrl}
-                  className={`flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-bold text-white ${currentUrl ? 'bg-emerald-600 active:scale-[0.98]' : 'pointer-events-none bg-emerald-900 opacity-40'}`}
+                  aria-disabled={!returnUrl}
+                  className={`flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-bold text-white ${returnUrl ? 'bg-emerald-600 active:scale-[0.98]' : 'pointer-events-none bg-emerald-900 opacity-40'}`}
                 >
                   Star PassPRNTで印刷
                 </a>
