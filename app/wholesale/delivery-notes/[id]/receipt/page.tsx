@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Printer } from 'lucide-react';
 
+const PASSPRNT_APP_STORE_URL = 'https://apps.apple.com/jp/app/star-passprnt/id979827520';
+
 type ReceiptItem = {
   productName: string;
   quantity: number;
@@ -111,12 +113,23 @@ function buildPassPrntHtml(note: DeliveryNote, taxIncludedNote: string) {
 </html>`;
 }
 
+function buildPassPrntUri(note: DeliveryNote, taxIncludedNote: string, backUrl: string) {
+  const html = buildPassPrntHtml(note, taxIncludedNote);
+  return [
+    'starpassprnt://v1/print/nopreview?',
+    `back=${encodeURIComponent(backUrl)}`,
+    `&size=384`,
+    `&html=${encodeURIComponent(html)}`,
+  ].join('');
+}
+
 export default function DeliveryNoteReceiptPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [note, setNote] = useState<DeliveryNote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentUrl, setCurrentUrl] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -135,18 +148,12 @@ export default function DeliveryNoteReceiptPage() {
     if (params.id) load();
   }, [params.id]);
 
+  useEffect(() => {
+    setCurrentUrl(window.location.href);
+  }, []);
+
   const taxIncludedNote = '金額は卸販売管理の税込単価を使用しています';
-  const openPassPrnt = () => {
-    if (!note) return;
-    const html = buildPassPrntHtml(note, taxIncludedNote);
-    const uri = [
-      'starpassprnt://v1/print/nopreview?',
-      `back=${encodeURIComponent(window.location.href)}`,
-      `&size=384`,
-      `&html=${encodeURIComponent(html)}`,
-    ].join('');
-    window.location.href = uri;
-  };
+  const passPrntUri = note && currentUrl ? buildPassPrntUri(note, taxIncludedNote, currentUrl) : '#';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 print:bg-white print:text-black">
@@ -160,15 +167,14 @@ export default function DeliveryNoteReceiptPage() {
             <ArrowLeft className="h-4 w-4" />
             発行画面
           </button>
-          <button
-            type="button"
-            onClick={openPassPrnt}
-            disabled={!note}
-            className="flex min-h-10 items-center gap-2 rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-40"
+          <a
+            href={passPrntUri}
+            aria-disabled={!note || !currentUrl}
+            className={`flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white ${note && currentUrl ? 'bg-emerald-600 active:scale-95' : 'pointer-events-none bg-emerald-900 opacity-40'}`}
           >
             <Printer className="h-4 w-4" />
             Star印刷
-          </button>
+          </a>
         </div>
       </div>
 
@@ -185,13 +191,13 @@ export default function DeliveryNoteReceiptPage() {
             <div className="no-print mb-3 space-y-2 rounded-xl border border-amber-500/40 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
               <div className="font-bold">iPhoneの標準印刷にはAirPrint対応機だけが表示されます。SM-S210iは「Star PassPRNTで印刷」を使ってください。</div>
               <div className="grid grid-cols-1 gap-2">
-                <button
-                  type="button"
-                  onClick={openPassPrnt}
-                  className="min-h-11 rounded-xl bg-emerald-600 px-3 text-sm font-bold text-white"
+                <a
+                  href={passPrntUri}
+                  aria-disabled={!currentUrl}
+                  className={`flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-bold text-white ${currentUrl ? 'bg-emerald-600 active:scale-[0.98]' : 'pointer-events-none bg-emerald-900 opacity-40'}`}
                 >
                   Star PassPRNTで印刷
-                </button>
+                </a>
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -200,7 +206,10 @@ export default function DeliveryNoteReceiptPage() {
                   AirPrint対応プリンターで印刷
                 </button>
               </div>
-              <div>事前にApp StoreでStar PassPRNTを入れ、BluetoothでSM-S210iをペアリングしてPassPRNT側でプリンターを選択してください。</div>
+              <div>事前にApp StoreでStar PassPRNTを入れ、BluetoothでSM-S210iをペアリングしてPassPRNT側でプリンターを選択してください。StarPRNT SDKサンプルアプリとは別アプリです。</div>
+              <a href={PASSPRNT_APP_STORE_URL} target="_blank" rel="noreferrer" className="block rounded-lg border border-amber-300 bg-white px-3 py-2 text-center text-xs font-semibold text-amber-900">
+                Star PassPRNTをApp Storeで開く
+              </a>
             </div>
             <header className="border-b border-black pb-2 text-center">
               <div className="text-base font-bold tracking-[0.25em]">納品書</div>

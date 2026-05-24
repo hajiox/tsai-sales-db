@@ -78,7 +78,6 @@ function formatYen(value: number) {
 export default function WholesaleDeliveryNotesMobilePage() {
   const router = useRouter();
   const settingsRestoredRef = useRef(false);
-  const addedFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [recentNotes, setRecentNotes] = useState<DeliveryNoteSummary[]>([]);
@@ -95,7 +94,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
   const [productSearch, setProductSearch] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
   const [memo, setMemo] = useState('');
-  const [lastAddedProduct, setLastAddedProduct] = useState<{ id: string; name: string; quantity: number } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -144,12 +142,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
   };
 
   useEffect(() => { load(); }, []);
-
-  useEffect(() => {
-    return () => {
-      if (addedFeedbackTimerRef.current) clearTimeout(addedFeedbackTimerRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     if (!settingsRestoredRef.current) return;
@@ -222,12 +214,7 @@ export default function WholesaleDeliveryNotesMobilePage() {
         remarks: '',
       }];
     });
-    setLastAddedProduct({ id: product.id, name: product.product_name, quantity: nextQuantity });
     setMessage(`${product.product_name} を追加しました（数量 ${nextQuantity}）`);
-    if (addedFeedbackTimerRef.current) clearTimeout(addedFeedbackTimerRef.current);
-    addedFeedbackTimerRef.current = setTimeout(() => {
-      setLastAddedProduct(null);
-    }, 1800);
     setProductSearch('');
   };
 
@@ -468,33 +455,19 @@ export default function WholesaleDeliveryNotesMobilePage() {
                   className="min-h-12 w-full rounded-xl border border-slate-700 bg-slate-800 pl-9 pr-3 text-base text-white outline-none placeholder:text-slate-500 focus:border-cyan-500"
                 />
               </div>
-              {lastAddedProduct && (
-                <div className="rounded-xl border border-emerald-500/60 bg-emerald-950/50 px-3 py-2 text-sm font-semibold text-emerald-100" role="status" aria-live="polite">
-                  {lastAddedProduct.name} を追加しました。数量 {lastAddedProduct.quantity}
-                </div>
-              )}
               <div className="max-h-72 space-y-2 overflow-y-auto">
                 {filteredProducts.map(product => (
                   <button
                     key={product.id}
                     type="button"
                     onClick={() => addProduct(product)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition active:scale-[0.98] ${
-                      lastAddedProduct?.id === product.id
-                        ? 'border-emerald-400 bg-emerald-950/70 ring-2 ring-emerald-400/40'
-                        : 'border-slate-700 bg-slate-800'
-                    }`}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-left transition active:scale-[0.97] active:bg-slate-700 active:shadow-inner"
                   >
                     <span className="min-w-0">
                       <span className="block break-words text-sm font-semibold text-slate-100">{product.product_name}</span>
                       <span className="text-[11px] text-slate-500">{product.product_code || 'コードなし'}</span>
                     </span>
-                    <span className="shrink-0 text-right">
-                      <span className="block text-sm font-semibold text-emerald-300">{formatYen(Number(product.price || 0))}</span>
-                      {lastAddedProduct?.id === product.id && (
-                        <span className="mt-1 block rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-bold text-emerald-950">追加済</span>
-                      )}
-                    </span>
+                    <span className="shrink-0 text-sm font-semibold text-emerald-300">{formatYen(Number(product.price || 0))}</span>
                   </button>
                 ))}
               </div>
