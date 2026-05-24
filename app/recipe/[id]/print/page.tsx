@@ -15,9 +15,9 @@ interface Recipe {
   development_date: string | null;
   manufacturing_notes: string | null;
   filling_quantity: number | null;
-  filling_quantity_unit?: "g" | "ml" | null;
+  filling_quantity_unit?: string | null;
   label_quantity: string | null;
-  net_content_unit?: "g" | "ml" | null;
+  net_content_unit?: string | null;
   storage_method: string | null;
   sterilization_method: string | null;
   sterilization_temperature: string | null;
@@ -48,7 +48,8 @@ interface VersionInfo {
 }
 
 function normalizeQuantityUnit(unit?: string | null) {
-  return unit === "ml" ? "ml" : "g";
+  const text = String(unit || "").trim();
+  return text || "g";
 }
 
 function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {

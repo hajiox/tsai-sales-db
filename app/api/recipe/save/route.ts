@@ -116,8 +116,9 @@ export async function POST(request: Request) {
                 }
             }
             for (const f of ['filling_quantity_unit', 'net_content_unit']) {
-                if (f in sanitized && !['g', 'ml'].includes(sanitized[f])) {
-                    sanitized[f] = 'g';
+                if (f in sanitized) {
+                    const unit = typeof sanitized[f] === 'string' ? sanitized[f].trim() : '';
+                    sanitized[f] = unit || 'g';
                 }
             }
             if (sanitized.category === "自社" && "shelf_life" in sanitized) {

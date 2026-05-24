@@ -58,7 +58,7 @@ const CATEGORIES = [
   },
 ];
 
-type QuantityUnit = "g" | "ml";
+type QuantityUnit = string;
 
 const QUANTITY_UNITS: QuantityUnit[] = ["g", "ml"];
 const SELF_SHELF_LIFE_OPTIONS = [
@@ -69,7 +69,8 @@ const SELF_SHELF_LIFE_OPTIONS = [
 ] as const;
 
 function normalizeQuantityUnit(unit?: string | null): QuantityUnit {
-  return unit === "ml" ? "ml" : "g";
+  const text = String(unit || "").trim();
+  return text || "g";
 }
 
 function formatQuantityWithUnit(value: string | number | null | undefined, unit?: string | null) {
@@ -105,23 +106,57 @@ function QuantityUnitToggle({
   value: QuantityUnit;
   onChange: (unit: QuantityUnit) => void;
 }) {
+  const [customOpen, setCustomOpen] = useState(() => !QUANTITY_UNITS.includes(normalizeQuantityUnit(value)));
+  const normalizedValue = normalizeQuantityUnit(value);
+  const isCustom = !QUANTITY_UNITS.includes(normalizedValue);
+
+  useEffect(() => {
+    if (isCustom) setCustomOpen(true);
+  }, [isCustom]);
+
   return (
-    <div className="inline-flex shrink-0 overflow-hidden rounded border border-gray-200 bg-white text-[10px] leading-none">
-      {QUANTITY_UNITS.map((unit) => (
+    <div className="flex shrink-0 items-center gap-1">
+      <div className="inline-flex overflow-hidden rounded border border-gray-200 bg-white text-[10px] leading-none">
+        {QUANTITY_UNITS.map((unit) => (
+          <button
+            key={unit}
+            type="button"
+            onClick={() => {
+              setCustomOpen(false);
+              onChange(unit);
+            }}
+            className={`h-6 min-w-8 px-2 font-bold transition-colors ${
+              normalizedValue === unit && !customOpen
+                ? "bg-gray-900 text-white"
+                : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            }`}
+            aria-pressed={normalizedValue === unit && !customOpen}
+          >
+            {unit}
+          </button>
+        ))}
         <button
-          key={unit}
           type="button"
-          onClick={() => onChange(unit)}
-          className={`h-6 min-w-8 px-2 font-bold transition-colors ${
-            value === unit
+          onClick={() => setCustomOpen(true)}
+          className={`h-6 min-w-12 px-2 font-bold transition-colors ${
+            customOpen
               ? "bg-gray-900 text-white"
               : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
           }`}
-          aria-pressed={value === unit}
+          aria-pressed={customOpen}
         >
-          {unit}
+          自由
         </button>
-      ))}
+      </div>
+      {customOpen && (
+        <input
+          type="text"
+          value={isCustom ? normalizedValue : ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="例: 本"
+          className="h-6 w-20 rounded border border-gray-200 bg-white px-2 text-[11px] font-bold text-gray-700 outline-none focus:border-gray-400"
+        />
+      )}
     </div>
   );
 }
