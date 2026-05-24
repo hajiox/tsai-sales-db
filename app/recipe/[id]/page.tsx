@@ -61,6 +61,12 @@ const CATEGORIES = [
 type QuantityUnit = "g" | "ml";
 
 const QUANTITY_UNITS: QuantityUnit[] = ["g", "ml"];
+const SELF_SHELF_LIFE_OPTIONS = [
+  "製造から12カ月",
+  "製造から18カ月",
+  "製造から24カ月",
+  "製造から2カ月",
+] as const;
 
 function normalizeQuantityUnit(unit?: string | null): QuantityUnit {
   return unit === "ml" ? "ml" : "g";
@@ -71,6 +77,20 @@ function formatQuantityWithUnit(value: string | number | null | undefined, unit?
   const text = String(value).trim();
   if (/(?:g|ml)$/i.test(text)) return text;
   return `${text} ${normalizeQuantityUnit(unit)}`;
+}
+
+function normalizeSelfShelfLife(value?: string | null) {
+  if (!value) return null;
+  const text = value
+    .trim()
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/ヶ月|か月|ヵ月|ケ月/g, "カ月")
+    .replace(/より/g, "から");
+  if (text.includes("60日") || /2\s*カ月/.test(text)) return "製造から2カ月";
+  if (/18\s*カ月/.test(text)) return "製造から18カ月";
+  if (/24\s*カ月/.test(text) || /2\s*年/.test(text)) return "製造から24カ月";
+  if (/12\s*カ月/.test(text) || /1\s*年/.test(text)) return "製造から12カ月";
+  return SELF_SHELF_LIFE_OPTIONS.includes(text as typeof SELF_SHELF_LIFE_OPTIONS[number]) ? text : null;
 }
 
 function QuantityUnitToggle({
@@ -554,11 +574,16 @@ function RecipeDetailContent() {
       return;
     }
 
+    const selfShelfLife = recipeData.category === "自社"
+      ? normalizeSelfShelfLife(recipeData.shelf_life)
+      : recipeData.shelf_life;
+
     setRecipe({
       ...recipeData,
       amazon_fee_enabled: recipeData.amazon_fee_enabled ?? false,
       filling_quantity_unit: normalizeQuantityUnit(recipeData.filling_quantity_unit),
       net_content_unit: normalizeQuantityUnit(recipeData.net_content_unit),
+      shelf_life: selfShelfLife,
     });
 
     const { data: itemsData } = await supabase
@@ -891,6 +916,7 @@ function RecipeDetailContent() {
     // category変更時はis_intermediateも連動
     if (field === "category") {
       updatedRecipe.is_intermediate = value === "中間部品";
+      updatedRecipe.shelf_life = value === "自社" ? normalizeSelfShelfLife(recipe.shelf_life) : recipe.shelf_life;
     }
     setRecipe(updatedRecipe);
     setHasChanges(true);
@@ -1077,7 +1103,7 @@ function RecipeDetailContent() {
             lot_size: recipe.lot_size,
             case_quantity: recipe.case_quantity,
             case_size: recipe.case_size,
-            shelf_life: recipe.shelf_life,
+            shelf_life: recipe.category === "自社" ? normalizeSelfShelfLife(recipe.shelf_life) : recipe.shelf_life,
             series_code: recipe.series_code,
             series: recipe.series,
             product_code: recipe.product_code,
@@ -1665,13 +1691,31 @@ function RecipeDetailContent() {
                     賞味期限
                   </div>
                   <div className="flex-1 flex items-center">
-                    <InlineEdit
-                      value={recipe.shelf_life ?? null}
-                      onSave={(val) => handleRecipeChange("shelf_life", val || null)}
-                      className="font-semibold text-sm"
-                      inputClassName="font-semibold text-sm w-full"
-                      placeholder="-"
-                    />
+                    {recipe.category === "自社" ? (
+                      <Select
+                        value={normalizeSelfShelfLife(recipe.shelf_life) || ""}
+                        onValueChange={(val) => handleRecipeChange("shelf_life", val)}
+                      >
+                        <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-semibold text-sm">
+                          <SelectValue placeholder="選択してください" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SELF_SHELF_LIFE_OPTIONS.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <InlineEdit
+                        value={recipe.shelf_life ?? null}
+                        onSave={(val) => handleRecipeChange("shelf_life", val || null)}
+                        className="font-semibold text-sm"
+                        inputClassName="font-semibold text-sm w-full"
+                        placeholder="-"
+                      />
+                    )}
                   </div>
                 </div>
                 {/* 製造ロット数・ケース入数 */}

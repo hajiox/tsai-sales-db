@@ -4,6 +4,27 @@ import { NextResponse } from "next/server";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+const selfShelfLifeOptions = [
+    "製造から12カ月",
+    "製造から18カ月",
+    "製造から24カ月",
+    "製造から2カ月",
+] as const;
+
+function normalizeSelfShelfLife(value?: string | null) {
+    if (!value) return null;
+    const text = value
+        .trim()
+        .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+        .replace(/ヶ月|か月|ヵ月|ケ月/g, "カ月")
+        .replace(/より/g, "から");
+    if (text.includes("60日") || /2\s*カ月/.test(text)) return "製造から2カ月";
+    if (/18\s*カ月/.test(text)) return "製造から18カ月";
+    if (/24\s*カ月/.test(text) || /2\s*年/.test(text)) return "製造から24カ月";
+    if (/12\s*カ月/.test(text) || /1\s*年/.test(text)) return "製造から12カ月";
+    return selfShelfLifeOptions.includes(text as typeof selfShelfLifeOptions[number]) ? text : null;
+}
+
 // POST: Save recipe changes (items + recipe metadata)
 export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -93,6 +114,9 @@ export async function POST(request: Request) {
                 if (f in sanitized && !['g', 'ml'].includes(sanitized[f])) {
                     sanitized[f] = 'g';
                 }
+            }
+            if (sanitized.category === "自社" && "shelf_life" in sanitized) {
+                sanitized.shelf_life = normalizeSelfShelfLife(sanitized.shelf_life);
             }
 
             const { error: recipeError } = await supabase

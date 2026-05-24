@@ -4,6 +4,27 @@ import { NextResponse } from "next/server";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+const selfShelfLifeOptions = [
+    "製造から12カ月",
+    "製造から18カ月",
+    "製造から24カ月",
+    "製造から2カ月",
+] as const;
+
+function normalizeSelfShelfLife(value?: string | null) {
+    if (!value) return null;
+    const text = value
+        .trim()
+        .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+        .replace(/ヶ月|か月|ヵ月|ケ月/g, "カ月")
+        .replace(/より/g, "から");
+    if (text.includes("60日") || /2\s*カ月/.test(text)) return "製造から2カ月";
+    if (/18\s*カ月/.test(text)) return "製造から18カ月";
+    if (/24\s*カ月/.test(text) || /2\s*年/.test(text)) return "製造から24カ月";
+    if (/12\s*カ月/.test(text) || /1\s*年/.test(text)) return "製造から12カ月";
+    return selfShelfLifeOptions.includes(text as typeof selfShelfLifeOptions[number]) ? text : null;
+}
+
 // PATCH: Update recipe fields (category, date, name, series, product_code, etc.)
 export async function PATCH(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -22,7 +43,7 @@ export async function PATCH(request: Request) {
             "selling_price", "series", "series_code", "product_code",
             "linked_product_id", "ingredient_label", "ai_ingredient_label",
             "manufacturing_notes", "filling_quantity", "filling_quantity_unit",
-            "storage_method", "label_quantity", "net_content_unit",
+            "storage_method", "label_quantity", "net_content_unit", "shelf_life",
             "sterilization_method", "sterilization_temperature", "sterilization_time",
             "amazon_fee_enabled", "total_cost", "total_weight",
             "yield_rate",
@@ -42,6 +63,9 @@ export async function PATCH(request: Request) {
         // Auto-set is_intermediate when category changes
         if ("category" in safeUpdates) {
             safeUpdates.is_intermediate = safeUpdates.category === "中間部品";
+        }
+        if (safeUpdates.category === "自社" && "shelf_life" in safeUpdates) {
+            safeUpdates.shelf_life = normalizeSelfShelfLife(safeUpdates.shelf_life);
         }
 
         const { error } = await supabase
