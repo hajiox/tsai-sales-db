@@ -298,12 +298,15 @@ export default function WholesaleDeliveryNotesMobilePage() {
               </div>
               <label className="block text-xs text-slate-500">
                 納品日
-                <input
-                  type="date"
-                  value={deliveryDate}
-                  onChange={e => setDeliveryDate(e.target.value)}
-                  className="mt-1 block min-h-12 w-full max-w-full min-w-0 rounded-xl border border-slate-700 bg-slate-800 px-3 text-center text-base text-white outline-none focus:border-cyan-500"
-                />
+                <div className="mt-1 w-full overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
+                  <input
+                    type="date"
+                    value={deliveryDate}
+                    onChange={e => setDeliveryDate(e.target.value)}
+                    className="block h-12 w-full min-w-0 appearance-none border-0 bg-transparent px-3 text-center text-base text-white outline-none focus:ring-0"
+                    style={{ maxWidth: '100%', boxSizing: 'border-box', WebkitAppearance: 'none' }}
+                  />
+                </div>
               </label>
             </section>
 
