@@ -423,7 +423,9 @@ export default function WholesaleDeliveryNotesMobilePage() {
                         </button>
                         <input
                           type="number"
+                          inputMode="numeric"
                           value={item.quantity}
+                          onFocus={e => e.currentTarget.select()}
                           onChange={e => updateItem(index, { quantity: Number(e.target.value || 0) })}
                           className="min-h-11 rounded-xl border border-slate-700 bg-slate-900 px-3 text-center text-base text-white outline-none focus:border-cyan-500"
                         />
