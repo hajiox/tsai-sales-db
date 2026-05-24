@@ -116,7 +116,7 @@ async function ensureCustomer(input: DeliveryNoteCreateInput) {
 }
 
 export async function getDeliveryNoteOptions() {
-  const INCLUDE_RECIPE_CATEGORIES = ['自社'];
+  const INCLUDE_RECIPE_CATEGORIES = ['自社', 'OEM'];
   const [customersRes, recipesRes] = await Promise.all([
     supabase
       .from('wholesale_customers')
@@ -126,10 +126,9 @@ export async function getDeliveryNoteOptions() {
       .order('customer_name', { ascending: true }),
     supabase
       .from('recipes')
-      .select('id, name, category, selling_price, is_intermediate, linked_wholesale_product_id, created_at')
+      .select('id, name, category, selling_price, is_intermediate, linked_wholesale_product_id, linked_oem_product_id, created_at')
       .eq('is_intermediate', false)
       .not('selling_price', 'is', null)
-      .not('linked_wholesale_product_id', 'is', null)
       .in('category', INCLUDE_RECIPE_CATEGORIES)
       .order('name', { ascending: true }),
   ]);
@@ -137,10 +136,16 @@ export async function getDeliveryNoteOptions() {
   if (customersRes.error) throw customersRes.error;
   if (recipesRes.error) throw recipesRes.error;
 
-  const recipes = recipesRes.data || [];
+  const recipes = (recipesRes.data || []).filter((recipe: any) => {
+    if (recipe.category === 'OEM') return Boolean(recipe.linked_oem_product_id || recipe.linked_wholesale_product_id);
+    return Boolean(recipe.linked_wholesale_product_id);
+  });
   const wholesaleProductIds = Array.from(new Set(
     recipes
-      .map((recipe: any) => recipe.linked_wholesale_product_id)
+      .map((recipe: any) => recipe.category === 'OEM'
+        ? recipe.linked_oem_product_id || recipe.linked_wholesale_product_id
+        : recipe.linked_wholesale_product_id
+      )
       .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
   ));
 
@@ -150,7 +155,6 @@ export async function getDeliveryNoteOptions() {
       .from('wholesale_products')
       .select('id, product_code, product_name, price, product_type, is_active, display_order')
       .in('id', wholesaleProductIds)
-      .eq('product_type', '通常卸')
       .eq('is_active', true);
     if (error) throw error;
     wholesaleProducts = data || [];
@@ -159,7 +163,10 @@ export async function getDeliveryNoteOptions() {
   const wholesaleProductMap = new Map(wholesaleProducts.map(product => [product.id, product]));
   const products = recipes
     .map((recipe: any) => {
-      const product = wholesaleProductMap.get(recipe.linked_wholesale_product_id);
+      const linkedProductId = recipe.category === 'OEM'
+        ? recipe.linked_oem_product_id || recipe.linked_wholesale_product_id
+        : recipe.linked_wholesale_product_id;
+      const product = wholesaleProductMap.get(linkedProductId);
       if (!product) return null;
       return {
         id: product.id,
@@ -169,6 +176,7 @@ export async function getDeliveryNoteOptions() {
         product_type: product.product_type,
         is_active: product.is_active,
         display_order: product.display_order,
+        recipe_category: recipe.category,
         source_recipe_id: recipe.id,
         source_recipe_name: recipe.name,
       };

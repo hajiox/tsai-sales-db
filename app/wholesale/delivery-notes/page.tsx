@@ -34,6 +34,7 @@ type Product = {
   product_name: string;
   price: number;
   product_type: string | null;
+  recipe_category?: string | null;
   is_active: boolean | null;
 };
 
@@ -69,6 +70,7 @@ export default function WholesaleDeliveryNotesMobilePage() {
   const transactionType = 'purchase';
   const rate = 0.65;
   const [productSearch, setProductSearch] = useState('');
+  const [productCategory, setProductCategory] = useState<'自社' | 'OEM'>('自社');
   const [items, setItems] = useState<LineItem[]>([]);
   const memo = '';
 
@@ -142,8 +144,9 @@ export default function WholesaleDeliveryNotesMobilePage() {
     const q = productSearch.trim().toLowerCase();
     return products
       .filter(p => p.is_active !== false)
+      .filter(p => (p.recipe_category || '自社') === productCategory)
       .filter(p => !q || p.product_name.toLowerCase().includes(q) || String(p.product_code || '').toLowerCase().includes(q));
-  }, [products, productSearch]);
+  }, [products, productSearch, productCategory]);
 
   const itemCount = useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
@@ -364,6 +367,21 @@ export default function WholesaleDeliveryNotesMobilePage() {
               <div className="flex items-center gap-2 text-cyan-300">
                 <Package className="h-4 w-4" />
                 <h2 className="text-sm font-semibold">商品追加</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-700 bg-slate-950 p-1">
+                {(['自社', 'OEM'] as const).map(category => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => {
+                      setProductCategory(category);
+                      setProductSearch('');
+                    }}
+                    className={`min-h-10 rounded-lg text-sm font-semibold transition active:scale-[0.98] ${productCategory === category ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}
+                  >
+                    {category}
+                  </button>
+                ))}
               </div>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-500" />
