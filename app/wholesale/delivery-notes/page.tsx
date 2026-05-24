@@ -302,7 +302,7 @@ export default function WholesaleDeliveryNotesMobilePage() {
                   type="date"
                   value={deliveryDate}
                   onChange={e => setDeliveryDate(e.target.value)}
-                  className="mt-1 min-h-12 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-base text-white outline-none focus:border-cyan-500"
+                  className="mt-1 block min-h-12 w-full max-w-full min-w-0 rounded-xl border border-slate-700 bg-slate-800 px-3 text-center text-base text-white outline-none focus:border-cyan-500"
                 />
               </label>
             </section>
