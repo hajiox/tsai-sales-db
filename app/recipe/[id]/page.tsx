@@ -1720,21 +1720,26 @@ function RecipeDetailContent() {
                   </div>
                   <div className="flex-1 flex items-center">
                     {recipe.category === "自社" ? (
-                      <Select
-                        value={normalizeSelfShelfLife(recipe.shelf_life) || ""}
-                        onValueChange={(val) => handleRecipeChange("shelf_life", val)}
+                      <select
+                        aria-label="賞味期限"
+                        value={normalizeSelfShelfLife(recipe.shelf_life) || "__unset__"}
+                        onChange={(event) => {
+                          handleRecipeChange(
+                            "shelf_life",
+                            event.target.value === "__unset__" ? null : event.target.value
+                          );
+                        }}
+                        className="h-7 w-full border-none bg-transparent p-0 text-sm font-semibold text-gray-800 outline-none focus:ring-0"
                       >
-                        <SelectTrigger className="h-7 border-none bg-transparent p-0 focus:ring-0 shadow-none font-semibold text-sm">
-                          <SelectValue placeholder="選択してください" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SELF_SHELF_LIFE_OPTIONS.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <option value="__unset__" disabled>
+                          選択してください
+                        </option>
+                        {SELF_SHELF_LIFE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
                     ) : (
                       <InlineEdit
                         value={recipe.shelf_life ?? null}
