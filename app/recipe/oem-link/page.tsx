@@ -246,7 +246,7 @@ export default function OemLinkPage() {
                         OEM商品 → レシピ 紐付け管理
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        OEM卸販売商品にレシピを紐付けて、卸価格・利益率を自動同期（7掛ベース）
+                        OEM商品にレシピを紐付けて、販売価格・粗利益率を自動同期
                     </p>
                 </div>
                 <div className="flex gap-2">

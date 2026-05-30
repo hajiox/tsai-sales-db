@@ -1,5 +1,5 @@
 // app/recipe/page.tsx
-// レシピシステム メインページ（改訂版）
+// レシピシステム メインページ（改訂版） ver.2
 
 "use client";
 
@@ -748,7 +748,7 @@ export default function RecipePage() {
                             <TableHead>カテゴリ</TableHead>
                             {activeTab !== "中間部品" && <TableHead className="text-right">販売価格</TableHead>}
                             <TableHead className="text-right">原価</TableHead>
-                            {activeTab !== "中間部品" && <TableHead className="text-right w-[80px]">{activeTab === "自社" || activeTab === "OEM" ? "利益率（７掛）" : "利益率"}</TableHead>}
+                            {activeTab !== "中間部品" && <TableHead className="text-right w-[80px]">{activeTab === "自社" ? "利益率（７掛）" : "利益率"}</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -964,7 +964,7 @@ export default function RecipePage() {
                                     <TableCell className="text-right">
                                         {(() => {
                                             if (!recipe.selling_price || !recipe.total_cost) return <span className="text-gray-300">-</span>;
-                                            if (activeTab === "自社" || activeTab === "OEM") {
+                                            if (activeTab === "自社") {
                                                 const wholesalePrice = Math.round(recipe.selling_price * 0.7);
                                                 const wholesaleProfit = wholesalePrice - recipe.total_cost;
                                                 const rate = wholesalePrice > 0 ? (wholesaleProfit / wholesalePrice) * 100 : 0;
