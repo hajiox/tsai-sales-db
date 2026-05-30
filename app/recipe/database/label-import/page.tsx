@@ -327,7 +327,8 @@ function LabelImportContent() {
 
                 const result = await res.json();
                 savedIngredientId = selectedCandidate.id;
-                toast.success(`「${selectedCandidate.name}」の${result.updated_fields.length}件の項目を更新しました`);
+                const syncedCount = result.synced_recipe_items || 0;
+                toast.success(`「${selectedCandidate.name}」の${result.updated_fields.length}件の項目を更新しました${syncedCount ? `（レシピ明細${syncedCount}件同期）` : ""}`);
             } else if (actionMode === "create") {
                 // Create new ingredient via server-side API (bypasses RLS)
                 const res = await fetch('/api/recipe/db-write', {

@@ -49,6 +49,10 @@ export async function POST(request: Request) {
             );
         }
 
+        const shouldSyncRecipeItemNames =
+            typeof filteredUpdates.name === "string" && filteredUpdates.name.trim().length > 0;
+        let syncedRecipeItems = 0;
+
         const { data, error } = await supabase
             .from("ingredients")
             .update(filteredUpdates)
@@ -63,9 +67,28 @@ export async function POST(request: Request) {
             );
         }
 
+        if (shouldSyncRecipeItemNames) {
+            const { data: syncedItems, error: syncError } = await supabase
+                .from("recipe_items")
+                .update({ item_name: filteredUpdates.name })
+                .eq("ingredient_id", target_id)
+                .select("id");
+
+            if (syncError) {
+                console.error("Recipe item name sync error:", syncError);
+                return NextResponse.json(
+                    { error: syncError.message },
+                    { status: 500 }
+                );
+            }
+
+            syncedRecipeItems = syncedItems?.length || 0;
+        }
+
         return NextResponse.json({
             success: true,
             updated_fields: Object.keys(filteredUpdates),
+            synced_recipe_items: syncedRecipeItems,
             data: data?.[0],
         });
     } catch (error: any) {

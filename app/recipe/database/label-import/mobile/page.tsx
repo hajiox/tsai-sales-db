@@ -434,7 +434,8 @@ function MobileLabelImportContent() {
 
                 const result = await res.json();
                 savedIngredientId = selectedCandidate.id;
-                showToast(`「${selectedCandidate.name}」を更新しました`, "success");
+                const syncedCount = result.synced_recipe_items || 0;
+                showToast(`「${selectedCandidate.name}」を更新しました${syncedCount ? `（明細${syncedCount}件同期）` : ""}`, "success");
             } else if (actionMode === "create") {
                 // Create new ingredient via server-side API (bypasses RLS)
                 const res = await fetch('/api/recipe/db-write', {
