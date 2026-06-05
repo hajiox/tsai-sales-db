@@ -165,22 +165,24 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
             x += barWidth;
         }
 
+        // Convert digits to vector paths in EPS so Illustrator outline operations
+        // cannot drop font-backed text objects.
         eps += `\n/Courier findfont ${fontSize} scalefont setfont\n`;
 
         const d0x = leftQuiet - 2;
-        eps += `${d0x} 0 moveto (${code[0]}) show\n`;
+        eps += `${d0x} 0 moveto (${code[0]}) true charpath fill\n`;
 
         const leftStart      = leftQuiet + 3 * barWidth;
         const leftGroupWidth = 6 * 7 * barWidth;
         const leftCenter     = leftStart + leftGroupWidth / 2;
         const leftText       = code.substring(1, 7);
-        eps += `(${leftText}) stringwidth pop 2 div neg ${leftCenter} add 0 moveto (${leftText}) show\n`;
+        eps += `(${leftText}) stringwidth pop 2 div neg ${leftCenter} add 0 moveto (${leftText}) true charpath fill\n`;
 
         const rightStart      = leftStart + leftGroupWidth + 5 * barWidth;
         const rightGroupWidth = 6 * 7 * barWidth;
         const rightCenter     = rightStart + rightGroupWidth / 2;
         const rightText       = code.substring(7);
-        eps += `(${rightText}) stringwidth pop 2 div neg ${rightCenter} add 0 moveto (${rightText}) show\n`;
+        eps += `(${rightText}) stringwidth pop 2 div neg ${rightCenter} add 0 moveto (${rightText}) true charpath fill\n`;
 
         eps += `\n%%EOF\n`;
 
