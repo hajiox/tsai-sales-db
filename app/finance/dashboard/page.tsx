@@ -239,13 +239,22 @@ export default function FinanceDashboardPage() {
           </p>
         </div>
         {/* インポートボタン */}
-        <button
-          onClick={() => router.push('/finance/general-ledger/import')}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition shadow-sm"
-        >
-          <Upload className="w-4 h-4" />
-          インポート
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => router.push('/finance/general-ledger/import')}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition shadow-sm"
+          >
+            <Upload className="w-4 h-4" />
+            総勘定元帳取込
+          </button>
+          <button
+            onClick={() => router.push('/finance/trial-balance-statement/import')}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            試算表取込
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -254,6 +263,56 @@ export default function FinanceDashboardPage() {
           <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 text-xs">✕</button>
         </div>
       )}
+
+      {/* 月次取込 */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <div className="flex items-center gap-2">
+            <Upload className="w-5 h-5 text-blue-600" />
+            <h2 className="font-bold text-slate-800">月次取込</h2>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            先に総勘定元帳を取り込み、その後に会計事務所の合計残高試算表を取り込むと、試算表画面で突合・アラート確認までできます。
+          </p>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4 p-4">
+          <button
+            onClick={() => router.push('/finance/general-ledger/import')}
+            className="group rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-left hover:bg-blue-50 hover:border-blue-300 transition"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-blue-600 mb-1">STEP 1</div>
+                <div className="font-bold text-slate-900">総勘定元帳を取り込む</div>
+                <p className="text-sm text-slate-600 mt-1 leading-6">
+                  会計事務所から受け取った総勘定元帳CSV/TXTを取り込み、月次の仕訳・科目残高を作成します。
+                </p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => router.push('/finance/trial-balance-statement/import')}
+            className="group rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-left hover:bg-emerald-50 hover:border-emerald-300 transition"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-emerald-600 mb-1">STEP 2</div>
+                <div className="font-bold text-slate-900">合計残高試算表を取り込む</div>
+                <p className="text-sm text-slate-600 mt-1 leading-6">
+                  試算表を取り込むと、元帳との突合、今月の見立て、アラート、費用上位を確認できます。
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
 
       {/* サマリーカード */}
       {/* 検索バー */}
@@ -522,10 +581,11 @@ export default function FinanceDashboardPage() {
       )}
 
       {/* クイックリンク */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <QuickLink icon={<BarChart3 className="w-5 h-5" />} title="損益分析ビューアー" description="科目別の収支とAIコスト分析" href="/finance/trial-balance" color="indigo" />
         <QuickLink icon={<TrendingUp className="w-5 h-5" />} title="財務概要" description="BS・PL合計とバランスチェック" href="/finance/overview" color="emerald" />
         <QuickLink icon={<Upload className="w-5 h-5" />} title="仕訳CSVインポート" description="月次仕訳データの取り込み" href="/finance/general-ledger/import" color="blue" />
+        <QuickLink icon={<FileSpreadsheet className="w-5 h-5" />} title="合計残高試算表" description="試算表取込と元帳突合" href="/finance/trial-balance-statement" color="emerald" />
         <QuickLink icon={<FileSpreadsheet className="w-5 h-5" />} title="決算仕訳インポート" description="決算整理仕訳の取り込み" href="/finance/general-ledger/closing-import" color="violet" />
       </div>
 

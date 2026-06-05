@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { taxIncludedFromExcluded } from "@/lib/money";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
         series_code,
         jan_code,
         shelf_life,
+        web_description,
         storage_method,
         case_quantity,
         case_size,
@@ -70,13 +72,13 @@ export async function GET(request: NextRequest) {
             ingredient_count: r.recipe_items?.[0]?.count || 0,
             // 後方互換性
             production_quantity: r.filling_quantity || 400,
-            selling_price_incl_tax: r.selling_price,
-            selling_price_excl_tax: r.selling_price ? Math.round(r.selling_price / 1.08) : null,
+            selling_price_incl_tax: r.selling_price ? taxIncludedFromExcluded(r.selling_price) : null,
+            selling_price_excl_tax: r.selling_price,
             unit_cost: r.total_cost && r.filling_quantity
                 ? r.total_cost / r.filling_quantity
                 : r.total_cost || null,
             profit_margin: r.selling_price && r.total_cost
-                ? ((r.selling_price - (r.total_cost / (r.filling_quantity || 400))) / r.selling_price * 100)
+                ? ((taxIncludedFromExcluded(r.selling_price) - (r.total_cost / (r.filling_quantity || 400))) / taxIncludedFromExcluded(r.selling_price) * 100)
                 : null,
         }));
 

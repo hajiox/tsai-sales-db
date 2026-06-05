@@ -20,21 +20,11 @@ type SalesReportFormProps = {
   onSaveSuccess?: () => void; // 保存成功時に呼び出すコールバック関数
 };
 
-const salesChannels = [
-  { key: "amazon", name: "Amazon" },
-  { key: "rakuten", name: "楽天" },
-  { key: "yahoo", name: "Yahoo!" },
-  { key: "mercari", name: "メルカリ" },
-  { key: "base", name: "BASE" },
-  { key: "qoo10", name: "Qoo10" },
-];
-
 type FormData = {
   floor_sales: string;
   cash_income: string;
   register_count: string;
   remarks: string;
-  [key: string]: string;
 };
 
 // --- 変更点2: コンポーネントがonSaveSuccessを受け取るように変更 ---
@@ -57,11 +47,6 @@ export default function SalesReportForm({ initialDate, onSaveSuccess }: SalesRep
 
   const emptyFormData: FormData = {
     floor_sales: "", cash_income: "", register_count: "", remarks: "",
-    ...salesChannels.reduce((acc, channel) => {
-      acc[`${channel.key}_count`] = "";
-      acc[`${channel.key}_amount`] = "";
-      return acc;
-    }, {} as { [key: string]: string }),
   };
   const [formData, setFormData] = useState<FormData>(emptyFormData);
 
@@ -89,11 +74,6 @@ export default function SalesReportForm({ initialDate, onSaveSuccess }: SalesRep
             cash_income: String(data.cash_income ?? ''),
             register_count: String(data.register_count ?? ''),
             remarks: data.remarks ?? '',
-            ...salesChannels.reduce((acc, channel) => {
-                acc[`${channel.key}_count`] = String(data[`${channel.key}_count`] ?? '');
-                acc[`${channel.key}_amount`] = String(data[`${channel.key}_amount`] ?? '');
-                return acc;
-            }, {} as {[key: string]: string}),
         };
         setFormData(newFormData);
         setIsDataFound(true);
@@ -123,20 +103,13 @@ export default function SalesReportForm({ initialDate, onSaveSuccess }: SalesRep
 
   const generateReportText = (data: any): string => {
     if (!data) return ""
-    const webSalesText = salesChannels.map(channel => `${channel.name} 売上 / ${data[`d_${channel.key}_count`] || 0}件 ${formatCurrency(data[`d_${channel.key}_amount`] || 0)}`).join("\n");
-    const webCumulativeText = salesChannels.map(channel => `${channel.name}累計 / ${formatCurrency(data[`m_${channel.key}_total`] || 0)}`).join("\n");
     return `【会津ブランド館売上報告】
 ${formatDateJST(date || new Date())}
 フロア日計 / ${formatCurrency(data.d_floor_sales || 0)}
 フロア累計 / ${formatCurrency(data.m_floor_total || 0)}
 入　金 / ${formatCurrency(data.d_cash_income || 0)}
 レジ通過人数 / ${data.d_register_count || 0} 人
-【WEB売上】
-${webSalesText}
-${webCumulativeText}
-WEB売上累計 / ${formatCurrency(data.m_web_total || 0)}
-【月内フロア＋WEB累計売上】
-${formatCurrency(data.m_grand_total || 0)}`;
+累計レジ通過人数 / ${data.m_register_count_total || 0} 人`;
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -237,19 +210,6 @@ ${formatCurrency(data.m_grand_total || 0)}`;
                 <div className="space-y-1"><Label htmlFor="floor_sales" className="text-xs font-medium">フロア日計売上</Label><Input id="floor_sales" type="number" value={formData.floor_sales} onChange={(e) => handleInputChange("floor_sales", e.target.value)} placeholder="0" /></div>
                 <div className="space-y-1"><Label htmlFor="cash_income" className="text-xs font-medium">入金額</Label><Input id="cash_income" type="number" value={formData.cash_income} onChange={(e) => handleInputChange("cash_income", e.target.value)} placeholder="0" /></div>
                 <div className="space-y-1"><Label htmlFor="register_count" className="text-xs font-medium">レジ通過人数</Label><Input id="register_count" type="number" value={formData.register_count} onChange={(e) => handleInputChange("register_count", e.target.value)} placeholder="0" /></div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium">Web売上</Label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
-                  {salesChannels.map((channel) => (
-                    <div key={channel.key} className="p-3 border rounded-md space-y-2">
-                      <Label className="text-xs font-semibold">{channel.name}</Label>
-                      <div className="space-y-1"><Label className="text-xs text-gray-500">販売件数</Label><Input type="number" value={formData[`${channel.key}_count`]} onChange={(e) => handleInputChange(`${channel.key}_count`, e.target.value)} className="text-xs h-7" placeholder="0" /></div>
-                      <div className="space-y-1"><Label className="text-xs text-gray-500">売上金額</Label><Input type="number" value={formData[`${channel.key}_amount`]} onChange={(e) => handleInputChange(`${channel.key}_amount`, e.target.value)} className="text-xs h-7" placeholder="0" /></div>
-                    </div>
-                  ))}
-                </div>
               </div>
 
               <div className="space-y-1"><Label className="text-xs font-medium">備考</Label><Textarea value={formData.remarks} onChange={(e) => handleInputChange("remarks", e.target.value)} className="text-xs min-h-[60px]" placeholder="特記事項があれば入力してください" /></div>

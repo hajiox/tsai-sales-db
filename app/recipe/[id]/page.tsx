@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database, ClipboardCopy } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database, ClipboardCopy, ListOrdered } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -23,6 +23,7 @@ import NutritionDisplay, {
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 import InlineEdit from "../_components/InlineEdit";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
+import { taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -145,11 +146,15 @@ interface RecipeItem {
   tax_included?: boolean;
 }
 
+type IngredientSortMode = "registered" | "weight";
+
 function RecipeDetailContent() {
   const params = useParams();
   const router = useRouter();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [items, setItems] = useState<RecipeItem[]>([]);
+  const [ingredientSortMode, setIngredientSortMode] = useState<IngredientSortMode>("registered");
+  const [registeredItemOrder, setRegisteredItemOrder] = useState<Record<string, number>>({});
   const [taxRates, setTaxRates] = useState({
     ingredient: 1.08,
     material: 1.1,
@@ -360,10 +365,12 @@ function RecipeDetailContent() {
       ...snap,
       id: prev.id, // IDは元のまま
     } : prev);
-    setItems(version.snapshot_items.map((si: any) => ({
+    const previewItems = version.snapshot_items.map((si: any) => ({
       ...si,
       id: `temp-preview-${Math.random().toString(36).slice(2)}`,
-    })));
+    }));
+    setItems(previewItems);
+    setRegisteredItemOrder(Object.fromEntries(previewItems.map((item: RecipeItem, index: number) => [item.id, index])));
     setPreviewingVersionId(version.id);
     setHasChanges(true);
   };
@@ -570,6 +577,7 @@ function RecipeDetailContent() {
 
     if (itemsData) {
       setItems(itemsData);
+      setRegisteredItemOrder(Object.fromEntries(itemsData.map((item, index) => [item.id, index])));
 
       const ingredientItems = itemsData.filter(
         (i) => i.item_type === "ingredient" || i.item_type === "intermediate",
@@ -762,6 +770,7 @@ function RecipeDetailContent() {
       tax_included: true,
     };
     setItems((prev) => [...prev, newItem]);
+    setRegisteredItemOrder((prev) => ({ ...prev, [newItem.id]: Object.keys(prev).length }));
     setIsEditing(true);
     setHasChanges(true);
   };
@@ -775,6 +784,11 @@ function RecipeDetailContent() {
       });
     }
     setItems((prev) => prev.filter((i) => i.id !== itemId));
+    setRegisteredItemOrder((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
     setHasChanges(true);
   };
 
@@ -832,7 +846,7 @@ function RecipeDetailContent() {
               }
 
               if (selected.name === "Amazon手数料" && recipe?.selling_price) {
-                updates.cost = Math.round(recipe.selling_price * (taxRates.amazon_fee / 100));
+                updates.cost = Math.round(taxIncludedFromExcluded(recipe.selling_price) * (taxRates.amazon_fee / 100));
                 updates.usage_amount = 1;
                 updates.unit_price = updates.cost;
               }
@@ -1030,7 +1044,7 @@ function RecipeDetailContent() {
         0,
       );
       const savedAmazonFee = (recipe.amazon_fee_enabled && recipe.selling_price)
-        ? Math.round(recipe.selling_price * (taxRates.amazon_fee / 100))
+        ? Math.round(taxIncludedFromExcluded(recipe.selling_price) * (taxRates.amazon_fee / 100))
         : 0;
       const totalCost = baseCost + savedAmazonFee;
 
@@ -1154,7 +1168,7 @@ function RecipeDetailContent() {
 
   // Amazon手数料の計算（販売価格 × 手数料率%）
   const amazonFee = (recipe?.amazon_fee_enabled && recipe?.selling_price)
-    ? Math.round(recipe.selling_price * (taxRates.amazon_fee / 100))
+    ? Math.round(taxIncludedFromExcluded(recipe.selling_price) * (taxRates.amazon_fee / 100))
     : 0;
 
   const getTotals = () => {
@@ -1215,12 +1229,30 @@ function RecipeDetailContent() {
     );
 
   const totals = getTotals();
-  // Calculate profit: selling price (tax included) - cost (tax included)
-  const sellingPriceExTax = recipe.selling_price
-    ? Math.round(recipe.selling_price / 1.08)
+  const sellingPriceExTax = recipe.selling_price ? yenFloor(recipe.selling_price) : 0;
+  const sellingPriceInclTax = recipe.selling_price
+    ? taxIncludedFromExcluded(recipe.selling_price)
     : 0;
-  const profit = (recipe.selling_price || 0) - totals.cost;
-  const profitRate = recipe.selling_price ? (profit / recipe.selling_price) * 100 : 0;
+  const profit = sellingPriceInclTax - totals.cost;
+  const profitRate = sellingPriceInclTax ? (profit / sellingPriceInclTax) * 100 : 0;
+  const getRegisteredOrder = (item: RecipeItem, fallbackIndex: number) => (
+    registeredItemOrder[item.id] ?? Number.MAX_SAFE_INTEGER - 100000 + fallbackIndex
+  );
+  const getIngredientWeight = (item: RecipeItem) => {
+    const weight = parseFloat(String(item.usage_amount));
+    return Number.isFinite(weight) ? weight : 0;
+  };
+  const ingredientItems = items.filter((i) => i.item_type === "ingredient");
+  const sortedIngredientItems = ingredientItems
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      if (ingredientSortMode === "weight") {
+        const weightDiff = getIngredientWeight(b.item) - getIngredientWeight(a.item);
+        if (weightDiff !== 0) return weightDiff;
+      }
+      return getRegisteredOrder(a.item, a.index) - getRegisteredOrder(b.item, b.index);
+    })
+    .map(({ item }) => item);
 
   // Group items for display
   const groupedItems = [
@@ -1234,7 +1266,7 @@ function RecipeDetailContent() {
     {
       title: "原材料",
       type: "ingredient",
-      items: items.filter((i) => i.item_type === "ingredient"),
+      items: sortedIngredientItems,
       color: "bg-green-50 text-green-700 border-green-100",
       candidates: ingredients,
     },
@@ -1303,7 +1335,7 @@ function RecipeDetailContent() {
               p.set('recipe_id', recipe.id);
               p.set('product_name', recipe.name);
               if (recipe.selling_price) {
-                p.set('unit_price', String(Math.round(recipe.selling_price / 1.08)));
+                p.set('unit_price', String(yenFloor(recipe.selling_price)));
               }
               if (recipe.category) p.set('category', recipe.category);
               window.open(`http://192.168.110.200:3004/estimates/new?${p.toString()}`, '_blank');
@@ -1887,24 +1919,11 @@ function RecipeDetailContent() {
                       販売価格 (Selling Price)
                     </div>
                     <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300 flex items-center gap-1">
-                      <span className="text-gray-400">税抜:</span>
+                      <span className="text-gray-400">税込参考:</span>
                       <span className="font-bold">¥</span>
-                      <InlineEdit
-                        type="number"
-                        value={sellingPriceExTax}
-                        onSave={(val) => {
-                          const taxExcluded =
-                            typeof val === "string" ? parseFloat(val) : val;
-                          const taxIncluded = Math.round(taxExcluded * 1.08);
-                          handleRecipeChange(
-                            "selling_price",
-                            isNaN(taxIncluded) ? 0 : taxIncluded,
-                          );
-                        }}
-                        className="font-bold min-w-[30px] justify-end"
-                        inputClassName="bg-gray-700 text-white border-none w-16 text-right px-1 h-5 text-xs"
-                        placeholder="0"
-                      />
+                      <span className="font-bold min-w-[30px] text-right">
+                        {sellingPriceInclTax.toLocaleString()}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-baseline justify-end mb-4">
@@ -1912,7 +1931,7 @@ function RecipeDetailContent() {
                       className="text-xs font-bold text-gray-500 mr-1"
                       style={{ alignSelf: "flex-end", marginBottom: "8px" }}
                     >
-                      税込
+                      税抜
                     </span>
                     <span
                       className="font-medium text-gray-400 mr-1"
@@ -1926,8 +1945,15 @@ function RecipeDetailContent() {
                     </span>
                     <InlineEdit
                       type="number"
-                      value={recipe.selling_price}
-                      onSave={(val) => handleRecipeChange("selling_price", val)}
+                      value={sellingPriceExTax}
+                      onSave={(val) => {
+                        const taxExcluded =
+                          typeof val === "string" ? parseFloat(val) : val;
+                        handleRecipeChange(
+                          "selling_price",
+                          isNaN(taxExcluded) ? 0 : yenFloor(taxExcluded),
+                        );
+                      }}
                       style={{
                         fontSize: "48px",
                         lineHeight: "1.1",
@@ -1988,8 +2014,8 @@ function RecipeDetailContent() {
                         {formatCurrency(totals.cost)}
                         <span className="text-xs font-normal text-gray-500">
                           (
-                          {recipe.selling_price && totals.cost
-                            ? ((totals.cost / recipe.selling_price) * 100).toFixed(1)
+                          {sellingPriceInclTax && totals.cost
+                            ? ((totals.cost / sellingPriceInclTax) * 100).toFixed(1)
                             : "-"}
                           %)
                         </span>
@@ -2019,7 +2045,7 @@ function RecipeDetailContent() {
                   <div className="space-y-3">
                     {[0.65, 0.7].map((rate) => {
                       const wholesalePrice = recipe.selling_price
-                        ? Math.round(recipe.selling_price * rate)
+                        ? wholesalePriceFromTaxExcludedRetail(recipe.selling_price, rate)
                         : 0;
                       const wholesaleProfit = wholesalePrice - totals.cost;
                       const wholesaleMargin = wholesalePrice
@@ -2443,10 +2469,42 @@ Now Expanded or Scrollable */}
               {groupedItems.map((group, gIdx) => (
                 <div key={gIdx} className="break-inside-avoid">
                   <div className="flex justify-between items-center mb-2">
-                    <div
-                      className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded border ${group.color}`}
-                    >
-                      {group.title}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div
+                        className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded border ${group.color}`}
+                      >
+                        {group.title}
+                      </div>
+                      {group.type === "ingredient" && group.items.length > 1 && (
+                        <div className="inline-flex overflow-hidden rounded-md border border-gray-200 bg-white print:hidden">
+                          <button
+                            type="button"
+                            onClick={() => setIngredientSortMode("weight")}
+                            className={`flex h-7 items-center gap-1 px-2 text-[11px] font-bold transition-colors ${
+                              ingredientSortMode === "weight"
+                                ? "bg-emerald-600 text-white"
+                                : "text-gray-500 hover:bg-gray-50 hover:text-emerald-700"
+                            }`}
+                            title="原材料を使用重量の多い順に表示"
+                          >
+                            <ArrowDownWideNarrow className="h-3.5 w-3.5" />
+                            重量順
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIngredientSortMode("registered")}
+                            className={`flex h-7 items-center gap-1 border-l border-gray-200 px-2 text-[11px] font-bold transition-colors ${
+                              ingredientSortMode === "registered"
+                                ? "bg-gray-800 text-white"
+                                : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                            }`}
+                            title="原材料を登録時の順番に戻す"
+                          >
+                            <ListOrdered className="h-3.5 w-3.5" />
+                            登録順
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {isEditing && (
                       <Button
@@ -3076,7 +3134,7 @@ Now Expanded or Scrollable */}
           <div className="col-span-12 md:col-span-5 print:hidden">
             {/* Nutrition */}
             <div className="break-inside-avoid">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 border-b pb-1">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 border-b pb-1">
                 栄養成分表示
               </h3>
               <NutritionDisplay

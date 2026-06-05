@@ -3,6 +3,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import {
@@ -10,7 +11,7 @@ import {
     DollarSign, Eye, MousePointerClick, Target,
     BarChart3, Zap, ChevronDown, ChevronUp,
     Download, Check, Save, AlertCircle, ArrowRight,
-    Brain, Sparkles, LayoutDashboard, CheckCircle, Crosshair
+    Brain, Sparkles, LayoutDashboard, CheckCircle, Crosshair, FileSpreadsheet
 } from "lucide-react"
 import MetaTab from "./meta-tab"
 import RakutenTab from "./rakuten-tab"
@@ -438,16 +439,27 @@ export default function AdvertisingDashboard() {
     }
 
     // ===== タブ定義 =====
-    const tabs: { id: TabType; label: string; icon: React.ReactNode; imported?: boolean }[] = [
+    const primaryTabs: { id: TabType; label: string; icon: React.ReactNode; imported?: boolean; platformKey?: TabType }[] = [
         { id: 'overview', label: '概要', icon: <LayoutDashboard size={16} /> },
         { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span>, imported: importedPlatforms.google },
         { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span>, imported: importedPlatforms.meta },
         { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span>, imported: importedPlatforms.rakuten },
-        { id: 'rakuten-search', label: '楽天サーチ申請', icon: <Target size={16} className="text-red-600" /> },
         { id: 'yahoo', label: 'Yahoo!広告', icon: <span className="text-xs font-bold text-purple-600">Y</span>, imported: importedPlatforms.yahoo },
         { id: 'amazon', label: 'Amazon広告', icon: <span className="text-xs font-bold text-orange-500">A</span>, imported: importedPlatforms.amazon },
         { id: 'lp-tracking', label: 'LP計測', icon: <Crosshair size={16} className="text-teal-600" /> },
     ]
+    const activePrimaryTab: TabType = activeTab === 'rakuten-search' ? 'rakuten' : activeTab
+    const secondaryTabs: Partial<Record<TabType, Array<{ id?: TabType; href?: string; label: string; icon: React.ReactNode }>>> = {
+        rakuten: [
+            { id: 'rakuten', label: '広告費管理', icon: <span className="text-xs font-bold text-red-600">R</span> },
+            { id: 'rakuten-search', label: '楽天サーチ申請', icon: <Target size={16} className="text-red-600" /> },
+        ],
+        amazon: [
+            { id: 'amazon', label: '広告費管理', icon: <span className="text-xs font-bold text-orange-500">A</span> },
+            { href: '/web-sales/advertising/amazon-deals', label: 'タイムセール設定', icon: <FileSpreadsheet size={16} className="text-orange-500" /> },
+        ],
+    }
+    const activeSecondaryTabs = secondaryTabs[activePrimaryTab] ?? []
 
     return (
         <div className="w-full space-y-5">
@@ -481,17 +493,43 @@ export default function AdvertisingDashboard() {
             </header>
 
             {/* タブナビゲーション */}
-            <div className="overflow-x-auto">
-                <div className="flex w-max min-w-full gap-1 rounded-lg bg-gray-100 p-1">
-                    {tabs.map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                            className={`flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                            <span className="shrink-0">{tab.icon}</span>
-                            <span>{tab.label}</span>
-                            {tab.imported && <CheckCircle size={14} className="shrink-0 text-green-500" />}
-                        </button>
-                    ))}
+            <div className="space-y-2">
+                <div className="overflow-x-auto">
+                    <div className="flex w-max min-w-full gap-1 rounded-lg bg-gray-100 p-1">
+                        {primaryTabs.map(tab => (
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                                className={`flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium transition-all ${activePrimaryTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                                <span className="shrink-0">{tab.icon}</span>
+                                <span>{tab.label}</span>
+                                {tab.imported && <CheckCircle size={14} className="shrink-0 text-green-500" />}
+                            </button>
+                        ))}
+                    </div>
                 </div>
+                {activeSecondaryTabs.length > 0 && (
+                    <div className="overflow-x-auto">
+                        <div className="flex w-max min-w-full gap-2 border-b border-gray-200 pb-2">
+                            {activeSecondaryTabs.map(tab => {
+                                if (tab.href) {
+                                    return (
+                                        <Link key={tab.href} href={tab.href}
+                                            className="flex shrink-0 items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100">
+                                            <span className="shrink-0">{tab.icon}</span>
+                                            <span>{tab.label}</span>
+                                        </Link>
+                                    )
+                                }
+                                return (
+                                    <button key={tab.id} onClick={() => tab.id && setActiveTab(tab.id)}
+                                        className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${activeTab === tab.id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                                        <span className="shrink-0">{tab.icon}</span>
+                                        <span>{tab.label}</span>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ===== 概要タブ ===== */}

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { taxIncludedFromExcluded } from "@/lib/money";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -141,14 +142,15 @@ export async function POST(request: Request) {
                 .single();
 
             if (recipe?.linked_product_id && recipe?.selling_price) {
+                const productPrice = taxIncludedFromExcluded(recipe.selling_price);
                 const totalCost = recipeUpdates?.total_cost;
                 const profitRate = totalCost
-                    ? ((recipe.selling_price - totalCost) / recipe.selling_price) * 100
+                    ? ((productPrice - totalCost) / productPrice) * 100
                     : null;
                 await supabase
                     .from("products")
                     .update({
-                        price: recipe.selling_price,
+                        price: productPrice,
                         profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
                     })
                     .eq("id", recipe.linked_product_id);

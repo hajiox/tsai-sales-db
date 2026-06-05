@@ -1,7 +1,16 @@
 import pg from "pg";
 import * as fs from "fs";
+import dotenv from "dotenv";
 
-const client = new pg.Client("postgresql://postgres.zrerpexdsaxqztqqrwwv:WAmas0831@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres");
+dotenv.config({ path: ".env.local" });
+dotenv.config({ path: ".env" });
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+    throw new Error("DATABASE_URL is not set");
+}
+
+const client = new pg.Client({ connectionString });
 
 async function main() {
     await client.connect();

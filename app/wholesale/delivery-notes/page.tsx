@@ -63,7 +63,8 @@ export default function WholesaleDeliveryNotesMobilePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
-  const [deliveryDate, setDeliveryDate] = useState(todayIso);
+  const [deliveryDate, setDeliveryDate] = useState(() => todayIso());
+  const [deliveryDateInputKey, setDeliveryDateInputKey] = useState(0);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -98,7 +99,6 @@ export default function WholesaleDeliveryNotesMobilePage() {
                 setCustomerSearch(saved.customerName);
                 setNewCustomerName(saved.customerName);
               }
-              if (saved.deliveryDate) setDeliveryDate(String(saved.deliveryDate).slice(0, 10));
             }
           } catch {
             localStorage.removeItem(SETTINGS_STORAGE_KEY);
@@ -115,14 +115,24 @@ export default function WholesaleDeliveryNotesMobilePage() {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
+    const resetDeliveryDate = () => {
+      setDeliveryDate(todayIso());
+      setDeliveryDateInputKey((key) => key + 1);
+    };
+
+    resetDeliveryDate();
+    window.addEventListener('pageshow', resetDeliveryDate);
+    return () => window.removeEventListener('pageshow', resetDeliveryDate);
+  }, []);
+
+  useEffect(() => {
     if (!settingsRestoredRef.current) return;
     const customerName = selectedCustomer?.customer_name || newCustomerName.trim() || customerSearch.trim();
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
-      deliveryDate,
       customerId: selectedCustomer?.id || null,
       customerName,
     }));
-  }, [deliveryDate, selectedCustomer, newCustomerName, customerSearch]);
+  }, [selectedCustomer, newCustomerName, customerSearch]);
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -300,7 +310,9 @@ export default function WholesaleDeliveryNotesMobilePage() {
                 納品日
                 <div className="mt-1 w-full overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
                   <input
+                    key={`delivery-date-${deliveryDateInputKey}`}
                     type="date"
+                    autoComplete="off"
                     value={deliveryDate}
                     onChange={e => setDeliveryDate(e.target.value)}
                     className="block h-12 w-full min-w-0 appearance-none border-0 bg-transparent px-3 text-center text-base text-white outline-none focus:ring-0"

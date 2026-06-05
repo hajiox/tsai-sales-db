@@ -159,7 +159,7 @@ export default function WebSalesDataTable({
       try {
         const { data, error } = await supabase
           .from('advertising_costs')
-          .select('series_code, amazon_cost, google_cost, other_cost, rakuten_cost, yahoo_cost')
+          .select('series_code, amazon_cost, google_cost, meta_cost, other_cost, rakuten_cost, yahoo_cost')
           .eq('report_month', `${month}-01`)
 
         if (error) throw error
@@ -170,6 +170,7 @@ export default function WebSalesDataTable({
         data?.forEach(item => {
           const totalCost = (item.amazon_cost || 0) +
             (item.google_cost || 0) +
+            (item.meta_cost || 0) +
             (item.rakuten_cost || 0) +
             (item.yahoo_cost || 0) +
             (item.other_cost || 0)

@@ -169,11 +169,16 @@ export default function LoginButton() {
 
   // Normal browser - show Google login button
   return (
-    <button
-      className="rounded-xl bg-blue-600 px-8 py-4 font-bold text-white hover:bg-blue-700 text-base w-full max-w-xs transition-all shadow-lg"
-      onClick={() => signIn("google", { callbackUrl })}
-    >
-      Googleでログイン
-    </button>
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+      <button
+        className="rounded-xl bg-blue-600 px-8 py-4 font-bold text-white hover:bg-blue-700 text-base w-full max-w-xs transition-all shadow-lg"
+        onClick={() => signIn("google", { callbackUrl }, { prompt: "select_account" })}
+      >
+        Googleアカウントを選んでログイン
+      </button>
+      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.6 }}>
+        別のGoogleアカウントで開いている場合も、次の画面で許可済みアカウントを選択できます。
+      </div>
+    </div>
   )
 }

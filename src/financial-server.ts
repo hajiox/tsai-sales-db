@@ -1,7 +1,7 @@
 // src/financial-server.ts
 // REST API for "final" closing functions/views (PostgreSQL)
 // --------------------------------------------------------
-// env: DATABASE_URL=postgres://user:pass@host:5432/dbname
+// env: DATABASE_URL=<postgres connection string>
 // run:  npm i express pg cors
 //       npx ts-node src/financial-server.ts
 

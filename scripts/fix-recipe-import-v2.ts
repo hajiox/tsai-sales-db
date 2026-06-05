@@ -5,10 +5,17 @@ import pg from "pg";
 import * as XLSX from "xlsx";
 import * as fs from "fs";
 import * as path from "path";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local" });
+dotenv.config({ path: ".env" });
 
 const { Client } = pg;
 
-const connectionString = "postgresql://postgres.zrerpexdsaxqztqqrwwv:WAmas0831@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres";
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+    throw new Error("DATABASE_URL is not set");
+}
 
 const RECIPE_DIR = "C:/Users/ts/OneDrive/Desktop/作業用/レシピ";
 

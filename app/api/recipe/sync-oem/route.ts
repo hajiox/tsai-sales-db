@@ -2,6 +2,7 @@
 // OEMレシピ → OEM卸販売商品 紐付けAPI
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { taxIncludedFromExcluded } from "@/lib/money";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -226,7 +227,7 @@ async function syncPriceToOemProduct(
 
     if (recipe && recipe.selling_price) {
         // OEM商品はレシピ販売価格をそのまま卸価格にする
-        const wholesalePrice = Math.round(recipe.selling_price);
+        const wholesalePrice = taxIncludedFromExcluded(recipe.selling_price);
         const profitRate = recipe.total_cost
             ? ((wholesalePrice - recipe.total_cost) / wholesalePrice) * 100
             : null;
@@ -312,7 +313,7 @@ export async function PUT() {
             if (!recipe.linked_oem_product_id || !recipe.selling_price) continue;
 
             // OEM商品はレシピ販売価格をそのまま卸価格にする
-            const wholesalePrice = Math.round(recipe.selling_price);
+            const wholesalePrice = taxIncludedFromExcluded(recipe.selling_price);
             const profitRate = recipe.total_cost
                 ? ((wholesalePrice - recipe.total_cost) / wholesalePrice) * 100
                 : null;

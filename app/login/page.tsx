@@ -15,10 +15,20 @@ function getSafeCallbackUrl(value: string | string[] | undefined) {
   return raw;
 }
 
+function getErrorMessage(value: string | string[] | undefined) {
+  const error = Array.isArray(value) ? value[0] : value;
+  if (!error) return null;
+  if (error === "AccessDenied") {
+    return "このGoogleアカウントにはTSAへのログイン権限がありません。許可済みのGoogleアカウントを選択してください。";
+  }
+  return "ログインに失敗しました。もう一度Googleアカウントを選択してください。";
+}
+
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await getServerSession(authOptions);
   const params = await searchParams;
   const callbackUrl = getSafeCallbackUrl(params?.callbackUrl) || getSafeCallbackUrl(params?.redirect);
+  const errorMessage = getErrorMessage(params?.error);
   if (session) {
     const headersList = await headers();
     const ua = headersList.get("user-agent") || "";
@@ -84,6 +94,22 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           }}>
             Googleアカウントでログインしてください
           </p>
+
+          {errorMessage && (
+            <div style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              color: "#991b1b",
+              fontSize: 12,
+              lineHeight: 1.6,
+              marginBottom: 18,
+              textAlign: "left",
+            }}>
+              {errorMessage}
+            </div>
+          )}
 
           <div style={{
             display: "flex",

@@ -14,15 +14,6 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 type DailySalesReport = Record<string, any>
 import { formatDateJST } from "@/lib/utils"
 
-const salesChannels = [
-  { key: "amazon", name: "Amazon" },
-  { key: "rakuten", name: "楽天" },
-  { key: "yahoo", name: "Yahoo!" },
-  { key: "mercari", name: "メルカリ" },
-  { key: "base", name: "BASE" },
-  { key: "qoo10", name: "Qoo10" },
-]
-
 export default function SalesEditView() {
   const supabase = getSupabaseBrowserClient()
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -37,18 +28,6 @@ export default function SalesEditView() {
     cash_income: "",
     register_count: "",
     remarks: "",
-    amazon_count: "",
-    amazon_amount: "",
-    rakuten_count: "",
-    rakuten_amount: "",
-    yahoo_count: "",
-    yahoo_amount: "",
-    mercari_count: "",
-    mercari_amount: "",
-    base_count: "",
-    base_amount: "",
-    qoo10_count: "",
-    qoo10_amount: "",
   })
 
   const handleInputChange = (field: string, value: string) => {
@@ -70,38 +49,12 @@ export default function SalesEditView() {
   }
 
   const generateReport = (data: DailySalesReport) => {
-    const totalEcCount =
-      data.amazon_count +
-      data.rakuten_count +
-      data.yahoo_count +
-      data.mercari_count +
-      data.base_count +
-      data.qoo10_count
-    const totalEcAmount =
-      data.amazon_amount +
-      data.rakuten_amount +
-      data.yahoo_amount +
-      data.mercari_amount +
-      data.base_amount +
-      data.qoo10_amount
-
     return `【会津ブランド館売上報告】
 ${data.date}
 
 フロア日計 / ${formatCurrency(data.floor_sales)}
 入　金 / ${formatCurrency(data.cash_income)}
 レジ通過人数 / 　${data.register_count} 人
-
-【ECサイト売上】
-Amazon: ${data.amazon_count}件 / ${formatCurrency(data.amazon_amount)}
-楽天: ${data.rakuten_count}件 / ${formatCurrency(data.rakuten_amount)}
-Yahoo!: ${data.yahoo_count}件 / ${formatCurrency(data.yahoo_amount)}
-メルカリ: ${data.mercari_count}件 / ${formatCurrency(data.mercari_amount)}
-BASE: ${data.base_count}件 / ${formatCurrency(data.base_amount)}
-Qoo10: ${data.qoo10_count}件 / ${formatCurrency(data.qoo10_amount)}
-
-EC合計: ${totalEcCount}件 / ${formatCurrency(totalEcAmount)}
-総売上: ${formatCurrency(data.floor_sales + totalEcAmount)}
 
 ${data.remarks ? `備考: ${data.remarks}` : ""}`
   }
@@ -133,18 +86,6 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
           cash_income: data.cash_income?.toString() ?? "",
           register_count: data.register_count?.toString() ?? "",
           remarks: data.remarks ?? "",
-          amazon_count: data.amazon_count?.toString() ?? "",
-          amazon_amount: data.amazon_amount?.toString() ?? "",
-          rakuten_count: data.rakuten_count?.toString() ?? "",
-          rakuten_amount: data.rakuten_amount?.toString() ?? "",
-          yahoo_count: data.yahoo_count?.toString() ?? "",
-          yahoo_amount: data.yahoo_amount?.toString() ?? "",
-          mercari_count: data.mercari_count?.toString() ?? "",
-          mercari_amount: data.mercari_amount?.toString() ?? "",
-          base_count: data.base_count?.toString() ?? "",
-          base_amount: data.base_amount?.toString() ?? "",
-          qoo10_count: data.qoo10_count?.toString() ?? "",
-          qoo10_amount: data.qoo10_amount?.toString() ?? "",
         })
       } catch (error) {
         console.error("Error searching record:", error)
@@ -169,18 +110,6 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
         cash_income: Number.parseInt(formData.cash_income) || 0,
         register_count: Number.parseInt(formData.register_count) || 0,
         remarks: formData.remarks,
-        amazon_count: Number.parseInt(formData.amazon_count) || 0,
-        amazon_amount: Number.parseInt(formData.amazon_amount) || 0,
-        rakuten_count: Number.parseInt(formData.rakuten_count) || 0,
-        rakuten_amount: Number.parseInt(formData.rakuten_amount) || 0,
-        yahoo_count: Number.parseInt(formData.yahoo_count) || 0,
-        yahoo_amount: Number.parseInt(formData.yahoo_amount) || 0,
-        mercari_count: Number.parseInt(formData.mercari_count) || 0,
-        mercari_amount: Number.parseInt(formData.mercari_amount) || 0,
-        base_count: Number.parseInt(formData.base_count) || 0,
-        base_amount: Number.parseInt(formData.base_amount) || 0,
-        qoo10_count: Number.parseInt(formData.qoo10_count) || 0,
-        qoo10_amount: Number.parseInt(formData.qoo10_amount) || 0,
       }
 
       const { data, error } = await supabase
@@ -309,38 +238,6 @@ ${data.remarks ? `備考: ${data.remarks}` : ""}`
                     className="text-sm h-9"
                     placeholder="0"
                   />
-                </div>
-              </div>
-
-              {/* Sales Channels */}
-              <div className="space-y-4">
-                <h3 className="text-base font-medium text-gray-900">ECサイト売上</h3>
-                <div className="grid gap-4">
-                  {salesChannels.map((channel) => (
-                    <div key={channel.key} className="grid grid-cols-3 gap-4 items-center">
-                      <Label className="text-sm font-medium">{channel.name}</Label>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-gray-500">件数</Label>
-                        <Input
-                          type="number"
-                          value={formData[`${channel.key}_count` as keyof typeof formData]}
-                          onChange={(e) => handleInputChange(`${channel.key}_count`, e.target.value)}
-                          className="text-sm h-9"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-gray-500">売上金額</Label>
-                        <Input
-                          type="number"
-                          value={formData[`${channel.key}_amount` as keyof typeof formData]}
-                          onChange={(e) => handleInputChange(`${channel.key}_amount`, e.target.value)}
-                          className="text-sm h-9"
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
 

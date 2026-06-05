@@ -2,6 +2,7 @@
 // 自社レシピ → 卸販売商品 紐付けAPI
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { wholesalePriceFromTaxExcludedRetail } from "@/lib/money";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -223,7 +224,7 @@ async function syncPriceToWholesaleProduct(
 
     if (recipe && recipe.selling_price) {
         // 7掛の卸価格ベースの利益率
-        const wholesalePrice = Math.round(recipe.selling_price * 0.7);
+        const wholesalePrice = wholesalePriceFromTaxExcludedRetail(recipe.selling_price, 0.7);
         const profitRate = recipe.total_cost
             ? ((wholesalePrice - recipe.total_cost) / wholesalePrice) * 100
             : null;
@@ -253,7 +254,7 @@ export async function POST(request: Request) {
 
             // 7掛の卸価格
             // 7掛の卸価格
-            const wholesalePrice = recipePrice ? Math.round(recipePrice * 0.7) : 0;
+            const wholesalePrice = recipePrice ? wholesalePriceFromTaxExcludedRetail(recipePrice, 0.7) : 0;
 
             // product_code自動採番: W+連番（既存の最大値+1）
             const { data: maxCodeRow } = await supabase
@@ -351,7 +352,7 @@ export async function PUT() {
         for (const recipe of linkedRecipes || []) {
             if (!recipe.linked_wholesale_product_id || !recipe.selling_price) continue;
 
-            const wholesalePrice = Math.round(recipe.selling_price * 0.7);
+            const wholesalePrice = wholesalePriceFromTaxExcludedRetail(recipe.selling_price, 0.7);
             const profitRate = recipe.total_cost
                 ? ((wholesalePrice - recipe.total_cost) / wholesalePrice) * 100
                 : null;

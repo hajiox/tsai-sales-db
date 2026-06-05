@@ -7,6 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "security:scan": "node scripts/security/scan-secrets.mjs",
+    "security:rls": "node scripts/security/check-rls.mjs",
+    "security": "npm run security:scan && npm run security:rls",
+    "predeploy": "npm run security && npm run build",
     "google-ads:oauth": "node scripts/google-ads-oauth-local.mjs"
   },
   "dependencies": {

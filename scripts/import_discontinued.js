@@ -16,6 +16,10 @@ if (fs.existsSync(envPath)) {
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseUrl || !supabaseKey) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set");
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const TARGET_FILE = "C:/作業用/レシピ/【重要】【製造】総合管理（新型）終売.xlsx";

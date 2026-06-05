@@ -95,9 +95,9 @@ export default function NutritionDisplay({ items, compact = false, fillingQuanti
         return (
             <div className="space-y-4">
                 {missingNutritionItems.length > 0 && (
-                    <div className="rounded border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-800">
+                    <div className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                         <div className="flex items-center gap-1 font-bold">
-                            <AlertTriangle className="h-3 w-3" />
+                            <AlertTriangle className="h-4 w-4" />
                             栄養未登録
                         </div>
                         <div className="mt-1 leading-relaxed">
@@ -106,10 +106,10 @@ export default function NutritionDisplay({ items, compact = false, fillingQuanti
                     </div>
                 )}
                 <div>
-                    <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
+                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
                         100g あたり
                     </h4>
-                    <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-600">
+                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
                         <div className="flex justify-between border-b pb-1">
                             <span>エネルギー</span>
                             <span className="font-bold">{formatVal(per100g.calories)} kcal</span>
@@ -135,10 +135,10 @@ export default function NutritionDisplay({ items, compact = false, fillingQuanti
 
                 {fillingQuantity && fillingQuantity > 0 && (
                     <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
-                        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
                             1個 ({formatVal(fillingQuantity)}g) あたり
                         </h4>
-                        <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-600">
+                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
                             <div className="flex justify-between border-b pb-1">
                                 <span>エネルギー</span>
                                 <span className="font-bold">{formatVal(per100g.calories * fillingQuantity / 100)} kcal</span>

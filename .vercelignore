@@ -1,0 +1,3 @@
+*.log
+.vercel_token_tmp
+sync_body.json

@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -228,7 +229,7 @@ export default function RecipePage() {
             setNewSeriesName('');
             setNewSeriesCode('');
             setModalProductName(recipeName);
-            setModalPrice(recipePrice ? Math.round(recipePrice) : 0);
+            setModalPrice(recipePrice ? yenFloor(recipePrice) : 0);
             setSeriesModalOpen(true);
         } else {
             // 卸の場合は従来通り
@@ -965,13 +966,14 @@ export default function RecipePage() {
                                         {(() => {
                                             if (!recipe.selling_price || !recipe.total_cost) return <span className="text-gray-300">-</span>;
                                             if (activeTab === "自社" || activeTab === "OEM") {
-                                                const wholesalePrice = Math.round(recipe.selling_price * 0.7);
+                                                const wholesalePrice = wholesalePriceFromTaxExcludedRetail(recipe.selling_price, 0.7);
                                                 const wholesaleProfit = wholesalePrice - recipe.total_cost;
                                                 const rate = wholesalePrice > 0 ? (wholesaleProfit / wholesalePrice) * 100 : 0;
                                                 const color = rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600";
                                                 return <span className={`text-sm font-bold ${color}`}>{rate.toFixed(1)}%</span>;
                                             } else {
-                                                const rate = ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100;
+                                                const sellingPriceInclTax = taxIncludedFromExcluded(recipe.selling_price);
+                                                const rate = ((sellingPriceInclTax - recipe.total_cost) / sellingPriceInclTax) * 100;
                                                 const color = rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600";
                                                 return <span className={`text-sm font-bold ${color}`}>{rate.toFixed(1)}%</span>;
                                             }
@@ -1052,7 +1054,7 @@ export default function RecipePage() {
 
                             {/* 価格 */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">価格（円） *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">価格（税別） *</label>
                                 <input
                                     type="number"
                                     value={modalPrice}

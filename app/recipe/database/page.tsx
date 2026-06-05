@@ -79,6 +79,11 @@ export default function DatabasePage() {
     const [editModal, setEditModal] = useState<Ingredient | null>(null);
     const [editForm, setEditForm] = useState<Record<string, string>>({});
     const [labelPreview, setLabelPreview] = useState<{ name: string; images: { type: string; url: string; uploaded_at: string }[] } | null>(null);
+    const labelImageTypeLabels: Record<string, string> = {
+        front_label: "表ラベル",
+        ingredients_label: "原材料表示",
+        nutrition_label: "栄養成分表示",
+    };
 
     const [taxRates, setTaxRates] = useState({
         ingredient: 8,
@@ -1006,7 +1011,7 @@ export default function DatabasePage() {
             {/* 食材編集モーダル */}
             {editModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditModal(null)}>
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 rounded-t-xl">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900">{editModal.name}</h3>
@@ -1069,6 +1074,55 @@ export default function DatabasePage() {
                                     )}
                                 </div>
                             ))}
+                            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                                <div className="flex items-center justify-between gap-3 mb-3">
+                                    <div className="inline-flex items-center gap-2 text-sm font-bold text-blue-900">
+                                        <Camera className="w-4 h-4" />
+                                        ラベル画像
+                                    </div>
+                                    {editModal.label_images && editModal.label_images.length > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setLabelPreview({ name: editModal.name, images: editModal.label_images! })}
+                                            className="h-8 text-xs"
+                                        >
+                                            大きく表示
+                                        </Button>
+                                    )}
+                                </div>
+                                {editModal.label_images && editModal.label_images.length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        {editModal.label_images.map((img, i) => (
+                                            <button
+                                                key={`${img.type}-${i}`}
+                                                type="button"
+                                                onClick={() => setLabelPreview({ name: editModal.name, images: editModal.label_images! })}
+                                                className="text-left rounded-lg border border-blue-100 bg-white overflow-hidden hover:border-blue-300 hover:shadow-sm transition"
+                                            >
+                                                <div className="px-2 py-1.5 bg-white border-b flex items-center justify-between gap-2">
+                                                    <span className="text-xs font-medium text-gray-700 truncate">
+                                                        {labelImageTypeLabels[img.type] || img.type}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-400 shrink-0">
+                                                        {new Date(img.uploaded_at).toLocaleDateString("ja-JP")}
+                                                    </span>
+                                                </div>
+                                                <img
+                                                    src={img.url}
+                                                    alt={labelImageTypeLabels[img.type] || img.type}
+                                                    className="w-full h-32 object-contain bg-white"
+                                                />
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed border-blue-200 bg-white px-3 py-4 text-sm text-gray-500">
+                                        保存済みのラベル画像はありません。
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50 rounded-b-xl">
                             <Button

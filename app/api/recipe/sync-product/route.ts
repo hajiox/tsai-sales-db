@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { taxIncludedFromExcluded } from "@/lib/money";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -164,7 +165,12 @@ export async function GET(request: Request) {
                     if (normalizeForExact(recipe.name) === normalizeForExact(product.name)) {
                         allScores.push({ recipe, product, score: 1.0 });
                     } else {
-                        const score = compositeScore(recipe.name, product.name, recipe.selling_price, product.price);
+                        const score = compositeScore(
+                            recipe.name,
+                            product.name,
+                            recipe.selling_price ? taxIncludedFromExcluded(recipe.selling_price) : null,
+                            product.price
+                        );
                         allScores.push({ recipe, product, score });
                     }
                 }
@@ -268,13 +274,14 @@ async function syncPriceToProduct(
         .single();
 
     if (recipe && recipe.selling_price) {
+        const productPrice = taxIncludedFromExcluded(recipe.selling_price);
         const profitRate = recipe.total_cost
-            ? ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100
+            ? ((productPrice - recipe.total_cost) / productPrice) * 100
             : null;
         await supabase
             .from("products")
             .update({
-                price: recipe.selling_price,
+                price: productPrice,
                 profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
             })
             .eq("id", productId);
@@ -295,8 +302,8 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: "recipeId and recipeName are required" }, { status: 400 });
             }
 
-            // productsテーブルに新規作成（priceはintegerなので四捨五入）
-            const insertPrice = recipePrice ? Math.round(recipePrice) : null;
+            // recipePrice は税別。WEB販売商品には税込価格を切り捨てで登録する。
+            const insertPrice = recipePrice ? taxIncludedFromExcluded(recipePrice) : null;
 
             // product_code自動採番: 同一series_code内の最大値+1
             let autoProductCode = 1;
@@ -399,14 +406,15 @@ export async function PUT() {
         for (const recipe of linkedRecipes || []) {
             if (!recipe.linked_product_id || !recipe.selling_price) continue;
 
+            const productPrice = taxIncludedFromExcluded(recipe.selling_price);
             const profitRate = recipe.total_cost
-                ? ((recipe.selling_price - recipe.total_cost) / recipe.selling_price) * 100
+                ? ((productPrice - recipe.total_cost) / productPrice) * 100
                 : null;
 
             const { error: updateError } = await supabase
                 .from("products")
                 .update({
-                    price: recipe.selling_price,
+                    price: productPrice,
                     profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
                 })
                 .eq("id", recipe.linked_product_id);
