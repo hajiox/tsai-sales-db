@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Link2, Unlink, RefreshCw, X, Sparkles, CheckCircle2, Circle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { taxIncludedFromExcluded } from "@/lib/money";
 
 interface Recipe {
     id: string;
@@ -200,6 +201,8 @@ export default function OemLinkPage() {
     const linkedProductIds = new Set(linkedRecipes.map(r => r.linked_oem_product_id!));
     const getRecipeForProduct = (productId: string) => recipes.find(r => r.linked_oem_product_id === productId);
     const formatCurrency = (v: number | null) => (v ? `¥${v.toLocaleString()}` : "-");
+    const formatRecipePriceInclTax = (v: number | null | undefined) =>
+        v ? formatCurrency(taxIncludedFromExcluded(v)) : "-";
 
     const linkedProducts = products.filter(p => linkedProductIds.has(p.id));
     const unlinkedProducts = products.filter(p => !linkedProductIds.has(p.id));
@@ -246,7 +249,7 @@ export default function OemLinkPage() {
                         OEM商品 → レシピ 紐付け管理
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        OEM卸販売商品にレシピを紐付けて、卸価格・利益率を自動同期（7掛ベース）
+                        OEM卸販売商品にレシピを紐付けて、税込卸価格・利益率を自動同期
                     </p>
                 </div>
                 <div className="flex gap-2">
@@ -313,7 +316,7 @@ export default function OemLinkPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>レシピ名</TableHead>
-                                    <TableHead className="text-right">販売価格</TableHead>
+                                    <TableHead className="text-right">販売価格(税込)</TableHead>
                                     <TableHead className="w-[40px] text-center">→</TableHead>
                                     <TableHead>マッチ商品名（AI提案 or 手動選択）</TableHead>
                                     <TableHead className="text-right">卸価格</TableHead>
@@ -330,7 +333,7 @@ export default function OemLinkPage() {
                                     return (
                                         <TableRow key={s.recipeId} className={s.accepted ? "bg-purple-50/50" : s.confidence === "none" ? "bg-gray-50/50" : ""}>
                                             <TableCell className="font-medium text-sm">{s.recipeName}</TableCell>
-                                            <TableCell className="text-right text-sm">{formatCurrency(s.recipePrice)}</TableCell>
+                                            <TableCell className="text-right text-sm">{formatRecipePriceInclTax(s.recipePrice)}</TableCell>
                                             <TableCell className="text-center text-gray-400">→</TableCell>
                                             <TableCell>
                                                 <Select value={effectiveProductId || "__none__"} onValueChange={val => overrideProduct(s.recipeId, val === "__none__" ? null : val)}>
@@ -440,7 +443,7 @@ export default function OemLinkPage() {
                                             <TableHead className="text-right">利益率</TableHead>
                                             <TableHead className="text-center">↔</TableHead>
                                             <TableHead>レシピ名</TableHead>
-                                            <TableHead className="text-right">レシピ販売価格</TableHead>
+                                            <TableHead className="text-right">レシピ販売価格(税込)</TableHead>
                                             <TableHead className="text-right">原価</TableHead>
                                             <TableHead></TableHead>
                                         </TableRow>
@@ -456,7 +459,7 @@ export default function OemLinkPage() {
                                                     <TableCell className="text-right">{product.profit_rate != null ? `${product.profit_rate}%` : "-"}</TableCell>
                                                     <TableCell className="text-center"><Link2 className="w-4 h-4 mx-auto text-purple-500" /></TableCell>
                                                     <TableCell className="font-medium text-purple-700">{recipe?.name || "（レシピ不明）"}</TableCell>
-                                                    <TableCell className="text-right">{formatCurrency(recipe?.selling_price || null)}</TableCell>
+                                                    <TableCell className="text-right">{formatRecipePriceInclTax(recipe?.selling_price)}</TableCell>
                                                     <TableCell className="text-right">{formatCurrency(recipe?.total_cost ? Math.round(recipe.total_cost) : null)}</TableCell>
                                                     <TableCell>
                                                         {recipe && (
