@@ -21,6 +21,48 @@ const PARITY_PATTERNS = [
     "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"
 ];
 
+const DIGIT_BITMAPS: Record<string, string[]> = {
+    "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+    "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+    "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+    "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+    "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+    "5": ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+    "6": ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+    "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+    "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+    "9": ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+};
+
+const epsNum = (value: number) => Number(value.toFixed(4)).toString();
+
+function digitTextWidth(text: string, cellSize: number, gap: number): number {
+    return text.length * 5 * cellSize + Math.max(0, text.length - 1) * gap;
+}
+
+function digitTextToEps(text: string, x: number, y: number, cellSize: number, gap: number): string {
+    let eps = "";
+    let cursorX = x;
+
+    for (const digit of text) {
+        const bitmap = DIGIT_BITMAPS[digit];
+        if (!bitmap) continue;
+
+        for (let row = 0; row < bitmap.length; row++) {
+            for (let col = 0; col < bitmap[row].length; col++) {
+                if (bitmap[row][col] !== "1") continue;
+                const rectX = cursorX + col * cellSize;
+                const rectY = y + (bitmap.length - 1 - row) * cellSize;
+                eps += `${epsNum(rectX)} ${epsNum(rectY)} ${epsNum(cellSize)} ${epsNum(cellSize)} rf\n`;
+            }
+        }
+
+        cursorX += 5 * cellSize + gap;
+    }
+
+    return eps;
+}
+
 function encodeEAN13(code: string): string[] {
     if (code.length !== 13) return [];
     const digits = code.split("").map(Number);
@@ -165,24 +207,29 @@ export default function BarcodeImage({ code, scale = 4 }: BarcodeImageProps) {
             x += barWidth;
         }
 
-        // Convert digits to vector paths in EPS so Illustrator outline operations
-        // cannot drop font-backed text objects.
-        eps += `\n/Courier findfont ${fontSize} scalefont setfont\n`;
+        // Draw digits as plain vector rectangles. Illustrator can embed this EPS
+        // without touching PostScript fonts or font-derived char paths.
+        const digitCell = 1.5;
+        const digitGap = 1.2;
+        const digitY = 2;
 
-        const d0x = leftQuiet - 2;
-        eps += `${d0x} 0 moveto (${code[0]}) true charpath fill\n`;
+        const d0Width = digitTextWidth(code[0], digitCell, digitGap);
+        const d0x = leftQuiet - 2 - d0Width;
+        eps += digitTextToEps(code[0], Math.max(0, d0x), digitY, digitCell, digitGap);
 
         const leftStart      = leftQuiet + 3 * barWidth;
         const leftGroupWidth = 6 * 7 * barWidth;
         const leftCenter     = leftStart + leftGroupWidth / 2;
         const leftText       = code.substring(1, 7);
-        eps += `(${leftText}) stringwidth pop 2 div neg ${leftCenter} add 0 moveto (${leftText}) true charpath fill\n`;
+        const leftTextX      = leftCenter - digitTextWidth(leftText, digitCell, digitGap) / 2;
+        eps += digitTextToEps(leftText, leftTextX, digitY, digitCell, digitGap);
 
         const rightStart      = leftStart + leftGroupWidth + 5 * barWidth;
         const rightGroupWidth = 6 * 7 * barWidth;
         const rightCenter     = rightStart + rightGroupWidth / 2;
         const rightText       = code.substring(7);
-        eps += `(${rightText}) stringwidth pop 2 div neg ${rightCenter} add 0 moveto (${rightText}) true charpath fill\n`;
+        const rightTextX      = rightCenter - digitTextWidth(rightText, digitCell, digitGap) / 2;
+        eps += digitTextToEps(rightText, rightTextX, digitY, digitCell, digitGap);
 
         eps += `\n%%EOF\n`;
 
