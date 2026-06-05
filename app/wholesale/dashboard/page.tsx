@@ -94,6 +94,7 @@ function WholesaleDashboardContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
+  const [linkedOemProductIds, setLinkedOemProductIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setMounted(true);
@@ -247,6 +248,22 @@ function WholesaleDashboardContent() {
       }
     } catch (error) {
       console.error('OEM商品データ取得エラー:', error);
+    }
+
+    try {
+      const linkRes = await fetch('/api/recipe/sync-oem');
+      if (linkRes.ok) {
+        const linkData = await linkRes.json();
+        if (Array.isArray(linkData.recipes)) {
+          const linked = new Set<string>();
+          linkData.recipes.forEach((r: { linked_oem_product_id: string | null }) => {
+            if (r.linked_oem_product_id) linked.add(r.linked_oem_product_id);
+          });
+          setLinkedOemProductIds(linked);
+        }
+      }
+    } catch (error) {
+      console.error('OEMレシピ紐付け情報取得エラー:', error);
     }
   };
 
@@ -643,6 +660,7 @@ function WholesaleDashboardContent() {
             <OEMArea
               oemProducts={oemProducts}
               oemSales={oemSales}
+              linkedProductIds={linkedOemProductIds}
               selectedYear={selectedYear}
               selectedMonth={selectedMonth}
             />

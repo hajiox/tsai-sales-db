@@ -5,7 +5,7 @@ import { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Package, TrendingUp, Search, X, Loader2 } from 'lucide-react';
+import { Link2, Package, TrendingUp, Search, X, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface OEMProduct {
@@ -47,11 +47,12 @@ interface SearchResult {
 interface OEMAreaProps {
   oemProducts: OEMProduct[];
   oemSales: OEMSale[];
+  linkedProductIds?: Set<string>;
   selectedYear?: string;
   selectedMonth?: string;
 }
 
-export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedMonth }: OEMAreaProps) {
+export default function OEMArea({ oemProducts, oemSales, linkedProductIds, selectedYear, selectedMonth }: OEMAreaProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -230,9 +231,16 @@ export default function OEMArea({ oemProducts, oemSales, selectedYear, selectedM
           <div className="grid grid-cols-8 gap-2">
             {productSummary.map(({ product, totalQuantity, totalAmount, displayPrice }) => (
               <div key={product.id} className="bg-white rounded-lg p-2 shadow-sm hover:shadow-md transition-shadow">
-                <h3 className="font-medium text-gray-900 text-xs truncate" title={product.product_name}>
-                  {product.product_name}
-                </h3>
+                <div className="flex items-center gap-1">
+                  <h3 className="min-w-0 flex-1 font-medium text-gray-900 text-xs truncate" title={product.product_name}>
+                    {product.product_name}
+                  </h3>
+                  {linkedProductIds?.has(product.id) && (
+                    <span className="inline-flex flex-shrink-0 items-center px-1 py-0.5 bg-green-100 text-green-700 rounded" title="レシピ紐付済">
+                      <Link2 className="h-2.5 w-2.5" />
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1 space-y-0.5">
                   <div className="flex justify-between items-center text-xs text-gray-600">
                     <span className="text-xs">単価:</span>
