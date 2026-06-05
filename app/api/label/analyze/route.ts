@@ -80,7 +80,7 @@ export async function POST(request: Request) {
             return `画像${i + 1}: ${labels[t] || t}`;
         }).join("\n");
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const prompt = `
 あなたは食品表示の専門家です。提供された食品ラベルの画像を解析し、情報を正確に抽出してください。
