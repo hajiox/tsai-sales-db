@@ -120,11 +120,13 @@ function LabelImportContent() {
     const [manualSearchResults, setManualSearchResults] = useState<Ingredient[]>([]);
     const [showManualSearch, setShowManualSearch] = useState(false);
     const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+    const [mobileUrl, setMobileUrl] = useState("");
     const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const manualSearchRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         fetchAllIngredients();
+        setMobileUrl(`${window.location.origin}/recipe/database/label-import/mobile`);
     }, []);
 
     useEffect(() => {
@@ -409,21 +411,27 @@ function LabelImportContent() {
                         </p>
                     </div>
                 </div>
-                <Button
-                    variant="outline"
-                    onClick={() => {
-                        const url = window.location.origin + "/recipe/database/label-import/mobile";
-                        navigator.clipboard.writeText(url).then(() => {
-                            toast.success("スマホ用URLをコピーしました");
-                        }).catch(() => {
-                            window.open("/recipe/database/label-import/mobile", "_blank");
-                        });
-                    }}
-                    className="border-blue-300 text-blue-700 hover:bg-blue-50 gap-2"
-                >
-                    <Camera className="w-4 h-4" />
-                    📱 スマホ版URL
-                </Button>
+                {mobileUrl && (
+                    <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-white px-3 py-2 shadow-sm">
+                        <div className="text-right">
+                            <div className="text-xs font-semibold text-blue-700">スマホ版</div>
+                            <div className="text-[11px] text-gray-400">QRで読み取り</div>
+                        </div>
+                        <a
+                            href={mobileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex h-20 w-20 items-center justify-center overflow-hidden rounded border border-gray-200 bg-white"
+                            title={mobileUrl}
+                        >
+                            <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(mobileUrl)}`}
+                                alt="スマホ版QR"
+                                className="h-full w-full object-contain"
+                            />
+                        </a>
+                    </div>
+                )}
             </div>
 
             {/* Step 1: Upload Label Images */}
