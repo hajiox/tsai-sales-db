@@ -22,6 +22,7 @@ import NutritionDisplay, {
 } from "../_components/NutritionDisplay";
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 import InlineEdit from "../_components/InlineEdit";
+import EcPriceSyncControls from "../_components/EcPriceSyncControls";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 
@@ -2037,6 +2038,22 @@ function RecipeDetailContent() {
                     </div>
                   </div>
                 </div>
+                <EcPriceSyncControls
+                  recipeId={recipe.id}
+                  recipeName={recipe.name}
+                  ecProductName={recipe.ec_product_name}
+                  linkedProductId={recipe.linked_product_id}
+                  janCode={recipe.jan_code}
+                  seriesCode={recipe.series_code}
+                  productCode={recipe.product_code}
+                  fillingQuantity={recipe.filling_quantity}
+                  fillingQuantityUnit={recipe.filling_quantity_unit}
+                  storageMethod={recipe.storage_method}
+                  sellingPriceExTax={sellingPriceExTax}
+                  sellingPriceInclTax={sellingPriceInclTax}
+                  hasUnsavedChanges={hasChanges}
+                  isSaving={isSaving}
+                />
                 {/* Wholesale Simulation */}
                 <div>
                   <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">
