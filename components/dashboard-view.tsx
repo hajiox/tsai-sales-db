@@ -16,22 +16,43 @@ import AiDashboardSection from './ai-dashboard-section';
 const SalesChartGrid = dynamic(() => import('./sales-chart-grid'), { ssr: false });
 const SalesTop10Summary = dynamic(() => import('./sales-top10-summary'), { ssr: false });
 
-export default function DashboardView() {
+function parseLocalDate(value: string | null) {
+    const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const parsed = new Date(year, month - 1, day);
+
+    return parsed.getFullYear() === year
+        && parsed.getMonth() === month - 1
+        && parsed.getDate() === day
+        ? parsed
+        : null;
+}
+
+function formatLocalDate(date: Date, separator = '-') {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}${separator}${month}${separator}${day}`;
+}
+
+interface DashboardViewProps {
+    initialDate?: string;
+}
+
+export default function DashboardView({ initialDate }: DashboardViewProps) {
     const { data: session } = useSession();
     const router = useRouter();
     const searchParams = useSearchParams();
     
     // URLパラメータから日付を取得、なければ今日の日付
-    const getInitialDate = () => {
-        const dateParam = searchParams.get('date');
-        if (dateParam) {
-            const parsed = new Date(dateParam);
-            if (!isNaN(parsed.getTime())) {
-                return parsed;
-            }
-        }
-        return new Date();
-    };
+    const getInitialDate = () =>
+        parseLocalDate(searchParams.get('date'))
+        ?? parseLocalDate(initialDate ?? null)
+        ?? new Date(2000, 0, 1);
     
     const [selectedDate, setSelectedDate] = useState<Date>(getInitialDate());
     
@@ -45,22 +66,22 @@ export default function DashboardView() {
     const [graphLoading, setGraphLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    useEffect(() => {
+        if (!initialDate && !searchParams.get('date')) {
+            setSelectedDate(new Date());
+        }
+    }, [initialDate, searchParams]);
+
     // 日付が変更されたらURLを更新
     const handleDateChange = (date: Date) => {
         setSelectedDate(date);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const dateString = `${year}-${month}-${day}`;
+        const dateString = formatLocalDate(date);
         router.push(`/sales/dashboard?date=${dateString}`, { scroll: false });
     };
 
     // 日次データを取得
     const getDailyData = useCallback(async (date: Date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const dateString = `${year}-${month}-${day}`;
+        const dateString = formatLocalDate(date);
         
         const response = await fetch(`/api/sales/daily?date=${dateString}`, { cache: 'no-store' });
         if (!response.ok) {
@@ -73,10 +94,7 @@ export default function DashboardView() {
 
     // 月累計データを取得
     const getMonthlyData = useCallback(async (date: Date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const dateString = `${year}-${month}-${day}`;
+        const dateString = formatLocalDate(date);
         
         const response = await fetch(`/api/sales/monthly?date=${dateString}`, { cache: 'no-store' });
         if (!response.ok) {
@@ -89,7 +107,7 @@ export default function DashboardView() {
     
     // 過去6ヶ月データを取得
     const getSixMonthData = useCallback(async (date: Date) => {
-        const dateString = date.toISOString().split('T')[0];
+        const dateString = formatLocalDate(date);
         
         const response = await fetch(`/api/sales/six-month?date=${dateString}`, { cache: 'no-store' });
         if (!response.ok) {
@@ -172,16 +190,11 @@ export default function DashboardView() {
                     className="order-2 min-w-0 scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm [&_.grid.grid-cols-3]:grid-cols-1 [&_.min-w-\[240px\]]:min-w-0 [&_button]:min-h-11 sm:p-6 sm:[&_.grid.grid-cols-3]:grid-cols-3 lg:order-none lg:[&_.min-w-\[240px\]]:min-w-[240px] lg:[&_button]:min-h-0"
                 >
                     <h3 className="text-lg font-semibold text-slate-800 mb-4">
-                        日次データ操作 ({selectedDate.toLocaleDateString()})
+                        日次データ操作 ({formatLocalDate(selectedDate, '/')})
                     </h3>
                     {session && (
                         <DailySalesCrudForm
-                            selectedDate={(() => {
-                                const year = selectedDate.getFullYear();
-                                const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-                                const day = String(selectedDate.getDate()).padStart(2, '0');
-                                return `${year}-${month}-${day}`;
-                            })()}
+                            selectedDate={formatLocalDate(selectedDate)}
                             dailyData={dailyData}
                             monthlyData={monthlyData}
                             onDataUpdate={handleDataUpdate}
