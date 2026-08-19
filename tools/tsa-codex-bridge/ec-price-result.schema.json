@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["completed", "waiting_for_user", "needs_review", "failed"]
+    },
+    "summary": { "type": "string" },
+    "old_standard_price": {
+      "anyOf": [{ "type": "integer" }, { "type": "null" }]
+    },
+    "new_price": { "type": "integer" },
+    "sites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "site": {
+            "type": "string",
+            "enum": ["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["updated", "submitted_pending", "not_found", "blocked"]
+          },
+          "final_price": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }]
+          },
+          "product_identifier": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "message": { "type": "string" }
+        },
+        "required": ["site", "status", "final_price", "product_identifier", "message"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["status", "summary", "old_standard_price", "new_price", "sites"],
+  "additionalProperties": false
+}

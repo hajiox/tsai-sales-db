@@ -18,6 +18,7 @@ New-Item -ItemType Directory -Path (Join-Path $installDir "jobs") -Force | Out-N
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "result.schema.json") -Destination (Join-Path $installDir "result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "analysis-result.schema.json") -Destination (Join-Path $installDir "analysis-result.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-price-result.schema.json") -Destination (Join-Path $installDir "ec-price-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "start-bridge.ps1") -Destination (Join-Path $installDir "start-bridge.ps1") -Force
 
 foreach ($skillName in @("tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report", "tsa-web-sales-analysis")) {
@@ -25,6 +26,11 @@ foreach ($skillName in @("tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-
   $skillRoot = Join-Path (Join-Path $env:USERPROFILE ".codex\skills") $skillName
   New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null
   Copy-Item -Path (Join-Path $skillSource "*") -Destination $skillRoot -Recurse -Force
+}
+
+$priceSkill = Join-Path $env:USERPROFILE ".codex\skills\update-aizu-ec-prices\SKILL.md"
+if (-not (Test-Path -LiteralPath $priceSkill)) {
+  throw "update-aizu-ec-prices Skillがありません。共有Skillsを同期してから再実行してください。"
 }
 
 $config = @{
