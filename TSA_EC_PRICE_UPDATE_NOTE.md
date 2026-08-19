@@ -19,6 +19,10 @@
 - `npm run security:scan`: success
 - 対象TypeScript診断0件（全体には既存エラーあり）
 - `npm run build`: success
+- TSA本体PR #186を`main`へ統合。本番deploymentは`dpl_6Y2XWWmxo1X2R8tGfdETnSbUpZ3e`、固定URL`https://v0-tsa-19.vercel.app`へalias済み。
+- TSG連携PR #2も`main`へ統合。本番deploymentは`dpl_AZonGVyDzMQBxrGSZaNs4MEdxzig`、固定URL`https://v0-line-blush.vercel.app`へalias済み。
+- 本番画面で即時／予約モード、7サイト、全サイト予約、一括実行ボタンを確認。実EC変更は行わず、テスト予約がDBに残っていないことを確認。
+- TSA/TSG間の共有secretは両Vercel projectで同一の新値へ更新し、両deploymentを更新後に作成。TSG連携APIは未認証GETを401で拒否することを確認。
 
 - レシピ詳細の販売価格カード直下に Amazon、楽天、Yahoo、メルカリ、BASE、Qoo10、TikTok と「全て反映」を追加。
 - 未保存のレシピ変更がある間は実行不可。確認時の商品情報・税込価格と保存済みDBを照合し、相違時はジョブを作成しない。
