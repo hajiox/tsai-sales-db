@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
                 const pdfPath = path.join(outputDir, `${safeName}.pdf`)
 
                 const page = await browser.newPage()
-                await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 })
+                await page.setContent(html, { waitUntil: 'load', timeout: 30000 })
 
                 // ページ内容の幅に合わせてPDF出力サイズを調整
                 const contentSize = await page.evaluate(() => {
