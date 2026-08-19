@@ -102,7 +102,8 @@ try {
       $children = @($allProcesses | Where-Object {
         $frontier -contains [int]$_.ParentProcessId -and
         $bridgeIds -notcontains [int]$_.ProcessId -and
-        $descendantIds -notcontains [int]$_.ProcessId
+        $descendantIds -notcontains [int]$_.ProcessId -and
+        $_.Name -ne "conhost.exe"
       })
       if ($children.Count -eq 0) { break }
       $newIds = @($children | ForEach-Object { [int]$_.ProcessId })
