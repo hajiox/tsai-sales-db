@@ -2,6 +2,24 @@
 
 ## 2026-08-19
 
+### 予約キュー・一括実行・TSG掲示板報告
+
+- EC価格反映に「今すぐ実行」と「一括実行へ予約」を追加。Amazon等の個別サイト、全サイトのどちらも従来どおり即時実行でき、予約時はECへ書き込まない。
+- 予約ジョブは実行対象外の将来時刻で保持し、「予約分をまとめて実行」で初めて事務所PC Bridgeの実行待ちへ移す。予約取消にも対応。
+- 一括実行直前に、予約時の商品識別子・保存価格と現在のレシピを再照合。不一致の予約はECへ触れず `needs_review` で停止する。Bridge側の書込直前照合も維持。
+- 新しい販売価格の保存で作られる `recipe_ec_price_revisions` をTSG通知の送信待ち台帳として利用。`NEWブランド館（フロア）` へTSG君名義で前回価格・新価格・差額・TSAレシピURLを投稿する。
+- TSG投稿は価格履歴IDから決定的な投稿IDを作り二重投稿を防止。即時投稿に失敗した場合は送信状態を保持し、毎時の再試行で復旧する。導入前の価格履歴は遡及投稿しない。
+
+### Verification（予約・TSG連携）
+
+- `npm run test:recipe-selling-price`: success（予約モード・Bridge非claim条件を含む）
+- `npm run test:ec-price-plan`: success
+- `npm run test:ec-price-migration`: success（TSG送信待ち列・claim RPC・service-role権限をtransaction rollbackで検証）
+- `npm run test:shipping-label-address`: success
+- `npm run security:scan`: success
+- 対象TypeScript診断0件（全体には既存エラーあり）
+- `npm run build`: success
+
 - レシピ詳細の販売価格カード直下に Amazon、楽天、Yahoo、メルカリ、BASE、Qoo10、TikTok と「全て反映」を追加。
 - 未保存のレシピ変更がある間は実行不可。確認時の商品情報・税込価格と保存済みDBを照合し、相違時はジョブを作成しない。
 - VercelはCodexを直接起動せず、認証済みの `web_sales_codex_jobs` に登録。事務所PCの TSA Codex Bridge 1.8.9 が独立した `codex exec --ephemeral` で既存 `update-aizu-ec-prices` Skillを呼ぶ。

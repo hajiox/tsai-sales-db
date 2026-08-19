@@ -486,8 +486,12 @@ function RecipeDetailContent() {
           },
         }),
       });
-      if (!res.ok) throw new Error('上書き保存に失敗しました');
+      const saveResult = await res.json();
+      if (!res.ok) throw new Error(saveResult.error || '上書き保存に失敗しました');
       toast.success(`Ver.${version.version_number} で上書き保存しました`);
+      if (saveResult.tsgNotification?.failed > 0) {
+        toast.warning('価格変更のTSG掲示板報告は再試行待ちです');
+      }
       setPreviewingVersionId(null);
       setDraftMode(false);
       setDraftVersionNote("");
@@ -1444,15 +1448,17 @@ function RecipeDetailContent() {
           },
         }),
       });
-
+      const saveResult = await res.json();
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || '保存に失敗しました');
+        throw new Error(saveResult.error || '保存に失敗しました');
       }
 
       setDeletedItemIds(new Set());
       setHasChanges(false);
       toast.success("保存しました");
+      if (saveResult.tsgNotification?.failed > 0) {
+        toast.warning('価格変更のTSG掲示板報告は再試行待ちです');
+      }
 
       if (draftMode) {
         try {

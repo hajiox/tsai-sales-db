@@ -4,6 +4,7 @@ import {
     calculateRecipeItemCost,
     recalculateRecipeTotalCost,
 } from "@/lib/recipe-cost-sync";
+import { dispatchRecipePriceTsgNotifications } from "@/lib/recipe-price-tsg-notification";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -169,7 +170,35 @@ export async function POST(request: Request) {
         // 5. Recalculate from the server-normalized item costs, then sync linked products.
         await recalculateRecipeTotalCost(supabase, recipeId);
 
-        return NextResponse.json({ success: true });
+        let tsgNotification: {
+            claimed: number;
+            posted: number;
+            failed: number;
+            error?: string;
+        } | null = null;
+        try {
+            const dispatched = await dispatchRecipePriceTsgNotifications(supabase, {
+                recipeId,
+                limit: 5,
+            });
+            tsgNotification = {
+                claimed: dispatched.claimed,
+                posted: dispatched.posted,
+                failed: dispatched.failed,
+            };
+        } catch (notificationError) {
+            // The recipe save remains successful. The durable revision outbox is retried by cron.
+            tsgNotification = {
+                claimed: 0,
+                posted: 0,
+                failed: 1,
+                error: notificationError instanceof Error
+                    ? notificationError.message
+                    : "TSG投稿を予約できませんでした",
+            };
+        }
+
+        return NextResponse.json({ success: true, tsgNotification });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

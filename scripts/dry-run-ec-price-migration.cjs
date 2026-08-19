@@ -47,6 +47,10 @@ async function main() {
       path.join(__dirname, "..", "supabase", "migrations", "20260819110000_fix_ec_price_revision_tax_inclusive_priority.sql"),
       "utf8",
     ));
+    await client.query(fs.readFileSync(
+      path.join(__dirname, "..", "supabase", "migrations", "20260819123000_recipe_price_tsg_notifications.sql"),
+      "utf8",
+    ));
     const checks = await client.query(`
       SELECT
         to_regclass('public.recipe_ec_price_revisions') IS NOT NULL AS revisions_table,
@@ -58,6 +62,19 @@ async function main() {
           'public.complete_ec_price_codex_job(uuid,text,text,integer,text,text,jsonb,timestamp with time zone,jsonb)',
           'EXECUTE'
         ) AS service_role_execute,
+        to_regprocedure('public.claim_recipe_price_tsg_notifications(integer,uuid)') IS NOT NULL
+          AS tsg_claim_rpc,
+        has_function_privilege(
+          'service_role',
+          'public.claim_recipe_price_tsg_notifications(integer,uuid)',
+          'EXECUTE'
+        ) AS tsg_claim_service_role_execute,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'recipe_ec_price_revisions'
+            AND column_name = 'tsg_post_status'
+        ) AS tsg_outbox_columns,
         EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = 'public'
@@ -87,7 +104,8 @@ async function main() {
     );
     const probeRevision = await client.query(`
       SELECT previous_price_ex_tax, new_price_ex_tax,
-             previous_price_incl_tax, new_price_incl_tax
+             previous_price_incl_tax, new_price_incl_tax,
+             tsg_post_status
       FROM public.recipe_ec_price_revisions
       WHERE recipe_id = $1
       ORDER BY created_at DESC
@@ -100,6 +118,7 @@ async function main() {
       && Number(revision.new_price_ex_tax) === nextPriceExTax
       && Number(revision.previous_price_incl_tax) === Math.floor(previousPriceExTax * 1.08)
       && Number(revision.new_price_incl_tax) === Math.floor(nextPriceExTax * 1.08)
+      && revision.tsg_post_status === 'pending'
     );
     console.log(`dry_run=${JSON.stringify(checks.rows[0])}`);
     await client.query("ROLLBACK");
