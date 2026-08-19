@@ -81,6 +81,25 @@ const specialMatchingRules = [{ keywords: ['炊き込み', 'チャーシュー']
 
 type Channel = 'amazon' | 'rakuten' | 'yahoo' | 'mercari' | 'base' | 'qoo10';
 
+const AKUMA_BUTA_MESHI_NAME = '悪魔のBUTAめし';
+const TWO_ITEM_OR_MEAL_SET_PATTERN = /(?:2|２)\s*(?:個|食)\s*セット/;
+
+function findAkumaButaMeshiSetProduct(
+  normalizedTitle: string,
+  products: Product[],
+  matchedIds: Set<string>,
+  allowDuplicate: boolean
+): Product | null {
+  if (!normalizedTitle.includes(AKUMA_BUTA_MESHI_NAME) || !TWO_ITEM_OR_MEAL_SET_PATTERN.test(normalizedTitle)) {
+    return null;
+  }
+
+  return products.find(p => {
+    if (!allowDuplicate && matchedIds.has(p.id)) return false;
+    return normalizeTitle(p.name).includes(AKUMA_BUTA_MESHI_NAME);
+  }) || null;
+}
+
 export function findBestMatchSimplified(
   title: string,
   products: Product[],
@@ -92,6 +111,13 @@ export function findBestMatchSimplified(
   const normalizedTitle = normalizeTitle(title);
   // BASEは同一商品の「送料別」「送料込み」など複数バリエーションがあるため重複排除しない
   const allowDuplicate = channel === 'base';
+
+  // 「2食セット」→「2個セット」などの表記揺れで、炊き込みご飯の素へ誤マッチしないよう先に固定する
+  const akumaButaMeshiProduct = findAkumaButaMeshiSetProduct(normalizedTitle, products, matchedIds, allowDuplicate);
+  if (akumaButaMeshiProduct) {
+    matchedIds.add(akumaButaMeshiProduct.id);
+    return { product: akumaButaMeshiProduct, matchType: 'special' };
+  }
 
   // 0. 特定キーワードによる専用マッチング
   for (const rule of specialMatchingRules) {

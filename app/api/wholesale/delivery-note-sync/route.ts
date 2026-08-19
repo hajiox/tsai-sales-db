@@ -32,6 +32,8 @@ type SyncPayload = {
     counterpartyId?: string | null;
     counterpartyName?: string | null;
     transactionType?: string | null;
+    counterpartyTransactionType?: string | null;
+    counterpartyDefaultRate?: number | null;
     rate?: number | null;
     taxRate?: number | null;
     subtotal?: number | null;
@@ -130,6 +132,16 @@ async function findOrCreateCustomer(note: SyncPayload['deliveryNote']) {
   const counterpartyId = note.counterpartyId || null;
   const counterpartyName = note.counterpartyName || '取引先不明';
   const normalized = normalizeName(counterpartyName);
+  const masterTransactionType = note.counterpartyTransactionType === 'consignment'
+    ? 'consignment'
+    : note.counterpartyTransactionType === 'purchase' ? 'purchase' : null;
+  const masterDefaultRate = Number(note.counterpartyDefaultRate);
+  const masterUpdate = masterTransactionType ? {
+    transaction_type: masterTransactionType,
+    default_rate: Number.isFinite(masterDefaultRate) && masterDefaultRate > 0
+      ? masterDefaultRate
+      : masterTransactionType === 'consignment' ? 0.70 : 0.65,
+  } : {};
 
   if (counterpartyId) {
     const { data } = await supabase
@@ -137,7 +149,17 @@ async function findOrCreateCustomer(note: SyncPayload['deliveryNote']) {
       .select('*')
       .eq('doc_scanner_counterparty_id', counterpartyId)
       .maybeSingle();
-    if (data) return data;
+    if (data) {
+      if (!masterTransactionType) return data;
+      const { data: updated, error: updateError } = await supabase
+        .from('wholesale_customers')
+        .update(masterUpdate)
+        .eq('id', data.id)
+        .select('*')
+        .single();
+      if (updateError) throw updateError;
+      return updated;
+    }
   }
 
   const { data: customers, error } = await supabase
@@ -150,11 +172,21 @@ async function findOrCreateCustomer(note: SyncPayload['deliveryNote']) {
   );
 
   if (matched) {
-    if (counterpartyId && !matched.doc_scanner_counterparty_id) {
-      await supabase
+    const update = {
+      ...(counterpartyId && !matched.doc_scanner_counterparty_id
+        ? { doc_scanner_counterparty_id: counterpartyId, normalized_name: normalized }
+        : {}),
+      ...masterUpdate,
+    };
+    if (Object.keys(update).length > 0) {
+      const { data: updated, error: updateError } = await supabase
         .from('wholesale_customers')
-        .update({ doc_scanner_counterparty_id: counterpartyId, normalized_name: normalized })
-        .eq('id', matched.id);
+        .update(update)
+        .eq('id', matched.id)
+        .select('*')
+        .single();
+      if (updateError) throw updateError;
+      return updated;
     }
     return matched;
   }
@@ -169,6 +201,7 @@ async function findOrCreateCustomer(note: SyncPayload['deliveryNote']) {
       is_active: true,
       doc_scanner_counterparty_id: counterpartyId,
       normalized_name: normalized,
+      ...masterUpdate,
     })
     .select('*')
     .single();

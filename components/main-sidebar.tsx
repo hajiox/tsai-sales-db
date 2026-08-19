@@ -17,6 +17,8 @@ type Module =
   | "kpi"
   | "recipe"
   | "links"
+  | "shipping-labels"
+  | "backup"
   | "ai-tools";
 
 export default function MainSidebar() {
@@ -36,6 +38,8 @@ export default function MainSidebar() {
     else if (pathname.startsWith("/kpi")) setActiveModule("kpi");
     else if (pathname.startsWith("/recipe")) setActiveModule("recipe");
     else if (pathname.startsWith("/links")) setActiveModule("links");
+    else if (pathname.startsWith("/shipping-labels")) setActiveModule("shipping-labels");
+    else if (pathname.startsWith("/system/backup")) setActiveModule("backup");
     else if (pathname.startsWith("/ai-tools")) setActiveModule("ai-tools");
     else setActiveModule("sales");
   }, [pathname]);
@@ -52,6 +56,8 @@ export default function MainSidebar() {
       kpi: "/kpi",
       recipe: "/recipe",
       links: "/links",
+      "shipping-labels": "/shipping-labels",
+      backup: "/system/backup",
       "ai-tools": "/ai-tools",
     } as const;
     router.push(map[module]);
@@ -179,6 +185,27 @@ export default function MainSidebar() {
             onClick={() => window.open("https://naisyoku.aizubrandhall.com/dashboard", "_blank")}
           >
             内職管理システム
+          </Button>
+          <Button
+            variant={activeVariant("shipping-labels")}
+            className={baseBtn("shipping-labels")}
+            onClick={() => goto("shipping-labels")}
+          >
+            伝票発行システム
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-slate-200 hover:bg-slate-700 hover:text-white"
+            onClick={() => window.open("http://192.168.110.200:3003", "_blank", "noopener,noreferrer")}
+          >
+            ヤマト出荷データ管理
+          </Button>
+          <Button
+            variant={activeVariant("backup")}
+            className={baseBtn("backup")}
+            onClick={() => goto("backup")}
+          >
+            バックアップ管理
           </Button>
         </div>
       </nav>

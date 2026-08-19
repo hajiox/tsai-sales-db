@@ -6,6 +6,15 @@ import { NextResponse } from 'next/server';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+function saleAmount(sale: { quantity: any; unit_price: any; amount: any }) {
+  const quantity = Number(sale.quantity || 0);
+  const unitPrice = Number(sale.unit_price || 0);
+  const calculatedAmount = quantity * unitPrice;
+  return Number.isFinite(calculatedAmount) && (quantity !== 0 || unitPrice !== 0)
+    ? calculatedAmount
+    : Number(sale.amount || 0);
+}
+
 export async function GET(request: Request) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { searchParams } = new URL(request.url);
@@ -33,12 +42,17 @@ export async function GET(request: Request) {
       .select('id, product_name, product_code, price')
       .eq('product_type', 'OEM');
 
+    const { data: legacyProducts } = await supabase
+      .from('oem_products')
+      .select('id, product_name, product_code, price');
+
     // 顧客マスタ取得
     const { data: customers } = await supabase
       .from('oem_customers')
       .select('id, customer_name, customer_code');
 
-    const productMap = new Map((products || []).map(p => [p.id, p]));
+    const productMap = new Map((legacyProducts || []).map(p => [p.id, p]));
+    (products || []).forEach(p => productMap.set(p.id, p));
     const customerMap = new Map((customers || []).map(c => [c.id, c]));
 
     // JOINして結果を組み立て
@@ -48,9 +62,9 @@ export async function GET(request: Request) {
       return {
         id: sale.id,
         sale_date: sale.sale_date,
-        quantity: sale.quantity,
-        unit_price: sale.unit_price,
-        amount: sale.amount,
+        quantity: Number(sale.quantity || 0),
+        unit_price: Number(sale.unit_price || 0),
+        amount: saleAmount(sale),
         product_name: product?.product_name || '不明',
         product_code: product?.product_code || '',
         customer_name: customer?.customer_name || '不明',

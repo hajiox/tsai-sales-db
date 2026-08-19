@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
-import { Search, FileSpreadsheet, FileText, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Bell, Barcode } from "lucide-react";
+import { Search, FileSpreadsheet, FileText, ChefHat, Package, Building, Truck, Globe, ShoppingBag, Plus, Link as LinkIcon, Link2, Edit, Copy, Trash2, Bell, Barcode, ClipboardList, Factory, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 
@@ -54,6 +54,14 @@ interface Recipe {
     series: string | null;
     series_code: number | null;
     product_code: number | null;
+    recipe_items?: RecipeItemSummary[];
+    cost_excluding_expenses?: number | null;
+}
+
+interface RecipeItemSummary {
+    item_type: string;
+    item_name?: string | null;
+    cost: number | string | null;
 }
 
 type TabType = "all" | "ネット専用" | "自社" | "OEM" | "中間部品" | "試作" | "終売";
@@ -89,6 +97,7 @@ export default function RecipePage() {
     const [wholesaleProducts, setWholesaleProducts] = useState<{id: string; name: string; price: number | null}[]>([]);
     const [oemProducts, setOemProducts] = useState<{id: string; name: string; price: number | null}[]>([]);
     const [linkingId, setLinkingId] = useState<string | null>(null);
+    const [diningRecipeCount, setDiningRecipeCount] = useState(0);
 
     // シリーズ選択モーダル用
     const [seriesModalOpen, setSeriesModalOpen] = useState(false);
@@ -164,6 +173,10 @@ export default function RecipePage() {
         fetchRecipes();
         fetchStats();
         fetchLinkableProducts();
+        fetch('/api/recipe/dining')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => setDiningRecipeCount(d?.recipes?.length || 0))
+            .catch(() => setDiningRecipeCount(0));
         // 見積書pending件数を取得
         fetch('/api/recipe/estimates?status=pending')
             .then(r => r.json())
@@ -221,7 +234,7 @@ export default function RecipePage() {
         finally { setLinkingId(null); }
     };
 
-    const handleInlineCreateAndLink = async (recipeId: string, recipeName: string, recipePrice: number | null, type: 'web' | 'wholesale') => {
+    const handleInlineCreateAndLink = async (recipeId: string, recipeName: string, recipePrice: number | null, type: LinkType) => {
         if (type === 'web') {
             // WEBの場合はシリーズ選択モーダルを表示
             setSeriesModalData({ recipeId, recipeName, recipePrice, type });
@@ -232,10 +245,10 @@ export default function RecipePage() {
             setModalPrice(recipePrice ? yenFloor(recipePrice) : 0);
             setSeriesModalOpen(true);
         } else {
-            // 卸の場合は従来通り
-            const label = '卸販売';
+            // 卸/OEMは商品マスターを作成して即紐付け
+            const label = type === 'oem' ? 'OEM卸販売' : '卸販売';
             if (!confirm(`${label}管理に「${recipeName}」を新規作成して紐付けます。\nよろしいですか？`)) return;
-            const endpoint = '/api/recipe/sync-wholesale';
+            const endpoint = getLinkEndpoint(type);
             try {
                 setLinkingId(recipeId + type);
                 const res = await fetch(endpoint, {
@@ -308,8 +321,16 @@ export default function RecipePage() {
         finally { setLinkingId(null); }
     };
 
-    const handleInlineUnlink = async (recipeId: string, type: LinkType) => {
-        if (!confirm('紐付けを解除しますか？')) return;
+    const handleInlineUnlink = async (recipeId: string, type: LinkType, targetName?: string) => {
+        const labels: Record<LinkType, string> = {
+            web: "WEB販売商品",
+            wholesale: "卸販売商品",
+            oem: "OEM卸販売商品",
+        };
+        const message = targetName
+            ? `リンク先: ${labels[type]}\n${targetName}\n\nこの紐付けを解除しますか？`
+            : `リンク先: ${labels[type]}\n取得できませんでした\n\nこの紐付けを解除しますか？`;
+        if (!confirm(message)) return;
         const endpoint = getLinkEndpoint(type);
         try {
             const res = await fetch(endpoint, {
@@ -328,14 +349,33 @@ export default function RecipePage() {
         setLoading(true);
         const { data, error } = await supabase
             .from("recipes")
-            .select("*")
+            .select(`
+                *,
+                recipe_items:recipe_items!recipe_items_recipe_id_fkey (
+                    item_type,
+                    item_name,
+                    cost
+                )
+            `)
             .order("series", { ascending: true, nullsFirst: false })
             .order("series_code", { ascending: true, nullsFirst: false })
             .order("product_code", { ascending: true, nullsFirst: false })
             .order("name");
 
         if (!error && data) {
-            setRecipes(data);
+            setRecipes(data.map((recipe: any) => {
+                const costExcludingExpenses = (recipe.recipe_items || []).reduce(
+                    (sum: number, item: RecipeItemSummary) => {
+                        if (item.item_type === "expense") return sum;
+                        return sum + (parseFloat(String(item.cost)) || 0);
+                    },
+                    0,
+                );
+                return {
+                    ...recipe,
+                    cost_excluding_expenses: recipe.recipe_items?.length ? costExcludingExpenses : null,
+                };
+            }));
         }
         setLoading(false);
     };
@@ -484,6 +524,8 @@ export default function RecipePage() {
                 id: newRecipeId,
                 name: `${recipe.name} (コピー)`,
                 linked_product_id: null,
+                linked_wholesale_product_id: null,
+                linked_oem_product_id: null,
             };
             setRecipes(prev => [...prev, copiedRecipe]);
             toast.success('レシピを複製しました');
@@ -516,9 +558,33 @@ export default function RecipePage() {
     // シリーズ一覧は共通ファイルから取得
 
     const formatCurrency = (value: number | null) => {
-        if (!value) return "-";
+        if (value === null || value === undefined) return "-";
         return `¥${value.toLocaleString()}`;
     };
+
+    const getGrossExcludingExpenses = (recipe: Recipe) => {
+        if (!recipe.selling_price || recipe.cost_excluding_expenses == null) return null;
+        const sellingPriceInclTax = taxIncludedFromExcluded(recipe.selling_price);
+        if (!sellingPriceInclTax) return null;
+        const profit = sellingPriceInclTax - recipe.cost_excluding_expenses;
+        const rate = (profit / sellingPriceInclTax) * 100;
+        return { profit, rate };
+    };
+
+    const getGrossIncludingAll = (recipe: Recipe) => {
+        if (!recipe.selling_price || !recipe.total_cost) return null;
+        const basePrice = activeTab === "自社"
+            ? wholesalePriceFromTaxExcludedRetail(recipe.selling_price, 0.7)
+            : taxIncludedFromExcluded(recipe.selling_price);
+        if (!basePrice) return null;
+        const profit = basePrice - recipe.total_cost;
+        const rate = (profit / basePrice) * 100;
+        return { profit, rate };
+    };
+
+    const getRateColor = (rate: number) => (
+        rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600"
+    );
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return "-";
@@ -682,6 +748,14 @@ export default function RecipePage() {
                         </button>
                     );
                 })}
+                <button
+                    onClick={() => router.push('/recipe/dining')}
+                    className="-mb-px flex items-center gap-2 whitespace-nowrap rounded-t-lg border border-transparent bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 transition hover:border-emerald-200 hover:bg-emerald-100"
+                >
+                    <UtensilsCrossed className="h-4 w-4" />
+                    会津食のブランド館
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">{diningRecipeCount}</span>
+                </button>
             </div>
 
             {/* Filters */}
@@ -703,6 +777,16 @@ export default function RecipePage() {
                     <Button variant="outline" onClick={() => router.push("/recipe/database")}>
                         <Package className="w-4 h-4 mr-2" />
                         材料データベース
+                    </Button>
+
+                    <Button className="bg-slate-900 hover:bg-slate-800" onClick={() => router.push("/recipe/inventory")}>
+                        <ClipboardList className="w-4 h-4 mr-2" />
+                        製造棚卸し
+                    </Button>
+
+                    <Button variant="outline" onClick={() => router.push("/recipe/char-siu-production")}>
+                        <Factory className="w-4 h-4 mr-2" />
+                        チャーシュー製造原価入力
                     </Button>
 
                     <Button
@@ -732,14 +816,14 @@ export default function RecipePage() {
             </div>
 
             {/* Recipe Table */}
-            <div className="bg-white rounded-lg shadow">
+            <div className="hidden bg-white rounded-lg shadow lg:block">
                 <div className="flex items-center gap-4 px-4 py-2 border-b text-[10px] text-gray-400">
-                    <span>利益率:</span>
+                    <span>粗利率:</span>
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />30%以上</span>
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />20%以上</span>
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />20%未満</span>
                 </div>
-                <Table>
+                <Table className="min-w-[1160px]">
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[140px]">シリーズ</TableHead>
@@ -749,19 +833,41 @@ export default function RecipePage() {
                             <TableHead>カテゴリ</TableHead>
                             {activeTab !== "中間部品" && <TableHead className="text-right">販売価格(税込)</TableHead>}
                             <TableHead className="text-right">原価</TableHead>
-                            {activeTab !== "中間部品" && <TableHead className="text-right w-[80px]">{activeTab === "自社" ? "利益率（７掛）" : "利益率"}</TableHead>}
+                            {activeTab !== "中間部品" && (
+                                <TableHead
+                                    className="text-right w-[150px]"
+                                    title="販売価格(税込)から、expense行（人件費・諸経費）を除いた原価を引いた粗利です"
+                                >
+                                    粗利<br />
+                                    <span className="text-[10px] font-normal">人件費・諸経費除く</span>
+                                </TableHead>
+                            )}
+                            {activeTab !== "中間部品" && (
+                                <TableHead
+                                    className="text-right w-[120px]"
+                                    title={activeTab === "自社"
+                                        ? "7掛の卸価格から全ての原価を引いた粗利です"
+                                        : "販売価格(税込)から全ての原価を引いた粗利です"}
+                                >
+                                    粗利<br />
+                                    <span className="text-[10px] font-normal">
+                                        {activeTab === "自社" ? "全て含む（7掛）" : "全て含む"}
+                                    </span>
+                                </TableHead>
+                            )}
+                            <TableHead className="w-[120px] text-right">操作</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center py-8">
+                                <TableCell colSpan={activeTab === "中間部品" ? 7 : 9} className="text-center py-8">
                                     読み込み中...
                                 </TableCell>
                             </TableRow>
                         ) : filteredRecipes.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                                <TableCell colSpan={activeTab === "中間部品" ? 7 : 9} className="text-center py-8 text-gray-500">
                                     レシピがありません
                                 </TableCell>
                             </TableRow>
@@ -833,8 +939,8 @@ export default function RecipePage() {
                                             {recipe.linked_product_id ? (
                                                 <span
                                                     className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium cursor-pointer hover:bg-blue-200 transition"
-                                                    title={`WEB販売紐付済: ${linkedProductNames[recipe.linked_product_id] || '取得中...'} (クリックで解除)`}
-                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'web'); }}
+                                                    title={`WEB販売紐付済: ${linkedProductNames[recipe.linked_product_id] || '取得中...'} (クリックで確認)`}
+                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'web', linkedProductNames[recipe.linked_product_id!] || '取得中...'); }}
                                                 >
                                                     <Link2 className="h-3 w-3" />WEB
                                                 </span>
@@ -865,8 +971,8 @@ export default function RecipePage() {
                                             {recipe.linked_wholesale_product_id ? (
                                                 <span
                                                     className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium cursor-pointer hover:bg-green-200 transition"
-                                                    title="卸販売紐付済 (クリックで解除)"
-                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'wholesale'); }}
+                                                    title={`卸販売紐付済: ${wholesaleProducts.find(p => p.id === recipe.linked_wholesale_product_id)?.name || '取得中...'} (クリックで確認)`}
+                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'wholesale', wholesaleProducts.find(p => p.id === recipe.linked_wholesale_product_id)?.name || '取得中...'); }}
                                                 >
                                                     <Link2 className="h-3 w-3" />卸
                                                 </span>
@@ -896,8 +1002,8 @@ export default function RecipePage() {
                                             {recipe.linked_oem_product_id ? (
                                                 <span
                                                     className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-medium cursor-pointer hover:bg-purple-200 transition"
-                                                    title={`OEM卸販売紐付済: ${oemProducts.find(p => p.id === recipe.linked_oem_product_id)?.name || '取得中...'} (クリックで解除)`}
-                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'oem'); }}
+                                                    title={`OEM卸販売紐付済: ${oemProducts.find(p => p.id === recipe.linked_oem_product_id)?.name || '取得中...'} (クリックで確認)`}
+                                                    onClick={(e) => { e.stopPropagation(); handleInlineUnlink(recipe.id, 'oem', oemProducts.find(p => p.id === recipe.linked_oem_product_id)?.name || '取得中...'); }}
                                                 >
                                                     <Link2 className="h-3 w-3" />OEM
                                                 </span>
@@ -908,13 +1014,16 @@ export default function RecipePage() {
                                                         defaultValue=""
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            if (val) {
+                                                            if (val === '__create__') {
+                                                                handleInlineCreateAndLink(recipe.id, recipe.name, recipe.selling_price, 'oem');
+                                                            } else if (val) {
                                                                 handleInlineLink(recipe.id, 'oem', val);
                                                             }
                                                             e.target.value = '';
                                                         }}
                                                     >
                                                         <option value="">+OEM</option>
+                                                        <option value="__create__">＋ 新規作成</option>
                                                         {oemProducts.filter(p => !recipes.some(r => r.linked_oem_product_id === p.id)).map(p => (
                                                             <option key={p.id} value={p.id}>{p.name}</option>
                                                         ))}
@@ -964,19 +1073,38 @@ export default function RecipePage() {
                                     {activeTab !== "中間部品" && (
                                     <TableCell className="text-right">
                                         {(() => {
-                                            if (!recipe.selling_price || !recipe.total_cost) return <span className="text-gray-300">-</span>;
-                                            if (activeTab === "自社") {
-                                                const wholesalePrice = wholesalePriceFromTaxExcludedRetail(recipe.selling_price, 0.7);
-                                                const wholesaleProfit = wholesalePrice - recipe.total_cost;
-                                                const rate = wholesalePrice > 0 ? (wholesaleProfit / wholesalePrice) * 100 : 0;
-                                                const color = rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600";
-                                                return <span className={`text-sm font-bold ${color}`}>{rate.toFixed(1)}%</span>;
-                                            } else {
-                                                const sellingPriceInclTax = taxIncludedFromExcluded(recipe.selling_price);
-                                                const rate = ((sellingPriceInclTax - recipe.total_cost) / sellingPriceInclTax) * 100;
-                                                const color = rate >= 30 ? "text-green-600" : rate >= 20 ? "text-blue-600" : "text-red-600";
-                                                return <span className={`text-sm font-bold ${color}`}>{rate.toFixed(1)}%</span>;
-                                            }
+                                            const gross = getGrossExcludingExpenses(recipe);
+                                            if (!gross) return <span className="text-gray-300">-</span>;
+                                            const color = getRateColor(gross.rate);
+                                            return (
+                                                <div className="leading-tight">
+                                                    <div className={`text-sm font-bold ${color}`}>
+                                                        {formatCurrency(Math.round(gross.profit))}
+                                                    </div>
+                                                    <div className={`text-[11px] font-semibold ${color}`}>
+                                                        {gross.rate.toFixed(1)}%
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </TableCell>
+                                    )}
+                                    {activeTab !== "中間部品" && (
+                                    <TableCell className="text-right">
+                                        {(() => {
+                                            const gross = getGrossIncludingAll(recipe);
+                                            if (!gross) return <span className="text-gray-300">-</span>;
+                                            const color = getRateColor(gross.rate);
+                                            return (
+                                                <div className="leading-tight">
+                                                    <div className={`text-sm font-bold ${color}`}>
+                                                        {formatCurrency(Math.round(gross.profit))}
+                                                    </div>
+                                                    <div className={`text-[11px] font-semibold ${color}`}>
+                                                        {gross.rate.toFixed(1)}%
+                                                    </div>
+                                                </div>
+                                            );
                                         })()}
                                     </TableCell>
                                     )}
@@ -1025,6 +1153,294 @@ export default function RecipePage() {
                         )}
                     </TableBody>
                 </Table>
+            </div>
+
+            {/* Mobile Recipe Cards */}
+            <div className="space-y-3 lg:hidden">
+                <div className="flex items-center justify-between gap-3 px-1 text-xs text-gray-500">
+                    <span>{tabs.find((tab) => tab.key === activeTab)?.label || activeTab}</span>
+                    <span>{loading ? "読み込み中" : `${filteredRecipes.length}件`}</span>
+                </div>
+
+                {loading ? (
+                    <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+                        読み込み中...
+                    </div>
+                ) : filteredRecipes.length === 0 ? (
+                    <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+                        レシピがありません
+                    </div>
+                ) : (
+                    filteredRecipes.map((recipe) => {
+                        const grossExcludingExpenses = getGrossExcludingExpenses(recipe);
+                        const grossIncludingAll = getGrossIncludingAll(recipe);
+                        const category = CATEGORIES.find((item) => item.value === recipe.category);
+                        const sellingPrice = recipe.selling_price
+                            ? taxIncludedFromExcluded(recipe.selling_price)
+                            : null;
+
+                        return (
+                            <article
+                                key={recipe.id}
+                                className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm"
+                            >
+                                <button
+                                    type="button"
+                                    className="w-full px-4 py-3 text-left active:bg-gray-50"
+                                    onClick={() => router.push(`/recipe/${recipe.id}?fromTab=${encodeURIComponent(activeTab)}`)}
+                                >
+                                    <span className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                        <span className="rounded bg-slate-100 px-2 py-1 font-medium text-slate-700">
+                                            {tabs.find((tab) => tab.key === activeTab)?.label || activeTab}
+                                        </span>
+                                        <span className={`rounded px-2 py-1 font-medium ${category?.color || "bg-gray-100 text-gray-700"}`}>
+                                            {recipe.category}
+                                        </span>
+                                        {recipe.is_intermediate && (
+                                            <span className="rounded bg-purple-100 px-2 py-1 font-medium text-purple-800">P</span>
+                                        )}
+                                    </span>
+                                    <span className="block text-base font-bold leading-snug text-gray-950">
+                                        {recipe.name}
+                                    </span>
+                                    <span className="mt-1 block text-xs text-gray-500">
+                                        {recipe.series || "シリーズなし"}
+                                        {recipe.product_code != null ? ` / No.${recipe.product_code}` : ""}
+                                    </span>
+                                </button>
+
+                                <div className="grid grid-cols-2 border-y border-gray-100 text-sm">
+                                    <div className="border-b border-r border-gray-100 px-4 py-3">
+                                        <div className="text-[11px] text-gray-500">販売価格（税込）</div>
+                                        <div className="mt-0.5 font-bold text-gray-900">
+                                            {activeTab === "中間部品" ? "-" : formatCurrency(sellingPrice)}
+                                        </div>
+                                    </div>
+                                    <div className="border-b border-gray-100 px-4 py-3 text-right">
+                                        <div className="text-[11px] text-gray-500">原価</div>
+                                        <div className="mt-0.5 font-bold text-gray-900">
+                                            {recipe.total_cost
+                                                ? formatCurrency(Math.round(recipe.total_cost))
+                                                : "-"}
+                                        </div>
+                                    </div>
+                                    <div className="border-r border-gray-100 px-4 py-3">
+                                        <div className="text-[11px] leading-tight text-gray-500">
+                                            粗利
+                                            <span className="block">人件費・諸経費除く</span>
+                                        </div>
+                                        {activeTab === "中間部品" || !grossExcludingExpenses ? (
+                                            <div className="mt-1 font-bold text-gray-300">-</div>
+                                        ) : (
+                                            <div className={`mt-1 leading-tight ${getRateColor(grossExcludingExpenses.rate)}`}>
+                                                <div className="font-bold">{formatCurrency(Math.round(grossExcludingExpenses.profit))}</div>
+                                                <div className="text-xs font-semibold">{grossExcludingExpenses.rate.toFixed(1)}%</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="px-4 py-3 text-right">
+                                        <div className="text-[11px] leading-tight text-gray-500">
+                                            粗利
+                                            <span className="block">
+                                                {activeTab === "自社" ? "全て含む（7掛）" : "全て含む"}
+                                            </span>
+                                        </div>
+                                        {activeTab === "中間部品" || !grossIncludingAll ? (
+                                            <div className="mt-1 font-bold text-gray-300">-</div>
+                                        ) : (
+                                            <div className={`mt-1 leading-tight ${getRateColor(grossIncludingAll.rate)}`}>
+                                                <div className="font-bold">{formatCurrency(Math.round(grossIncludingAll.profit))}</div>
+                                                <div className="text-xs font-semibold">{grossIncludingAll.rate.toFixed(1)}%</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {activeTab === "中間部品" && (
+                                    <div className="border-b border-gray-100 px-4 py-3">
+                                        <div className="mb-1 text-[11px] text-gray-500">使用されている商品</div>
+                                        <div className="flex flex-wrap gap-1">
+                                            {usageMap[recipe.name]?.length ? (
+                                                usageMap[recipe.name].map((parent) => (
+                                                    <span key={parent} className="rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-700">
+                                                        {parent}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span className="text-xs text-gray-400">-</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex min-h-12 items-center gap-2 border-b border-gray-100 px-3 py-2">
+                                    <LinkIcon className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+                                    <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                                        {recipe.linked_product_id ? (
+                                            <button
+                                                type="button"
+                                                className="inline-flex min-h-8 items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 text-xs font-medium text-blue-700"
+                                                title="WEB販売の紐付けを確認・解除"
+                                                onClick={() => handleInlineUnlink(
+                                                    recipe.id,
+                                                    "web",
+                                                    linkedProductNames[recipe.linked_product_id!] || "取得中...",
+                                                )}
+                                            >
+                                                <Link2 className="h-3.5 w-3.5" /> WEB
+                                            </button>
+                                        ) : (recipe.category === "ネット専用" || recipe.category === "自社") && (
+                                            <select
+                                                aria-label={`${recipe.name}のWEB販売紐付け`}
+                                                className="min-h-8 max-w-[112px] rounded border border-blue-200 bg-blue-50 px-2 text-xs text-blue-700"
+                                                defaultValue=""
+                                                disabled={linkingId === recipe.id + "web"}
+                                                onChange={(event) => {
+                                                    const value = event.target.value;
+                                                    if (value === "__create__") {
+                                                        handleInlineCreateAndLink(recipe.id, recipe.name, recipe.selling_price, "web");
+                                                    } else if (value) {
+                                                        handleInlineLink(recipe.id, "web", value);
+                                                    }
+                                                    event.target.value = "";
+                                                }}
+                                            >
+                                                <option value="">+ WEB</option>
+                                                <option value="__create__">＋ 新規作成</option>
+                                                {webProducts
+                                                    .filter((product) => !recipes.some((item) => item.linked_product_id === product.id))
+                                                    .map((product) => (
+                                                        <option key={product.id} value={product.id}>{product.name}</option>
+                                                    ))}
+                                            </select>
+                                        )}
+
+                                        {recipe.linked_wholesale_product_id ? (
+                                            <button
+                                                type="button"
+                                                className="inline-flex min-h-8 items-center gap-1 rounded border border-green-200 bg-green-50 px-2 text-xs font-medium text-green-700"
+                                                title="卸販売の紐付けを確認・解除"
+                                                onClick={() => handleInlineUnlink(
+                                                    recipe.id,
+                                                    "wholesale",
+                                                    wholesaleProducts.find((product) => product.id === recipe.linked_wholesale_product_id)?.name || "取得中...",
+                                                )}
+                                            >
+                                                <Link2 className="h-3.5 w-3.5" /> 卸
+                                            </button>
+                                        ) : recipe.category === "自社" && (
+                                            <select
+                                                aria-label={`${recipe.name}の卸販売紐付け`}
+                                                className="min-h-8 max-w-[112px] rounded border border-green-200 bg-green-50 px-2 text-xs text-green-700"
+                                                defaultValue=""
+                                                disabled={linkingId === recipe.id + "wholesale"}
+                                                onChange={(event) => {
+                                                    const value = event.target.value;
+                                                    if (value === "__create__") {
+                                                        handleInlineCreateAndLink(recipe.id, recipe.name, recipe.selling_price, "wholesale");
+                                                    } else if (value) {
+                                                        handleInlineLink(recipe.id, "wholesale", value);
+                                                    }
+                                                    event.target.value = "";
+                                                }}
+                                            >
+                                                <option value="">+ 卸</option>
+                                                <option value="__create__">＋ 新規作成</option>
+                                                {wholesaleProducts
+                                                    .filter((product) => !recipes.some((item) => item.linked_wholesale_product_id === product.id))
+                                                    .map((product) => (
+                                                        <option key={product.id} value={product.id}>{product.name}</option>
+                                                    ))}
+                                            </select>
+                                        )}
+
+                                        {recipe.linked_oem_product_id ? (
+                                            <button
+                                                type="button"
+                                                className="inline-flex min-h-8 items-center gap-1 rounded border border-purple-200 bg-purple-50 px-2 text-xs font-medium text-purple-700"
+                                                title="OEM卸販売の紐付けを確認・解除"
+                                                onClick={() => handleInlineUnlink(
+                                                    recipe.id,
+                                                    "oem",
+                                                    oemProducts.find((product) => product.id === recipe.linked_oem_product_id)?.name || "取得中...",
+                                                )}
+                                            >
+                                                <Link2 className="h-3.5 w-3.5" /> OEM
+                                            </button>
+                                        ) : recipe.category === "OEM" && (
+                                            <select
+                                                aria-label={`${recipe.name}のOEM卸販売紐付け`}
+                                                className="min-h-8 max-w-[112px] rounded border border-purple-200 bg-purple-50 px-2 text-xs text-purple-700"
+                                                defaultValue=""
+                                                disabled={linkingId === recipe.id + "oem"}
+                                                onChange={(event) => {
+                                                    const value = event.target.value;
+                                                    if (value === "__create__") {
+                                                        handleInlineCreateAndLink(recipe.id, recipe.name, recipe.selling_price, "oem");
+                                                    } else if (value) {
+                                                        handleInlineLink(recipe.id, "oem", value);
+                                                    }
+                                                    event.target.value = "";
+                                                }}
+                                            >
+                                                <option value="">+ OEM</option>
+                                                <option value="__create__">＋ 新規作成</option>
+                                                {oemProducts
+                                                    .filter((product) => !recipes.some((item) => item.linked_oem_product_id === product.id))
+                                                    .map((product) => (
+                                                        <option key={product.id} value={product.id}>{product.name}</option>
+                                                    ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between px-3 py-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-10 px-3 text-sm font-medium text-slate-700"
+                                        onClick={() => router.push(`/recipe/${recipe.id}?fromTab=${encodeURIComponent(activeTab)}`)}
+                                    >
+                                        <FileText className="mr-2 h-4 w-4" /> 詳細
+                                    </Button>
+                                    <div className="flex items-center gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-10 w-10 p-0 text-gray-500"
+                                            title="名称変更"
+                                            aria-label={`${recipe.name}の名称を変更`}
+                                            onClick={() => handleRenameRecipe(recipe.id, recipe.name)}
+                                        >
+                                            <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-10 w-10 p-0 text-gray-500"
+                                            title="複製"
+                                            aria-label={`${recipe.name}を複製`}
+                                            onClick={() => handleDuplicateRecipe(recipe)}
+                                        >
+                                            <Copy className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-10 w-10 p-0 text-red-500"
+                                            title="削除"
+                                            aria-label={`${recipe.name}を削除`}
+                                            onClick={() => handleDeleteRecipe(recipe.id, recipe.name)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </article>
+                        );
+                    })
+                )}
             </div>
 
             {/* === WEB販売商品新規作成モーダル === */}

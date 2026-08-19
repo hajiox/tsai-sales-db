@@ -1,0 +1,4 @@
+interface:
+  display_name: "TSA EC月次利益"
+  short_description: "EC手数料・返金・店舗負担値引を月次利益向けに取得"
+  default_prompt: "対象ECの公式管理画面から月次精算明細を取得し、TSA用の正規化JSONを作成してください。"

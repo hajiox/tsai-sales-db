@@ -25,17 +25,22 @@ interface ProductStatistics {
 interface ProductStatisticsProps {
   selectedYear: string;
   selectedMonth: string;
+  linkedProductNames?: Record<string, string>;
 }
 
-export default function ProductStatistics({ selectedYear, selectedMonth }: ProductStatisticsProps) {
+export default function ProductStatistics({ selectedYear, selectedMonth, linkedProductNames: linkedProductNamesProp }: ProductStatisticsProps) {
   const [statistics, setStatistics] = useState<ProductStatistics[]>([]);
   const [loading, setLoading] = useState(true);
-  const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
+  const [linkedProductNames, setLinkedProductNames] = useState<Record<string, string>>(linkedProductNamesProp || {});
+
+  useEffect(() => {
+    if (linkedProductNamesProp) setLinkedProductNames(linkedProductNamesProp);
+  }, [linkedProductNamesProp]);
 
   useEffect(() => {
     if (!selectedYear || !selectedMonth) return;
     fetchStatistics();
-    fetchLinkedProducts();
+    if (!linkedProductNamesProp) fetchLinkedProducts();
   }, [selectedYear, selectedMonth]);
 
   const fetchLinkedProducts = async () => {
@@ -44,11 +49,11 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
       if (res.ok) {
         const data = await res.json();
         if (data.recipes) {
-          const linked = new Set<string>();
-          data.recipes.forEach((r: { linked_wholesale_product_id: string | null }) => {
-            if (r.linked_wholesale_product_id) linked.add(r.linked_wholesale_product_id);
+          const linked: Record<string, string> = {};
+          data.recipes.forEach((r: { name: string; linked_wholesale_product_id: string | null }) => {
+            if (r.linked_wholesale_product_id) linked[r.linked_wholesale_product_id] = r.name;
           });
-          setLinkedProductIds(linked);
+          setLinkedProductNames(linked);
         }
       }
     } catch (error) {
@@ -96,6 +101,10 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
     if (previous === 0) return current > 0 ? '+100%' : '0%';
     const change = ((current - previous) / previous) * 100;
     return `${change > 0 ? '+' : ''}${change.toFixed(1)}%`;
+  };
+
+  const showLinkedRecipe = (productName: string, recipeName: string) => {
+    window.alert(`リンク先レシピ\n\n卸商品: ${productName}\nレシピ: ${recipeName}`);
   };
 
   const renderTableHeader = () => (
@@ -185,10 +194,19 @@ export default function ProductStatistics({ selectedYear, selectedMonth }: Produ
                     <td className="p-3">
                       <div className="font-medium text-sm flex items-center gap-1">
                         {stat.product_name}
-                        {linkedProductIds.has(stat.product_id) && (
-                          <span className="inline-flex items-center px-1 py-0.5 bg-green-100 text-green-700 rounded" title="レシピ紐付済">
+                        {linkedProductNames[stat.product_id] && (
+                          <button
+                            type="button"
+                            className="inline-flex items-center px-1 py-0.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                            title={`リンク先レシピ: ${linkedProductNames[stat.product_id]}`}
+                            aria-label={`${stat.product_name} のリンク先レシピを表示`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              showLinkedRecipe(stat.product_name, linkedProductNames[stat.product_id]);
+                            }}
+                          >
                             <Link2 className="h-2.5 w-2.5" />
-                          </span>
+                          </button>
                         )}
                       </div>
                       <div className="text-xs text-gray-500">{stat.product_code}</div>

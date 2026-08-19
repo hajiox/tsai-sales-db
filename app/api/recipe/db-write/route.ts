@@ -1,8 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { syncRecipeItemsForMaster } from "@/lib/recipe-cost-sync";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const normalizeName = (value: unknown) =>
+    String(value || "").trim().replace(/[\s\u3000]+/g, " ").toLowerCase();
 
 // Generic database write operations for recipe-related tables
 // Handles: ingredients, materials, expenses, recipe_items, recipes
@@ -11,7 +15,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { operation, table, id, data, ids, filter } = body;
+        const { operation, table, id, data, ids, filter, dedupeByName } = body;
 
         // Allowed tables for safety
         const allowedTables = ["ingredients", "materials", "expenses", "recipe_items", "recipes"];
@@ -20,6 +24,32 @@ export async function POST(request: Request) {
         }
 
         if (operation === "insert") {
+            if (dedupeByName === true && table === "ingredients" && data?.name) {
+                const normalizedIncomingName = normalizeName(data.name);
+                const { data: existingRows, error: existingError } = await supabase
+                    .from("ingredients")
+                    .select("*")
+                    .ilike("name", String(data.name).trim());
+
+                if (existingError) throw existingError;
+
+                const existing = (existingRows || []).find((row: any) => normalizeName(row.name) === normalizedIncomingName);
+                if (existing) {
+                    const cleanUpdates = Object.fromEntries(
+                        Object.entries(data).filter(([, value]) => value !== undefined && value !== null)
+                    );
+                    const { data: updated, error: updateError } = await supabase
+                        .from("ingredients")
+                        .update(cleanUpdates)
+                        .eq("id", existing.id)
+                        .select()
+                        .single();
+
+                    if (updateError) throw updateError;
+                    return NextResponse.json({ success: true, data: updated, deduped: true });
+                }
+            }
+
             const { data: result, error } = await supabase
                 .from(table)
                 .insert(data)
@@ -52,10 +82,16 @@ export async function POST(request: Request) {
 
                 if (oldRecord && oldRecord.name !== data.name) {
                     // recipe_items で旧名称を使っているアイテムを新名称に一括更新
+                    const itemType = table === "ingredients"
+                        ? "ingredient"
+                        : table === "materials"
+                            ? "material"
+                            : "expense";
                     const { error: syncError } = await supabase
                         .from("recipe_items")
                         .update({ item_name: data.name })
-                        .eq("item_name", oldRecord.name);
+                        .eq("item_name", oldRecord.name)
+                        .eq("item_type", itemType);
 
                     if (syncError) {
                         console.error("recipe_items sync error:", syncError);
@@ -64,9 +100,32 @@ export async function POST(request: Request) {
                 }
             }
 
-            const { error } = await supabase.from(table).update(data).eq("id", id);
+            const { data: updatedRows, error } = await supabase
+                .from(table)
+                .update(data)
+                .eq("id", id)
+                .select("id");
             if (error) throw error;
-            return NextResponse.json({ success: true });
+            if (!updatedRows || updatedRows.length === 0) {
+                return NextResponse.json({ error: "更新対象が見つかりません" }, { status: 404 });
+            }
+
+            const shouldSyncRecipeCosts =
+                ["ingredients", "materials", "expenses"].includes(table) &&
+                ["price", "unit_price", "unit_quantity", "tax_included"].some((field) => field in data);
+            const syncResult = shouldSyncRecipeCosts
+                ? await syncRecipeItemsForMaster(
+                    supabase,
+                    table === "ingredients"
+                        ? "ingredient"
+                        : table === "materials"
+                            ? "material"
+                            : "expense",
+                    id,
+                )
+                : null;
+
+            return NextResponse.json({ success: true, syncResult });
         }
 
         if (operation === "delete") {

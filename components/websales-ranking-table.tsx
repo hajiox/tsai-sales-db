@@ -13,10 +13,26 @@ interface Row {
   product_name: string
   total_count: number
   total_amount: number
+  channel_counts: Record<EcChannel, number>
+  channel_amounts: Record<EcChannel, number>
 }
 
 type SortType = 'count' | 'amount';
 type TrendData = { month_label: string; sales: number; }
+const EC_CHANNELS = ['amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10', 'tiktok'] as const
+type EcChannel = typeof EC_CHANNELS[number]
+type RankingChannel = 'total' | EcChannel
+
+const CHANNEL_OPTIONS: Array<{ key: RankingChannel; label: string }> = [
+  { key: 'total', label: '総合' },
+  { key: 'amazon', label: 'Amazon' },
+  { key: 'rakuten', label: '楽天' },
+  { key: 'yahoo', label: 'Yahoo' },
+  { key: 'mercari', label: 'メルカリ' },
+  { key: 'base', label: 'BASE' },
+  { key: 'qoo10', label: 'Qoo10' },
+  { key: 'tiktok', label: 'TikTok' },
+]
 
 export default function WebSalesRankingTable({ month }: Props) {
   const supabase = getSupabaseBrowserClient();
@@ -24,6 +40,7 @@ export default function WebSalesRankingTable({ month }: Props) {
   const [worstRows, setWorstRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState<SortType>('count')
+  const [activeChannel, setActiveChannel] = useState<RankingChannel>('total')
   const [originalData, setOriginalData] = useState<Row[]>([])
 
   // ホバートレンド関連
@@ -58,7 +75,13 @@ export default function WebSalesRankingTable({ month }: Props) {
         }
 
         // 商品ごとに集計（product_idも保持）
-        const map = new Map<string, { id: string; count: number; amount: number }>()
+        const map = new Map<string, {
+          id: string
+          count: number
+          amount: number
+          channelCounts: Record<EcChannel, number>
+          channelAmounts: Record<EcChannel, number>
+        }>()
         const nameToId: Record<string, string> = {}
 
         data.forEach((row: any) => {
@@ -67,23 +90,51 @@ export default function WebSalesRankingTable({ month }: Props) {
           const price = typeof row.price === 'number' ? row.price :
             (parseFloat(row.price) || 0)
 
-          const count =
-            (row.amazon_count || 0) +
-            (row.rakuten_count || 0) +
-            (row.yahoo_count || 0) +
-            (row.mercari_count || 0) +
-            (row.base_count || 0) +
-            (row.qoo10_count || 0) +
-            (row.tiktok_count || 0)
+          const channelCounts: Record<EcChannel, number> = {
+            amazon: Number(row.amazon_count) || 0,
+            rakuten: Number(row.rakuten_count) || 0,
+            yahoo: Number(row.yahoo_count) || 0,
+            mercari: Number(row.mercari_count) || 0,
+            base: Number(row.base_count) || 0,
+            qoo10: Number(row.qoo10_count) || 0,
+            tiktok: Number(row.tiktok_count) || 0,
+          }
+          const count = EC_CHANNELS.reduce((sum, channel) => sum + channelCounts[channel], 0)
 
           if (!map.has(name)) {
-            map.set(name, { id, count: 0, amount: 0 })
+            map.set(name, {
+              id,
+              count: 0,
+              amount: 0,
+              channelCounts: {
+                amazon: 0,
+                rakuten: 0,
+                yahoo: 0,
+                mercari: 0,
+                base: 0,
+                qoo10: 0,
+                tiktok: 0,
+              },
+              channelAmounts: {
+                amazon: 0,
+                rakuten: 0,
+                yahoo: 0,
+                mercari: 0,
+                base: 0,
+                qoo10: 0,
+                tiktok: 0,
+              },
+            })
           }
           const entry = map.get(name)!
           entry.count += count
 
           const itemAmount = count * price
           entry.amount += itemAmount
+          for (const channel of EC_CHANNELS) {
+            entry.channelCounts[channel] += channelCounts[channel]
+            entry.channelAmounts[channel] += channelCounts[channel] * price
+          }
 
           if (id) nameToId[name] = id
         })
@@ -95,10 +146,12 @@ export default function WebSalesRankingTable({ month }: Props) {
           product_name,
           total_count: v.count,
           total_amount: v.amount,
+          channel_counts: v.channelCounts,
+          channel_amounts: v.channelAmounts,
         }))
 
         setOriginalData(arr)
-        sortAndSetData(arr, sortBy)
+        sortAndSetData(arr, sortBy, activeChannel)
 
       } catch (error) {
         console.error("🚨 ランキング処理エラー:", error)
@@ -110,30 +163,21 @@ export default function WebSalesRankingTable({ month }: Props) {
     fetchData()
   }, [month])
 
-  const sortAndSetData = (data: Row[], sortType: SortType) => {
-    const sortFunc = (a: Row, b: Row) => {
-      if (sortType === 'count') {
-        return b.total_count - a.total_count
-      } else {
-        return b.total_amount - a.total_amount
-      }
+  const getMetric = (row: Row, channel: RankingChannel, sortType: SortType) => {
+    if (channel === 'total') {
+      return sortType === 'count' ? row.total_count : row.total_amount
     }
+    return sortType === 'count' ? row.channel_counts[channel] : row.channel_amounts[channel]
+  }
 
-    const sortFuncAsc = (a: Row, b: Row) => {
-      if (sortType === 'count') {
-        if (a.total_count === 0) return 1;
-        if (b.total_count === 0) return -1;
-        return a.total_count - b.total_count
-      } else {
-        if (a.total_amount === 0) return 1;
-        if (b.total_amount === 0) return -1;
-        return a.total_amount - b.total_amount
-      }
-    }
+  const sortAndSetData = (data: Row[], sortType: SortType, channel: RankingChannel) => {
+    const desc = [...data]
+      .filter(row => getMetric(row, channel, 'count') > 0)
+      .sort((a, b) => getMetric(b, channel, sortType) - getMetric(a, channel, sortType))
 
-    const desc = [...data].sort(sortFunc)
-    const asc = [...data].sort(sortFuncAsc)
-      .filter(row => sortType === 'count' ? row.total_count > 0 : row.total_amount > 0);
+    const asc = [...data]
+      .filter(row => getMetric(row, channel, 'count') > 0)
+      .sort((a, b) => getMetric(a, channel, sortType) - getMetric(b, channel, sortType))
 
     setBestRows(desc.slice(0, 10))
     setWorstRows(asc.slice(0, 10))
@@ -141,9 +185,9 @@ export default function WebSalesRankingTable({ month }: Props) {
 
   useEffect(() => {
     if (originalData.length > 0) {
-      sortAndSetData(originalData, sortBy)
+      sortAndSetData(originalData, sortBy, activeChannel)
     }
-  }, [sortBy, originalData])
+  }, [sortBy, originalData, activeChannel])
 
   const handleSortChange = (type: SortType) => {
     setSortBy(type)
@@ -202,7 +246,7 @@ export default function WebSalesRankingTable({ month }: Props) {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="animate-pulse">
           <div className="h-4 bg-gray-200 rounded mb-3 w-24"></div>
           <div className="h-64 bg-gray-200 rounded"></div>
@@ -217,17 +261,20 @@ export default function WebSalesRankingTable({ month }: Props) {
 
   const renderTable = (rows: Row[], type: 'best' | 'worst') => {
     const isBest = type === 'best'
-    const title = isBest ? '🏆 ベスト10' : '📉 ワースト10'
+    const channel = activeChannel
+    const channelLabel = CHANNEL_OPTIONS.find(option => option.key === channel)?.label || '総合'
+    const title = isBest ? `${channelLabel} TOP10` : `${channelLabel} ワースト10`
     const titleColor = isBest ? 'text-green-700' : 'text-red-700'
     const headerBg = isBest ? 'bg-green-50' : 'bg-red-50'
     const hoverBg = isBest ? 'hover:bg-green-50' : 'hover:bg-red-50'
 
     return (
-      <div>
+      <div className="min-w-0">
         <h3 className={`font-semibold mb-3 ${titleColor}`}>
           {title} ({sortBy === 'count' ? '件数順' : '金額順'})
         </h3>
-        <table className="min-w-full text-xs border">
+        <div className="overflow-x-auto rounded-md border border-slate-200">
+        <table className="w-full min-w-[620px] border-collapse text-xs">
           <thead className={headerBg}>
             <tr>
               <th className="border px-1 py-1 w-12">順位</th>
@@ -248,8 +295,12 @@ export default function WebSalesRankingTable({ month }: Props) {
                   >
                     {r.product_name}
                   </td>
-                  <td className="border px-1 py-1 text-xs">{f(r.total_count)}</td>
-                  <td className="border px-1 py-1 text-xs">¥{f(Math.round(r.total_amount))}</td>
+                  <td className="border px-1 py-1 text-xs">
+                    {f(channel === 'total' ? r.total_count : r.channel_counts[channel])}
+                  </td>
+                  <td className="border px-1 py-1 text-xs">
+                    ¥{f(Math.round(channel === 'total' ? r.total_amount : r.channel_amounts[channel]))}
+                  </td>
                 </tr>
               ))
             ) : (
@@ -261,36 +312,65 @@ export default function WebSalesRankingTable({ month }: Props) {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-4 relative" ref={containerRef}>
-      {/* 並び替えボタン */}
-      <div className="flex justify-end space-x-2 items-center text-sm">
-        <span className="text-gray-600">並び順:</span>
-        <button
-          onClick={() => handleSortChange('count')}
-          className={`px-3 py-1 rounded text-sm ${sortBy === 'count'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-        >
-          件数順
-        </button>
-        <button
-          onClick={() => handleSortChange('amount')}
-          className={`px-3 py-1 rounded text-sm ${sortBy === 'amount'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-        >
-          金額順
-        </button>
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">売上TOP10サマリー</h2>
+          <p className="mt-1 text-xs text-slate-500">総合またはEC別の商品ランキング</p>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-600">並び順</span>
+          <div className="inline-flex rounded-md border border-slate-200 bg-slate-100 p-1">
+            <button
+              onClick={() => handleSortChange('count')}
+              className={`rounded px-3 py-1 text-sm ${sortBy === 'count'
+                  ? 'bg-white font-semibold text-slate-900 shadow-sm'
+                  : 'text-gray-600 hover:text-slate-900'
+                }`}
+            >
+              件数順
+            </button>
+            <button
+              onClick={() => handleSortChange('amount')}
+              className={`rounded px-3 py-1 text-sm ${sortBy === 'amount'
+                  ? 'bg-white font-semibold text-slate-900 shadow-sm'
+                  : 'text-gray-600 hover:text-slate-900'
+                }`}
+            >
+              金額順
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="overflow-x-auto pb-1" role="tablist" aria-label="売上ランキングのEC">
+        <div className="inline-flex min-w-max rounded-md border border-slate-200 bg-slate-100 p-1">
+          {CHANNEL_OPTIONS.map(option => (
+            <button
+              key={option.key}
+              type="button"
+              role="tab"
+              aria-selected={activeChannel === option.key}
+              onClick={() => setActiveChannel(option.key)}
+              className={`rounded px-3 py-1.5 text-sm transition ${
+                activeChannel === option.key
+                  ? 'bg-slate-900 font-semibold text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         {renderTable(bestRows, 'best')}
         {renderTable(worstRows, 'worst')}
       </div>

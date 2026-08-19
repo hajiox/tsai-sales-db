@@ -3,6 +3,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { calculateRecipeItemCost, roundRecipeCost } from "@/lib/recipe-cost-sync";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     const table = targetTable === "material" ? "materials" : "ingredients";
     const { data: currentItem } = await supabase
         .from(table)
-        .select("id, name, price, unit_quantity")
+        .select("id, name, price, unit_quantity, tax_included")
         .eq("id", ingredientId)
         .single();
 
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
     const idColumn = targetTable === "material" ? "material_id" : "ingredient_id";
     const { data: recipeItems, error } = await supabase
         .from("recipe_items")
-        .select("id, recipe_id, item_name, usage_amount, unit_quantity, unit_price, cost, tax_included")
+        .select("id, recipe_id, item_name, item_type, usage_amount, unit_quantity, unit_weight, unit_price, cost, tax_included")
         .eq(idColumn, ingredientId);
 
     if (error) {
@@ -83,10 +84,14 @@ export async function GET(request: NextRequest) {
             currentCostFromItem += parseFloat(String(ri.cost)) || 0;
 
             // 新価格での原価を計算
-            // usage_amount(g) / unit_quantity(g) × newPrice
-            if (unitQty > 0) {
-                newCostFromItem += Math.round((usage / unitQty) * newPrice);
-            }
+            newCostFromItem += calculateRecipeItemCost({
+                itemType: targetTable === "material" ? "material" : "ingredient",
+                usageAmount: usage,
+                unitPrice: newPrice,
+                unitQuantity: unitQty,
+                unitWeight: ri.unit_weight,
+                taxIncluded: currentItem.tax_included !== false,
+            });
         }
 
         const costDiff = newCostFromItem - currentCostFromItem;
@@ -100,17 +105,17 @@ export async function GET(request: NextRequest) {
                 itemName: ri.item_name,
                 usageAmount: parseFloat(String(ri.usage_amount)) || 0,
             })),
-            currentCostFromItem: Math.round(currentCostFromItem),
-            newCostFromItem: Math.round(newCostFromItem),
-            costDiff: Math.round(costDiff),
+            currentCostFromItem: roundRecipeCost(currentCostFromItem),
+            newCostFromItem: roundRecipeCost(newCostFromItem),
+            costDiff: roundRecipeCost(costDiff),
         };
     }).filter(Boolean);
 
     return NextResponse.json({
         ingredientName: currentItem.name,
-        currentPrice: Math.round(currentPrice),
-        newPrice: Math.round(newPrice),
-        priceDiff: Math.round(priceDiff),
+        currentPrice: roundRecipeCost(currentPrice, 2),
+        newPrice: roundRecipeCost(newPrice, 2),
+        priceDiff: roundRecipeCost(priceDiff, 2),
         affectedRecipes,
     });
 }

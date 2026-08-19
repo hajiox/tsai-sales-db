@@ -16,7 +16,8 @@ import { SalesAdjustmentHistoryModal } from '@/components/brand-store/SalesAdjus
 import { CategoryRankingCard } from '@/components/brand-store/CategoryRankingCard'
 import { ProductRankingCard } from '@/components/brand-store/ProductRankingCard'
 import { ProductSalesTable } from '@/components/brand-store/ProductSalesTable'
-import { TrendingUp, Package, Settings, Edit, History, Target } from 'lucide-react'
+import { InventoryQrDialog } from '@/components/brand-store/InventoryQrDialog'
+import { TrendingUp, Package, Settings, Edit, History, Target, ClipboardList, QrCode } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import ClientOnly from '@/components/common/ClientOnly' // ver.10 (2025-08-19 JST) - client-only charts
@@ -30,6 +31,7 @@ function BrandStoreAnalysisContent() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
   const [showAdjustmentHistoryModal, setShowAdjustmentHistoryModal] = useState(false)
+  const [showInventoryQr, setShowInventoryQr] = useState(false)
   // const [showMasterModal, setShowMasterModal] = useState(false)
   const [data, setData] = useState<any>(null)
   const [chartData, setChartData] = useState<any[]>([])
@@ -325,15 +327,15 @@ function BrandStoreAnalysisContent() {
   const adjustedTotalSales = (data?.totalSales || 0) + adjustmentAmount
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="space-y-4 p-3 lg:space-y-6 lg:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:gap-4">
           <Select value={String(selectedYear)} onValueChange={handleYearChange}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-32"><SelectValue /></SelectTrigger>
             <SelectContent>{yearOptions.map(year => <SelectItem key={year} value={String(year)}>{year}年</SelectItem>)}</SelectContent>
           </Select>
           <Select value={String(selectedMonth)} onValueChange={handleMonthChange}>
-            <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-24"><SelectValue /></SelectTrigger>
             <SelectContent>{monthOptions.map(month => <SelectItem key={month} value={String(month)}>{month}月</SelectItem>)}</SelectContent>
           </Select>
           <Button onClick={() => setShowImportModal(true)}>CSV読込</Button>
@@ -344,6 +346,12 @@ function BrandStoreAnalysisContent() {
           <Button variant="outline" onClick={() => setShowAdjustmentHistoryModal(true)}>
             <History className="h-4 w-4 mr-2" />修正履歴
           </Button>
+          <Button className="bg-slate-900 hover:bg-slate-800" onClick={() => router.push('/brand-store-analysis/inventory')}>
+            <ClipboardList className="h-4 w-4 mr-2" />決算棚卸し
+          </Button>
+          <Button className="w-full sm:w-10" variant="outline" size="icon" title="棚卸し画面のQRコード" onClick={() => setShowInventoryQr(true)}>
+            <QrCode className="h-4 w-4" />
+          </Button>
         </div>
         {/* マスター管理ボタンを一時的にコメントアウト
         <Button variant="outline" size="sm" onClick={() => setShowMasterModal(true)}>
@@ -352,7 +360,7 @@ function BrandStoreAnalysisContent() {
         */}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 max-w-2xl">
+      <div className="grid grid-cols-1 gap-3 lg:max-w-2xl lg:grid-cols-2 lg:gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">今月の実績</CardTitle>
@@ -447,7 +455,7 @@ function BrandStoreAnalysisContent() {
           </p>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4">
             {data?.nextMonthPrediction && data.nextMonthPrediction.length > 0 ? (
               data.nextMonthPrediction.map((product: any, index: number) => (
                 <div key={index} className="space-y-1">
@@ -457,7 +465,7 @@ function BrandStoreAnalysisContent() {
                 </div>
               ))
             ) : (
-              <div className="col-span-5 text-center text-muted-foreground">予測データがありません</div>
+              <div className="text-center text-muted-foreground sm:col-span-2 lg:col-span-5">予測データがありません</div>
             )}
           </div>
         </CardContent>
@@ -465,7 +473,7 @@ function BrandStoreAnalysisContent() {
 
       <div>
         <h2 className="text-lg font-semibold mb-4">カテゴリーランキング TOP5</h2>
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4">
           {data?.hasData && data.categoryRanking.length > 0 ? (
             data.categoryRanking.map((category: any, index: number) => (
               <CategoryRankingCard key={index} rank={index + 1} category={category} />
@@ -484,7 +492,7 @@ function BrandStoreAnalysisContent() {
 
       <div>
         <h2 className="text-lg font-semibold mb-4">商品ランキング TOP20</h2>
-        <div className="grid grid-cols-10 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-10">
           {data?.hasData && data.productRanking.length > 0 ? (
             data.productRanking.map((product: any, index: number) => (
               <ProductRankingCard key={index} rank={index + 1} product={product} />
@@ -503,10 +511,11 @@ function BrandStoreAnalysisContent() {
 
       <div>
         <h2 className="text-lg font-semibold mb-4">売上・販売個数推移（過去12ヶ月）</h2>
-        <Card>
-          <CardContent className="pt-6">
-            <ClientOnly>
-              <ResponsiveContainer width="100%" height={300}>
+        <Card className="overflow-hidden">
+          <CardContent className="overflow-x-auto pt-4 lg:pt-6">
+            <div className="min-w-[720px] lg:min-w-0">
+              <ClientOnly>
+                <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
@@ -517,15 +526,18 @@ function BrandStoreAnalysisContent() {
                   <Bar yAxisId="left" dataKey="売上" fill="#3b82f6" name="売上（円）" />
                   <Line yAxisId="right" type="monotone" dataKey="個数" stroke="#10b981" strokeWidth={2} name="販売個数" />
                 </ComposedChart>
-              </ResponsiveContainer>
-            </ClientOnly>
+                </ResponsiveContainer>
+              </ClientOnly>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <div>
         <h2 className="text-lg font-semibold mb-4">販売商品一覧</h2>
-        <ProductSalesTable data={data?.salesData || []} />
+        <div className="overflow-x-auto">
+          <ProductSalesTable data={data?.salesData || []} />
+        </div>
       </div>
 
       {showImportModal && (
@@ -560,6 +572,8 @@ function BrandStoreAnalysisContent() {
           onUpdate={fetchData}
         />
       )}
+
+      <InventoryQrDialog open={showInventoryQr} onOpenChange={setShowInventoryQr} />
 
       {/* マスター管理モーダルを一時的にコメントアウト
       {showMasterModal && (

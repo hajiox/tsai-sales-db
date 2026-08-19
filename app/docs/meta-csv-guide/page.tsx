@@ -118,7 +118,7 @@ export default function MetaCsvGuidePage() {
                         TSAシステムにアップロード
                     </h2>
                     <div className="space-y-3 text-sm text-gray-700">
-                        <p>① <a href="/web-sales/advertising" className="text-blue-600 hover:underline">広告管理システム</a> を開く</p>
+                        <p>① <a href="/web-sales/advertising" className="text-blue-600 hover:underline">経費管理システム</a> を開く</p>
                         <p>② <strong>「Meta広告」</strong> タブを選択</p>
                         <p>③ <strong>「CSVアップロード」</strong> ボタンからダウンロードしたCSVを選択</p>
                         <p>④ データが自動的にパースされ、パフォーマンスが表示されます</p>

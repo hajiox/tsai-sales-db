@@ -1,20 +1,28 @@
 // /app/web-sales/dashboard/page.tsx ver.28 (TikTok対応版)
-"use client"
+"use client";
 
-import { useState, useEffect, Suspense, useCallback, useRef } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import WebSalesSummaryCards from "@/components/websales-summary-cards"
-import WebSalesRankingTable from "@/components/websales-ranking-table"
-import WebSalesEditableTable from "@/components/web-sales-editable-table"
-import WebSalesCharts from "@/components/websales-charts"
-import WebSalesAiSection from "@/components/web-sales-ai-section"
-import ProductAddModal from "@/components/ProductAddModal"
-import AdvertisingCostModal from "@/components/AdvertisingCostModal"
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
-import { WebSalesData } from "@/types/db"
-import { Plus, Trash2, DollarSign, EyeOff, Target } from "lucide-react"
+import { useState, useEffect, Suspense, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import WebSalesSummaryCards from "@/components/websales-summary-cards";
+import WebSalesRankingTable from "@/components/websales-ranking-table";
+import WebSalesEditableTable from "@/components/web-sales-editable-table";
+import WebSalesCharts from "@/components/websales-charts";
+import WebSalesAiSection from "@/components/web-sales-ai-section";
+import ProductAddModal from "@/components/ProductAddModal";
+import AdvertisingCostModal from "@/components/AdvertisingCostModal";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { WebSalesData } from "@/types/db";
+import { Plus, Trash2, DollarSign, EyeOff, Target, RefreshCw, CalendarRange } from "lucide-react";
 
-type ViewMode = 'month' | 'period';
+type ViewMode = "month" | "period";
+
+type DisplayPeriod = {
+  type: "half_month" | "monthly";
+  startDate: string;
+  endDate: string;
+  completedChannels: number;
+  totalChannels: number;
+};
 
 function WebSalesDashboardContent() {
   const router = useRouter();
@@ -23,37 +31,44 @@ function WebSalesDashboardContent() {
   const supabase = getSupabaseBrowserClient();
 
   const getCurrentMonth = () => {
-    const urlMonth = searchParams.get('month');
+    const urlMonth = searchParams.get("month");
     if (urlMonth) return urlMonth;
 
     // フォールバック: 前月（当月はまだデータが揃っていない可能性が高い）
     const now = new Date();
     const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
   };
 
   const [month, setMonth] = useState<string>(() => getCurrentMonth());
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [webSalesData, setWebSalesData] = useState<WebSalesData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [displayPeriod, setDisplayPeriod] = useState<DisplayPeriod | null>(null);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [periodMonths, setPeriodMonths] = useState<6 | 12>(6);
 
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [productMaster, setProductMaster] = useState<any[]>([])
+  const [productMaster, setProductMaster] = useState<any[]>([]);
   const [isAdCostModalOpen, setIsAdCostModalOpen] = useState(false);
-  const [targetData, setTargetData] = useState<{ target: number; sales: number }>({ target: 0, sales: 0 });
+  const [targetData, setTargetData] = useState<{
+    target: number;
+    sales: number;
+  }>({ target: 0, sales: 0 });
 
-  const handleMonthChange = useCallback((newMonth: string) => {
-    if (newMonth === month) return;
+  const handleMonthChange = useCallback(
+    (newMonth: string) => {
+      if (newMonth === month) return;
 
-    setMonth(newMonth);
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('month', newMonth);
-    router.push(`?${params.toString()}`, { scroll: false });
-  }, [month, searchParams, router]);
+      setMonth(newMonth);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("month", newMonth);
+      router.push(`?${params.toString()}`, { scroll: false });
+    },
+    [month, searchParams, router],
+  );
 
   // 初期化: データが存在する最新月を取得し、現在の月にデータがなければ切り替え
   useEffect(() => {
@@ -62,9 +77,9 @@ function WebSalesDashboardContent() {
 
       const fetchLatestMonth = async () => {
         const { data, error } = await supabase
-          .from('web_sales_summary')
-          .select('report_month')
-          .order('report_month', { ascending: false })
+          .from("web_sales_summary")
+          .select("report_month")
+          .order("report_month", { ascending: false })
           .limit(1);
 
         if (error || !data || data.length === 0) return;
@@ -75,16 +90,16 @@ function WebSalesDashboardContent() {
         // 現在表示中の月にデータがあるか確認
         const currentMonthDate = `${month}-01`;
         const { count } = await supabase
-          .from('web_sales_summary')
-          .select('id', { count: 'exact', head: true })
-          .eq('report_month', currentMonthDate);
+          .from("web_sales_summary")
+          .select("id", { count: "exact", head: true })
+          .eq("report_month", currentMonthDate);
 
         // 現在月にデータがなければ最新月に切り替え
         if (!count || count === 0) {
           if (latestMonth !== month) {
             setMonth(latestMonth);
             const params = new URLSearchParams(searchParams.toString());
-            params.set('month', latestMonth);
+            params.set("month", latestMonth);
             router.replace(`?${params.toString()}`, { scroll: false });
           }
         }
@@ -97,19 +112,19 @@ function WebSalesDashboardContent() {
     const fetchProductMaster = async () => {
       try {
         const { data, error } = await supabase
-          .from('products')
-          .select('id, name, price, series, series_code, product_code')
-          .eq('is_hidden', false)
-          .order('series_code')
-          .order('product_code');
+          .from("products")
+          .select("id, name, price, series, series_code, product_code")
+          .eq("is_hidden", false)
+          .order("series_code")
+          .order("product_code");
 
         if (error) {
-          console.error('商品マスター取得エラー:', error);
+          console.error("商品マスター取得エラー:", error);
         } else {
           setProductMaster(data || []);
         }
       } catch (error) {
-        console.error('商品マスター取得エラー:', error);
+        console.error("商品マスター取得エラー:", error);
       }
     };
 
@@ -129,31 +144,31 @@ function WebSalesDashboardContent() {
       setIsLoading(true);
       try {
         const { data: salesData, error: salesError } = await supabase
-          .from('web_sales_summary')
-          .select('*')
-          .eq('report_month', `${month}-01`);
+          .from("web_sales_summary")
+          .select("*")
+          .eq("report_month", `${month}-01`);
 
         if (salesError) {
-          console.error('売上データ取得エラー:', salesError);
+          console.error("売上データ取得エラー:", salesError);
           setWebSalesData([]);
           return;
         }
 
         const { data: productsData, error: productsError } = await supabase
-          .from('products')
-          .select('*')
-          .eq('is_hidden', false)
-          .order('series_code')
-          .order('product_code');
+          .from("products")
+          .select("*")
+          .eq("is_hidden", false)
+          .order("series_code")
+          .order("product_code");
 
         if (productsError) {
-          console.error('商品データ取得エラー:', productsError);
+          console.error("商品データ取得エラー:", productsError);
           setWebSalesData([]);
           return;
         }
 
-        const combinedData = productsData.map(product => {
-          const salesItem = salesData?.find(s => s.product_id === product.id);
+        const combinedData = productsData.map((product) => {
+          const salesItem = salesData?.find((s) => s.product_id === product.id);
 
           return {
             product_id: product.id,
@@ -171,16 +186,15 @@ function WebSalesDashboardContent() {
             series: product.series,
             series_code: product.series_code,
             product_code: product.product_code,
-            report_month: salesItem?.report_month || null
+            report_month: salesItem?.report_month || null,
           };
         });
 
         if (isCancelled) return;
         setWebSalesData(combinedData);
-
       } catch (error) {
         if (isCancelled) return;
-        console.error('データ取得エラー:', error);
+        console.error("データ取得エラー:", error);
         setWebSalesData([]);
       } finally {
         if (!isCancelled) {
@@ -196,243 +210,569 @@ function WebSalesDashboardContent() {
     };
   }, [month, refreshTrigger]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadDisplayPeriod = async () => {
+      try {
+        const response = await fetch(`/api/web-sales/display-period?month=${encodeURIComponent(month)}`, {
+          cache: "no-store",
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "集計期間を確認できません");
+        if (!cancelled) setDisplayPeriod(payload);
+      } catch (error) {
+        console.error("集計期間の取得エラー:", error);
+        if (!cancelled) setDisplayPeriod(null);
+      }
+    };
+    void loadDisplayPeriod();
+    return () => { cancelled = true; };
+  }, [month, refreshTrigger]);
+
   const handleDataSaved = useCallback(() => {
-    setRefreshTrigger(prev => prev + 1);
+    setRefreshTrigger((prev) => prev + 1);
   }, []);
 
   const selectPeriod = useCallback((months: 6 | 12) => {
     setPeriodMonths(months);
-    setViewMode('period');
+    setViewMode("period");
   }, []);
 
-  const handleAddProduct = async (productData: { productName: string; price: number; seriesNumber: number; productNumber: number; seriesName: string }) => {
+  const handleAddProduct = async (productData: {
+    productName: string;
+    price: number;
+    seriesNumber: number;
+    productNumber: number;
+    seriesName: string;
+  }) => {
     // Implementation omitted
   };
 
-  const handleDeleteProduct = async (productId: string, productName: string) => {
+  const handleDeleteProduct = async (
+    productId: string,
+    productName: string,
+  ) => {
     // Implementation omitted
   };
 
   const handleAdCostUpdate = () => {
-    setRefreshTrigger(prev => prev + 1);
+    setRefreshTrigger((prev) => prev + 1);
   };
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full min-w-0 space-y-4 lg:space-y-6">
       <header className="space-y-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">WEB販売管理システム</h1>
-          <p className="text-gray-500">
-            {viewMode === 'month'
-              ? '月次の販売実績を確認・管理します。'
+          <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">
+            WEB販売管理システム
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 lg:text-base">
+            {viewMode === "month"
+              ? "月次の販売実績を確認・管理します。"
               : `${month}月を基準とした過去${periodMonths}ヶ月間の集計結果`}
           </p>
         </div>
 
-        {/* モード切り替えボタン部分 - 月選択ボタンを常時表示 */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '12px',
-          backgroundColor: '#f9fafb',
-          borderRadius: '8px',
-          marginBottom: '16px',
-          border: '1px solid #e5e7eb'
-        }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => setViewMode('month')}
-              style={{
-                padding: '8px 12px',
-                fontSize: '14px',
-                borderRadius: '6px',
-                backgroundColor: viewMode === 'month' ? '#000' : '#fff',
-                color: viewMode === 'month' ? '#fff' : '#000',
-                border: '1px solid #ddd',
-                cursor: 'pointer'
-              }}
-            >
-              月別表示
-            </button>
+        {viewMode === "month" && displayPeriod?.type === "half_month" && (
+          <div className="flex items-start gap-3 border-l-4 border-cyan-600 bg-cyan-50 px-4 py-3 text-cyan-950">
+            <CalendarRange className="mt-0.5 h-5 w-5 shrink-0 text-cyan-700" aria-hidden="true" />
+            <div className="min-w-0">
+              <div className="font-bold">途中集計：{formatDisplayDate(displayPeriod.startDate)}〜{formatDisplayDate(displayPeriod.endDate)}</div>
+              <p className="mt-0.5 text-sm leading-6">
+                現在は15日までの販売個数を表示しています。16日以降の販売と、広告費・EC手数料などの月次経費はまだ含みません。
+                <span className="ml-1 whitespace-nowrap">取得済み {displayPeriod.completedChannels}/{displayPeriod.totalChannels} EC</span>
+              </p>
+            </div>
+          </div>
+        )}
 
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:hidden">
+          <div
+            className="grid grid-cols-3 gap-2"
+            role="group"
+            aria-label="表示期間"
+          >
             <button
+              type="button"
+              onClick={() => setViewMode("month")}
+              className={`min-h-11 rounded-md border px-2 text-sm font-semibold ${
+                viewMode === "month"
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-700"
+              }`}
+            >
+              月別
+            </button>
+            <button
+              type="button"
               onClick={() => selectPeriod(6)}
-              style={{
-                padding: '8px 12px',
-                fontSize: '14px',
-                borderRadius: '6px',
-                backgroundColor: viewMode === 'period' && periodMonths === 6 ? '#000' : '#fff',
-                color: viewMode === 'period' && periodMonths === 6 ? '#fff' : '#000',
-                border: '1px solid #ddd',
-                cursor: 'pointer'
-              }}
+              className={`min-h-11 rounded-md border px-2 text-sm font-semibold ${
+                viewMode === "period" && periodMonths === 6
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-700"
+              }`}
             >
-              過去6ヶ月
+              6ヶ月
             </button>
-
             <button
+              type="button"
               onClick={() => selectPeriod(12)}
-              style={{
-                padding: '8px 12px',
-                fontSize: '14px',
-                borderRadius: '6px',
-                backgroundColor: viewMode === 'period' && periodMonths === 12 ? '#000' : '#fff',
-                color: viewMode === 'period' && periodMonths === 12 ? '#fff' : '#000',
-                border: '1px solid #ddd',
-                cursor: 'pointer'
-              }}
+              className={`min-h-11 rounded-md border px-2 text-sm font-semibold ${
+                viewMode === "period" && periodMonths === 12
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-700"
+              }`}
             >
-              過去12ヶ月
+              12ヶ月
             </button>
-
-            {/* 目標達成メーター */}
-            {viewMode === 'month' && targetData.target > 0 && (() => {
-              const rate = Math.round((targetData.sales / targetData.target) * 1000) / 10;
-              const rateColor = rate >= 100 ? '#16a34a' : rate >= 50 ? '#ca8a04' : '#dc2626';
-              const bgColor = rate >= 100 ? '#22c55e' : rate >= 50 ? '#eab308' : '#ef4444';
-              const formatNum = (n: number) => new Intl.NumberFormat('ja-JP').format(n);
-              return (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '6px 14px', backgroundColor: '#fff',
-                  borderRadius: '8px', border: '1px solid #e5e7eb',
-                  marginLeft: '8px'
-                }}>
-                  <Target size={14} style={{ color: '#6b7280' }} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <div style={{ fontSize: '10px', color: '#6b7280', lineHeight: 1 }}>目標: ¥{formatNum(targetData.target)}</div>
-                    <div style={{
-                      width: '100px', height: '6px', backgroundColor: '#e5e7eb',
-                      borderRadius: '3px', overflow: 'hidden'
-                    }}>
-                      <div style={{
-                        width: `${Math.min(rate, 100)}%`, height: '100%',
-                        backgroundColor: bgColor, borderRadius: '3px',
-                        transition: 'width 0.5s'
-                      }} />
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: rateColor, lineHeight: 1 }}>
-                    {rate}%
-                  </div>
-                </div>
-              );
-            })()}
           </div>
 
-          {/* 月選択ボタンと広告費管理ボタン */}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              onClick={() => router.push('/web-sales/advertising')}
-              style={{
-                padding: '8px 16px',
-                fontSize: '14px',
-                borderRadius: '6px',
-                backgroundColor: '#059669',
-                color: '#fff',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontWeight: '500'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#047857'}
-              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#059669'}
-            >
-              <DollarSign size={16} />
-              広告管理
-            </button>
-
-            <button
-              onClick={() => router.push('/web-sales/discontinued')}
-              style={{
-                padding: '8px 16px',
-                fontSize: '14px',
-                borderRadius: '6px',
-                backgroundColor: '#6b7280',
-                color: '#fff',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontWeight: '500'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#4b5563'}
-              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#6b7280'}
-            >
-              <EyeOff size={16} />
-              終売管理
-            </button>
-
+          <label className="block text-xs font-semibold text-slate-600">
+            対象月
             <input
               type="month"
               value={month}
               onChange={(e) => handleMonthChange(e.target.value)}
-              style={{
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                padding: '8px',
-                backgroundColor: '#fff'
-              }}
+              className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900"
             />
+          </label>
+
+          {viewMode === "month" &&
+            targetData.target > 0 &&
+            (() => {
+              const rate =
+                Math.round((targetData.sales / targetData.target) * 1000) / 10;
+              const rateColor =
+                rate >= 100
+                  ? "text-green-700"
+                  : rate >= 50
+                    ? "text-amber-700"
+                    : "text-red-700";
+              const barColor =
+                rate >= 100
+                  ? "bg-green-500"
+                  : rate >= 50
+                    ? "bg-amber-500"
+                    : "bg-red-500";
+              return (
+                <div
+                  className="rounded-md border border-slate-200 bg-white p-3"
+                  aria-label={`売上目標達成率 ${rate}%`}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                      <Target size={15} aria-hidden="true" />
+                      売上目標 ¥
+                      {new Intl.NumberFormat("ja-JP").format(targetData.target)}
+                    </span>
+                    <strong className={`text-lg ${rateColor}`}>{rate}%</strong>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className={`h-full rounded-full ${barColor}`}
+                      style={{ width: `${Math.min(rate, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/web-sales/automation")}
+              className="flex min-h-11 items-center justify-center gap-1 rounded-md bg-blue-600 px-2 text-xs font-semibold text-white"
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+              自動同期
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/web-sales/advertising")}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white"
+            >
+              <DollarSign size={17} aria-hidden="true" />
+              経費管理
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/web-sales/discontinued")}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-600 px-3 text-sm font-semibold text-white"
+            >
+              <EyeOff size={17} aria-hidden="true" />
+              終売管理
+            </button>
+          </div>
+
+          {viewMode === "month" && (
+            <nav
+              className="grid grid-cols-4 gap-1 border-t border-slate-200 pt-3"
+              aria-label="ページ内ナビ"
+            >
+              {[
+                ["#web-sales-summary", "KPI"],
+                ["#web-sales-ranking", "ランキング"],
+                ["#web-sales-results", "販売実績"],
+                ["#web-sales-charts", "推移"],
+              ].map(([href, label]) => (
+                <a
+                  key={href}
+                  href={href}
+                  className="flex min-h-10 items-center justify-center rounded-md bg-white px-1 text-center text-[11px] font-semibold text-slate-700"
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
+          )}
+        </div>
+
+        {/* モード切り替えボタン部分 - 月選択ボタンを常時表示 */}
+        <div className="hidden lg:block">
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px",
+              backgroundColor: "#f9fafb",
+              borderRadius: "8px",
+              marginBottom: "16px",
+              border: "1px solid #e5e7eb",
+            }}
+          >
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => setViewMode("month")}
+                style={{
+                  padding: "8px 12px",
+                  fontSize: "14px",
+                  borderRadius: "6px",
+                  backgroundColor: viewMode === "month" ? "#000" : "#fff",
+                  color: viewMode === "month" ? "#fff" : "#000",
+                  border: "1px solid #ddd",
+                  cursor: "pointer",
+                }}
+              >
+                月別表示
+              </button>
+
+              <button
+                onClick={() => selectPeriod(6)}
+                style={{
+                  padding: "8px 12px",
+                  fontSize: "14px",
+                  borderRadius: "6px",
+                  backgroundColor:
+                    viewMode === "period" && periodMonths === 6
+                      ? "#000"
+                      : "#fff",
+                  color:
+                    viewMode === "period" && periodMonths === 6
+                      ? "#fff"
+                      : "#000",
+                  border: "1px solid #ddd",
+                  cursor: "pointer",
+                }}
+              >
+                過去6ヶ月
+              </button>
+
+              <button
+                onClick={() => selectPeriod(12)}
+                style={{
+                  padding: "8px 12px",
+                  fontSize: "14px",
+                  borderRadius: "6px",
+                  backgroundColor:
+                    viewMode === "period" && periodMonths === 12
+                      ? "#000"
+                      : "#fff",
+                  color:
+                    viewMode === "period" && periodMonths === 12
+                      ? "#fff"
+                      : "#000",
+                  border: "1px solid #ddd",
+                  cursor: "pointer",
+                }}
+              >
+                過去12ヶ月
+              </button>
+
+              {/* 目標達成メーター */}
+              {viewMode === "month" &&
+                targetData.target > 0 &&
+                (() => {
+                  const rate =
+                    Math.round((targetData.sales / targetData.target) * 1000) /
+                    10;
+                  const rateColor =
+                    rate >= 100
+                      ? "#16a34a"
+                      : rate >= 50
+                        ? "#ca8a04"
+                        : "#dc2626";
+                  const bgColor =
+                    rate >= 100
+                      ? "#22c55e"
+                      : rate >= 50
+                        ? "#eab308"
+                        : "#ef4444";
+                  const formatNum = (n: number) =>
+                    new Intl.NumberFormat("ja-JP").format(n);
+                  return (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        padding: "6px 14px",
+                        backgroundColor: "#fff",
+                        borderRadius: "8px",
+                        border: "1px solid #e5e7eb",
+                        marginLeft: "8px",
+                      }}
+                    >
+                      <Target size={14} style={{ color: "#6b7280" }} />
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            lineHeight: 1,
+                          }}
+                        >
+                          目標: ¥{formatNum(targetData.target)}
+                        </div>
+                        <div
+                          style={{
+                            width: "100px",
+                            height: "6px",
+                            backgroundColor: "#e5e7eb",
+                            borderRadius: "3px",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${Math.min(rate, 100)}%`,
+                              height: "100%",
+                              backgroundColor: bgColor,
+                              borderRadius: "3px",
+                              transition: "width 0.5s",
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "16px",
+                          fontWeight: "bold",
+                          color: rateColor,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {rate}%
+                      </div>
+                    </div>
+                  );
+                })()}
+            </div>
+
+            {/* 月選択ボタンと広告費管理ボタン */}
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button
+                onClick={() => router.push("/web-sales/automation")}
+                style={{
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  borderRadius: "6px",
+                  backgroundColor: "#2563eb",
+                  color: "#fff",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontWeight: "500",
+                }}
+              >
+                <RefreshCw size={16} />
+                EC自動同期
+              </button>
+              <button
+                onClick={() => router.push("/web-sales/advertising")}
+                style={{
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  borderRadius: "6px",
+                  backgroundColor: "#059669",
+                  color: "#fff",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontWeight: "500",
+                }}
+                onMouseOver={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#047857")
+                }
+                onMouseOut={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#059669")
+                }
+              >
+                <DollarSign size={16} />
+                経費管理
+              </button>
+
+              <button
+                onClick={() => router.push("/web-sales/discontinued")}
+                style={{
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  borderRadius: "6px",
+                  backgroundColor: "#6b7280",
+                  color: "#fff",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontWeight: "500",
+                }}
+                onMouseOver={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#4b5563")
+                }
+                onMouseOut={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#6b7280")
+                }
+              >
+                <EyeOff size={16} />
+                終売管理
+              </button>
+
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => handleMonthChange(e.target.value)}
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: "6px",
+                  padding: "8px",
+                  backgroundColor: "#fff",
+                }}
+              />
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="space-y-6">
-        <WebSalesSummaryCards
-          month={month}
-          refreshTrigger={refreshTrigger}
-          viewMode={viewMode}
-          periodMonths={periodMonths}
-          onTargetDataReady={setTargetData}
-        />
+      <div className="flex min-w-0 flex-col gap-5 lg:gap-6">
+        <section
+          id="web-sales-summary"
+          className="mobile-websales-summary min-w-0 scroll-mt-24 order-1"
+        >
+          <WebSalesSummaryCards
+            month={month}
+            refreshTrigger={refreshTrigger}
+            viewMode={viewMode}
+            periodMonths={periodMonths}
+            onTargetDataReady={setTargetData}
+          />
+        </section>
 
         {/* グラフコンポーネントへの月数パラメータを正確に渡す */}
-        <WebSalesCharts
-          month={month}
-          refreshTrigger={refreshTrigger}
-          periodMonths={viewMode === 'period' ? periodMonths : 6}
-        />
+        <section
+          id="web-sales-charts"
+          className="min-w-0 scroll-mt-24 order-4 lg:order-2"
+        >
+          <WebSalesCharts
+            month={month}
+            refreshTrigger={refreshTrigger}
+            periodMonths={viewMode === "period" ? periodMonths : 6}
+          />
+        </section>
 
         {/* 月別表示モードの場合のみ表示するコンポーネント */}
-        {viewMode === 'month' && (
+        {viewMode === "month" && (
           <>
-            {isLoading ? (
-              <div className="p-4">
-                <div className="animate-pulse">
-                  <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
-                  <div className="h-64 bg-gray-200 rounded"></div>
+            <section
+              id="web-sales-results"
+              className="min-w-0 scroll-mt-24 order-3"
+            >
+              <h2 className="mb-3 text-lg font-bold text-slate-900 lg:hidden">
+                販売実績
+              </h2>
+              {isLoading ? (
+                <div className="p-4">
+                  <div className="animate-pulse">
+                    <div className="mb-4 h-8 w-1/3 rounded bg-gray-200"></div>
+                    <div className="h-64 rounded bg-gray-200"></div>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <WebSalesEditableTable
-                  initialWebSalesData={webSalesData}
-                  month={month}
-                  onDataUpdated={handleDataSaved}
-                />
-              </div>
-            )}
-            <WebSalesRankingTable month={month} />
-            <WebSalesAiSection month={month} />
+              ) : (
+                <div className="min-w-0 space-y-4">
+                  <WebSalesEditableTable
+                    initialWebSalesData={webSalesData}
+                    month={month}
+                    onDataUpdated={handleDataSaved}
+                  />
+                </div>
+              )}
+            </section>
+            <section
+              id="web-sales-ranking"
+              className="min-w-0 scroll-mt-24 order-2 lg:order-4"
+            >
+              <WebSalesRankingTable month={month} />
+            </section>
+            <section className="min-w-0 order-5">
+              <WebSalesAiSection month={month} />
+            </section>
           </>
         )}
       </div>
+
+      <style jsx global>{`
+        @media (max-width: 1023px) {
+          .mobile-websales-summary > div > .grid:first-child {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.5rem;
+          }
+
+          .mobile-websales-summary > div > .grid:first-child > * {
+            min-width: 0;
+          }
+
+          .mobile-websales-summary > div > .grid:first-child [class*="text-xl"],
+          .mobile-websales-summary
+            > div
+            > .grid:first-child
+            [class*="text-lg"] {
+            font-size: 1rem;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
+          }
+        }
+      `}</style>
 
       {isAddingProduct && (
         <ProductAddModal
           isOpen={isAddingProduct}
           onClose={() => setIsAddingProduct(false)}
           onAdd={handleAddProduct}
-          existingProducts={productMaster.map(p => ({
+          existingProducts={productMaster.map((p) => ({
             seriesNumber: p.series_code,
             productNumber: p.product_code,
             name: p.name,
-            seriesName: p.series
+            seriesName: p.series,
           }))}
         />
       )}
@@ -472,4 +812,9 @@ export default function WebSalesDashboardPage() {
       <WebSalesDashboardContent />
     </Suspense>
   );
+}
+
+function formatDisplayDate(value: string) {
+  const [, month, day] = value.split("-");
+  return `${Number(month)}月${Number(day)}日`;
 }

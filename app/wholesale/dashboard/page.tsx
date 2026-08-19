@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { useState, useEffect, KeyboardEvent, useRef } from 'react';
 import { Button } from "@/components/ui/button";
-import { Upload, Trash2, Settings, Users, TrendingUp, BarChart3, Edit3, ReceiptText } from 'lucide-react';
+import { Upload, Trash2, Settings, Users, TrendingUp, BarChart3, Edit3, ReceiptText, ClipboardList } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SummaryCards from '@/components/wholesale/summary-cards';
@@ -29,6 +29,7 @@ interface OEMProduct {
   id: string;
   product_name: string;
   price: number;
+  profit_rate: number;
   [key: string]: any;
 }
 
@@ -48,6 +49,11 @@ interface OEMSale {
     customer_name: string;
     customer_code: string;
   };
+}
+
+interface OemRecipeInfo {
+  recipeName: string;
+  totalCost: number | null;
 }
 
 interface SalesData {
@@ -76,6 +82,17 @@ interface PriceChangeDate {
   product_count: number;
 }
 
+function getOemSaleAmount(sale: OEMSale, product?: OEMProduct, useCurrentPrice = false) {
+  const quantity = Number(sale.quantity || 0);
+  const unitPrice = useCurrentPrice && product
+    ? Number(product.price || 0)
+    : Number(sale.unit_price || 0);
+  const calculatedAmount = quantity * unitPrice;
+  return Number.isFinite(calculatedAmount) && (quantity !== 0 || unitPrice !== 0)
+    ? calculatedAmount
+    : Number(sale.amount || 0);
+}
+
 function WholesaleDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -93,8 +110,9 @@ function WholesaleDashboardContent() {
   const [isImporting, setIsImporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [linkedProductIds, setLinkedProductIds] = useState<Set<string>>(new Set());
-  const [linkedOemProductIds, setLinkedOemProductIds] = useState<Set<string>>(new Set());
+  const [linkedProductNames, setLinkedProductNames] = useState<Record<string, string>>({});
+  const [linkedOemProductNames, setLinkedOemProductNames] = useState<Record<string, string>>({});
+  const [linkedOemRecipeInfo, setLinkedOemRecipeInfo] = useState<Record<string, OemRecipeInfo>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -221,11 +239,11 @@ function WholesaleDashboardContent() {
       if (linkRes.ok) {
         const linkData = await linkRes.json();
         if (linkData.recipes) {
-          const linked = new Set<string>();
-          linkData.recipes.forEach((r: { linked_wholesale_product_id: string | null }) => {
-            if (r.linked_wholesale_product_id) linked.add(r.linked_wholesale_product_id);
+          const linked: Record<string, string> = {};
+          linkData.recipes.forEach((r: { name: string; linked_wholesale_product_id: string | null }) => {
+            if (r.linked_wholesale_product_id) linked[r.linked_wholesale_product_id] = r.name;
           });
-          setLinkedProductIds(linked);
+          setLinkedProductNames(linked);
         }
       }
     } catch (error) {
@@ -243,6 +261,7 @@ function WholesaleDashboardContent() {
             id: p.id,
             product_name: p.product_name,
             price: p.price,
+            profit_rate: Number(p.profit_rate || 0),
           })));
         }
       }
@@ -255,11 +274,19 @@ function WholesaleDashboardContent() {
       if (linkRes.ok) {
         const linkData = await linkRes.json();
         if (Array.isArray(linkData.recipes)) {
-          const linked = new Set<string>();
-          linkData.recipes.forEach((r: { linked_oem_product_id: string | null }) => {
-            if (r.linked_oem_product_id) linked.add(r.linked_oem_product_id);
+          const linked: Record<string, string> = {};
+          const linkedInfo: Record<string, OemRecipeInfo> = {};
+          linkData.recipes.forEach((r: { name: string; total_cost: number | null; linked_oem_product_id: string | null }) => {
+            if (r.linked_oem_product_id) {
+              linked[r.linked_oem_product_id] = r.name;
+              linkedInfo[r.linked_oem_product_id] = {
+                recipeName: r.name,
+                totalCost: r.total_cost === null || r.total_cost === undefined ? null : Number(r.total_cost),
+              };
+            }
           });
-          setLinkedOemProductIds(linked);
+          setLinkedOemProductNames(linked);
+          setLinkedOemRecipeInfo(linkedInfo);
         }
       }
     } catch (error) {
@@ -543,7 +570,23 @@ function WholesaleDashboardContent() {
     return sum + totalProfit;
   }, 0);
 
-  const oemTotal = oemSales.reduce((sum, sale) => sum + sale.amount, 0);
+  const oemProductMap = new Map(oemProducts.map(product => [product.id, product]));
+
+  const oemTotal = oemSales.reduce((sum, sale) => {
+    const product = oemProductMap.get(sale.product_id);
+    return sum + getOemSaleAmount(sale, product, Boolean(product && Number(product.price || 0) > 0));
+  }, 0);
+  const oemProfit = oemSales.reduce((sum, sale) => {
+    const product = oemProductMap.get(sale.product_id);
+    const amount = getOemSaleAmount(sale, product, Boolean(product && Number(product.price || 0) > 0));
+    const recipeInfo = linkedOemRecipeInfo[sale.product_id];
+    if (recipeInfo && recipeInfo.totalCost !== null && Number.isFinite(recipeInfo.totalCost)) {
+      return sum + Math.round(amount - ((sale.quantity || 0) * recipeInfo.totalCost));
+    }
+
+    const profitRate = Number(product?.profit_rate || 0);
+    return sum + Math.round(amount * profitRate / 100);
+  }, 0);
   const grandTotal = wholesaleTotal + oemTotal;
 
 
@@ -553,16 +596,16 @@ function WholesaleDashboardContent() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50 lg:h-screen lg:min-h-0">
       <header className="flex-shrink-0 bg-white shadow-sm border-b z-30">
         {/* 上段：タイトル・年月選択・データ操作 */}
-        <div className="px-4 py-2 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">卸販売管理システム</h1>
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 px-3 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-4 lg:py-2">
+          <h1 className="text-lg font-bold text-gray-900 lg:text-xl">卸販売管理システム</h1>
+          <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto lg:items-center lg:gap-3">
             <select
               value={selectedYear}
               onChange={(e) => handleYearChange(e.target.value)}
-              className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
+              className="h-11 min-w-0 rounded-md border border-input bg-background px-3 py-1 text-base lg:h-8 lg:px-2 lg:text-sm"
               disabled={loading}
             >
               {yearOptions.map(year => <option key={year} value={year}>{year}年</option>)}
@@ -570,12 +613,12 @@ function WholesaleDashboardContent() {
             <select
               value={selectedMonth}
               onChange={(e) => handleMonthChange(e.target.value)}
-              className="h-8 px-2 py-1 text-sm rounded-md border border-input bg-background"
+              className="h-11 min-w-0 rounded-md border border-input bg-background px-3 py-1 text-base lg:h-8 lg:px-2 lg:text-sm"
               disabled={loading}
             >
               {monthOptions.map(month => <option key={month} value={month}>{month}月</option>)}
             </select>
-            <div className="h-5 w-px bg-gray-300" />
+            <div className="hidden h-5 w-px bg-gray-300 lg:block" />
             <input
               type="file"
               ref={fileInputRef}
@@ -588,7 +631,7 @@ function WholesaleDashboardContent() {
               variant="outline"
               onClick={() => fileInputRef.current?.click()}
               disabled={loading || isImporting}
-              className="flex items-center gap-2"
+              className="h-11 w-full items-center gap-2 lg:h-8 lg:w-auto"
             >
               <Upload className="w-4 h-4" />
               {isImporting ? 'インポート中...' : 'CSV読込'}
@@ -598,7 +641,7 @@ function WholesaleDashboardContent() {
               variant="destructive"
               onClick={handleDeleteMonth}
               disabled={loading || isDeleting}
-              className="flex items-center gap-2"
+              className="h-11 w-full items-center gap-2 lg:h-8 lg:w-auto"
             >
               <Trash2 className="w-4 h-4" />
               {isDeleting ? '削除中...' : '月削除'}
@@ -606,66 +649,88 @@ function WholesaleDashboardContent() {
           </div>
         </div>
         {/* 下段：ナビゲーションバー */}
-        <div className="px-4 py-1.5 bg-gray-50 border-t flex items-center gap-2">
-          <Link href="/wholesale/products">
-            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs">
+        <div className="grid grid-cols-2 gap-2 border-t bg-gray-50 px-3 py-3 lg:flex lg:items-center lg:gap-2 lg:px-4 lg:py-1.5">
+          <Link href="/wholesale/products" className="min-w-0">
+            <Button size="sm" variant="outline" className="h-11 w-full items-center gap-1.5 text-xs lg:h-7 lg:w-auto">
               <Settings className="w-3.5 h-3.5" />
               商品マスター
             </Button>
           </Link>
-          <Link href="/wholesale/oem-customers">
-            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs">
+          <Link href="/wholesale/oem-customers" className="min-w-0">
+            <Button size="sm" variant="outline" className="h-11 w-full items-center gap-1.5 text-xs lg:h-7 lg:w-auto">
               <Users className="w-3.5 h-3.5" />
               OEM顧客管理
             </Button>
           </Link>
-          <Link href={`/wholesale/oem-sales?year=${selectedYear}&month=${selectedMonth}`}>
-            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs bg-green-50 border-green-300 text-green-700 hover:bg-green-100">
+          <Link href={`/wholesale/oem-sales?year=${selectedYear}&month=${selectedMonth}`} className="min-w-0">
+            <Button size="sm" variant="outline" className="h-11 w-full items-center gap-1.5 bg-green-50 text-xs text-green-700 border-green-300 hover:bg-green-100 lg:h-7 lg:w-auto">
               <TrendingUp className="w-3.5 h-3.5" />
               OEM売上入力
             </Button>
           </Link>
-          <div className="h-4 w-px bg-gray-300" />
-          <Link href={`/wholesale/sales-input?year=${selectedYear}&month=${selectedMonth}`}>
-            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
+          <div className="hidden h-4 w-px bg-gray-300 lg:block" />
+          <Link href={`/wholesale/sales-input?year=${selectedYear}&month=${selectedMonth}`} className="min-w-0">
+            <Button size="sm" variant="outline" className="h-11 w-full items-center gap-1.5 bg-blue-50 text-xs text-blue-700 border-blue-300 hover:bg-blue-100 lg:h-7 lg:w-auto">
               <Edit3 className="w-3.5 h-3.5" />
               日別売上入力
             </Button>
           </Link>
-          <Link href="/wholesale/delivery-notes">
-            <Button size="sm" variant="outline" className="flex items-center gap-1.5 h-7 text-xs bg-cyan-50 border-cyan-300 text-cyan-700 hover:bg-cyan-100">
+          <Link href="/wholesale/delivery-notes" className="min-w-0">
+            <Button size="sm" variant="outline" className="h-11 w-full items-center gap-1.5 bg-cyan-50 text-xs text-cyan-700 border-cyan-300 hover:bg-cyan-100 lg:h-7 lg:w-auto">
               <ReceiptText className="w-3.5 h-3.5" />
               納品書発行
+            </Button>
+          </Link>
+          <Link href="/wholesale/inventory" className="min-w-0">
+            <Button size="sm" variant="outline" className="h-11 w-full items-center gap-1.5 bg-amber-50 text-xs text-amber-800 border-amber-300 hover:bg-amber-100 lg:h-7 lg:w-auto">
+              <ClipboardList className="w-3.5 h-3.5" />
+              決算棚卸し
             </Button>
           </Link>
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-4">
+      <main className="flex-1 overflow-visible p-3 lg:overflow-auto lg:p-4">
         {loading ? (
           <div className="flex-1 flex items-center justify-center"><p className="text-gray-500">データを読み込んでいます...</p></div>
         ) : (
-          <div className="space-y-4">
-            <SummaryCards
-              products={products}
-              salesData={salesData}
-              oemSalesCount={oemSales.length}
-              oemTotal={oemTotal}
-              selectedYear={selectedYear}
-              selectedMonth={selectedMonth}
-            />
+          <div className="flex flex-col gap-4 lg:block lg:space-y-4">
+            <section aria-label="売上サマリー" className="order-1 [&>div]:grid-cols-1 sm:[&>div]:grid-cols-2 lg:[&>div]:grid-cols-5">
+              <SummaryCards
+                products={products}
+                salesData={salesData}
+                oemSalesCount={oemSales.length}
+                oemTotal={oemTotal}
+                oemProfit={oemProfit}
+                selectedYear={selectedYear}
+                selectedMonth={selectedMonth}
+              />
+            </section>
 
-            <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
+            <section aria-label="売上ランキング" className="order-3 [&_.grid-cols-10]:grid-cols-2 [&_.grid-cols-2]:grid-cols-1 [&_.grid-cols-5]:grid-cols-2 sm:[&_.grid-cols-10]:grid-cols-5 lg:[&_.grid-cols-10]:grid-cols-10 lg:[&_.grid-cols-2]:grid-cols-2 lg:[&_.grid-cols-5]:grid-cols-5">
+              <RankingCards products={products} salesData={salesData} previousMonthData={previousMonthData} />
+            </section>
 
-            <OEMArea
-              oemProducts={oemProducts}
-              oemSales={oemSales}
-              linkedProductIds={linkedOemProductIds}
-              selectedYear={selectedYear}
-              selectedMonth={selectedMonth}
-            />
+            <section aria-label="OEM売上" className="order-2 [&_.grid-cols-8]:grid-cols-1 sm:[&_.grid-cols-8]:grid-cols-2 lg:[&_.grid-cols-8]:grid-cols-8">
+              <OEMArea
+                oemProducts={oemProducts}
+                oemSales={oemSales}
+                linkedProductNames={linkedOemProductNames}
+                linkedRecipeInfo={linkedOemRecipeInfo}
+                selectedYear={selectedYear}
+                selectedMonth={selectedMonth}
+              />
+            </section>
 
-            <ProductStatistics selectedYear={selectedYear} selectedMonth={selectedMonth} />
+            <section aria-label="商品販売実績" className="order-4 min-w-0 overflow-x-auto">
+              <div className="min-w-[760px] lg:min-w-0">
+                <ProductStatistics
+                  selectedYear={selectedYear}
+                  selectedMonth={selectedMonth}
+                  linkedProductNames={linkedProductNames}
+                />
+              </div>
+            </section>
           </div>
         )}
       </main>

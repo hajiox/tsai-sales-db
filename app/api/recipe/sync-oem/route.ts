@@ -213,7 +213,7 @@ async function linkRecipeToOemProduct(
 }
 
 // Helper: Sync recipe price to OEM wholesale product
-// OEMの場合はレシピ販売価格 = 卸価格（7掛け不要）
+// OEMは7掛けしない。レシピ販売価格（税抜）を税込換算して卸価格へ同期する。
 async function syncPriceToOemProduct(
     supabase: any,
     recipeId: string,
@@ -226,7 +226,7 @@ async function syncPriceToOemProduct(
         .single();
 
     if (recipe && recipe.selling_price) {
-        // OEM商品はレシピ販売価格をそのまま卸価格にする
+        // OEM商品はレシピ販売価格（税抜）を税込換算して卸価格にする
         const wholesalePrice = taxIncludedFromExcluded(recipe.selling_price);
         const profitRate = recipe.total_cost
             ? ((wholesalePrice - recipe.total_cost) / wholesalePrice) * 100
@@ -247,12 +247,152 @@ async function syncPriceToOemProduct(
     }
 }
 
-// POST: Link/unlink or batch-link
+function calculateProfitRate(price: number, totalCost: unknown): number | null {
+    const cost = Number(totalCost);
+    if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(cost) || cost <= 0) return null;
+    return Math.round(((price - cost) / price) * 1000) / 10;
+}
+
+async function getNextWholesaleProductCode(supabase: any): Promise<string> {
+    const { data: allCodes } = await supabase
+        .from("wholesale_products")
+        .select("product_code");
+
+    let maxNum = 0;
+    if (allCodes) {
+        for (const row of allCodes) {
+            const num = parseInt(row.product_code, 10);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+    }
+
+    const nextCode = String(maxNum + 1).padStart(4, "0");
+    const { data: existing } = await supabase
+        .from("wholesale_products")
+        .select("id")
+        .eq("product_code", nextCode)
+        .maybeSingle();
+
+    return existing ? `${maxNum + 1}-${Date.now().toString(36).slice(-4)}` : nextCode;
+}
+
+async function getNextDisplayOrder(supabase: any): Promise<number> {
+    const { data: maxOrderData } = await supabase
+        .from("wholesale_products")
+        .select("display_order")
+        .order("display_order", { ascending: false })
+        .limit(1);
+
+    return maxOrderData && maxOrderData[0]?.display_order
+        ? maxOrderData[0].display_order + 1
+        : 1;
+}
+
+async function mirrorOemProductForSalesInput(
+    supabase: any,
+    product: { id: string; product_code: string; product_name: string; price: number }
+): Promise<void> {
+    const { data: existing } = await supabase
+        .from("oem_products")
+        .select("id")
+        .eq("id", product.id)
+        .maybeSingle();
+
+    if (existing) {
+        const { error } = await supabase
+            .from("oem_products")
+            .update({
+                product_code: product.product_code,
+                product_name: product.product_name,
+                price: product.price,
+                is_active: true,
+            })
+            .eq("id", product.id);
+        if (error) console.warn("Failed to mirror OEM product update:", error.message);
+        return;
+    }
+
+    const insertPayload = {
+        id: product.id,
+        product_code: product.product_code,
+        product_name: product.product_name,
+        price: product.price,
+        is_active: true,
+    };
+
+    const { error } = await supabase
+        .from("oem_products")
+        .insert([insertPayload]);
+
+    if (!error) return;
+
+    const fallbackPayload = {
+        ...insertPayload,
+        product_code: `${product.product_code}-${Date.now().toString(36).slice(-4)}`,
+    };
+    const { error: fallbackError } = await supabase
+        .from("oem_products")
+        .insert([fallbackPayload]);
+
+    if (fallbackError) {
+        console.warn("Failed to mirror OEM product for sales input:", fallbackError.message);
+    }
+}
+
+// POST: Link/unlink, batch-link, or create-and-link
 export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
         const body = await request.json();
+
+        // Create OEM wholesale product, mirror it for OEM sales input, then link the recipe.
+        if (body.createAndLink) {
+            const { recipeId, recipeName, recipePrice } = body;
+            if (!recipeId || !recipeName) {
+                return NextResponse.json({ error: "recipeId and recipeName are required" }, { status: 400 });
+            }
+
+            const { data: recipe, error: recipeError } = await supabase
+                .from("recipes")
+                .select("selling_price, total_cost")
+                .eq("id", recipeId)
+                .maybeSingle();
+            if (recipeError) throw recipeError;
+
+            const sellingPrice = Number(recipePrice ?? recipe?.selling_price ?? 0);
+            const wholesalePrice = taxIncludedFromExcluded(sellingPrice);
+            const profitRate = calculateProfitRate(wholesalePrice, recipe?.total_cost);
+            const productCode = await getNextWholesaleProductCode(supabase);
+            const displayOrder = await getNextDisplayOrder(supabase);
+
+            const { data: newProduct, error: insertError } = await supabase
+                .from("wholesale_products")
+                .insert({
+                    product_code: productCode,
+                    product_name: recipeName,
+                    price: wholesalePrice,
+                    profit_rate: profitRate,
+                    display_order: displayOrder,
+                    is_active: true,
+                    product_type: "OEM",
+                })
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+
+            await mirrorOemProductForSalesInput(supabase, {
+                id: newProduct.id,
+                product_code: newProduct.product_code,
+                product_name: newProduct.product_name,
+                price: Number(newProduct.price || 0),
+            });
+            await linkRecipeToOemProduct(supabase, recipeId, newProduct.id);
+            await syncPriceToOemProduct(supabase, recipeId, newProduct.id);
+
+            return NextResponse.json({ success: true, productId: newProduct.id, productName: newProduct.product_name });
+        }
 
         if (body.batch && Array.isArray(body.links)) {
             let linked = 0;
@@ -312,7 +452,7 @@ export async function PUT() {
         for (const recipe of linkedRecipes || []) {
             if (!recipe.linked_oem_product_id || !recipe.selling_price) continue;
 
-            // OEM商品はレシピ販売価格をそのまま卸価格にする
+            // OEM商品はレシピ販売価格（税抜）を税込換算して卸価格にする
             const wholesalePrice = taxIncludedFromExcluded(recipe.selling_price);
             const profitRate = recipe.total_cost
                 ? ((wholesalePrice - recipe.total_cost) / wholesalePrice) * 100

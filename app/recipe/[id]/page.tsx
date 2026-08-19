@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowDownWideNarrow, ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database, ClipboardCopy, ListOrdered } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database, ClipboardCopy, ListOrdered, ExternalLink, Link2, Images } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -128,6 +128,7 @@ interface Recipe {
   product_points?: string | null;
   ec_product_name?: string | null;
   catchcopy?: string | null;
+  product_lp_url?: string | null;
 }
 
 interface RecipeItem {
@@ -137,6 +138,7 @@ interface RecipeItem {
   item_type: string;
   ingredient_id?: string | null;
   material_id?: string | null;
+  expense_id?: string | null;
   intermediate_recipe_id?: string | null;
   unit_quantity: number | string | null;
   unit_price: number | string | null;
@@ -147,6 +149,65 @@ interface RecipeItem {
 }
 
 type IngredientSortMode = "registered" | "weight";
+
+type WebProductImage = {
+  id: string;
+  image_url: string;
+  image_role: "gallery" | "portrait";
+  source_type: "manual" | "rakuten" | "base" | "shared_folder";
+  source_page_url: string | null;
+  source_image_url: string | null;
+  original_filename: string | null;
+  file_size_bytes: number;
+  sort_order: number;
+  created_at: string;
+};
+
+const WEB_IMAGE_MAX_BYTES = 250 * 1024;
+
+async function compressWebProductImage(file: File): Promise<File> {
+  if (file.size <= WEB_IMAGE_MAX_BYTES) return file;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    throw new Error(`${file.name}: JPEG・PNG・WebP画像を選択してください`);
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new window.Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error(`${file.name}: 画像を読み込めませんでした`));
+      element.src = objectUrl;
+    });
+
+    let width = image.naturalWidth;
+    let height = image.naturalHeight;
+    const initialScale = Math.min(1, 1800 / Math.max(width, height));
+    width = Math.max(1, Math.round(width * initialScale));
+    height = Math.max(1, Math.round(height * initialScale));
+
+    for (let sizeAttempt = 0; sizeAttempt < 7; sizeAttempt++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('画像縮小処理を開始できませんでした');
+      context.drawImage(image, 0, 0, width, height);
+
+      for (const quality of [0.9, 0.82, 0.74, 0.66, 0.58, 0.5, 0.42]) {
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', quality));
+        if (blob && blob.size <= WEB_IMAGE_MAX_BYTES) {
+          return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.webp', { type: 'image/webp' });
+        }
+      }
+      width = Math.max(320, Math.round(width * 0.82));
+      height = Math.max(320, Math.round(height * 0.82));
+    }
+    throw new Error(`${file.name}: 250KB以下へ縮小できませんでした`);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 function RecipeDetailContent() {
   const params = useParams();
@@ -232,6 +293,16 @@ function RecipeDetailContent() {
   const [dragOver, setDragOver] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  // Web商品画像（商品写真とは別管理）
+  const [webProductImages, setWebProductImages] = useState<WebProductImage[]>([]);
+  const [webImagesUploading, setWebImagesUploading] = useState(false);
+  const [webImagesDragOver, setWebImagesDragOver] = useState(false);
+  const webImagesInputRef = useRef<HTMLInputElement>(null);
+  const [portraitImages, setPortraitImages] = useState<WebProductImage[]>([]);
+  const [portraitUploading, setPortraitUploading] = useState(false);
+  const [portraitDragOver, setPortraitDragOver] = useState(false);
+  const portraitInputRef = useRef<HTMLInputElement>(null);
+
   // バージョン管理
   interface RecipeVersion {
     id: string;
@@ -246,6 +317,18 @@ function RecipeDetailContent() {
   const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
   const [draftMode, setDraftMode] = useState(false);
   const [draftVersionNote, setDraftVersionNote] = useState("");
+  const [draftSourceVersionId, setDraftSourceVersionId] = useState<string | null>(null);
+  const [editingVersionNoteId, setEditingVersionNoteId] = useState<string | null>(null);
+  const [editingVersionNote, setEditingVersionNote] = useState("");
+  const [savingVersionNoteId, setSavingVersionNoteId] = useState<string | null>(null);
+
+  const formatVersionDate = (date: string) =>
+    new Date(date).toLocaleString('ja-JP', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
   const fetchVersions = useCallback(async (recipeId: string) => {
     try {
@@ -264,17 +347,101 @@ function RecipeDetailContent() {
   const startDraftRevision = () => {
     if (!recipe) return;
     if (previewingVersionId) {
-      toast.error("過去版のプレビュー中は修正版を作れません。先に戻ってください。");
+      const version = versions.find(v => v.id === previewingVersionId);
+      if (version) startRevisionFromVersion(version);
       return;
     }
     setDraftMode(true);
     setDraftVersionNote("");
+    setDraftSourceVersionId(null);
+    setIsEditing(true);
     toast.success("修正版の編集を開始しました");
+  };
+
+  const loadVersionSnapshot = (version: RecipeVersion, idPrefix: string) => {
+    const snap = version.snapshot_recipe || {};
+    setRecipe(prev => prev ? {
+      ...prev,
+      ...snap,
+      id: prev.id,
+    } : prev);
+    const snapshotItems = (version.snapshot_items || []).map((si: any) => ({
+      ...si,
+      id: `${idPrefix}-${Math.random().toString(36).slice(2)}`,
+    }));
+    setItems(snapshotItems);
+    setRegisteredItemOrder(Object.fromEntries(snapshotItems.map((item: RecipeItem, index: number) => [item.id, index])));
+    setDeletedItemIds(new Set());
+    setOriginalUsageMap({});
+    setCurrentScalePercent(null);
+  };
+
+  const clearVersionPreview = () => {
+    if (!recipe) return;
+    setPreviewingVersionId(null);
+    setDraftMode(false);
+    setDraftVersionNote("");
+    setDraftSourceVersionId(null);
+    setEditingVersionNoteId(null);
+    setEditingVersionNote("");
+    setHasChanges(false);
+    setIsEditing(true);
+    fetchRecipe(recipe.id);
+  };
+
+  const startRevisionFromVersion = (version: RecipeVersion) => {
+    if (!recipe || isSaving) return;
+    if (!previewingVersionId && hasChanges) {
+      if (!confirm("未保存の変更を破棄して、この過去版を元に修正版を作りますか？")) return;
+    }
+    loadVersionSnapshot(version, "temp-history");
+    setPreviewingVersionId(null);
+    setDraftMode(true);
+    setDraftSourceVersionId(version.id);
+    setDraftVersionNote(`v${version.version_number}を元に修正`);
+    setIsEditing(true);
+    setHasChanges(true);
+    toast.success(`Ver.${version.version_number}を元に修正版の編集を開始しました`);
+  };
+
+  const startEditVersionNote = (version: RecipeVersion) => {
+    setEditingVersionNoteId(version.id);
+    setEditingVersionNote(version.version_note || "");
+  };
+
+  const cancelEditVersionNote = () => {
+    setEditingVersionNoteId(null);
+    setEditingVersionNote("");
+  };
+
+  const saveVersionNote = async (version: RecipeVersion) => {
+    if (savingVersionNoteId) return;
+    setSavingVersionNoteId(version.id);
+    try {
+      const res = await fetch('/api/recipe/versions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: version.id,
+          note: editingVersionNote,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '履歴メモの保存に失敗しました');
+      setVersions((prev) => prev.map((v) => v.id === version.id ? data.version : v));
+      setEditingVersionNoteId(null);
+      setEditingVersionNote("");
+      toast.success(`Ver.${version.version_number} のメモを更新しました`);
+    } catch (error: any) {
+      toast.error(error.message || '履歴メモの保存に失敗しました');
+    } finally {
+      setSavingVersionNoteId(null);
+    }
   };
 
   const restoreVersion = async (version: RecipeVersion) => {
     if (!recipe || isSaving) return;
-    if (!confirm(`Ver.${version.version_number} に復元しますか？\n現在の変更は失われます。`)) return;
+    if (!confirm(`Ver.${version.version_number} で現在のレシピを上書き保存します。\n新しい履歴として残したい場合は「新レシピを作成」を使ってください。\n\n上書き保存しますか？`)) return;
     setIsSaving(true);
     try {
       // レシピメタデータを復元
@@ -302,6 +469,9 @@ function RecipeDetailContent() {
             usage_amount: si.usage_amount,
             cost: si.cost,
             tax_included: si.tax_included ?? true,
+            ingredient_id: si.ingredient_id || null,
+            material_id: si.material_id || null,
+            expense_id: si.expense_id || null,
             intermediate_recipe_id: si.intermediate_recipe_id || null,
           })),
           existingItems: [],
@@ -312,15 +482,17 @@ function RecipeDetailContent() {
           },
         }),
       });
-      if (!res.ok) throw new Error('復元に失敗しました');
-      toast.success(`Ver.${version.version_number} を採用しました`);
+      if (!res.ok) throw new Error('上書き保存に失敗しました');
+      toast.success(`Ver.${version.version_number} で上書き保存しました`);
       setPreviewingVersionId(null);
       setDraftMode(false);
       setDraftVersionNote("");
+      setDraftSourceVersionId(null);
       setHasChanges(false);
+      setIsEditing(true);
       fetchRecipe(recipe.id);
     } catch (error: any) {
-      toast.error(error.message || '復元に失敗しました');
+      toast.error(error.message || '上書き保存に失敗しました');
     } finally {
       setIsSaving(false);
     }
@@ -335,7 +507,18 @@ function RecipeDetailContent() {
       toast.success(`Ver.${version.version_number} を削除しました`);
       if (previewingVersionId === version.id) {
         setPreviewingVersionId(null);
+        setDraftMode(false);
+        setDraftVersionNote("");
+        setHasChanges(false);
+        setIsEditing(true);
         fetchRecipe(recipe.id);
+      }
+      if (draftSourceVersionId === version.id) {
+        setDraftSourceVersionId(null);
+      }
+      if (editingVersionNoteId === version.id) {
+        setEditingVersionNoteId(null);
+        setEditingVersionNote("");
       }
       fetchVersions(recipe.id);
     } catch (error: any) {
@@ -347,31 +530,18 @@ function RecipeDetailContent() {
     if (!recipe) return;
     // 既に同じバージョンをプレビュー中ならプレビュー解除（元に戻す）
     if (previewingVersionId === version.id) {
-      setPreviewingVersionId(null);
-      setHasChanges(false);
-      fetchRecipe(recipe.id);
+      clearVersionPreview();
       return;
     }
     if (!previewingVersionId && hasChanges) {
       if (!confirm("未保存の変更を破棄して過去版をプレビューしますか？")) return;
-      setDraftMode(false);
-      setDraftVersionNote("");
     }
-    // スナップショットデータをローカルstateに読み込み
-    // 重要: 全アイテムにtemp-IDを付与して「新規」として扱う（DBの既存アイテムと混同させない）
-    const snap = version.snapshot_recipe;
-    setRecipe(prev => prev ? {
-      ...prev,
-      ...snap,
-      id: prev.id, // IDは元のまま
-    } : prev);
-    const previewItems = version.snapshot_items.map((si: any) => ({
-      ...si,
-      id: `temp-preview-${Math.random().toString(36).slice(2)}`,
-    }));
-    setItems(previewItems);
-    setRegisteredItemOrder(Object.fromEntries(previewItems.map((item: RecipeItem, index: number) => [item.id, index])));
+    setDraftMode(false);
+    setDraftVersionNote("");
+    setDraftSourceVersionId(null);
+    loadVersionSnapshot(version, "temp-preview");
     setPreviewingVersionId(version.id);
+    setIsEditing(false);
     setHasChanges(true);
   };
 
@@ -652,6 +822,148 @@ function RecipeDetailContent() {
     if (recipe?.id) fetchRecipeImages(recipe.id);
   }, [recipe?.id]);
 
+  const fetchWebProductImages = async (recipeId: string) => {
+    try {
+      const response = await fetch(`/api/recipe/web-images?recipeId=${recipeId}`, { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json();
+      setWebProductImages(data.images || []);
+      setPortraitImages(data.portraitImages || []);
+    } catch { }
+  };
+
+  useEffect(() => {
+    if (recipe?.id) fetchWebProductImages(recipe.id);
+  }, [recipe?.id]);
+
+  const uploadWebProductImages = async (files: File[]) => {
+    if (!recipe || files.length === 0) return;
+    setWebImagesUploading(true);
+    let resizedCount = 0;
+    try {
+      for (const sourceFile of files) {
+        if (!sourceFile.type.startsWith('image/')) continue;
+        const file = await compressWebProductImage(sourceFile);
+        if (file.size < sourceFile.size) resizedCount++;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('recipeId', recipe.id);
+        formData.append('sourceType', 'manual');
+        formData.append('originalFilename', sourceFile.name);
+        const response = await fetch('/api/recipe/web-images', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `${sourceFile.name}の登録に失敗しました`);
+        setWebProductImages((current) => [...current, data.image]);
+      }
+      toast.success(`${files.length}枚を登録しました${resizedCount ? `（${resizedCount}枚を自動縮小）` : ''}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Web商品画像の登録に失敗しました');
+    } finally {
+      setWebImagesUploading(false);
+    }
+  };
+
+  const reorderWebProductImages = async (fromIndex: number, toIndex: number) => {
+    if (!recipe || fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    const next = [...webProductImages];
+    const [moved] = next.splice(fromIndex, 1);
+    if (!moved) return;
+    next.splice(toIndex, 0, moved);
+    const reordered = next.map((image, index) => ({ ...image, sort_order: index }));
+    setWebProductImages(reordered);
+    const response = await fetch('/api/recipe/web-images', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipeId: recipe.id, imageOrder: reordered.map(({ id }) => ({ id })) }),
+    });
+    if (!response.ok) {
+      await fetchWebProductImages(recipe.id);
+      toast.error('画像の並び替えに失敗しました');
+    }
+  };
+
+  const deleteWebProductImage = async (imageId: string) => {
+    if (!recipe || !confirm('このWeb商品画像を削除しますか？')) return;
+    const response = await fetch('/api/recipe/web-images', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageId, recipeId: recipe.id }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      toast.error(data.error || '画像を削除できませんでした');
+      return;
+    }
+    setWebProductImages((current) => current.filter((image) => image.id !== imageId));
+    toast.success('Web商品画像を削除しました');
+  };
+
+  const uploadPortraitImages = async (files: File[]) => {
+    if (!recipe || files.length === 0) return;
+    setPortraitUploading(true);
+    let uploadedCount = 0;
+    let resizedCount = 0;
+    try {
+      for (const sourceFile of files) {
+        if (!sourceFile.type.startsWith('image/')) continue;
+        const file = await compressWebProductImage(sourceFile);
+        if (file.size < sourceFile.size) resizedCount++;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('recipeId', recipe.id);
+        formData.append('sourceType', 'manual');
+        formData.append('imageRole', 'portrait');
+        formData.append('originalFilename', sourceFile.name);
+        const response = await fetch('/api/recipe/web-images', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `${sourceFile.name}の登録に失敗しました`);
+        setPortraitImages((current) => [...current, data.image]);
+        uploadedCount++;
+      }
+      if (uploadedCount === 0) throw new Error('JPEG・PNG・WebP画像を選択してください');
+      toast.success(`${uploadedCount}枚のポートレート画像を登録しました${resizedCount ? `（${resizedCount}枚を自動縮小）` : ''}`);
+    } catch (error: any) {
+      toast.error(error.message || 'ポートレート画像の登録に失敗しました');
+    } finally {
+      setPortraitUploading(false);
+    }
+  };
+
+  const reorderPortraitImages = async (fromIndex: number, toIndex: number) => {
+    if (!recipe || fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    const next = [...portraitImages];
+    const [moved] = next.splice(fromIndex, 1);
+    if (!moved) return;
+    next.splice(toIndex, 0, moved);
+    const reordered = next.map((image, index) => ({ ...image, sort_order: index }));
+    setPortraitImages(reordered);
+    const response = await fetch('/api/recipe/web-images', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipeId: recipe.id, imageRole: 'portrait', imageOrder: reordered.map(({ id }) => ({ id })) }),
+    });
+    if (!response.ok) {
+      await fetchWebProductImages(recipe.id);
+      toast.error('ポートレート画像の並び替えに失敗しました');
+    }
+  };
+
+  const deletePortraitImage = async (imageId: string) => {
+    if (!recipe || !confirm('このポートレート画像を削除しますか？')) return;
+    const response = await fetch('/api/recipe/web-images', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageId, recipeId: recipe.id }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      toast.error(data.error || 'ポートレート画像を削除できませんでした');
+      return;
+    }
+    setPortraitImages((current) => current.filter((image) => image.id !== imageId));
+    toast.success('ポートレート画像を削除しました');
+  };
+
   const compressPhoto = (file: File, maxWidth = 1200, targetSizeKB = 280): Promise<File> => {
     return new Promise((resolve, reject) => {
       const img = new window.Image();
@@ -725,10 +1037,10 @@ function RecipeDetailContent() {
               const isGramMode = parseFloat(String(updatedItem.unit_quantity)) === -1;
               if (isGramMode && (updatedItem.unit_weight || 0) > 0) {
                 // グラムモード: usage_amount(g) / unit_weight(1個分のg) × unit_price
-                updatedItem.cost = Math.round((usage / (updatedItem.unit_weight || 1)) * price);
+                updatedItem.cost = roundToDecimals((usage / (updatedItem.unit_weight || 1)) * price, 4);
               } else {
                 // 個数モード: usage_amount(個数) × unit_price(元レシピの原価)
-                updatedItem.cost = Math.round(usage * price);
+                updatedItem.cost = roundToDecimals(usage * price, 4);
               }
             } else {
               const rate =
@@ -743,8 +1055,8 @@ function RecipeDetailContent() {
               // 資材・経費: priceは1個単価なのでそのまま掛ける
               // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
               updatedItem.cost = isMat
-                ? Math.round(usage * price * rate)
-                : Math.round(usage * (price / qty) * rate);
+                ? roundToDecimals(usage * price * rate, 4)
+                : roundToDecimals(usage * (price / qty) * rate, 4);
             }
           }
           return updatedItem;
@@ -768,6 +1080,7 @@ function RecipeDetailContent() {
       usage_amount: 0,
       cost: 0,
       tax_included: true,
+      expense_id: null,
     };
     setItems((prev) => [...prev, newItem]);
     setRegisteredItemOrder((prev) => ({ ...prev, [newItem.id]: Object.keys(prev).length }));
@@ -805,6 +1118,7 @@ function RecipeDetailContent() {
               item_name: selected,
               ingredient_id: null,
               material_id: null,
+              expense_id: null,
               intermediate_recipe_id: null,
             };
           } else {
@@ -818,10 +1132,11 @@ function RecipeDetailContent() {
                 unit_weight: selected.unit_weight || 0, // 元レシピのtotal_weight
                 unit_quantity: 1,
                 usage_amount: 1, // デフォルト1個（倍率）
-                cost: Math.round(parseFloat(String(selected.unit_price)) || 0), // 1個分の原価
+                cost: roundToDecimals(parseFloat(String(selected.unit_price)) || 0, 4), // 1個分の原価
                 intermediate_recipe_id: selected.id,
                 ingredient_id: null,
                 material_id: null,
+                expense_id: null,
                 tax_included: true,
               };
             } else {
@@ -838,10 +1153,17 @@ function RecipeDetailContent() {
               if (item.item_type === "ingredient") {
                 updates.ingredient_id = selected.id || null;
                 updates.material_id = null;
+                updates.expense_id = null;
                 updates.intermediate_recipe_id = null;
               } else if (item.item_type === "material") {
                 updates.material_id = selected.id || null;
                 updates.ingredient_id = null;
+                updates.expense_id = null;
+                updates.intermediate_recipe_id = null;
+              } else if (item.item_type === "expense") {
+                updates.expense_id = selected.id || null;
+                updates.ingredient_id = null;
+                updates.material_id = null;
                 updates.intermediate_recipe_id = null;
               }
 
@@ -867,10 +1189,16 @@ function RecipeDetailContent() {
               updatedItem.unit_quantity = 1;
             }
 
-            if (
-              updatedItem.usage_amount &&
-              updatedItem.unit_price
-            ) {
+            const hasUsageAmount =
+              updatedItem.usage_amount !== null &&
+              updatedItem.usage_amount !== undefined &&
+              String(updatedItem.usage_amount).trim() !== "";
+            const hasUnitPrice =
+              updatedItem.unit_price !== null &&
+              updatedItem.unit_price !== undefined &&
+              String(updatedItem.unit_price).trim() !== "";
+
+            if (hasUsageAmount && hasUnitPrice) {
               const usage = parseFloat(String(updatedItem.usage_amount)) || 0;
               const qty = parseFloat(String(updatedItem.unit_quantity)) || 1;
               const price = parseFloat(String(updatedItem.unit_price)) || 0;
@@ -888,8 +1216,8 @@ function RecipeDetailContent() {
               // 資材・経費: priceは1個単価なのでそのまま掛ける
               // 食材: priceはパック価格なのでunit_quantityで割ってg単価にする
               updatedItem.cost = isMat
-                ? Math.round(usage * price * rate)
-                : Math.round(usage * (price / qty) * rate);
+                ? roundToDecimals(usage * price * rate, 4)
+                : roundToDecimals(usage * (price / qty) * rate, 4);
             }
           }
           return updatedItem;
@@ -1005,12 +1333,7 @@ function RecipeDetailContent() {
     if (!recipe || isSaving) return;
 
     if (previewingVersionId) {
-      const version = versions.find(v => v.id === previewingVersionId);
-      if (!version) {
-        toast.error("プレビュー中の履歴が見つかりません");
-        return;
-      }
-      await restoreVersion(version);
+      toast.error("過去版のプレビュー中は保存できません。「新レシピを作成」か「上書き保存」を選んでください。");
       return;
     }
 
@@ -1101,6 +1424,7 @@ function RecipeDetailContent() {
             product_points: recipe.product_points,
             ec_product_name: recipe.ec_product_name,
             catchcopy: recipe.catchcopy,
+            product_lp_url: recipe.product_lp_url,
           },
         }),
       });
@@ -1116,17 +1440,23 @@ function RecipeDetailContent() {
 
       if (draftMode) {
         try {
+          const sourceVersion = draftSourceVersionId
+            ? versions.find(v => v.id === draftSourceVersionId)
+            : null;
+          const versionNote = draftVersionNote.trim()
+            || (sourceVersion ? `v${sourceVersion.version_number}を元に修正` : null);
           const versionRes = await fetch('/api/recipe/versions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               recipeId: recipe.id,
-              note: draftVersionNote.trim() || null,
+              note: versionNote,
             }),
           });
           if (!versionRes.ok) throw new Error('バージョン保存に失敗しました');
           setDraftMode(false);
           setDraftVersionNote("");
+          setDraftSourceVersionId(null);
           toast.success("修正版を正式版として保存しました");
         } catch (e: any) {
           toast.error(e.message || 'バージョン保存に失敗しました');
@@ -1151,14 +1481,21 @@ function RecipeDetailContent() {
     setPreviewingVersionId(null);
     setDraftMode(false);
     setDraftVersionNote("");
+    setDraftSourceVersionId(null);
     setCurrentScalePercent(null);
     setOriginalUsageMap({});
+    setIsEditing(true);
     fetchRecipe(recipe.id);
   };
 
   const formatNumber = (value?: number | null, decimals = 2, suffix = "") => {
     if (value === undefined || value === null) return "-";
     return `${value.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix}`;
+  };
+
+  const roundToDecimals = (value: number, decimals = 2) => {
+    const factor = 10 ** decimals;
+    return Math.round((value + Number.EPSILON) * factor) / factor;
   };
 
   const formatCurrency = (value?: number | null) => {
@@ -1176,19 +1513,25 @@ function RecipeDetailContent() {
     const itemsWithoutAmazonFee = items.filter(
       (i) => !(i.item_type === "expense" && i.item_name === "Amazon手数料")
     );
+    const costWithoutAmazon = itemsWithoutAmazonFee.reduce(
+      (sum, item) => sum + (parseFloat(String(item.cost)) || 0),
+      0,
+    );
+    const costExcludingExpenses = itemsWithoutAmazonFee.reduce(
+      (sum, item) => {
+        if (item.item_type === "expense") return sum;
+        return sum + (parseFloat(String(item.cost)) || 0);
+      },
+      0,
+    );
     return {
       usage: itemsWithoutAmazonFee.reduce(
         (sum, item) => sum + (parseFloat(String(item.usage_amount)) || 0),
         0,
       ),
-      costWithoutAmazon: itemsWithoutAmazonFee.reduce(
-        (sum, item) => sum + (parseFloat(String(item.cost)) || 0),
-        0,
-      ),
-      cost: itemsWithoutAmazonFee.reduce(
-        (sum, item) => sum + (parseFloat(String(item.cost)) || 0),
-        0,
-      ) + amazonFee,
+      costWithoutAmazon,
+      costExcludingExpenses,
+      cost: costWithoutAmazon + amazonFee,
     };
   };
 
@@ -1235,6 +1578,10 @@ function RecipeDetailContent() {
     : 0;
   const profit = sellingPriceInclTax - totals.cost;
   const profitRate = sellingPriceInclTax ? (profit / sellingPriceInclTax) * 100 : 0;
+  const grossProfitExcludingExpenses = sellingPriceInclTax - totals.costExcludingExpenses;
+  const grossProfitExcludingExpensesRate = sellingPriceInclTax
+    ? (grossProfitExcludingExpenses / sellingPriceInclTax) * 100
+    : 0;
   const getRegisteredOrder = (item: RecipeItem, fallbackIndex: number) => (
     registeredItemOrder[item.id] ?? Number.MAX_SAFE_INTEGER - 100000 + fallbackIndex
   );
@@ -1312,10 +1659,10 @@ function RecipeDetailContent() {
   const janDuplicateTooltipLines = [...janDuplicateRecipeLines, ...janDuplicateMasterLines];
 
   return (
-    <div className="min-h-screen bg-white text-gray-800 font-sans print:p-0">
+    <div className="min-h-screen min-w-0 bg-white text-gray-800 font-sans print:p-0">
       {/* Control Bar */}
-      <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b px-6 py-3 flex justify-between items-center print:hidden">
-        <div className="flex items-center gap-4">
+      <header className="relative z-10 flex flex-col gap-2 border-b bg-white/90 px-3 py-2 backdrop-blur lg:sticky lg:top-0 lg:z-20 lg:flex-row lg:items-center lg:justify-between lg:gap-0 lg:px-6 lg:py-3 print:hidden">
+        <div className="flex w-full items-center gap-4 lg:w-auto">
           <Button
             variant="ghost"
             size="sm"
@@ -1326,7 +1673,7 @@ function RecipeDetailContent() {
             レシピ一覧
           </Button>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap lg:gap-3">
           <Button
             variant="outline"
             size="sm"
@@ -1365,44 +1712,86 @@ function RecipeDetailContent() {
             </Button>
           )}
           {hasChanges && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={cancelChanges}
-                disabled={isSaving}
-                className="gap-2 text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-4 h-4" />
-                {previewingVersionId ? '戻る' : 'キャンセル'}
-              </Button>
-              <Button
-                size="sm"
-                onClick={saveChanges}
-                disabled={isSaving}
-                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {isSaving
-                  ? '保存中...'
-                  : previewingVersionId
-                    ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number}を採用`
+            previewingVersionId ? (() => {
+              const version = versions.find(v => v.id === previewingVersionId);
+              if (!version) return null;
+              return (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={clearVersionPreview}
+                    disabled={isSaving}
+                    className="gap-2 text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="w-4 h-4" />
+                    現在へ戻る
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => startRevisionFromVersion(version)}
+                    disabled={isSaving}
+                    className="gap-2 h-auto py-1.5 bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <Edit className="w-4 h-4" />
+                    <span className="flex flex-col items-start leading-tight">
+                      <span>新レシピを作成</span>
+                      <span className="text-[10px] font-normal opacity-85">この版を元に新履歴</span>
+                    </span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => restoreVersion(version)}
+                    disabled={isSaving}
+                    className="gap-2 h-auto py-1.5 border-red-300 text-red-700 hover:bg-red-50"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span className="flex flex-col items-start leading-tight">
+                      <span>上書き保存</span>
+                      <span className="text-[10px] font-normal">現在レシピを置換</span>
+                    </span>
+                  </Button>
+                </>
+              );
+            })() : (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={cancelChanges}
+                  disabled={isSaving}
+                  className="gap-2 text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-4 h-4" />
+                  キャンセル
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={saveChanges}
+                  disabled={isSaving}
+                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {isSaving
+                    ? '保存中...'
                     : draftMode
-                      ? '正式版として保存'
+                      ? '新しい履歴として保存'
                       : '保存'}
-              </Button>
-            </>
+                </Button>
+              </>
+            )
           )}
         </div>
       </header>
       {/* Main Content - Screen Only */}
-      <main className="max-w-[1400px] mx-auto p-8 print:hidden">
+      <main className="mx-auto max-w-[1400px] min-w-0 px-3 py-4 sm:px-4 lg:p-8 print:hidden">
         {/* Header Section */}
         {/* Header Section (Recipe Name & Pricing Card) */}
         <div className="border-b-2 border-gray-800 pb-4 mb-6">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <div className="flex gap-2 mb-2">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-0">
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 flex flex-wrap gap-2">
                 <Select
                   value={recipe.category}
                   onValueChange={(val) => handleRecipeChange("category", val)}
@@ -1483,10 +1872,10 @@ function RecipeDetailContent() {
               <InlineEdit
                 value={recipe.name}
                 onSave={(val) => handleRecipeChange("name", val)}
-                className="text-3xl font-extrabold text-gray-900 leading-tight w-full hover:bg-gray-50 rounded px-1 -ml-1 transition-colors"
-                inputClassName="text-3xl font-extrabold text-gray-900 leading-tight"
+                className="w-full rounded px-1 -ml-1 text-2xl font-extrabold leading-tight text-gray-900 transition-colors hover:bg-gray-50 lg:text-3xl"
+                inputClassName="text-2xl font-extrabold text-gray-900 leading-tight lg:text-3xl"
               />
-              <div className="flex gap-4 mt-2 text-xs text-gray-500 font-mono items-center">
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-mono text-gray-500">
                 <span>ID: {recipe.id.split("-")[0]}</span>
                 <span className="flex items-center gap-1">
                   DEV:
@@ -1507,7 +1896,7 @@ function RecipeDetailContent() {
               </div>
             </div>
             {/* 商品写真（インライン） */}
-            <div className="ml-4 flex-shrink-0 w-[120px]">
+            <div className="w-[120px] flex-shrink-0 self-start lg:ml-4">
               <div className="border border-gray-200 rounded-lg bg-gray-50/50 overflow-hidden">
                 {recipe.product_image_url ? (
                   <div className="relative group">
@@ -1552,7 +1941,7 @@ function RecipeDetailContent() {
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
+        <div className="mb-6 grid grid-cols-1 items-start gap-5 lg:mb-8 lg:grid-cols-2 lg:gap-8">
           {/* Specs Grid (Left) */}
           <div className="space-y-6">
             {/* Product Specs */}
@@ -1560,7 +1949,7 @@ function RecipeDetailContent() {
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-3">
                 製品仕様
               </h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                 <div className="p-3 bg-gray-50 rounded border border-gray-100">
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -1600,7 +1989,7 @@ function RecipeDetailContent() {
                   </div>
                 </div>
                 {recipe.is_intermediate && (
-                  <div className="p-3 bg-purple-50 rounded border border-purple-200 col-span-2">
+                  <div className="rounded border border-purple-200 bg-purple-50 p-3 sm:col-span-2">
                     <div className="flex items-center justify-between mb-1">
                       <div className="text-xs font-bold text-purple-600 uppercase tracking-wider">
                         歩留まり（出来高率）
@@ -1635,7 +2024,7 @@ function RecipeDetailContent() {
                     </div>
                   </div>
                 )}
-                <div className="p-3 bg-gray-50 rounded border border-gray-100 col-span-2">
+                <div className="rounded border border-gray-100 bg-gray-50 p-3 sm:col-span-2">
                   <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
                     保存方法
                   </div>
@@ -1688,7 +2077,7 @@ function RecipeDetailContent() {
                         >
                           <AlertTriangle className="h-3 w-3" />
                           重複あり
-                          <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-80 rounded-md border border-red-200 bg-white p-2 text-left text-[11px] font-normal leading-relaxed text-gray-700 shadow-lg group-hover:block">
+                          <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-[min(20rem,calc(100vw-3rem))] rounded-md border border-red-200 bg-white p-2 text-left text-[11px] font-normal leading-relaxed text-gray-700 shadow-lg group-hover:block">
                             <span className="mb-1 block font-bold text-red-700">同じJANコードがあります</span>
                             {janDuplicateTooltipLines.length > 0 ? (
                               janDuplicateTooltipLines.map((line, index) => (
@@ -1776,7 +2165,7 @@ function RecipeDetailContent() {
                   </div>
                 </div>
                 {/* ケースサイズ */}
-                <div className="p-2 bg-gray-50 rounded border border-gray-100 col-span-2 min-h-[52px] flex flex-col">
+                <div className="flex min-h-[52px] flex-col rounded border border-gray-100 bg-gray-50 p-2 sm:col-span-2">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                     ケースサイズ
                   </div>
@@ -1867,7 +2256,7 @@ function RecipeDetailContent() {
           <div>
             {recipe.is_intermediate ? (
               /* 中間部品用: 原価合計のみ表示 */
-              <div className="bg-purple-900 rounded-xl p-6 text-white mb-6 shadow-lg">
+              <div className="mb-6 rounded-xl bg-purple-900 p-4 text-white shadow-lg lg:p-6">
                 <div className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-4">
                   中間加工品 原価情報
                 </div>
@@ -1913,7 +2302,7 @@ function RecipeDetailContent() {
             ) : (
               <>
                 {/* Pricing Header Card */}
-                <div className="bg-gray-900 rounded-xl p-6 text-white mb-6 shadow-lg">
+                <div className="mb-6 rounded-xl bg-gray-900 p-4 text-white shadow-lg lg:p-6">
                   <div className="flex justify-between items-start mb-2">
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                       販売価格 (Selling Price)
@@ -2005,12 +2394,12 @@ function RecipeDetailContent() {
                       </div>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-800">
+                    <div className="min-w-0">
                       <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">
                         原価合計 (Total Cost)
                       </div>
-                      <div className="text-xl font-bold flex items-baseline gap-2">
+                      <div className="text-xl font-bold flex flex-wrap items-baseline gap-x-2 gap-y-1">
                         {formatCurrency(totals.cost)}
                         <span className="text-xs font-normal text-gray-500">
                           (
@@ -2021,12 +2410,26 @@ function RecipeDetailContent() {
                         </span>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="min-w-0 sm:text-center">
+                      <div className="text-[10px] text-cyan-200/80 font-bold tracking-normal mb-1 leading-tight">
+                        粗利（人件費・諸経費除く）
+                      </div>
+                      <div
+                        className={`text-xl font-bold flex flex-wrap items-baseline gap-x-2 gap-y-1 sm:justify-center ${grossProfitExcludingExpenses >= 0 ? "text-cyan-300" : "text-red-400"
+                          }`}
+                      >
+                        {formatCurrency(grossProfitExcludingExpenses)}
+                        <span className="text-xs font-normal text-gray-500">
+                          ({recipe.selling_price ? grossProfitExcludingExpensesRate.toFixed(1) : "-"}%)
+                        </span>
+                      </div>
+                    </div>
+                    <div className="min-w-0 sm:text-right">
                       <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">
                         粗利益 (Profit)
                       </div>
                       <div
-                        className={`text-xl font-bold flex items-baseline justify-end gap-2 ${profit > 0 ? "text-green-400" : "text-red-400"
+                        className={`text-xl font-bold flex flex-wrap items-baseline gap-x-2 gap-y-1 sm:justify-end ${profit > 0 ? "text-green-400" : "text-red-400"
                           }`}
                       >
                         {formatCurrency(profit)}
@@ -2055,7 +2458,7 @@ function RecipeDetailContent() {
                       return (
                         <div
                           key={rate}
-                          className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg hover:border-gray-300 transition-colors"
+                          className="flex flex-col items-start gap-2 rounded-lg border border-gray-100 bg-white p-3 transition-colors hover:border-gray-300 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                         >
                           <div className="flex items-center gap-3">
                             <div className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">
@@ -2352,43 +2755,68 @@ function RecipeDetailContent() {
                 </div>
               </div>
             </div>
-        <div className="grid grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-8">
           {/* Left Column: Ingredients (8 cols) ->
-Now Expanded or Scrollable */}
-          <div className="col-span-12 print:col-span-12">
-            <div className="flex justify-between items-center mb-4 border-b pb-2">
+          Now Expanded or Scrollable */}
+          <div className="min-w-0 lg:col-span-12 print:col-span-12">
+            <div className="mb-4 flex flex-col items-start gap-3 border-b pb-2 lg:flex-row lg:items-center lg:justify-between">
               <h2 className="text-base font-bold text-gray-900 uppercase tracking-wider">
                 製造計画（材料表）
               </h2>
-              <div className="flex items-center gap-4 text-xs">
+              <div className="flex w-full flex-wrap items-center gap-3 text-xs lg:w-auto lg:gap-4">
                 <span className="font-mono text-gray-400">
                   {items.length} FILES
                 </span>
                 <div className="flex items-center gap-2 print:hidden flex-wrap">
                   <span className="h-8 px-3 text-xs font-bold rounded border border-gray-300 bg-gray-50 text-gray-700 flex items-center gap-1.5">
                     <History className="w-3.5 h-3.5" />
-                    現在の正式版
-                    <span className="font-mono text-gray-500">v{versions[0]?.version_number ?? 0}</span>
+                    {previewingVersionId
+                      ? '過去版を表示中'
+                      : draftSourceVersionId
+                        ? '過去版から修正中'
+                        : '履歴の最新'}
+                    <span className="font-mono text-gray-500">
+                      v{previewingVersionId
+                        ? versions.find(v => v.id === previewingVersionId)?.version_number ?? 0
+                        : draftSourceVersionId
+                          ? versions.find(v => v.id === draftSourceVersionId)?.version_number ?? 0
+                          : versions[0]?.version_number ?? 0}
+                    </span>
                   </span>
                   <button
                     onClick={startDraftRevision}
-                    disabled={draftMode || !!previewingVersionId || isSaving}
-                    className={`h-8 px-3 text-xs font-bold rounded flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
+                    disabled={draftMode || isSaving}
+                    className={`min-h-[38px] px-3 py-1 text-xs font-bold rounded flex items-center gap-2 text-left transition-colors disabled:opacity-50 ${
                       draftMode
                         ? 'bg-green-100 text-green-700 border border-green-300'
                         : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
                     <Edit className="w-3.5 h-3.5" />
-                    {draftMode ? '修正版を編集中' : '修正版を作る'}
+                    <span className="flex flex-col leading-tight">
+                      <span>
+                        {draftMode
+                          ? '修正版を編集中'
+                          : previewingVersionId
+                            ? '新レシピを作成'
+                            : '最新版から作る'}
+                      </span>
+                      <span className={`text-[10px] font-normal ${draftMode ? 'text-green-600' : 'text-green-100'}`}>
+                        {draftMode
+                          ? '保存で新履歴'
+                          : previewingVersionId
+                            ? 'この版を元に新履歴'
+                            : '新しい履歴版'}
+                      </span>
+                    </span>
                   </button>
                   {draftMode && (
                     <input
                       type="text"
                       value={draftVersionNote}
                       onChange={(e) => setDraftVersionNote(e.target.value)}
-                      placeholder="変更メモ 例: ウニ2K・うに味噌3K"
-                      className="h-8 w-72 px-2 text-xs border border-green-300 rounded focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none bg-white"
+                      placeholder="履歴メモ 例: v3を元に配合を微調整"
+                      className="h-8 w-full rounded border border-green-300 bg-white px-2 text-xs outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 sm:w-72"
                     />
                   )}
                   {versions.length > 0 && (
@@ -2397,7 +2825,7 @@ Now Expanded or Scrollable */}
                       className="h-8 px-3 text-xs font-bold rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 flex items-center gap-1.5"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      過去版 {versions.length}件
+                      履歴 {versions.length}件
                       <ChevronDown className={`w-3.5 h-3.5 transition-transform ${versionPanelOpen ? 'rotate-180' : ''}`} />
                     </button>
                   )}
@@ -2405,41 +2833,167 @@ Now Expanded or Scrollable */}
               </div>
             </div>
             {versionPanelOpen && versions.length > 0 && (
-              <div className="mb-4 print:hidden border border-amber-200 bg-amber-50/70 rounded p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs font-bold text-amber-800">過去版</div>
-                  <div className="text-[11px] text-amber-700">クリックで内容確認、採用は下部の保存ボタン</div>
+              <div className="mb-4 print:hidden border border-slate-200 bg-white rounded p-3 shadow-sm">
+                <div className="mb-3 flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
+                  <div>
+                    <div className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                      <History className="w-4 h-4 text-slate-500" />
+                      レシピ履歴
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      青は確認、緑は過去版から新履歴、赤は現在レシピの置換です。
+                    </div>
+                  </div>
+                  {previewingVersionId && (
+                    <button
+                      type="button"
+                      onClick={clearVersionPreview}
+                      className="h-8 px-3 text-xs font-bold rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      現在へ戻る
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="divide-y divide-slate-100 border border-slate-100 rounded overflow-hidden">
                   {versions.map((v) => (
-                    <div key={v.id} className="relative group">
-                      <button
-                        onClick={() => previewVersion(v)}
-                        className={`h-8 px-3 text-xs font-bold rounded border transition-colors flex items-center gap-1.5 pr-5 group-hover:pr-6 ${
-                          previewingVersionId === v.id
-                            ? 'border-blue-500 bg-blue-100 text-blue-800 ring-2 ring-blue-300'
-                            : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-100 hover:border-amber-400'
-                        }`}
-                        title={`v${v.version_number}${v.version_note ? ` - ${v.version_note}` : ''} | ${new Date(v.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        v{v.version_number}
-                        {v.version_note && <span className="font-normal max-w-[140px] truncate">{v.version_note}</span>}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteVersion(v); }}
-                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                        title="この過去版を削除"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                    <div
+                      key={v.id}
+                      className={`flex flex-wrap items-center justify-between gap-3 px-3 py-2 ${
+                        previewingVersionId === v.id
+                          ? 'bg-blue-50'
+                          : draftSourceVersionId === v.id
+                            ? 'bg-green-50'
+                            : 'bg-white'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1 sm:min-w-[220px]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-sm font-bold text-slate-900">v{v.version_number}</span>
+                          {v.id === versions[0]?.id && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                              最新履歴
+                            </span>
+                          )}
+                          {previewingVersionId === v.id && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200">
+                              表示中
+                            </span>
+                          )}
+                          {draftSourceVersionId === v.id && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">
+                              修正元
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-400">{formatVersionDate(v.created_at)}</span>
+                        </div>
+                        {editingVersionNoteId === v.id ? (
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={editingVersionNote}
+                              onChange={(e) => setEditingVersionNote(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveVersionNote(v);
+                                if (e.key === 'Escape') cancelEditVersionNote();
+                              }}
+                              autoFocus
+                              placeholder="履歴メモを入力"
+                              className="h-8 w-full min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 text-xs text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 sm:min-w-[260px]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveVersionNote(v)}
+                              disabled={savingVersionNoteId === v.id}
+                              className="h-8 w-8 rounded border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 flex items-center justify-center"
+                              title="メモを保存"
+                            >
+                              {savingVersionNoteId === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEditVersionNote}
+                              disabled={savingVersionNoteId === v.id}
+                              className="h-8 w-8 rounded border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 disabled:opacity-50 flex items-center justify-center"
+                              title="編集をやめる"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-xs text-slate-600">
+                              {v.version_note || 'メモなし'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => startEditVersionNote(v)}
+                              className="h-6 w-6 shrink-0 rounded border border-slate-200 text-slate-400 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center"
+                              title="履歴メモを編集"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => previewVersion(v)}
+                          className={`min-h-[46px] px-3 py-1.5 text-xs font-bold rounded border flex items-center gap-2 text-left transition-colors ${
+                            previewingVersionId === v.id
+                              ? 'border-blue-500 bg-blue-600 text-white'
+                              : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                          }`}
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          <span className="flex flex-col leading-tight">
+                            <span>{previewingVersionId === v.id ? '表示を解除' : '内容を見る'}</span>
+                            <span className={`text-[10px] font-normal ${previewingVersionId === v.id ? 'text-blue-100' : 'text-blue-500'}`}>
+                              {previewingVersionId === v.id ? '現在レシピへ戻る' : '保存せず確認'}
+                            </span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startRevisionFromVersion(v)}
+                          disabled={isSaving}
+                          className="min-h-[46px] px-3 py-1.5 text-xs font-bold rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-left"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          <span className="flex flex-col leading-tight">
+                            <span>新レシピを作成</span>
+                            <span className="text-[10px] font-normal text-green-100">この版を元に新履歴</span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => restoreVersion(v)}
+                          disabled={isSaving}
+                          className="min-h-[46px] px-3 py-1.5 text-xs font-bold rounded border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50 flex items-center gap-2 text-left"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span className="flex flex-col leading-tight">
+                            <span>上書き保存</span>
+                            <span className="text-[10px] font-normal text-red-500">現在レシピを置換</span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteVersion(v)}
+                          className="h-8 w-8 rounded border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
+                          title="この履歴を削除"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
             {/* Batch Settings (Only visible in edit/interact mode, but printed values persist) */}
-            <div className="flex gap-4 mb-4 bg-gray-50 p-2 rounded print:hidden">
+            <div className="mb-4 flex flex-col gap-3 rounded bg-gray-50 p-2 sm:flex-row sm:gap-4 print:hidden">
               <div className="flex items-center gap-2">
                 <label className="text-xs font-bold text-gray-500">
                   製造数 A
@@ -2468,7 +3022,7 @@ Now Expanded or Scrollable */}
             <div className="space-y-8">
               {groupedItems.map((group, gIdx) => (
                 <div key={gIdx} className="break-inside-avoid">
-                  <div className="flex justify-between items-center mb-2">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <div
                         className={`text-[10px] font-bold px-2 py-0.5 inline-block rounded border ${group.color}`}
@@ -2519,7 +3073,8 @@ Now Expanded or Scrollable */}
                     )}
                   </div>
                   {group.items.length > 0 ? (
-                    <table className="w-full text-sm table-auto">
+                    <div className="-mx-3 overflow-x-auto px-3 pb-1 lg:mx-0 lg:px-0">
+                    <table className="min-w-[980px] w-full text-sm table-auto">
                       <thead>
                         <tr className="border-b border-gray-200 text-gray-500">
                           <th className="text-left py-1 w-8 font-normal">#</th>
@@ -2545,7 +3100,7 @@ Now Expanded or Scrollable */}
                                             const qty = parseFloat(String(item.unit_quantity)) || 1;
                                             const price = parseFloat(String(item.unit_price)) || 0;
                                             const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
-                                            const cost = Math.round(origUsage * (price / qty) * rate);
+                                            const cost = roundToDecimals(origUsage * (price / qty) * rate, 4);
                                             return { ...item, usage_amount: origUsage, cost };
                                           }
                                           return item;
@@ -2581,7 +3136,7 @@ Now Expanded or Scrollable */}
                                                 const qty = parseFloat(String(item.unit_quantity)) || 1;
                                                 const price = parseFloat(String(item.unit_price)) || 0;
                                                 const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
-                                                const cost = Math.round(origUsage * (price / qty) * rate);
+                                                const cost = roundToDecimals(origUsage * (price / qty) * rate, 4);
                                                 return { ...item, usage_amount: origUsage, cost };
                                               }
                                               return item;
@@ -2608,12 +3163,12 @@ Now Expanded or Scrollable */}
                                           if (item.item_type !== 'ingredient') return item;
                                           // 元の使用量をベースにスケーリング
                                           const baseUsage = backupMap[item.id] ?? (parseFloat(String(item.usage_amount)) || 0);
-                                          const newUsage = Math.round(baseUsage * scale * 10) / 10; // 小数点第2位で四捨五入
+                                          const newUsage = roundToDecimals(baseUsage * scale, 2);
 
                                           const qty = parseFloat(String(item.unit_quantity)) || 1;
                                           const price = parseFloat(String(item.unit_price)) || 0;
                                           const rate = !item.tax_included ? (1 + (taxRates.ingredient / 100)) : 1.0;
-                                          const cost = Math.round(newUsage * (price / qty) * rate);
+                                          const cost = roundToDecimals(newUsage * (price / qty) * rate, 4);
 
                                           return { ...item, usage_amount: newUsage, cost };
                                         }),
@@ -2760,7 +3315,7 @@ Now Expanded or Scrollable */}
                                               if (parseFloat(String(item.unit_quantity)) !== -1) {
                                                 // 個→gに切替
                                                 const units = parseFloat(String(item.usage_amount)) || 0;
-                                                const grams = Math.round(units * (item.unit_weight || 0));
+                                                const grams = roundToDecimals(units * (item.unit_weight || 0), 2);
                                                 handleItemChange(item.id, 'unit_quantity', -1);
                                                 setTimeout(() => handleItemChange(item.id, 'usage_amount', grams || 0), 0);
                                               }
@@ -2872,7 +3427,7 @@ Now Expanded or Scrollable */}
                               <td className="py-2 text-right font-mono text-blue-700 bg-blue-50/30 border-l border-gray-50 align-top">
                                 <>
                                   <div className="font-bold">
-                                    {formatNumber(b1Usage, 0)}
+                                    {formatNumber(b1Usage, group.type === "ingredient" ? 2 : 0)}
                                     <span className="text-[10px] font-normal ml-0.5">
                                       {(group.type === "product" || group.type === "intermediate")
                                         ? (parseFloat(String(item.unit_quantity)) === -1 ? "g" : "個")
@@ -2896,7 +3451,7 @@ Now Expanded or Scrollable */}
                               <td className="py-2 text-right font-mono text-purple-700 bg-purple-50/30 border-l border-gray-50 align-top">
                                 <>
                                   <div className="font-bold">
-                                    {formatNumber(b2Usage, 0)}
+                                    {formatNumber(b2Usage, group.type === "ingredient" ? 2 : 0)}
                                     <span className="text-[10px] font-normal ml-0.5">
                                       {(group.type === "product" || group.type === "intermediate")
                                         ? (parseFloat(String(item.unit_quantity)) === -1 ? "g" : "個")
@@ -3028,6 +3583,7 @@ Now Expanded or Scrollable */}
                         </tr>
                       </tfoot>
                     </table>
+                    </div>
                   ) : (
                     <div className="text-sm text-gray-300 py-4 text-center border border-dashed rounded bg-gray-50/50">
                       アイテムがありません
@@ -3035,9 +3591,9 @@ Now Expanded or Scrollable */}
                   )}
                   {group.type === "intermediate" && (
                     <div className="mt-4 mb-8 border-t-2 border-double border-gray-200 pt-4 px-2">
-                      <div className="flex justify-start items-center gap-8">
+                      <div className="flex flex-col items-start gap-3 lg:flex-row lg:items-center lg:gap-8">
                         <div className="text-sm font-bold text-gray-600">全体重量 (原材料 + 中間加工品)</div>
-                        <div className="flex gap-12">
+                        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-4 lg:flex lg:w-auto lg:gap-12">
                           <div className="text-right">
                             <div className="text-[10px] text-gray-400 uppercase">基本(1)</div>
                             <div className="font-mono font-bold text-lg text-gray-800">
@@ -3047,7 +3603,7 @@ Now Expanded or Scrollable */}
                                   return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
                                 }
                                 return sum;
-                              }, 0), 1)}g
+                              }, 0), 2)}g
                             </div>
                           </div>
                           <div className="text-right">
@@ -3060,7 +3616,7 @@ Now Expanded or Scrollable */}
                                   return sum + (weight * batchSize1);
                                 }
                                 return sum;
-                              }, 0), 0)}g
+                              }, 0), 2)}g
                             </div>
                           </div>
                           <div className="text-right">
@@ -3073,13 +3629,13 @@ Now Expanded or Scrollable */}
                                   return sum + (weight * batchSize2);
                                 }
                                 return sum;
-                              }, 0), 0)}g
+                              }, 0), 2)}g
                             </div>
                           </div>
                         </div>
                       </div>
                       {/* 材料系小計 */}
-                      <div className="flex justify-start items-center gap-8 mt-3 pt-3 border-t border-gray-200">
+                      <div className="mt-3 flex flex-col items-start gap-1 border-t border-gray-200 pt-3 lg:flex-row lg:items-center lg:gap-8">
                         <div className="text-sm font-bold text-emerald-700">原価小計 (セット内容 + 原材料 + 中間加工品)</div>
                         <div className="font-mono font-bold text-lg text-emerald-700">
                           {formatCurrency(
@@ -3093,7 +3649,7 @@ Now Expanded or Scrollable */}
                   )}
                   {group.type === "expense" && (
                     <div className="mt-4 mb-2 border-t-2 border-double border-gray-200 pt-4 px-2">
-                      <div className="flex justify-start items-center gap-8">
+                      <div className="flex flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-8">
                         <div className="text-sm font-bold text-orange-700">原価小計 (資材・包材 + 諸経費)</div>
                         <div className="font-mono font-bold text-lg text-orange-700">
                           {formatCurrency(
@@ -3110,11 +3666,11 @@ Now Expanded or Scrollable */}
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-12 gap-8 mt-8 border-t pt-8">
+        <div className="mt-6 grid grid-cols-1 gap-5 border-t pt-6 lg:mt-8 lg:grid-cols-12 lg:gap-8 lg:pt-8">
           {/* Bottom Section: Notes & Nutrition (Now Full Width split or separate) */}
           {/* Since table is wide, we move these to bottom */}
 
-          <div className="col-span-12 md:col-span-7 print:col-span-7">
+          <div className="min-w-0 lg:col-span-7 print:col-span-7">
             {/* Manufacturing Notes */}
             <div className="break-inside-avoid bg-gray-50 p-4 rounded border border-gray-100 print:bg-white print:border-l-2 print:border-gray-200 print:border-t-0 print:border-r-0 print:border-b-0 print:rounded-none h-full">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -3131,7 +3687,7 @@ Now Expanded or Scrollable */}
               />
             </div>
           </div>
-          <div className="col-span-12 md:col-span-5 print:hidden">
+          <div className="min-w-0 lg:col-span-5 print:hidden">
             {/* Nutrition */}
             <div className="break-inside-avoid">
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 border-b pb-1">
@@ -3155,52 +3711,90 @@ Now Expanded or Scrollable */}
       </main>
       {/* 下部固定 保存/キャンセルバー */}
       {hasChanges && (
-        <div className={`sticky bottom-0 z-20 backdrop-blur border-t px-6 py-3 print:hidden shadow-[0_-2px_10px_rgba(0,0,0,0.08)] ${previewingVersionId ? 'bg-blue-50/95 border-blue-300' : draftMode ? 'bg-green-50/95 border-green-300' : 'bg-white/95 border-blue-200'}`}>
-          <div className="max-w-[1400px] mx-auto flex justify-between items-center">
-            <div className={`text-sm font-medium flex items-center gap-2 ${previewingVersionId ? 'text-blue-700' : draftMode ? 'text-green-700' : 'text-amber-600'}`}>
+        <div className={`sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t px-3 py-2 backdrop-blur shadow-[0_-2px_10px_rgba(0,0,0,0.08)] lg:bottom-0 lg:px-6 lg:py-3 print:hidden ${previewingVersionId ? 'bg-blue-50/95 border-blue-300' : draftMode ? 'bg-green-50/95 border-green-300' : 'bg-white/95 border-blue-200'}`}>
+          <div className="mx-auto flex max-w-[1400px] flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className={`flex min-w-0 items-start gap-2 text-xs font-medium sm:items-center sm:text-sm ${previewingVersionId ? 'text-blue-700' : draftMode ? 'text-green-700' : 'text-amber-600'}`}>
               <div className={`w-2 h-2 rounded-full animate-pulse ${previewingVersionId ? 'bg-blue-500' : draftMode ? 'bg-green-500' : 'bg-amber-500'}`} />
               {previewingVersionId
-                ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} をプレビュー中`
+                ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} を表示中 - 保存はされません`
                 : draftMode
-                  ? '修正版の編集中 - 保存すると新しい正式版として履歴に残ります'
+                  ? draftSourceVersionId
+                    ? `Ver.${versions.find(v => v.id === draftSourceVersionId)?.version_number} を元に編集中 - 保存すると新しい履歴になります`
+                    : '修正版の編集中 - 保存すると新しい履歴になります'
                   : '未保存の変更があります'
               }
             </div>
-            <div className="flex items-center gap-3">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={cancelChanges}
-                disabled={isSaving}
-                className="gap-2 text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-4 h-4" />
-                {previewingVersionId ? '戻る' : 'キャンセル'}
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  if (isSaving) return;
-                  if (previewingVersionId) {
-                    const ver = versions.find(v => v.id === previewingVersionId);
-                    restoreVersion(ver!);
-                  } else {
-                    saveChanges();
-                  }
-                }}
-                disabled={isSaving}
-                className={`gap-2 text-white px-6 ${previewingVersionId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-              >
-                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {isSaving
-                  ? '保存中...'
-                  : previewingVersionId
-                    ? `Ver.${versions.find(v => v.id === previewingVersionId)?.version_number} を採用して保存`
-                    : draftMode
-                      ? '正式版として保存'
-                      : '保存'
-                }
-              </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+              {previewingVersionId ? (() => {
+                const version = versions.find(v => v.id === previewingVersionId);
+                if (!version) return null;
+                return (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={clearVersionPreview}
+                      disabled={isSaving}
+                      className="gap-2 text-gray-500 hover:text-gray-700"
+                    >
+                      <X className="w-4 h-4" />
+                      現在へ戻る
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => startRevisionFromVersion(version)}
+                      disabled={isSaving}
+                      className="h-auto gap-2 bg-green-600 px-3 py-1.5 text-white hover:bg-green-700 sm:px-6"
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span className="flex flex-col items-start leading-tight">
+                        <span>新レシピを作成</span>
+                        <span className="text-[10px] font-normal opacity-85">この版を元に新履歴</span>
+                      </span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => restoreVersion(version)}
+                      disabled={isSaving}
+                      className="gap-2 h-auto py-1.5 border-red-300 text-red-700 hover:bg-red-50"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span className="flex flex-col items-start leading-tight">
+                        <span>上書き保存</span>
+                        <span className="text-[10px] font-normal">現在レシピを置換</span>
+                      </span>
+                    </Button>
+                  </>
+                );
+              })() : (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={cancelChanges}
+                    disabled={isSaving}
+                    className="gap-2 text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="w-4 h-4" />
+                    キャンセル
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={saveChanges}
+                    disabled={isSaving}
+                    className="gap-2 bg-blue-600 px-4 text-white hover:bg-blue-700 sm:px-6"
+                  >
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {isSaving
+                      ? '保存中...'
+                      : draftMode
+                        ? '新しい履歴として保存'
+                        : '保存'
+                    }
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -3336,12 +3930,12 @@ Now Expanded or Scrollable */}
                               )}
                             </td>
                             <td className="py-0 text-right font-mono text-[10px]">
-                              {formatNumber(unitUsage, 1)}
+                              {formatNumber(unitUsage, group.type === "ingredient" ? 2 : 1)}
                               {unit}
                             </td>
                             <td className="py-0 text-right font-mono">
                               <span className="font-bold">
-                                {formatNumber(b1Usage, 0)}
+                                {formatNumber(b1Usage, group.type === "ingredient" ? 2 : 0)}
                                 {unit}
                               </span>
                               {b1Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
@@ -3352,7 +3946,7 @@ Now Expanded or Scrollable */}
                             </td>
                             <td className="py-0 text-right font-mono">
                               <span className="font-bold">
-                                {formatNumber(b2Usage, 0)}
+                                {formatNumber(b2Usage, group.type === "ingredient" ? 2 : 0)}
                                 {unit}
                               </span>
                               {b2Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
@@ -3380,7 +3974,7 @@ Now Expanded or Scrollable */}
                                 s + (parseFloat(String(i.usage_amount)) || 0),
                               0,
                             ),
-                            0,
+                            group.type === "ingredient" ? 2 : 0,
                           ) + (() => {
                             if (group.type === "product" || group.type === "intermediate") {
                               const allGram = group.items.every(i => parseFloat(String(i.unit_quantity)) === -1);
@@ -3398,7 +3992,7 @@ Now Expanded or Scrollable */}
                                 batchSize1,
                               0,
                             ),
-                            0,
+                            group.type === "ingredient" ? 2 : 0,
                           ) + (() => {
                             if (group.type === "product" || group.type === "intermediate") {
                               const allGram = group.items.every(i => parseFloat(String(i.unit_quantity)) === -1);
@@ -3416,7 +4010,7 @@ Now Expanded or Scrollable */}
                                 batchSize2,
                               0,
                             ),
-                            0,
+                            group.type === "ingredient" ? 2 : 0,
                           ) + (() => {
                             if (group.type === "product" || group.type === "intermediate") {
                               const allGram = group.items.every(i => parseFloat(String(i.unit_quantity)) === -1);
@@ -3442,7 +4036,7 @@ Now Expanded or Scrollable */}
                                   return sum + (item.item_type === "ingredient" ? usage : usage * (item.unit_weight || 0));
                                 }
                                 return sum;
-                              }, 0), 1)}g
+                              }, 0), 2)}g
                             </span>
                           </div>
                           <div className="text-right">
@@ -3455,7 +4049,7 @@ Now Expanded or Scrollable */}
                                   return sum + (weight * batchSize1);
                                 }
                                 return sum;
-                              }, 0), 0)}g
+                              }, 0), 2)}g
                             </span>
                           </div>
                           <div className="text-right">
@@ -3468,7 +4062,7 @@ Now Expanded or Scrollable */}
                                   return sum + (weight * batchSize2);
                                 }
                                 return sum;
-                              }, 0), 0)}g
+                              }, 0), 2)}g
                             </span>
                           </div>
                         </div>
@@ -3493,7 +4087,7 @@ Now Expanded or Scrollable */}
       </div>
 
       {/* ── 商品写真セクション (PC用・印刷非表示) ── */}
-      <div className="print:hidden mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-5 print:hidden">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
             <Camera className="w-4 h-4 text-blue-600" />
@@ -3623,7 +4217,7 @@ Now Expanded or Scrollable */}
             if (files.length === 0) return;
             await uploadPhotos(files);
           }}
-          className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50'
+          className={`cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-colors sm:p-6 ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50'
             } ${photoUploading ? 'opacity-50 pointer-events-none' : ''}`}
           onClick={() => photoInputRef.current?.click()}
         >
@@ -3664,7 +4258,7 @@ Now Expanded or Scrollable */}
         const overCount = totalChars - 500;
         return (
           <details className="print:hidden mt-6 bg-white rounded-xl border border-gray-200 shadow-sm group">
-            <summary className="cursor-pointer select-none px-5 py-4 flex items-center justify-between hover:bg-gray-50 rounded-xl transition-colors list-none [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none select-none flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-4 transition-colors hover:bg-gray-50 sm:px-5 [&::-webkit-details-marker]:hidden">
               <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
                 📝 商品ポイント & Web商品説明
               </h3>
@@ -3676,7 +4270,56 @@ Now Expanded or Scrollable */}
                 <ChevronDown className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180" />
               </div>
             </summary>
-            <div className="px-5 pb-5 space-y-4 border-t border-gray-100 pt-4">
+            <div className="space-y-4 border-t border-gray-100 px-3 pb-4 pt-4 sm:px-5 sm:pb-5">
+              {recipe.category === "ネット専用" && (() => {
+                const productLpUrl = (recipe.product_lp_url || '').trim();
+                const canOpenProductLp = /^https?:\/\/\S+$/i.test(productLpUrl);
+                return (
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+                        <Link2 className="h-4 w-4 text-blue-600" />
+                        商品LP
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(productLpUrl);
+                            toast.success('商品LPをコピーしました');
+                          }}
+                          disabled={!productLpUrl}
+                          className="rounded p-1.5 text-gray-400 transition hover:bg-white hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
+                          title="商品LPをコピー"
+                        >
+                          <ClipboardCopy className="h-4 w-4" />
+                        </button>
+                        <a
+                          href={canOpenProductLp ? productLpUrl : undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-disabled={!canOpenProductLp}
+                          className={`rounded p-1.5 transition ${canOpenProductLp ? 'text-gray-400 hover:bg-white hover:text-blue-600' : 'pointer-events-none text-gray-300'}`}
+                          title="商品LPを開く"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </div>
+                    </div>
+                    <input
+                      type="url"
+                      inputMode="url"
+                      value={recipe.product_lp_url || ''}
+                      onChange={(e) => {
+                        setRecipe(prev => prev ? { ...prev, product_lp_url: e.target.value } : null);
+                        setHasChanges(true);
+                      }}
+                      placeholder="https://..."
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                );
+              })()}
               {/* EC用商品名 */}
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -3737,7 +4380,7 @@ Now Expanded or Scrollable */}
                     className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="コピー"
                   ><ClipboardCopy className="w-3.5 h-3.5" /></button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {/* 左: 編集用（■マーカー） */}
                   <div>
                     <div className="text-xs text-gray-400 mb-1 font-medium">✏️ 編集</div>
@@ -3791,6 +4434,228 @@ Now Expanded or Scrollable */}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none overflow-hidden"
                   style={{ fieldSizing: 'content' as any, minHeight: '180px' }}
                 />
+              </div>
+
+              {/* ポートレート画像 */}
+              <div className="border-t border-gray-100 pt-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4 text-emerald-600" />
+                      <label className="text-sm font-semibold text-gray-700">ポートレート画像</label>
+                      <span className="text-xs text-gray-400">{portraitImages.length}枚</span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">縦長画像を枚数制限なしで登録できます。ドラッグで表示順を変更できます。</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => portraitInputRef.current?.click()}
+                    disabled={portraitUploading}
+                  >
+                    {portraitUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    画像を追加
+                  </Button>
+                </div>
+
+                {portraitImages.length > 0 && (
+                  <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+                    {portraitImages.map((image, index) => (
+                      <div
+                        key={image.id}
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData('application/x-recipe-portrait-image-index', String(index));
+                          event.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(event) => {
+                          if (!event.dataTransfer.types.includes('application/x-recipe-portrait-image-index')) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = 'move';
+                        }}
+                        onDrop={(event) => {
+                          const value = event.dataTransfer.getData('application/x-recipe-portrait-image-index');
+                          if (!value) return;
+                          event.preventDefault();
+                          reorderPortraitImages(Number(value), index);
+                        }}
+                        className="group relative overflow-hidden rounded-md border border-gray-200 bg-white"
+                      >
+                        <a href={image.image_url} target="_blank" rel="noreferrer" className="block aspect-[3/4] bg-gray-50">
+                          <img src={image.image_url} alt={`${recipe.name} ポートレート画像 ${index + 1}`} className="h-full w-full object-contain" />
+                        </a>
+                        <div className="flex min-h-9 items-center justify-between gap-1 border-t border-gray-100 px-2 py-1">
+                          <span className="min-w-0 truncate text-[10px] text-gray-500">
+                            {index + 1}・{Math.ceil(image.file_size_bytes / 1024)}KB
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => deletePortraitImage(image.id)}
+                            className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            title="ポートレート画像を削除"
+                            aria-label={`${index + 1}枚目のポートレート画像を削除`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div
+                    onDragEnter={(event) => {
+                      if (event.dataTransfer.types.includes('Files')) {
+                        event.preventDefault();
+                        setPortraitDragOver(true);
+                      }
+                    }}
+                    onDragOver={(event) => {
+                      if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+                    }}
+                    onDragLeave={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPortraitDragOver(false);
+                    }}
+                    onDrop={async (event) => {
+                      if (!event.dataTransfer.types.includes('Files')) return;
+                      event.preventDefault();
+                      setPortraitDragOver(false);
+                      const files = Array.from(event.dataTransfer.files).filter((item) => item.type.startsWith('image/'));
+                      await uploadPortraitImages(files);
+                    }}
+                    onClick={() => !portraitUploading && portraitInputRef.current?.click()}
+                    className={`flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed px-4 py-5 text-center transition-colors ${portraitDragOver ? 'border-emerald-500 bg-emerald-50' : 'border-gray-300 bg-gray-50 hover:border-emerald-400 hover:bg-emerald-50/40'} ${portraitUploading ? 'pointer-events-none opacity-60' : ''}`}
+                  >
+                    <input
+                      ref={portraitInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      className="hidden"
+                      onChange={async (event) => {
+                        const files = Array.from(event.target.files || []);
+                        event.target.value = '';
+                        await uploadPortraitImages(files);
+                      }}
+                    />
+                    {portraitUploading ? (
+                      <><Loader2 className="mb-2 h-6 w-6 animate-spin text-emerald-600" /><p className="text-sm font-medium text-gray-600">画像を処理しています</p></>
+                    ) : (
+                      <><Upload className="mb-2 h-6 w-6 text-gray-400" /><p className="text-sm font-medium text-gray-700">PCから複数画像をドロップ</p><p className="mt-1 text-xs text-gray-500">JPEG・PNG・WebP／複数選択・枚数制限なし／250KB超は自動縮小</p></>
+                    )}
+                </div>
+              </div>
+
+              {/* Web商品画像 */}
+              <div className="border-t border-gray-100 pt-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Images className="h-4 w-4 text-blue-600" />
+                      <label className="text-sm font-semibold text-gray-700">Web商品画像</label>
+                      <span className="text-xs text-gray-400">{webProductImages.length}枚</span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">EC掲載用の画像を順番どおり管理します。250KBを超える画像は自動縮小します。</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => webImagesInputRef.current?.click()}
+                    disabled={webImagesUploading}
+                  >
+                    {webImagesUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    画像を追加
+                  </Button>
+                </div>
+
+                {webProductImages.length > 0 && (
+                  <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+                    {webProductImages.map((image, index) => (
+                      <div
+                        key={image.id}
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData('application/x-recipe-web-image-index', String(index));
+                          event.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(event) => {
+                          if (!event.dataTransfer.types.includes('application/x-recipe-web-image-index')) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = 'move';
+                        }}
+                        onDrop={(event) => {
+                          const value = event.dataTransfer.getData('application/x-recipe-web-image-index');
+                          if (!value) return;
+                          event.preventDefault();
+                          reorderWebProductImages(Number(value), index);
+                        }}
+                        className="group relative overflow-hidden rounded-md border border-gray-200 bg-white"
+                      >
+                        <a href={image.image_url} target="_blank" rel="noreferrer" className="block aspect-square bg-gray-50">
+                          <img src={image.image_url} alt={`${recipe.name} Web商品画像 ${index + 1}`} className="h-full w-full object-contain" />
+                        </a>
+                        <div className="flex min-h-9 items-center justify-between gap-1 border-t border-gray-100 px-2 py-1">
+                          <span className="min-w-0 truncate text-[10px] text-gray-500">
+                            {index + 1}・{image.source_type === 'rakuten' ? '楽天' : image.source_type === 'base' ? 'BASE' : image.source_type === 'shared_folder' ? '共有' : '手動'}・{Math.ceil(image.file_size_bytes / 1024)}KB
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => deleteWebProductImage(image.id)}
+                            className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            title="画像を削除"
+                            aria-label={`${index + 1}枚目を削除`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div
+                  onDragEnter={(event) => {
+                    if (event.dataTransfer.types.includes('Files')) {
+                      event.preventDefault();
+                      setWebImagesDragOver(true);
+                    }
+                  }}
+                  onDragOver={(event) => {
+                    if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+                  }}
+                  onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setWebImagesDragOver(false);
+                  }}
+                  onDrop={async (event) => {
+                    if (!event.dataTransfer.types.includes('Files')) return;
+                    event.preventDefault();
+                    setWebImagesDragOver(false);
+                    const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
+                    await uploadWebProductImages(files);
+                  }}
+                  onClick={() => !webImagesUploading && webImagesInputRef.current?.click()}
+                  className={`flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed px-4 py-5 text-center transition-colors ${webImagesDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/40'} ${webImagesUploading ? 'pointer-events-none opacity-60' : ''}`}
+                >
+                  <input
+                    ref={webImagesInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    className="hidden"
+                    onChange={async (event) => {
+                      const files = Array.from(event.target.files || []);
+                      event.target.value = '';
+                      await uploadWebProductImages(files);
+                    }}
+                  />
+                  {webImagesUploading ? (
+                    <><Loader2 className="mb-2 h-6 w-6 animate-spin text-blue-600" /><p className="text-sm font-medium text-gray-600">画像を処理しています</p></>
+                  ) : (
+                    <><ImageIcon className="mb-2 h-6 w-6 text-gray-400" /><p className="text-sm font-medium text-gray-700">画像をドロップ、またはクリックして選択</p><p className="mt-1 text-xs text-gray-500">JPEG・PNG・WebP／複数選択対応</p></>
+                  )}
+                </div>
               </div>
             </div>
           </details>

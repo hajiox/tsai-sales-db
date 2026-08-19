@@ -12,6 +12,7 @@ interface OEMProduct {
   id: string;
   product_name: string;
   price: number;
+  profit_rate?: number;
 }
 
 interface OEMSale {
@@ -44,15 +45,31 @@ interface SearchResult {
   customer_code: string;
 }
 
+interface OemRecipeInfo {
+  recipeName: string;
+  totalCost: number | null;
+}
+
 interface OEMAreaProps {
   oemProducts: OEMProduct[];
   oemSales: OEMSale[];
-  linkedProductIds?: Set<string>;
+  linkedProductNames?: Record<string, string>;
+  linkedRecipeInfo?: Record<string, OemRecipeInfo>;
+  useCurrentPrice?: boolean;
   selectedYear?: string;
   selectedMonth?: string;
 }
 
-export default function OEMArea({ oemProducts, oemSales, linkedProductIds, selectedYear, selectedMonth }: OEMAreaProps) {
+function storedSaleAmount(sale: OEMSale) {
+  const quantity = Number(sale.quantity || 0);
+  const unitPrice = Number(sale.unit_price || 0);
+  const calculatedAmount = quantity * unitPrice;
+  return Number.isFinite(calculatedAmount) && (quantity !== 0 || unitPrice !== 0)
+    ? calculatedAmount
+    : Number(sale.amount || 0);
+}
+
+export default function OEMArea({ oemProducts, oemSales, linkedProductNames = {}, linkedRecipeInfo = {}, useCurrentPrice = false, selectedYear, selectedMonth }: OEMAreaProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -65,16 +82,32 @@ export default function OEMArea({ oemProducts, oemSales, linkedProductIds, selec
   const productSummary = oemProducts.map(product => {
     const sales = oemSales.filter(sale => sale.product_id === product.id);
     const totalQuantity = sales.reduce((sum, sale) => sum + sale.quantity, 0);
-    const totalAmount = sales.reduce((sum, sale) => sum + sale.amount, 0);
+    const currentMasterPrice = Number(product.price || 0);
+    const storedAmount = sales.reduce((sum, sale) => sum + storedSaleAmount(sale), 0);
+    const storedUnitPrice = totalQuantity > 0 ? Math.round(storedAmount / totalQuantity) : currentMasterPrice;
+    const useCurrentProductPrice = useCurrentPrice || currentMasterPrice > 0;
+    const totalAmount = useCurrentProductPrice ? totalQuantity * currentMasterPrice : storedAmount;
+    const displayPrice = useCurrentProductPrice ? currentMasterPrice : storedUnitPrice;
+    const recipeInfo = linkedRecipeInfo[product.id];
+    const hasRecipeCost = recipeInfo && recipeInfo.totalCost !== null && Number.isFinite(recipeInfo.totalCost);
+    const totalProfit = hasRecipeCost
+      ? Math.round(totalAmount - (totalQuantity * Number(recipeInfo.totalCost)))
+      : Math.round(totalAmount * Number(product.profit_rate || 0) / 100);
+    const profitRate = totalAmount > 0 ? (totalProfit / totalAmount) * 100 : 0;
 
     return {
       product,
       totalQuantity,
       totalAmount,
-      displayPrice: product.price  // マスター価格を表示
+      totalProfit,
+      profitRate,
+      displayPrice,
+      useCurrentProductPrice,
     };
-  }).filter(item => item.totalAmount > 0)
+  }).filter(item => item.totalQuantity !== 0 || item.totalAmount > 0)
     .sort((a, b) => b.totalAmount - a.totalAmount);
+  const oemTotalAmount = productSummary.reduce((sum, item) => sum + item.totalAmount, 0);
+  const oemTotalProfit = productSummary.reduce((sum, item) => sum + item.totalProfit, 0);
 
   const handleOemSalesClick = () => {
     const params = new URLSearchParams();
@@ -113,6 +146,10 @@ export default function OEMArea({ oemProducts, oemSales, linkedProductIds, selec
     setSearchSummary(null);
     setShowResults(false);
     inputRef.current?.focus();
+  };
+
+  const showLinkedRecipe = (productName: string, recipeName: string) => {
+    window.alert(`リンク先レシピ\n\nOEM商品: ${productName}\nレシピ: ${recipeName}`);
   };
 
   return (
@@ -229,21 +266,30 @@ export default function OEMArea({ oemProducts, oemSales, linkedProductIds, selec
           </div>
         ) : (
           <div className="grid grid-cols-8 gap-2">
-            {productSummary.map(({ product, totalQuantity, totalAmount, displayPrice }) => (
+            {productSummary.map(({ product, totalQuantity, totalAmount, totalProfit, profitRate, displayPrice, useCurrentProductPrice }) => (
               <div key={product.id} className="bg-white rounded-lg p-2 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-1">
                   <h3 className="min-w-0 flex-1 font-medium text-gray-900 text-xs truncate" title={product.product_name}>
                     {product.product_name}
                   </h3>
-                  {linkedProductIds?.has(product.id) && (
-                    <span className="inline-flex flex-shrink-0 items-center px-1 py-0.5 bg-green-100 text-green-700 rounded" title="レシピ紐付済">
+                  {linkedProductNames[product.id] && (
+                    <button
+                      type="button"
+                      className="inline-flex flex-shrink-0 items-center px-1 py-0.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                      title={`リンク先レシピ: ${linkedProductNames[product.id]}`}
+                      aria-label={`${product.product_name} のリンク先レシピを表示`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        showLinkedRecipe(product.product_name, linkedProductNames[product.id]);
+                      }}
+                    >
                       <Link2 className="h-2.5 w-2.5" />
-                    </span>
+                    </button>
                   )}
                 </div>
                 <div className="mt-1 space-y-0.5">
                   <div className="flex justify-between items-center text-xs text-gray-600">
-                    <span className="text-xs">単価:</span>
+                    <span className="text-xs">{useCurrentProductPrice ? '現行単価:' : '入力時単価:'}</span>
                     <span className="font-medium text-xs">¥{displayPrice.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs text-gray-600">
@@ -255,6 +301,15 @@ export default function OEMArea({ oemProducts, oemSales, linkedProductIds, selec
                       <span className="text-xs text-gray-600">合計:</span>
                       <span className="text-xs font-bold text-green-700">
                         ¥{totalAmount.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">利益:</span>
+                      <span className="text-xs font-bold text-emerald-700">
+                        ¥{totalProfit.toLocaleString()}
+                        <span className="ml-1 text-[10px] font-medium">
+                          {profitRate.toFixed(1)}%
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -270,7 +325,14 @@ export default function OEMArea({ oemProducts, oemSales, linkedProductIds, selec
             <div className="flex justify-end items-center gap-4">
               <span className="text-sm text-gray-600">OEM売上合計:</span>
               <span className="text-xl font-bold text-green-800">
-                ¥{oemSales.reduce((sum, sale) => sum + sale.amount, 0).toLocaleString()}
+                ¥{oemTotalAmount.toLocaleString()}
+              </span>
+              <span className="text-sm text-gray-600">OEM利益合計:</span>
+              <span className="text-xl font-bold text-emerald-700">
+                ¥{oemTotalProfit.toLocaleString()}
+                <span className="ml-2 text-sm font-semibold">
+                  ({oemTotalAmount > 0 ? (oemTotalProfit / oemTotalAmount * 100).toFixed(1) : '0.0'}%)
+                </span>
               </span>
             </div>
           </div>

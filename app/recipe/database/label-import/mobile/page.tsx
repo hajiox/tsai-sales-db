@@ -444,6 +444,7 @@ function MobileLabelImportContent() {
                         operation: 'insert',
                         table: 'ingredients',
                         data: updates,
+                        dedupeByName: true,
                     }),
                 });
                 if (!res.ok) {
@@ -452,7 +453,11 @@ function MobileLabelImportContent() {
                 }
                 const createResult = await res.json();
                 savedIngredientId = createResult.data?.id || createResult.id || null;
+                if (createResult.deduped) {
+                    showToast(`同名の既存食材「${createResult.data?.name || updates.name}」を更新しました`, "success");
+                } else {
                 showToast(`「${updates.name || "新規食材"}」を登録しました`, "success");
+                }
             }
 
             // Upload label images to Vercel Blob

@@ -2,8 +2,12 @@
   "installCommand": "npm install --legacy-peer-deps",
   "crons": [
     {
-      "path": "/api/cron/google-ads-token-health",
-      "schedule": "0 19 * * *"
+      "path": "/api/cron/kpi-completeness-reminder",
+      "schedule": "0 0 5,7 * *"
+    },
+    {
+      "path": "/api/cron/web-sales-sync",
+      "schedule": "15 0 * * *"
     }
   ]
 }

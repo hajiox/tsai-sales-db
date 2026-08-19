@@ -339,6 +339,7 @@ function LabelImportContent() {
                         operation: 'insert',
                         table: 'ingredients',
                         data: updates,
+                        dedupeByName: true,
                     }),
                 });
                 if (!res.ok) {
@@ -347,7 +348,11 @@ function LabelImportContent() {
                 }
                 const createResult = await res.json();
                 savedIngredientId = createResult.data?.id || createResult.id || null;
+                if (createResult.deduped) {
+                    toast.success(`同名の既存食材「${createResult.data?.name || updates.name}」を更新しました`);
+                } else {
                 toast.success(`「${updates.name || "新規食材"}」を新規登録しました`);
+                }
             }
 
             // Upload label images to Vercel Blob

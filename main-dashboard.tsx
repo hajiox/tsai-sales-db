@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react"
 import { usePathname } from 'next/navigation'
 import MainSidebar from "@/components/main-sidebar"
+import MobileNavigation from "@/components/mobile-navigation"
 
-// サイドバーを表示しないルートのリスト
+// PC版の全画面表示を維持するルート。
 const FULL_SCREEN_ROUTES = [
   '/login',
   '/mobile',
@@ -13,6 +14,18 @@ const FULL_SCREEN_ROUTES = [
   '/kpi',
   '/wholesale/sales-input',
   '/wholesale/delivery-notes',
+  '/wholesale/inventory',
+  '/brand-store-analysis/inventory',
+  '/recipe/inventory',
+]
+
+// 専用スマホ画面は自身のヘッダー・戻る導線を持つため、共通ナビを重ねない。
+const DEDICATED_MOBILE_ROUTES = [
+  '/login',
+  '/mobile',
+  '/recipe/database/label-import/mobile',
+  '/recipe/photo/mobile',
+  '/recipe/char-siu-production/scan',
 ]
 
 export default function MainDashboard({ children }: { children: React.ReactNode }) {
@@ -37,19 +50,36 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
 
   // ログインページやモバイル専用ページではサイドバーなしの全画面表示
   const isFullScreen = FULL_SCREEN_ROUTES.some(route => pathname.startsWith(route))
+  const isDedicatedMobile = DEDICATED_MOBILE_ROUTES.some(route => pathname.startsWith(route))
 
-  if (isFullScreen) {
+  if (isDedicatedMobile) {
     return <>{children}</>
   }
 
-  return (
-    <div className="flex h-screen bg-gray-100 print:h-auto print:block">
+  if (isFullScreen) {
+    return (
+      <div className="min-h-[100dvh] bg-gray-100 lg:contents">
+        <MobileNavigation />
+        <div className="tsa-mobile-content tsa-mobile-standalone min-h-[100dvh] pt-[calc(3.5rem+env(safe-area-inset-top))] pb-[calc(4rem+env(safe-area-inset-bottom))] lg:contents">
+          {children}
+        </div>
+      </div>
+    )
+  }
 
-      <div className="print:hidden">
+  return (
+    <div className="min-h-[100dvh] min-w-0 bg-gray-100 lg:flex lg:h-screen print:h-auto print:block">
+
+      <MobileNavigation />
+
+      <div className="hidden lg:block print:hidden">
         <MainSidebar />
       </div>
 
-      <main ref={mainRef} className="flex-grow p-6 overflow-auto print:p-0 print:overflow-visible">
+      <main
+        ref={mainRef}
+        className="tsa-mobile-content min-w-0 w-full overflow-x-auto px-3 pt-[calc(4.25rem+env(safe-area-inset-top))] pb-[calc(4.75rem+env(safe-area-inset-bottom))] sm:px-4 lg:flex-grow lg:overflow-auto lg:p-6 print:p-0 print:overflow-visible"
+      >
         {children}
       </main>
 

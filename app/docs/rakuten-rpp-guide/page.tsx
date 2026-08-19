@@ -133,7 +133,7 @@ export default function RakutenRPPGuidePage() {
                         TSAシステムにアップロード
                     </h2>
                     <div className="space-y-3 text-sm text-gray-700">
-                        <p>① <a href="/web-sales/advertising" className="text-blue-600 hover:underline">広告管理システム</a> を開く</p>
+                        <p>① <a href="/web-sales/advertising" className="text-blue-600 hover:underline">経費管理システム</a> を開く</p>
                         <p>② <strong>「楽天広告」</strong> タブを選択</p>
                         <p>③ <strong>「CSVアップロード」</strong> ボタンからダウンロードしたZIPファイルを選択</p>
                         <p>④ データが自動的にパースされ、パフォーマンスが表示されます</p>

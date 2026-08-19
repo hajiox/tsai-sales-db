@@ -35,5 +35,5 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   // 既存の除外はそのまま。/api は除外されるので API で Cookie を発行できます
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|login|auth).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|tsa-mobile-icon-|login|auth).*)"],
 };

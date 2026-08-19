@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, X, Plus, RefreshCw, FileText, ChevronDown, ChevronRight, Search, Sparkles, Undo2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Check, X, RefreshCw, FileText, ChevronDown, ChevronRight, Search, Sparkles, Undo2, AlertTriangle, Apple, Box } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -53,6 +53,16 @@ interface EstimateGroup {
 }
 
 type StatusFilter = "pending" | "applied" | "rejected" | "all";
+type MasterTarget = "ingredient" | "material";
+
+const MATERIAL_KEYWORDS = [
+    "段ボール", "ダンボール", "パウチ", "容器", "トレー", "ボトル",
+    "キャップ", "フィルム", "ラベル", "シール", "テープ", "包装資材",
+    "発送用", "ネコポス", "レトルト用",
+];
+
+const isLikelyMaterialName = (name: string) =>
+    MATERIAL_KEYWORDS.some(keyword => name.includes(keyword));
 
 // --- 材料選択ドロップダウン ---
 function IngredientSelector({
@@ -104,8 +114,7 @@ function IngredientSelector({
     }, [open]);
 
     // 品目名から資材っぽいかを推定
-    const materialKeywords = ["段ボール", "ダンボール", "箱", "ボール", "パック", "袋", "ラベル", "シール", "テープ", "ギフト", "発送用", "ネコポス", "レトルト用", "個入"];
-    const isItemMaterial = materialKeywords.some(kw => itemName.includes(kw));
+    const isItemMaterial = isLikelyMaterialName(itemName);
 
     // 品目名からキーワードを抽出（数字・記号・先頭の"1 "を除去して分割）
     const cleanName = itemName.replace(/^[\d\s]+/, "").replace(/[（）()]/g, "");
@@ -364,12 +373,9 @@ export default function EstimatesPage() {
         setProcessing(null);
     };
 
-    const handleCreateNew = async (item: PendingEstimateItem) => {
+    const handleCreateNew = async (item: PendingEstimateItem, targetTable: MasterTarget) => {
         setProcessing(item.id);
         try {
-            const materialKeywords = ["段ボール", "ダンボール", "箱", "ボール", "パック", "袋", "ラベル", "シール", "テープ", "ギフト", "発送用", "ネコポス", "レトルト用"];
-            const isMaterial = materialKeywords.some(kw => item.item_name.includes(kw));
-            const targetTable = isMaterial ? "material" : "ingredient";
             const res = await fetch("/api/recipe/estimates", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
@@ -384,7 +390,7 @@ export default function EstimatesPage() {
             if (!res.ok || !data.success) {
                 throw new Error(data.error || "新規登録に失敗しました");
             }
-            toast.success(`${item.item_name} → ${isMaterial ? "資材DB" : "食材DB"}に新規登録完了`);
+            toast.success(`${item.item_name} → ${targetTable === "material" ? "資材DB" : "食材DB"}に新規登録完了`);
             // 楽観更新
             setItems(prev => prev.filter(i => i.id !== item.id));
         } catch (e: any) {
@@ -739,15 +745,36 @@ export default function EstimatesPage() {
                                                                     価格更新
                                                                 </Button>
                                                             )}
-                                                            <Button
-                                                                size="sm" variant="outline"
-                                                                className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
-                                                                onClick={() => handleCreateNew(item)}
-                                                                disabled={processing === item.id}
-                                                            >
-                                                                <Plus className="w-3 h-3 mr-1" />
-                                                                新規登録
-                                                            </Button>
+                                                            <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
+                                                                <button
+                                                                    type="button"
+                                                                    className={`inline-flex h-7 items-center px-2 text-xs transition ${
+                                                                        !isLikelyMaterialName(item.item_name)
+                                                                            ? "bg-emerald-50 font-semibold text-emerald-700"
+                                                                            : "bg-white text-gray-600 hover:bg-emerald-50"
+                                                                    }`}
+                                                                    onClick={() => handleCreateNew(item, "ingredient")}
+                                                                    disabled={processing === item.id}
+                                                                    title="食材データベースへ新規登録"
+                                                                >
+                                                                    <Apple className="mr-1 h-3 w-3" />
+                                                                    食材登録
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className={`inline-flex h-7 items-center border-l border-gray-200 px-2 text-xs transition ${
+                                                                        isLikelyMaterialName(item.item_name)
+                                                                            ? "bg-orange-50 font-semibold text-orange-700"
+                                                                            : "bg-white text-gray-600 hover:bg-orange-50"
+                                                                    }`}
+                                                                    onClick={() => handleCreateNew(item, "material")}
+                                                                    disabled={processing === item.id}
+                                                                    title="資材データベースへ新規登録"
+                                                                >
+                                                                    <Box className="mr-1 h-3 w-3" />
+                                                                    資材登録
+                                                                </button>
+                                                            </div>
                                                             <Button
                                                                 size="sm" variant="ghost"
                                                                 className="h-7 text-xs text-gray-400 hover:text-red-500"

@@ -23,6 +23,8 @@ type Customer = {
   customer_code: string | null;
   customer_name: string;
   customer_type: string | null;
+  transaction_type: 'purchase' | 'consignment' | null;
+  default_rate: number | null;
   is_active: boolean | null;
   is_favorite: boolean | null;
   favorite_order: number | null;
@@ -68,8 +70,11 @@ export default function WholesaleDeliveryNotesMobilePage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [newCustomerName, setNewCustomerName] = useState('');
-  const transactionType = 'purchase';
-  const rate = 0.65;
+  const transactionType = selectedCustomer?.transaction_type === 'consignment' ? 'consignment' : 'purchase';
+  const configuredRate = Number(selectedCustomer?.default_rate);
+  const rate = Number.isFinite(configuredRate) && configuredRate > 0
+    ? configuredRate
+    : transactionType === 'consignment' ? 0.70 : 0.65;
   const [productSearch, setProductSearch] = useState('');
   const [productCategory, setProductCategory] = useState<'自社' | 'OEM'>('自社');
   const [items, setItems] = useState<LineItem[]>([]);
@@ -294,7 +299,7 @@ export default function WholesaleDeliveryNotesMobilePage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-md space-y-4 px-4 pb-36 pt-4">
+      <main className="mx-auto max-w-md space-y-4 px-4 pb-[calc(9rem+env(safe-area-inset-bottom))] pt-4 lg:pb-36">
         {loading ? (
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-400">
             読み込み中...
@@ -475,7 +480,7 @@ export default function WholesaleDeliveryNotesMobilePage() {
         )}
       </main>
 
-      <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
+      <footer className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[80] border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur lg:bottom-0">
         <div className="mx-auto max-w-md space-y-2">
           {message && <div className="rounded-lg bg-slate-800 px-3 py-2 text-center text-xs text-cyan-200">{message}</div>}
           <div className="grid grid-cols-2 gap-2">
@@ -483,15 +488,19 @@ export default function WholesaleDeliveryNotesMobilePage() {
               type="button"
               onClick={() => issue(false)}
               disabled={saving || loading}
-              className="min-h-12 rounded-xl border border-slate-700 bg-slate-800 text-sm font-semibold text-slate-100 disabled:opacity-40"
+              className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-2 text-slate-100 disabled:opacity-40"
             >
-              {saving ? '発行中...' : '発行のみ'}
+              <ReceiptText className="h-4 w-4 shrink-0" />
+              <span className="flex flex-col text-left leading-tight">
+                <span className="text-sm font-semibold">{saving ? '発行中...' : '発行のみ'}</span>
+                {!saving && <span className="text-[11px] font-normal text-slate-400">印刷しない</span>}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => issue(true)}
               disabled={saving || loading}
-              className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-cyan-600 text-sm font-semibold text-white disabled:opacity-40"
+              className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-2 text-sm font-semibold text-white disabled:opacity-40"
             >
               <Printer className="h-4 w-4" />
               発行して印刷

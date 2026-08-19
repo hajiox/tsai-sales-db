@@ -1,6 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { taxIncludedFromExcluded } from "@/lib/money";
+import {
+    calculateRecipeItemCost,
+    recalculateRecipeTotalCost,
+} from "@/lib/recipe-cost-sync";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -29,6 +32,24 @@ function normalizeSelfShelfLife(value?: string | null) {
     if (hasMonth(12) || hasYear(1)) return "製造から12カ月";
     if (text.includes("60日") || hasMonth(2)) return "製造から2カ月";
     return null;
+}
+
+function withCanonicalCost(item: any) {
+    if (!["ingredient", "material", "expense"].includes(item.item_type)) {
+        return item;
+    }
+
+    return {
+        ...item,
+        cost: calculateRecipeItemCost({
+            itemType: item.item_type,
+            usageAmount: item.usage_amount,
+            unitPrice: item.unit_price,
+            unitQuantity: item.unit_quantity,
+            unitWeight: item.unit_weight,
+            taxIncluded: item.tax_included ?? true,
+        }),
+    };
 }
 
 // POST: Save recipe changes (items + recipe metadata)
@@ -62,27 +83,32 @@ export async function POST(request: Request) {
         // 2. Insert new items
         if (newItems && newItems.length > 0) {
             const { error: insError } = await supabase.from("recipe_items").insert(
-                newItems.map((item: any) => ({
-                    recipe_id: recipeId,
-                    item_name: item.item_name,
-                    item_type: item.item_type,
-                    unit_quantity: item.unit_quantity,
-                    unit_price: item.unit_price,
-                    unit_weight: item.unit_weight,
-                    usage_amount: item.usage_amount,
-                    cost: item.cost,
-                    tax_included: item.tax_included ?? true,
-                    ingredient_id: item.ingredient_id || null,
-                    material_id: item.material_id || null,
-                    intermediate_recipe_id: item.intermediate_recipe_id || null,
-                }))
+                newItems.map((rawItem: any) => {
+                    const item = withCanonicalCost(rawItem);
+                    return {
+                        recipe_id: recipeId,
+                        item_name: item.item_name,
+                        item_type: item.item_type,
+                        unit_quantity: item.unit_quantity,
+                        unit_price: item.unit_price,
+                        unit_weight: item.unit_weight,
+                        usage_amount: item.usage_amount,
+                        cost: item.cost,
+                        tax_included: item.tax_included ?? true,
+                        ingredient_id: item.ingredient_id || null,
+                        material_id: item.material_id || null,
+                        expense_id: item.expense_id || null,
+                        intermediate_recipe_id: item.intermediate_recipe_id || null,
+                    };
+                })
             );
             if (insError) throw insError;
         }
 
         // 3. Update existing items
         if (existingItems && existingItems.length > 0) {
-            for (const item of existingItems) {
+            for (const rawItem of existingItems) {
+                const item = withCanonicalCost(rawItem);
                 const { error: updError } = await supabase
                     .from("recipe_items")
                     .update({
@@ -95,6 +121,7 @@ export async function POST(request: Request) {
                         tax_included: item.tax_included ?? true,
                         ingredient_id: item.ingredient_id || null,
                         material_id: item.material_id || null,
+                        expense_id: item.expense_id || null,
                         intermediate_recipe_id: item.intermediate_recipe_id || null,
                     })
                     .eq("id", item.id);
@@ -125,6 +152,12 @@ export async function POST(request: Request) {
             if (sanitized.category === "自社" && "shelf_life" in sanitized) {
                 sanitized.shelf_life = normalizeSelfShelfLife(sanitized.shelf_life);
             }
+            if ("product_lp_url" in sanitized) {
+                const productLpUrl = typeof sanitized.product_lp_url === "string"
+                    ? sanitized.product_lp_url.trim()
+                    : "";
+                sanitized.product_lp_url = productLpUrl || null;
+            }
 
             const { error: recipeError } = await supabase
                 .from("recipes")
@@ -133,29 +166,8 @@ export async function POST(request: Request) {
             if (recipeError) throw recipeError;
         }
 
-        // 5. Auto-sync to linked product
-        if (recipeUpdates?.linked_product_id || true) {
-            const { data: recipe } = await supabase
-                .from("recipes")
-                .select("linked_product_id, selling_price")
-                .eq("id", recipeId)
-                .single();
-
-            if (recipe?.linked_product_id && recipe?.selling_price) {
-                const productPrice = taxIncludedFromExcluded(recipe.selling_price);
-                const totalCost = recipeUpdates?.total_cost;
-                const profitRate = totalCost
-                    ? ((productPrice - totalCost) / productPrice) * 100
-                    : null;
-                await supabase
-                    .from("products")
-                    .update({
-                        price: productPrice,
-                        profit_rate: profitRate ? Math.round(profitRate * 10) / 10 : null,
-                    })
-                    .eq("id", recipe.linked_product_id);
-            }
-        }
+        // 5. Recalculate from the server-normalized item costs, then sync linked products.
+        await recalculateRecipeTotalCost(supabase, recipeId);
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

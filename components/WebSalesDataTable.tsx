@@ -129,6 +129,34 @@ export default function WebSalesDataTable({
     setDragOverProductId(null)
   }
 
+  const handleMobileMove = async (productId: string, direction: -1 | 1, seriesItems: WebSalesData[]) => {
+    if (isDragSaving) return
+
+    const ordered = [...seriesItems]
+    const fromIdx = ordered.findIndex(row => row.product_id === productId)
+    const toIdx = fromIdx + direction
+    if (fromIdx === -1 || toIdx < 0 || toIdx >= ordered.length) return
+
+    const [moved] = ordered.splice(fromIdx, 1)
+    ordered.splice(toIdx, 0, moved)
+
+    setIsDragSaving(true)
+    try {
+      for (const [index, item] of ordered.entries()) {
+        await supabase
+          .from('products')
+          .update({ product_code: index + 1 })
+          .eq('id', item.product_id)
+      }
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      console.error('並び替え保存エラー:', err)
+      alert('並び替えの保存に失敗しました')
+    } finally {
+      setIsDragSaving(false)
+    }
+  }
+
   // シリーズ折りたたみ状態（デフォルト: 全て折りたたみ）
   const [expandedSeries, setExpandedSeries] = useState<Set<number>>(new Set())
 
@@ -577,8 +605,8 @@ export default function WebSalesDataTable({
   return (
     <div ref={containerRef} className="relative">
       {/* 検索窓 + ボタン群 */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full flex-1 lg:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
@@ -601,10 +629,10 @@ export default function WebSalesDataTable({
             {seriesGroups.reduce((sum, [, g]) => sum + g.items.length, 0)}件ヒット
           </span>
         )}
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2 lg:flex">
           <button
             onClick={toggleAll}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors border border-gray-300"
+            className="flex min-h-11 items-center justify-center gap-1.5 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors border border-gray-300 lg:min-h-0"
             title={expandedSeries.size === seriesGroups.length ? '全て折りたたむ' : '全て展開'}
           >
             <ChevronsUpDown className="h-4 w-4" />
@@ -612,7 +640,7 @@ export default function WebSalesDataTable({
           </button>
           <button
             onClick={() => setIsAddingProduct(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className="flex min-h-11 items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors lg:min-h-0"
           >
             <Plus className="h-4 w-4" />
             新規登録
@@ -620,7 +648,258 @@ export default function WebSalesDataTable({
         </div>
       </div>
 
-      <div className="overflow-auto border border-gray-300 rounded-lg">
+      <div className="space-y-3 lg:hidden">
+        {seriesGroups.length === 0 ? (
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+            データがありません
+          </div>
+        ) : (
+          seriesGroups.map(([seriesCode, group]) => {
+            const isExpanded = expandedSeries.has(seriesCode)
+            const subtotals = getSeriesSubtotals(group.items)
+
+            return (
+              <section key={`mobile-series-${seriesCode}`} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => toggleSeries(seriesCode)}
+                  className="flex min-h-14 w-full items-start justify-between gap-3 bg-slate-50 px-4 py-3 text-left"
+                  aria-expanded={isExpanded}
+                >
+                  <span className="flex min-w-0 items-start gap-2">
+                    {isExpanded ? (
+                      <ChevronDown className="mt-0.5 h-5 w-5 flex-none text-slate-500" />
+                    ) : (
+                      <ChevronRight className="mt-0.5 h-5 w-5 flex-none text-slate-500" />
+                    )}
+                    <span className="min-w-0">
+                      <span className="block break-words text-sm font-bold text-slate-900">
+                        {group.seriesName || `シリーズ ${seriesCode}`}
+                      </span>
+                      <span className="mt-1 block text-xs text-slate-500">{group.items.length}商品</span>
+                    </span>
+                  </span>
+                  <span className="flex-none text-right">
+                    <span className="block text-sm font-bold text-slate-900">{subtotals.totalCount.toLocaleString('ja-JP')}個</span>
+                    <span className="block text-xs text-slate-500">¥{formatNumber(subtotals.totalAmount)}</span>
+                  </span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-px border-y border-slate-200 bg-slate-200 text-xs">
+                  <div className="bg-white px-3 py-2">
+                    <span className="block text-slate-500">広告費</span>
+                    <strong className="mt-0.5 block text-red-600">¥{formatNumber(subtotals.totalAdCost)}</strong>
+                  </div>
+                  <div className="bg-white px-3 py-2">
+                    <span className="block text-slate-500">最終利益</span>
+                    <strong className={`mt-0.5 block ${subtotals.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      ¥{formatNumber(subtotals.totalProfit)}
+                    </strong>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="divide-y divide-slate-200">
+                    {group.items.map((row, rowIndex) => {
+                      const price = getProductPrice(row.product_id)
+                      const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
+                      const productCode = getProductProductCode ? getProductProductCode(row.product_id) : (row.product_code || 0)
+                      const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
+                      const totalAmount = totalCount * price
+                      const profitAmount = Math.round(totalAmount * (profitRate / 100))
+                      const selectedSiteKey = hoveredSiteCell?.startsWith(`${row.product_id}-`)
+                        ? hoveredSiteCell.slice(row.product_id.length + 1)
+                        : null
+
+                      return (
+                        <article key={`mobile-product-${row.product_id}`} className="space-y-3 px-3 py-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-start gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    if (hoveredProductId === row.product_id) {
+                                      setHoveredProductId(null)
+                                    } else {
+                                      handleProductNameMouseEnter(row.product_id, event)
+                                    }
+                                  }}
+                                  className="min-w-0 break-words text-left text-sm font-semibold text-slate-900 underline-offset-2 hover:text-blue-600 hover:underline"
+                                  aria-expanded={hoveredProductId === row.product_id}
+                                >
+                                  {getProductName(row.product_id)}
+                                </button>
+                                {recipeLinks[row.product_id] && (
+                                  <span className="mt-0.5 flex-none text-emerald-500" title={`レシピ: ${recipeLinks[row.product_id]}`}>
+                                    <Link2 className="h-4 w-4" />
+                                  </span>
+                                )}
+                              </div>
+                              <span className="mt-1 block text-xs text-slate-500">No. {productCode || '-'}</span>
+                            </div>
+                            <div className="flex flex-none items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleMobileMove(row.product_id, -1, group.items)}
+                                disabled={rowIndex === 0 || isDragSaving}
+                                className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-600 disabled:opacity-30"
+                                title="上へ移動"
+                                aria-label={`${getProductName(row.product_id)}を上へ移動`}
+                              >
+                                <ChevronDown className="h-4 w-4 rotate-180" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMobileMove(row.product_id, 1, group.items)}
+                                disabled={rowIndex === group.items.length - 1 || isDragSaving}
+                                className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-600 disabled:opacity-30"
+                                title="下へ移動"
+                                aria-label={`${getProductName(row.product_id)}を下へ移動`}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {hoveredProductId === row.product_id && (
+                            <div className="rounded-md bg-slate-50 p-3">
+                              <div className="mb-2 text-xs font-semibold text-slate-700">過去6ヶ月の売上推移</div>
+                              {trendLoading[row.product_id] ? (
+                                <div className="py-3 text-center text-xs text-slate-500">読み込み中...</div>
+                              ) : trendData[row.product_id]?.length ? (
+                                <div className="space-y-1.5">
+                                  {trendData[row.product_id].map((trend, index) => (
+                                    <div key={index} className="flex items-center justify-between gap-3 text-xs">
+                                      <span className="text-slate-500">{trend.month_label}</span>
+                                      <strong className="text-slate-800">¥{formatNumber(trend.sales)}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="py-3 text-center text-xs text-slate-500">推移データがありません</div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-md bg-slate-50 px-3 py-2">
+                              <span className="block text-xs text-slate-500">価格</span>
+                              <strong className="text-sm text-slate-900">¥{formatNumber(price)}</strong>
+                            </div>
+                            <div className="rounded-md bg-slate-50 px-3 py-2">
+                              <span className="block text-xs text-slate-500">利益率</span>
+                              <strong className="text-sm text-slate-900">{profitRate}%</strong>
+                            </div>
+                            <div className="rounded-md bg-slate-50 px-3 py-2">
+                              <span className="block text-xs text-slate-500">合計</span>
+                              <strong className="text-sm text-slate-900">{totalCount.toLocaleString('ja-JP')}個 / ¥{formatNumber(totalAmount)}</strong>
+                            </div>
+                            <div className="rounded-md bg-slate-50 px-3 py-2">
+                              <span className="block text-xs text-slate-500">利益</span>
+                              <strong className={`text-sm ${profitAmount >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>¥{formatNumber(profitAmount)}</strong>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            {sites.map(site => {
+                              const count = (row as any)[site.key] || 0
+                              const cellKey = `${row.product_id}-${site.key}`
+
+                              return (
+                                <div key={`mobile-${cellKey}`} className={`rounded-md border border-slate-200 p-2 ${site.bgColor}`}>
+                                  <div className="mb-2 flex items-center justify-between gap-2">
+                                    <span className="text-xs font-semibold text-slate-700">{site.label}</span>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        if (hoveredSiteCell === cellKey) {
+                                          setHoveredSiteCell(null)
+                                        } else {
+                                          handleSiteMouseEnter(row.product_id, site.key, event)
+                                        }
+                                      }}
+                                      className="min-h-8 px-1 text-xs text-slate-600 underline underline-offset-2"
+                                      aria-expanded={hoveredSiteCell === cellKey}
+                                    >
+                                      推移
+                                    </button>
+                                  </div>
+                                  {editMode[cellKey] ? (
+                                    <div className="space-y-2">
+                                      <Input
+                                        type="number"
+                                        value={editedValue}
+                                        onChange={(event) => onEditValueChange(event.target.value)}
+                                        className="w-full"
+                                        size="sm"
+                                        autoFocus
+                                      />
+                                      <div className="grid grid-cols-2 gap-1">
+                                        <button type="button" onClick={() => onSave(row.product_id, site.key)} className="min-h-10 rounded bg-emerald-600 text-sm font-semibold text-white">保存</button>
+                                        <button type="button" onClick={onCancel} className="min-h-10 rounded border border-slate-300 bg-white text-sm font-semibold text-slate-700">取消</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => onEdit(row.product_id, site.key)}
+                                      className="min-h-11 w-full rounded bg-white/80 px-3 text-center text-base font-bold text-slate-900"
+                                      aria-label={`${site.label}の販売数${count}を編集`}
+                                    >
+                                      {count}
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+
+                          {selectedSiteKey && hoveredSiteCell && (
+                            <div className="rounded-md border border-slate-200 bg-white p-3">
+                              <div className="mb-2 text-xs font-semibold text-slate-700">
+                                {siteNames[selectedSiteKey] || selectedSiteKey} 過去6ヶ月の販売数
+                              </div>
+                              {siteTrendLoading[hoveredSiteCell] ? (
+                                <div className="py-3 text-center text-xs text-slate-500">読み込み中...</div>
+                              ) : siteTrendData[hoveredSiteCell]?.length ? (
+                                <div className="space-y-1.5">
+                                  {siteTrendData[hoveredSiteCell].map((trend, index) => (
+                                    <div key={index} className="flex items-center justify-between gap-3 text-xs">
+                                      <span className="text-slate-500">{trend.month_label}</span>
+                                      <strong className="text-slate-800">{formatNumber(trend.count)}個</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="py-3 text-center text-xs text-slate-500">推移データがありません</div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3">
+                            <button type="button" onClick={() => handleEditProduct(row.product_id)} className="flex min-h-11 items-center justify-center gap-1 rounded-md border border-blue-200 text-sm font-semibold text-blue-700">
+                              <Edit className="h-4 w-4" />編集
+                            </button>
+                            <button type="button" onClick={() => handleHideProduct(row.product_id)} className="flex min-h-11 items-center justify-center gap-1 rounded-md border border-slate-200 text-sm font-semibold text-slate-700">
+                              <EyeOff className="h-4 w-4" />終売
+                            </button>
+                            <button type="button" onClick={() => handleDeleteProduct(row.product_id)} disabled={isDeleting} className="flex min-h-11 items-center justify-center gap-1 rounded-md border border-red-200 text-sm font-semibold text-red-700 disabled:opacity-50">
+                              <Trash2 className="h-4 w-4" />削除
+                            </button>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            )
+          })
+        )}
+      </div>
+
+      <div className="hidden overflow-auto border border-gray-300 rounded-lg lg:block">
         <div className="inline-block min-w-full align-middle">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 sticky top-0 z-10">
@@ -860,7 +1139,7 @@ export default function WebSalesDataTable({
       {/* 商品名ホバー時のツールチップ */}
       {hoveredProductId && (
         <div
-          className="absolute z-50 bg-white border-2 border-gray-300 rounded-lg shadow-xl p-4 w-72"
+          className="absolute z-50 hidden bg-white border-2 border-gray-300 rounded-lg shadow-xl p-4 w-72 lg:block"
           style={{
             top: `${tooltipPosition.top}px`,
             left: `${tooltipPosition.left}px`,
@@ -909,7 +1188,7 @@ export default function WebSalesDataTable({
       {/* ECサイト別ホバー時のツールチップ */}
       {hoveredSiteCell && (
         <div
-          className="absolute z-50 bg-white border-2 border-gray-300 rounded-lg shadow-xl p-4 w-72"
+          className="absolute z-50 hidden bg-white border-2 border-gray-300 rounded-lg shadow-xl p-4 w-72 lg:block"
           style={{
             top: `${tooltipPosition.top}px`,
             left: `${tooltipPosition.left}px`,

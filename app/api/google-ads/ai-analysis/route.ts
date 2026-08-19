@@ -113,6 +113,7 @@ export async function POST(request: NextRequest) {
             ctr: d.impressions > 0 ? parseFloat((d.clicks / d.impressions * 100).toFixed(2)) : 0,
             cpc: d.clicks > 0 ? Math.round(d.cost / d.clicks) : 0,
             cvr: d.clicks > 0 ? parseFloat((d.conversions / d.clicks * 100).toFixed(2)) : 0,
+            cpa: d.conversions > 0 ? Math.round(d.cost / d.conversions) : 0,
             roas: d.cost > 0 ? parseFloat((d.cv_value / d.cost * 100).toFixed(0)) : 0,
             cv_value: Math.round(d.cv_value),
         })
@@ -120,6 +121,10 @@ export async function POST(request: NextRequest) {
         const currM = calcMetrics(curr)
         const prevM = calcMetrics(prev)
         const prevPrevM = calcMetrics(prevPrev)
+        const cvValueLooksReliable = currM.cost > 0 && currM.cv_value >= currM.cost * 0.5
+        const cvValueReliabilityNote = cvValueLooksReliable
+            ? 'CV値は広告費に対して一定以上あり、参考指標として扱えます。ただし実売上との一致は別途確認してください。'
+            : 'CV値が広告費に対して極端に低いため、Google AdsのCV値/ROASは実売上を反映していない可能性が高いです。停止判断には使わず、CV数・CVR・CPAを主指標にしてください。'
 
         // 変化率計算
         const pctChange = (c: number, p: number) => p > 0 ? parseFloat(((c - p) / p * 100).toFixed(1)) : null
@@ -140,13 +145,19 @@ ${seriesInfo}
 
 【パフォーマンスサマリー — 3ヶ月推移】
 ${prevPrevMonth}（2ヶ月前）:
-  広告費: ¥${prevPrevM.cost.toLocaleString()}, クリック: ${prevPrevM.clicks}, CTR: ${prevPrevM.ctr}%, CPC: ¥${prevPrevM.cpc}, CV: ${prevPrevM.conversions}, CVR: ${prevPrevM.cvr}%, ROAS: ${prevPrevM.roas}%
+  広告費: ¥${prevPrevM.cost.toLocaleString()}, クリック: ${prevPrevM.clicks}, CTR: ${prevPrevM.ctr}%, CPC: ¥${prevPrevM.cpc}, CV: ${prevPrevM.conversions}, CVR: ${prevPrevM.cvr}%, CPA: ¥${prevPrevM.cpa}, ROAS(CV値由来): ${prevPrevM.roas}%
 
 ${prevMonth}（前月）:
-  広告費: ¥${prevM.cost.toLocaleString()}, クリック: ${prevM.clicks}, CTR: ${prevM.ctr}%, CPC: ¥${prevM.cpc}, CV: ${prevM.conversions}, CVR: ${prevM.cvr}%, ROAS: ${prevM.roas}%
+  広告費: ¥${prevM.cost.toLocaleString()}, クリック: ${prevM.clicks}, CTR: ${prevM.ctr}%, CPC: ¥${prevM.cpc}, CV: ${prevM.conversions}, CVR: ${prevM.cvr}%, CPA: ¥${prevM.cpa}, ROAS(CV値由来): ${prevM.roas}%
 
 ${targetMonth}（対象月）:
-  広告費: ¥${currM.cost.toLocaleString()}, 表示: ${currM.impressions.toLocaleString()}, クリック: ${currM.clicks}, CTR: ${currM.ctr}%, CPC: ¥${currM.cpc}, CV: ${currM.conversions}, CVR: ${currM.cvr}%, ROAS: ${currM.roas}%, CV値: ¥${currM.cv_value.toLocaleString()}
+  広告費: ¥${currM.cost.toLocaleString()}, 表示: ${currM.impressions.toLocaleString()}, クリック: ${currM.clicks}, CTR: ${currM.ctr}%, CPC: ¥${currM.cpc}, CV: ${currM.conversions}, CVR: ${currM.cvr}%, CPA: ¥${currM.cpa}, ROAS(CV値由来): ${currM.roas}%, CV値: ¥${currM.cv_value.toLocaleString()}
+
+【Google広告の判定ルール（重要）】
+- conversions_value と ROAS はGoogle Ads側のコンバージョン値設定に依存し、EC実売上と一致しないことがあります。
+- ${cvValueReliabilityNote}
+- 今月の主要指標は CV ${currM.conversions}件、CVR ${currM.cvr}%、CPA ¥${currM.cpa}、CPC ¥${currM.cpc} です。CV値由来ROASだけを理由に「即停止」「壊滅的」と結論しないでください。
+- 停止候補にするのは、CVRが低い、CPAが高い、CV数が少ない、クリック品質が悪い、という複数条件が揃う場合だけです。CVRが高くCPAが低い場合は、計測修正・維持・高効率面への寄せ方を優先してください。
 
 【前月比変化率】
   広告費: ${pctChange(currM.cost, prevM.cost) ?? '—'}%
@@ -155,6 +166,7 @@ ${targetMonth}（対象月）:
   CTR: ${pctChange(currM.ctr, prevM.ctr) ?? '—'}%
   CPC: ${pctChange(currM.cpc, prevM.cpc) ?? '—'}%
   CVR: ${pctChange(currM.cvr, prevM.cvr) ?? '—'}%
+  CPA: ${pctChange(currM.cpa, prevM.cpa) ?? '—'}%
 
 【日別推移データ（対象月）】
 ${dailyTrend.slice(0, 15).map(d => `${d.date}: 費用¥${Math.round(d.cost)}, ${d.clicks}クリック, ${d.conversions.toFixed(1)}CV`).join('\n')}
@@ -169,14 +181,14 @@ ${dailyTrend.length > 15 ? `... 他${dailyTrend.length - 15}日分` : ''}
    - 予算配分の偏り
 
 2. 入札戦略評価:
-   - 現在のROAS ${currM.roas}%に対する入札目標の適切性
+   - CV値/ROASの信頼性を確認し、信頼できない場合はtROASではなくCPA・CVR・CV数を中心に評価
    - CV数が自動入札の学習に十分か（月間50CV以上が望ましい）
    - 予算制限による機会損失の可能性
 
 3. 効率性分析:
    - CPC ¥${currM.cpc} は業種（食品EC）として適切か
    - CVR ${currM.cvr}% は高すぎ/低すぎないか
-   - ROAS ${currM.roas}% の改善余地
+   - CPA ¥${currM.cpa} とCV数から見て、止めるべき広告か、維持/拡大すべき広告か
 
 【出力要件】
 以下のセクションをMarkdownで出力してください。具体的な数値を引用し、経営者が読んでアクションを取れる内容にしてください。
@@ -191,7 +203,9 @@ ${dailyTrend.length > 15 ? `... 他${dailyTrend.length - 15}日分` : ''}
 P-MAXの入札戦略（tROAS/tCPA）、予算配分について具体的な数値付きで提案。
 
 ## 💡 具体的アクションプラン
-今すぐ実行すべきこと、1週間以内、1ヶ月以内の3段階で具体的なアクションを提案。`
+今すぐ実行すべきこと、1週間以内、1ヶ月以内の3段階で具体的なアクションを提案。
+
+注意: CV値/ROASが低いだけで停止推奨にしないこと。CVR・CPA・CV数が良い場合は「計測修正」「高効率アセットへ寄せる」「予算維持/増額検討」を優先して書くこと。`
 
         // Gemini 2.5 Flash API呼び出し
         const response = await fetch(

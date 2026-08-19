@@ -91,6 +91,10 @@ interface ApiResponse {
     currentOperatingIncome: number;
     currentOrdinaryIncome: number;
     currentNetIncome: number;
+    currentPersonnelCost: number;
+    currentPersonnelRatio: number;
+    currentAdvertisingCost: number;
+    currentAdvertisingRatio: number;
     currentGrossMargin: number;
     currentOperatingMargin: number;
     currentNetMargin: number;
@@ -119,6 +123,10 @@ interface ApiResponse {
       cashMonths: number;
       inventoryDays: number;
       monthlyCost: number;
+      personnelCost: number;
+      personnelRatio: number;
+      advertisingCost: number;
+      advertisingRatio: number;
     };
     expenseAccounts: Array<{
       accountCode: string;
@@ -244,12 +252,15 @@ function InsightMetric({
     rose: 'border-rose-200 bg-rose-50',
     blue: 'border-blue-200 bg-blue-50',
   };
+  const compactValue = value.replace(/[^\d-]/g, '').length >= 9;
 
   return (
-    <div className={`rounded-xl border px-4 py-3 ${tones[tone]}`}>
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="mt-1 text-lg font-bold text-slate-900">{value}</div>
-      <div className="mt-1 text-xs text-slate-500">{sub}</div>
+    <div className={`min-w-0 rounded-xl border px-3 py-3 ${tones[tone]}`}>
+      <div className="truncate text-xs text-slate-500">{label}</div>
+      <div className={`mt-1 whitespace-nowrap font-bold leading-tight tracking-normal text-slate-900 tabular-nums ${compactValue ? 'text-base' : 'text-lg'}`}>
+        {value}
+      </div>
+      <div className="mt-1 truncate text-xs text-slate-500">{sub}</div>
     </div>
   );
 }
@@ -463,13 +474,13 @@ export default function TrialBalanceStatementPage() {
           {data.summary && data.insights && (
             <section className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                  <div>
+                <div className="space-y-5">
+                  <div className="max-w-5xl">
                     <div className="text-xs font-semibold text-emerald-700 mb-2">今月の見立て</div>
                     <h2 className="text-xl font-bold text-slate-900">まずここを見れば大枠が分かります</h2>
                     <p className="mt-2 text-sm leading-7 text-slate-600">{data.insights.headline}</p>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3 lg:min-w-[520px]">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
                     <InsightMetric
                       label="当月売上"
                       value={yen(data.summary.currentNetSales)}
@@ -481,6 +492,18 @@ export default function TrialBalanceStatementPage() {
                       value={percent(data.summary.currentGrossMargin)}
                       sub={`粗利 ${yen(data.summary.currentGrossProfit)}`}
                       tone={data.summary.currentGrossMargin < 0.45 ? 'amber' : 'emerald'}
+                    />
+                    <InsightMetric
+                      label="人件費"
+                      value={yen(data.summary.currentPersonnelCost)}
+                      sub={`売上比 ${percent(data.summary.currentPersonnelRatio)}`}
+                      tone={data.summary.currentPersonnelRatio >= 0.35 ? 'rose' : data.summary.currentPersonnelRatio >= 0.25 ? 'amber' : 'slate'}
+                    />
+                    <InsightMetric
+                      label="広告宣伝費"
+                      value={yen(data.summary.currentAdvertisingCost)}
+                      sub={`売上比 ${percent(data.summary.currentAdvertisingRatio)}`}
+                      tone={data.summary.currentAdvertisingRatio >= 0.15 ? 'rose' : data.summary.currentAdvertisingRatio >= 0.1 ? 'amber' : 'slate'}
                     />
                     <InsightMetric
                       label="当月営業利益"

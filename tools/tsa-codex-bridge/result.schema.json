@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["completed", "waiting_for_user", "needs_review", "failed"]
+    },
+    "summary": { "type": "string" },
+    "details": { "type": "string" },
+    "source_files": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "imported_count": {
+      "anyOf": [{ "type": "integer" }, { "type": "null" }]
+    },
+    "report_month": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }]
+    }
+  },
+  "required": ["status", "summary", "details", "source_files", "imported_count", "report_month"],
+  "additionalProperties": false
+}

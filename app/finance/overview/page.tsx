@@ -25,13 +25,15 @@ function shiftMonthISO(iso: string, delta: number) {
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { date?: string; refresh?: string; ts?: string };
+  searchParams?: Promise<{ date?: string; refresh?: string; ts?: string }>;
 }) {
-  const host = headers().get("host")!;
+  const headersList = await headers();
+  const host = headersList.get("host")!;
   const proto = process.env.VERCEL ? "https" : "http";
+  const params = await searchParams;
 
-  const dateParam = searchParams?.date?.match(/^\d{4}-\d{2}-\d{2}$/) ? searchParams!.date! : "";
-  const doRefresh = searchParams?.refresh === "1";
+  const dateParam = params?.date?.match(/^\d{4}-\d{2}-\d{2}$/) ? params.date : "";
+  const doRefresh = params?.refresh === "1";
 
   // リフレッシュ（見える手応え）
   let refreshed: { ok: boolean; at: string; bs?: number; pl?: number } | null = null;
@@ -52,7 +54,7 @@ export default async function Page({
   const res = await fetch(overviewUrl, { cache: "no-store" });
   if (!res.ok) {
     return (
-      <div className="p-6">
+      <div className="px-3 py-4 sm:px-4 lg:p-6">
         <h1 className="text-xl font-semibold">財務ダッシュボード</h1>
         <p className="text-red-600">Error: {res.status} {res.statusText}</p>
       </div>
@@ -73,57 +75,109 @@ export default async function Page({
   const refreshHref = `?${rqs.toString()}`;
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">財務ダッシュボード</h1>
-        <div className="flex items-center gap-3">
-          <a href={prevHref} className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50">← 前月</a>
-          <a href={nextHref} className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50">翌月 →</a>
-          {refreshed && (
-            <span className={`px-2 py-1 rounded-full text-xs ${refreshed.ok ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"}`}>
-              更新 {new Date(refreshed.at).toLocaleTimeString()} (bs:{refreshed.bs ?? "-"}, pl:{refreshed.pl ?? "-"})
+    <>
+      <div className="mx-auto max-w-[1400px] space-y-4 px-3 py-4 sm:px-4 lg:hidden">
+        <div className="flex flex-col gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900">財務ダッシュボード</h1>
+            <div className="mt-1 text-sm text-gray-600">対象月: {baseISO}</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <a href={prevHref} className="inline-flex min-h-11 items-center justify-center rounded-lg border px-3 py-2 text-sm shadow-sm hover:bg-gray-50">← 前月</a>
+            <a href={nextHref} className="inline-flex min-h-11 items-center justify-center rounded-lg border px-3 py-2 text-sm shadow-sm hover:bg-gray-50">翌月 →</a>
+            {refreshed && (
+              <span className={`col-span-2 rounded-lg px-2 py-2 text-center text-xs sm:order-last sm:rounded-full ${refreshed.ok ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"}`}>
+                更新 {new Date(refreshed.at).toLocaleTimeString()} (bs:{refreshed.bs ?? "-"}, pl:{refreshed.pl ?? "-"})
+              </span>
+            )}
+            <a href={refreshHref} className="inline-flex min-h-11 items-center justify-center rounded-lg border px-3 py-2 text-sm shadow-sm hover:bg-gray-50">更新</a>
+            <span className={`inline-flex min-h-11 items-center justify-center rounded-lg px-3 py-2 text-center text-sm ${is_balanced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+              {is_balanced ? "OK（検算差=0）" : "Unbalanced"}
             </span>
-          )}
-          <a href={refreshHref} className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50">更新</a>
-          <span className={`px-3 py-1 rounded-full text-sm ${is_balanced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-            {is_balanced ? "OK（検算差=0）" : "Unbalanced"}
-          </span>
-        </div>
-      </div>
-
-      <div className="text-sm text-gray-600">対象月: {baseISO}</div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* 貸借対照表（PDF表記に合わせて名称調整） */}
-        <div className="rounded-2xl shadow p-4">
-          <h2 className="font-medium mb-2">貸借対照表（合計）</h2>
-          <div className="space-y-1">
-            <div>資産合計：{fmt(bs.assets_total)}</div>
-            <div>負債合計：{fmt(bs.liabilities_total)}</div>
-            <div>純資産合計：{fmt(bs.equity_total)}</div>
-            <div className={`${bs.diff === 0 ? "text-green-700" : "text-red-700"}`}>検算差：{fmt(bs.diff)}</div>
           </div>
-          <p className="mt-3 text-xs text-gray-500">
-            ※ 科目の内訳（流動資産／固定資産／投資その他 等）は明細画面で対応。ここは合計値のみ。
-          </p>
         </div>
 
-        {/* 損益計算書（PDF表記に合わせて名称調整） */}
-        <div className="rounded-2xl shadow p-4">
-          <h2 className="font-medium mb-2">損益計算書（当期累計）</h2>
-          <div className="space-y-1">
-            <div>売上高（純売上高）：{fmt(pl.revenues_total)}</div>
-            <div>費用合計（原価・販管費等）：{fmt(pl.expenses_total)}</div>
-            <div className={`${pl.net_income_signed >= 0 ? "text-green-700" : "text-red-700"}`}>
-              当期純利益：{fmt(pl.net_income_signed)}
+        <div className="grid grid-cols-1 gap-3">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="mb-3 font-medium">貸借対照表（合計）</h2>
+            <div className="divide-y divide-slate-100 text-sm sm:text-base">
+              <div className="flex items-center justify-between gap-3 py-2"><span className="text-slate-600">資産合計</span><strong className="text-right tabular-nums">{fmt(bs.assets_total)}</strong></div>
+              <div className="flex items-center justify-between gap-3 py-2"><span className="text-slate-600">負債合計</span><strong className="text-right tabular-nums">{fmt(bs.liabilities_total)}</strong></div>
+              <div className="flex items-center justify-between gap-3 py-2"><span className="text-slate-600">純資産合計</span><strong className="text-right tabular-nums">{fmt(bs.equity_total)}</strong></div>
+              <div className={`flex items-center justify-between gap-3 py-2 ${bs.diff === 0 ? "text-green-700" : "text-red-700"}`}><span>検算差</span><strong className="text-right tabular-nums">{fmt(bs.diff)}</strong></div>
             </div>
-            <div className={`${pl.diff === 0 ? "text-green-700" : "text-red-700"}`}>差分：{fmt(pl.diff)}</div>
+            <p className="mt-3 text-xs text-gray-500">
+              ※ 科目の内訳（流動資産／固定資産／投資その他 等）は明細画面で対応。ここは合計値のみ。
+            </p>
           </div>
-          <p className="mt-3 text-xs text-gray-500">
-            ※ 「売上総利益」「営業利益」「経常利益」など段階利益はDB集計を簡略化中のため省略。
-          </p>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="mb-3 font-medium">損益計算書（当期累計）</h2>
+            <div className="divide-y divide-slate-100 text-sm sm:text-base">
+              <div className="flex items-center justify-between gap-3 py-2"><span className="text-slate-600">売上高（純売上高）</span><strong className="text-right tabular-nums">{fmt(pl.revenues_total)}</strong></div>
+              <div className="flex items-center justify-between gap-3 py-2"><span className="text-slate-600">費用合計</span><strong className="text-right tabular-nums">{fmt(pl.expenses_total)}</strong></div>
+              <div className={`flex items-center justify-between gap-3 py-2 ${pl.net_income_signed >= 0 ? "text-green-700" : "text-red-700"}`}>
+                <span>当期純利益</span><strong className="text-right tabular-nums">{fmt(pl.net_income_signed)}</strong>
+              </div>
+              <div className={`flex items-center justify-between gap-3 py-2 ${pl.diff === 0 ? "text-green-700" : "text-red-700"}`}><span>差分</span><strong className="text-right tabular-nums">{fmt(pl.diff)}</strong></div>
+            </div>
+            <p className="mt-3 text-xs text-gray-500">
+              ※ 「売上総利益」「営業利益」「経常利益」など段階利益はDB集計を簡略化中のため省略。
+            </p>
+          </div>
         </div>
       </div>
-    </div>
+
+      <div className="hidden p-6 space-y-6 lg:block">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold">財務ダッシュボード</h1>
+          <div className="flex items-center gap-3">
+            <a href={prevHref} className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50">← 前月</a>
+            <a href={nextHref} className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50">翌月 →</a>
+            {refreshed && (
+              <span className={`px-2 py-1 rounded-full text-xs ${refreshed.ok ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"}`}>
+                更新 {new Date(refreshed.at).toLocaleTimeString()} (bs:{refreshed.bs ?? "-"}, pl:{refreshed.pl ?? "-"})
+              </span>
+            )}
+            <a href={refreshHref} className="px-3 py-1 rounded-xl border shadow-sm text-sm hover:bg-gray-50">更新</a>
+            <span className={`px-3 py-1 rounded-full text-sm ${is_balanced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+              {is_balanced ? "OK（検算差=0）" : "Unbalanced"}
+            </span>
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-600">対象月: {baseISO}</div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-2xl shadow p-4">
+            <h2 className="font-medium mb-2">貸借対照表（合計）</h2>
+            <div className="space-y-1">
+              <div>資産合計：{fmt(bs.assets_total)}</div>
+              <div>負債合計：{fmt(bs.liabilities_total)}</div>
+              <div>純資産合計：{fmt(bs.equity_total)}</div>
+              <div className={`${bs.diff === 0 ? "text-green-700" : "text-red-700"}`}>検算差：{fmt(bs.diff)}</div>
+            </div>
+            <p className="mt-3 text-xs text-gray-500">
+              ※ 科目の内訳（流動資産／固定資産／投資その他 等）は明細画面で対応。ここは合計値のみ。
+            </p>
+          </div>
+
+          <div className="rounded-2xl shadow p-4">
+            <h2 className="font-medium mb-2">損益計算書（当期累計）</h2>
+            <div className="space-y-1">
+              <div>売上高（純売上高）：{fmt(pl.revenues_total)}</div>
+              <div>費用合計（原価・販管費等）：{fmt(pl.expenses_total)}</div>
+              <div className={`${pl.net_income_signed >= 0 ? "text-green-700" : "text-red-700"}`}>
+                当期純利益：{fmt(pl.net_income_signed)}
+              </div>
+              <div className={`${pl.diff === 0 ? "text-green-700" : "text-red-700"}`}>差分：{fmt(pl.diff)}</div>
+            </div>
+            <p className="mt-3 text-xs text-gray-500">
+              ※ 「売上総利益」「営業利益」「経常利益」など段階利益はDB集計を簡略化中のため省略。
+            </p>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

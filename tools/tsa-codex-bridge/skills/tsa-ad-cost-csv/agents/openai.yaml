@@ -1,0 +1,4 @@
+interface:
+  display_name: "TSA広告費CSV"
+  short_description: "5媒体の広告費レポート取得と原本保存を自動化するSkill"
+  default_prompt: "TSA広告費取込タスクとして、指定媒体・期間の正しい広告レポートを取得し、検証後に原本を共有フォルダへ保存してください。"

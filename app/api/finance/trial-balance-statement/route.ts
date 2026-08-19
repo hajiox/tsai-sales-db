@@ -34,6 +34,13 @@ function asNumber(value: unknown) {
   return Number.isFinite(num) ? num : 0;
 }
 
+const PERSONNEL_ACCOUNT_CODES = new Set(['500', '501', '502', '503', '504', '505', '509']);
+const ADVERTISING_ACCOUNT_CODES = new Set(['510']);
+
+function expenseAmount(account: { debitAmount: number; creditAmount: number }) {
+  return Math.max(0, account.debitAmount - account.creditAmount);
+}
+
 function inferStatementType(accountCode: string): 'bs' | 'pl' {
   const code = Number(accountCode);
   if ((code >= 400 && code <= 899) || code >= 9500) return 'pl';
@@ -66,6 +73,30 @@ function buildSummary(accounts: any[], ledgerOnlyAccounts: any[]) {
     const account = pickAccount(code);
     return account ? account.closingBalance - account.openingBalance : 0;
   };
+  const personnelDetailCost = accounts
+    .filter((account) => account.source === 'trial' && !account.isSummary && PERSONNEL_ACCOUNT_CODES.has(account.accountCode))
+    .reduce((sum, account) => sum + expenseAmount(account), 0);
+  const personnelSubtotal = Math.max(0, current('9605'));
+  const currentPersonnelCost = personnelDetailCost > 0 ? personnelDetailCost : personnelSubtotal;
+  const currentAdvertisingCost = accounts
+    .filter((account) => account.source === 'trial' && !account.isSummary && ADVERTISING_ACCOUNT_CODES.has(account.accountCode))
+    .reduce((sum, account) => sum + expenseAmount(account), 0);
+  const cumulativePersonnelDetailCost = accounts
+    .filter((account) => account.source === 'trial' && !account.isSummary && PERSONNEL_ACCOUNT_CODES.has(account.accountCode))
+    .reduce((sum, account) => sum + Math.max(0, account.closingBalance), 0);
+  const cumulativePersonnelSubtotal = Math.max(0, pick('9605'));
+  const personnelCost = cumulativePersonnelSubtotal > 0
+    ? cumulativePersonnelSubtotal
+    : cumulativePersonnelDetailCost;
+  const advertisingCost = Math.max(0, pick('510'));
+  const sellingGeneralAdministrativeExpenses = Math.max(0, pick('9630'));
+  const depreciation = Math.max(0, pick('528')) + Math.max(0, pick('3023'));
+  const paymentFees = Math.max(0, pick('532'));
+  const interestExpense = Math.max(0, pick('610'));
+  const directorLongTermDebt = Math.max(0, pick('1219'));
+  const leaseLiabilities = Math.max(0, pick('3027'));
+  const longTermDebt = Math.max(0, pick('220'));
+  const interestBearingDebt = longTermDebt + directorLongTermDebt + leaseLiabilities;
   const comparable = accounts.filter((account) => account.source === 'trial' && !account.isSummary);
 
   return {
@@ -78,11 +109,29 @@ function buildSummary(accounts: any[], ledgerOnlyAccounts: any[]) {
     operatingIncome: pick('9640'),
     ordinaryIncome: pick('9700'),
     netIncome: pick('9750'),
+    sellingGeneralAdministrativeExpenses,
+    grossMargin: ratio(pick('9580'), pick('9530')),
+    operatingMargin: ratio(pick('9640'), pick('9530')),
+    ordinaryMargin: ratio(pick('9700'), pick('9530')),
+    netMargin: ratio(pick('9750'), pick('9530')),
+    personnelCost,
+    personnelRatio: ratio(personnelCost, pick('9530')),
+    advertisingCost,
+    advertisingRatio: ratio(advertisingCost, pick('9530')),
+    paymentFees,
+    paymentFeeRatio: ratio(paymentFees, pick('9530')),
+    depreciation,
+    depreciationRatio: ratio(depreciation, pick('9530')),
+    interestExpense,
     currentNetSales: current('9530'),
     currentGrossProfit: current('9580'),
     currentOperatingIncome: current('9640'),
     currentOrdinaryIncome: current('9700'),
     currentNetIncome: current('9750'),
+    currentPersonnelCost,
+    currentPersonnelRatio: ratio(currentPersonnelCost, current('9530')),
+    currentAdvertisingCost,
+    currentAdvertisingRatio: ratio(currentAdvertisingCost, current('9530')),
     currentGrossMargin: ratio(current('9580'), current('9530')),
     currentOperatingMargin: ratio(current('9640'), current('9530')),
     currentNetMargin: ratio(current('9750'), current('9530')),
@@ -92,7 +141,10 @@ function buildSummary(accounts: any[], ledgerOnlyAccounts: any[]) {
     inventory: pick('9145'),
     receivables: pick('131'),
     payables: pick('201') + pick('204'),
-    longTermDebt: pick('220'),
+    longTermDebt,
+    directorLongTermDebt,
+    leaseLiabilities,
+    interestBearingDebt,
     matchedCount: comparable.filter((account) => account.matchStatus === 'matched').length,
     differentCount: comparable.filter((account) => account.matchStatus === 'different').length,
     trialOnlyCount: comparable.filter((account) => account.matchStatus === 'trial_only').length,
@@ -175,6 +227,70 @@ function buildFinancialInsights(accounts: any[], summary: any) {
     });
   }
 
+  if (summary.currentPersonnelCost > 0) {
+    if (summary.currentNetSales <= 0) {
+      alerts.push({
+        level: 'warning',
+        title: '売上がない月に人件費が発生しています',
+        body: '当月売上が未計上またはゼロの状態で人件費が出ています。売上計上漏れ、締め月、給与計上月のズレを確認してください。',
+        metric: yen(summary.currentPersonnelCost),
+      });
+    } else if (summary.currentPersonnelRatio >= 0.35) {
+      alerts.push({
+        level: 'danger',
+        title: '人件費比率がかなり高いです',
+        body: '売上に対して人件費が重く、営業利益を強く圧迫しています。臨時給与、役員報酬、法定福利費、売上計上タイミングを確認してください。',
+        metric: percent(summary.currentPersonnelRatio),
+      });
+    } else if (summary.currentPersonnelRatio >= 0.25) {
+      alerts.push({
+        level: 'warning',
+        title: '人件費比率が高めです',
+        body: '売上比で人件費がやや重い月です。人員配置、残業、賞与・臨時手当、売上の季節要因を合わせて確認してください。',
+        metric: percent(summary.currentPersonnelRatio),
+      });
+    } else {
+      alerts.push({
+        level: 'info',
+        title: '人件費比率は大きな警戒水準ではありません',
+        body: '人件費は当月売上に対して極端には重くありません。利益が薄い場合は、仕入・広告費・手数料など他の費用要因も見てください。',
+        metric: percent(summary.currentPersonnelRatio),
+      });
+    }
+  }
+
+  if (summary.currentAdvertisingCost > 0) {
+    if (summary.currentNetSales <= 0) {
+      alerts.push({
+        level: 'warning',
+        title: '売上がない月に広告宣伝費が発生しています',
+        body: '広告宣伝費が発生していますが、当月売上が未計上またはゼロです。広告の対象月、売上計上漏れ、請求月のズレを確認してください。',
+        metric: yen(summary.currentAdvertisingCost),
+      });
+    } else if (summary.currentAdvertisingRatio >= 0.15) {
+      alerts.push({
+        level: 'danger',
+        title: '広告宣伝費比率がかなり高いです',
+        body: '売上に対して広告宣伝費が重く、利益を強く圧迫しています。広告別の費用対効果、キャンペーン費、計上月のズレを確認してください。',
+        metric: percent(summary.currentAdvertisingRatio),
+      });
+    } else if (summary.currentAdvertisingRatio >= 0.1) {
+      alerts.push({
+        level: 'warning',
+        title: '広告宣伝費比率が高めです',
+        body: '売上比で広告宣伝費がやや重い月です。広告費をかけた販売チャネルの売上増加と利益残りを確認してください。',
+        metric: percent(summary.currentAdvertisingRatio),
+      });
+    } else {
+      alerts.push({
+        level: 'info',
+        title: '広告宣伝費比率は大きな警戒水準ではありません',
+        body: '広告宣伝費は当月売上に対して極端には重くありません。費用対効果を見る場合は、広告別売上や粗利と合わせて確認してください。',
+        metric: percent(summary.currentAdvertisingRatio),
+      });
+    }
+  }
+
   const monthlyCost = Math.max(0, summary.currentNetSales - summary.currentOperatingIncome);
   const cashMonths = monthlyCost > 0 ? summary.cashAndDeposits / monthlyCost : 0;
   if (cashMonths > 0 && cashMonths < 1.5) {
@@ -219,21 +335,51 @@ function buildFinancialInsights(accounts: any[], summary: any) {
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
 
+  const cumulativeExpenseAccounts = accounts
+    .filter((account) => {
+      if (account.source !== 'trial' || account.isSummary || account.statementType !== 'pl') return false;
+      const code = Number(account.accountCode);
+      return (code >= 500 && code < 800) || account.accountCode === '3023';
+    })
+    .map((account) => ({
+      accountCode: account.accountCode,
+      accountName: account.accountName,
+      amount: Math.max(0, account.closingBalance),
+      ratioToSales: ratio(Math.max(0, account.closingBalance), summary.netSales),
+    }))
+    .filter((account) => account.amount > 0)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 6);
+
   const headline = [
     `当月売上は${yen(summary.currentNetSales)}、粗利率は${percent(summary.currentGrossMargin)}です。`,
+    `人件費は${yen(summary.currentPersonnelCost)}、売上比は${percent(summary.currentPersonnelRatio)}です。`,
+    `広告宣伝費は${yen(summary.currentAdvertisingCost)}、売上比は${percent(summary.currentAdvertisingRatio)}です。`,
     `営業利益は${yen(summary.currentOperatingIncome)}、当月純利益は${yen(summary.currentNetIncome)}です。`,
     issueCount === 0 ? '元帳突合は一致しています。' : '元帳突合に確認が必要です。',
   ].join('');
 
+  const cumulativeHeadline = [
+    `今期累計売上は${yen(summary.netSales)}、粗利率は${percent(summary.grossMargin)}です。`,
+    `販管費は${yen(summary.sellingGeneralAdministrativeExpenses)}、営業利益は${yen(summary.operatingIncome)}です。`,
+    `当期純利益は${yen(summary.netIncome)}、現預金は${yen(summary.cashAndDeposits)}です。`,
+  ].join('');
+
   return {
     headline,
+    cumulativeHeadline,
     alerts,
     metrics: {
       cashMonths,
       inventoryDays: inventoryMonths,
       monthlyCost,
+      personnelCost: summary.currentPersonnelCost,
+      personnelRatio: summary.currentPersonnelRatio,
+      advertisingCost: summary.currentAdvertisingCost,
+      advertisingRatio: summary.currentAdvertisingRatio,
     },
     expenseAccounts,
+    cumulativeExpenseAccounts,
   };
 }
 

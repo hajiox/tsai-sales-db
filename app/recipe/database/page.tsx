@@ -7,9 +7,11 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X, Copy, Camera, Printer } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ArrowLeft, Plus, Save, Search, Package, Trash2, Apple, Box, Layers, FileText, FlaskConical, Pencil, X, Copy, Camera, Printer, BookOpen, ClipboardList } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { convertRecipePrice, formatRecipePrice, recipePriceForDisplay } from "@/lib/recipe-price-entry";
 
 interface Ingredient {
     id: string;
@@ -63,6 +65,16 @@ interface Expense {
     isNew?: boolean;
 }
 
+interface RecipeUsage {
+    recipeId: string;
+    recipeName: string;
+    category: string | null;
+    isIntermediate: boolean;
+    itemCount: number;
+    totalUsage: number | null;
+    totalCost: number | null;
+}
+
 type TabType = "ingredients" | "materials" | "intermediate" | "expense";
 
 export default function DatabasePage() {
@@ -78,7 +90,16 @@ export default function DatabasePage() {
     const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
     const [editModal, setEditModal] = useState<Ingredient | null>(null);
     const [editForm, setEditForm] = useState<Record<string, string>>({});
+    const [priceInputIncludesTax, setPriceInputIncludesTax] = useState(false);
     const [labelPreview, setLabelPreview] = useState<{ name: string; images: { type: string; url: string; uploaded_at: string }[] } | null>(null);
+    const [recipeUsageByIngredient, setRecipeUsageByIngredient] = useState<Record<string, RecipeUsage[]>>({});
+    const [recipeUsageByMaterial, setRecipeUsageByMaterial] = useState<Record<string, RecipeUsage[]>>({});
+    const [recipeUsagePopover, setRecipeUsagePopover] = useState<{
+        title: string;
+        usages: RecipeUsage[];
+        left: number;
+        top: number;
+    } | null>(null);
     const labelImageTypeLabels: Record<string, string> = {
         front_label: "表ラベル",
         ingredients_label: "原材料表示",
@@ -92,6 +113,7 @@ export default function DatabasePage() {
     });
 
     const inputRef = useRef<HTMLInputElement>(null);
+    const usagePopoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         const saved = localStorage.getItem('global_tax_settings');
@@ -125,17 +147,24 @@ export default function DatabasePage() {
         setLoading(true);
 
         // 4テーブルを並列取得（直列比 約4倍高速化）
-        const [ingRes, matRes, intRes, expRes] = await Promise.all([
+        const usagePromise = fetch("/api/recipe/database-usages")
+            .then(res => res.ok ? res.json() : null)
+            .catch(() => null);
+
+        const [ingRes, matRes, intRes, expRes, usageRes] = await Promise.all([
             supabase.from("ingredients").select("*").order("name"),
             supabase.from("materials").select("*").order("name"),
             supabase.from("recipes").select("id, name, category, selling_price, source_file").eq("is_intermediate", true).order("name"),
             supabase.from("expenses").select("*").order("name"),
+            usagePromise,
         ]);
 
         if (ingRes.data) setIngredients(ingRes.data.map((i: any) => ({ ...i, tax_included: i.tax_included ?? true })));
         if (matRes.data) setMaterials(matRes.data.map((m: any) => ({ ...m, tax_included: m.tax_included ?? true })));
         if (intRes.data) setIntermediates(intRes.data);
         if (expRes.data) setExpenses(expRes.data.map((e: any) => ({ ...e, tax_included: e.tax_included ?? false })));
+        setRecipeUsageByIngredient(usageRes?.ingredients || {});
+        setRecipeUsageByMaterial(usageRes?.materials || {});
 
         setLoading(false);
     };
@@ -177,8 +206,13 @@ export default function DatabasePage() {
     };
 
     const handleCellChange = async (id: string, field: string, value: string, type: "ingredient" | "material" | "expense") => {
-        const numericFields = ['unit_quantity', 'price', 'price_tax_included', 'unit_price', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
-        const actualField = (field === 'price_tax_included') ? 'price' : field;
+        const numericFields = ['unit_quantity', 'price', 'price_tax_included', 'unit_price', 'unit_price_tax_included', 'calories', 'protein', 'fat', 'carbohydrate', 'sodium'];
+        const inputIncludesTax = field === 'price_tax_included' || field === 'unit_price_tax_included';
+        const actualField = field === 'price_tax_included'
+            ? 'price'
+            : field === 'unit_price_tax_included'
+                ? 'unit_price'
+                : field;
         let parsedValue: any = value;
 
         if (numericFields.includes(field)) {
@@ -190,24 +224,19 @@ export default function DatabasePage() {
             }
         }
 
-        // 価格→DB値の変換
+        // 入力モードと各行の保存方式に合わせてDB値へ変換する。
         let dbValue = parsedValue;
-        const rate = type === 'ingredient' ? (1 + taxRates.ingredient / 100) : (1 + taxRates.material / 100);
+        const taxRate = type === 'ingredient' ? taxRates.ingredient : taxRates.material;
         const currentList = type === "ingredient" ? ingredients : type === "material" ? materials : expenses;
         const currentItem = currentList.find(i => i.id === id);
 
-        if (field === 'price' && parsedValue != null) {
-            // 税別入力 → DB値変換
-            if (currentItem && (currentItem as any).tax_included !== false) {
-                dbValue = Math.round(parsedValue * rate * 1000) / 1000;
-            }
-        } else if (field === 'price_tax_included' && parsedValue != null) {
-            // 税込入力 → DB値変換
-            if (currentItem && (currentItem as any).tax_included !== false) {
-                dbValue = parsedValue; // 税込設定ならそのまま
-            } else {
-                dbValue = Math.round(parsedValue / rate * 1000) / 1000; // 税抜設定なら割り戻す
-            }
+        if ((actualField === 'price' || actualField === 'unit_price') && parsedValue != null && currentItem) {
+            dbValue = convertRecipePrice(
+                parsedValue,
+                inputIncludesTax,
+                (currentItem as Ingredient | Material | Expense).tax_included !== false,
+                taxRate,
+            );
         }
 
         // 現在の値と比較して変更がなければスキップ
@@ -279,6 +308,7 @@ export default function DatabasePage() {
             name: "新規項目",
             unit_quantity: 1000,
             price: 0,
+            tax_included: true,
         };
 
         try {
@@ -289,6 +319,7 @@ export default function DatabasePage() {
             });
             if (!res.ok) throw new Error('追加失敗');
             const result = await res.json();
+            setSearchTerm("");
             setIngredients(prev => [{ ...result.data, isNew: true }, ...prev]);
             setEditingCell({ id: result.data.id, field: 'name' });
         } catch (e: any) {
@@ -299,7 +330,9 @@ export default function DatabasePage() {
     const addNewMaterial = async () => {
         const newData = {
             name: "新規資材",
+            unit_quantity: "1",
             price: 0,
+            tax_included: true,
         };
 
         try {
@@ -310,11 +343,42 @@ export default function DatabasePage() {
             });
             if (!res.ok) throw new Error('追加失敗');
             const result = await res.json();
+            setSearchTerm("");
             setMaterials(prev => [{ ...result.data, isNew: true }, ...prev]);
             setEditingCell({ id: result.data.id, field: 'name' });
         } catch (e: any) {
             toast.error(`追加失敗: ${e.message}`);
         }
+    };
+
+    const addNewExpense = async () => {
+        const newData = {
+            name: "新規諸経費",
+            unit_price: 0,
+            unit_quantity: 1,
+            tax_included: false,
+        };
+
+        try {
+            const res = await fetch('/api/recipe/db-write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'insert', table: 'expenses', data: newData }),
+            });
+            if (!res.ok) throw new Error('追加失敗');
+            const result = await res.json();
+            setSearchTerm("");
+            setExpenses(prev => [{ ...result.data, isNew: true }, ...prev]);
+            setEditingCell({ id: result.data.id, field: 'name' });
+        } catch (e: any) {
+            toast.error(`追加失敗: ${e.message}`);
+        }
+    };
+
+    const addNewCurrentItem = () => {
+        if (activeTab === "ingredients") return addNewIngredient();
+        if (activeTab === "materials") return addNewMaterial();
+        if (activeTab === "expense") return addNewExpense();
     };
 
     const deleteIngredient = async (id: string) => {
@@ -471,12 +535,14 @@ export default function DatabasePage() {
     // 食材編集モーダルを開く
     const openEditModal = (ing: Ingredient) => {
         setEditModal(ing);
-        // 税別価格に変換して表示
-        const taxExPrice = ing.price != null
-            ? (ing.tax_included !== false ? Math.round(ing.price / (1 + taxRates.ingredient / 100)) : ing.price)
-            : null;
+        const inputPrice = recipePriceForDisplay(
+            ing.price,
+            priceInputIncludesTax,
+            ing.tax_included !== false,
+            taxRates.ingredient,
+        );
         setEditForm({
-            price: taxExPrice != null ? String(taxExPrice) : '',
+            price: formatRecipePrice(inputPrice),
             unit_quantity: ing.unit_quantity != null ? String(ing.unit_quantity) : '',
             raw_materials: ing.raw_materials || '',
             allergens: ing.allergens || '',
@@ -487,19 +553,37 @@ export default function DatabasePage() {
         });
     };
 
+    const changePriceInputMode = (nextIncludesTax: boolean) => {
+        if (editModal && editForm.price.trim()) {
+            const currentValue = Number(editForm.price.replace(/,/g, ''));
+            if (Number.isFinite(currentValue)) {
+                const converted = convertRecipePrice(
+                    currentValue,
+                    priceInputIncludesTax,
+                    nextIncludesTax,
+                    taxRates.ingredient,
+                );
+                setEditForm(prev => ({ ...prev, price: formatRecipePrice(converted) }));
+            }
+        }
+        setPriceInputIncludesTax(nextIncludesTax);
+    };
+
     // 食材編集保存
     const saveEditModal = async () => {
         if (!editModal) return;
         const updates: Record<string, any> = {};
         for (const [key, val] of Object.entries(editForm)) {
             if (key === 'price') {
-                // 入力は税別 → DB保存は tax_included=true なら × 税率
                 const numVal = val ? parseFloat(val) : null;
-                if (numVal != null && editModal.tax_included !== false) {
-                    updates[key] = Math.round(numVal * (1 + taxRates.ingredient / 100) * 100) / 100;
-                } else {
-                    updates[key] = numVal;
-                }
+                updates[key] = numVal == null
+                    ? null
+                    : convertRecipePrice(
+                        numVal,
+                        priceInputIncludesTax,
+                        editModal.tax_included !== false,
+                        taxRates.ingredient,
+                    );
             } else if (key === 'unit_quantity') {
                 updates[key] = val ? parseFloat(val) : null;
             } else {
@@ -575,6 +659,76 @@ export default function DatabasePage() {
         );
     };
 
+    const renderCalculatedPrice = (value: number | null) => (
+        <div className="min-h-[1.5rem] w-full px-2 py-1 text-gray-500">
+            {value == null ? <span className="text-gray-300">-</span> : `¥${formatRecipePrice(value)}`}
+        </div>
+    );
+
+    const formatCompactValue = (value: number | null | undefined, decimals = 2) => {
+        if (value === null || value === undefined || Number.isNaN(value)) return "";
+        return new Intl.NumberFormat("ja-JP", {
+            maximumFractionDigits: Math.abs(value) >= 100 ? 1 : decimals,
+        }).format(value);
+    };
+
+    const keepRecipeUsagePopover = () => {
+        if (usagePopoverTimer.current) {
+            clearTimeout(usagePopoverTimer.current);
+            usagePopoverTimer.current = null;
+        }
+    };
+
+    const hideRecipeUsagePopoverSoon = () => {
+        keepRecipeUsagePopover();
+        usagePopoverTimer.current = setTimeout(() => {
+            setRecipeUsagePopover(null);
+        }, 140);
+    };
+
+    const showRecipeUsagePopover = (
+        event: React.MouseEvent<HTMLButtonElement> | React.FocusEvent<HTMLButtonElement>,
+        title: string,
+        usages: RecipeUsage[]
+    ) => {
+        if (!usages.length) return;
+        keepRecipeUsagePopover();
+
+        const rect = event.currentTarget.getBoundingClientRect();
+        const width = Math.min(380, window.innerWidth - 24);
+        const estimatedHeight = Math.min(340, 92 + usages.length * 34);
+        const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+        const bottomTop = rect.bottom + 8;
+        const top = bottomTop + estimatedHeight > window.innerHeight
+            ? Math.max(12, rect.top - estimatedHeight - 8)
+            : bottomTop;
+
+        setRecipeUsagePopover({ title, usages, left, top });
+    };
+
+    const renderRecipeUsageButton = (title: string, usages: RecipeUsage[] | undefined) => {
+        if (!usages || usages.length === 0) return null;
+
+        return (
+            <button
+                type="button"
+                className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full border border-indigo-200 bg-indigo-50 px-1.5 text-[10px] font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                onMouseEnter={(event) => showRecipeUsagePopover(event, title, usages)}
+                onMouseLeave={hideRecipeUsagePopoverSoon}
+                onFocus={(event) => showRecipeUsagePopover(event, title, usages)}
+                onBlur={hideRecipeUsagePopoverSoon}
+                onClick={(event) => showRecipeUsagePopover(event, title, usages)}
+                title="使用レシピを見る"
+            >
+                <BookOpen className="h-3 w-3" />
+                <span>レシピ</span>
+                <span className="ml-0.5 rounded-full bg-white/80 px-1 text-[9px] leading-4 text-indigo-800">
+                    {usages.length}
+                </span>
+            </button>
+        );
+    };
+
     const tabs = [
         { key: "ingredients" as TabType, label: "食材", icon: Apple, count: ingredients.length },
         { key: "materials" as TabType, label: "資材", icon: Box, count: materials.length },
@@ -584,8 +738,44 @@ export default function DatabasePage() {
 
     return (
         <div className="h-full flex flex-col">
+            {/* Mobile header */}
+            <div className="mb-4 space-y-3 lg:hidden">
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => router.push("/recipe")} aria-label="レシピ一覧へ戻る">
+                        <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <div className="min-w-0">
+                        <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+                            <Package className="h-5 w-5 shrink-0" />
+                            材料データベース
+                        </h1>
+                        <p className="text-xs text-gray-500">項目をタップして編集</p>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                    {activeTab !== "intermediate" && (
+                        <Button onClick={addNewCurrentItem} className="col-span-2 h-11 bg-blue-600 hover:bg-blue-700">
+                            <Plus className="mr-2 h-4 w-4" />
+                            {activeTab === "ingredients" ? "食材" : activeTab === "materials" ? "資材" : "諸経費"}を新規追加
+                        </Button>
+                    )}
+                    <Button onClick={() => router.push("/recipe/database/quote-import")} variant="outline" className="h-10 border-blue-300 text-blue-700">
+                        <FileText className="mr-1.5 h-4 w-4" />
+                        見積書AI
+                    </Button>
+                    <Button onClick={() => router.push("/recipe/database/label-import")} variant="outline" className="h-10 border-amber-300 text-amber-700">
+                        <Camera className="mr-1.5 h-4 w-4" />
+                        ラベルAI
+                    </Button>
+                    <Button onClick={() => router.push("/recipe/inventory")} variant="outline" className="col-span-2 h-10">
+                        <ClipboardList className="mr-1.5 h-4 w-4" />
+                        製造棚卸し
+                    </Button>
+                </div>
+            </div>
+
             {/* Header */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4 hidden items-center justify-between lg:flex">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" onClick={() => router.push("/recipe")}>
                         <ArrowLeft className="w-4 h-4 mr-2" />
@@ -600,6 +790,10 @@ export default function DatabasePage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <Button onClick={() => router.push("/recipe/inventory")} className="bg-slate-900 hover:bg-slate-800">
+                        <ClipboardList className="w-4 h-4 mr-2" />
+                        製造棚卸し
+                    </Button>
                     <Button onClick={() => router.push("/recipe/database/quote-import")} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
                         <FileText className="w-4 h-4 mr-2" />
                         見積書AI取込
@@ -609,7 +803,7 @@ export default function DatabasePage() {
                         ラベルAI取込
                     </Button>
                     {activeTab !== "intermediate" && (
-                        <Button onClick={activeTab === "ingredients" ? addNewIngredient : addNewMaterial} variant="outline">
+                        <Button onClick={addNewCurrentItem} variant="outline">
                             <Plus className="w-4 h-4 mr-2" />
                             新規追加
                         </Button>
@@ -617,8 +811,61 @@ export default function DatabasePage() {
                 </div>
             </div>
 
+            {/* Mobile tax settings */}
+            <details className="mb-4 rounded-lg border border-blue-200 bg-blue-50 lg:hidden">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-bold text-blue-900">
+                    税率・手数料設定
+                    <span className="text-xs font-normal text-blue-600">タップして開く</span>
+                </summary>
+                <div className="space-y-3 border-t border-blue-200 p-3">
+                    <div className="grid grid-cols-3 gap-2">
+                        <label className="space-y-1 text-xs text-gray-600">
+                            <span>食材</span>
+                            <div className="relative">
+                                <Input
+                                    type="number"
+                                    value={taxRates.ingredient}
+                                    onChange={(e) => setTaxRates({ ...taxRates, ingredient: parseInt(e.target.value) || 0 })}
+                                    className="h-10 bg-white pr-7 text-right"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">%</span>
+                            </div>
+                        </label>
+                        <label className="space-y-1 text-xs text-gray-600">
+                            <span>資材</span>
+                            <div className="relative">
+                                <Input
+                                    type="number"
+                                    value={taxRates.material}
+                                    onChange={(e) => setTaxRates({ ...taxRates, material: parseInt(e.target.value) || 0 })}
+                                    className="h-10 bg-white pr-7 text-right"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">%</span>
+                            </div>
+                        </label>
+                        <label className="space-y-1 text-xs text-gray-600">
+                            <span>Amazon</span>
+                            <div className="relative">
+                                <Input
+                                    type="number"
+                                    value={taxRates.amazon_fee}
+                                    onChange={(e) => setTaxRates({ ...taxRates, amazon_fee: parseInt(e.target.value) || 0 })}
+                                    className="h-10 bg-white pr-7 text-right"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">%</span>
+                            </div>
+                        </label>
+                    </div>
+                    <Button onClick={() => saveTaxRates(taxRates)} className="h-10 w-full bg-blue-600 hover:bg-blue-700">
+                        <Save className="mr-2 h-4 w-4" />
+                        設定を保存
+                    </Button>
+                    <p className="text-[11px] leading-4 text-blue-700">全件の税込・税抜一括変更はPC版から操作できます。</p>
+                </div>
+            </details>
+
             {/* Global Tax Settings */}
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-wrap gap-8 items-center">
+            <div className="mb-6 hidden flex-wrap items-center gap-8 rounded-lg border border-blue-200 bg-blue-50 p-4 lg:flex">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-blue-800">一括税率設定:</span>
                 </div>
@@ -723,7 +970,7 @@ export default function DatabasePage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-300 mb-4">
+            <div className="mb-3 flex snap-x gap-1 overflow-x-auto border-b border-gray-300 pb-px lg:mb-4 lg:gap-0 lg:overflow-visible">
                 {tabs.map((tab) => {
                     const Icon = tab.icon;
                     return (
@@ -733,7 +980,7 @@ export default function DatabasePage() {
                                 setActiveTab(tab.key);
                                 setSearchTerm("");
                             }}
-                            className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-t border-l border-r rounded-t-lg -mb-px transition ${activeTab === tab.key
+                            className={`-mb-px flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-t-lg border-l border-r border-t px-3 py-2 text-sm font-medium transition lg:gap-2 lg:px-6 lg:py-3 ${activeTab === tab.key
                                 ? "bg-white border-gray-300 text-gray-900"
                                 : "bg-gray-100 border-transparent text-gray-500 hover:text-gray-700"
                                 }`}
@@ -750,20 +997,220 @@ export default function DatabasePage() {
             </div>
 
             {/* Search */}
-            <div className="mb-4">
-                <div className="relative max-w-sm">
+            <div className="mb-3 flex flex-col gap-2 lg:mb-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="relative w-full lg:max-w-sm">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <Input
                         placeholder="検索..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
+                        className="h-11 pl-10 lg:h-9"
                     />
                 </div>
+                {activeTab !== "intermediate" && (
+                    <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 lg:min-h-9">
+                        <Checkbox
+                            checked={priceInputIncludesTax}
+                            onCheckedChange={(checked) => changePriceInputMode(checked === true)}
+                            aria-label="税込金額から税別単価を計算"
+                        />
+                        <span className="font-medium">税込から計算</span>
+                        <span className="text-xs text-gray-400">税込額を入力して税別を逆算</span>
+                    </label>
+                )}
+            </div>
+
+            {/* Mobile cards */}
+            <div className="space-y-3 pb-4 lg:hidden">
+                {loading ? (
+                    <div className="rounded-lg border border-gray-200 bg-white py-10 text-center text-sm text-gray-500">読み込み中...</div>
+                ) : activeTab === "ingredients" ? (
+                    filteredIngredients.length === 0 ? (
+                        <div className="rounded-lg border border-gray-200 bg-white py-10 text-center text-sm text-gray-500">該当する食材がありません</div>
+                    ) : filteredIngredients.map((ing, index) => {
+                        const taxExclusive = ing.price != null
+                            ? (ing.tax_included !== false ? ing.price / (1 + taxRates.ingredient / 100) : ing.price)
+                            : null;
+                        const taxIncluded = ing.price != null
+                            ? (ing.tax_included !== false ? ing.price : ing.price * (1 + taxRates.ingredient / 100))
+                            : null;
+                        return (
+                            <article key={ing.id} className={`rounded-lg border bg-white p-3 shadow-sm ${ing.isNew ? "border-green-300 bg-green-50" : ing.isModified ? "border-amber-300 bg-amber-50" : "border-gray-200"}`}>
+                                <div className="flex items-start gap-2">
+                                    <span className="pt-1 text-xs font-semibold text-gray-400">{index + 1}</span>
+                                    <div className="min-w-0 flex-1 font-semibold text-gray-900">
+                                        {renderEditableCell(ing, "name", ing.name, "ingredient", "w-full")}
+                                    </div>
+                                    <div className="flex shrink-0 items-center">
+                                        <Button variant="ghost" size="icon" onClick={() => openEditModal(ing)} className="h-10 w-10 text-blue-600" aria-label={`${ing.name}を編集`}>
+                                            <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" onClick={() => duplicateIngredient(ing)} className="h-10 w-10 text-green-600" aria-label={`${ing.name}を複製`}>
+                                            <Copy className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" onClick={() => deleteIngredient(ing.id)} className="h-10 w-10 text-red-600" aria-label={`${ing.name}を削除`}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTaxToggle(ing.id, !!ing.tax_included, "ingredient")}
+                                        className={`min-h-8 rounded border px-2 text-xs font-bold ${ing.tax_included ? "border-green-200 bg-green-100 text-green-700" : "border-gray-200 bg-gray-100 text-gray-600"}`}
+                                    >
+                                        {ing.tax_included ? "税込設定" : "税抜設定"}
+                                    </button>
+                                    {renderRecipeUsageButton(ing.name, recipeUsageByIngredient[ing.id])}
+                                    {ing.raw_materials && (
+                                        <button type="button" onClick={() => openEditModal(ing)} className="inline-flex min-h-8 items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 text-xs font-medium text-emerald-700">
+                                            <FlaskConical className="h-3.5 w-3.5" />原材料情報
+                                        </button>
+                                    )}
+                                    {ing.label_images && ing.label_images.length > 0 && (
+                                        <button type="button" onClick={() => setLabelPreview({ name: ing.name, images: ing.label_images! })} className="inline-flex min-h-8 items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 text-xs font-medium text-blue-700">
+                                            <Camera className="h-3.5 w-3.5" />ラベル {ing.label_images.length}枚
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
+                                    <div><p className="text-[11px] text-gray-500">入数(g)</p>{renderEditableCell(ing, "unit_quantity", formatNumber(ing.unit_quantity, 0), "ingredient", "w-full")}</div>
+                                    <div>
+                                        <p className="text-[11px] text-gray-500">税別単価 {priceInputIncludesTax ? "（自動）" : "（入力）"}</p>
+                                        {priceInputIncludesTax
+                                            ? renderCalculatedPrice(taxExclusive)
+                                            : renderEditableCell(ing, "price", taxExclusive != null ? `¥${formatRecipePrice(taxExclusive)}` : "-", "ingredient", "w-full")}
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] text-gray-500">税込単価 {priceInputIncludesTax ? "（入力）" : "（自動）"}</p>
+                                        {priceInputIncludesTax
+                                            ? renderEditableCell(ing, "price_tax_included", taxIncluded != null ? `¥${formatRecipePrice(taxIncluded)}` : "-", "ingredient", "w-full")
+                                            : renderCalculatedPrice(taxIncluded)}
+                                    </div>
+                                </div>
+                                <details className="mt-2 border-t border-gray-100 pt-2">
+                                    <summary className="min-h-9 cursor-pointer py-2 text-xs font-medium text-gray-600">栄養成分を確認・編集</summary>
+                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                        {[
+                                            ["熱量", "calories", formatNumber(ing.calories, 1)],
+                                            ["タンパク", "protein", formatNumber(ing.protein, 1)],
+                                            ["脂質", "fat", formatNumber(ing.fat, 1)],
+                                            ["炭水化物", "carbohydrate", formatNumber(ing.carbohydrate, 1)],
+                                            ["食塩", "sodium", formatNumber(ing.sodium, 2)],
+                                        ].map(([label, field, value]) => (
+                                            <div key={field}><p className="text-[11px] text-gray-500">{label}</p>{renderEditableCell(ing, field, value, "ingredient", "w-full")}</div>
+                                        ))}
+                                    </div>
+                                </details>
+                            </article>
+                        );
+                    })
+                ) : activeTab === "materials" ? (
+                    filteredMaterials.length === 0 ? (
+                        <div className="rounded-lg border border-gray-200 bg-white py-10 text-center text-sm text-gray-500">該当する資材がありません</div>
+                    ) : filteredMaterials.map((mat, index) => {
+                        const taxExclusive = mat.price != null
+                            ? (mat.tax_included !== false ? mat.price / (1 + taxRates.material / 100) : mat.price)
+                            : null;
+                        const taxIncluded = mat.price != null
+                            ? (mat.tax_included !== false ? mat.price : mat.price * (1 + taxRates.material / 100))
+                            : null;
+                        return (
+                            <article key={mat.id} className={`rounded-lg border bg-white p-3 shadow-sm ${mat.isNew ? "border-green-300 bg-green-50" : mat.isModified ? "border-amber-300 bg-amber-50" : "border-gray-200"}`}>
+                                <div className="flex items-start gap-2">
+                                    <span className="pt-1 text-xs font-semibold text-gray-400">{index + 1}</span>
+                                    <div className="min-w-0 flex-1 font-semibold text-gray-900">{renderEditableCell(mat, "name", mat.name, "material", "w-full")}</div>
+                                    <div className="flex shrink-0 items-center">
+                                        <Button variant="ghost" size="icon" onClick={() => duplicateMaterial(mat)} className="h-10 w-10 text-green-600" aria-label={`${mat.name}を複製`}><Copy className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" onClick={() => deleteMaterial(mat.id)} className="h-10 w-10 text-red-600" aria-label={`${mat.name}を削除`}><Trash2 className="h-4 w-4" /></Button>
+                                    </div>
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <button type="button" onClick={() => handleTaxToggle(mat.id, !!mat.tax_included, "material")} className={`min-h-8 rounded border px-2 text-xs font-bold ${mat.tax_included ? "border-green-200 bg-green-100 text-green-700" : "border-gray-200 bg-gray-100 text-gray-600"}`}>
+                                        {mat.tax_included ? "税込設定" : "税抜設定"}
+                                    </button>
+                                    {renderRecipeUsageButton(mat.name, recipeUsageByMaterial[mat.id])}
+                                </div>
+                                <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
+                                    <div><p className="text-[11px] text-gray-500">入数</p>{renderEditableCell(mat, "unit_quantity", mat.unit_quantity || "", "material", "w-full")}</div>
+                                    <div>
+                                        <p className="text-[11px] text-gray-500">税別単価 {priceInputIncludesTax ? "（自動）" : "（入力）"}</p>
+                                        {priceInputIncludesTax
+                                            ? renderCalculatedPrice(taxExclusive)
+                                            : renderEditableCell(mat, "price", taxExclusive != null ? `¥${formatRecipePrice(taxExclusive)}` : "-", "material", "w-full")}
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] text-gray-500">税込単価 {priceInputIncludesTax ? "（入力）" : "（自動）"}</p>
+                                        {priceInputIncludesTax
+                                            ? renderEditableCell(mat, "price_tax_included", taxIncluded != null ? `¥${formatRecipePrice(taxIncluded)}` : "-", "material", "w-full")
+                                            : renderCalculatedPrice(taxIncluded)}
+                                    </div>
+                                </div>
+                                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <div><p className="text-[11px] text-gray-500">仕入先</p>{renderEditableCell(mat, "supplier", mat.supplier || "", "material", "w-full")}</div>
+                                    <div><p className="text-[11px] text-gray-500">備考</p>{renderEditableCell(mat, "notes", mat.notes || "", "material", "w-full")}</div>
+                                </div>
+                                <button type="button" onClick={() => moveItem(mat.id, "materials", "expenses")} className="mt-3 min-h-10 w-full rounded border border-orange-200 bg-orange-50 text-xs font-medium text-orange-700">諸経費へ移動</button>
+                            </article>
+                        );
+                    })
+                ) : activeTab === "expense" ? (
+                    filteredExpenses.length === 0 ? (
+                        <div className="rounded-lg border border-gray-200 bg-white py-10 text-center text-sm text-gray-500">該当する諸経費がありません</div>
+                    ) : filteredExpenses.map((exp, index) => {
+                        const displayPrice = recipePriceForDisplay(
+                            exp.unit_price,
+                            priceInputIncludesTax,
+                            exp.tax_included !== false,
+                            taxRates.material,
+                        );
+                        return (
+                        <article key={exp.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-gray-400">{index + 1}</span>
+                                <div className="min-w-0 flex-1 font-semibold text-gray-900">{renderEditableCell(exp, "name", exp.name, "expense", "w-full")}</div>
+                                <button type="button" onClick={() => handleTaxToggle(exp.id, !!exp.tax_included, "expense")} className={`min-h-8 shrink-0 rounded border px-2 text-xs font-bold ${exp.tax_included ? "border-green-200 bg-green-100 text-green-700" : "border-gray-200 bg-gray-100 text-gray-600"}`}>
+                                    {exp.tax_included ? "税込" : "税抜"}
+                                </button>
+                            </div>
+                            <div className="mt-3 grid grid-cols-[110px_minmax(0,1fr)] gap-2 border-t border-gray-100 pt-3">
+                                <div>
+                                    <p className="text-[11px] text-gray-500">{priceInputIncludesTax ? "税込単価（入力）" : "税別単価（入力）"}</p>
+                                    {renderEditableCell(
+                                        exp,
+                                        priceInputIncludesTax ? "unit_price_tax_included" : "unit_price",
+                                        displayPrice != null ? `¥${formatRecipePrice(displayPrice)}` : "-",
+                                        "expense",
+                                        "w-full",
+                                    )}
+                                </div>
+                                <div><p className="text-[11px] text-gray-500">備考</p>{renderEditableCell(exp, "notes", exp.notes || "", "expense", "w-full")}</div>
+                            </div>
+                            <button type="button" onClick={() => moveItem(exp.id, "expenses", "materials")} className="mt-3 min-h-10 w-full rounded border border-blue-200 bg-blue-50 text-xs font-medium text-blue-700">資材へ移動</button>
+                        </article>
+                        );
+                    })
+                ) : filteredIntermediates.length === 0 ? (
+                    <div className="rounded-lg border border-gray-200 bg-white py-10 text-center text-sm text-gray-500">該当する中間部品がありません</div>
+                ) : filteredIntermediates.map((item, index) => (
+                    <button key={item.id} type="button" onClick={() => router.push(`/recipe/${item.id}`)} className="w-full rounded-lg border border-gray-200 bg-white p-3 text-left shadow-sm">
+                        <div className="flex items-start gap-3">
+                            <span className="pt-0.5 text-xs font-semibold text-gray-400">{index + 1}</span>
+                            <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-gray-900">{item.name}</p>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                    <span className="rounded bg-purple-100 px-2 py-1 font-medium text-purple-800">{item.category || "未分類"}</span>
+                                    <span className="font-semibold text-gray-800">{item.selling_price ? `¥${item.selling_price.toLocaleString()}` : "価格未設定"}</span>
+                                </div>
+                                {item.source_file && <p className="mt-2 truncate text-xs text-gray-500">{item.source_file.replace("【重要】【製造】総合管理（新型）", "").replace(".xlsx", "")}</p>}
+                            </div>
+                        </div>
+                    </button>
+                ))}
             </div>
 
             {/* Table */}
-            <div className="flex-1 overflow-auto bg-white border border-gray-300 border-t-0 rounded-b-lg">
+            <div className="hidden flex-1 overflow-auto rounded-b-lg border border-t-0 border-gray-300 bg-white lg:block">
                 {loading ? (
                     <div className="text-center py-8 text-gray-500">読み込み中...</div>
                 ) : activeTab === "ingredients" ? (
@@ -774,8 +1221,8 @@ export default function DatabasePage() {
                                 <th className="px-2 py-2 text-left min-w-[200px]">食材名</th>
                                 <th className="px-2 py-2 text-center w-20">税込設定</th>
                                 <th className="px-2 py-2 text-right w-24">入数(g)</th>
-                                <th className="px-2 py-2 text-right w-24">税別単価</th>
-                                <th className="px-2 py-2 text-right w-24">税込単価</th>
+                                <th className={`px-2 py-2 text-right w-28 ${priceInputIncludesTax ? "" : "bg-blue-50 text-blue-800"}`}>税別単価<br /><span className="text-[10px] font-normal">{priceInputIncludesTax ? "自動計算" : "入力"}</span></th>
+                                <th className={`px-2 py-2 text-right w-28 ${priceInputIncludesTax ? "bg-blue-50 text-blue-800" : ""}`}>税込単価<br /><span className="text-[10px] font-normal">{priceInputIncludesTax ? "入力" : "自動計算"}</span></th>
                                 <th className="px-2 py-2 text-right w-20">熱量</th>
                                 <th className="px-2 py-2 text-right w-20">タンパク</th>
                                 <th className="px-2 py-2 text-right w-20">脂質</th>
@@ -794,6 +1241,7 @@ export default function DatabasePage() {
                                         <td className="px-0 py-1">
                                             <div className="flex items-center gap-1.5">
                                                 {renderEditableCell(ing, 'name', ing.name, 'ingredient', 'min-w-[180px]')}
+                                                {renderRecipeUsageButton(ing.name, recipeUsageByIngredient[ing.id])}
                                                 {ing.raw_materials && (
                                                     <button
                                                         onClick={() => openEditModal(ing)}
@@ -825,13 +1273,15 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'unit_quantity', formatNumber(ing.unit_quantity, 0), 'ingredient')}</td>
-                                        {/* 税別単価 = 編集可能 */}
                                         <td className="px-0 py-1 text-right">
-                                            {renderEditableCell(ing, 'price', ing.price != null ? `¥${(ing.tax_included !== false ? ing.price / (1 + taxRates.ingredient / 100) : ing.price).toFixed(1)}` : '-', 'ingredient')}
+                                            {priceInputIncludesTax
+                                                ? renderCalculatedPrice(recipePriceForDisplay(ing.price, false, ing.tax_included !== false, taxRates.ingredient))
+                                                : renderEditableCell(ing, 'price', ing.price != null ? `¥${formatRecipePrice(recipePriceForDisplay(ing.price, false, ing.tax_included !== false, taxRates.ingredient))}` : '-', 'ingredient')}
                                         </td>
-                                        {/* 税込単価 = 編集可能 */}
                                         <td className="px-0 py-1 text-right">
-                                            {renderEditableCell(ing, 'price_tax_included', ing.price != null ? `¥${(ing.tax_included !== false ? ing.price : ing.price * (1 + taxRates.ingredient / 100)).toFixed(1)}` : '-', 'ingredient')}
+                                            {priceInputIncludesTax
+                                                ? renderEditableCell(ing, 'price_tax_included', ing.price != null ? `¥${formatRecipePrice(recipePriceForDisplay(ing.price, true, ing.tax_included !== false, taxRates.ingredient))}` : '-', 'ingredient')
+                                                : renderCalculatedPrice(recipePriceForDisplay(ing.price, true, ing.tax_included !== false, taxRates.ingredient))}
                                         </td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'calories', formatNumber(ing.calories, 1), 'ingredient')}</td>
                                         <td className="px-0 py-1 text-right">{renderEditableCell(ing, 'protein', formatNumber(ing.protein, 1), 'ingredient')}</td>
@@ -864,8 +1314,8 @@ export default function DatabasePage() {
                                 <th className="px-2 py-2 text-left min-w-[250px]">資材名</th>
                                 <th className="px-2 py-2 text-center w-20">税込設定</th>
                                 <th className="px-2 py-2 text-left w-40">入数</th>
-                                <th className="px-2 py-2 text-right w-24">税別単価</th>
-                                <th className="px-2 py-2 text-right w-24">税込単価</th>
+                                <th className={`px-2 py-2 text-right w-28 ${priceInputIncludesTax ? "" : "bg-blue-50 text-blue-800"}`}>税別単価<br /><span className="text-[10px] font-normal">{priceInputIncludesTax ? "自動計算" : "入力"}</span></th>
+                                <th className={`px-2 py-2 text-right w-28 ${priceInputIncludesTax ? "bg-blue-50 text-blue-800" : ""}`}>税込単価<br /><span className="text-[10px] font-normal">{priceInputIncludesTax ? "入力" : "自動計算"}</span></th>
                                 <th className="px-2 py-2 text-left w-28">仕入先</th>
                                 <th className="px-2 py-2 text-left w-40">備考</th>
                                 <th className="px-2 py-2 w-10"></th>
@@ -878,7 +1328,12 @@ export default function DatabasePage() {
                                 filteredMaterials.map((mat, index) => (
                                     <tr key={mat.id} className={`border-b hover:bg-gray-50 ${mat.isNew ? 'bg-green-50' : ''} ${mat.isModified && !mat.isNew ? 'bg-yellow-50' : ''}`}>
                                         <td className="px-2 py-1 text-gray-500">{index + 1}</td>
-                                        <td className="px-0 py-1">{renderEditableCell(mat, 'name', mat.name, 'material', 'min-w-[230px]')}</td>
+                                        <td className="px-0 py-1">
+                                            <div className="flex items-center gap-1.5">
+                                                {renderEditableCell(mat, 'name', mat.name, 'material', 'min-w-[230px]')}
+                                                {renderRecipeUsageButton(mat.name, recipeUsageByMaterial[mat.id])}
+                                            </div>
+                                        </td>
                                         <td className="px-2 py-1 text-center">
                                             <button
                                                 onClick={() => handleTaxToggle(mat.id, !!mat.tax_included, 'material')}
@@ -888,13 +1343,15 @@ export default function DatabasePage() {
                                             </button>
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'unit_quantity', mat.unit_quantity || '', 'material', 'w-36')}</td>
-                                        {/* 税別単価 = 編集可能 */}
                                         <td className="px-0 py-1 text-right">
-                                            {renderEditableCell(mat, 'price', mat.price != null ? `¥${(mat.tax_included !== false ? mat.price / (1 + taxRates.material / 100) : mat.price).toFixed(1)}` : '-', 'material')}
+                                            {priceInputIncludesTax
+                                                ? renderCalculatedPrice(recipePriceForDisplay(mat.price, false, mat.tax_included !== false, taxRates.material))
+                                                : renderEditableCell(mat, 'price', mat.price != null ? `¥${formatRecipePrice(recipePriceForDisplay(mat.price, false, mat.tax_included !== false, taxRates.material))}` : '-', 'material')}
                                         </td>
-                                        {/* 税込単価 = 編集可能 */}
                                         <td className="px-0 py-1 text-right">
-                                            {renderEditableCell(mat, 'price_tax_included', mat.price != null ? `¥${(mat.tax_included !== false ? mat.price : mat.price * (1 + taxRates.material / 100)).toFixed(1)}` : '-', 'material')}
+                                            {priceInputIncludesTax
+                                                ? renderEditableCell(mat, 'price_tax_included', mat.price != null ? `¥${formatRecipePrice(recipePriceForDisplay(mat.price, true, mat.tax_included !== false, taxRates.material))}` : '-', 'material')
+                                                : renderCalculatedPrice(recipePriceForDisplay(mat.price, true, mat.tax_included !== false, taxRates.material))}
                                         </td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'supplier', mat.supplier || '', 'material', 'w-24')}</td>
                                         <td className="px-0 py-1">{renderEditableCell(mat, 'notes', mat.notes || '', 'material', 'w-36')}</td>
@@ -927,7 +1384,7 @@ export default function DatabasePage() {
                                 <th className="px-2 py-2 text-left w-10">NO</th>
                                 <th className="px-2 py-2 text-left min-w-[250px]">経費名</th>
                                 <th className="px-2 py-2 text-center w-20">税込設定</th>
-                                <th className="px-2 py-2 text-right w-24">単価</th>
+                                <th className="px-2 py-2 text-right w-28 bg-blue-50 text-blue-800">{priceInputIncludesTax ? "税込単価" : "税別単価"}<br /><span className="text-[10px] font-normal">入力</span></th>
                                 <th className="px-2 py-2 text-left w-40">備考</th>
                                 <th className="px-2 py-2 w-10"></th>
                             </tr>
@@ -948,7 +1405,16 @@ export default function DatabasePage() {
                                                 {exp.tax_included ? '税込' : '税抜'}
                                             </button>
                                         </td>
-                                        <td className="px-0 py-1 text-right">{renderEditableCell(exp, 'unit_price', formatNumber(exp.unit_price, 1), 'expense')}</td>
+                                        <td className="px-0 py-1 text-right">
+                                            {renderEditableCell(
+                                                exp,
+                                                priceInputIncludesTax ? 'unit_price_tax_included' : 'unit_price',
+                                                exp.unit_price != null
+                                                    ? `¥${formatRecipePrice(recipePriceForDisplay(exp.unit_price, priceInputIncludesTax, exp.tax_included !== false, taxRates.material))}`
+                                                    : '-',
+                                                'expense',
+                                            )}
+                                        </td>
                                         <td className="px-0 py-1">{renderEditableCell(exp, 'notes', exp.notes || '', 'expense', 'w-36')}</td>
                                         <td className="px-2 py-1">
                                             <div className="flex items-center gap-0.5">
@@ -1009,6 +1475,57 @@ export default function DatabasePage() {
             </div>
 
             {/* 食材編集モーダル */}
+            {recipeUsagePopover && (
+                <div
+                    className="fixed z-40 w-[380px] max-w-[calc(100vw-24px)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
+                    style={{ left: recipeUsagePopover.left, top: recipeUsagePopover.top }}
+                    onMouseEnter={keepRecipeUsagePopover}
+                    onMouseLeave={hideRecipeUsagePopoverSoon}
+                >
+                    <div className="border-b border-slate-200 bg-slate-900 px-3 py-2 text-white">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-100">
+                                    <BookOpen className="h-3 w-3" />
+                                    使用レシピ
+                                </div>
+                                <div className="truncate text-xs font-bold">{recipeUsagePopover.title}</div>
+                            </div>
+                            <div className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold">
+                                {recipeUsagePopover.usages.length}件
+                            </div>
+                        </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto py-1">
+                        {recipeUsagePopover.usages.map((usage, index) => (
+                            <div key={`${usage.recipeId}-${index}`} className="border-b border-slate-100 px-3 py-1.5 last:border-b-0">
+                                <div className="flex items-start gap-2">
+                                    <span className="mt-0.5 max-w-[72px] shrink-0 truncate rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">
+                                        {usage.category || (usage.isIntermediate ? "中間品" : "未分類")}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="truncate text-[11px] font-semibold leading-4 text-slate-900">
+                                            {usage.recipeName}
+                                        </div>
+                                        <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] leading-4 text-slate-500">
+                                            {usage.totalUsage !== null && (
+                                                <span>使用量 {formatCompactValue(usage.totalUsage)}</span>
+                                            )}
+                                            {usage.totalCost !== null && (
+                                                <span>原価 ¥{formatCompactValue(usage.totalCost)}</span>
+                                            )}
+                                            {usage.itemCount > 1 && (
+                                                <span>{usage.itemCount}行</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {editModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditModal(null)}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
@@ -1025,14 +1542,35 @@ export default function DatabasePage() {
                             {/* 価格・入数フィールド */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">単価（税別） <span className="text-xs text-gray-400">※税込は税率設定から自動計算</span></label>
+                                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                                        <label className="text-sm font-medium text-gray-700">単価（{priceInputIncludesTax ? "税込" : "税別"}）</label>
+                                        <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-600">
+                                            <Checkbox
+                                                checked={priceInputIncludesTax}
+                                                onCheckedChange={(checked) => changePriceInputMode(checked === true)}
+                                                aria-label="税込金額から税別単価を計算"
+                                            />
+                                            税込から計算
+                                        </label>
+                                    </div>
                                     <input
                                         type="number"
+                                        step="0.0001"
                                         value={editForm['price'] || ''}
                                         onChange={(e) => setEditForm(prev => ({ ...prev, price: e.target.value }))}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        placeholder="例: 1080"
+                                        placeholder={priceInputIncludesTax ? "税込金額を入力" : "税別金額を入力"}
                                     />
+                                    {editForm.price && Number.isFinite(Number(editForm.price)) && (
+                                        <p className="mt-1 text-xs text-blue-700">
+                                            {priceInputIncludesTax ? "税別換算" : "税込換算"}: ¥{formatRecipePrice(convertRecipePrice(
+                                                Number(editForm.price),
+                                                priceInputIncludesTax,
+                                                !priceInputIncludesTax,
+                                                taxRates.ingredient,
+                                            ))}
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">入数(g)</label>
@@ -1148,7 +1686,7 @@ export default function DatabasePage() {
                                         </style></head><body>
                                         <h2>${editModal.name}</h2>
                                         <div class="grid">
-                                            <div class="field"><div class="field-label">単価（税別）</div><div class="field-value">${editForm['price'] || '-'} 円</div></div>
+                                            <div class="field"><div class="field-label">単価（${priceInputIncludesTax ? '税込' : '税別'}入力）</div><div class="field-value">${editForm['price'] || '-'} 円</div></div>
                                             <div class="field"><div class="field-label">入数</div><div class="field-value">${editForm['unit_quantity'] || '-'} g</div></div>
                                         </div>
                                         ${fields.map(f => `<div class="field"><div class="field-label">${f.l}</div><div class="field-value">${(editForm[f.k] || '-').replace(/</g, '&lt;')}</div></div>`).join('')}

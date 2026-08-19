@@ -45,6 +45,7 @@ function OEMSalesContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<OEMProduct[]>([])
+  const [productLookup, setProductLookup] = useState<OEMProduct[]>([])
   const [customers, setCustomers] = useState<OEMCustomer[]>([])
   const [sales, setSales] = useState<OEMSale[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -97,25 +98,72 @@ function OEMSalesContent() {
     }))
   }, [formData.unitPrice, formData.quantity])
 
+  const normalizeProduct = (product: any): OEMProduct => ({
+    id: product.id,
+    product_code: product.product_code || '',
+    product_name: product.product_name || product.name || '',
+    price: Number(product.price || 0),
+    is_active: product.is_active !== false
+  })
+
+  const buildProductLists = (masterProducts: any[], legacyProducts: any[]) => {
+    const selectable = (masterProducts || [])
+      .map(normalizeProduct)
+      .filter(product => product.is_active && product.product_name)
+      .sort((a, b) => a.product_name.localeCompare(b.product_name, 'ja'))
+
+    const lookupMap = new Map<string, OEMProduct>()
+    ;(legacyProducts || []).map(normalizeProduct).forEach(product => {
+      if (product.id) lookupMap.set(product.id, product)
+    })
+    selectable.forEach(product => {
+      lookupMap.set(product.id, product)
+    })
+
+    return {
+      selectable,
+      lookup: Array.from(lookupMap.values())
+    }
+  }
+
+  const fetchProductLists = async () => {
+    const [masterRes, legacyRes] = await Promise.all([
+      fetch('/api/wholesale/products?type=OEM'),
+      fetch('/api/wholesale/oem-products')
+    ])
+
+    if (!masterRes.ok || !legacyRes.ok) {
+      throw new Error('OEM商品マスターの取得に失敗しました')
+    }
+
+    const masterData = await masterRes.json()
+    const legacyData = await legacyRes.json()
+
+    return buildProductLists(
+      masterData.success && Array.isArray(masterData.products) ? masterData.products : [],
+      Array.isArray(legacyData) ? legacyData : []
+    )
+  }
+
   const fetchInitialData = async (month: string) => {
     try {
       setIsLoading(true)
 
-      const [productsRes, customersRes, salesRes] = await Promise.all([
-        fetch('/api/wholesale/oem-products'),
+      const [productLists, customersRes, salesRes] = await Promise.all([
+        fetchProductLists(),
         fetch('/api/wholesale/oem-customers?all=true'),
         fetch(`/api/wholesale/oem-sales?month=${month}`)
       ])
 
-      if (!productsRes.ok || !customersRes.ok || !salesRes.ok) {
+      if (!customersRes.ok || !salesRes.ok) {
         throw new Error('データの取得に失敗しました')
       }
 
-      const productsData = await productsRes.json()
       const customersData = await customersRes.json()
       const salesData = await salesRes.json()
 
-      setProducts(productsData.filter((p: OEMProduct) => p.is_active))
+      setProducts(productLists.selectable)
+      setProductLookup(productLists.lookup)
       setCustomers(customersData.customers?.filter((c: OEMCustomer) => c.is_active) || [])
       setSales(salesData.sales || [])
     } catch (error) {
@@ -128,18 +176,22 @@ function OEMSalesContent() {
 
   const handleAddProduct = async (productName: string, productPrice: string) => {
     try {
-      const response = await fetch('/api/wholesale/oem-products', {
+      const response = await fetch('/api/wholesale/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_name: productName,
-          price: parseInt(productPrice)
+          price: parseInt(productPrice),
+          product_type: 'OEM',
+          profit_rate: 0
         })
       })
 
       if (!response.ok) throw new Error('商品の登録に失敗しました')
 
-      const newProduct = await response.json()
+      const result = await response.json()
+      if (!result.success || !result.product) throw new Error(result.error || '商品の登録に失敗しました')
+      const newProduct = normalizeProduct(result.product)
 
       // 商品リストを再取得して確実に最新データを反映
       await fetchProducts()
@@ -193,9 +245,9 @@ function OEMSalesContent() {
   }
 
   const fetchProducts = async () => {
-    const response = await fetch('/api/wholesale/oem-products')
-    const data = await response.json()
-    setProducts(data.filter((p: OEMProduct) => p.is_active))
+    const productLists = await fetchProductLists()
+    setProducts(productLists.selectable)
+    setProductLookup(productLists.lookup)
   }
 
   const fetchCustomers = async () => {
@@ -295,7 +347,7 @@ function OEMSalesContent() {
   // 売上データに商品名と顧客名を結合
   const salesWithDetails = sales.map(sale => ({
     ...sale,
-    product_name: products.find(p => p.id === sale.product_id)?.product_name || '不明',
+    product_name: productLookup.find(p => p.id === sale.product_id)?.product_name || '不明',
     customer_name: customers.find(c => c.id === sale.customer_id)?.customer_name || '不明'
   }))
 

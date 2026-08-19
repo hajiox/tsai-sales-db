@@ -211,15 +211,15 @@ export default function RecipePrintPage() {
                             <span className="text-gray-400 ml-1">({formatNumber(unitQty, 0)}g/pk)</span>
                           )}
                         </td>
-                        <td className="py-0 text-right font-mono text-[10px]">{formatNumber(unitUsage, 1)}{unit}</td>
+                        <td className="py-0 text-right font-mono text-[10px]">{formatNumber(unitUsage, group.type === "ingredient" ? 2 : 1)}{unit}</td>
                         <td className="py-0 text-right font-mono">
-                          <span className="font-bold">{formatNumber(b1Usage, 0)}{unit}</span>
+                          <span className="font-bold">{formatNumber(b1Usage, group.type === "ingredient" ? 2 : 0)}{unit}</span>
                           {b1Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
                             <span className="text-gray-500 ml-1">({formatNumber(b1Bags, 2)}pk)</span>
                           )}
                         </td>
                         <td className="py-0 text-right font-mono">
-                          <span className="font-bold">{formatNumber(b2Usage, 0)}{unit}</span>
+                          <span className="font-bold">{formatNumber(b2Usage, group.type === "ingredient" ? 2 : 0)}{unit}</span>
                           {b2Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
                             <span className="text-gray-500 ml-1">({formatNumber(b2Bags, 2)}pk)</span>
                           )}
@@ -232,15 +232,15 @@ export default function RecipePrintPage() {
                   <tr className="border-t border-gray-300 font-bold text-[10px]">
                     <td colSpan={2} className="py-1 text-right text-gray-500">計</td>
                     <td className="py-0 text-right font-mono text-[10px]">
-                      {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), 0)
+                      {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), group.type === "ingredient" ? 2 : 0)
                         + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
                     </td>
                     <td className="py-0 text-right font-mono">
-                      {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0) * batchSize1, 0), 0)
+                      {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0) * batchSize1, 0), group.type === "ingredient" ? 2 : 0)
                         + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
                     </td>
                     <td className="py-0 text-right font-mono">
-                      {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0) * batchSize2, 0), 0)
+                      {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0) * batchSize2, 0), group.type === "ingredient" ? 2 : 0)
                         + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
                     </td>
                   </tr>
@@ -262,7 +262,7 @@ export default function RecipePrintPage() {
                               return sum + (it.item_type === "ingredient" ? usage : usage * (it.unit_weight || 0));
                             }
                             return sum;
-                          }, 0), 1)}g
+                          }, 0), 2)}g
                         </span>
                       </div>
                       <div className="text-right">
@@ -275,7 +275,7 @@ export default function RecipePrintPage() {
                               return sum + (weight * batchSize1);
                             }
                             return sum;
-                          }, 0), 0)}g
+                          }, 0), 2)}g
                         </span>
                       </div>
                       <div className="text-right">
@@ -288,7 +288,7 @@ export default function RecipePrintPage() {
                               return sum + (weight * batchSize2);
                             }
                             return sum;
-                          }, 0), 0)}g
+                          }, 0), 2)}g
                         </span>
                       </div>
                     </div>

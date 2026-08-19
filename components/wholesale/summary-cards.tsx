@@ -21,6 +21,7 @@ interface SummaryCardsProps {
   salesData: SalesData;
   oemSalesCount: number;
   oemTotal: number;
+  oemProfit: number;
   selectedYear: string;
   selectedMonth: string;
 }
@@ -30,6 +31,7 @@ export default function SummaryCards({
   salesData,
   oemSalesCount = 0,
   oemTotal = 0,
+  oemProfit = 0,
   selectedYear,
   selectedMonth
 }: SummaryCardsProps) {
@@ -132,7 +134,7 @@ export default function SummaryCards({
   const wholesaleStats = currentMonthWholesaleStats();
   const totalAmount = wholesaleStats.amount + oemTotal;
   const totalCount = wholesaleStats.count + oemSalesCount;
-  const totalProfit = wholesaleStats.profit; // OEMの利益率が不明なため卸のみ
+  const totalProfit = wholesaleStats.profit + oemProfit;
 
   return (
     <div className="grid grid-cols-5 gap-3">
@@ -220,6 +222,10 @@ export default function SummaryCards({
             ¥{oemTotal.toLocaleString()}
           </div>
           <div className="text-xs text-green-600">
+            利益: ¥{oemProfit.toLocaleString()}
+            <span className="ml-1 text-[10px]">({oemTotal > 0 ? (oemProfit / oemTotal * 100).toFixed(1) : '0.0'}%)</span>
+          </div>
+          <div className="text-[10px] text-green-500">
             {selectedYear}年{selectedMonth}月
           </div>
         </CardContent>

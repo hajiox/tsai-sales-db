@@ -25,6 +25,8 @@ export type DeliveryNoteCreateInput = {
   items: DeliveryNoteItemInput[];
 };
 
+type DeliveryTransactionType = 'purchase' | 'consignment';
+
 type AggregateCombo = {
   productId: string;
   customerId: string;
@@ -55,6 +57,26 @@ function normalizeName(value: string | null | undefined) {
     .replace(/[【】\[\]（）()「」『』〈〉<>]/g, '')
     .replace(/[・･\s_\-—–ー.,，、。/／:：]/g, '')
     .trim();
+}
+
+function normalizeTransactionType(value: unknown): DeliveryTransactionType | null {
+  if (value === 'purchase' || value === 'consignment') return value;
+  return null;
+}
+
+function resolveTransactionTerms(customer: any, input: DeliveryNoteCreateInput) {
+  const transactionType = normalizeTransactionType(customer?.transaction_type)
+    || normalizeTransactionType(input.transactionType)
+    || 'purchase';
+  const configuredRate = Number(customer?.default_rate);
+  const requestedRate = Number(input.rate);
+  const rate = Number.isFinite(configuredRate) && configuredRate > 0
+    ? configuredRate
+    : Number.isFinite(requestedRate) && requestedRate > 0
+      ? requestedRate
+      : transactionType === 'consignment' ? 0.70 : 0.65;
+
+  return { transactionType, rate };
 }
 
 async function nextCustomerCode() {
@@ -104,6 +126,10 @@ async function ensureCustomer(input: DeliveryNoteCreateInput) {
       customer_code: await nextCustomerCode(),
       customer_name: customerName,
       customer_type: '通常卸',
+      transaction_type: normalizeTransactionType(input.transactionType) || 'purchase',
+      default_rate: Number.isFinite(Number(input.rate)) && Number(input.rate) > 0
+        ? Number(input.rate)
+        : normalizeTransactionType(input.transactionType) === 'consignment' ? 0.70 : 0.65,
       is_active: true,
       is_favorite: false,
       favorite_order: null,
@@ -120,7 +146,7 @@ export async function getDeliveryNoteOptions() {
   const [customersRes, recipesRes] = await Promise.all([
     supabase
       .from('wholesale_customers')
-      .select('id, customer_code, customer_name, customer_type, is_active, is_favorite, favorite_order')
+      .select('id, customer_code, customer_name, customer_type, transaction_type, default_rate, is_active, is_favorite, favorite_order')
       .order('is_favorite', { ascending: false })
       .order('favorite_order', { ascending: true })
       .order('customer_name', { ascending: true }),
@@ -204,7 +230,7 @@ export async function updateCustomerFavorite(customerId: string, isFavorite: boo
       updated_at: new Date().toISOString(),
     })
     .eq('id', customerId)
-    .select('id, customer_code, customer_name, customer_type, is_active, is_favorite, favorite_order')
+    .select('id, customer_code, customer_name, customer_type, transaction_type, default_rate, is_active, is_favorite, favorite_order')
     .single();
 
   if (error) throw error;
@@ -288,6 +314,7 @@ export async function createWebDeliveryNote(input: DeliveryNoteCreateInput) {
   if (!Array.isArray(input.items) || input.items.length === 0) throw new Error('明細を追加してください');
 
   const customer = await ensureCustomer(input);
+  const { transactionType, rate } = resolveTransactionTerms(customer, input);
   const productIds = [...new Set(input.items.map(i => i.productId).filter(Boolean))];
   if (productIds.length === 0) throw new Error('商品を選択してください');
 
@@ -328,8 +355,8 @@ export async function createWebDeliveryNote(input: DeliveryNoteCreateInput) {
       unit: item.unit || '個',
       unit_price: unitPrice,
       amount,
-      transaction_type: input.transactionType || null,
-      rate: input.rate ?? null,
+      transaction_type: transactionType,
+      rate,
       source_payload: {
         source: 'tsa_web',
         memo: input.memo || null,
@@ -356,6 +383,8 @@ export async function createWebDeliveryNote(input: DeliveryNoteCreateInput) {
     customer,
     itemCount: sourceRows.length,
     subtotal: sourceRows.reduce((sum, row) => sum + row.amount, 0),
+    transactionType,
+    rate,
     rebuilt,
   };
 }

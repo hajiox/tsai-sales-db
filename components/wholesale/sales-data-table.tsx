@@ -27,6 +27,7 @@ interface SalesDataTableProps {
   onSave: (productId: string, day: number) => void;
   onInputKeyDown: (e: KeyboardEvent<HTMLInputElement>, productId: string, day: number) => void;
   linkedProductIds?: Set<string>;
+  linkedProductNames?: Record<string, string>;
 }
 
 export default function SalesDataTable({
@@ -37,6 +38,7 @@ export default function SalesDataTable({
   onSave,
   onInputKeyDown,
   linkedProductIds,
+  linkedProductNames = {},
 }: SalesDataTableProps) {
   const router = useRouter();
 
@@ -53,6 +55,10 @@ export default function SalesDataTable({
     });
 
     return { totalQuantity, totalAmount };
+  };
+
+  const showLinkedRecipe = (productName: string, recipeName: string) => {
+    window.alert(`リンク先レシピ\n\n卸商品: ${productName}\nレシピ: ${recipeName}`);
   };
 
   return (
@@ -111,10 +117,19 @@ export default function SalesDataTable({
                   <td className="p-2 border-r">
                     <div className="font-medium text-gray-800 flex items-center gap-1">
                       {product.product_name}
-                      {linkedProductIds?.has(product.id) && (
-                        <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium" title="レシピ紐付済">
+                      {(linkedProductNames[product.id] || linkedProductIds?.has(product.id)) && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium hover:bg-green-200"
+                          title={linkedProductNames[product.id] ? `リンク先レシピ: ${linkedProductNames[product.id]}` : 'レシピ紐付済'}
+                          aria-label={`${product.product_name} のリンク先レシピを表示`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            showLinkedRecipe(product.product_name, linkedProductNames[product.id] || 'レシピ名を取得できませんでした');
+                          }}
+                        >
                           <Link2 className="h-2.5 w-2.5" />
-                        </span>
+                        </button>
                       )}
                     </div>
                     <div className="text-gray-500">単価: {product.price.toLocaleString()}円</div>

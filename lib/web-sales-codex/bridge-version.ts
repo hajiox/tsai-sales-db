@@ -1,0 +1,1 @@
+export const REQUIRED_TSA_CODEX_BRIDGE_VERSION = "1.8.7";

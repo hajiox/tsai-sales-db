@@ -34,14 +34,15 @@ export default function AmazonSPGuidePage() {
                 <div className="bg-white border rounded-xl p-6 mb-6">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-3">
                         <span className="bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">1</span>
-                        Amazon Advertising にログイン → レポート画面を開く
+                        Seller Central から広告コンソールを開く
                     </h2>
                     <div className="space-y-3 text-sm text-gray-700">
-                        <p>① <a href="https://advertising.amazon.co.jp/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">Amazon Advertising <ExternalLink size={12} /></a> にログイン</p>
-                        <p>② 左サイドバーの <strong>📊 効果測定とレポート</strong>（グラフアイコン）をクリック</p>
-                        <p>③ サブメニューから <strong>「スポンサー広告レポート」</strong> を選択</p>
+                        <p>① <a href="https://sellercentral.amazon.co.jp/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">Seller Central <ExternalLink size={12} /></a> にログイン</p>
+                        <p>② 左上メニューの <strong>「マーケティング」→「広告コンソール」</strong> を選択</p>
+                        <p>③ 広告コンソールで <strong>会津ブランド館 / スポンサー広告、日本</strong> が表示されていることを確認</p>
+                        <p>④ 左サイドバーの <strong>「効果測定とレポート」→「スポンサー広告レポート」</strong> を選択</p>
                         <div className="bg-gray-50 rounded-lg p-3 mt-2">
-                            <p className="text-xs text-gray-500">💡 左サイドバーの下の方にあるグラフ📊のアイコンです。クリックするとサブメニューが展開されます。</p>
+                            <p className="text-xs text-gray-500">一般向けAmazon Advertisingページへ直接移動せず、ログイン済みのSeller Centralを起点にしてください。</p>
                         </div>
                     </div>
                 </div>
@@ -157,7 +158,7 @@ export default function AmazonSPGuidePage() {
                         TSAシステムにアップロード
                     </h2>
                     <div className="space-y-3 text-sm text-gray-700">
-                        <p>① <a href="/web-sales/advertising" className="text-blue-600 hover:underline">広告管理システム</a> を開く</p>
+                        <p>① <a href="/web-sales/advertising" className="text-blue-600 hover:underline">経費管理システム</a> を開く</p>
                         <p>② <strong>「Amazon広告」</strong> タブを選択</p>
                         <p>③ <strong>「CSVアップロード」</strong> ボタンからダウンロードしたCSVファイルを選択</p>
                         <p>④ データが自動的にパースされ、パフォーマンスが表示されます</p>

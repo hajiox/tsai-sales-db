@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { createAuthenticatedSupabaseClient } from '@/lib/supabase';
 import { nf } from '@/lib/utils';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +20,6 @@ interface DailySalesCrudFormProps {
     dailyData: any;
     monthlyData: any;
     onDataUpdate: () => void;
-    accessToken: string | null;
 }
 
 const FormInput = ({ id, label, value, onChange }: { id: string, label: string, value: any, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
@@ -58,7 +56,7 @@ ${selectedDate}
 累計売上 / ${nf(toNumber(monthly.m_floor_total))}円
 累計レジ通過人数 / ${nf(toNumber(monthly.m_register_count_total))}人`;
 
-export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyData, onDataUpdate, accessToken }: DailySalesCrudFormProps) {
+export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyData, onDataUpdate }: DailySalesCrudFormProps) {
     const [formData, setFormData] = useState<any>({});
     const [tsgPosters, setTsgPosters] = useState<TsgPoster[]>([]);
     const [selectedTsgPosterId, setSelectedTsgPosterId] = useState('');
@@ -120,13 +118,16 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyDat
     };
 
     const saveFormData = async () => {
-        if (!accessToken) throw new Error('エラー: 認証トークンがありません');
-        const supabase = createAuthenticatedSupabaseClient(accessToken);
         const dataToSave = { date: selectedDate, ...formData };
         for(const key in dataToSave) { if (dataToSave[key] === '') { dataToSave[key] = null; } }
-        const { error } = await supabase.from('daily_sales_report').upsert(dataToSave, { onConflict: 'date' });
-        if (error) throw new Error(`保存に失敗しました: ${error.message}`);
-        return dataToSave;
+        const response = await fetch('/api/sales/daily', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dataToSave),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || '保存に失敗しました');
+        return payload.data || dataToSave;
     };
 
     const handleSave = async () => {
@@ -140,12 +141,16 @@ export default function DailySalesCrudForm({ selectedDate, dailyData, monthlyDat
     };
 
     const handleDelete = async () => {
-        if (!accessToken) { toast.error('エラー: 認証トークンがありません'); return; }
         if (!confirm(`${selectedDate}のデータを本当に削除しますか？`)) return;
-        const supabase = createAuthenticatedSupabaseClient(accessToken);
-        const { error } = await supabase.from('daily_sales_report').delete().eq('date', selectedDate);
-        if (error) { toast.error(`削除に失敗しました: ${error.message}`); } 
-        else { toast.success(`${selectedDate}のデータを削除しました。`); onDataUpdate(); }
+        try {
+            const response = await fetch(`/api/sales/daily?date=${encodeURIComponent(selectedDate)}`, { method: 'DELETE' });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || '削除に失敗しました');
+            toast.success(`${selectedDate}のデータを削除しました。`);
+            onDataUpdate();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : '削除に失敗しました');
+        }
     };
 
     const fetchLatestMonthlyData = async () => {

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import KpiTargetModal from "./KpiTargetModal";
+import KpiAnnualGoalSummary from "./KpiAnnualGoalSummary";
 import { KpiSummary, ChannelCode, updateKpiEntry } from "@/app/kpi/actions";
 import { formatCurrency, formatPercent } from '@/lib/utils';
 
@@ -110,6 +111,7 @@ function EditableCell({
 
 interface KpiPageClientProps {
     fiscalYear: number;
+    availableFiscalYears: number[];
     data: KpiSummary;
     summaryMetrics: {
         totalActual: number;
@@ -125,7 +127,7 @@ interface KpiPageClientProps {
     };
 }
 
-export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiPageClientProps) {
+export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, summaryMetrics }: KpiPageClientProps) {
     const router = useRouter();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -234,14 +236,15 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                 <div className="flex items-center justify-between pb-4 print:hidden">
                     <div className="flex items-center gap-2">
                         <Select value={fiscalYear.toString()} onValueChange={handleYearChange}>
-                            <SelectTrigger className="w-[180px]">
+                            <SelectTrigger className="w-[290px]">
                                 <SelectValue placeholder="年度を選択" />
                             </SelectTrigger>
                             <SelectContent>
-                                {[0, 1, 2, 3].map(i => {
-                                    const y = new Date().getFullYear() + 1 - i;
-                                    return <SelectItem key={y} value={y.toString()}>{`FY${y} (7月期)`}</SelectItem>;
-                                })}
+                                {availableFiscalYears.map(year => (
+                                    <SelectItem key={year} value={year.toString()}>
+                                        {`FY${year}（${year - 1}年8月〜${year}年7月）`}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -256,6 +259,8 @@ export default function KpiPageClient({ fiscalYear, data, summaryMetrics }: KpiP
                         </Button>
                     </div>
                 </div>
+
+                <KpiAnnualGoalSummary fiscalYear={fiscalYear} data={data} />
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 print:hidden">
                     <Card>

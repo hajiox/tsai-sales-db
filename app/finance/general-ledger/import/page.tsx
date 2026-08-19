@@ -14,11 +14,22 @@ import {
   Trash2,
   Eye,
   Settings2,
-  Info,
   Zap,
 } from 'lucide-react';
 
 type Encoding = 'auto' | 'utf-8' | 'shift_jis';
+type ImportStatus = 'ready' | 'uploading' | 'done' | 'error';
+
+type ImportFileItem = {
+  id: string;
+  file: File;
+  preview: string[];
+  targetMonth: string;
+  detectedMonth: string | null;
+  usedEncoding: Exclude<Encoding, 'auto'>;
+  status: ImportStatus;
+  message: string;
+};
 
 function toReiwa(year: number): string {
   const r = year - 2018;
@@ -27,20 +38,69 @@ function toReiwa(year: number): string {
   return `H${year - 1988}`;
 }
 
+function countReplacementChars(value: string) {
+  return (value.match(/\uFFFD/g) || []).length;
+}
+
+function decodeBuffer(buffer: ArrayBuffer, encoding: Exclude<Encoding, 'auto'>) {
+  return new TextDecoder(encoding, { fatal: false }).decode(buffer);
+}
+
+function decodeFileBuffer(buffer: ArrayBuffer, encoding: Encoding) {
+  if (encoding !== 'auto') {
+    return { text: decodeBuffer(buffer, encoding), usedEncoding: encoding };
+  }
+
+  const utf8 = decodeBuffer(buffer, 'utf-8');
+  const shiftJis = decodeBuffer(buffer, 'shift_jis');
+  return countReplacementChars(shiftJis) < countReplacementChars(utf8)
+    ? { text: shiftJis, usedEncoding: 'shift_jis' as const }
+    : { text: utf8, usedEncoding: 'utf-8' as const };
+}
+
+function detectMonthFromCSV(text: string): string | null {
+  const monthCounts = new Map<string, number>();
+  for (const line of text.split(/\r?\n/)) {
+    const columns = line.split(/[,\t]/);
+    const year = columns[3]?.trim();
+    const month = columns[4]?.trim();
+    if (year && month && /^\d{4}$/.test(year) && /^\d{1,2}$/.test(month)) {
+      const yearMonth = `${year}-${month.padStart(2, '0')}`;
+      monthCounts.set(yearMonth, (monthCounts.get(yearMonth) || 0) + 1);
+    }
+  }
+
+  let detected: string | null = null;
+  let highestCount = 0;
+  for (const [yearMonth, count] of monthCounts) {
+    if (count > highestCount) {
+      detected = yearMonth;
+      highestCount = count;
+    }
+  }
+  return detected;
+}
+
+function fileKey(file: File) {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function makeFileId(file: File, index: number) {
+  return `${fileKey(file)}:${index}:${Date.now()}`;
+}
+
 export default function GeneralLedgerImportPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string[]>([]);
+  const [files, setFiles] = useState<ImportFileItem[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'uploading' | 'refreshing' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const [targetMonth, setTargetMonth] = useState('');
-  const [detectedMonth, setDetectedMonth] = useState<string | null>(null);
   const [encoding, setEncoding] = useState<Encoding>('auto');
-  const [usedEncoding, setUsedEncoding] = useState<Exclude<Encoding, 'auto'> | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [importedMonths, setImportedMonths] = useState<string[]>([]);
+  const [processedCount, setProcessedCount] = useState(0);
 
   // 取り込み済み月を取得
   useEffect(() => {
@@ -69,157 +129,189 @@ export default function GeneralLedgerImportPage() {
     return missing;
   }, [importedMonths]);
 
-  // --- helpers ---
-  function countReplacementChars(s: string) {
-    return (s.match(/\uFFFD/g) || []).length;
-  }
-  function decodeBuffer(buf: ArrayBuffer, enc: Exclude<Encoding, 'auto'>) {
-    return new TextDecoder(enc, { fatal: false }).decode(buf);
-  }
-  function autoDecode(buf: ArrayBuffer): { text: string; used: Exclude<Encoding, 'auto'> } {
-    const utf8 = decodeBuffer(buf, 'utf-8');
-    const sjis = decodeBuffer(buf, 'shift_jis');
-    return countReplacementChars(sjis) < countReplacementChars(utf8)
-      ? { text: sjis, used: 'shift_jis' }
-      : { text: utf8, used: 'utf-8' };
-  }
-  async function readFile(f: File, enc: Encoding) {
-    const buf = await f.arrayBuffer();
-    if (enc === 'auto') {
-      const { text, used } = autoDecode(buf);
-      setUsedEncoding(used);
-      return text;
-    }
-    const text = decodeBuffer(buf, enc);
-    setUsedEncoding(enc);
-    return text;
-  }
-
-  /** CSV内の日付列から最頻の年月を検出 */
-  function detectMonthFromCSV(text: string): string | null {
-    const lines = text.split(/\r?\n/);
-    const monthCounts = new Map<string, number>();
-    for (const line of lines) {
-      const cols = line.split(/[,\t]/);
-      // 列3=年, 列4=月 (総勘定元帳CSV形式)
-      const year = cols[3]?.trim();
-      const month = cols[4]?.trim();
-      if (year && month && /^\d{4}$/.test(year) && /^\d{1,2}$/.test(month)) {
-        const ym = `${year}-${month.padStart(2, '0')}`;
-        monthCounts.set(ym, (monthCounts.get(ym) || 0) + 1);
-      }
-    }
-    if (monthCounts.size === 0) return null;
-    // 最頻の年月を返す
-    let best = '';
-    let bestCount = 0;
-    for (const [ym, cnt] of monthCounts) {
-      if (cnt > bestCount) { best = ym; bestCount = cnt; }
-    }
-    return best || null;
-  }
-
   // --- handlers ---
-  async function onPick(f: File | null) {
-    setFile(f);
+  async function addFiles(selectedFiles: File[]) {
+    if (selectedFiles.length === 0) return;
     setStatus('idle');
     setMessage('');
-    setPreview([]);
-    setUsedEncoding(null);
-    setDetectedMonth(null);
-    if (!f) return;
-    const text = await readFile(f, encoding);
-    setPreview(text.split(/\r?\n/).slice(0, 8));
-    // 年月自動検出
-    const detected = detectMonthFromCSV(text);
-    if (detected) {
-      setDetectedMonth(detected);
-      setTargetMonth(`${detected}-01`);
+    setProcessedCount(0);
+
+    const existingKeys = new Set(files.map(item => fileKey(item.file)));
+    const uniqueFiles = selectedFiles.filter(file => !existingKeys.has(fileKey(file)));
+    const prepared = await Promise.all(uniqueFiles.map(async (file, index): Promise<ImportFileItem> => {
+      const decoded = decodeFileBuffer(await file.arrayBuffer(), encoding);
+      const detectedMonth = detectMonthFromCSV(decoded.text);
+      return {
+        id: makeFileId(file, index),
+        file,
+        preview: decoded.text.split(/\r?\n/).slice(0, 8),
+        targetMonth: detectedMonth || '',
+        detectedMonth,
+        usedEncoding: decoded.usedEncoding,
+        status: 'ready',
+        message: '',
+      };
+    }));
+
+    if (prepared.length === 0) {
+      setMessage('同じファイルはすでに選択されています。');
+      return;
     }
+
+    setFiles(current => [...current, ...prepared]);
+    setActiveFileId(current => current || prepared[0].id);
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) onPick(f);
+    void addFiles(Array.from(e.dataTransfer.files || []));
+  }
+
+  function updateFile(id: string, patch: Partial<ImportFileItem>) {
+    setFiles(current => current.map(item => item.id === id ? { ...item, ...patch } : item));
+  }
+
+  function removeFile(id: string) {
+    setFiles(current => {
+      const next = current.filter(item => item.id !== id);
+      setActiveFileId(active => active === id ? (next[0]?.id || null) : active);
+      return next;
+    });
+  }
+
+  async function changeEncoding(nextEncoding: Encoding) {
+    setEncoding(nextEncoding);
+    setStatus('idle');
+    setMessage('');
+    const updated = await Promise.all(files.map(async item => {
+      const decoded = decodeFileBuffer(await item.file.arrayBuffer(), nextEncoding);
+      const detectedMonth = detectMonthFromCSV(decoded.text);
+      return {
+        ...item,
+        preview: decoded.text.split(/\r?\n/).slice(0, 8),
+        detectedMonth,
+        targetMonth: item.targetMonth || detectedMonth || '',
+        usedEncoding: decoded.usedEncoding,
+        status: item.status === 'done' ? item.status : 'ready' as ImportStatus,
+        message: item.status === 'done' ? item.message : '',
+      };
+    }));
+    setFiles(updated);
   }
 
   async function upload() {
-    if (!file) {
+    const pendingFiles = files.filter(item => item.status !== 'done');
+    if (pendingFiles.length === 0) {
       setStatus('error');
-      setMessage('ファイルを選択してください');
+      setMessage(files.length === 0 ? 'ファイルを選択してください。' : 'すべて取り込み済みです。');
       return;
     }
-    try {
-      setStatus('uploading');
-      setMessage('取り込み中…');
 
-      const buf = await file.arrayBuffer();
-      const encToUse = encoding === 'auto' ? (usedEncoding ?? 'utf-8') : encoding;
-      const text = decodeBuffer(buf, encToUse);
+    const invalidMonth = pendingFiles.find(item => !/^\d{4}-(0[1-9]|1[0-2])$/.test(item.targetMonth));
+    if (invalidMonth) {
+      setStatus('error');
+      setMessage(`${invalidMonth.file.name} の対象月を指定してください。`);
+      return;
+    }
 
-      const fd = new FormData();
-      fd.append(
-        'file',
-        new Blob([text], { type: 'text/plain;charset=utf-8' }),
-        file.name.replace(/\.(txt|csv|tsv)$/i, '') + '.csv'
-      );
-      // APIが期待するキー: reportMonth (YYYY-MM形式)
-      if (targetMonth) {
-        fd.append('reportMonth', targetMonth.slice(0, 7)); // "2023-04"
+    const monthCounts = new Map<string, number>();
+    for (const item of files) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(item.targetMonth)) continue;
+      monthCounts.set(item.targetMonth, (monthCounts.get(item.targetMonth) || 0) + 1);
+    }
+    const duplicatedMonth = [...monthCounts.entries()].find(([, count]) => count > 1)?.[0];
+    if (duplicatedMonth) {
+      setStatus('error');
+      setMessage(`${duplicatedMonth} のファイルが複数あります。同じ月は後のファイルで上書きされるため、1ファイルにしてください。`);
+      return;
+    }
+
+    setStatus('uploading');
+    setProcessedCount(0);
+    setMessage(`${pendingFiles.length}ファイルを順番に取り込んでいます...`);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let index = 0; index < pendingFiles.length; index += 1) {
+      const item = pendingFiles[index];
+      updateFile(item.id, { status: 'uploading', message: '取り込み中' });
+
+      try {
+        const decoded = decodeFileBuffer(await item.file.arrayBuffer(), item.usedEncoding);
+        const fd = new FormData();
+        fd.append(
+          'file',
+          new Blob([decoded.text], { type: 'text/plain;charset=utf-8' }),
+          item.file.name.replace(/\.(txt|csv|tsv)$/i, '') + '.csv'
+        );
+        fd.append('reportMonth', item.targetMonth);
+        fd.append(
+          'options',
+          JSON.stringify({
+            saveOriginal: true,
+            encoding: item.usedEncoding,
+          })
+        );
+
+        const res = await fetch('/api/general-ledger/import', { method: 'POST', body: fd });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error ?? res.statusText);
+
+        successCount += 1;
+        updateFile(item.id, {
+          status: 'done',
+          message: `${json?.stats?.transactions ?? 0}件`,
+        });
+      } catch (error: any) {
+        errorCount += 1;
+        updateFile(item.id, {
+          status: 'error',
+          message: error?.message || '取り込みに失敗しました',
+        });
       }
-      fd.append(
-        'options',
-        JSON.stringify({
-          saveOriginal: true,
-          encoding: encToUse,
-        })
-      );
+      setProcessedCount(index + 1);
+    }
 
-      const res = await fetch('/api/general-ledger/import', { method: 'POST', body: fd });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error ?? res.statusText);
-
+    if (successCount > 0) {
       setStatus('refreshing');
       setMessage('マテリアライズドビュー更新中…');
-      const r2 = await fetch('/api/finance/refresh', { method: 'POST' });
-      if (!r2.ok) throw new Error('マテビュー更新に失敗しました');
-      // 未取り込み月アラートを即時更新（awaitで確実に待つ）
-      setStatus('refreshing');
-      setMessage('取り込み状況を更新中…');
       try {
+        const refreshResponse = await fetch('/api/finance/refresh', { method: 'POST' });
+        if (!refreshResponse.ok) throw new Error('集計更新に失敗しました');
+
         const r3 = await fetch('/api/finance/import-status');
         const j3 = await r3.json();
         setImportedMonths((j3.months || []).map((m: any) => m.month));
-      } catch {}
+      } catch (error: any) {
+        setStatus('error');
+        setMessage(`${successCount}ファイルの取込は完了しましたが、${error?.message || '集計更新に失敗しました'}。`);
+        return;
+      }
+    }
 
-      setStatus('done');
-      setMessage(`インポート完了（${json?.stats?.transactions ?? '?'}件の仕訳を取り込みました）`);
-
-      // ファイル選択を自動クリア（次のインポートに備える）
-      setFile(null);
-      setPreview([]);
-      setDetectedMonth(null);
-      setUsedEncoding(null);
-      setTargetMonth('');
-      if (fileRef.current) fileRef.current.value = '';
-    } catch (e: any) {
+    if (errorCount > 0) {
       setStatus('error');
-      setMessage(String(e?.message ?? e));
+      setMessage(`${successCount}ファイル成功、${errorCount}ファイル失敗。失敗したファイルを確認して再実行してください。`);
+    } else {
+      setStatus('done');
+      setMessage(`${successCount}ファイルの取り込みが完了しました。`);
     }
   }
 
   function clear() {
-    setFile(null);
-    setPreview([]);
+    setFiles([]);
+    setActiveFileId(null);
     setStatus('idle');
     setMessage('');
-    setUsedEncoding(null);
+    setProcessedCount(0);
     if (fileRef.current) fileRef.current.value = '';
   }
 
   const isProcessing = status === 'uploading' || status === 'refreshing';
+  const pendingCount = files.filter(item => item.status !== 'done').length;
+  const activeFile = files.find(item => item.id === activeFileId) || files[0] || null;
 
   return (
     <div className="p-6 max-w-[900px] mx-auto space-y-6">
@@ -268,52 +360,20 @@ export default function GeneralLedgerImportPage() {
           <Settings2 className="w-4 h-4 text-slate-500" />
           <h2 className="font-semibold text-sm text-slate-700">インポート設定</h2>
         </div>
-        <div className="p-6 space-y-5">
-          {/* 対象月 */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <label className="text-sm font-semibold text-slate-700 w-28 shrink-0">対象月</label>
-            <input
-              type="month"
-              value={targetMonth ? targetMonth.slice(0, 7) : ''}
-              onChange={(e) => { setTargetMonth(e.target.value ? `${e.target.value}-01` : ''); setDetectedMonth(null); }}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-            />
-            {detectedMonth ? (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md">
-                <Zap className="w-3 h-3" />
-                CSVから自動検出: {detectedMonth.replace('-', '年')}月
-              </span>
-            ) : (
-              <span className="text-xs text-slate-400">ファイル選択時にCSVから自動検出します</span>
-            )}
-          </div>
-
-          {/* 文字コード */}
+        <div className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <label className="text-sm font-semibold text-slate-700 w-28 shrink-0">文字コード</label>
             <select
               value={encoding}
-              onChange={async (e) => {
-                const enc = e.target.value as Encoding;
-                setEncoding(enc);
-                setStatus('idle');
-                setMessage('');
-                if (file) {
-                  const text = await readFile(file, enc);
-                  setPreview(text.split(/\r?\n/).slice(0, 8));
-                }
-              }}
+              onChange={(e) => void changeEncoding(e.target.value as Encoding)}
+              disabled={isProcessing}
               className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white cursor-pointer"
             >
               <option value="auto">自動判別（推奨）</option>
               <option value="utf-8">UTF-8</option>
               <option value="shift_jis">Shift_JIS（Windows）</option>
             </select>
-            {usedEncoding && (
-              <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-                判定: {usedEncoding.toUpperCase()}
-              </span>
-            )}
+            <span className="text-xs text-slate-400">対象月と判定結果はファイルごとに表示します。</span>
           </div>
         </div>
       </div>
@@ -327,7 +387,7 @@ export default function GeneralLedgerImportPage() {
         className={`relative bg-white rounded-2xl shadow-sm border-2 border-dashed p-10 text-center cursor-pointer transition-all ${
           dragOver
             ? 'border-blue-400 bg-blue-50/50'
-            : file
+            : files.length > 0
             ? 'border-emerald-300 bg-emerald-50/30'
             : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/30'
         }`}
@@ -335,35 +395,120 @@ export default function GeneralLedgerImportPage() {
         <input
           ref={fileRef}
           type="file"
+          multiple
           accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
-          onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            const selected = Array.from(e.target.files || []);
+            e.target.value = '';
+            void addFiles(selected);
+          }}
           className="hidden"
         />
-        {file ? (
-          <div className="space-y-2">
-            <FileText className="w-10 h-10 text-emerald-500 mx-auto" />
-            <div className="font-semibold text-slate-700">{file.name}</div>
-            <div className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB · クリックでファイル変更</div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Upload className="w-10 h-10 text-slate-300 mx-auto" />
-            <div className="font-semibold text-slate-600">ファイルをドラッグ＆ドロップ</div>
-            <div className="text-xs text-slate-400">または、クリックしてファイルを選択</div>
-            <div className="text-xs text-slate-400 mt-2">.csv, .tsv, .txt（UTF-8 / Shift_JIS）</div>
-          </div>
-        )}
+        <div className="space-y-2">
+          {files.length > 0
+            ? <FileText className="w-10 h-10 text-emerald-500 mx-auto" />
+            : <Upload className="w-10 h-10 text-slate-300 mx-auto" />}
+          <div className="font-semibold text-slate-600">複数ファイルをドラッグ＆ドロップ</div>
+          <div className="text-xs text-slate-400">またはクリックしてまとめて選択</div>
+          <div className="text-xs text-slate-400 mt-2">.csv, .tsv, .txt（UTF-8 / Shift_JIS）</div>
+        </div>
       </div>
 
+      {files.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+            <h2 className="font-semibold text-sm text-slate-700">取込ファイル</h2>
+            <span className="text-xs font-semibold text-slate-500">{files.length}件</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {files.map(item => (
+              <div
+                key={item.id}
+                className={`grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_150px_110px_42px] sm:items-center ${
+                  activeFile?.id === item.id ? 'bg-blue-50/40' : ''
+                }`}
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <button
+                    type="button"
+                    title="プレビューを表示"
+                    onClick={() => setActiveFileId(item.id)}
+                    className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-white hover:text-blue-600"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-800">{item.file.name}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                      <span>{(item.file.size / 1024).toFixed(1)} KB</span>
+                      <span>{item.usedEncoding.toUpperCase()}</span>
+                      {item.detectedMonth && (
+                        <span className="inline-flex items-center gap-1 text-emerald-600">
+                          <Zap className="h-3 w-3" />
+                          自動判定 {item.detectedMonth}
+                        </span>
+                      )}
+                    </div>
+                    {item.message && (
+                      <div className={`mt-1 text-xs ${item.status === 'error' ? 'text-red-600' : 'text-slate-500'}`}>
+                        {item.message}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold text-slate-500">対象月</span>
+                  <input
+                    type="month"
+                    value={item.targetMonth}
+                    disabled={isProcessing || item.status === 'done'}
+                    onChange={(e) => updateFile(item.id, {
+                      targetMonth: e.target.value,
+                      detectedMonth: null,
+                      status: 'ready',
+                      message: '',
+                    })}
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                  />
+                </label>
+                <div className={`text-xs font-bold ${
+                  item.status === 'done'
+                    ? 'text-emerald-600'
+                    : item.status === 'error'
+                      ? 'text-red-600'
+                      : item.status === 'uploading'
+                        ? 'text-blue-600'
+                        : 'text-slate-500'
+                }`}>
+                  {item.status === 'done' && '完了'}
+                  {item.status === 'error' && '失敗'}
+                  {item.status === 'uploading' && '取込中'}
+                  {item.status === 'ready' && '待機'}
+                </div>
+                <button
+                  type="button"
+                  title="一覧から削除"
+                  disabled={isProcessing}
+                  onClick={() => removeFile(item.id)}
+                  className="grid h-9 w-9 place-items-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* アクションボタン */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={upload}
-          disabled={!file || isProcessing}
+          disabled={pendingCount === 0 || isProcessing}
           className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
         >
           {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-          {isProcessing ? '処理中…' : 'アップロードして取り込み'}
+          {isProcessing ? `処理中… ${processedCount}件処理済み` : `${pendingCount}ファイルを取り込む`}
         </button>
         <button
           onClick={clear}
@@ -408,11 +553,11 @@ export default function GeneralLedgerImportPage() {
           <h2 className="font-semibold text-sm text-slate-700">プレビュー（先頭8行）</h2>
         </div>
         <div className="p-6">
-          {preview.length === 0 ? (
+          {!activeFile ? (
             <div className="text-sm text-slate-400 text-center py-4">ファイル未選択</div>
           ) : (
             <pre className="whitespace-pre-wrap text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-xl p-4 max-h-[280px] overflow-auto font-mono leading-relaxed">
-              {preview.join('\n')}
+              {activeFile.preview.join('\n')}
             </pre>
           )}
         </div>

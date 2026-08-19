@@ -1,5 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import {
+    findExistingMasterByNormalizedName,
+    syncRecipeItemsForMaster,
+} from "@/lib/recipe-cost-sync";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -215,8 +219,11 @@ export async function PATCH(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await request.json();
     const { action, itemId, ingredientId, newIngredientData } = body;
-    // targetTable: "ingredient" or "material" (デフォルトはingredient)
-    const targetTable = body.targetTable === "material" ? "materials" : "ingredients";
+    const targetTable = body.targetTable === "material"
+        ? "materials"
+        : body.targetTable === "ingredient"
+            ? "ingredients"
+            : null;
 
     // 一括スキップ（1リクエストで複数件処理）
     if (action === "bulk_skip") {
@@ -242,6 +249,13 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "itemId and action are required" }, { status: 400 });
     }
 
+    if ((action === "update_price" || action === "create_new") && !targetTable) {
+        return NextResponse.json(
+            { error: "登録先として食材または資材を選択してください" },
+            { status: 400 },
+        );
+    }
+
     const { data: item, error: fetchErr } = await supabase
         .from("pending_estimate_items")
         .select("*")
@@ -254,6 +268,9 @@ export async function PATCH(request: NextRequest) {
 
     try {
         if (action === "update_price") {
+            if (!targetTable) {
+                return NextResponse.json({ error: "登録先が指定されていません" }, { status: 400 });
+            }
             if (!ingredientId) return NextResponse.json({ error: "ingredientId is required" }, { status: 400 });
 
             const updateData: any = {};
@@ -265,19 +282,33 @@ export async function PATCH(request: NextRequest) {
 
             if (Object.keys(updateData).length > 0) {
                 // 選択先のテーブル（ingredients or materials）を更新
-                const { error: updateErr } = await supabase
+                let actualTable = targetTable;
+                let { data: updatedMaster, error: updateErr } = await supabase
                     .from(targetTable)
                     .update(updateData)
-                    .eq("id", ingredientId);
-                if (updateErr) {
+                    .eq("id", ingredientId)
+                    .select("id, name, price, unit_quantity, tax_included");
+                if (updateErr || !updatedMaster || updatedMaster.length === 0) {
                     // フォールバック: もう片方のテーブルも試す
                     const fallbackTable = targetTable === "ingredients" ? "materials" : "ingredients";
-                    const { error: fallbackErr } = await supabase
+                    const { data: fallbackMaster, error: fallbackErr } = await supabase
                         .from(fallbackTable)
                         .update(updateData)
-                        .eq("id", ingredientId);
-                    if (fallbackErr) throw updateErr;
+                        .eq("id", ingredientId)
+                        .select("id, name, price, unit_quantity, tax_included");
+                    if (fallbackErr) throw updateErr || fallbackErr;
+                    if (!fallbackMaster || fallbackMaster.length === 0) {
+                        return NextResponse.json({ error: "更新先の材料が見つかりません" }, { status: 404 });
+                    }
+                    updatedMaster = fallbackMaster;
+                    actualTable = fallbackTable;
                 }
+
+                await syncRecipeItemsForMaster(
+                    supabase,
+                    actualTable === "materials" ? "material" : "ingredient",
+                    ingredientId,
+                );
             }
 
             const { error: statusErr } = await supabase
@@ -299,6 +330,9 @@ export async function PATCH(request: NextRequest) {
         }
 
         if (action === "create_new") {
+            if (!targetTable) {
+                return NextResponse.json({ error: "登録先が指定されていません" }, { status: 400 });
+            }
             // 見積書の単価は税別 → DBは税込で保存
             const taxRate = item.tax_rate || 0.1;
             const priceExclTax = item.unit_price || item.amount;
@@ -312,6 +346,46 @@ export async function PATCH(request: NextRequest) {
                 price: priceInclTax,
                 tax_included: true,
             };
+
+            const existing = await findExistingMasterByNormalizedName(supabase, targetTable, itemData.name);
+            if (existing) {
+                const { data: updatedExisting, error: existingUpdateErr } = await supabase
+                    .from(targetTable)
+                    .update({
+                        price: priceInclTax,
+                        tax_included: true,
+                    })
+                    .eq("id", existing.id)
+                    .select("id, name, price, unit_quantity, tax_included");
+                if (existingUpdateErr) throw existingUpdateErr;
+                if (!updatedExisting || updatedExisting.length === 0) {
+                    return NextResponse.json({ error: "既存材料の更新に失敗しました" }, { status: 500 });
+                }
+
+                await syncRecipeItemsForMaster(
+                    supabase,
+                    targetTable === "materials" ? "material" : "ingredient",
+                    existing.id,
+                );
+
+                const { error: statusErr } = await supabase
+                    .from("pending_estimate_items")
+                    .update({
+                        status: "applied",
+                        applied_action: "price_updated_existing",
+                        applied_at: new Date().toISOString(),
+                        matched_ingredient_id: existing.id,
+                        matched_ingredient_name: existing.name,
+                    })
+                    .eq("id", itemId);
+
+                if (statusErr) {
+                    console.error("[Estimates PATCH] existing update status failed:", statusErr.message);
+                    return NextResponse.json({ error: `ステータス更新失敗: ${statusErr.message}` }, { status: 500 });
+                }
+
+                return NextResponse.json({ success: true, action: "price_updated_existing", ingredientId: existing.id });
+            }
 
             const { data: newItem, error: insertErr } = await supabase
                 .from(targetTable)

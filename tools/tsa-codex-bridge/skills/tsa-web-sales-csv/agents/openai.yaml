@@ -1,0 +1,4 @@
+interface:
+  display_name: "TSA WEB売上CSV運用"
+  short_description: "Amazon等7ECの売上CSV取得・検証・TSA取込を安全に実行"
+  default_prompt: "対象ECと期間を確認し、売上CSVを取得してTSAへ安全に取り込んでください。"

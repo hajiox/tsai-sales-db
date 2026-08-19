@@ -4,7 +4,7 @@
 import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
-import { TrendingUp, Target } from "lucide-react"
+import { Target } from "lucide-react"
 
 const SITES = [
   { key: "amazon", name: "Amazon", bgColor: "bg-green-50", borderColor: "border-green-200" },
@@ -21,6 +21,12 @@ type Totals = Record<string, {
   count: number;
   amount: number;
   profit: number;
+  platformFees: number;
+  paymentFees: number;
+  ecFees: number;
+  ecDeductions: number;
+  promotions: number;
+  refundEtc: number;
   adCost: number;
   finalProfit: number;
 }>
@@ -30,6 +36,8 @@ type SeriesSummary = {
   count: number;
   sales: number;
   profit: number;
+  ecFees: number;
+  ecDeductions: number;
   adCost: number;
   finalProfit: number;
 }
@@ -39,6 +47,62 @@ type TrendData = {
   profit: number;
   ad_cost: number;
   final_profit: number;
+}
+type EcProfitSummary = {
+  channels: Array<{
+    channel: string;
+    label: string;
+    quantity: number;
+    sales: number;
+    productProfit: number;
+    platformFees: number;
+    paymentFees: number;
+    sellerDiscounts: number;
+    sellerCoupons: number;
+    sellerPoints: number;
+    refunds: number;
+    shippingCosts: number;
+    otherCosts: number;
+    otherCredits: number;
+    ecDeductions: number;
+    directAdCost: number;
+    finalProfit: number;
+  }>;
+  series: Array<{
+    seriesName: string;
+    seriesCode: number | null;
+    count: number;
+    sales: number;
+    productProfit: number;
+    ecFees: number;
+    ecDeductions: number;
+    adCost: number;
+    finalProfit: number;
+  }>;
+  totals: {
+    sales: number;
+    platformFees: number;
+    paymentFees: number;
+    sellerDiscounts: number;
+    sellerCoupons: number;
+    sellerPoints: number;
+    refunds: number;
+    shippingCosts: number;
+    otherCosts: number;
+    otherCredits: number;
+    ecDeductions: number;
+    adCost: number;
+    finalProfit: number;
+  };
+  comparisons: {
+    previousMonth: ComparisonSummary;
+    previousYear: ComparisonSummary;
+  };
+}
+type ComparisonSummary = {
+  month: string;
+  channels: EcProfitSummary["channels"];
+  totals: EcProfitSummary["totals"];
 }
 type HoveredItem = { type: 'total' | 'site' | 'series'; key: string; name: string; }
 
@@ -57,6 +121,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const [loading, setLoading] = useState(true);
   const [rpcTotalAdCost, setRpcTotalAdCost] = useState(0);
   const [rpcTotalFinalProfit, setRpcTotalFinalProfit] = useState(0);
+  const [profitSummary, setProfitSummary] = useState<EcProfitSummary | null>(null);
   const [webTarget, setWebTarget] = useState(0);
   const [lastYearTotals, setLastYearTotals] = useState<Totals | null>(null);
 
@@ -137,6 +202,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
                 count: periodData.totals[ch]?.count ?? 0,
                 amount: periodData.totals[ch]?.amount ?? 0,
                 profit: 0, // 期間集計では現在未対応
+                platformFees: 0,
+                paymentFees: 0,
+                ecFees: 0,
+                ecDeductions: 0,
+                promotions: 0,
+                refundEtc: 0,
                 adCost: 0, // 期間集計では現在未対応
                 finalProfit: 0 // 期間集計では現在未対応
               };
@@ -145,7 +216,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           } else {
             const siteTotals: Totals = {};
             SITES.forEach(s => {
-              siteTotals[s.key] = { count: 0, amount: 0, profit: 0, adCost: 0, finalProfit: 0 };
+              siteTotals[s.key] = emptySiteTotal();
             });
             setTotals(siteTotals);
           }
@@ -157,6 +228,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               count: s.count,
               sales: s.sales,
               profit: 0,
+              ecFees: 0,
+              ecDeductions: 0,
               adCost: 0,
               finalProfit: 0
             })));
@@ -169,96 +242,69 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           setRpcTotalAdCost(0);
           setRpcTotalFinalProfit(0);
           setLastYearTotals(null);
+          setProfitSummary(null);
         } else {
           // 月別表示（既存ロジック）
-          const lastYearMonth = `${parseInt(month.split('-')[0]) - 1}-${month.split('-')[1]}`;
-          const [financialRes, seriesRes, targetRes, lastYearRes] = await Promise.all([
-            supabase.rpc('get_monthly_financial_summary', { target_month: month }),
-            supabase.rpc('get_monthly_series_summary', { target_month: month }),
+          const [profitPayload, targetRes] = await Promise.all([
+            fetch(`/api/web-sales/ec-profit?month=${encodeURIComponent(month)}`, { cache: 'no-store' })
+              .then(async (response) => {
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(payload.error || 'EC利益サマリーを取得できませんでした');
+                return payload as EcProfitSummary;
+              }),
             fetch(`/api/kpi/web-target?month=${month}`).then(r => r.json()).catch(() => ({ target: 0 })),
-            supabase.rpc('get_monthly_financial_summary', { target_month: lastYearMonth })
           ]);
 
-          if (financialRes.error) throw financialRes.error;
-          if (seriesRes.error) throw seriesRes.error;
           setWebTarget(targetRes.target ?? 0);
+          setProfitSummary(profitPayload);
 
-          const financialData = financialRes.data;
-          if (financialData && financialData.length > 0) {
-            const financial = financialData[0];
-            // RPCのtotal値を保存（サイト別合計では拾えないGoogle広告費等を含む）
-            setRpcTotalAdCost(financial.total_ad_cost ?? 0);
-            setRpcTotalFinalProfit(financial.total_final_profit ?? 0);
-            const siteTotals: Totals = {};
-            SITES.forEach(s => {
-              siteTotals[s.key] = {
-                count: financial[`${s.key}_count`] ?? 0,
-                amount: financial[`${s.key}_amount`] ?? 0,
-                profit: financial[`${s.key}_profit`] ?? 0,
-                adCost: financial[`${s.key}_ad_cost`] ?? 0,
-                finalProfit: financial[`${s.key}_final_profit`] ?? 0,
-              }
-            });
-            setTotals(siteTotals);
-          } else {
-            const siteTotals: Totals = {};
-            SITES.forEach(s => {
-              siteTotals[s.key] = {
-                count: 0,
-                amount: 0,
-                profit: 0,
-                adCost: 0,
-                finalProfit: 0
-              };
-            });
-            setTotals(siteTotals);
-          }
+          const profitByChannel = new Map(profitPayload.channels.map(row => [row.channel, row]));
+          const siteTotals: Totals = {};
+          SITES.forEach(s => {
+            const row = profitByChannel.get(s.key);
+            const promotions = (row?.sellerDiscounts ?? 0) + (row?.sellerCoupons ?? 0) + (row?.sellerPoints ?? 0);
+            const refundEtc = (row?.refunds ?? 0) + (row?.shippingCosts ?? 0) + (row?.otherCosts ?? 0) - (row?.otherCredits ?? 0);
+            siteTotals[s.key] = {
+              count: row?.quantity ?? 0,
+              amount: row?.sales ?? 0,
+              profit: row?.productProfit ?? 0,
+              platformFees: row?.platformFees ?? 0,
+              paymentFees: row?.paymentFees ?? 0,
+              ecFees: (row?.platformFees ?? 0) + (row?.paymentFees ?? 0),
+              ecDeductions: row?.ecDeductions ?? 0,
+              promotions,
+              refundEtc,
+              adCost: row?.directAdCost ?? 0,
+              finalProfit: row?.finalProfit ?? 0,
+            };
+          });
+          setRpcTotalAdCost(profitPayload.totals.adCost ?? 0);
+          setRpcTotalFinalProfit(profitPayload.totals.finalProfit ?? 0);
+          setTotals(siteTotals);
 
-          const lastYearData = lastYearRes.data;
-          if (lastYearData && lastYearData.length > 0) {
-            const financialLY = lastYearData[0];
-            const siteTotalsLY: Totals = {};
-            SITES.forEach(s => {
-              siteTotalsLY[s.key] = {
-                count: financialLY[`${s.key}_count`] ?? 0,
-                amount: financialLY[`${s.key}_amount`] ?? 0,
-                profit: financialLY[`${s.key}_profit`] ?? 0,
-                adCost: financialLY[`${s.key}_ad_cost`] ?? 0,
-                finalProfit: financialLY[`${s.key}_final_profit`] ?? 0,
-              }
-            });
-            setLastYearTotals(siteTotalsLY);
-          } else {
-            setLastYearTotals(null);
-          }
-
-          const seriesData = seriesRes.data;
-          if (seriesData && seriesData.length > 0) {
-            const seriesSummaryData = seriesData
-              .map((s: any) => ({
-                seriesName: s.series_name || '未分類',
-                seriesCode: s.series_code || 0,
-                count: s.series_count || 0,
-                sales: s.series_amount || 0,
-                profit: s.series_profit || 0,
-                adCost: s.series_ad_cost || 0,
-                finalProfit: s.series_final_profit || 0,
-              }))
-              .sort((a, b) => b.sales - a.sales);
-            setSeriesSummary(seriesSummaryData);
-          } else {
-            setSeriesSummary([]);
-          }
+          setLastYearTotals(comparisonToTotals(profitPayload.comparisons.previousYear));
+          setSeriesSummary((profitPayload.series || []).map((series) => ({
+            seriesName: series.seriesName,
+            seriesCode: series.seriesCode ?? 0,
+            count: series.count,
+            sales: series.sales,
+            profit: series.productProfit,
+            ecFees: series.ecFees,
+            ecDeductions: series.ecDeductions,
+            adCost: series.adCost,
+            finalProfit: series.finalProfit,
+          })));
         }
       } catch (error) {
         console.error('サマリーデータの読み込みに失敗しました:', error);
         const siteTotals: Totals = {};
         SITES.forEach(s => {
-          siteTotals[s.key] = { count: 0, amount: 0, profit: 0, adCost: 0, finalProfit: 0 };
+          siteTotals[s.key] = emptySiteTotal();
         });
         setTotals(siteTotals);
         setLastYearTotals(null);
         setSeriesSummary([]);
+        setProfitSummary(null);
       } finally {
         setLoading(false);
       }
@@ -286,10 +332,17 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
   const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
-  const grandTotalAdCost = rpcTotalAdCost || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0);
-  const grandTotalFinalProfit = rpcTotalFinalProfit || (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0);
+  const grandTotalAdCost = viewMode === 'month'
+    ? rpcTotalAdCost
+    : (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0);
+  const grandTotalFinalProfit = viewMode === 'month'
+    ? rpcTotalFinalProfit
+    : (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0);
+  const grandTotalEcFees = profitSummary
+    ? profitSummary.totals.platformFees + profitSummary.totals.paymentFees
+    : 0;
+  const grandTotalEcDeductions = profitSummary?.totals.ecDeductions ?? 0;
   const grandTotalSalesLastYear = lastYearTotals ? SITES.reduce((sum, s) => sum + (lastYearTotals[s.key]?.amount ?? 0), 0) : 0;
-
   // 目標データを親コンポーネントに通知（前回値と比較して変化時のみ）
   const prevTargetRef = useRef<{ target: number; sales: number }>({ target: 0, sales: 0 });
   useEffect(() => {
@@ -316,19 +369,22 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
   return (
     <div className="space-y-3 relative" ref={containerRef}>
-      <div className="grid grid-cols-4 md:grid-cols-8 gap-3 relative">
+      <div className="relative grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8 xl:gap-3">
         <Card
-          className="text-center bg-gray-50 border-gray-200 cursor-pointer flex flex-col justify-between col-span-1"
+          className="min-h-[230px] text-center bg-gray-50 border-gray-200 cursor-pointer flex flex-col justify-between col-span-1"
           onMouseEnter={(e) => handleMouseEnter({ type: 'total', key: 'grandTotal', name: '総合計' }, e)}
           onMouseLeave={handleMouseLeave}
         >
           <div>
             <CardHeader className="py-2 px-3"><CardTitle className="text-xs">総合計</CardTitle></CardHeader>
             <CardContent className="space-y-0.5 py-1 px-3">
-              <div className="text-xl font-bold">{formatNumber(grandTotalCount)} 件</div>
-              <div className="text-xs text-gray-600">売上: ¥{formatNumber(grandTotalSales)}</div>
+              <div className="text-xl font-bold">¥{formatNumber(grandTotalSales)}</div>
+              <div className="text-xs text-gray-600">{formatNumber(grandTotalCount)}個</div>
               {viewMode === 'month' && (
                 <>
+                  <div className="text-xs text-amber-700">EC手数料: ¥{formatNumber(grandTotalEcFees)}</div>
+                  <div className="text-xs text-orange-700">EC控除計: ¥{formatNumber(grandTotalEcDeductions)}</div>
+                  <div className="text-[10px] font-semibold text-orange-700">売上比 {formatPercent(grandTotalEcDeductions, grandTotalSales)}</div>
                   <div className="text-xs text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
                   <div className="text-xs font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
                 </>
@@ -354,17 +410,24 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           return (
           <Card
             key={s.key}
-            className={`text-center flex flex-col justify-between ${s.bgColor} ${s.borderColor} cursor-pointer`}
+            className={`min-h-[230px] text-center flex flex-col justify-between ${s.bgColor} ${s.borderColor} cursor-pointer`}
             onMouseEnter={(e) => handleMouseEnter({ type: 'site', key: s.key, name: s.name }, e)}
             onMouseLeave={handleMouseLeave}
           >
             <div>
               <CardHeader className="py-2 px-3"><CardTitle className="text-xs">{s.name}</CardTitle></CardHeader>
               <CardContent className="space-y-0.5 py-1 px-3">
-                <div className="text-lg font-bold">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"} 件</div>
-                <div className="text-[11px] text-gray-500">売上: ¥{formatNumber(currentSales)}</div>
+                <div className="text-base font-bold">¥{formatNumber(currentSales)}</div>
+                <div className="text-[11px] text-gray-500">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"}個</div>
                 {viewMode === 'month' && (
                   <>
+                    <div className="text-[11px] text-amber-700">手数料: ¥{totals ? formatNumber(totals[s.key]?.ecFees ?? 0) : "-"}</div>
+                    <div className="text-[11px] font-semibold text-orange-700">
+                      EC控除: ¥{totals ? formatNumber(totals[s.key]?.ecDeductions ?? 0) : "-"}
+                    </div>
+                    <div className="text-[10px] font-semibold text-orange-700">
+                      売上比 {totals ? formatPercent(totals[s.key]?.ecDeductions ?? 0, currentSales) : "-"}
+                    </div>
                     <div className="text-[11px] text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
                     <div className="text-[11px] font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
                   </>
@@ -386,8 +449,11 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
       </div>
 
       <Card>
-        <CardHeader className="py-2 px-4"><CardTitle className="text-sm">シリーズ別 売上サマリー</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 relative py-2 px-4">
+        <CardHeader className="px-4 py-2">
+          <CardTitle className="text-sm">シリーズ別 売上・経費サマリー</CardTitle>
+          {viewMode === 'month' && <p className="text-[10px] text-slate-500">EC手数料・控除は各EC内のシリーズ売上比で按分しています</p>}
+        </CardHeader>
+        <CardContent className="relative grid grid-cols-2 gap-2 px-4 py-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {seriesSummary.map((series) => (
             <div
               key={series.seriesName}
@@ -400,6 +466,9 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               <p className="text-xs text-gray-500">売上: ¥{formatNumber(series.sales)}</p>
               {viewMode === 'month' && (
                 <>
+                  <p className="text-[11px] text-amber-700">手数料(按分): ¥{formatNumber(series.ecFees)}</p>
+                  <p className="text-[11px] text-orange-700">EC控除(按分): ¥{formatNumber(series.ecDeductions)}</p>
+                  <p className="text-[10px] font-semibold text-orange-700">EC控除率: {formatPercent(series.ecDeductions, series.sales)}</p>
                   <p className="text-xs text-red-600">広告: ¥{formatNumber(series.adCost)}</p>
                   <p className="text-xs font-bold text-green-600">利益: ¥{formatNumber(series.finalProfit)}</p>
                 </>
@@ -463,4 +532,47 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
       )}
     </div>
   );
+}
+
+function emptySiteTotal(): Totals[string] {
+  return {
+    count: 0,
+    amount: 0,
+    profit: 0,
+    platformFees: 0,
+    paymentFees: 0,
+    ecFees: 0,
+    ecDeductions: 0,
+    promotions: 0,
+    refundEtc: 0,
+    adCost: 0,
+    finalProfit: 0,
+  };
+}
+
+function comparisonToTotals(summary: ComparisonSummary | null | undefined): Totals | null {
+  if (!summary) return null;
+  const result: Totals = {};
+  const byChannel = new Map(summary.channels.map((row) => [row.channel, row]));
+  SITES.forEach((site) => {
+    const row = byChannel.get(site.key);
+    result[site.key] = {
+      count: row?.quantity ?? 0,
+      amount: row?.sales ?? 0,
+      profit: row?.productProfit ?? 0,
+      platformFees: row?.platformFees ?? 0,
+      paymentFees: row?.paymentFees ?? 0,
+      ecFees: (row?.platformFees ?? 0) + (row?.paymentFees ?? 0),
+      ecDeductions: row?.ecDeductions ?? 0,
+      promotions: (row?.sellerDiscounts ?? 0) + (row?.sellerCoupons ?? 0) + (row?.sellerPoints ?? 0),
+      refundEtc: (row?.refunds ?? 0) + (row?.shippingCosts ?? 0) + (row?.otherCosts ?? 0) - (row?.otherCredits ?? 0),
+      adCost: row?.directAdCost ?? 0,
+      finalProfit: row?.finalProfit ?? 0,
+    };
+  });
+  return result;
+}
+
+function formatPercent(value: number, base: number) {
+  return base > 0 ? `${(value / base * 100).toFixed(1)}%` : '—';
 }

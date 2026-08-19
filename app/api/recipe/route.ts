@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
         jan_code,
         shelf_life,
         web_description,
+        product_points,
+        product_lp_url,
         storage_method,
         case_quantity,
         case_size,
@@ -116,6 +118,9 @@ export async function POST(request: NextRequest) {
                 status: body.status || "active",
                 source_file: body.source_file,
                 source_sheet: body.source_sheet,
+                product_lp_url: typeof body.product_lp_url === "string"
+                    ? body.product_lp_url.trim() || null
+                    : null,
             })
             .select()
             .single();

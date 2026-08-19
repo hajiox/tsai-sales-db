@@ -1,3 +1,4 @@
 *.log
 .vercel_token_tmp
 sync_body.json
+tmp/recipe-web-images/

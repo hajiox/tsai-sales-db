@@ -1,4 +1,19 @@
 // DocScanner FAX通知用 Service Worker
+self.addEventListener('install', function(event) {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', function(event) {
+  event.waitUntil(self.clients.claim());
+});
+
+// PWA installability without caching business data. Always use the live response.
+self.addEventListener('fetch', function(event) {
+  if (event.request.method === 'GET' && event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request));
+  }
+});
+
 self.addEventListener('push', function (event) {
   if (event.data) {
     const data = event.data.json();

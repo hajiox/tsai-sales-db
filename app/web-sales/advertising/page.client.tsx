@@ -1,17 +1,19 @@
 // /app/web-sales/advertising/page.client.tsx ver.3
-// 統合広告管理ダッシュボード — 複数プラットフォーム対応 + AI分析機能
+// 統合経費管理ダッシュボード — EC精算・広告費・AI分析機能
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import {
     ArrowLeft, RefreshCw, TrendingUp, TrendingDown,
     DollarSign, Eye, MousePointerClick, Target,
     BarChart3, Zap, ChevronDown, ChevronUp,
     Download, Check, Save, AlertCircle, ArrowRight,
-    Brain, Sparkles, LayoutDashboard, CheckCircle, Crosshair, FileSpreadsheet
+    Brain, Sparkles, LayoutDashboard, CheckCircle, Crosshair, FileSpreadsheet, Bot
 } from "lucide-react"
 import MetaTab from "./meta-tab"
 import RakutenTab from "./rakuten-tab"
@@ -20,6 +22,8 @@ import AmazonTab from "./amazon-tab"
 import AdChatWindow from "@/components/AdChatWindow"
 import LpTrackingInlineTab from "./lp-tracking-tab"
 import RakutenSearchRequestTab from "./rakuten-search-request-tab"
+import EcProfitOverview from "./ec-profit-overview"
+import WebSalesCodexAnalysis from "@/components/web-sales-codex-analysis"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -81,11 +85,35 @@ interface AdCostRow {
 
 type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'rakuten-search' | 'yahoo' | 'amazon' | 'lp-tracking'
 type SyncResultType = 'success' | 'warning' | 'error'
+type AdPlatformKey = 'google' | 'meta' | 'rakuten' | 'yahoo' | 'amazon'
+
+interface MonthlyPlatformAnalysis {
+    platform: AdPlatformKey
+    label: string
+    success: boolean
+    analysis?: string
+    error?: string
+    metrics?: Record<string, unknown>
+}
+
+interface MonthlyReviewResult {
+    month: string
+    summary: string
+    analyses: MonthlyPlatformAnalysis[]
+    generatedAt?: string
+}
+
+const AD_ANALYSIS_PLATFORMS: Array<{ key: AdPlatformKey; label: string; endpoint: string }> = [
+    { key: 'google', label: 'Google', endpoint: '/api/google-ads/ai-analysis' },
+    { key: 'meta', label: 'Meta', endpoint: '/api/meta-ads/ai-analysis' },
+    { key: 'rakuten', label: '楽天', endpoint: '/api/rakuten-ads/ai-analysis' },
+    { key: 'yahoo', label: 'Yahoo', endpoint: '/api/yahoo-ads/ai-analysis' },
+    { key: 'amazon', label: 'Amazon', endpoint: '/api/amazon-ads/ai-analysis' },
+]
 
 // ===== メインコンポーネント =====
 export default function AdvertisingDashboard() {
     const router = useRouter()
-    const supabase = getSupabaseBrowserClient()
 
     // デフォルトは前月
     const [month, setMonth] = useState(() => {
@@ -123,6 +151,11 @@ export default function AdvertisingDashboard() {
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [aiTarget, setAiTarget] = useState<string | null>(null)
     const [showGoogleChat, setShowGoogleChat] = useState(false)
+    const [googleAnalysisResult, setGoogleAnalysisResult] = useState<string | null>(null)
+    const [isMonthlyReviewing, setIsMonthlyReviewing] = useState(false)
+    const [monthlyReviewStatus, setMonthlyReviewStatus] = useState<string | null>(null)
+    const [monthlyReviewError, setMonthlyReviewError] = useState<string | null>(null)
+    const [monthlyReview, setMonthlyReview] = useState<MonthlyReviewResult | null>(null)
     // 取り込み済み状態（プラットフォーム別）
     const [importedPlatforms, setImportedPlatforms] = useState<{ google: boolean; meta: boolean; amazon: boolean; rakuten: boolean; yahoo: boolean }>({ google: false, meta: false, amazon: false, rakuten: false, yahoo: false })
 
@@ -130,6 +163,7 @@ export default function AdvertisingDashboard() {
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
+            const supabase = getSupabaseBrowserClient()
             // シリーズマスター取得
             const { data: products } = await supabase
                 .from('products')
@@ -280,6 +314,12 @@ export default function AdvertisingDashboard() {
 
     useEffect(() => { fetchData() }, [fetchData])
 
+    useEffect(() => {
+        setMonthlyReview(null)
+        setMonthlyReviewError(null)
+        setMonthlyReviewStatus(null)
+    }, [month])
+
     // 手動同期
     const handleSync = async () => {
         setIsSyncing(true); setSyncResult(null); setSyncResultType('success')
@@ -314,6 +354,7 @@ export default function AdvertisingDashboard() {
     // ===== 広告費取り込み =====
     const openImportPanel = async () => {
         setShowImportPanel(true); setImportResult(null)
+        const supabase = getSupabaseBrowserClient()
         const { data: learnedMappings } = await supabase
             .from('google_ads_series_mapping').select('asset_group_name, series_code')
         const learnedMap = new Map<string, number>()
@@ -378,6 +419,107 @@ export default function AdvertisingDashboard() {
         finally { setIsImporting(false) }
     }
 
+    const handleAiAnalysis = async (assetGroupName?: string) => {
+        setIsAnalyzing(true)
+        setAiTarget(assetGroupName || 'Google広告全体')
+        setGoogleAnalysisResult(null)
+        try {
+            const res = await fetch('/api/google-ads/ai-analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month, assetGroupName }),
+            })
+            const result = await res.json()
+            if (!res.ok || !result.success) {
+                throw new Error(result.error || 'Google広告のAI分析に失敗しました')
+            }
+            setGoogleAnalysisResult(result.analysis)
+            setShowGoogleChat(true)
+        } catch (error: any) {
+            alert(error.message || 'AI分析に失敗しました')
+        } finally {
+            setIsAnalyzing(false)
+            setAiTarget(null)
+        }
+    }
+
+    const handleMonthlyReview = async () => {
+        if (isMonthlyReviewing) return
+        setIsMonthlyReviewing(true)
+        setMonthlyReview(null)
+        setMonthlyReviewError(null)
+        setMonthlyReviewStatus('各媒体のAI分析を実行中...')
+
+        try {
+            const analyses = await Promise.all(AD_ANALYSIS_PLATFORMS.map(async (platform): Promise<MonthlyPlatformAnalysis> => {
+                try {
+                    const res = await fetch(platform.endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ month }),
+                    })
+                    const result = await res.json().catch(() => ({}))
+                    if (!res.ok || !result.success || !result.analysis) {
+                        return {
+                            platform: platform.key,
+                            label: platform.label,
+                            success: false,
+                            error: result.error || `HTTP ${res.status}`,
+                        }
+                    }
+                    return {
+                        platform: platform.key,
+                        label: platform.label,
+                        success: true,
+                        analysis: result.analysis,
+                        metrics: result.metrics,
+                    }
+                } catch (error: any) {
+                    return {
+                        platform: platform.key,
+                        label: platform.label,
+                        success: false,
+                        error: error.message || '通信エラー',
+                    }
+                }
+            }))
+
+            if (!analyses.some(item => item.success && item.analysis?.trim())) {
+                throw new Error('各媒体のAI分析結果を取得できませんでした')
+            }
+
+            setMonthlyReviewStatus('媒体横断の総まとめを作成中...')
+            const profitRes = await fetch(`/api/web-sales/ec-profit?month=${encodeURIComponent(month)}`, { cache: 'no-store' })
+            const profitResult = await profitRes.json().catch(() => null)
+            const summaryRes = await fetch('/api/ads/monthly-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    month,
+                    analyses,
+                    costs: { ...platformCosts, total: totalPlatformCost },
+                    ecProfit: profitRes.ok ? profitResult : null,
+                }),
+            })
+            const summaryResult = await summaryRes.json().catch(() => ({}))
+            if (!summaryRes.ok || !summaryResult.success || !summaryResult.summary) {
+                throw new Error(summaryResult.error || '総評の作成に失敗しました')
+            }
+
+            setMonthlyReview({
+                month,
+                summary: summaryResult.summary,
+                analyses,
+                generatedAt: summaryResult.generatedAt,
+            })
+        } catch (error: any) {
+            setMonthlyReviewError(error.message || '今月の総評を作成できませんでした')
+        } finally {
+            setMonthlyReviewStatus(null)
+            setIsMonthlyReviewing(false)
+        }
+    }
+
     // ===== Google AIチャットコンテキスト生成 =====
     const getGoogleChatContext = () => {
         const cpa = totalConversions > 0 ? Math.round(totalCost / totalConversions) : 0
@@ -440,7 +582,7 @@ export default function AdvertisingDashboard() {
 
     // ===== タブ定義 =====
     const primaryTabs: { id: TabType; label: string; icon: React.ReactNode; imported?: boolean; platformKey?: TabType }[] = [
-        { id: 'overview', label: '概要', icon: <LayoutDashboard size={16} /> },
+        { id: 'overview', label: '経費サマリー', icon: <LayoutDashboard size={16} /> },
         { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span>, imported: importedPlatforms.google },
         { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span>, imported: importedPlatforms.meta },
         { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span>, imported: importedPlatforms.rakuten },
@@ -462,23 +604,33 @@ export default function AdvertisingDashboard() {
     const activeSecondaryTabs = secondaryTabs[activePrimaryTab] ?? []
 
     return (
-        <div className="w-full space-y-5">
+        <div className="w-full min-w-0 space-y-4 lg:space-y-5">
             {/* ヘッダー */}
             <header>
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => router.push('/web-sales/dashboard')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors"><ArrowLeft size={20} /></button>
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 items-start gap-2 lg:items-center lg:gap-3">
+                        <button onClick={() => router.push('/web-sales/dashboard')} className="min-h-11 min-w-11 shrink-0 rounded-lg p-2 hover:bg-gray-100 transition-colors lg:min-h-0 lg:min-w-0"><ArrowLeft size={20} /></button>
+                        <div className="min-w-0">
+                            <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight lg:text-2xl">
                                 <BarChart3 className="text-emerald-600" size={28} />
-                                広告管理システム
+                                EC経費管理
                             </h1>
-                            <p className="text-gray-500 text-sm">Google / Meta / Amazon / 楽天 / Yahoo 広告の統合管理</p>
+                            <p className="mt-1 text-xs leading-5 text-gray-500 lg:mt-0 lg:text-sm">売上・商品原価・EC控除・広告費から月次利益を確認</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {lastSyncTime && <span className="text-xs text-gray-400">最終同期: {lastSyncTime}</span>}
-                        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:gap-3">
+                        {lastSyncTime && <span className="order-2 text-xs text-gray-400 sm:order-1">最終同期: {lastSyncTime}</span>}
+                        <label className="order-1 flex items-center gap-2 sm:order-2">
+                            <span className="shrink-0 text-xs font-medium text-gray-500 lg:hidden">対象月</span>
+                            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-base sm:w-auto lg:min-h-0 lg:text-sm" />
+                        </label>
+                        <Link
+                            href="/web-sales/automation"
+                            className="order-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-gray-800 lg:min-h-0 lg:py-2"
+                            title="商品売上・EC精算・広告費をまとめて更新"
+                        >
+                            <Bot size={16} /> データ更新
+                        </Link>
                     </div>
                 </div>
 
@@ -494,11 +646,11 @@ export default function AdvertisingDashboard() {
 
             {/* タブナビゲーション */}
             <div className="space-y-2">
-                <div className="overflow-x-auto">
+                <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
                     <div className="flex w-max min-w-full gap-1 rounded-lg bg-gray-100 p-1">
                         {primaryTabs.map(tab => (
                             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                                className={`flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium transition-all ${activePrimaryTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                                className={`flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-md text-sm font-medium transition-all lg:min-h-0 ${activePrimaryTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                                 <span className="shrink-0">{tab.icon}</span>
                                 <span>{tab.label}</span>
                                 {tab.imported && <CheckCircle size={14} className="shrink-0 text-green-500" />}
@@ -507,13 +659,13 @@ export default function AdvertisingDashboard() {
                     </div>
                 </div>
                 {activeSecondaryTabs.length > 0 && (
-                    <div className="overflow-x-auto">
+                    <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
                         <div className="flex w-max min-w-full gap-2 border-b border-gray-200 pb-2">
                             {activeSecondaryTabs.map(tab => {
                                 if (tab.href) {
                                     return (
                                         <Link key={tab.href} href={tab.href}
-                                            className="flex shrink-0 items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100">
+                                            className="flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 lg:min-h-0">
                                             <span className="shrink-0">{tab.icon}</span>
                                             <span>{tab.label}</span>
                                         </Link>
@@ -521,7 +673,7 @@ export default function AdvertisingDashboard() {
                                 }
                                 return (
                                     <button key={tab.id} onClick={() => tab.id && setActiveTab(tab.id)}
-                                        className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${activeTab === tab.id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                                        className={`flex min-h-11 shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors lg:min-h-0 ${activeTab === tab.id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
                                         <span className="shrink-0">{tab.icon}</span>
                                         <span>{tab.label}</span>
                                     </button>
@@ -535,13 +687,79 @@ export default function AdvertisingDashboard() {
             {/* ===== 概要タブ ===== */}
             {activeTab === 'overview' && (
                 <>
+                    <EcProfitOverview month={month} />
+                    <WebSalesCodexAnalysis month={month} focus="expense" />
+                    {false && <section className="border-y border-gray-200 bg-white p-3 lg:p-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h2 className="flex items-center gap-2 text-base font-semibold lg:text-lg">
+                                    <Sparkles size={18} className="text-violet-600" /> 今月の総評
+                                </h2>
+                                <p className="mt-1 text-xs text-gray-500">各広告媒体のAI分析をまとめて確認します</p>
+                            </div>
+                            <button
+                                onClick={handleMonthlyReview}
+                                disabled={isMonthlyReviewing}
+                                title="Google / Meta / 楽天 / Yahoo / Amazon のAI分析を実行して総まとめします"
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:bg-gray-400"
+                            >
+                                {isMonthlyReviewing ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                                {isMonthlyReviewing ? '総評作成中...' : '総評を更新'}
+                            </button>
+                        </div>
+                        {(isMonthlyReviewing || monthlyReviewError || monthlyReview) && (
+                            <div className="mt-4 border-t pt-4">
+                                {isMonthlyReviewing && (
+                                    <div className="flex items-center gap-2 border-l-4 border-violet-500 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-700">
+                                        <RefreshCw size={16} className="animate-spin" />
+                                        {monthlyReviewStatus || 'AI分析を実行中...'}
+                                    </div>
+                                )}
+                                {monthlyReviewError && (
+                                    <div className="flex items-start gap-2 border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                                        <span>{monthlyReviewError}</span>
+                                    </div>
+                                )}
+                                {monthlyReview && (
+                                    <div className="mt-3 border-l-4 border-violet-400 bg-violet-50/50 p-4">
+                                        <div className="prose prose-sm max-w-none break-words text-gray-800 prose-headings:text-gray-900 prose-li:my-0.5">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{monthlyReview.summary}</ReactMarkdown>
+                                        </div>
+                                        <div className="mt-4 flex flex-wrap gap-2">
+                                            {monthlyReview.analyses.map(item => (
+                                                <span key={item.platform} className={`rounded border px-2.5 py-1 text-xs font-medium ${item.success ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                                                    {item.label}: {item.success ? '分析済み' : '未取得'}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </section>}
+                </>
+            )}
+            {false && activeTab === 'overview' && (
+                <>
                     {/* プラットフォーム別広告費カード */}
-                    <div className="bg-white border rounded-xl p-5">
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <DollarSign className="text-emerald-600" size={20} />
-                            プラットフォーム別広告費 — {month}
-                        </h2>
-                        <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
+                    <div className="rounded-lg border bg-white p-3 lg:rounded-xl lg:p-5">
+                        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                            <h2 className="flex items-center gap-2 text-base font-semibold lg:text-lg">
+                                <DollarSign className="text-emerald-600" size={20} />
+                                プラットフォーム別広告費 — {month}
+                            </h2>
+                            <button
+                                onClick={handleMonthlyReview}
+                                disabled={isMonthlyReviewing}
+                                title="Google / Meta / 楽天 / Yahoo / Amazon のAI分析を実行して総まとめします"
+                                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:bg-gray-400 sm:w-auto lg:min-h-0"
+                            >
+                                {isMonthlyReviewing ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                                {isMonthlyReviewing ? '総評作成中...' : '今月の総評'}
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 lg:gap-3">
                             {[
                                 { name: 'Google', cost: platformCosts.google, color: 'emerald', active: true },
                                 { name: 'Meta', cost: platformCosts.meta, color: 'blue', active: true },
@@ -551,9 +769,9 @@ export default function AdvertisingDashboard() {
                                 { name: 'その他', cost: platformCosts.other, color: 'gray', active: false },
                                 { name: '合計', cost: totalPlatformCost, color: 'indigo', active: true },
                             ].map(p => (
-                                <div key={p.name} className={`rounded-lg p-3 border ${p.active ? 'bg-white' : 'bg-gray-50'}`}>
+                                <div key={p.name} className={`min-w-0 rounded-lg border p-3 ${p.active ? 'bg-white' : 'bg-gray-50'}`}>
                                     <div className="text-xs text-gray-500 mb-1">{p.name}</div>
-                                    <div className={`text-lg font-bold ${p.cost > 0 ? `text-${p.color}-700` : 'text-gray-300'}`}>
+                                    <div className={`break-words text-base font-bold sm:text-lg ${p.cost > 0 ? `text-${p.color}-700` : 'text-gray-300'}`}>
                                         {p.cost > 0 ? formatCurrency(p.cost) : '—'}
                                     </div>
                                     {totalPlatformCost > 0 && p.name !== '合計' && p.cost > 0 && (
@@ -562,19 +780,69 @@ export default function AdvertisingDashboard() {
                                 </div>
                             ))}
                         </div>
+                        {(isMonthlyReviewing || monthlyReviewError || monthlyReview) && (
+                            <div className="mt-5 border-t pt-4">
+                                {isMonthlyReviewing && (
+                                    <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-700">
+                                        <RefreshCw size={16} className="animate-spin" />
+                                        {monthlyReviewStatus || 'AI分析を実行中...'}
+                                    </div>
+                                )}
+
+                                {monthlyReviewError && (
+                                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                                        <span>{monthlyReviewError}</span>
+                                    </div>
+                                )}
+
+                                {monthlyReview && (
+                                    <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 lg:p-4">
+                                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2 text-sm font-bold text-violet-800">
+                                                <Sparkles size={16} />
+                                                今月の総評
+                                            </div>
+                                            {monthlyReview.generatedAt && (
+                                                <div className="text-xs text-gray-400">
+                                                    {new Date(monthlyReview.generatedAt).toLocaleString('ja-JP')}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="prose prose-sm max-w-none break-words text-gray-800 prose-headings:text-gray-900 prose-li:my-0.5">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{monthlyReview.summary}</ReactMarkdown>
+                                        </div>
+                                        <div className="mt-4 flex flex-wrap gap-2">
+                                            {monthlyReview.analyses.map(item => (
+                                                <span
+                                                    key={item.platform}
+                                                    title={item.success ? 'AI分析完了' : item.error || '分析エラー'}
+                                                    className={`rounded-full border px-2.5 py-1 text-xs font-medium ${item.success
+                                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                        : 'border-amber-200 bg-amber-50 text-amber-700'
+                                                        }`}
+                                                >
+                                                    {item.label}: {item.success ? '分析済み' : '未取得'}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* シリーズ別広告費内訳 */}
                     {seriesAdCosts.length > 0 && (
                         <div className="bg-white border rounded-xl overflow-hidden">
-                            <div className="p-5 border-b">
-                                <h2 className="text-lg font-semibold flex items-center gap-2">
+                            <div className="border-b p-3 lg:p-5">
+                                <h2 className="flex items-center gap-2 text-base font-semibold lg:text-lg">
                                     <Zap size={20} className="text-amber-500" />
                                     シリーズ別広告費内訳 — {month}
                                 </h2>
                             </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
+                            <div className="overflow-x-auto [scrollbar-width:thin]">
+                                <table className="min-w-[920px] w-full lg:min-w-0">
                                     <thead>
                                         <tr className="bg-gray-50 text-xs text-gray-500">
                                             <th className="text-left px-5 py-3 font-medium">シリーズ</th>
@@ -640,7 +908,7 @@ export default function AdvertisingDashboard() {
                     )}
 
                     {/* Google広告KPIカード + トレンド */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4">
                         <KpiCard title="Google広告費" value={formatCurrency(totalCost)} icon={<DollarSign size={20} />} color="emerald" change={costChange} />
                         <KpiCard title="表示回数" value={formatNumber(totalImpressions)} icon={<Eye size={20} />} color="blue" subtitle={`CTR: ${formatPercent(avgCtr)}`} />
                         <KpiCard title="クリック数" value={formatNumber(totalClicks)} icon={<MousePointerClick size={20} />} color="purple" subtitle={`CPC: ${formatCurrency(avgCpc)}`} />
@@ -648,16 +916,16 @@ export default function AdvertisingDashboard() {
                     </div>
 
                     {/* 月次トレンド */}
-                    <div className="bg-white border rounded-lg p-5">
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><TrendingUp size={20} className="text-emerald-600" />月次Google広告費トレンド</h2>
-                        <div className="flex items-end gap-2 h-40">
+                    <div className="rounded-lg border bg-white p-3 lg:p-5">
+                        <h2 className="mb-4 flex items-center gap-2 text-base font-semibold lg:text-lg"><TrendingUp size={20} className="text-emerald-600" />月次Google広告費トレンド</h2>
+                        <div className="flex h-40 items-end gap-1.5 lg:gap-2">
                             {monthlyTrend.map((m) => {
                                 const maxCost = Math.max(...monthlyTrend.map(t => t.cost), 1)
                                 const height = (m.cost / maxCost) * 100
                                 const isCurrentMonth = m.month === month
                                 return (
                                     <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-                                        <span className="text-xs text-gray-500 font-medium">{formatCurrency(m.cost)}</span>
+                                        <span className="max-w-full truncate text-[10px] font-medium text-gray-500 lg:text-xs">{formatCurrency(m.cost)}</span>
                                         <div className={`w-full rounded-t-md transition-all ${isCurrentMonth ? 'bg-emerald-500' : 'bg-emerald-200'}`} style={{ height: `${Math.max(height, 2)}%` }} />
                                         <span className="text-xs text-gray-400">{m.month.split('-')[1]}月</span>
                                     </div>
@@ -672,55 +940,61 @@ export default function AdvertisingDashboard() {
             {activeTab === 'google' && (
                 <>
                     {/* アクションボタン */}
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <div className="flex gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
                             <button onClick={handleSync} disabled={isSyncing}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-sm font-medium">
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:bg-gray-400 lg:min-h-0 lg:px-4">
                                 <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />{isSyncing ? '同期中...' : `${month}を同期`}
                             </button>
                             <button onClick={openImportPanel} disabled={assetGroups.length === 0}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${importedPlatforms.google ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400'}`}>
+                                className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:min-h-0 lg:px-4 ${importedPlatforms.google ? 'bg-gray-100 text-gray-500 border border-gray-300' : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400'}`}>
                                 {importedPlatforms.google ? <><CheckCircle size={16} />マッチ済み</> : <><Download size={16} />商品マッチング</>}
                             </button>
                         </div>
                         {assetGroups.length > 0 && (
                             <button onClick={() => setShowGoogleChat(!showGoogleChat)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showGoogleChat ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:opacity-90'}`}>
+                                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors sm:w-auto lg:min-h-0 ${showGoogleChat ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:opacity-90'}`}>
                                 <Sparkles size={16} /> {showGoogleChat ? 'AIチャットを閉じる' : 'AIに質問'}
                             </button>
                         )}
                     </div>
+                    {isAnalyzing && aiTarget && (
+                        <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700">
+                            <RefreshCw size={15} className="animate-spin" />
+                            {aiTarget} を分析中...
+                        </div>
+                    )}
 
                     {/* Google広告 KPIサマリー */}
                     {assetGroups.length > 0 && (
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            <div className="bg-white border rounded-lg p-4">
+                        <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 lg:gap-3">
+                            <div className="min-w-0 rounded-lg border bg-white p-3 lg:p-4">
                                 <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><DollarSign size={14} />広告費</div>
-                                <div className="text-xl font-bold text-emerald-700">{formatCurrency(totalCost)}</div>
+                                <div className="break-words text-lg font-bold text-emerald-700 lg:text-xl">{formatCurrency(totalCost)}</div>
                                 {costChange !== null && (
                                     <div className={`text-[10px] flex items-center gap-0.5 mt-0.5 ${costChange >= 0 ? 'text-red-500' : 'text-emerald-600'}`}>
                                         {costChange >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}{Math.abs(costChange).toFixed(1)}% 前月比
                                     </div>
                                 )}
                             </div>
-                            <div className="bg-white border rounded-lg p-4">
+                            <div className="min-w-0 rounded-lg border bg-white p-3 lg:p-4">
                                 <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><Eye size={14} />表示回数</div>
-                                <div className="text-xl font-bold text-blue-700">{formatNumber(totalImpressions)}</div>
+                                <div className="break-words text-lg font-bold text-blue-700 lg:text-xl">{formatNumber(totalImpressions)}</div>
                                 <div className="text-[10px] text-gray-400">CTR: {formatPercent(avgCtr)}</div>
                             </div>
-                            <div className="bg-white border rounded-lg p-4">
+                            <div className="min-w-0 rounded-lg border bg-white p-3 lg:p-4">
                                 <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><MousePointerClick size={14} />クリック</div>
-                                <div className="text-xl font-bold text-purple-700">{formatNumber(totalClicks)}</div>
+                                <div className="break-words text-lg font-bold text-purple-700 lg:text-xl">{formatNumber(totalClicks)}</div>
                                 <div className="text-[10px] text-gray-400">CPC: {formatCurrency(avgCpc)}</div>
                             </div>
-                            <div className="bg-white border rounded-lg p-4">
+                            <div className="min-w-0 rounded-lg border bg-white p-3 lg:p-4">
                                 <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><Target size={14} />コンバージョン</div>
-                                <div className="text-xl font-bold text-orange-700">{totalConversions.toFixed(1)}</div>
+                                <div className="break-words text-lg font-bold text-orange-700 lg:text-xl">{totalConversions.toFixed(1)}</div>
                                 <div className="text-[10px] text-gray-400">CVR: {formatPercent(avgCvr)}</div>
                             </div>
-                            <div className="bg-white border rounded-lg p-4">
+                            <div className="min-w-0 rounded-lg border bg-white p-3 lg:p-4">
                                 <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><TrendingUp size={14} />CPA</div>
-                                <div className="text-xl font-bold text-amber-700">{totalConversions > 0 ? formatCurrency(totalCost / totalConversions) : '—'}</div>
+                                <div className="break-words text-lg font-bold text-amber-700 lg:text-xl">{totalConversions > 0 ? formatCurrency(totalCost / totalConversions) : '—'}</div>
                                 <div className="text-[10px] text-gray-400">CV値: {formatCurrency(totalConversionsValue)}</div>
                             </div>
                         </div>
@@ -728,20 +1002,20 @@ export default function AdvertisingDashboard() {
 
                     {/* 取り込みパネル */}
                     {showImportPanel && (
-                        <div ref={importPanelRef} className="bg-white border-2 border-emerald-300 rounded-xl p-6 space-y-5">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-lg font-bold flex items-center gap-2"><Download className="text-emerald-600" size={22} />Google広告 商品マッチング — {month}</h2>
-                                <button onClick={() => setShowImportPanel(false)} className="text-gray-400 hover:text-gray-600 text-sm">閉じる</button>
+                        <div ref={importPanelRef} className="space-y-4 rounded-lg border-2 border-emerald-300 bg-white p-3 lg:space-y-5 lg:rounded-xl lg:p-6">
+                            <div className="flex items-start justify-between gap-3">
+                                <h2 className="flex items-start gap-2 text-base font-bold lg:items-center lg:text-lg"><Download className="shrink-0 text-emerald-600" size={22} />Google広告 商品マッチング — {month}</h2>
+                                <button onClick={() => setShowImportPanel(false)} className="min-h-11 shrink-0 px-2 text-sm text-gray-500 hover:text-gray-700 lg:min-h-0 lg:px-0">閉じる</button>
                             </div>
                             <p className="text-sm text-gray-600">アセットグループ名と商品グループ（シリーズ）を紐付けます。変更後は「学習」で記憶。</p>
-                            <div className="grid grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
                                 <div className="bg-gray-50 rounded-lg p-3 text-center"><div className="text-xs text-gray-500">合計</div><div className="text-xl font-bold">{mappingStats.total}件</div></div>
                                 <div className="bg-green-50 rounded-lg p-3 text-center"><div className="text-xs text-gray-500">マッチ済み</div><div className="text-xl font-bold text-green-600">{mappingStats.matched}件</div></div>
                                 <div className={`rounded-lg p-3 text-center ${mappingStats.unmatched > 0 ? 'bg-yellow-50' : 'bg-green-50'}`}><div className="text-xs text-gray-500">未マッチ</div><div className={`text-xl font-bold ${mappingStats.unmatched > 0 ? 'text-yellow-600' : 'text-green-600'}`}>{mappingStats.unmatched}件</div></div>
                                 <div className="bg-emerald-50 rounded-lg p-3 text-center"><div className="text-xs text-gray-500">取り込み広告費</div><div className="text-xl font-bold text-emerald-700">{formatCurrency(mappingStats.totalCost)}</div></div>
                             </div>
-                            <div className="border rounded-lg overflow-hidden">
-                                <table className="w-full">
+                            <div className="overflow-x-auto rounded-lg border [scrollbar-width:thin]">
+                                <table className="min-w-[760px] w-full lg:min-w-0">
                                     <thead><tr className="bg-gray-50 text-xs text-gray-500">
                                         <th className="text-left px-4 py-2 font-medium">広告名</th>
                                         <th className="text-right px-4 py-2 font-medium">広告費</th>
@@ -777,13 +1051,13 @@ export default function AdvertisingDashboard() {
                                 </table>
                             </div>
                             {importResult && (<div className={`px-4 py-3 rounded-lg text-sm whitespace-pre-line ${importResult.includes('エラー') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{importResult}</div>)}
-                            <div className="flex gap-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
                                 {mappings.some(m => !m.isLearned && m.series_code !== null) && (
-                                    <button onClick={handleLearnAll} className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors text-sm font-medium"><Save size={16} />一括学習</button>
+                                    <button onClick={handleLearnAll} className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-blue-300 px-4 py-2.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50 lg:min-h-0"><Save size={16} />一括学習</button>
                                 )}
                                 <div className="flex-1" />
-                                <button onClick={() => setShowImportPanel(false)} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm">キャンセル</button>
-                                <button onClick={handleImportCosts} disabled={isImporting || mappingStats.matched === 0} className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-gray-400 transition-colors text-sm font-medium"><ArrowRight size={16} />{isImporting ? '取り込み中...' : `広告費を取り込み（${mappingStats.matched}件 / ${formatCurrency(mappingStats.totalCost)}）`}</button>
+                                <button onClick={() => setShowImportPanel(false)} className="min-h-11 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 lg:min-h-0">キャンセル</button>
+                                <button onClick={handleImportCosts} disabled={isImporting || mappingStats.matched === 0} className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:bg-gray-400 lg:min-h-0 lg:px-6"><ArrowRight size={16} />{isImporting ? '取り込み中...' : `広告費を取り込み（${mappingStats.matched}件 / ${formatCurrency(mappingStats.totalCost)}）`}</button>
                             </div>
                         </div>
                     )}
@@ -793,15 +1067,16 @@ export default function AdvertisingDashboard() {
                         <AdChatWindow
                             platform="google"
                             context={getGoogleChatContext()}
+                            analysisResult={googleAnalysisResult}
                             onClose={() => setShowGoogleChat(false)}
                         />
                     )}
 
                     {/* Google広告 シリーズ別パフォーマンス */}
                     <div className="bg-white border rounded-lg overflow-hidden">
-                        <div className="p-5 border-b"><h2 className="text-lg font-semibold flex items-center gap-2"><Zap size={20} className="text-amber-500" />シリーズ別パフォーマンス — {month}</h2></div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full" style={{ tableLayout: 'fixed' }}>
+                        <div className="border-b p-3 lg:p-5"><h2 className="flex items-center gap-2 text-base font-semibold lg:text-lg"><Zap size={20} className="text-amber-500" />シリーズ別パフォーマンス — {month}</h2></div>
+                        <div className="overflow-x-auto [scrollbar-width:thin]">
+                            <table className="min-w-[920px] w-full lg:min-w-0" style={{ tableLayout: 'fixed' }}>
                                 <colgroup>
                                     <col style={{ width: '22%' }} />
                                     <col style={{ width: '10%' }} />
@@ -913,31 +1188,43 @@ export default function AdvertisingDashboard() {
 
             {/* ===== Metaタブ ===== */}
             {activeTab === 'meta' && (
-                <MetaTab month={month} />
+                <div className="min-w-0 overflow-x-auto lg:overflow-visible">
+                    <MetaTab month={month} />
+                </div>
             )}
 
             {/* ===== 楽天タブ ===== */}
             {activeTab === 'rakuten' && (
-                <RakutenTab month={month} />
+                <div className="min-w-0 overflow-x-auto lg:overflow-visible">
+                    <RakutenTab month={month} />
+                </div>
             )}
 
             {/* ===== 楽天サーチ申請タブ ===== */}
             {activeTab === 'rakuten-search' && (
-                <RakutenSearchRequestTab />
+                <div className="min-w-0 overflow-x-auto lg:overflow-visible">
+                    <RakutenSearchRequestTab />
+                </div>
             )}
 
             {/* ===== Yahoo!タブ ===== */}
             {activeTab === 'yahoo' && (
-                <YahooTab month={month} />
+                <div className="min-w-0 overflow-x-auto lg:overflow-visible">
+                    <YahooTab month={month} />
+                </div>
             )}
 
             {activeTab === 'amazon' && (
-                <AmazonTab month={month} />
+                <div className="min-w-0 overflow-x-auto lg:overflow-visible">
+                    <AmazonTab month={month} />
+                </div>
             )}
 
             {/* ===== LP計測タブ ===== */}
             {activeTab === 'lp-tracking' && (
-                <LpTrackingInlineTab />
+                <div className="min-w-0 overflow-x-auto lg:overflow-visible">
+                    <LpTrackingInlineTab />
+                </div>
             )}
 
 
@@ -957,12 +1244,12 @@ function KpiCard({ title, value, icon, color, subtitle, change }: {
     }
     const c = colorMap[color] || colorMap.emerald
     return (
-        <div className={`${c.bg} border ${c.border} rounded-xl p-4 transition-transform hover:scale-[1.02]`}>
+        <div className={`${c.bg} border ${c.border} min-w-0 rounded-lg p-3 transition-transform hover:scale-[1.02] lg:rounded-xl lg:p-4`}>
             <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">{title}</span>
                 <span className={c.icon}>{icon}</span>
             </div>
-            <div className={`text-2xl font-bold ${c.text}`}>{value}</div>
+            <div className={`break-words text-lg font-bold sm:text-xl lg:text-2xl ${c.text}`}>{value}</div>
             <div className="flex items-center gap-2 mt-1">
                 {subtitle && <span className="text-xs text-gray-500">{subtitle}</span>}
                 {change !== undefined && change !== null && (

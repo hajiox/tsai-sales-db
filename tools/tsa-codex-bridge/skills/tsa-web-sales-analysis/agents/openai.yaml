@@ -1,0 +1,5 @@
+interface:
+  display_name: "TSA WEB販売分析"
+  short_description: "月次の売上・EC経費を実務アクションまで分析"
+  default_prompt: "Use $tsa-web-sales-analysis to analyze the supplied TSA monthly packet and return the required structured result."
+

@@ -5,9 +5,8 @@ import { Suspense } from 'react';
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Upload, Save, Link2, GripVertical } from 'lucide-react';
+import { ArrowLeft, Upload, Save, Link2, GripVertical, ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 // 行背景色の定義（5色 + クリア）
 const ROW_COLORS: { key: string; label: string; bg: string; bgCell: string; bgSticky: string; dot: string }[] = [
@@ -106,6 +105,8 @@ function SalesInputContent() {
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [linkedProductMap, setLinkedProductMap] = useState<Map<string, string>>(new Map());
   const [colorPickerOpen, setColorPickerOpen] = useState<{ productId: string; anchorEl: HTMLElement } | null>(null); // カラーパレット開閉
+  const [selectedDay, setSelectedDay] = useState(1);
+  const [mobileSaveStatus, setMobileSaveStatus] = useState('');
 
   // ドラッグ&ドロップ
   const [dragId, setDragId] = useState<string | null>(null);
@@ -196,6 +197,10 @@ function SalesInputContent() {
     }
   };
 
+  const showLinkedRecipe = (productName: string, recipeName: string) => {
+    window.alert(`リンク先レシピ\n\n卸商品: ${productName}\nレシピ: ${recipeName}`);
+  };
+
   const getDaysInMonth = () => {
     if (!selectedYear || !selectedMonth) return 31;
     return new Date(parseInt(selectedYear), parseInt(selectedMonth), 0).getDate();
@@ -229,6 +234,21 @@ function SalesInputContent() {
       });
     } catch (error) {
       console.error('保存エラー:', error);
+    }
+  };
+
+  const saveSelectedDay = async () => {
+    setSaving(true);
+    setMobileSaveStatus('');
+    try {
+      for (const product of products) {
+        if (salesData[product.id]?.[selectedDay] !== undefined) {
+          await saveSalesData(product.id, selectedDay);
+        }
+      }
+      setMobileSaveStatus(`${selectedMonth}月${selectedDay}日を保存しました`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -401,6 +421,25 @@ function SalesInputContent() {
 
   const daysInMonth = getDaysInMonth();
 
+  useEffect(() => {
+    if (!selectedYear || !selectedMonth) return;
+    const now = new Date();
+    const isCurrentMonth = selectedYear === String(now.getFullYear())
+      && selectedMonth === String(now.getMonth() + 1).padStart(2, '0');
+    setSelectedDay(isCurrentMonth ? Math.min(now.getDate(), daysInMonth) : 1);
+    setMobileSaveStatus('');
+  }, [selectedYear, selectedMonth, daysInMonth]);
+
+  const selectedDayTotals = products.reduce((totals, product) => {
+    const dayData = salesData[product.id]?.[selectedDay];
+    if (dayData) {
+      totals.quantity += dayData.quantity || 0;
+      totals.amount += dayData.amount || 0;
+      if (dayData.quantity) totals.productCount += 1;
+    }
+    return totals;
+  }, { quantity: 0, amount: 0, productCount: 0 });
+
   // 全体合計
   const grandTotalQuantity = products.reduce((sum, p) => sum + calculateTotals(p.id).totalQuantity, 0);
   const grandTotalAmount = products.reduce((sum, p) => sum + calculateTotals(p.id).totalAmount, 0);
@@ -408,7 +447,199 @@ function SalesInputContent() {
   if (!mounted) return null;
 
   return (
-    <div className="h-screen flex flex-col">
+    <>
+      <section className="min-h-[calc(100dvh-7.5rem)] bg-slate-50 lg:hidden">
+        <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 border-b border-slate-200 bg-white px-3 py-3 shadow-sm">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              <span>年</span>
+              <select
+                value={selectedYear}
+                onChange={(e) => handleYearChange(e.target.value)}
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base font-semibold text-slate-900"
+                disabled={loading}
+              >
+                {yearOptions.map(y => <option key={y} value={y}>{y}年</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              <span>月</span>
+              <select
+                value={selectedMonth}
+                onChange={(e) => handleMonthChange(e.target.value)}
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base font-semibold text-slate-900"
+                disabled={loading}
+              >
+                {monthOptions.map(m => <option key={m} value={m}>{m}月</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-3 grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedDay(day => Math.max(1, day - 1))}
+              disabled={selectedDay <= 1 || loading}
+              className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 disabled:opacity-35"
+              aria-label="前の日を表示"
+              title="前の日"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <label className="min-w-0">
+              <span className="sr-only">入力する日</span>
+              <select
+                value={selectedDay}
+                onChange={(e) => {
+                  setSelectedDay(Number(e.target.value));
+                  setMobileSaveStatus('');
+                }}
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-center text-base font-bold text-slate-950"
+                disabled={loading}
+              >
+                {Array.from({ length: daysInMonth }, (_, index) => (
+                  <option key={index + 1} value={index + 1}>{selectedMonth}月{index + 1}日</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => setSelectedDay(day => Math.min(daysInMonth, day + 1))}
+              disabled={selectedDay >= daysInMonth || loading}
+              className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 disabled:opacity-35"
+              aria-label="次の日を表示"
+              title="次の日"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-slate-50 py-2 text-center">
+            <div className="min-w-0 px-1">
+              <div className="text-[11px] font-medium text-slate-500">入力商品</div>
+              <div className="mt-0.5 text-base font-bold text-slate-950">{selectedDayTotals.productCount}</div>
+            </div>
+            <div className="min-w-0 px-1">
+              <div className="text-[11px] font-medium text-slate-500">数量</div>
+              <div className="mt-0.5 text-base font-bold text-blue-700">{selectedDayTotals.quantity.toLocaleString()}</div>
+            </div>
+            <div className="min-w-0 px-1">
+              <div className="text-[11px] font-medium text-slate-500">売上</div>
+              <div className="mt-0.5 truncate text-base font-bold text-emerald-700">¥{selectedDayTotals.amount.toLocaleString()}</div>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            onClick={saveSelectedDay}
+            disabled={loading || saving}
+            className="mt-3 h-12 w-full bg-emerald-600 text-base font-bold hover:bg-emerald-700"
+          >
+            <Save className={`mr-2 h-5 w-5 ${saving ? 'animate-spin' : ''}`} />
+            {saving ? '保存中...' : `${selectedMonth}月${selectedDay}日を保存`}
+          </Button>
+          <p className="mt-1 min-h-5 text-center text-xs font-medium text-emerald-700" aria-live="polite">
+            {mobileSaveStatus}
+          </p>
+        </div>
+
+        <main className="space-y-2 p-3">
+          {loading ? (
+            <div className="flex min-h-48 items-center justify-center">
+              <p className="text-sm text-slate-500">データを読み込んでいます...</p>
+            </div>
+          ) : products.length === 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+              商品データがありません
+            </div>
+          ) : products.map((product) => {
+            const dayData = salesData[product.id]?.[selectedDay];
+            const quantity = dayData?.quantity ?? '';
+            const colorDef = product.row_color ? COLOR_MAP[product.row_color] : null;
+            const dayAmount = dayData?.amount || 0;
+            return (
+              <article
+                key={product.id}
+                className={`rounded-lg border border-slate-200 p-3 shadow-sm ${colorDef?.bg || 'bg-white'}`}
+              >
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-1.5">
+                      <h2 className="min-w-0 break-words text-sm font-bold leading-5 text-slate-950">{product.product_name}</h2>
+                      {linkedProductMap.has(product.id) && (
+                        <button
+                          type="button"
+                          onClick={() => showLinkedRecipe(product.product_name, linkedProductMap.get(product.id) || '')}
+                          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700"
+                          aria-label={`${product.product_name} のリンク先レシピを表示`}
+                          title="リンク先レシピ"
+                        >
+                          <Link2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                      {product.product_code && <span>{product.product_code}</span>}
+                      <span>単価 ¥{product.price.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    <div className="text-[11px] font-medium text-slate-500">売上</div>
+                    <div className="text-sm font-bold text-emerald-700">¥{dayAmount.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-[48px_minmax(88px,1fr)_48px] items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = dayData?.quantity || 0;
+                      handleQuantityChange(product.id, selectedDay, String(current - 1));
+                      setMobileSaveStatus('');
+                    }}
+                    className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 active:bg-slate-100"
+                    aria-label={`${product.product_name}を1減らす`}
+                    title="1減らす"
+                  >
+                    <Minus className="h-5 w-5" />
+                  </button>
+                  <label className="min-w-0">
+                    <span className="sr-only">{product.product_name}の数量</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={quantity}
+                      onChange={(e) => {
+                        handleQuantityChange(product.id, selectedDay, e.target.value);
+                        setMobileSaveStatus('');
+                      }}
+                      onBlur={() => saveSalesData(product.id, selectedDay)}
+                      onKeyDown={(e) => handleInputKeyDown(e, product.id, selectedDay)}
+                      className="h-12 w-full rounded-lg border border-slate-300 bg-white px-2 text-center text-xl font-bold text-slate-950 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      aria-label={`${product.product_name} ${selectedDay}日`}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = dayData?.quantity || 0;
+                      handleQuantityChange(product.id, selectedDay, String(current + 1));
+                      setMobileSaveStatus('');
+                    }}
+                    className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 active:bg-slate-100"
+                    aria-label={`${product.product_name}を1増やす`}
+                    title="1増やす"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </main>
+      </section>
+
+      <div className="hidden h-screen flex-col lg:flex">
       {/* ヘッダー */}
       <header className="flex-shrink-0 bg-white shadow-sm border-b z-30">
         <div className="px-4 py-2 flex items-center justify-between">
@@ -560,9 +791,17 @@ function SalesInputContent() {
                             {product.product_name}
                             {linkedProductMap.has(product.id) && (
                               <span className="relative group/wlink">
-                                <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium cursor-help">
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-medium hover:bg-green-200"
+                                  aria-label={`${product.product_name} のリンク先レシピを表示`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    showLinkedRecipe(product.product_name, linkedProductMap.get(product.id) || '');
+                                  }}
+                                >
                                   <Link2 className="h-2.5 w-2.5" />
-                                </span>
+                                </button>
                                 <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg shadow-lg whitespace-nowrap opacity-0 invisible group-hover/wlink:opacity-100 group-hover/wlink:visible transition-all duration-200 pointer-events-none z-[100]">
                                   🔗 {linkedProductMap.get(product.id)}
                                   <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800"></span>
@@ -603,7 +842,8 @@ function SalesInputContent() {
           </table>
         )}
       </main>
-    </div>
+      </div>
+    </>
   );
 }
 

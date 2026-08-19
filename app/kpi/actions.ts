@@ -19,6 +19,11 @@ export interface MonthlyKpiData {
   twoYearsAgo: number; // 前々年実績
 }
 
+export interface KpiAnnualPlan {
+  wholesaleCoreTarget: number;
+  oemTarget: number;
+}
+
 export interface KpiSummary {
   fiscalYear: number;
   months: string[];
@@ -38,6 +43,7 @@ export interface KpiSummary {
     actual: number;
     lastYear: number;
   }[];
+  annualPlan: KpiAnnualPlan | null;
 }
 
 // ----------------------------------------------------------------------
@@ -62,6 +68,17 @@ function generateMonths(fy: number): string[] {
     months.push(format(addMonths(start, i), 'yyyy-MM-01'));
   }
   return months;
+}
+
+function getFiscalYearFromMonth(month: string): number | null {
+  const match = /^(\d{4})-(\d{2})/.exec(month);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const monthNumber = Number(match[2]);
+  if (!Number.isInteger(year) || monthNumber < 1 || monthNumber > 12) return null;
+
+  return monthNumber >= 8 ? year + 1 : year;
 }
 
 // ----------------------------------------------------------------------
@@ -99,6 +116,7 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
     // Manufacturing
     const manufacturingTargetMap = new Map();
     const manufacturingActualMap = new Map();
+    const annualDetailTargetMap = new Map();
     const historicalActualMap = new Map(); // key: channel_month
 
 
@@ -113,6 +131,8 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
         manufacturingTargetMap.set(r.month, r.amount);
       } else if (r.metric === 'manufacturing_actual') {
         manufacturingActualMap.set(r.month, r.amount);
+      } else if (r.metric === 'annual_detail_target') {
+        annualDetailTargetMap.set(r.channel, r.amount);
       } else if (r.metric === 'historical_actual') {
         historicalActualMap.set(`${r.channel}_${r.month}`, r.amount);
       }
@@ -139,13 +159,17 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
         // Priority: Seeded historical data > Calculated from sales_v1
         const seededHist = historicalActualMap.get(`${channel}_${lastYearMonth}`);
         const lastYearAmount = seededHist !== undefined ? seededHist : getAmount(channel, lastYearMonth);
+        const seededTwoYearsAgo = historicalActualMap.get(`${channel}_${twoYearsAgoMonth}`);
+        const twoYearsAgoAmount = seededTwoYearsAgo !== undefined
+          ? seededTwoYearsAgo
+          : getAmount(channel, twoYearsAgoMonth);
 
         return {
           month,
           actual: getAmount(channel, month),
           target: targetMap.get(`${channel}_${month}`) || 0,
           lastYear: lastYearAmount,
-          twoYearsAgo: getAmount(channel, twoYearsAgoMonth),
+          twoYearsAgo: twoYearsAgoAmount,
         };
       });
     });
@@ -187,7 +211,13 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
       channels: resultChannels,
       total,
       salesActivity,
-      manufacturing
+      manufacturing,
+      annualPlan: annualDetailTargetMap.size > 0
+        ? {
+            wholesaleCoreTarget: Number(annualDetailTargetMap.get('WHOLESALE_CORE') || 0),
+            oemTarget: Number(annualDetailTargetMap.get('OEM') || 0),
+          }
+        : null,
     };
   } catch (error: any) {
     console.error('Data Fetch Error Details:', {
@@ -198,6 +228,40 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
       fullUser: error
     });
     throw new Error(`データの取得に失敗しました: ${error?.message || '不明なエラー'}`);
+  }
+}
+
+export async function getAvailableKpiFiscalYears(currentFiscalYear: number): Promise<number[]> {
+  const queryStart = '2000-01-01';
+  const queryEnd = `${currentFiscalYear}-08-01`;
+
+  try {
+    const [webRows, wholesaleRows, storeRows, shokuRows, manualRows] = await Promise.all([
+      fetchWebSalesRPC(queryStart, queryEnd),
+      fetchWholesaleSalesRPC(queryStart, queryEnd),
+      fetchStoreSalesRPC(queryStart, queryEnd),
+      fetchShokuSalesRPC(queryStart, queryEnd),
+      fetchTargets(queryStart, queryEnd),
+    ]);
+
+    const years = new Set<number>([currentFiscalYear]);
+    const salesRows = [...webRows, ...wholesaleRows, ...storeRows, ...shokuRows];
+
+    salesRows.forEach((row) => {
+      if (Number(row.amount) === 0) return;
+      const fiscalYear = getFiscalYearFromMonth(row.month);
+      if (fiscalYear !== null) years.add(fiscalYear);
+    });
+
+    manualRows.forEach((row) => {
+      const fiscalYear = getFiscalYearFromMonth(row.month);
+      if (fiscalYear !== null) years.add(fiscalYear);
+    });
+
+    return Array.from(years).sort((a, b) => b - a);
+  } catch (error) {
+    console.error('Failed to resolve available KPI fiscal years:', error);
+    return Array.from({ length: 8 }, (_, index) => currentFiscalYear - index);
   }
 }
 

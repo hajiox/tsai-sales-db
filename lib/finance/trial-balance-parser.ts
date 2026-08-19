@@ -48,13 +48,18 @@ function parseRatio(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseReiwaDate(text: string) {
-  const match = text.match(/令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/);
-  if (!match) return null;
-  const year = 2018 + Number(match[1]);
-  const month = Number(match[2]);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
-  return `${year}-${String(month).padStart(2, '0')}`;
+function parseLatestReiwaDate(text: string) {
+  const months = [...text.matchAll(/令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/g)]
+    .map((match) => {
+      const year = 2018 + Number(match[1]);
+      const month = Number(match[2]);
+      if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
+      return `${year}-${String(month).padStart(2, '0')}`;
+    })
+    .filter((month): month is string => Boolean(month))
+    .sort();
+
+  return months.at(-1) || null;
 }
 
 function isAccountCode(value: unknown) {
@@ -101,8 +106,8 @@ export function parseTrialBalanceText(text: string): ParsedTrialBalance {
       continue;
     }
 
-    const dateMonth = parseReiwaDate(joined);
-    if (dateMonth) {
+    const dateMonth = parseLatestReiwaDate(joined);
+    if (dateMonth && (!reportMonth || dateMonth > reportMonth)) {
       reportMonth = dateMonth;
       periodLabel = joined.replace(/\s+/g, ' ').trim();
     }

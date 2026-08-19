@@ -11,7 +11,8 @@ export async function POST(request: Request) {
 
     if (password === ADMIN_PASSWORD) {
       // 認証成功時にCookieを設定
-      cookies().set('finance-auth', 'authenticated', {
+      const cookieStore = await cookies();
+      cookieStore.set('finance-auth', 'authenticated', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -31,7 +32,8 @@ export async function POST(request: Request) {
 export async function GET() {
   try {
     // Cookieから認証状態を確認
-    const authCookie = cookies().get('finance-auth');
+    const cookieStore = await cookies();
+    const authCookie = cookieStore.get('finance-auth');
     const authenticated = authCookie?.value === 'authenticated';
     
     return NextResponse.json({ authenticated }, { status: 200 });
@@ -43,7 +45,8 @@ export async function GET() {
 export async function DELETE() {
   try {
     // ログアウト処理（Cookieを削除）
-    cookies().delete('finance-auth');
+    const cookieStore = await cookies();
+    cookieStore.delete('finance-auth');
     
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {

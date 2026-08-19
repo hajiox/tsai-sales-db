@@ -63,6 +63,12 @@ interface TrialBalanceResponse {
   month: string;
 }
 
+interface ImportedMonthStatus {
+  month: string;
+  accountCount?: number;
+  transactionCount?: number;
+}
+
 interface Transaction {
   date: string;
   counterAccount: string;
@@ -91,7 +97,7 @@ interface AnalysisResult {
 export default function TrialBalancePage() {
   const [currentMonth, setCurrentMonth] = useState<string>("");
   const [data, setData] = useState<TrialBalanceResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   const [analysisData, setAnalysisData] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -102,11 +108,6 @@ export default function TrialBalancePage() {
   const [transactions, setTransactions] = useState<Map<string, Transaction[]>>(new Map());
   const [loadingTransactions, setLoadingTransactions] = useState<Set<string>>(new Set());
 
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importMonth, setImportMonth] = useState("");
-  const [isImporting, setIsImporting] = useState(false);
-
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteMonth, setDeleteMonth] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -114,17 +115,44 @@ export default function TrialBalancePage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // URLパラメータを優先
-    const params = new URLSearchParams(window.location.search);
-    const urlMonth = params.get('month');
-    if (urlMonth && /^\d{4}-\d{2}$/.test(urlMonth)) {
-      setCurrentMonth(urlMonth);
-    } else {
+    const currentYearMonth = () => {
       const now = new Date();
       const yyyy = now.getFullYear();
       const mm = String(now.getMonth() + 1).padStart(2, "0");
-      setCurrentMonth(`${yyyy}-${mm}`);
+      return `${yyyy}-${mm}`;
+    };
+
+    async function initializeMonth() {
+      const params = new URLSearchParams(window.location.search);
+      const urlMonth = params.get("month");
+      if (urlMonth && /^\d{4}-\d{2}$/.test(urlMonth)) {
+        setCurrentMonth(urlMonth);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/finance/import-status", { cache: "no-store" });
+        if (!res.ok) throw new Error("取込月の取得に失敗しました");
+        const json = await res.json();
+        const months = Array.isArray(json.months) ? json.months as ImportedMonthStatus[] : [];
+        const latestDataMonth = months
+          .filter((item) => item?.month && (Number(item.accountCount) > 0 || Number(item.transactionCount) > 0))
+          .map((item) => item.month)
+          .sort()
+          .at(-1);
+
+        const month = latestDataMonth || currentYearMonth();
+        setCurrentMonth(month);
+        if (latestDataMonth) {
+          window.history.replaceState(null, "", `/finance/trial-balance?month=${latestDataMonth}`);
+        }
+      } catch (error) {
+        console.error("Latest month detection error:", error);
+        setCurrentMonth(currentYearMonth());
+      }
     }
+
+    initializeMonth();
   }, []);
 
   useEffect(() => {
@@ -147,6 +175,13 @@ export default function TrialBalancePage() {
       // エラーでもトーストは出さず、画面表示のみ切り替える（UX向上）
     } finally {
       setLoading(false);
+    }
+  };
+
+  const changeMonth = (month: string) => {
+    setCurrentMonth(month);
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      window.history.replaceState(null, "", `/finance/trial-balance?month=${month}`);
     }
   };
 
@@ -204,51 +239,6 @@ export default function TrialBalancePage() {
         next.delete(accountCode);
         return next;
       });
-    }
-  };
-
-  const handleImport = async () => {
-    if (!importFile || !importMonth) {
-      toast({
-        title: "エラー",
-        description: "ファイルと対象月を選択してください。",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsImporting(true);
-    const formData = new FormData();
-    formData.append("file", importFile);
-    formData.append("reportMonth", importMonth);
-
-    try {
-      const res = await fetch("/api/general-ledger/import", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "インポートに失敗しました");
-      }
-
-      toast({
-        title: "完了",
-        description: "インポートが完了しました。",
-      });
-      setIsImportModalOpen(false);
-      setImportFile(null);
-      setCurrentMonth(importMonth);
-    } catch (error: any) {
-      console.error(error);
-      toast({
-        title: "エラー",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsImporting(false);
     }
   };
 
@@ -334,15 +324,12 @@ export default function TrialBalancePage() {
           <Input
             type="month"
             value={currentMonth}
-            onChange={(e) => setCurrentMonth(e.target.value)}
+            onChange={(e) => changeMonth(e.target.value)}
             className="w-40"
           />
           <Button
             variant="outline"
-            onClick={() => {
-              setImportMonth(currentMonth);
-              setIsImportModalOpen(true);
-            }}
+            onClick={() => { window.location.href = "/finance/general-ledger/import"; }}
           >
             <Upload className="w-4 h-4 mr-2" />
             インポート
@@ -603,33 +590,6 @@ export default function TrialBalancePage() {
           </div>
         </>
       )}
-
-      {/* インポートモーダル (条件分岐の外に移動) */}
-      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>データのインポート</DialogTitle>
-            <DialogDescription>総勘定元帳のCSV/TXTファイルを選択してください。</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">対象月</label>
-              <Input type="month" value={importMonth} onChange={(e) => setImportMonth(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">ファイル選択</label>
-              <Input type="file" accept=".csv,.txt" onChange={(e) => setImportFile(e.target.files ? e.target.files[0] : null)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsImportModalOpen(false)}>キャンセル</Button>
-            <Button onClick={handleImport} disabled={isImporting}>
-              {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              インポート実行
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 削除確認モーダル (条件分岐の外に移動) */}
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TSA業務PC 復旧手順</title>
+  <style>
+    body{font-family:"Yu Gothic UI",Meiryo,sans-serif;margin:0;background:#f1f5f9;color:#0f172a;line-height:1.75}main{max-width:900px;margin:auto;background:white;padding:32px 40px;min-height:100vh}h1{font-size:28px;border-bottom:3px solid #0891b2;padding-bottom:12px}h2{font-size:20px;margin-top:32px;border-left:5px solid #0891b2;padding-left:12px}code{background:#e2e8f0;padding:2px 5px;overflow-wrap:anywhere}.warn{border:2px solid #dc2626;background:#fef2f2;color:#991b1b;padding:14px;font-weight:bold}.ok{border-left:5px solid #059669;background:#ecfdf5;padding:14px}li{margin:7px 0}@media(max-width:640px){main{padding:20px}h1{font-size:23px}}
+  </style>
+</head>
+<body><main>
+  <h1>TSA業務PC 復旧手順</h1>
+  <p>このUSBは、業務PCに障害が起きた時の復旧用です。バックアップ本体は社内NASとGoogle Driveにあります。</p>
+  <div class="warn">復旧確認が終わるまで、FAX、メール監視、EC速報、定期送信を開始しないでください。二重送信を防ぐためです。</div>
+  <h2>Windowsが起動しない</h2>
+  <ol><li>交換SSDまたは代替PCを用意します。</li><li>Windows回復環境の「イメージでシステムを回復」を開きます。</li><li>NASの <code>\\tshdd\disk\NEW\TSA-PC-Backup\system-image</code> にある最新の正常スロットを選びます。</li><li>復元後、下の確認を終えてから外部送信を再開します。</li></ol>
+  <h2>データだけ戻す</h2>
+  <p>管理者PowerShellでこのUSBを開き、次を実行します。既定では検証・展開だけで、本番データを上書きしません。</p>
+  <div class="ok"><code>Set-ExecutionPolicy -Scope Process Bypass</code><br><code>cd D:\TSA-PC-RECOVERY</code><br><code>.\Restore-TsaPc.ps1 -ListOnly</code><br><code>.\Restore-TsaPc.ps1</code></div>
+  <p>NASが使えない場合: <code>.\Restore-TsaPc.ps1 -SourceRoot 'G:\マイドライブ\TSA-PC-Backup\daily'</code></p>
+  <h2>復旧後の確認</h2>
+  <ol><li>SQLite検査がok。</li><li>TSA、TSG、DocScanner、ヤマト管理へログイン可能。</li><li>書類・FAX・メール・EC速報の直近データがある。</li><li>PM2とタスクスケジューラに二重起動がない。</li><li>テスト宛先だけで外部連携を確認。</li><li>問題がなければ監視・送信を一つずつ再開。</li></ol>
+  <h2>通常の確認</h2>
+  <p>TSAサイドバーの「バックアップ管理」で、日次01:30、日曜03:00、監査06:30の履歴を確認します。定期処理はログイン前からPM2で動作し、結果をTSAへ保存します。詳細版は同じUSBの <code>PC復旧手順.md</code> です。</p>
+</main></body></html>

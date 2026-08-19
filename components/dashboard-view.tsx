@@ -134,22 +134,43 @@ export default function DashboardView() {
     };
 
     return (
-        <div className="p-4 md:p-6 lg:p-8 bg-slate-50 min-h-screen font-sans">
-            <div className="text-right text-sm text-slate-600"><ClientDate /></div>
-            <DashboardHeader selectedDate={selectedDate} onDateChange={handleDateChange} />
-            
-            <main className="mt-6 space-y-8">
-                {error && <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md"><p className="font-bold">エラーが発生しました:</p><p>{error}</p></div>}
-                
-                <SalesSummaryTable
-                    dailyData={dailyData}
-                    monthlyData={monthlyData}
-                    isLoading={dailyLoading}
-                />
-                
-                <SalesChartGrid data={sixMonthData} isLoading={graphLoading} />
+        <div className="min-h-screen overflow-x-hidden bg-slate-50 px-3 py-3 font-sans sm:p-4 lg:p-8">
+            <div className="mb-1 text-right text-xs text-slate-500 lg:mb-0 lg:text-sm lg:text-slate-600">
+                <ClientDate />
+            </div>
+            <div className="[&_header]:flex-col [&_header]:items-stretch [&_header]:gap-3 [&_h1]:text-xl [&_button]:min-h-11 [&_button]:w-full lg:[&_header]:flex-row lg:[&_header]:items-center lg:[&_header]:gap-0 lg:[&_h1]:text-2xl lg:[&_button]:min-h-0 lg:[&_button]:w-[240px]">
+                <DashboardHeader selectedDate={selectedDate} onDateChange={handleDateChange} />
+            </div>
 
-                <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-slate-200">
+            <nav
+                aria-label="売上ダッシュボード内メニュー"
+                className="mt-4 grid grid-cols-4 overflow-hidden rounded-md border border-slate-200 bg-white text-center text-xs font-semibold text-slate-700 shadow-sm lg:hidden"
+            >
+                <a className="flex min-h-11 min-w-0 items-center justify-center border-r border-slate-200 px-1 active:bg-slate-100" href="#sales-summary">概要</a>
+                <a className="flex min-h-11 min-w-0 items-center justify-center border-r border-slate-200 px-1 active:bg-slate-100" href="#sales-input">売上入力</a>
+                <a className="flex min-h-11 min-w-0 items-center justify-center border-r border-slate-200 px-1 active:bg-slate-100" href="#sales-trends">推移</a>
+                <a className="flex min-h-11 min-w-0 items-center justify-center px-1 active:bg-slate-100" href="#sales-ai">AI分析</a>
+            </nav>
+            
+            <main className="mt-4 flex min-w-0 flex-col gap-4 lg:mt-6 lg:block lg:space-y-8">
+                {error && <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md"><p className="font-bold">エラーが発生しました:</p><p>{error}</p></div>}
+
+                <section id="sales-summary" className="order-1 min-w-0 scroll-mt-24 lg:order-none">
+                    <SalesSummaryTable
+                        dailyData={dailyData}
+                        monthlyData={monthlyData}
+                        isLoading={dailyLoading}
+                    />
+                </section>
+
+                <section id="sales-trends" className="order-3 min-w-0 scroll-mt-24 lg:order-none">
+                    <SalesChartGrid data={sixMonthData} isLoading={graphLoading} />
+                </section>
+
+                <section
+                    id="sales-input"
+                    className="order-2 min-w-0 scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm [&_.grid.grid-cols-3]:grid-cols-1 [&_.min-w-\[240px\]]:min-w-0 [&_button]:min-h-11 sm:p-6 sm:[&_.grid.grid-cols-3]:grid-cols-3 lg:order-none lg:[&_.min-w-\[240px\]]:min-w-[240px] lg:[&_button]:min-h-0"
+                >
                     <h3 className="text-lg font-semibold text-slate-800 mb-4">
                         日次データ操作 ({selectedDate.toLocaleDateString()})
                     </h3>
@@ -164,14 +185,17 @@ export default function DashboardView() {
                             dailyData={dailyData}
                             monthlyData={monthlyData}
                             onDataUpdate={handleDataUpdate}
-                            accessToken={session.supabaseAccessToken}
                         />
                     )}
-                </div>
+                </section>
 
-                <SalesTop10Summary />
+                <section className="order-4 min-w-0 lg:order-none [&>div]:p-4 sm:[&>div]:p-6">
+                    <SalesTop10Summary />
+                </section>
 
-                <AiDashboardSection />
+                <section id="sales-ai" className="order-5 min-w-0 scroll-mt-24 lg:order-none [&>div]:p-4 sm:[&>div]:p-6">
+                    <AiDashboardSection />
+                </section>
             </main>
         </div>
     );

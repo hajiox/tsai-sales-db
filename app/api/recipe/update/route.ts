@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { syncRecipeLinkedProductPrices } from "@/lib/recipe-linked-product-prices";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -46,12 +47,14 @@ export async function PATCH(request: Request) {
         const allowedFields = [
             "name", "category", "is_intermediate", "development_date",
             "selling_price", "series", "series_code", "product_code",
-            "linked_product_id", "ingredient_label", "ai_ingredient_label",
+            "linked_product_id", "linked_wholesale_product_id", "linked_oem_product_id",
+            "ingredient_label", "ai_ingredient_label",
             "manufacturing_notes", "filling_quantity", "filling_quantity_unit",
             "storage_method", "label_quantity", "net_content_unit", "shelf_life",
             "sterilization_method", "sterilization_temperature", "sterilization_time",
             "amazon_fee_enabled", "total_cost", "total_weight",
-            "yield_rate",
+            "yield_rate", "web_description", "product_points", "ec_product_name",
+            "catchcopy", "product_lp_url",
         ];
 
         const safeUpdates: Record<string, any> = {};
@@ -72,6 +75,12 @@ export async function PATCH(request: Request) {
         if (safeUpdates.category === "自社" && "shelf_life" in safeUpdates) {
             safeUpdates.shelf_life = normalizeSelfShelfLife(safeUpdates.shelf_life);
         }
+        if ("product_lp_url" in safeUpdates) {
+            const productLpUrl = typeof safeUpdates.product_lp_url === "string"
+                ? safeUpdates.product_lp_url.trim()
+                : "";
+            safeUpdates.product_lp_url = productLpUrl || null;
+        }
 
         const { error } = await supabase
             .from("recipes")
@@ -79,6 +88,19 @@ export async function PATCH(request: Request) {
             .eq("id", recipeId);
 
         if (error) throw error;
+
+        const shouldSyncLinkedPrices = [
+            "selling_price",
+            "total_cost",
+            "linked_product_id",
+            "linked_wholesale_product_id",
+            "linked_oem_product_id",
+        ].some(
+            (field) => field in safeUpdates
+        );
+        if (shouldSyncLinkedPrices) {
+            await syncRecipeLinkedProductPrices(supabase, recipeId);
+        }
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
@@ -108,13 +130,33 @@ export async function POST(request: Request) {
         if (fetchError) throw fetchError;
         if (!original) throw new Error("レシピが見つかりません");
 
-        // 2. Create new recipe (remove id, timestamps, linked_product_id, product_image_url)
+        // 2. Create new recipe. Product links and JAN must not be copied.
         // product_image_url はrecipe_imagesテーブルで管理されるため、コピーしない
         // （URLだけコピーするとrecipe_imagesにレコードがなく削除できなくなる）
-        const { id, created_at, updated_at, linked_product_id, product_image_url, ...rest } = original;
+        const {
+            id,
+            created_at,
+            updated_at,
+            linked_product_id,
+            linked_wholesale_product_id,
+            linked_oem_product_id,
+            jan_code,
+            product_image_url,
+            product_lp_url,
+            ...rest
+        } = original;
         const { data: newRecipe, error: createError } = await supabase
             .from("recipes")
-            .insert({ ...rest, name: `${original.name} (コピー)`, linked_product_id: null, product_image_url: null })
+            .insert({
+                ...rest,
+                name: `${original.name} (コピー)`,
+                linked_product_id: null,
+                linked_wholesale_product_id: null,
+                linked_oem_product_id: null,
+                jan_code: null,
+                product_image_url: null,
+                product_lp_url: null,
+            })
             .select()
             .single();
 

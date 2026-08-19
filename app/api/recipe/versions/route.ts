@@ -138,6 +138,41 @@ export async function POST(request: Request) {
   }
 }
 
+// PATCH: バージョンメモを更新
+export async function PATCH(request: Request) {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  try {
+    const body = await request.json();
+    const { id, note } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "idが必要です" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedNote = typeof note === "string" ? note.trim() || null : null;
+
+    const { data, error } = await supabase
+      .from("recipe_versions")
+      .update({ version_note: normalizedNote })
+      .eq("id", id)
+      .select("id, version_number, version_note, created_at, snapshot_recipe, snapshot_items")
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      version: data,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
 // DELETE: バージョンを削除
 export async function DELETE(request: Request) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
