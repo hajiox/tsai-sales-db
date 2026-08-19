@@ -25,6 +25,7 @@ import InlineEdit from "../_components/InlineEdit";
 import EcPriceSyncControls from "../_components/EcPriceSyncControls";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
+import type { PreviousRecipePrice } from "@/lib/recipe-price-history";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -243,6 +244,7 @@ function RecipeDetailContent() {
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [sellingPriceTaxIncludedPriority, setSellingPriceTaxIncludedPriority] = useState(false);
+  const [previousSellingPrice, setPreviousSellingPrice] = useState<PreviousRecipePrice | null>(null);
   const [nutritionMap, setNutritionMap] = useState<
     Record<string, NutritionData>
   >({});
@@ -740,6 +742,18 @@ function RecipeDetailContent() {
       amazon_fee_enabled: recipeData.amazon_fee_enabled ?? false,
       shelf_life: selfShelfLife,
     });
+
+    try {
+      const response = await fetch(`/api/recipe/${encodeURIComponent(id)}/price-history`, {
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("前回価格を取得できませんでした");
+      const history = await response.json();
+      setPreviousSellingPrice(history.previousPrice || null);
+    } catch (error) {
+      console.error("Previous recipe price fetch error:", error);
+      setPreviousSellingPrice(null);
+    }
 
     const { data: itemsData } = await supabase
       .from("recipe_items")
@@ -2331,6 +2345,32 @@ function RecipeDetailContent() {
                             : sellingPriceInclTax.toLocaleString()}
                         </span>
                       </div>
+                      {!previewingVersionId && !draftMode && (
+                        <div
+                          className="flex items-center gap-1 rounded border border-gray-700 bg-gray-950/60 px-2 py-1 text-xs text-gray-300"
+                          title={previousSellingPrice?.changedAt
+                            ? `前回変更: ${new Date(previousSellingPrice.changedAt).toLocaleString("ja-JP")}`
+                            : "価格変更履歴はまだありません"}
+                        >
+                          <span className="text-gray-500">前回価格:</span>
+                          {previousSellingPrice ? (
+                            <>
+                              <span className="font-bold">¥</span>
+                              <span className="font-bold">
+                                {(sellingPriceTaxIncludedPriority
+                                  ? previousSellingPrice.previousPriceInclTax
+                                  : previousSellingPrice.previousPriceExTax
+                                ).toLocaleString("ja-JP", { maximumFractionDigits: 4 })}
+                              </span>
+                              <span className="text-[10px] text-gray-500">
+                                {sellingPriceTaxIncludedPriority ? "税込" : "税抜"}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="font-medium text-gray-500">記録なし</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-baseline justify-end mb-4">
