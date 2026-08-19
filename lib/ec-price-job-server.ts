@@ -22,7 +22,8 @@ function nullableText(value: unknown, maxLength: number) {
 }
 
 export function buildEcPriceRecipeSnapshot(recipe: Record<string, unknown>): EcPriceRecipeSnapshot {
-  const newPriceExTax = yenFloor(Number(recipe.selling_price));
+  const storedPriceExTax = Number(recipe.selling_price);
+  const newPriceExTax = yenFloor(storedPriceExTax);
   return {
     recipeId: String(recipe.id || ""),
     recipeName: String(recipe.name || "").trim().slice(0, 200),
@@ -35,7 +36,7 @@ export function buildEcPriceRecipeSnapshot(recipe: Record<string, unknown>): EcP
     fillingQuantityUnit: nullableText(recipe.filling_quantity_unit, 30),
     storageMethod: nullableText(recipe.storage_method, 100),
     newPriceExTax,
-    newPriceInclTax: taxIncludedFromExcluded(newPriceExTax),
+    newPriceInclTax: taxIncludedFromExcluded(storedPriceExTax),
   };
 }
 

@@ -43,6 +43,10 @@ async function main() {
       path.join(__dirname, "..", "supabase", "migrations", "20260819093000_add_ec_price_update_jobs.sql"),
       "utf8",
     ));
+    await client.query(fs.readFileSync(
+      path.join(__dirname, "..", "supabase", "migrations", "20260819110000_fix_ec_price_revision_tax_inclusive_priority.sql"),
+      "utf8",
+    ));
     const checks = await client.query(`
       SELECT
         to_regclass('public.recipe_ec_price_revisions') IS NOT NULL AS revisions_table,
@@ -59,7 +63,11 @@ async function main() {
           WHERE table_schema = 'public'
             AND table_name = 'recipe_ec_price_sync_state'
             AND column_name = 'recipe_snapshot'
-        ) AS snapshot_column
+        ) AS snapshot_column,
+        position(
+          'floor(floor('
+          in replace(lower(pg_get_functiondef('public.record_recipe_ec_price_revision()'::regprocedure)), ' ', '')
+        ) = 0 AS fractional_tax_excluded_supported
     `);
     console.log(`dry_run=${JSON.stringify(checks.rows[0])}`);
     await client.query("ROLLBACK");

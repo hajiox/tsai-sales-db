@@ -10,6 +10,23 @@ export function taxExcludedFromIncluded(value: unknown, taxRate = DEFAULT_REDUCE
   return yenFloor(Number(value || 0) / (1 + taxRate));
 }
 
+export function taxExcludedForExactIncluded(
+  value: unknown,
+  taxRate = DEFAULT_REDUCED_TAX_RATE,
+  precision = 4,
+): number {
+  const included = yenFloor(value);
+  if (included <= 0) return included;
+
+  const multiplier = 1 + taxRate;
+  const factor = 10 ** precision;
+  const roundedUp = Math.ceil((included / multiplier) * factor - Number.EPSILON) / factor;
+
+  // 税込優先では、丸め戻した税込額が入力値から1円もずれない税抜値を保存する。
+  if (taxIncludedFromExcluded(roundedUp, taxRate) === included) return roundedUp;
+  return Math.ceil(((included + Number.EPSILON) / multiplier) * factor) / factor;
+}
+
 export function taxIncludedFromExcluded(value: unknown, taxRate = DEFAULT_REDUCED_TAX_RATE): number {
   return yenFloor(Number(value || 0) * (1 + taxRate));
 }

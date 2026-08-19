@@ -24,7 +24,7 @@ import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 import InlineEdit from "../_components/InlineEdit";
 import EcPriceSyncControls from "../_components/EcPriceSyncControls";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
-import { taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
+import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -242,6 +242,7 @@ function RecipeDetailContent() {
   const [isEditing, setIsEditing] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [sellingPriceTaxIncludedPriority, setSellingPriceTaxIncludedPriority] = useState(false);
   const [nutritionMap, setNutritionMap] = useState<
     Record<string, NutritionData>
   >({});
@@ -1573,7 +1574,7 @@ function RecipeDetailContent() {
     );
 
   const totals = getTotals();
-  const sellingPriceExTax = recipe.selling_price ? yenFloor(recipe.selling_price) : 0;
+  const sellingPriceExTax = recipe.selling_price ? Number(recipe.selling_price) : 0;
   const sellingPriceInclTax = recipe.selling_price
     ? taxIncludedFromExcluded(recipe.selling_price)
     : 0;
@@ -2304,16 +2305,32 @@ function RecipeDetailContent() {
               <>
                 {/* Pricing Header Card */}
                 <div className="mb-6 rounded-xl bg-gray-900 p-4 text-white shadow-lg lg:p-6">
-                  <div className="flex justify-between items-start mb-2">
+                  <div className="mb-2 flex items-start justify-between gap-3">
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                       販売価格 (Selling Price)
                     </div>
-                    <div className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300 flex items-center gap-1">
-                      <span className="text-gray-400">税込参考:</span>
-                      <span className="font-bold">¥</span>
-                      <span className="font-bold min-w-[30px] text-right">
-                        {sellingPriceInclTax.toLocaleString()}
-                      </span>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <label className="flex cursor-pointer items-center gap-1.5 rounded bg-gray-800 px-2 py-1 text-xs text-gray-300 print:hidden">
+                        <input
+                          type="checkbox"
+                          checked={sellingPriceTaxIncludedPriority}
+                          onChange={(event) => setSellingPriceTaxIncludedPriority(event.target.checked)}
+                          className="h-3.5 w-3.5 accent-cyan-500"
+                          aria-label="税込価格を優先して税抜価格を逆算"
+                        />
+                        <span className="font-bold">税込優先</span>
+                      </label>
+                      <div className="flex items-center gap-1 rounded bg-gray-800 px-2 py-1 text-xs text-gray-300">
+                        <span className="text-gray-400">
+                          {sellingPriceTaxIncludedPriority ? "税抜換算:" : "税込参考:"}
+                        </span>
+                        <span className="font-bold">¥</span>
+                        <span className="min-w-[30px] text-right font-bold">
+                          {sellingPriceTaxIncludedPriority
+                            ? sellingPriceExTax.toLocaleString("ja-JP", { maximumFractionDigits: 4 })
+                            : sellingPriceInclTax.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-baseline justify-end mb-4">
@@ -2321,7 +2338,7 @@ function RecipeDetailContent() {
                       className="text-xs font-bold text-gray-500 mr-1"
                       style={{ alignSelf: "flex-end", marginBottom: "8px" }}
                     >
-                      税抜
+                      {sellingPriceTaxIncludedPriority ? "税込" : "税抜"}
                     </span>
                     <span
                       className="font-medium text-gray-400 mr-1"
@@ -2334,14 +2351,17 @@ function RecipeDetailContent() {
                       ¥
                     </span>
                     <InlineEdit
+                      key={sellingPriceTaxIncludedPriority ? "selling-price-included" : "selling-price-excluded"}
                       type="number"
-                      value={sellingPriceExTax}
+                      value={sellingPriceTaxIncludedPriority ? sellingPriceInclTax : sellingPriceExTax}
                       onSave={(val) => {
-                        const taxExcluded =
-                          typeof val === "string" ? parseFloat(val) : val;
+                        const enteredPrice = typeof val === "string" ? parseFloat(val) : val;
+                        const nextSellingPrice = sellingPriceTaxIncludedPriority
+                          ? taxExcludedForExactIncluded(enteredPrice)
+                          : yenFloor(enteredPrice);
                         handleRecipeChange(
                           "selling_price",
-                          isNaN(taxExcluded) ? 0 : yenFloor(taxExcluded),
+                          isNaN(nextSellingPrice) ? 0 : nextSellingPrice,
                         );
                       }}
                       style={{
