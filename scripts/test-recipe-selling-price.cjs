@@ -76,4 +76,31 @@ assert.equal(
   "価格履歴がなければ前回価格なしとして扱う",
 );
 
+const reservations = loadTypeScriptModule("lib/ec-price-reservations.ts");
+assert.equal(
+  reservations.EC_PRICE_RESERVATION_SCHEDULED_AT,
+  "9999-12-31T23:59:59.000Z",
+  "予約ジョブは一括実行までBridgeのclaim対象時刻に入らない",
+);
+assert.equal(
+  reservations.normalizeEcPriceDispatchMode("reserved"),
+  "reserved",
+  "明示した予約モードを保持する",
+);
+assert.equal(
+  reservations.normalizeEcPriceDispatchMode("unexpected"),
+  "immediate",
+  "不正な実行モードは従来どおり即時実行へ限定する",
+);
+assert.equal(
+  reservations.isReservedEcPriceJob("queued", { dispatchMode: "reserved" }),
+  true,
+  "queuedかつreservedだけを一括実行予約として扱う",
+);
+assert.equal(
+  reservations.isReservedEcPriceJob("running", { dispatchMode: "reserved" }),
+  false,
+  "実行開始済みジョブを予約へ戻さない",
+);
+
 console.log("Recipe selling price tax-inclusive priority checks passed.");

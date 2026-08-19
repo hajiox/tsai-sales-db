@@ -7,7 +7,14 @@ import {
   buildEcPriceRecipeSnapshot,
   ecPriceRecipeIdentitiesMatch,
   ecPriceSnapshotsMatch,
+  type EcPriceRecipeSnapshot,
 } from "@/lib/ec-price-job-server";
+import {
+  EC_PRICE_RESERVATION_SCHEDULED_AT,
+  isReservedEcPriceJob,
+  normalizeEcPriceDispatchMode,
+  type EcPriceDispatchMode,
+} from "@/lib/ec-price-reservations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +63,95 @@ async function requireAdmin() {
   return session?.user?.email?.toLowerCase() === ADMIN_EMAIL ? session : null;
 }
 
+function jobMatchesRequest(
+  job: Record<string, unknown>,
+  newPriceInclTax: number,
+  targets: string[],
+  recipeSnapshot: EcPriceRecipeSnapshot,
+) {
+  const parameters = asObject(job.parameters);
+  return Number(parameters.newPriceInclTax) === newPriceInclTax
+    && sameTargets(parameters.targets, targets)
+    && ecPriceSnapshotsMatch(parameters.recipeSnapshot, recipeSnapshot);
+}
+
+async function resolveExistingJob(input: {
+  supabase: ReturnType<typeof getWebSalesAutomationServiceClient>;
+  active: Record<string, unknown>;
+  dispatchMode: EcPriceDispatchMode;
+  newPriceInclTax: number;
+  targets: string[];
+  recipeSnapshot: EcPriceRecipeSnapshot;
+}) {
+  const { supabase, active, dispatchMode, newPriceInclTax, targets, recipeSnapshot } = input;
+  if (!jobMatchesRequest(active, newPriceInclTax, targets, recipeSnapshot)) {
+    return NextResponse.json(
+      { error: "この商品の別の価格変更が実行中または予約済みです。完了または取消後に再実行してください" },
+      { status: 409 },
+    );
+  }
+
+  const activeParameters = asObject(active.parameters);
+  const reserved = isReservedEcPriceJob(active.status, activeParameters);
+  if (dispatchMode === "reserved") {
+    if (!reserved) {
+      return NextResponse.json(
+        { error: "この商品の価格変更はすでに実行待ちです" },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      reused: true,
+      reserved: true,
+      job: toJobView(active),
+    });
+  }
+
+  if (!reserved) {
+    return NextResponse.json({ ok: true, reused: true, reserved: false, job: toJobView(active) });
+  }
+
+  const releasedAt = new Date().toISOString();
+  const { data: promoted, error } = await supabase
+    .from("web_sales_codex_jobs")
+    .update({
+      parameters: {
+        ...activeParameters,
+        dispatchMode: "immediate",
+        releasedAt,
+      },
+      scheduled_at: releasedAt,
+      current_step: "事務所PCの価格改定開始待ち",
+      updated_at: releasedAt,
+    })
+    .eq("id", String(active.id))
+    .eq("status", "queued")
+    .contains("parameters", { dispatchMode: "reserved" })
+    .select("id,status,progress,current_step,error_message,parameters,result,scheduled_at,created_at,completed_at")
+    .maybeSingle();
+  if (error) throw error;
+  if (!promoted) {
+    return NextResponse.json(
+      { error: "予約の実行状態が変わりました。画面を再読込してください" },
+      { status: 409 },
+    );
+  }
+  await supabase.from("web_sales_codex_job_events").insert({
+    job_id: promoted.id,
+    event_type: "queued",
+    message: "予約した価格変更を今すぐ実行へ移しました",
+    progress: 0,
+  });
+  return NextResponse.json({
+    ok: true,
+    reused: false,
+    promoted: true,
+    reserved: false,
+    job: toJobView(promoted),
+  });
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -93,6 +189,7 @@ export async function POST(
     const body = await request.json();
     const requestedTargets = Array.isArray(body.targets) ? body.targets : [];
     const targets = normalizeEcPriceTargets(body.targets);
+    const dispatchMode = normalizeEcPriceDispatchMode(body.dispatchMode);
     if (targets.length === 0 || targets.length !== requestedTargets.length) {
       return NextResponse.json({ error: "反映先ECを選択してください" }, { status: 400 });
     }
@@ -129,7 +226,7 @@ export async function POST(
 
     const { data: activeRows, error: activeError } = await supabase
       .from("web_sales_codex_jobs")
-      .select("id,status,progress,current_step,error_message,parameters,result,created_at,completed_at")
+      .select("id,status,progress,current_step,error_message,parameters,result,scheduled_at,created_at,completed_at")
       .eq("task_key", "ec_price_update")
       .contains("parameters", { recipeId })
       .in("status", ACTIVE_STATUSES)
@@ -138,18 +235,14 @@ export async function POST(
     if (activeError) throw activeError;
     const active = activeRows?.[0];
     if (active) {
-      const activeParameters = asObject(active.parameters);
-      if (
-        Number(activeParameters.newPriceInclTax) === newPriceInclTax
-        && sameTargets(activeParameters.targets, targets)
-        && ecPriceSnapshotsMatch(activeParameters.recipeSnapshot, recipeSnapshot)
-      ) {
-        return NextResponse.json({ ok: true, reused: true, job: toJobView(active) });
-      }
-      return NextResponse.json(
-        { error: "この商品の別の価格変更が実行中です。完了後に再実行してください" },
-        { status: 409 },
-      );
+      return resolveExistingJob({
+        supabase,
+        active: active as Record<string, unknown>,
+        dispatchMode,
+        newPriceInclTax,
+        targets,
+        recipeSnapshot,
+      });
     }
 
     const { data: revisionRows, error: revisionError } = await supabase
@@ -244,8 +337,11 @@ export async function POST(
       newPriceExTax,
       newPriceInclTax,
       lpUpdate: false,
+      dispatchMode,
       executionPolicy: "signed_in_browser_isolated_codex",
     };
+
+    const isReservation = dispatchMode === "reserved";
 
     const { data: job, error: insertError } = await supabase
       .from("web_sales_codex_jobs")
@@ -258,50 +354,53 @@ export async function POST(
         report_month: null,
         status: "queued",
         progress: 0,
-        current_step: "事務所PCの価格改定開始待ち",
+        current_step: isReservation ? "一括実行の予約済み" : "事務所PCの価格改定開始待ち",
         parameters,
         requested_by: session.user?.email || ADMIN_EMAIL,
         priority: 50,
         max_attempts: 1,
-        scheduled_at: new Date().toISOString(),
+        scheduled_at: isReservation ? EC_PRICE_RESERVATION_SCHEDULED_AT : new Date().toISOString(),
       })
-      .select("id,status,progress,current_step,error_message,parameters,result,created_at,completed_at")
+      .select("id,status,progress,current_step,error_message,parameters,result,scheduled_at,created_at,completed_at")
       .single();
     if (insertError?.code === "23505") {
       const { data: existingRows } = await supabase
         .from("web_sales_codex_jobs")
-        .select("id,status,progress,current_step,error_message,parameters,result,created_at,completed_at")
+        .select("id,status,progress,current_step,error_message,parameters,result,scheduled_at,created_at,completed_at")
         .eq("task_key", "ec_price_update")
         .contains("parameters", { recipeId })
         .in("status", ACTIVE_STATUSES)
         .order("created_at", { ascending: false })
         .limit(1);
       if (existingRows?.[0]) {
-        const existingParameters = asObject(existingRows[0].parameters);
-        if (
-          Number(existingParameters.newPriceInclTax) === newPriceInclTax
-          && sameTargets(existingParameters.targets, targets)
-          && ecPriceSnapshotsMatch(existingParameters.recipeSnapshot, recipeSnapshot)
-        ) {
-          return NextResponse.json({ ok: true, reused: true, job: toJobView(existingRows[0]) });
-        }
-        return NextResponse.json(
-          { error: "この商品の別の価格変更が実行中です。完了後に再実行してください" },
-          { status: 409 },
-        );
+        return resolveExistingJob({
+          supabase,
+          active: existingRows[0] as Record<string, unknown>,
+          dispatchMode,
+          newPriceInclTax,
+          targets,
+          recipeSnapshot,
+        });
       }
     }
     if (insertError || !job) throw insertError || new Error("価格変更タスクを登録できません");
 
     await supabase.from("web_sales_codex_job_events").insert({
       job_id: job.id,
-      event_type: "queued",
-      message: `${targets.join("・")}の価格変更を実行待ちに登録しました`,
+      event_type: isReservation ? "reserved" : "queued",
+      message: isReservation
+        ? `${targets.join("・")}の価格変更を一括実行予約へ登録しました`
+        : `${targets.join("・")}の価格変更を実行待ちに登録しました`,
       progress: 0,
       payload: { recipeId, targets, newPriceInclTax },
     });
 
-    return NextResponse.json({ ok: true, reused: false, job: toJobView(job) });
+    return NextResponse.json({
+      ok: true,
+      reused: false,
+      reserved: isReservation,
+      job: toJobView(job),
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "価格変更タスクを登録できません" },
