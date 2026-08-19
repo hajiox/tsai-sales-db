@@ -2446,6 +2446,19 @@ function RecipeDetailContent() {
                   recipeName={recipe.name}
                   ecProductName={recipe.ec_product_name}
                   sellingPriceInclTax={sellingPriceInclTax}
+                  expectedRecipeSnapshot={{
+                    id: recipe.id,
+                    name: recipe.name,
+                    ec_product_name: recipe.ec_product_name,
+                    linked_product_id: recipe.linked_product_id,
+                    jan_code: recipe.jan_code,
+                    series_code: recipe.series_code,
+                    product_code: recipe.product_code,
+                    filling_quantity: recipe.filling_quantity,
+                    filling_quantity_unit: recipe.filling_quantity_unit,
+                    storage_method: recipe.storage_method,
+                    selling_price: recipe.selling_price,
+                  }}
                   hasUnsavedChanges={hasChanges}
                   isSaving={isSaving}
                 />

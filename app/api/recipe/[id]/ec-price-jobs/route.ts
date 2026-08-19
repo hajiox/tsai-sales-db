@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { normalizeEcPriceTargets, type EcPriceJobView } from "@/lib/ec-price-codex";
-import { taxIncludedFromExcluded, yenFloor } from "@/lib/money";
+import {
+  buildEcPriceRecipeSnapshot,
+  ecPriceRecipeIdentitiesMatch,
+  ecPriceSnapshotsMatch,
+} from "@/lib/ec-price-job-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +19,17 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function sameTargets(left: unknown, right: string[]) {
+  const normalized = normalizeEcPriceTargets(left).sort();
+  const expected = [...right].sort();
+  return normalized.length === expected.length && normalized.every((target, index) => target === expected[index]);
+}
+
+function positiveInteger(value: unknown) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 function toJobView(job: Record<string, unknown>): EcPriceJobView {
@@ -95,10 +110,21 @@ export async function POST(
       return NextResponse.json({ error: "中間加工品はEC価格反映の対象外です" }, { status: 400 });
     }
 
-    const newPriceExTax = yenFloor(Number(recipe.selling_price));
-    const newPriceInclTax = taxIncludedFromExcluded(newPriceExTax);
+    const recipeSnapshot = buildEcPriceRecipeSnapshot(recipe as Record<string, unknown>);
+    const { newPriceExTax, newPriceInclTax } = recipeSnapshot;
     if (!Number.isFinite(newPriceExTax) || newPriceExTax <= 0 || newPriceInclTax <= 0) {
       return NextResponse.json({ error: "保存済み販売価格が正しくありません" }, { status: 400 });
+    }
+    const expectedPriceInclTax = positiveInteger(body.expectedPriceInclTax);
+    const expectedRecipeSnapshot = buildEcPriceRecipeSnapshot(asObject(body.expectedRecipeSnapshot));
+    if (
+      expectedPriceInclTax !== newPriceInclTax
+      || !ecPriceSnapshotsMatch(expectedRecipeSnapshot, recipeSnapshot)
+    ) {
+      return NextResponse.json(
+        { error: "確認後に販売価格または商品情報が変わりました。画面を再読込して確認し直してください" },
+        { status: 409 },
+      );
     }
 
     const { data: activeRows, error: activeError } = await supabase
@@ -112,38 +138,109 @@ export async function POST(
     if (activeError) throw activeError;
     const active = activeRows?.[0];
     if (active) {
-      return NextResponse.json({ ok: true, reused: true, job: toJobView(active) });
+      const activeParameters = asObject(active.parameters);
+      if (
+        Number(activeParameters.newPriceInclTax) === newPriceInclTax
+        && sameTargets(activeParameters.targets, targets)
+        && ecPriceSnapshotsMatch(activeParameters.recipeSnapshot, recipeSnapshot)
+      ) {
+        return NextResponse.json({ ok: true, reused: true, job: toJobView(active) });
+      }
+      return NextResponse.json(
+        { error: "この商品の別の価格変更が実行中です。完了後に再実行してください" },
+        { status: 409 },
+      );
     }
 
-    const { data: completedRows, error: completedError } = await supabase
+    const { data: revisionRows, error: revisionError } = await supabase
+      .from("recipe_ec_price_revisions")
+      .select("id,previous_price_incl_tax,new_price_incl_tax,recipe_snapshot,created_at")
+      .eq("recipe_id", recipeId)
+      .order("created_at", { ascending: true });
+    if (revisionError) throw revisionError;
+    const revisions = (revisionRows || []).filter((revision) =>
+      ecPriceRecipeIdentitiesMatch(revision.recipe_snapshot, recipeSnapshot),
+    );
+    const currentRevision = [...revisions].reverse().find(
+      (revision) => Number(revision.new_price_incl_tax) === newPriceInclTax,
+    );
+    const earliestTrackedStandardPrice = positiveInteger(revisions[0]?.previous_price_incl_tax);
+
+    const { data: syncRows, error: syncError } = await supabase
+      .from("recipe_ec_price_sync_state")
+      .select("target,last_standard_price_incl_tax,last_site_price,last_job_id,recipe_snapshot")
+      .eq("recipe_id", recipeId)
+      .in("target", targets);
+    if (syncError) throw syncError;
+    const trackedSiteBaselines = Object.fromEntries(targets.map((target) => {
+      const state = (syncRows || []).find((row) =>
+        row.target === target && ecPriceRecipeIdentitiesMatch(row.recipe_snapshot, recipeSnapshot),
+      );
+      return [target, positiveInteger(state?.last_standard_price_incl_tax) || earliestTrackedStandardPrice];
+    }));
+
+    const { data: historyRows, error: historyError } = await supabase
       .from("web_sales_codex_jobs")
-      .select("parameters,created_at")
+      .select("parameters,result,status,created_at")
       .eq("task_key", "ec_price_update")
       .contains("parameters", { recipeId })
-      .eq("status", "completed")
       .order("created_at", { ascending: false })
-      .limit(1);
-    if (completedError) throw completedError;
-    const previousCompleted = completedRows?.[0];
-    const previousParameters = asObject(previousCompleted?.parameters);
-    const previousSyncedPriceInclTax = Number(previousParameters.newPriceInclTax) > 0
-      ? Number(previousParameters.newPriceInclTax)
-      : null;
+      .limit(200);
+    if (historyError) throw historyError;
+    const campaignReferenceStandardPrice = (() => {
+      for (const history of historyRows || []) {
+        const historyParameters = asObject(history.parameters);
+        const historyResult = asObject(history.result);
+        if (historyResult.validated_plan_checkpoint !== true) continue;
+        const sameRevision = (historyParameters.priceRevisionId || null) === (currentRevision?.id || null);
+        if (
+          !sameRevision
+          || Number(historyParameters.newPriceInclTax) !== newPriceInclTax
+          || !ecPriceSnapshotsMatch(historyParameters.recipeSnapshot, recipeSnapshot)
+        ) continue;
+        const referencePrice = positiveInteger(asObject(historyResult.plan).reference_standard_price);
+        if (referencePrice) return referencePrice;
+      }
+      return null;
+    })();
+    const siteBaselines = Object.fromEntries(targets.map((target) => [
+      target,
+      positiveInteger(trackedSiteBaselines[target]) || campaignReferenceStandardPrice,
+    ]));
+    const recoveryPlanSites = targets.flatMap((target) => {
+      for (const history of historyRows || []) {
+        const historyParameters = asObject(history.parameters);
+        const historyResult = asObject(history.result);
+        if (historyResult.validated_plan_checkpoint !== true) continue;
+        const sameRevision = (historyParameters.priceRevisionId || null) === (currentRevision?.id || null);
+        if (
+          !sameRevision
+          || Number(historyParameters.newPriceInclTax) !== newPriceInclTax
+          || !ecPriceSnapshotsMatch(historyParameters.recipeSnapshot, recipeSnapshot)
+        ) continue;
+        const plan = asObject(historyResult.plan);
+        const sites = Array.isArray(plan.sites) ? plan.sites : [];
+        const site = sites.find((entry) => asObject(entry).site === target);
+        const siteObject = asObject(site);
+        if (
+          siteObject.status === "planned"
+          && positiveInteger(siteObject.target_price)
+          && positiveInteger(siteObject.basis_price)
+        ) {
+          return [siteObject];
+        }
+      }
+      return [];
+    });
 
     const parameters = {
       taskKey: "ec_price_update",
       targets,
-      recipeId,
-      recipeName: String(recipe.name || "").slice(0, 200),
-      ecProductName: recipe.ec_product_name ? String(recipe.ec_product_name).slice(0, 200) : null,
-      linkedProductId: recipe.linked_product_id || null,
-      janCode: recipe.jan_code ? String(recipe.jan_code).slice(0, 32) : null,
-      seriesCode: recipe.series_code ?? null,
-      productCode: recipe.product_code ?? null,
-      fillingQuantity: recipe.filling_quantity ?? null,
-      fillingQuantityUnit: recipe.filling_quantity_unit || null,
-      storageMethod: recipe.storage_method ? String(recipe.storage_method).slice(0, 100) : null,
-      previousSyncedPriceInclTax,
+      ...recipeSnapshot,
+      recipeSnapshot,
+      priceRevisionId: currentRevision?.id || null,
+      siteBaselines,
+      recoveryPlanSites,
       newPriceExTax,
       newPriceInclTax,
       lpUpdate: false,
@@ -180,7 +277,18 @@ export async function POST(
         .order("created_at", { ascending: false })
         .limit(1);
       if (existingRows?.[0]) {
-        return NextResponse.json({ ok: true, reused: true, job: toJobView(existingRows[0]) });
+        const existingParameters = asObject(existingRows[0].parameters);
+        if (
+          Number(existingParameters.newPriceInclTax) === newPriceInclTax
+          && sameTargets(existingParameters.targets, targets)
+          && ecPriceSnapshotsMatch(existingParameters.recipeSnapshot, recipeSnapshot)
+        ) {
+          return NextResponse.json({ ok: true, reused: true, job: toJobView(existingRows[0]) });
+        }
+        return NextResponse.json(
+          { error: "この商品の別の価格変更が実行中です。完了後に再実行してください" },
+          { status: 409 },
+        );
       }
     }
     if (insertError || !job) throw insertError || new Error("価格変更タスクを登録できません");

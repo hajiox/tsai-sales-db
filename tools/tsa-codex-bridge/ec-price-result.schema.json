@@ -7,10 +7,7 @@
       "enum": ["completed", "waiting_for_user", "needs_review", "failed"]
     },
     "summary": { "type": "string" },
-    "old_standard_price": {
-      "anyOf": [{ "type": "integer" }, { "type": "null" }]
-    },
-    "new_price": { "type": "integer" },
+    "new_standard_price": { "type": "integer" },
     "sites": {
       "type": "array",
       "items": {
@@ -37,6 +34,6 @@
       }
     }
   },
-  "required": ["status", "summary", "old_standard_price", "new_price", "sites"],
+  "required": ["status", "summary", "new_standard_price", "sites"],
   "additionalProperties": false
 }

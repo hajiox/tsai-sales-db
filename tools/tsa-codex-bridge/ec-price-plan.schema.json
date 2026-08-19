@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["ready", "waiting_for_user", "needs_review", "failed"]
+    },
+    "summary": { "type": "string" },
+    "reference_standard_price": {
+      "anyOf": [{ "type": "integer" }, { "type": "null" }]
+    },
+    "sites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "site": {
+            "type": "string",
+            "enum": ["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["planned", "not_found", "blocked"]
+          },
+          "pricing_rule": {
+            "type": "string",
+            "enum": ["standard_price", "delta_from_reference"]
+          },
+          "shipping_mode": {
+            "type": "string",
+            "enum": ["included", "excluded", "not_checked"]
+          },
+          "unit_multiplier": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "unit_evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observed_price": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }]
+          },
+          "basis_price": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }]
+          },
+          "standard_baseline_price": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }]
+          },
+          "target_price": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }]
+          },
+          "product_identifier": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "message": { "type": "string" }
+        },
+        "required": [
+          "site",
+          "status",
+          "pricing_rule",
+          "shipping_mode",
+          "unit_multiplier",
+          "unit_evidence",
+          "observed_price",
+          "basis_price",
+          "standard_baseline_price",
+          "target_price",
+          "product_identifier",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["status", "summary", "reference_standard_price", "sites"],
+  "additionalProperties": false
+}

@@ -11,6 +11,8 @@
     "security:rls": "node scripts/security/check-rls.mjs",
     "security": "npm run security:scan && npm run security:rls",
     "test:shipping-label-address": "node scripts/test-shipping-label-address.cjs",
+    "test:ec-price-plan": "node scripts/test-ec-price-plan.cjs",
+    "test:ec-price-migration": "node scripts/dry-run-ec-price-migration.cjs",
     "predeploy": "npm run security && npm run build",
     "google-ads:oauth": "node scripts/google-ads-oauth-local.mjs"
   },

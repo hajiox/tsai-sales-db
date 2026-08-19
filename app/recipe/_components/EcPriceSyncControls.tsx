@@ -28,6 +28,7 @@ interface EcPriceSyncControlsProps {
   recipeName: string;
   ecProductName?: string | null;
   sellingPriceInclTax: number;
+  expectedRecipeSnapshot: Record<string, unknown>;
   hasUnsavedChanges: boolean;
   isSaving: boolean;
 }
@@ -37,6 +38,7 @@ export default function EcPriceSyncControls({
   recipeName,
   ecProductName,
   sellingPriceInclTax,
+  expectedRecipeSnapshot,
   hasUnsavedChanges,
   isSaving,
 }: EcPriceSyncControlsProps) {
@@ -105,7 +107,11 @@ export default function EcPriceSyncControls({
       const response = await fetch(`/api/recipe/${recipeId}/ec-price-jobs`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ targets }),
+        body: JSON.stringify({
+          targets,
+          expectedPriceInclTax: sellingPriceInclTax,
+          expectedRecipeSnapshot,
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "価格変更を開始できません");
