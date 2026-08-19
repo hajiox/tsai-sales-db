@@ -111,3 +111,10 @@
 - `test:recipe-selling-price`で税込1円から100,000円まで全件が逆算後も一致することを確認。EC価格計画、migration transaction dry-run、伝票住所、秘密情報検査、本番環境build、対象TypeScript診断0件を確認した。
 - PR #182をGitHub `main`へmerge（code merge `947f7da`）。Supabase migration適用済み。本番deployment `dpl_GjTZhdLwbQw9Mz8wyWoBFG6G2c43`を固定alias `https://v0-tsa-19.vercel.app`へ割り当てた。
 - 本番のチャーシュー訳あり800gで、OFF時は税抜4,158円／税込参考4,490円、ON時は税込4,490円入力／税抜換算表示を確認。保存・EC反映は実行せず、伝票発行、7モール個別、全て反映の残存も確認した。
+
+# 2026-08-19 レシピ販売価格の前回価格表示
+
+- 保存済み販売価格が別の正数へ変わるたび、既存 `recipe_ec_price_revisions` triggerが変更前・変更後の税抜／税込、商品snapshot、変更日時を全件保持することを再確認した。既存履歴の削除や上書きは行わない。
+- 管理者認証付きAPIから最新履歴1件の変更前価格だけを取得し、販売価格カードへ「前回価格」として表示する。通常は税抜、税込優先ON時は税込へ連動し、履歴未登録時は「記録なし」とする。過去版表示・修正版編集中は現在価格の履歴と混同しないよう非表示にする。
+- DB transaction内で実レシピ価格を一時変更し、履歴行の旧価格・新価格・税込値が一致することを確認後にrollbackした。価格計算、EC価格計画、伝票住所、秘密情報、RLS、変更対象TypeScript診断、本番環境buildも合格した。
+- PR #184を `main`へmerge（`0bbba4b`）。本番deployment `dpl_4q8aZ8EenSzpnJEnmaLMkEtPXRqC`を固定alias `https://v0-tsa-19.vercel.app`へ割り当てた。本番では「前回価格: 記録なし」と税込優先ON/OFFを非破壊確認し、価格保存・EC反映は実行していない。
