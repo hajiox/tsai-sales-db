@@ -69,6 +69,38 @@ async function main() {
           in replace(lower(pg_get_functiondef('public.record_recipe_ec_price_revision()'::regprocedure)), ' ', '')
         ) = 0 AS fractional_tax_excluded_supported
     `);
+    const probeRecipe = await client.query(`
+      SELECT id, selling_price
+      FROM public.recipes
+      WHERE selling_price > 0
+      ORDER BY id
+      LIMIT 1
+      FOR UPDATE
+    `);
+    if (probeRecipe.rowCount !== 1) throw new Error("price history probe recipe was not found");
+    const probe = probeRecipe.rows[0];
+    const previousPriceExTax = Number(probe.selling_price);
+    const nextPriceExTax = previousPriceExTax + 1;
+    await client.query(
+      "UPDATE public.recipes SET selling_price = $2 WHERE id = $1",
+      [probe.id, nextPriceExTax],
+    );
+    const probeRevision = await client.query(`
+      SELECT previous_price_ex_tax, new_price_ex_tax,
+             previous_price_incl_tax, new_price_incl_tax
+      FROM public.recipe_ec_price_revisions
+      WHERE recipe_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [probe.id]);
+    const revision = probeRevision.rows[0];
+    checks.rows[0].history_trigger_records_previous_price = Boolean(
+      revision
+      && Number(revision.previous_price_ex_tax) === previousPriceExTax
+      && Number(revision.new_price_ex_tax) === nextPriceExTax
+      && Number(revision.previous_price_incl_tax) === Math.floor(previousPriceExTax * 1.08)
+      && Number(revision.new_price_incl_tax) === Math.floor(nextPriceExTax * 1.08)
+    );
     console.log(`dry_run=${JSON.stringify(checks.rows[0])}`);
     await client.query("ROLLBACK");
   } catch (error) {

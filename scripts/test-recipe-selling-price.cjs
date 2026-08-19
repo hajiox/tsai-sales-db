@@ -56,4 +56,24 @@ const snapshot = ecPriceServer.buildEcPriceRecipeSnapshot({
 assert.equal(snapshot.newPriceExTax, 4157, "Bridge互換の税抜整数を維持する");
 assert.equal(snapshot.newPriceInclTax, 4490, "EC価格は税込優先の指定額を使う");
 
+const priceHistory = loadTypeScriptModule("lib/recipe-price-history.ts");
+assert.deepEqual(
+  priceHistory.previousRecipePriceFromRevision({
+    previous_price_ex_tax: exactNet,
+    previous_price_incl_tax: 4490,
+    created_at: "2026-08-19T00:00:00.000Z",
+  }),
+  {
+    previousPriceExTax: exactNet,
+    previousPriceInclTax: 4490,
+    changedAt: "2026-08-19T00:00:00.000Z",
+  },
+  "直前の変更前価格を税抜・税込の両方で返す",
+);
+assert.equal(
+  priceHistory.previousRecipePriceFromRevision(null),
+  null,
+  "価格履歴がなければ前回価格なしとして扱う",
+);
+
 console.log("Recipe selling price tax-inclusive priority checks passed.");
