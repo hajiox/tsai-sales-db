@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Apple,
   ArrowLeft,
@@ -349,9 +350,9 @@ export default function ManufacturingInventoryPage() {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur md:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <a href="/recipe/database" className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-slate-600 hover:bg-slate-100" title="材料データベースへ戻る">
+            <Link href="/recipe/database" className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-slate-600 hover:bg-slate-100" title="材料データベースへ戻る">
               <ArrowLeft className="h-5 w-5" />
-            </a>
+            </Link>
             <div className="min-w-0">
               <h1 className="truncate text-lg font-bold md:text-2xl">製造棚卸し</h1>
               <div className="truncate text-[11px] text-slate-500 md:text-xs">
