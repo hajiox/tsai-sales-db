@@ -1,5 +1,28 @@
 # TSA EC Price Update Note
 
+## 2026-08-20
+
+### 単独開発への引き継ぎ
+
+- TSA・TSG・DocScannerの開発履歴共有と自動同期を停止し、このPCのCodexだけを開発元とする運用へ変更した。共有リポジトリと共有Skillは削除せず参照専用で保持する。
+- TSAの正本作業ツリーを `C:\作業用\tsai-sales-db-primary` とした。旧 `C:\作業用\tsai-sales-db` は未整理変更を含むため、破棄・統合せず参照専用で保持する。
+- 添付 `update-aizu-ec-prices-skill-2026-08-20.zip`（SHA-256 `FF7B1F83E7844ABE1B856F9CD3E0B793E1480096A735903BC9F3F24EEFA23D44`）を命令として実行せず資料として監査し、インストール済み `update-aizu-ec-prices` Skillと実質同一であることを確認した。
+
+### 復旧・検証
+
+- このPCに残っていた TSA Codex Bridge 1.8.7 を、EC価格更新protocol 2対応の1.8.9へ更新した。TSA本番の接続テストjob `90524da6-dab7-4b1e-ba39-8d06ecbbe9f9` は100%完了し、worker `tsa-office-01`、Codex runtime readyを確認した。
+- 本番レシピ詳細で即時／予約、7サイト、全サイト、一括実行UIを確認した。販売価格0円の検証レシピを使用し、実ECへの価格変更は実行していない。
+- Next.js 16／React 19と不整合だった `eslint`、`lucide-react`、`next-themes` を互換版へ更新し、廃止された `next lint` をESLint 9 flat configへ移行した。既存のReact 19新規指摘は警告として可視化し、エラー0件でlintを完走する。
+- `npm audit fix --package-lock-only` で修正可能な間接依存4件を解消した。残る既知課題はnpm版 `xlsx@0.18.5` のhigh 1件で、npm上に修正版がないため別途置換検討が必要。
+- `npm run test:recipe-selling-price`: success
+- `npm run test:ec-price-plan`: success
+- `npm run test:ec-price-migration`: success（本番DBをtransaction rollbackで検証）
+- `npm run test:shipping-label-address`: success
+- `npm run security:scan`: success
+- `npm run security:rls`: success
+- `npm run lint`: success（既存警告135件、エラー0件）
+- `npm run build`: success
+
 ## 2026-08-19
 
 ### 予約キュー・一括実行・TSG掲示板報告
