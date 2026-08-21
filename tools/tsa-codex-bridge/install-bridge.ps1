@@ -17,6 +17,7 @@ $requiredSourceFiles = @(
   "analysis-result.schema.json",
   "ec-price-result.schema.json",
   "ec-price-plan.schema.json",
+  "bridge-monitor.ps1",
   "start-bridge.ps1"
 )
 foreach ($sourceFile in $requiredSourceFiles) {
@@ -48,6 +49,7 @@ New-Item -ItemType Directory -Path (Join-Path $installDir "jobs") -Force | Out-N
 
 $startScriptPath = Join-Path $installDir "start-bridge.ps1"
 $bridgePath = Join-Path $installDir "bridge.mjs"
+$monitorPath = Join-Path $installDir "bridge-monitor.ps1"
 $maintenancePath = Join-Path $installDir "bridge-maintenance.lock"
 $statePath = Join-Path $installDir "bridge-state.json"
 $maintenanceNonce = [guid]::NewGuid().ToString("N")
@@ -103,7 +105,8 @@ try {
         $frontier -contains [int]$_.ParentProcessId -and
         $bridgeIds -notcontains [int]$_.ProcessId -and
         $descendantIds -notcontains [int]$_.ProcessId -and
-        $_.Name -ne "conhost.exe"
+        $_.Name -ne "conhost.exe" -and
+        (-not $_.CommandLine -or $_.CommandLine.IndexOf($monitorPath, [System.StringComparison]::OrdinalIgnoreCase) -lt 0)
       })
       if ($children.Count -eq 0) { break }
       $newIds = @($children | ForEach-Object { [int]$_.ProcessId })
@@ -133,6 +136,7 @@ try {
   if (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath -Force }
 
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor.ps1") -Destination (Join-Path $installDir "bridge-monitor.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "result.schema.json") -Destination (Join-Path $installDir "result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "analysis-result.schema.json") -Destination (Join-Path $installDir "analysis-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-price-result.schema.json") -Destination (Join-Path $installDir "ec-price-result.schema.json") -Force

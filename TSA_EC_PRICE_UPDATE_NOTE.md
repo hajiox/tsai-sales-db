@@ -1,5 +1,24 @@
 # TSA EC Price Update Note
 
+## 2026-08-21
+
+### Bridge実行の可視化・Amazon価格専用経路
+
+- TSA開発時はGitHub `main`を正本とし、既存ローカルクローンを最新版と見なさない。作業ごとにGitHubから新規クローンし、`HEAD`と`origin/main`の一致を確認してから修正する。
+- EC価格変更カードは進捗率、現在のブラウザ工程、経過時間、Bridge最終応答、幅を持たせた完了目安を表示する。
+- Bridge 1.8.15はジョブ取得時に事務所PCへ読み取り専用モニターを自動表示する。処理名、対象商品、対象EC、現在工程、進捗、経過時間、完了目安、最終応答、Bridge PID、Codex CLI PIDを確認でき、モニターを閉じても処理は継続する。
+- Amazon失敗ジョブ `cfc23574-7251-47ce-811a-f470b22bffa9` はログイン切れではなく、価格変更時に商品詳細全体の送信画面へ進み、無関係な必須属性 `90220: この商品はAmazon.co.jp限定商品ですか？` の検証を受けたことが原因。価格改定SkillとBridgeプロンプトを価格専用 `/interactive/listing/workflow/edit/offer` 経路へ固定し、商品詳細属性を変更しないようにした。
+- `update-aizu-ec-prices` Skillへオーション100％麺50食の検証済みASIN/SKUと各EC識別子を追加した。
+
+### Verification
+
+- `node --check tools/tsa-codex-bridge/bridge.mjs`: success
+- `bridge-monitor.ps1` / `install-bridge.ps1` PowerShell parser: success
+- `npm run test:ec-price-plan`: success
+- `npm run test:recipe-selling-price`: success
+- `update-aizu-ec-prices` Skill validation: success
+- 本番ビルド、Bridge更新、Amazon再実行、本番画面確認はデプロイ工程で追記する。
+
 ## 2026-08-20
 
 ### 単独開発への引き継ぎ
