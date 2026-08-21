@@ -26,6 +26,7 @@ export const dynamic = "force-dynamic";
 
 const ADMIN_EMAIL = "aizubrandhall@gmail.com";
 const ACTIVE_STATUSES = ["queued", "running"];
+const EC_PRICE_TAB_CONTENTION_MESSAGE = "Chromeの別の操作セッションがEC管理タブを使用中です。Chrome上部の「キャンセル」で前の操作を終了し、タブを閉じずに再実行してください。ログイン切れではなく、外部データは変更されていません。";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -53,9 +54,14 @@ function isValidProductLpUrl(value: string | null) {
   }
 }
 
+function isEcPriceBrowserSessionContention(...values: unknown[]) {
+  return values.some((value) => /(?:already part of (?:another )?browser session|another browser session|別のブラウザ作業セッション|別のブラウザ操作セッション|別のブラウザ作業で使用中|別のブラウザ.*セッション.*使用中)/i.test(String(value || "")));
+}
+
 function compactOperationalMessage(value: unknown) {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) return null;
+  if (isEcPriceBrowserSessionContention(text)) return EC_PRICE_TAB_CONTENTION_MESSAGE;
   const usefulLines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -69,16 +75,31 @@ function toJobView(job: Record<string, unknown>): EcPriceJobView {
   const parameters = asObject(job.parameters);
   const result = asObject(job.result);
   const sites = Array.isArray(result.sites) ? result.sites : [];
+  const browserSessionContention = isEcPriceBrowserSessionContention(
+    job.current_step,
+    job.error_message,
+    result.summary,
+    ...sites.map((site) => asObject(site).message),
+  );
   return {
     id: String(job.id),
     status: String(job.status) as EcPriceJobView["status"],
     progress: Number(job.progress) || 0,
-    currentStep: String(job.current_step || "実行待ち"),
+    currentStep: browserSessionContention
+      ? "Chromeの前の操作セッションを終了して再実行してください"
+      : String(job.current_step || "実行待ち"),
     errorMessage: compactOperationalMessage(job.error_message),
     targets: normalizeEcPriceTargets(parameters.targets),
     newPriceInclTax: Number(parameters.newPriceInclTax) || 0,
-    summary: compactOperationalMessage(result.summary),
-    sites: sites as EcPriceJobView["sites"],
+    summary: browserSessionContention
+      ? EC_PRICE_TAB_CONTENTION_MESSAGE
+      : compactOperationalMessage(result.summary),
+    sites: sites.map((site) => {
+      const siteObject = asObject(site);
+      return isEcPriceBrowserSessionContention(siteObject.message)
+        ? { ...siteObject, message: "別のChrome操作セッションがこの管理タブを使用中です。ログイン切れではなく、価格は変更していません。" }
+        : siteObject;
+    }) as EcPriceJobView["sites"],
     lp: ecPriceLpResultFromUnknown(result.lp),
     createdAt: String(job.created_at || ""),
     startedAt: job.started_at ? String(job.started_at) : null,
@@ -86,6 +107,32 @@ function toJobView(job: Record<string, unknown>): EcPriceJobView {
     updatedAt: job.updated_at ? String(job.updated_at) : null,
     completedAt: job.completed_at ? String(job.completed_at) : null,
   };
+}
+
+function toBlockingJobView(job: Record<string, unknown>) {
+  const parameters = asObject(job.parameters);
+  return {
+    id: String(job.id || ""),
+    recipeId: String(parameters.recipeId || ""),
+    productName: String(parameters.ecProductName || parameters.recipeName || "別の商品").slice(0, 200),
+    status: String(job.status || "queued"),
+    currentStep: String(job.current_step || "事務所PCの価格改定開始待ち"),
+  };
+}
+
+async function findGlobalImmediateEcPriceJob(
+  supabase: ReturnType<typeof getWebSalesAutomationServiceClient>,
+) {
+  const { data, error } = await supabase
+    .from("web_sales_codex_jobs")
+    .select("id,status,current_step,parameters,scheduled_at,created_at")
+    .eq("task_key", "ec_price_update")
+    .in("status", ACTIVE_STATUSES)
+    .lte("scheduled_at", new Date().toISOString())
+    .order("created_at", { ascending: true })
+    .limit(10);
+  if (error) throw error;
+  return (data || []) as Record<string, unknown>[];
 }
 
 async function requireAdmin() {
@@ -193,21 +240,26 @@ export async function GET(
   const jobId = new URL(request.url).searchParams.get("jobId")?.trim();
   const supabase = getWebSalesAutomationServiceClient();
   if (!jobId) {
-    const { data: rows, error } = await supabase
-      .from("web_sales_codex_jobs")
-      .select("id,task_key,status,progress,current_step,error_message,parameters,result,started_at,heartbeat_at,updated_at,created_at,completed_at")
-      .eq("task_key", "ec_price_update")
-      .contains("parameters", { recipeId })
-      .order("created_at", { ascending: false })
-      .limit(50);
+    const [{ data: rows, error }, immediateJobs] = await Promise.all([
+      supabase
+        .from("web_sales_codex_jobs")
+        .select("id,task_key,status,progress,current_step,error_message,parameters,result,started_at,heartbeat_at,updated_at,created_at,completed_at")
+        .eq("task_key", "ec_price_update")
+        .contains("parameters", { recipeId })
+        .order("created_at", { ascending: false })
+        .limit(50),
+      findGlobalImmediateEcPriceJob(supabase),
+    ]);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const jobs = rows || [];
     const active = jobs.find((row) => ACTIVE_STATUSES.includes(String(row.status)));
     const latest = jobs[0];
+    const blocking = immediateJobs.find((row) => String(asObject(row.parameters).recipeId || "") !== recipeId);
     return NextResponse.json({
       ok: true,
       activeJob: active ? toJobView(active as Record<string, unknown>) : null,
       latestJob: latest ? toJobView(latest as Record<string, unknown>) : null,
+      blockingJob: blocking ? toBlockingJobView(blocking) : null,
       history: ecPriceHistoryFromJobs(jobs),
     }, { headers: { "Cache-Control": "no-store" } });
   }
@@ -285,6 +337,17 @@ export async function POST(
       .limit(1);
     if (activeError) throw activeError;
     const active = activeRows?.[0];
+    if (dispatchMode === "immediate") {
+      const immediateJobs = await findGlobalImmediateEcPriceJob(supabase);
+      const blocking = immediateJobs.find((row) => String(asObject(row.parameters).recipeId || "") !== recipeId);
+      if (blocking) {
+        const blockingView = toBlockingJobView(blocking);
+        return NextResponse.json(
+          { error: `現在「${blockingView.productName}」の価格変更を実行中です。完了後に再実行してください` },
+          { status: 409 },
+        );
+      }
+    }
     if (active) {
       return resolveExistingJob({
         supabase,

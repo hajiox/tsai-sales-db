@@ -47,6 +47,14 @@ type ReservationView = {
   createdAt: string;
 };
 
+type BlockingJobView = {
+  id: string;
+  recipeId: string;
+  productName: string;
+  status: string;
+  currentStep: string;
+};
+
 interface EcPriceSyncControlsProps {
   recipeId: string;
   recipeName: string;
@@ -71,6 +79,7 @@ export default function EcPriceSyncControls({
   const [submitting, setSubmitting] = useState(false);
   const [dispatchMode, setDispatchMode] = useState<EcPriceDispatchMode>("immediate");
   const [job, setJob] = useState<EcPriceJobView | null>(null);
+  const [blockingJob, setBlockingJob] = useState<BlockingJobView | null>(null);
   const [priceHistory, setPriceHistory] = useState<EcPriceHistoryEntry[]>([]);
   const [priceHistoryExpanded, setPriceHistoryExpanded] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -82,8 +91,9 @@ export default function EcPriceSyncControls({
   const hasPrice = Number.isFinite(sellingPriceInclTax) && sellingPriceInclTax > 0;
   const hasProductLp = Boolean(productLpUrl?.trim());
   const jobIsActive = Boolean(job && ACTIVE_STATUSES.has(job.status));
+  const blockedByAnotherJob = dispatchMode === "immediate" && Boolean(blockingJob);
   const jobCanRetry = Boolean(job && job.status !== "completed" && !jobIsActive && job.targets.length > 0);
-  const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || !hasPrice;
+  const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || blockedByAnotherJob || !hasPrice;
 
   const refreshPriceHistory = useCallback(async () => {
     try {
@@ -92,6 +102,7 @@ export default function EcPriceSyncControls({
       if (!response.ok) throw new Error(payload.error || "価格変更履歴を取得できません");
       setPriceHistory(Array.isArray(payload.history) ? payload.history : []);
       setJob((payload.activeJob || payload.latestJob || null) as EcPriceJobView | null);
+      setBlockingJob((payload.blockingJob || null) as BlockingJobView | null);
     } catch (error) {
       console.error("EC price history fetch error:", error);
     }
@@ -127,9 +138,12 @@ export default function EcPriceSyncControls({
 
   useEffect(() => {
     void refreshReservations();
-    const timer = setInterval(() => void refreshReservations(true), 15000);
+    const timer = setInterval(() => {
+      void refreshReservations(true);
+      void refreshPriceHistory();
+    }, 15000);
     return () => clearInterval(timer);
-  }, [refreshReservations]);
+  }, [refreshPriceHistory, refreshReservations]);
 
   const activeJobId = job?.id;
   const activeJobStatus = job?.status;
@@ -388,6 +402,16 @@ export default function EcPriceSyncControls({
         {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
         {dispatchMode === "reserved" ? "全サイトを予約" : "全て反映"}
       </button>
+
+      {blockingJob && (
+        <p className="mt-3 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            現在「{blockingJob.productName}」の価格変更を実行中です。今すぐ実行は完了まで利用できません。
+            一括実行への予約は追加できます。
+          </span>
+        </p>
+      )}
 
       {hasUnsavedChanges ? (
         <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">

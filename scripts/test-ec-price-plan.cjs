@@ -20,6 +20,7 @@ const validateResult = loadFunction("validateEcPriceResultV2", "planToFinalResul
 const detectsForbiddenTabAction = loadFunction("isForbiddenEcPriceTabAction", "terminateChildProcessTree");
 const estimateDesktopCompletion = loadFunction("estimateDesktopCompletion", "bridgeTaskLabel");
 const ecPriceEventLabel = loadFunction("ecPriceEventLabel", "isForbiddenEcPriceTabAction");
+const detectsBrowserSessionContention = loadFunction("isEcPriceBrowserSessionContention", "normalizeEcPriceContentionSummary");
 
 const pricePromptSource = bridgeSource.slice(
   bridgeSource.indexOf("function buildEcPricePlanPrompt("),
@@ -28,6 +29,8 @@ const pricePromptSource = bridgeSource.slice(
 assert.match(pricePromptSource, /EXISTING-TAB-ONLY POLICY/);
 assert.match(pricePromptSource, /Never create a browser tab or window/);
 assert.match(pricePromptSource, /try the remaining existing matching official tabs/);
+assert.match(pricePromptSource, /TAB FINALIZATION IS MANDATORY/);
+assert.match(pricePromptSource, /Never call this signed-out or ask the operator to sign in/i);
 assert.match(pricePromptSource, /find-lp-source\.ps1 with -FreshClone/);
 assert.match(pricePromptSource, /mandatory product LP plan/);
 assert.match(pricePromptSource, /AMAZON PRICE-ONLY RULE/);
@@ -37,6 +40,9 @@ assert.doesNotMatch(pricePromptSource, /Close temporary tabs/);
 assert.doesNotMatch(pricePromptSource, /Never inspect, edit, deploy, or update any company LP/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: false/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: true/);
+assert.doesNotMatch(bridgeSource, /"exec", "--ephemeral"/);
+assert.equal(detectsBrowserSessionContention("別のブラウザ作業セッションで使用中です"), true);
+assert.equal(detectsBrowserSessionContention("公式ログイン画面が表示されています"), false);
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",
@@ -82,7 +88,14 @@ const installerSource = fs.readFileSync(
   "utf8",
 );
 assert.match(installerSource, /"bridge-monitor\.ps1"/);
+assert.match(installerSource, /"launch-bridge-monitor\.ps1"/);
 assert.match(installerSource, /IndexOf\(\$monitorPath/);
+const monitorLauncherSource = fs.readFileSync(
+  path.join(__dirname, "..", "tools", "tsa-codex-bridge", "launch-bridge-monitor.ps1"),
+  "utf8",
+);
+assert.match(monitorLauncherSource, /Start-Process/);
+assert.match(monitorLauncherSource, /-WindowStyle Normal/);
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",
@@ -99,6 +112,14 @@ const routeSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "route.ts"),
   "utf8",
 );
+
+const recipePriceRouteSource = fs.readFileSync(
+  path.join(__dirname, "..", "app", "api", "recipe", "[id]", "ec-price-jobs", "route.ts"),
+  "utf8",
+);
+assert.match(recipePriceRouteSource, /EC_PRICE_TAB_CONTENTION_MESSAGE/);
+assert.match(recipePriceRouteSource, /findGlobalImmediateEcPriceJob/);
+assert.match(recipePriceRouteSource, /現在「\$\{blockingView\.productName\}」の価格変更を実行中/);
 
 function loadRouteFunction(name, nextName) {
   const asObjectStart = routeSource.indexOf("function asObject(");
