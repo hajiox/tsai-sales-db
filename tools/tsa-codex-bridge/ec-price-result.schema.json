@@ -32,8 +32,38 @@
         "required": ["site", "status", "final_price", "product_identifier", "message"],
         "additionalProperties": false
       }
+    },
+    "lp": {
+      "type": "object",
+      "properties": {
+        "required": { "type": "boolean" },
+        "url": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["updated", "not_applicable", "not_found", "blocked"]
+        },
+        "final_prices": {
+          "type": "array",
+          "items": { "type": "integer" }
+        },
+        "changed_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "deployment_url": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }]
+        },
+        "deployed_commit": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }]
+        },
+        "message": { "type": "string" }
+      },
+      "required": ["required", "url", "status", "final_prices", "changed_files", "deployment_url", "deployed_commit", "message"],
+      "additionalProperties": false
     }
   },
-  "required": ["status", "summary", "new_standard_price", "sites"],
+  "required": ["status", "summary", "new_standard_price", "sites", "lp"],
   "additionalProperties": false
 }

@@ -155,6 +155,35 @@ function validateFinalPriceResult(
   if (status === "completed" && sites.some((site) => site.status !== "updated")) {
     throw new Error("未確認のECサイトがあるため完了にできません");
   }
+  const lp = asObject(submittedResult.lp);
+  const lpRequired = parameters.lpUpdate === true;
+  const lpUrl = String(parameters.lpUrl || "").trim();
+  if (lpRequired) {
+    if (lp.required !== true || String(lp.url || "").trim() !== lpUrl) {
+      throw new Error("商品LPの最終結果が依頼内容と一致しません");
+    }
+    if (status === "completed" && lp.status !== "updated") {
+      throw new Error("商品LPが未反映のため完了にできません");
+    }
+    if (lp.status === "updated") {
+      const plannedLp = asObject(asObject(submittedResult.plan).lp);
+      const plannedPrices = [...new Set((Array.isArray(plannedLp.updates) ? plannedLp.updates : [])
+        .map((update) => Number(asObject(update).target_price))
+        .filter((price) => Number.isInteger(price) && price > 0))].sort((a, b) => a - b);
+      const finalPrices = [...new Set((Array.isArray(lp.final_prices) ? lp.final_prices : [])
+        .map(Number)
+        .filter((price) => Number.isInteger(price) && price > 0))].sort((a, b) => a - b);
+      if (
+        plannedPrices.length === 0
+        || plannedPrices.length !== finalPrices.length
+        || plannedPrices.some((price, index) => price !== finalPrices[index])
+        || String(lp.deployment_url || "").trim() !== lpUrl
+        || !/^[0-9a-f]{40}$/i.test(String(lp.deployed_commit || "").trim())
+      ) throw new Error("商品LPの公開価格確認が保存済み計画と一致しません");
+    }
+  } else if (lp.required !== false || lp.status !== "not_applicable" || lp.url != null || !Array.isArray(lp.final_prices) || lp.final_prices.length !== 0 || !Array.isArray(lp.changed_files) || lp.changed_files.length !== 0 || lp.deployment_url != null || lp.deployed_commit != null) {
+    throw new Error("商品LP対象外の最終結果が不正です");
+  }
 }
 
 function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
@@ -247,6 +276,51 @@ function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
     } else if (observed !== basis) {
       throw new Error(`${target}の現在価格と基準価格が一致しません`);
     }
+  }
+  const lp = asObject(plan.lp);
+  const lpRequired = parameters.lpUpdate === true;
+  const lpUrl = String(parameters.lpUrl || "").trim();
+  if (lpRequired) {
+    if (
+      lp.required !== true
+      || lp.status !== "planned"
+      || String(lp.url || "").trim() !== lpUrl
+      || !String(lp.project_root || "").trim()
+      || !String(lp.github_repository || "").trim()
+      || !String(lp.production_branch || "").trim()
+      || !/^[0-9a-f]{40}$/i.test(String(lp.source_commit || "").trim())
+      || !String(lp.product_evidence || "").trim()
+      || !Array.isArray(lp.updates)
+      || lp.updates.length === 0
+    ) throw new Error("商品LPの更新計画が確定していません");
+    for (const updateInput of lp.updates) {
+      const update = asObject(updateInput);
+      const pricingBasis = String(update.pricing_basis || "");
+      const observedPrice = Number(update.observed_price);
+      const targetPrice = Number(update.target_price);
+      const expectedTarget = pricingBasis === "standard_price"
+        ? standardPrice
+        : Number(sites.find((site) => site.site === pricingBasis)?.target_price);
+      if (
+        !String(update.source_file || "").trim()
+        || !String(update.occurrence_evidence || "").trim()
+        || !Number.isInteger(observedPrice)
+        || observedPrice <= 0
+        || !Number.isInteger(targetPrice)
+        || targetPrice !== expectedTarget
+      ) throw new Error("商品LPの価格変更計画が不正です");
+    }
+  } else if (
+    lp.required !== false
+    || lp.status !== "not_applicable"
+    || lp.url != null
+    || String(lp.github_repository || "")
+    || String(lp.production_branch || "")
+    || String(lp.source_commit || "")
+    || !Array.isArray(lp.updates)
+    || lp.updates.length !== 0
+  ) {
+    throw new Error("商品LP対象外の計画が不正です");
   }
   return plan;
 }

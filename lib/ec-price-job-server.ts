@@ -12,6 +12,7 @@ export type EcPriceRecipeSnapshot = {
   fillingQuantity: string | null;
   fillingQuantityUnit: string | null;
   storageMethod: string | null;
+  productLpUrl: string | null;
   newPriceExTax: number;
   newPriceInclTax: number;
 };
@@ -35,6 +36,7 @@ export function buildEcPriceRecipeSnapshot(recipe: Record<string, unknown>): EcP
     fillingQuantity: nullableText(recipe.filling_quantity, 50),
     fillingQuantityUnit: nullableText(recipe.filling_quantity_unit, 30),
     storageMethod: nullableText(recipe.storage_method, 100),
+    productLpUrl: nullableText(recipe.product_lp_url, 2000),
     newPriceExTax,
     newPriceInclTax: taxIncludedFromExcluded(storedPriceExTax),
   };

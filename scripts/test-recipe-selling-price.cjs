@@ -75,6 +75,117 @@ assert.equal(
   null,
   "価格履歴がなければ前回価格なしとして扱う",
 );
+assert.deepEqual(
+  priceHistory.recipePriceHistoryFromRows([
+    {
+      id: "revision-2",
+      previous_price_ex_tax: exactNet,
+      new_price_ex_tax: 4620.3703,
+      previous_price_incl_tax: 4490,
+      new_price_incl_tax: 4990,
+      created_at: "2026-08-20T00:00:00.000Z",
+    },
+    {
+      id: "revision-1",
+      previous_price_ex_tax: 3694.4444,
+      new_price_ex_tax: exactNet,
+      previous_price_incl_tax: 3990,
+      new_price_incl_tax: 4490,
+      created_at: "2026-08-19T00:00:00.000Z",
+    },
+  ]),
+  [
+    {
+      id: "revision-2",
+      previousPriceExTax: exactNet,
+      previousPriceInclTax: 4490,
+      changedAt: "2026-08-20T00:00:00.000Z",
+      newPriceExTax: 4620.3703,
+      newPriceInclTax: 4990,
+    },
+    {
+      id: "revision-1",
+      previousPriceExTax: 3694.4444,
+      previousPriceInclTax: 3990,
+      changedAt: "2026-08-19T00:00:00.000Z",
+      newPriceExTax: exactNet,
+      newPriceInclTax: 4490,
+    },
+  ],
+  "価格変更履歴を旧価格・新価格の両方で保持する",
+);
+
+const ecPriceHistory = loadTypeScriptModule("lib/ec-price-codex.ts");
+assert.deepEqual(
+  ecPriceHistory.ecPriceHistoryFromJobs([{
+    id: "job-1",
+    status: "completed",
+    parameters: { targets: ["amazon"], newPriceInclTax: 4990 },
+    result: {
+      summary: "Amazon反映済み",
+      plan: {
+        sites: [{
+          site: "amazon",
+          basis_price: 4490,
+          target_price: 4990,
+          product_identifier: "ASIN-1",
+        }],
+      },
+      sites: [{
+        site: "amazon",
+        status: "updated",
+        final_price: 4990,
+        product_identifier: "ASIN-1",
+        message: "再読込で確認",
+      }],
+      lp: {
+        required: true,
+        url: "https://example.com/product",
+        status: "updated",
+        final_prices: [4990],
+        changed_files: ["app/product.tsx"],
+        deployment_url: "https://example.com/product",
+        deployed_commit: "0123456789abcdef0123456789abcdef01234567",
+        message: "公開ページで確認",
+      },
+    },
+    created_at: "2026-08-20T01:00:00.000Z",
+    completed_at: "2026-08-20T01:10:00.000Z",
+  }]),
+  [{
+    id: "job-1",
+    status: "completed",
+    newStandardPrice: 4990,
+    summary: "Amazon反映済み",
+    sites: [{
+      site: "amazon",
+      status: "updated",
+      previousPrice: 4490,
+      newPrice: 4990,
+      finalPrice: 4990,
+      productIdentifier: "ASIN-1",
+      message: "再読込で確認",
+    }],
+    lp: {
+      required: true,
+      url: "https://example.com/product",
+      status: "updated",
+      final_prices: [4990],
+      changed_files: ["app/product.tsx"],
+      deployment_url: "https://example.com/product",
+      deployed_commit: "0123456789abcdef0123456789abcdef01234567",
+      message: "公開ページで確認",
+    },
+    createdAt: "2026-08-20T01:00:00.000Z",
+    completedAt: "2026-08-20T01:10:00.000Z",
+  }],
+  "EC別の変更前価格と変更後価格を保存済みジョブから復元する",
+);
+assert.deepEqual(
+  ecPriceHistory.ecPriceHistoryFromJobs([{ id: "job-without-verified-plan" }]),
+  [],
+  "検証済み価格計画がないジョブを価格変更履歴に混ぜない",
+);
 
 const reservations = loadTypeScriptModule("lib/ec-price-reservations.ts");
 assert.equal(

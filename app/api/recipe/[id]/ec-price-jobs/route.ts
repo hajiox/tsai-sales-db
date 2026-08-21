@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
-import { normalizeEcPriceTargets, type EcPriceJobView } from "@/lib/ec-price-codex";
+import {
+  ecPriceLpResultFromUnknown,
+  ecPriceHistoryFromJobs,
+  normalizeEcPriceTargets,
+  type EcPriceJobView,
+} from "@/lib/ec-price-codex";
 import {
   buildEcPriceRecipeSnapshot,
   ecPriceRecipeIdentitiesMatch,
@@ -39,6 +44,27 @@ function positiveInteger(value: unknown) {
   return Number.isInteger(number) && number > 0 ? number : null;
 }
 
+function isValidProductLpUrl(value: string | null) {
+  if (!value) return true;
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
+function compactOperationalMessage(value: unknown) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return null;
+  const usefulLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/\bWARN\b|codex_skills|shell_snapshot|guardian::review_session/i.test(line));
+  const compact = (usefulLines.length > 0 ? usefulLines.slice(-3).join(" / ") : "処理ログを確認してください");
+  return compact.slice(0, 600);
+}
+
 function toJobView(job: Record<string, unknown>): EcPriceJobView {
   const parameters = asObject(job.parameters);
   const result = asObject(job.result);
@@ -48,12 +74,16 @@ function toJobView(job: Record<string, unknown>): EcPriceJobView {
     status: String(job.status) as EcPriceJobView["status"],
     progress: Number(job.progress) || 0,
     currentStep: String(job.current_step || "実行待ち"),
-    errorMessage: job.error_message ? String(job.error_message) : null,
+    errorMessage: compactOperationalMessage(job.error_message),
     targets: normalizeEcPriceTargets(parameters.targets),
     newPriceInclTax: Number(parameters.newPriceInclTax) || 0,
-    summary: result.summary ? String(result.summary) : null,
+    summary: compactOperationalMessage(result.summary),
     sites: sites as EcPriceJobView["sites"],
+    lp: ecPriceLpResultFromUnknown(result.lp),
     createdAt: String(job.created_at || ""),
+    startedAt: job.started_at ? String(job.started_at) : null,
+    heartbeatAt: job.heartbeat_at ? String(job.heartbeat_at) : null,
+    updatedAt: job.updated_at ? String(job.updated_at) : null,
     completedAt: job.completed_at ? String(job.completed_at) : null,
   };
 }
@@ -161,12 +191,30 @@ export async function GET(
 
   const { id: recipeId } = await params;
   const jobId = new URL(request.url).searchParams.get("jobId")?.trim();
-  if (!jobId) return NextResponse.json({ error: "jobIdが必要です" }, { status: 400 });
-
   const supabase = getWebSalesAutomationServiceClient();
+  if (!jobId) {
+    const { data: rows, error } = await supabase
+      .from("web_sales_codex_jobs")
+      .select("id,task_key,status,progress,current_step,error_message,parameters,result,started_at,heartbeat_at,updated_at,created_at,completed_at")
+      .eq("task_key", "ec_price_update")
+      .contains("parameters", { recipeId })
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const jobs = rows || [];
+    const active = jobs.find((row) => ACTIVE_STATUSES.includes(String(row.status)));
+    const latest = jobs[0];
+    return NextResponse.json({
+      ok: true,
+      activeJob: active ? toJobView(active as Record<string, unknown>) : null,
+      latestJob: latest ? toJobView(latest as Record<string, unknown>) : null,
+      history: ecPriceHistoryFromJobs(jobs),
+    }, { headers: { "Cache-Control": "no-store" } });
+  }
+
   const { data, error } = await supabase
     .from("web_sales_codex_jobs")
-    .select("id,task_key,status,progress,current_step,error_message,parameters,result,created_at,completed_at")
+    .select("id,task_key,status,progress,current_step,error_message,parameters,result,started_at,heartbeat_at,updated_at,created_at,completed_at")
     .eq("id", jobId)
     .eq("task_key", "ec_price_update")
     .maybeSingle();
@@ -197,7 +245,7 @@ export async function POST(
     const supabase = getWebSalesAutomationServiceClient();
     const { data: recipe, error: recipeError } = await supabase
       .from("recipes")
-      .select("id,name,is_intermediate,selling_price,ec_product_name,linked_product_id,jan_code,series_code,product_code,filling_quantity,filling_quantity_unit,storage_method")
+      .select("id,name,is_intermediate,selling_price,ec_product_name,linked_product_id,jan_code,series_code,product_code,filling_quantity,filling_quantity_unit,storage_method,product_lp_url")
       .eq("id", recipeId)
       .single();
     if (recipeError || !recipe) {
@@ -211,6 +259,9 @@ export async function POST(
     const { newPriceExTax, newPriceInclTax } = recipeSnapshot;
     if (!Number.isFinite(newPriceExTax) || newPriceExTax <= 0 || newPriceInclTax <= 0) {
       return NextResponse.json({ error: "保存済み販売価格が正しくありません" }, { status: 400 });
+    }
+    if (!isValidProductLpUrl(recipeSnapshot.productLpUrl)) {
+      return NextResponse.json({ error: "商品LPのURLが正しくありません。レシピを修正・保存してください" }, { status: 400 });
     }
     const expectedPriceInclTax = positiveInteger(body.expectedPriceInclTax);
     const expectedRecipeSnapshot = buildEcPriceRecipeSnapshot(asObject(body.expectedRecipeSnapshot));
@@ -336,7 +387,8 @@ export async function POST(
       recoveryPlanSites,
       newPriceExTax,
       newPriceInclTax,
-      lpUpdate: false,
+      lpUpdate: Boolean(recipeSnapshot.productLpUrl),
+      lpUrl: recipeSnapshot.productLpUrl,
       dispatchMode,
       executionPolicy: "signed_in_browser_isolated_codex",
     };

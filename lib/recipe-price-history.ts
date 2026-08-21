@@ -4,6 +4,12 @@ export type PreviousRecipePrice = {
   changedAt: string;
 };
 
+export type RecipePriceRevision = PreviousRecipePrice & {
+  id: string;
+  newPriceExTax: number;
+  newPriceInclTax: number;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -28,4 +34,33 @@ export function previousRecipePriceFromRevision(value: unknown): PreviousRecipeP
   }
 
   return { previousPriceExTax, previousPriceInclTax, changedAt };
+}
+
+export function recipePriceRevisionFromRow(value: unknown): RecipePriceRevision | null {
+  const revision = asRecord(value);
+  const previousPrice = previousRecipePriceFromRevision(revision);
+  if (!revision || !previousPrice) return null;
+
+  const id = typeof revision.id === "string" ? revision.id.trim() : "";
+  const newPriceExTax = Number(revision.new_price_ex_tax);
+  const newPriceInclTax = Number(revision.new_price_incl_tax);
+  if (
+    !id
+    || !Number.isFinite(newPriceExTax)
+    || newPriceExTax <= 0
+    || !Number.isInteger(newPriceInclTax)
+    || newPriceInclTax <= 0
+  ) {
+    return null;
+  }
+
+  return { id, ...previousPrice, newPriceExTax, newPriceInclTax };
+}
+
+export function recipePriceHistoryFromRows(value: unknown): RecipePriceRevision[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    const revision = recipePriceRevisionFromRow(row);
+    return revision ? [revision] : [];
+  });
 }

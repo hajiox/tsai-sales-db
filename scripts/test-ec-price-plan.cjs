@@ -12,11 +12,48 @@ function loadFunction(name, nextName) {
   const end = bridgeSource.indexOf(`function ${nextName}(`, start);
   assert.ok(start >= 0 && end > start, `${name} source not found`);
   const source = bridgeSource.slice(start, end);
-  return new Function(`${source}\nreturn ${name};`)();
+  return new Function(`const resolve = (value) => value; const config = { workspace: "C:\\\\work" };\n${source}\nreturn ${name};`)();
 }
 
 const validatePlan = loadFunction("validateEcPricePlan", "validateEcPriceResultV2");
 const validateResult = loadFunction("validateEcPriceResultV2", "planToFinalResult");
+const detectsForbiddenTabAction = loadFunction("isForbiddenEcPriceTabAction", "terminateChildProcessTree");
+
+const pricePromptSource = bridgeSource.slice(
+  bridgeSource.indexOf("function buildEcPricePlanPrompt("),
+  bridgeSource.indexOf("function validateEcPricePlan("),
+);
+assert.match(pricePromptSource, /EXISTING-TAB-ONLY POLICY/);
+assert.match(pricePromptSource, /Never create a browser tab or window/);
+assert.match(pricePromptSource, /try the remaining existing matching official tabs/);
+assert.match(pricePromptSource, /find-lp-source\.ps1 with -FreshClone/);
+assert.match(pricePromptSource, /mandatory product LP plan/);
+assert.doesNotMatch(pricePromptSource, /Close temporary tabs/);
+assert.doesNotMatch(pricePromptSource, /Never inspect, edit, deploy, or update any company LP/);
+assert.match(bridgeSource, /abortOnTabPolicyViolation: false/);
+assert.match(bridgeSource, /abortOnTabPolicyViolation: true/);
+assert.equal(
+  detectsForbiddenTabAction({
+    type: "item.started",
+    item: {
+      type: "mcp_tool_call",
+      arguments: { code: "const tab = await chrome.tabs.new();" },
+    },
+  }),
+  true,
+  "価格ジョブの新規Chromeタブ作成を検出する",
+);
+assert.equal(
+  detectsForbiddenTabAction({
+    type: "item.started",
+    item: {
+      type: "mcp_tool_call",
+      arguments: { code: "const tabs = await chrome.tabs.list();" },
+    },
+  }),
+  false,
+  "既存Chromeタブの一覧取得は許可する",
+);
 
 const routeSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "route.ts"),
@@ -48,11 +85,36 @@ function loadRouteFunction(name, nextName) {
 const validateServerPlan = loadRouteFunction("validatedPricePlan", "POST");
 const buildSyncRows = loadRouteFunction("priceSyncRows", "POST");
 
+const noLpPlan = {
+  required: false,
+  url: null,
+  status: "not_applicable",
+  project_root: null,
+  github_repository: "",
+  production_branch: "",
+  source_commit: "",
+  product_evidence: "",
+  updates: [],
+  message: "対象外",
+};
+const noLpResult = {
+  required: false,
+  url: null,
+  status: "not_applicable",
+  final_prices: [],
+  changed_files: [],
+  deployment_url: null,
+  deployed_commit: null,
+  message: "対象外",
+};
+
 const baseParameters = {
   targets: ["base"],
   newPriceInclTax: 4550,
   siteBaselines: { base: 4290 },
   recoveryPlanSites: [],
+  lpUpdate: false,
+  lpUrl: null,
 };
 const basePlan = {
   status: "ready",
@@ -72,6 +134,7 @@ const basePlan = {
     product_identifier: "base-item",
     message: "差額260円",
   }],
+  lp: noLpPlan,
 };
 
 assert.equal(validatePlan(basePlan, baseParameters), null);
@@ -143,8 +206,42 @@ const amazonPlan = {
     product_identifier: "ASIN",
     message: "standard",
   }],
+  lp: noLpPlan,
 };
 assert.equal(validatePlan(amazonPlan, amazonParameters), null);
+
+const lpParameters = {
+  ...amazonParameters,
+  lpUpdate: true,
+  lpUrl: "https://example.com/product",
+};
+const lpPlan = {
+  ...amazonPlan,
+  lp: {
+    required: true,
+    url: lpParameters.lpUrl,
+    status: "planned",
+    project_root: "C:\\work\\lp",
+    github_repository: "hajiox/example",
+    production_branch: "main",
+    source_commit: "1111111111111111111111111111111111111111",
+    product_evidence: "商品名・販売単位・公開URLが一致",
+    updates: [{
+      source_file: "C:\\work\\lp\\app\\page.tsx",
+      occurrence_evidence: "対象商品の価格表示",
+      pricing_basis: "standard_price",
+      observed_price: 4290,
+      target_price: 4550,
+    }],
+    message: "fresh cloneから対象価格を確認",
+  },
+};
+assert.equal(validatePlan(lpPlan, lpParameters), null);
+assert.equal(validateServerPlan(lpParameters, lpPlan).status, "ready");
+assert.match(
+  validatePlan({ ...lpPlan, lp: { ...lpPlan.lp, updates: [{ ...lpPlan.lp.updates[0], target_price: 4600 }] } }, lpParameters),
+  /商品LPの目標価格/,
+);
 
 const mercariParameters = {
   targets: ["mercari"],
@@ -170,6 +267,7 @@ const mercariTwoPackPlan = {
     product_identifier: "mercari-two-pack",
     message: "単品差額30円×2個",
   }],
+  lp: noLpPlan,
 };
 assert.equal(validatePlan(mercariTwoPackPlan, mercariParameters), null);
 assert.equal(validateServerPlan(mercariParameters, mercariTwoPackPlan).status, "ready");
@@ -199,8 +297,28 @@ const validResult = {
     product_identifier: "base-item",
     message: "verified",
   }],
+  lp: noLpResult,
 };
 assert.equal(validateResult(validResult, baseParameters, basePlan), null);
+const validLpResult = {
+  ...validResult,
+  sites: [{ ...validResult.sites[0], site: "amazon", product_identifier: "ASIN", final_price: 4550 }],
+  lp: {
+    required: true,
+    url: lpParameters.lpUrl,
+    status: "updated",
+    final_prices: [4550],
+    changed_files: ["C:\\work\\lp\\app\\page.tsx"],
+    deployment_url: lpParameters.lpUrl,
+    deployed_commit: "2222222222222222222222222222222222222222",
+    message: "公開URLで確認済み",
+  },
+};
+assert.equal(validateResult(validLpResult, lpParameters, lpPlan), null);
+assert.match(
+  validateResult({ ...validLpResult, lp: { ...validLpResult.lp, status: "blocked" } }, lpParameters, lpPlan),
+  /完了にできません/,
+);
 assert.match(
   validateResult({
     ...validResult,

@@ -73,8 +73,49 @@
         ],
         "additionalProperties": false
       }
+    },
+    "lp": {
+      "type": "object",
+      "properties": {
+        "required": { "type": "boolean" },
+        "url": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["planned", "not_applicable", "not_found", "blocked"]
+        },
+        "project_root": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }]
+        },
+        "github_repository": { "type": "string" },
+        "production_branch": { "type": "string" },
+        "source_commit": { "type": "string" },
+        "product_evidence": { "type": "string" },
+        "updates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source_file": { "type": "string" },
+              "occurrence_evidence": { "type": "string" },
+              "pricing_basis": {
+                "type": "string",
+                "enum": ["standard_price", "amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]
+              },
+              "observed_price": { "type": "integer" },
+              "target_price": { "type": "integer" }
+            },
+            "required": ["source_file", "occurrence_evidence", "pricing_basis", "observed_price", "target_price"],
+            "additionalProperties": false
+          }
+        },
+        "message": { "type": "string" }
+      },
+      "required": ["required", "url", "status", "project_root", "github_repository", "production_branch", "source_commit", "product_evidence", "updates", "message"],
+      "additionalProperties": false
     }
   },
-  "required": ["status", "summary", "reference_standard_price", "sites"],
+  "required": ["status", "summary", "reference_standard_price", "sites", "lp"],
   "additionalProperties": false
 }
