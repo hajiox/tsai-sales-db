@@ -4,6 +4,7 @@ import {
   isCodexBridgeAuthorized,
   normalizeWorkerId,
 } from "@/lib/web-sales-codex/server";
+import { REQUIRED_TSA_CODEX_BRIDGE_VERSION } from "@/lib/web-sales-codex/bridge-version";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,13 +16,20 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const workerId = normalizeWorkerId(body.workerId);
+    const bridgeVersion = String(body.version || "").trim();
+    if (bridgeVersion !== REQUIRED_TSA_CODEX_BRIDGE_VERSION) {
+      return NextResponse.json({
+        error: `Bridge ${REQUIRED_TSA_CODEX_BRIDGE_VERSION} への更新が必要です`,
+        requiredVersion: REQUIRED_TSA_CODEX_BRIDGE_VERSION,
+      }, { status: 409 });
+    }
     const currentJobId = body.currentJobId ? String(body.currentJobId) : null;
     const supabase = getWebSalesAutomationServiceClient();
     const now = new Date().toISOString();
     const { error } = await supabase.from("web_sales_codex_workers").upsert({
       id: workerId,
       name: String(body.name || workerId).slice(0, 120),
-      version: String(body.version || "").slice(0, 40) || null,
+      version: bridgeVersion.slice(0, 40),
       status: currentJobId ? "busy" : "online",
       capabilities: body.capabilities && typeof body.capabilities === "object" ? body.capabilities : {},
       current_job_id: currentJobId,

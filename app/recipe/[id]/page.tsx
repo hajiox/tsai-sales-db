@@ -25,7 +25,7 @@ import InlineEdit from "../_components/InlineEdit";
 import EcPriceSyncControls from "../_components/EcPriceSyncControls";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
-import type { PreviousRecipePrice } from "@/lib/recipe-price-history";
+import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -245,6 +245,8 @@ function RecipeDetailContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [sellingPriceTaxIncludedPriority, setSellingPriceTaxIncludedPriority] = useState(false);
   const [previousSellingPrice, setPreviousSellingPrice] = useState<PreviousRecipePrice | null>(null);
+  const [sellingPriceHistory, setSellingPriceHistory] = useState<RecipePriceRevision[]>([]);
+  const [priceHistoryExpanded, setPriceHistoryExpanded] = useState(false);
   const [nutritionMap, setNutritionMap] = useState<
     Record<string, NutritionData>
   >({});
@@ -754,9 +756,11 @@ function RecipeDetailContent() {
       if (!response.ok) throw new Error("前回価格を取得できませんでした");
       const history = await response.json();
       setPreviousSellingPrice(history.previousPrice || null);
+      setSellingPriceHistory(Array.isArray(history.history) ? history.history : []);
     } catch (error) {
       console.error("Previous recipe price fetch error:", error);
       setPreviousSellingPrice(null);
+      setSellingPriceHistory([]);
     }
 
     const { data: itemsData } = await supabase
@@ -2358,7 +2362,7 @@ function RecipeDetailContent() {
                             ? `前回変更: ${new Date(previousSellingPrice.changedAt).toLocaleString("ja-JP")}`
                             : "価格変更履歴はまだありません"}
                         >
-                          <span className="text-gray-500">前回価格:</span>
+                          <span className="text-gray-500">前回変更前価格:</span>
                           {previousSellingPrice ? (
                             <>
                               <span className="font-bold">¥</span>
@@ -2376,6 +2380,22 @@ function RecipeDetailContent() {
                             <span className="font-medium text-gray-500">記録なし</span>
                           )}
                         </div>
+                      )}
+                      {!previewingVersionId && !draftMode && (
+                        <button
+                          type="button"
+                          onClick={() => setPriceHistoryExpanded((current) => !current)}
+                          disabled={sellingPriceHistory.length === 0}
+                          aria-expanded={priceHistoryExpanded}
+                          className="flex items-center gap-1 rounded border border-gray-700 bg-gray-950/60 px-2 py-1 text-xs font-medium text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:text-gray-600"
+                          title={sellingPriceHistory.length > 0
+                            ? `価格変更履歴を${priceHistoryExpanded ? "閉じる" : "表示"}`
+                            : "価格変更履歴はまだありません"}
+                        >
+                          <History className="h-3.5 w-3.5" />
+                          価格変更履歴
+                          <span className="text-[10px] text-gray-500">{sellingPriceHistory.length}件</span>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -2420,6 +2440,46 @@ function RecipeDetailContent() {
                       placeholder="0"
                     />
                   </div>
+                  {priceHistoryExpanded && sellingPriceHistory.length > 0 && !previewingVersionId && !draftMode && (
+                    <div className="mb-3 border-t border-gray-800 pt-3 print:hidden">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-gray-300">
+                          <History className="h-3.5 w-3.5" />
+                          価格変更履歴
+                        </div>
+                        <span className="text-[10px] text-gray-500">新しい順・最大50件</span>
+                      </div>
+                      <div className="max-h-56 overflow-y-auto border-y border-gray-800">
+                        {sellingPriceHistory.map((revision) => (
+                          <div
+                            key={revision.id}
+                            className="grid gap-1 border-b border-gray-800 px-1 py-2 text-xs last:border-b-0 sm:grid-cols-[10rem_1fr] sm:items-center"
+                          >
+                            <time className="text-[11px] text-gray-500" dateTime={revision.changedAt}>
+                              {new Date(revision.changedAt).toLocaleString("ja-JP", {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </time>
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 sm:justify-end">
+                              <span className="text-gray-500">税込</span>
+                              <span className="font-bold text-gray-300">¥{revision.previousPriceInclTax.toLocaleString("ja-JP")}</span>
+                              <span className="text-gray-600">→</span>
+                              <span className="font-bold text-white">¥{revision.newPriceInclTax.toLocaleString("ja-JP")}</span>
+                              <span className="ml-1 text-[10px] text-gray-500">
+                                税抜 ¥{revision.previousPriceExTax.toLocaleString("ja-JP", { maximumFractionDigits: 4 })}
+                                {' → '}
+                                ¥{revision.newPriceExTax.toLocaleString("ja-JP", { maximumFractionDigits: 4 })}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {/* Amazon手数料 チェックボックス */}
                   <div className="pt-3 pb-1 border-t border-gray-800">
                     <label className="flex items-center gap-3 cursor-pointer group">
@@ -2511,6 +2571,7 @@ function RecipeDetailContent() {
                   recipeId={recipe.id}
                   recipeName={recipe.name}
                   ecProductName={recipe.ec_product_name}
+                  productLpUrl={recipe.product_lp_url}
                   sellingPriceInclTax={sellingPriceInclTax}
                   expectedRecipeSnapshot={{
                     id: recipe.id,
@@ -2523,6 +2584,7 @@ function RecipeDetailContent() {
                     filling_quantity: recipe.filling_quantity,
                     filling_quantity_unit: recipe.filling_quantity_unit,
                     storage_method: recipe.storage_method,
+                    product_lp_url: recipe.product_lp_url,
                     selling_price: recipe.selling_price,
                   }}
                   hasUnsavedChanges={hasChanges}

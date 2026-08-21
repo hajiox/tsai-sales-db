@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarClock,
+  ChevronDown,
   CheckCircle2,
+  CircleStop,
+  Clock3,
+  History,
+  Link2,
   Loader2,
   Play,
   Trash2,
@@ -13,6 +18,7 @@ import { toast } from "sonner";
 import {
   EC_PRICE_TARGETS,
   getEcPriceTargetLabel,
+  type EcPriceHistoryEntry,
   type EcPriceJobView,
   type EcPriceTarget,
 } from "@/lib/ec-price-codex";
@@ -45,6 +51,7 @@ interface EcPriceSyncControlsProps {
   recipeId: string;
   recipeName: string;
   ecProductName?: string | null;
+  productLpUrl?: string | null;
   sellingPriceInclTax: number;
   expectedRecipeSnapshot: Record<string, unknown>;
   hasUnsavedChanges: boolean;
@@ -55,6 +62,7 @@ export default function EcPriceSyncControls({
   recipeId,
   recipeName,
   ecProductName,
+  productLpUrl,
   sellingPriceInclTax,
   expectedRecipeSnapshot,
   hasUnsavedChanges,
@@ -63,13 +71,31 @@ export default function EcPriceSyncControls({
   const [submitting, setSubmitting] = useState(false);
   const [dispatchMode, setDispatchMode] = useState<EcPriceDispatchMode>("immediate");
   const [job, setJob] = useState<EcPriceJobView | null>(null);
+  const [priceHistory, setPriceHistory] = useState<EcPriceHistoryEntry[]>([]);
+  const [priceHistoryExpanded, setPriceHistoryExpanded] = useState(false);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [progressStableSince, setProgressStableSince] = useState(() => Date.now());
   const [reservations, setReservations] = useState<ReservationView[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueAction, setQueueAction] = useState(false);
   const notifiedJobId = useRef<string | null>(null);
   const hasPrice = Number.isFinite(sellingPriceInclTax) && sellingPriceInclTax > 0;
+  const hasProductLp = Boolean(productLpUrl?.trim());
   const jobIsActive = Boolean(job && ACTIVE_STATUSES.has(job.status));
+  const jobCanRetry = Boolean(job && job.status !== "completed" && !jobIsActive && job.targets.length > 0);
   const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || !hasPrice;
+
+  const refreshPriceHistory = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/recipe/${recipeId}/ec-price-jobs`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "価格変更履歴を取得できません");
+      setPriceHistory(Array.isArray(payload.history) ? payload.history : []);
+      setJob((payload.activeJob || payload.latestJob || null) as EcPriceJobView | null);
+    } catch (error) {
+      console.error("EC price history fetch error:", error);
+    }
+  }, [recipeId]);
 
   const refreshReservations = useCallback(async (quiet = false) => {
     if (!quiet) setQueueLoading(true);
@@ -86,19 +112,35 @@ export default function EcPriceSyncControls({
   }, []);
 
   useEffect(() => {
+    void refreshPriceHistory();
+  }, [refreshPriceHistory]);
+
+  useEffect(() => {
+    setProgressStableSince(Date.now());
+  }, [job?.id, job?.progress]);
+
+  useEffect(() => {
+    if (!jobIsActive) return;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [jobIsActive]);
+
+  useEffect(() => {
     void refreshReservations();
     const timer = setInterval(() => void refreshReservations(true), 15000);
     return () => clearInterval(timer);
   }, [refreshReservations]);
 
+  const activeJobId = job?.id;
+  const activeJobStatus = job?.status;
   useEffect(() => {
-    if (!job || !ACTIVE_STATUSES.has(job.status)) return;
+    if (!activeJobId || !activeJobStatus || !ACTIVE_STATUSES.has(activeJobStatus)) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const poll = async () => {
       try {
-        const response = await fetch(`/api/recipe/${recipeId}/ec-price-jobs?jobId=${encodeURIComponent(job.id)}`, {
+        const response = await fetch(`/api/recipe/${recipeId}/ec-price-jobs?jobId=${encodeURIComponent(activeJobId)}`, {
           cache: "no-store",
         });
         const payload = await response.json();
@@ -117,7 +159,7 @@ export default function EcPriceSyncControls({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [job?.id, job?.status, recipeId]);
+  }, [activeJobId, activeJobStatus, recipeId]);
 
   useEffect(() => {
     if (!job || !FINAL_STATUSES.has(job.status) || notifiedJobId.current === job.id) return;
@@ -126,7 +168,8 @@ export default function EcPriceSyncControls({
     else if (job.status === "waiting_for_user" || job.status === "needs_review") {
       toast.warning(job.summary || "価格変更結果の確認が必要です");
     } else toast.error(job.errorMessage || job.summary || "EC価格変更に失敗しました");
-  }, [job]);
+    void refreshPriceHistory();
+  }, [job, refreshPriceHistory]);
 
   const enqueue = async (targets: EcPriceTarget[]) => {
     if (disabled) return;
@@ -140,6 +183,7 @@ export default function EcPriceSyncControls({
           "",
           `商品: ${productName}`,
           `予約価格（税込）: ¥${sellingPriceInclTax.toLocaleString("ja-JP")}`,
+          ...(hasProductLp ? ["", `商品LPも必須更新: ${productLpUrl}`] : []),
           "",
           "「予約分をまとめて実行」を押すまでECサイトは変更しません。予約しますか？",
         ].join("\n")
@@ -148,6 +192,7 @@ export default function EcPriceSyncControls({
           "",
           `商品: ${productName}`,
           `新価格（税込）: ¥${sellingPriceInclTax.toLocaleString("ja-JP")}`,
+          ...(hasProductLp ? ["", `商品LPも必須更新: ${productLpUrl}`] : []),
           "",
           "事務所PCのCodexがログイン済みEC管理画面を操作します。実行しますか？",
         ].join("\n"),
@@ -233,14 +278,64 @@ export default function EcPriceSyncControls({
   };
 
   const allTargets = EC_PRICE_TARGETS.map((target) => target.id);
+  const heartbeatAt = job?.heartbeatAt ? Date.parse(job.heartbeatAt) : Number.NaN;
+  const startedAt = job?.startedAt ? Date.parse(job.startedAt) : Date.parse(job?.createdAt || "");
+  const heartbeatAgeSeconds = Number.isFinite(heartbeatAt) ? Math.max(0, Math.floor((clockNow - heartbeatAt) / 1000)) : null;
+  const elapsedSeconds = Number.isFinite(startedAt) ? Math.max(0, Math.floor((clockNow - startedAt) / 1000)) : 0;
+  const heartbeatStale = jobIsActive && heartbeatAgeSeconds !== null && heartbeatAgeSeconds >= 70;
+  const progressUnchanged = job?.status === "running" && clockNow - progressStableSince >= 120_000;
+  const executionPhase = job?.status === "queued"
+    ? "開始待ち"
+    : (job?.progress || 0) < 48
+      ? "工程1/2 変更前価格を確認中"
+      : "工程2/2 EC価格へ反映中";
+  const jobStatusLabel = jobIsActive
+    ? executionPhase
+    : job?.status === "completed"
+      ? "完了"
+      : job?.status === "waiting_for_user"
+        ? "操作待ち"
+        : job?.status === "needs_review"
+          ? "確認待ち"
+          : job?.status === "failed"
+            ? "失敗"
+            : job?.status === "cancelled"
+              ? "停止済み"
+              : "実行履歴なし";
+  const jobStatusStyle = job?.status === "completed"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : job?.status === "failed"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : job?.status === "cancelled"
+        ? "border-slate-200 bg-slate-50 text-slate-600"
+        : job?.status === "waiting_for_user" || job?.status === "needs_review" || heartbeatStale || progressUnchanged
+          ? "border-amber-300 bg-amber-50 text-amber-800"
+          : "border-blue-200 bg-blue-50 text-blue-700";
+  const previousSitePrices = EC_PRICE_TARGETS.flatMap((target) => {
+    for (const entry of priceHistory) {
+      const site = entry.sites.find((candidate) =>
+        candidate.site === target.id
+        && (candidate.status === "updated" || candidate.status === "submitted_pending")
+        && candidate.previousPrice !== candidate.newPrice,
+      );
+      if (site) return [{ ...site, changedAt: entry.completedAt || entry.createdAt }];
+    }
+    return [];
+  });
 
   return (
     <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:hidden">
       <div className="mb-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">EC価格反映</h3>
         <p className="mt-1 text-xs text-slate-500">
-          保存済みの税込価格を、事務所PCのCodexが価格改定Skillで反映します。
+          保存済みの税込価格を、事務所PCのCodexが価格改定Skillで反映します。商品LP登録時は公開確認まで必須です。
         </p>
+        {hasProductLp && (
+          <p className="mt-2 flex items-start gap-1.5 rounded-md bg-blue-50 px-2.5 py-2 text-[11px] font-bold text-blue-700">
+            <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 break-all">必須更新する商品LP: {productLpUrl}</span>
+          </p>
+        )}
       </div>
 
       <div className="mb-3 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-xs font-bold">
@@ -299,25 +394,169 @@ export default function EcPriceSyncControls({
           販売価格を登録・保存すると利用できます。
         </p>
       ) : job ? (
-        <div className={`mt-3 rounded-md px-3 py-2 text-xs ${job.status === "completed" ? "bg-emerald-50 text-emerald-700" : job.status === "failed" ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>
-          <div className="flex items-center gap-2 font-bold">
-            {job.status === "completed" ? <CheckCircle2 className="h-4 w-4" /> : job.status === "failed" ? <AlertTriangle className="h-4 w-4" /> : <Loader2 className={`h-4 w-4 ${jobIsActive ? "animate-spin" : ""}`} />}
-            {job.currentStep}（{job.progress}%）
+        <div className={`mt-3 rounded-md border px-3 py-3 text-xs ${jobStatusStyle}`}>
+          <p className="mb-2 text-[10px] font-bold uppercase text-current/70">直近の実行状況</p>
+          <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
+            <div className="flex items-center gap-2">
+              {job.status === "completed" ? <CheckCircle2 className="h-4 w-4" /> : job.status === "failed" ? <AlertTriangle className="h-4 w-4" /> : job.status === "cancelled" ? <CircleStop className="h-4 w-4" /> : <Loader2 className={`h-4 w-4 ${jobIsActive ? "animate-spin" : ""}`} />}
+              <span>{jobStatusLabel}</span>
+            </div>
+            {jobIsActive ? (
+              <span className="tabular-nums">{job.progress}%</span>
+            ) : (
+              <time className="text-[10px] font-medium opacity-70" dateTime={job.completedAt || job.updatedAt || job.createdAt}>
+                {new Date(job.completedAt || job.updatedAt || job.createdAt).toLocaleString("ja-JP")}
+              </time>
+            )}
           </div>
+          {jobIsActive && (
+            <>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80 ring-1 ring-inset ring-current/10">
+                <div
+                  className="h-full rounded-full bg-current transition-[width] duration-500"
+                  style={{ width: `${Math.max(3, Math.min(100, job.progress))}%` }}
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium opacity-80">
+                <span>{job.currentStep}</span>
+                <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" />経過 {formatDuration(elapsedSeconds)}</span>
+                {heartbeatAgeSeconds !== null && <span>最終応答 {formatAge(heartbeatAgeSeconds)}</span>}
+              </div>
+              {(job.progress || 0) < 48 && (
+                <p className="mt-2 rounded bg-white/70 px-2 py-1.5 text-[11px] font-bold">
+                  この工程では対象商品と変更前価格を確認するだけで、ECサイトへはまだ書き込みません。
+                </p>
+              )}
+              {(heartbeatStale || progressUnchanged) && (
+                <p className="mt-2 flex items-start gap-1.5 font-bold text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  {heartbeatStale
+                    ? "事務所PCから70秒以上応答がありません。処理停止の可能性があります。"
+                    : "同じ工程が2分以上続いています。案内画面・ログイン確認・権限待ちの可能性があります。"}
+                </p>
+              )}
+            </>
+          )}
+          {!jobIsActive && job.currentStep && <p className="mt-2 font-bold">{job.currentStep}</p>}
           {(job.summary || job.errorMessage) && <p className="mt-1 leading-relaxed">{job.summary || job.errorMessage}</p>}
-          {job.sites.length > 0 && (
+          {job.sites.length > 0 && job.status !== "cancelled" && (
             <ul className="mt-2 space-y-1">
               {job.sites.map((site) => (
                 <li key={site.site}>{getEcPriceTargetLabel([site.site])}: {site.message}</li>
               ))}
             </ul>
           )}
+          {job.lp && job.status !== "cancelled" && (
+            <p className="mt-2 flex items-start gap-1.5 font-medium">
+              <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>商品LP: {job.lp.message || (job.lp.status === "updated" ? "公開反映確認済み" : "対象外")}</span>
+            </p>
+          )}
+          {jobCanRetry && (
+            <button
+              type="button"
+              onClick={() => enqueue(job.targets)}
+              disabled={disabled}
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-current/20 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              同じ対象で再実行
+            </button>
+          )}
         </div>
       ) : (
-        <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
-          対象商品を一意に確定できない場合やログイン確認が必要な場合、Codexは変更せず停止します。
-        </p>
+        <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+          <p className="text-[10px] font-bold uppercase text-slate-400">直近の実行状況</p>
+          <p className="mt-1 font-bold text-slate-600">実行履歴はまだありません</p>
+          <p className="mt-1 text-[11px] leading-relaxed">実行すると、この場所に進捗と事務所PCからの最終応答を表示します。</p>
+        </div>
       )}
+
+      <div className="mt-4 border-t border-slate-200 pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h4 className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+              <History className="h-4 w-4" />
+              EC価格変更履歴
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px]">{priceHistory.length}件</span>
+            </h4>
+            {previousSitePrices.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                <span className="font-bold text-slate-600">前回変更前価格</span>
+                {previousSitePrices.map((site) => (
+                  <span key={site.site} title={`変更日時: ${new Date(site.changedAt).toLocaleString("ja-JP")}`}>
+                    {getEcPriceTargetLabel([site.site])} <strong className="text-slate-800">¥{site.previousPrice.toLocaleString("ja-JP")}</strong>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-[11px] text-slate-400">EC価格を変更すると、サイトごとの変更前価格がここに残ります。</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPriceHistoryExpanded((current) => !current)}
+            disabled={priceHistory.length === 0}
+            aria-expanded={priceHistoryExpanded}
+            className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            {priceHistoryExpanded ? "履歴を閉じる" : "履歴を見る"}
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${priceHistoryExpanded ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+
+        {priceHistoryExpanded && priceHistory.length > 0 && (
+          <div className="mt-3 max-h-80 overflow-y-auto border-y border-slate-200">
+            {priceHistory.map((entry) => (
+              <div key={entry.id} className="border-b border-slate-200 py-3 last:border-b-0">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px]">
+                  <time className="font-medium text-slate-500" dateTime={entry.completedAt || entry.createdAt}>
+                    {new Date(entry.completedAt || entry.createdAt).toLocaleString("ja-JP")}
+                  </time>
+                  <span className={`rounded px-2 py-0.5 font-bold ${entry.status === "completed" ? "bg-emerald-50 text-emerald-700" : entry.status === "failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                    {entry.status === "completed" ? "完了" : entry.status === "failed" ? "失敗" : "確認あり"}
+                  </span>
+                </div>
+                <div className="mt-2 divide-y divide-slate-100">
+                  {entry.sites.map((site) => (
+                    <div key={site.site} className="grid gap-1 px-1 py-2 text-xs sm:grid-cols-[7rem_1fr] sm:items-center">
+                      <span className="font-bold text-slate-700">{getEcPriceTargetLabel([site.site])}</span>
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 sm:justify-end">
+                        <span className="font-bold text-slate-600">¥{site.previousPrice.toLocaleString("ja-JP")}</span>
+                        <span className="text-slate-300">→</span>
+                        <span className="font-bold text-slate-900">¥{site.newPrice.toLocaleString("ja-JP")}</span>
+                        <span className="text-[10px] text-slate-400">
+                          {site.status === "updated" ? "反映確認済み" : site.status === "submitted_pending" ? "送信済み・反映待ち" : site.status === "not_found" ? "対象なし" : "未反映"}
+                        </span>
+                        {site.productIdentifier && (
+                          <span className="max-w-full truncate text-[10px] text-slate-400" title={site.productIdentifier}>
+                            ID: {site.productIdentifier}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {entry.lp?.required && (
+                    <div className="grid gap-1 px-1 py-2 text-xs sm:grid-cols-[7rem_1fr] sm:items-center">
+                      <span className="font-bold text-slate-700">商品LP</span>
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 sm:justify-end">
+                        <span className="font-bold text-slate-900">
+                          {entry.lp.final_prices.length > 0
+                            ? entry.lp.final_prices.map((price) => `¥${price.toLocaleString("ja-JP")}`).join("・")
+                            : "価格未確認"}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {entry.lp.status === "updated" ? "公開反映確認済み" : "未反映"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="mt-4 border-t border-slate-200 pt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -372,4 +611,16 @@ export default function EcPriceSyncControls({
       </div>
     </section>
   );
+}
+
+function formatDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes > 0 ? `${minutes}分${remainder}秒` : `${remainder}秒`;
+}
+
+function formatAge(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  return seconds < 60 ? `${seconds}秒前` : `${Math.floor(seconds / 60)}分前`;
 }
