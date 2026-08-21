@@ -18,6 +18,8 @@ function loadFunction(name, nextName) {
 const validatePlan = loadFunction("validateEcPricePlan", "validateEcPriceResultV2");
 const validateResult = loadFunction("validateEcPriceResultV2", "planToFinalResult");
 const detectsForbiddenTabAction = loadFunction("isForbiddenEcPriceTabAction", "terminateChildProcessTree");
+const estimateDesktopCompletion = loadFunction("estimateDesktopCompletion", "bridgeTaskLabel");
+const ecPriceEventLabel = loadFunction("ecPriceEventLabel", "isForbiddenEcPriceTabAction");
 
 const pricePromptSource = bridgeSource.slice(
   bridgeSource.indexOf("function buildEcPricePlanPrompt("),
@@ -28,6 +30,9 @@ assert.match(pricePromptSource, /Never create a browser tab or window/);
 assert.match(pricePromptSource, /try the remaining existing matching official tabs/);
 assert.match(pricePromptSource, /find-lp-source\.ps1 with -FreshClone/);
 assert.match(pricePromptSource, /mandatory product LP plan/);
+assert.match(pricePromptSource, /AMAZON PRICE-ONLY RULE/);
+assert.match(pricePromptSource, /\/interactive\/listing\/workflow\/edit\/offer/);
+assert.match(pricePromptSource, /90220/);
 assert.doesNotMatch(pricePromptSource, /Close temporary tabs/);
 assert.doesNotMatch(pricePromptSource, /Never inspect, edit, deploy, or update any company LP/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: false/);
@@ -43,6 +48,41 @@ assert.equal(
   true,
   "価格ジョブの新規Chromeタブ作成を検出する",
 );
+assert.equal(
+  ecPriceEventLabel({
+    type: "item.started",
+    item: { type: "mcp_tool_call", arguments: { title: "Amazon価格変更を送信" } },
+  }),
+  "Amazon価格変更を送信",
+);
+
+const monitorEstimate = estimateDesktopCompletion({
+  status: "running",
+  startedAt: "2026-08-21T00:00:00.000Z",
+  taskKey: "ec_price_update",
+  targets: ["amazon", "rakuten", "yahoo"],
+}, 50, "2026-08-21T00:05:00.000Z");
+assert.ok(Date.parse(monitorEstimate.estimatedEarliestAt) > Date.parse("2026-08-21T00:05:00.000Z"));
+assert.ok(Date.parse(monitorEstimate.estimatedLatestAt) > Date.parse(monitorEstimate.estimatedEarliestAt));
+assert.deepEqual(
+  estimateDesktopCompletion({ status: "completed" }, 100, "2026-08-21T00:05:00.000Z"),
+  { estimatedEarliestAt: null, estimatedLatestAt: null },
+);
+
+const monitorSource = fs.readFileSync(
+  path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor.ps1"),
+  "utf8",
+);
+assert.match(monitorSource, /TSA Codex Bridge 実行モニター/);
+assert.match(monitorSource, /完了目安/);
+assert.match(monitorSource, /Codex PID/);
+assert.match(monitorSource, /目安超過（処理継続中）/);
+const installerSource = fs.readFileSync(
+  path.join(__dirname, "..", "tools", "tsa-codex-bridge", "install-bridge.ps1"),
+  "utf8",
+);
+assert.match(installerSource, /"bridge-monitor\.ps1"/);
+assert.match(installerSource, /IndexOf\(\$monitorPath/);
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",

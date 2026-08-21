@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.14";
+const VERSION = "1.8.15";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -14,6 +14,8 @@ const CONFIG_PATH = process.env.TSA_CODEX_BRIDGE_CONFIG || join(APP_DIR, "bridge
 const LOG_DIR = join(APP_DIR, "logs");
 const LOCK_PATH = join(APP_DIR, "bridge.lock");
 const STATE_PATH = join(APP_DIR, "bridge-state.json");
+const MONITOR_STATE_PATH = join(APP_DIR, "monitor-state.json");
+const MONITOR_SCRIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "bridge-monitor.ps1");
 const MAINTENANCE_PATH = join(APP_DIR, "bridge-maintenance.lock");
 const RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "result.schema.json");
 const ANALYSIS_RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "analysis-result.schema.json");
@@ -34,6 +36,8 @@ let maintenanceObserved = null;
 let stopping = false;
 let lastError = null;
 let lastHeartbeatAt = null;
+let currentCodexPid = null;
+let desktopMonitorState = null;
 
 process.on("SIGINT", () => { stopping = true; });
 process.on("SIGTERM", () => { stopping = true; });
@@ -68,6 +72,7 @@ async function main() {
         continue;
       }
       currentJobId = claimed.job.id;
+      startDesktopMonitor(claimed.job);
       writeBridgeState();
       lastError = null;
       await heartbeat();
@@ -88,6 +93,7 @@ async function main() {
       await delay(Math.max(config.pollMs, 10_000));
     } finally {
       currentJobId = null;
+      currentCodexPid = null;
       writeBridgeState();
       await heartbeat().catch(() => undefined);
     }
@@ -580,11 +586,11 @@ async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputF
       const mapped = mapCodexEvent(event, progress);
       if (!mapped) continue;
       progress = Math.min(progressMax, Math.max(progress, mapped.progress));
-      const phaseMessage = mapped.message === "Chromeを操作しています"
+      const phaseMessage = ecPriceEventLabel(event) || (mapped.message === "Chromeを操作しています"
         || mapped.message === "処理を進めています"
         || mapped.message === "対象期間と保存先を確認しています"
         ? activityLabel
-        : mapped.message;
+        : mapped.message);
       const now = Date.now();
       if (now - lastProgressSent > 1200 || mapped.important) {
         lastProgressSent = now;
@@ -615,6 +621,14 @@ async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputF
     try { result = JSON.parse(readFileSync(outputFile, "utf8")); } catch { result = null; }
   }
   return { result, exitCode, stderr, progress, tabPolicyViolation };
+}
+
+function ecPriceEventLabel(event) {
+  if (event?.type !== "item.started" && event?.type !== "item.completed") return null;
+  const item = event?.item || {};
+  if (item.type !== "mcp_tool_call") return null;
+  const title = String(item?.arguments?.title || "").replace(/\s+/g, " ").trim();
+  return title ? title.slice(0, 120) : null;
 }
 
 function isForbiddenEcPriceTabAction(event) {
@@ -756,6 +770,8 @@ function buildEcPriceWritePrompt(parameters, plan) {
     "If current price equals target_price, do not save again; verify it and report updated with target_price.",
     "If current price equals basis_price, set the exact target_price, save/submit using the Skill procedure, reload/list-verify it, and report updated or submitted_pending.",
     "If current price is neither basis_price nor target_price, do not change it and report blocked. Never overwrite an unexpected concurrent price.",
+    "AMAZON PRICE-ONLY RULE: after identifying the exact SKU/ASIN, keep the claimed existing Amazon tab and navigate that same tab to the offer-only editor path /interactive/listing/workflow/edit/offer for that SKU/ASIN. Confirm the URL still contains /offer and edit only the field labeled 商品の販売価格. Do not submit the full product_details editor for a price-only change.",
+    "If Amazon redirects to product_details or shows error 90220 that Amazon.co.jp限定商品 is missing, do not fill or alter that unrelated catalog attribute. Return once to the offer-only editor in the same claimed tab and retry the price-only save one time. If the offer-only save still cannot complete, report Amazon blocked with the exact error and leave the saved price unchanged.",
     "Do not touch a site not listed in targets. Do not substitute a similar product. Follow the Skill's site-specific save and verification steps.",
     "After EC sites, when PLAN_JSON.lp.required is true, run git fetch origin in the planned fresh clone and verify HEAD still equals Vercel's origin production branch before editing. Update only the exact planned LP source occurrences. Before editing, confirm each current source price still equals observed_price or already equals target_price; otherwise block the LP without overwriting. Build with the repository's existing command, commit and push only the planned files through the existing production branch, wait for the existing Vercel deployment, then verify every planned price at TASK_JSON.lpUrl using a direct public HTTP read. Do not create a Chrome tab for LP verification.",
     "Report lp.status=updated only after the public TASK_JSON.lpUrl displays all planned target prices for the exact product. Otherwise report blocked/not_found with the real partial state; a required LP that is not updated prevents overall completed status.",
@@ -2121,6 +2137,7 @@ async function updateJob(jobId, payload) {
         },
       }
     : payload;
+  updateDesktopMonitor(jobId, enrichedPayload);
   return api(`/api/web-sales/codex-bridge/jobs/${jobId}`, {
     method: "POST",
     body: { workerId: config.workerId, ...enrichedPayload },
@@ -2519,6 +2536,16 @@ async function spawnCodex(args, options) {
         child.once("spawn", onSpawn);
         child.once("error", onError);
       });
+      currentCodexPid = child.pid || null;
+      updateDesktopMonitor(currentJobId, {
+        status: "running",
+        currentStep: desktopMonitorState?.currentStep || "Codex CLIを起動しました",
+      });
+      child.once("close", () => {
+        if (currentCodexPid !== child.pid) return;
+        currentCodexPid = null;
+        updateDesktopMonitor(currentJobId, {});
+      });
       return child;
     } catch (error) {
       lastError = error;
@@ -2611,6 +2638,108 @@ function writeBridgeState() {
     // State is advisory for safe installer handoff; the bridge can continue if
     // an antivirus scanner briefly locks the file.
   }
+}
+
+function startDesktopMonitor(job) {
+  const parameters = job?.parameters && typeof job.parameters === "object" && !Array.isArray(job.parameters)
+    ? job.parameters
+    : {};
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const startedAt = new Date().toISOString();
+  desktopMonitorState = {
+    jobId: String(job?.id || ""),
+    taskKey: String(job?.task_key || ""),
+    taskLabel: bridgeTaskLabel(job?.task_key),
+    productName: String(parameters.ecProductName || parameters.recipeName || "").slice(0, 160),
+    targets,
+    status: "running",
+    progress: 1,
+    currentStep: "事務所PCがジョブを受信しました",
+    summary: "",
+    startedAt,
+    lastResponseAt: startedAt,
+    bridgePid: process.pid,
+    codexPid: null,
+    estimatedEarliestAt: null,
+    estimatedLatestAt: null,
+  };
+  updateDesktopMonitor(job.id, {});
+  if (config.desktopMonitor === false || !existsSync(MONITOR_SCRIPT_PATH)) return;
+  try {
+    const monitor = spawn("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", MONITOR_SCRIPT_PATH,
+      "-StatePath", MONITOR_STATE_PATH,
+      "-JobId", String(job.id),
+    ], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false,
+    });
+    monitor.unref();
+    log(`desktop monitor started for ${job.id} (pid ${monitor.pid || "unknown"})`);
+  } catch (error) {
+    log(`WARN desktop monitor could not start: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function updateDesktopMonitor(jobId, payload) {
+  if (!desktopMonitorState || !jobId || desktopMonitorState.jobId !== String(jobId)) return;
+  const now = new Date().toISOString();
+  const nextStatus = payload?.status ? String(payload.status) : desktopMonitorState.status;
+  const nextProgress = Number.isFinite(Number(payload?.progress))
+    ? Math.max(0, Math.min(100, Number(payload.progress)))
+    : desktopMonitorState.progress;
+  desktopMonitorState = {
+    ...desktopMonitorState,
+    status: nextStatus,
+    progress: nextProgress,
+    currentStep: payload?.currentStep ? String(payload.currentStep).slice(0, 300) : desktopMonitorState.currentStep,
+    summary: payload?.message ? String(payload.message).slice(0, 800) : desktopMonitorState.summary,
+    lastResponseAt: now,
+    codexPid: currentCodexPid,
+    ...estimateDesktopCompletion({ ...desktopMonitorState, status: nextStatus }, nextProgress, now),
+  };
+  try {
+    writeFileSync(MONITOR_STATE_PATH, `${JSON.stringify(desktopMonitorState, null, 2)}\n`, "utf8");
+  } catch (error) {
+    log(`WARN desktop monitor state write failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function estimateDesktopCompletion(state, progress, nowIso) {
+  if (["completed", "waiting_for_user", "needs_review", "failed", "cancelled"].includes(state.status)) {
+    return { estimatedEarliestAt: null, estimatedLatestAt: null };
+  }
+  const startedMs = Date.parse(state.startedAt);
+  const nowMs = Date.parse(nowIso);
+  if (!Number.isFinite(startedMs) || !Number.isFinite(nowMs)) return {};
+  const elapsedSeconds = Math.max(1, (nowMs - startedMs) / 1000);
+  const targetCount = Math.max(1, Array.isArray(state.targets) ? state.targets.length : 1);
+  const defaultTotalSeconds = state.taskKey === "ec_price_update"
+    ? 180 + targetCount * 180
+    : 300;
+  const projectedSeconds = progress >= 8
+    ? elapsedSeconds / Math.max(0.08, progress / 100)
+    : defaultTotalSeconds;
+  const boundedSeconds = Math.max(defaultTotalSeconds * 0.6, Math.min(defaultTotalSeconds * 2.2, projectedSeconds));
+  const remainingSeconds = Math.max(30, boundedSeconds - elapsedSeconds);
+  return {
+    estimatedEarliestAt: new Date(nowMs + remainingSeconds * 0.8 * 1000).toISOString(),
+    estimatedLatestAt: new Date(nowMs + remainingSeconds * 1.25 * 1000).toISOString(),
+  };
+}
+
+function bridgeTaskLabel(taskKey) {
+  return {
+    connection_test: "Bridge接続テスト",
+    web_sales_import: "WEB商品売上集計",
+    ad_cost_import: "広告費取り込み",
+    ec_profit_import: "EC精算取り込み",
+    ec_price_update: "EC価格改定",
+    web_sales_analysis: "WEB販売分析",
+  }[String(taskKey || "")] || "TSA自動処理";
 }
 
 async function observeMaintenance() {

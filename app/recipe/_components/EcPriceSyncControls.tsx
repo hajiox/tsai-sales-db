@@ -278,15 +278,19 @@ export default function EcPriceSyncControls({
   };
 
   const allTargets = EC_PRICE_TARGETS.map((target) => target.id);
+  const activeProgress = clampProgress(job?.progress);
   const heartbeatAt = job?.heartbeatAt ? Date.parse(job.heartbeatAt) : Number.NaN;
   const startedAt = job?.startedAt ? Date.parse(job.startedAt) : Date.parse(job?.createdAt || "");
   const heartbeatAgeSeconds = Number.isFinite(heartbeatAt) ? Math.max(0, Math.floor((clockNow - heartbeatAt) / 1000)) : null;
   const elapsedSeconds = Number.isFinite(startedAt) ? Math.max(0, Math.floor((clockNow - startedAt) / 1000)) : 0;
+  const completionEstimate = jobIsActive && job
+    ? estimateCompletion(job.status, activeProgress, elapsedSeconds, job.targets.length, clockNow)
+    : null;
   const heartbeatStale = jobIsActive && heartbeatAgeSeconds !== null && heartbeatAgeSeconds >= 70;
   const progressUnchanged = job?.status === "running" && clockNow - progressStableSince >= 120_000;
   const executionPhase = job?.status === "queued"
     ? "開始待ち"
-    : (job?.progress || 0) < 48
+    : activeProgress < 48
       ? "工程1/2 変更前価格を確認中"
       : "工程2/2 EC価格へ反映中";
   const jobStatusLabel = jobIsActive
@@ -402,7 +406,7 @@ export default function EcPriceSyncControls({
               <span>{jobStatusLabel}</span>
             </div>
             {jobIsActive ? (
-              <span className="tabular-nums">{job.progress}%</span>
+              <span className="tabular-nums" aria-label={`進捗 ${activeProgress}パーセント`}>{activeProgress}%</span>
             ) : (
               <time className="text-[10px] font-medium opacity-70" dateTime={job.completedAt || job.updatedAt || job.createdAt}>
                 {new Date(job.completedAt || job.updatedAt || job.createdAt).toLocaleString("ja-JP")}
@@ -413,16 +417,44 @@ export default function EcPriceSyncControls({
             <>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80 ring-1 ring-inset ring-current/10">
                 <div
+                  role="progressbar"
+                  aria-label="EC価格変更の進捗"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={activeProgress}
                   className="h-full rounded-full bg-current transition-[width] duration-500"
-                  style={{ width: `${Math.max(3, Math.min(100, job.progress))}%` }}
+                  style={{ width: `${Math.max(3, activeProgress)}%` }}
                 />
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium opacity-80">
-                <span>{job.currentStep}</span>
-                <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" />経過 {formatDuration(elapsedSeconds)}</span>
-                {heartbeatAgeSeconds !== null && <span>最終応答 {formatAge(heartbeatAgeSeconds)}</span>}
-              </div>
-              {(job.progress || 0) < 48 && (
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 rounded bg-white/70 px-2.5 py-2 text-[11px] sm:grid-cols-4">
+                <div className="col-span-2 min-w-0 sm:col-span-4">
+                  <dt className="text-[10px] font-bold opacity-60">現在のステップ</dt>
+                  <dd className="mt-0.5 break-words font-bold">{job.currentStep || executionPhase}</dd>
+                </div>
+                <div>
+                  <dt className="flex items-center gap-1 text-[10px] font-bold opacity-60">
+                    <Clock3 className="h-3 w-3" aria-hidden="true" />
+                    経過時間
+                  </dt>
+                  <dd className="mt-0.5 font-bold tabular-nums">{formatDuration(elapsedSeconds)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-bold opacity-60">Bridge最終応答</dt>
+                  <dd className="mt-0.5 font-bold tabular-nums">
+                    {heartbeatAgeSeconds === null ? "応答待ち" : formatAge(heartbeatAgeSeconds)}
+                  </dd>
+                </div>
+                {completionEstimate && (
+                  <div className="col-span-2 min-w-0">
+                    <dt className="flex items-center gap-1 text-[10px] font-bold opacity-60">
+                      <CalendarClock className="h-3 w-3" aria-hidden="true" />
+                      完了目安
+                    </dt>
+                    <dd className="mt-0.5 font-bold tabular-nums">{completionEstimate}</dd>
+                  </div>
+                )}
+              </dl>
+              {activeProgress < 48 && (
                 <p className="mt-2 rounded bg-white/70 px-2 py-1.5 text-[11px] font-bold">
                   この工程では対象商品と変更前価格を確認するだけで、ECサイトへはまだ書き込みません。
                 </p>
@@ -623,4 +655,78 @@ function formatDuration(totalSeconds: number) {
 function formatAge(totalSeconds: number) {
   const seconds = Math.max(0, Math.floor(totalSeconds));
   return seconds < 60 ? `${seconds}秒前` : `${Math.floor(seconds / 60)}分前`;
+}
+
+function clampProgress(progress: number | null | undefined) {
+  if (!Number.isFinite(progress)) return 0;
+  return Math.max(0, Math.min(100, Math.round(progress as number)));
+}
+
+function estimateCompletion(
+  status: EcPriceJobView["status"],
+  progress: number,
+  elapsedSeconds: number,
+  targetCount: number,
+  now: number,
+) {
+  const safeTargetCount = Math.max(1, Math.min(EC_PRICE_TARGETS.length, Math.floor(targetCount) || 1));
+  const safeElapsed = Number.isFinite(elapsedSeconds) ? Math.max(0, elapsedSeconds) : 0;
+  const remainingFraction = Math.max(0.01, (100 - Math.min(progress, 99)) / 100);
+
+  // Browser work varies by site and login state, so keep the estimate deliberately broad.
+  const baselineLow = safeTargetCount * 4 * 60 * remainingFraction;
+  const baselineHigh = safeTargetCount * 12 * 60 * remainingFraction;
+  let lowSeconds = baselineLow;
+  let highSeconds = baselineHigh;
+
+  if (status === "running" && safeElapsed >= 30) {
+    const effectiveProgress = Math.max(5, Math.min(progress, 99));
+    const paceRemaining = safeElapsed * (100 - progress) / effectiveProgress;
+    if (Number.isFinite(paceRemaining) && paceRemaining >= 0) {
+      lowSeconds = Math.min(lowSeconds, paceRemaining * 0.7);
+      highSeconds = Math.max(highSeconds, paceRemaining * 1.5);
+    }
+  }
+
+  const [roundedLow, roundedHigh] = normalizeEstimateRange(lowSeconds, highSeconds);
+  const durationRange = `${formatEstimateDuration(roundedLow)}〜${formatEstimateDuration(roundedHigh)}`;
+  if (status === "queued") return `開始後 約${durationRange}`;
+
+  const completionRange = formatCompletionClockRange(now, roundedLow, roundedHigh);
+  return `${completionRange}頃（残り 約${durationRange}）`;
+}
+
+function normalizeEstimateRange(lowSeconds: number, highSeconds: number): [number, number] {
+  const maxSeconds = 8 * 60 * 60;
+  const safeLow = Number.isFinite(lowSeconds) ? Math.max(60, Math.min(maxSeconds - 60, lowSeconds)) : 60;
+  const safeHigh = Number.isFinite(highSeconds) ? Math.max(safeLow + 60, Math.min(maxSeconds, highSeconds)) : safeLow + 60;
+  const lowStep = safeLow >= 10 * 60 ? 5 * 60 : 60;
+  const highStep = safeHigh >= 10 * 60 ? 5 * 60 : 60;
+  const roundedLow = Math.max(lowStep, Math.floor(safeLow / lowStep) * lowStep);
+  const roundedHigh = Math.max(roundedLow + highStep, Math.ceil(safeHigh / highStep) * highStep);
+  return [roundedLow, Math.min(maxSeconds, roundedHigh)];
+}
+
+function formatEstimateDuration(totalSeconds: number) {
+  const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}分`;
+  return minutes === 0 ? `${hours}時間` : `${hours}時間${minutes}分`;
+}
+
+function formatCompletionClockRange(now: number, lowSeconds: number, highSeconds: number) {
+  const fiveMinutes = 5 * 60 * 1000;
+  const roundUp = (timestamp: number) => Math.ceil(timestamp / fiveMinutes) * fiveMinutes;
+  const low = new Date(roundUp(now + lowSeconds * 1000));
+  const high = new Date(roundUp(now + highSeconds * 1000));
+  const sameDay = low.getFullYear() === high.getFullYear()
+    && low.getMonth() === high.getMonth()
+    && low.getDate() === high.getDate();
+  const format = (date: Date, includeDate: boolean) => date.toLocaleString("ja-JP", {
+    ...(includeDate ? { month: "numeric", day: "numeric" } : {}),
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${format(low, !sameDay)}〜${format(high, !sameDay)}`;
 }
