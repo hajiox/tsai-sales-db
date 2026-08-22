@@ -210,8 +210,7 @@ function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
     plan.status !== "ready"
     || !Number.isInteger(standardPrice)
     || standardPrice <= 0
-    || !Number.isInteger(referencePrice)
-    || referencePrice <= 0
+    || (requestedTargets.length > 0 && (!Number.isInteger(referencePrice) || referencePrice <= 0))
     || (requestedTargets.length === 0 && !lpRequired)
     || new Set(requestedTargets).size !== requestedTargets.length
     || requestedTargets.some((target: string) => !EC_PRICE_TARGETS.has(target))
@@ -382,8 +381,7 @@ function validatedFinalPricePlan(parametersInput: unknown, submittedResultInput:
   const planNames = planSites.map((site) => String(site.site || ""));
   const referencePrice = Number(plan.reference_standard_price);
   if (
-    !Number.isInteger(referencePrice)
-    || referencePrice <= 0
+    (requestedTargets.length > 0 && (!Number.isInteger(referencePrice) || referencePrice <= 0))
     || resultNames.length !== requestedTargets.length
     || planNames.length !== requestedTargets.length
     || new Set(resultNames).size !== resultNames.length
