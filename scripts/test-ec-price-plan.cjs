@@ -165,12 +165,18 @@ const recipePriceRouteSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "recipe", "[id]", "ec-price-jobs", "route.ts"),
   "utf8",
 );
+const recipePriceControlsSource = fs.readFileSync(
+  path.join(__dirname, "..", "app", "recipe", "_components", "EcPriceSyncControls.tsx"),
+  "utf8",
+);
 assert.match(recipePriceRouteSource, /EC_PRICE_TAB_CONTENTION_MESSAGE/);
 assert.match(recipePriceRouteSource, /同じログイン済みChromeの一時タブへ自動退避/);
 assert.doesNotMatch(recipePriceRouteSource, /Chrome上部の「キャンセル」/);
 assert.match(recipePriceRouteSource, /EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE/);
 assert.match(recipePriceRouteSource, /operatorAuthorization/);
 assert.match(recipePriceRouteSource, /findGlobalImmediateEcPriceJob/);
+assert.match(recipePriceControlsSource, /hasHydratedJobHistory/);
+assert.match(recipePriceControlsSource, /FINAL_STATUSES\.has\(nextJob\.status\).*notifiedJobId\.current = nextJob\.id/);
 assert.match(recipePriceRouteSource, /現在「\$\{blockingView\.productName\}」の価格変更を実行中/);
 const reservationRouteSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "recipe", "ec-price-reservations", "route.ts"),
