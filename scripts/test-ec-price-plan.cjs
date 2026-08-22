@@ -43,6 +43,11 @@ assert.match(pricePromptSource, /has no chat reply channel/);
 assert.match(pricePromptSource, /Do not ask the operator to reply, confirm again/);
 assert.match(pricePromptSource, /save\/submit confirmation.*never waiting_for_user/i);
 assert.match(pricePromptSource, /unsaved staged input left by a previously stopped job/);
+assert.match(pricePromptSource, /BOUNDED RECOVERY POLICY FOR ALL EC SITES/);
+assert.match(pricePromptSource, /Amazon, Rakuten, Yahoo, Mercari Shops, BASE, Qoo10, or TikTok/);
+assert.match(pricePromptSource, /newly mandatory field may be changed only when its exact value is explicitly proven/);
+assert.match(pricePromptSource, /ABSOLUTE PROHIBITIONS DURING RECOVERY FOR ALL EC SITES/);
+assert.match(pricePromptSource, /at most two attempts for one distinct repair-and-save path/);
 assert.match(pricePromptSource, /find-lp-source\.ps1 with -FreshClone/);
 assert.match(pricePromptSource, /mandatory product LP plan/);
 assert.match(pricePromptSource, /AMAZON PRICE-ONLY RULE/);
@@ -320,6 +325,14 @@ assert.equal(
     sites: [{ ...basePlan.sites[0], observed_price: 4250 }],
   }, recoveryParameters),
   null,
+);
+assert.equal(
+  validatePlan({
+    ...basePlan,
+    sites: [{ ...basePlan.sites[0], unit_evidence: "再読込で同じ販売単位を確認" }],
+  }, recoveryParameters),
+  null,
+  "確定値が同じなら再確認時の説明文差分で回復計画を止めない",
 );
 assert.match(
   validatePlan({
