@@ -31,6 +31,7 @@ export const dynamic = "force-dynamic";
 
 const ADMIN_EMAIL = "aizubrandhall@gmail.com";
 const ACTIVE_STATUSES = ["queued", "running"];
+const FINAL_RETRY_STATUSES = new Set(["waiting_for_user", "needs_review", "failed", "completed"]);
 const EC_PRICE_TAB_CONTENTION_MESSAGE = "旧Bridgeの既存タブ固定ロジックで停止しました。Chrome上部の操作は不要です。現行Bridgeは同じログイン済みChromeの一時タブへ自動退避するため、そのまま再実行してください。ログイン切れではなく、外部データは変更されていません。";
 const EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE = "TSAで実行確認済みの価格変更に対して、旧Bridgeが不要な返信確認を求めて停止しました。EC価格は保存されていません。Bridge更新後に同じ対象で再実行してください。";
 
@@ -317,11 +318,15 @@ export async function POST(
   try {
     const { id: recipeId } = await params;
     const body = await request.json();
-    const requestedTargets = Array.isArray(body.targets) ? body.targets : [];
-    const targets = normalizeEcPriceTargets(body.targets);
+    const retryUnfinishedFromJobId = String(body.retryUnfinishedFromJobId || "").trim();
+    let requestedTargets = Array.isArray(body.targets) ? body.targets : [];
+    let targets = normalizeEcPriceTargets(body.targets);
     const dispatchMode = normalizeEcPriceDispatchMode(body.dispatchMode);
-    if (targets.length === 0 || targets.length !== requestedTargets.length) {
+    if (!retryUnfinishedFromJobId && (targets.length === 0 || targets.length !== requestedTargets.length)) {
       return NextResponse.json({ error: "反映先ECを選択してください" }, { status: 400 });
+    }
+    if (retryUnfinishedFromJobId && dispatchMode !== "immediate") {
+      return NextResponse.json({ error: "未完了だけの再実行は「今すぐ実行」で行ってください" }, { status: 400 });
     }
 
     const supabase = getWebSalesAutomationServiceClient();
@@ -338,6 +343,39 @@ export async function POST(
     }
 
     const recipeSnapshot = buildEcPriceRecipeSnapshot(recipe as Record<string, unknown>);
+    let lpUpdate = Boolean(recipeSnapshot.productLpUrl);
+    if (retryUnfinishedFromJobId) {
+      const { data: retrySource, error: retrySourceError } = await supabase
+        .from("web_sales_codex_jobs")
+        .select("id,status,parameters,result")
+        .eq("id", retryUnfinishedFromJobId)
+        .eq("task_key", "ec_price_update")
+        .maybeSingle();
+      if (retrySourceError) throw retrySourceError;
+      const retryParameters = asObject(retrySource?.parameters);
+      const retryResult = asObject(retrySource?.result);
+      if (
+        !retrySource
+        || String(retryParameters.recipeId || "") !== recipeId
+        || !FINAL_RETRY_STATUSES.has(String(retrySource.status || ""))
+        || Number(retryParameters.newPriceInclTax) !== recipeSnapshot.newPriceInclTax
+        || !ecPriceSnapshotsMatch(retryParameters.recipeSnapshot, recipeSnapshot)
+      ) {
+        return NextResponse.json({ error: "再実行元の価格・商品情報が現在のレシピと一致しません" }, { status: 409 });
+      }
+      const sourceTargets = normalizeEcPriceTargets(retryParameters.targets);
+      const sourceSites = Array.isArray(retryResult.sites) ? retryResult.sites.map(asObject) : [];
+      targets = sourceTargets.filter((target) => {
+        const site = sourceSites.find((entry) => entry.site === target);
+        return !site || site.status === "blocked" || site.status === "submitted_pending";
+      });
+      requestedTargets = [...targets];
+      const sourceLp = ecPriceLpResultFromUnknown(retryResult.lp);
+      lpUpdate = Boolean(recipeSnapshot.productLpUrl) && sourceLp?.status !== "updated";
+      if (targets.length === 0 && !lpUpdate) {
+        return NextResponse.json({ error: "再実行が必要なEC・商品LPはありません" }, { status: 409 });
+      }
+    }
     const productMappings = await loadEcPriceProductMappings(
       supabase,
       recipeSnapshot.linkedProductId,
@@ -347,7 +385,7 @@ export async function POST(
       recipeSnapshot.janCode,
       targets,
     );
-    const lpSource = getEcPriceLpSource(recipeSnapshot.productLpUrl);
+    const lpSource = lpUpdate ? getEcPriceLpSource(recipeSnapshot.productLpUrl) : null;
     const { newPriceExTax, newPriceInclTax } = recipeSnapshot;
     if (!Number.isFinite(newPriceExTax) || newPriceExTax <= 0 || newPriceInclTax <= 0) {
       return NextResponse.json({ error: "保存済み販売価格が正しくありません" }, { status: 400 });
@@ -414,11 +452,13 @@ export async function POST(
     );
     const earliestTrackedStandardPrice = positiveInteger(revisions[0]?.previous_price_incl_tax);
 
-    const { data: syncRows, error: syncError } = await supabase
-      .from("recipe_ec_price_sync_state")
-      .select("target,last_standard_price_incl_tax,last_site_price,last_job_id,recipe_snapshot")
-      .eq("recipe_id", recipeId)
-      .in("target", targets);
+    const { data: syncRows, error: syncError } = targets.length > 0
+      ? await supabase
+        .from("recipe_ec_price_sync_state")
+        .select("target,last_standard_price_incl_tax,last_site_price,last_job_id,recipe_snapshot")
+        .eq("recipe_id", recipeId)
+        .in("target", targets)
+      : { data: [], error: null };
     if (syncError) throw syncError;
     const trackedSiteBaselines = Object.fromEntries(targets.map((target) => {
       const state = (syncRows || []).find((row) =>
@@ -495,9 +535,10 @@ export async function POST(
       verifiedProductIdentifiers,
       newPriceExTax,
       newPriceInclTax,
-      lpUpdate: Boolean(recipeSnapshot.productLpUrl),
-      lpUrl: recipeSnapshot.productLpUrl,
+      lpUpdate,
+      lpUrl: lpUpdate ? recipeSnapshot.productLpUrl : null,
       lpSource,
+      retryUnfinishedFromJobId: retryUnfinishedFromJobId || null,
       dispatchMode,
       executionPolicy: "signed_in_browser_isolated_codex",
       operatorAuthorization: {
@@ -558,8 +599,8 @@ export async function POST(
       job_id: job.id,
       event_type: isReservation ? "reserved" : "queued",
       message: isReservation
-        ? `${targets.join("・")}の価格変更を一括実行予約へ登録しました`
-        : `${targets.join("・")}の価格変更を実行待ちに登録しました`,
+        ? `${targets.join("・") || "商品LP"}の価格変更を一括実行予約へ登録しました`
+        : `${targets.join("・") || "商品LP"}の価格変更を実行待ちに登録しました`,
       progress: 0,
       payload: { recipeId, targets, newPriceInclTax },
     });

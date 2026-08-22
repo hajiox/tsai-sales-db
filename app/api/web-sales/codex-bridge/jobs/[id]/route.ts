@@ -34,6 +34,7 @@ function priceSyncRows(
   const requestedTargets = Array.isArray(parameters.targets)
     ? parameters.targets.map((target: unknown) => String(target))
     : [];
+  if (requestedTargets.length === 0 && parameters.lpUpdate === true) return [];
   if (
     requestedTargets.length === 0
     || new Set(requestedTargets).size !== requestedTargets.length
@@ -54,8 +55,8 @@ function priceSyncRows(
     || requestedTargets.some((target: string) => !resultNames.includes(target))
   ) throw new Error("価格変更結果の対象ECが依頼内容と一致しません");
 
-  const persistedPlan = asObject(asObject(claimedJob.result).plan);
-  if (asObject(claimedJob.result).validated_plan_checkpoint !== true) {
+  const persistedPlan = asObject(result.plan);
+  if (result.validated_plan_checkpoint !== true) {
     throw new Error("サーバー検証済みの価格計画がありません");
   }
   const planSites = Array.isArray(persistedPlan.sites) ? persistedPlan.sites.map(asObject) : [];
@@ -185,7 +186,7 @@ function validateFinalPriceResult(
         plannedPrices.length === 0
         || plannedPrices.length !== finalPrices.length
         || plannedPrices.some((price, index) => price !== finalPrices[index])
-        || String(lp.deployment_url || "").trim() !== lpUrl
+        || !isHttpUrl(lp.deployment_url)
         || !/^[0-9a-f]{40}$/i.test(String(lp.deployed_commit || "").trim())
       ) throw new Error("商品LPの公開価格確認が保存済み計画と一致しません");
     }
@@ -204,13 +205,14 @@ function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
   const names = sites.map((site) => String(site.site || ""));
   const standardPrice = Number(parameters.newPriceInclTax);
   const referencePrice = Number(plan.reference_standard_price);
+  const lpRequired = parameters.lpUpdate === true;
   if (
     plan.status !== "ready"
     || !Number.isInteger(standardPrice)
     || standardPrice <= 0
     || !Number.isInteger(referencePrice)
     || referencePrice <= 0
-    || requestedTargets.length === 0
+    || (requestedTargets.length === 0 && !lpRequired)
     || new Set(requestedTargets).size !== requestedTargets.length
     || requestedTargets.some((target: string) => !EC_PRICE_TARGETS.has(target))
     || names.length !== requestedTargets.length
@@ -285,7 +287,7 @@ function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
     }
     const recovery = recoverySites.find((entry) => entry.site === target);
     if (recovery) {
-      for (const field of ["pricing_rule", "shipping_mode", "unit_multiplier", "unit_evidence", "basis_price", "standard_baseline_price", "target_price", "product_identifier"]) {
+      for (const field of ["pricing_rule", "shipping_mode", "unit_multiplier", "basis_price", "standard_baseline_price", "target_price", "product_identifier"]) {
         if ((recovery[field] ?? null) !== (site[field] ?? null)) {
           throw new Error(`${target}の保存済み価格計画が変更されています`);
         }
@@ -298,7 +300,6 @@ function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
     }
   }
   const lp = asObject(plan.lp);
-  const lpRequired = parameters.lpUpdate === true;
   const lpUrl = String(parameters.lpUrl || "").trim();
   if (lpRequired) {
     if (
@@ -345,6 +346,119 @@ function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
   return plan;
 }
 
+function isHttpUrl(value: unknown) {
+  try {
+    return ["http:", "https:"].includes(new URL(String(value || "").trim()).protocol);
+  } catch {
+    return false;
+  }
+}
+
+function notApplicableLpPlan() {
+  return {
+    required: false,
+    url: null,
+    status: "not_applicable",
+    project_root: null,
+    github_repository: "",
+    production_branch: "",
+    source_commit: "",
+    product_evidence: "",
+    updates: [],
+    message: "対象外",
+  };
+}
+
+function validatedFinalPricePlan(parametersInput: unknown, submittedResultInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const submittedResult = asObject(submittedResultInput);
+  const plan = asObject(submittedResult.plan);
+  const requestedTargets = Array.isArray(parameters.targets)
+    ? parameters.targets.map((target: unknown) => String(target))
+    : [];
+  const resultSites = Array.isArray(submittedResult.sites) ? submittedResult.sites.map(asObject) : [];
+  const planSites = Array.isArray(plan.sites) ? plan.sites.map(asObject) : [];
+  const resultNames = resultSites.map((site) => String(site.site || ""));
+  const planNames = planSites.map((site) => String(site.site || ""));
+  const referencePrice = Number(plan.reference_standard_price);
+  if (
+    !Number.isInteger(referencePrice)
+    || referencePrice <= 0
+    || resultNames.length !== requestedTargets.length
+    || planNames.length !== requestedTargets.length
+    || new Set(resultNames).size !== resultNames.length
+    || new Set(planNames).size !== planNames.length
+    || requestedTargets.some((target: string) => !resultNames.includes(target) || !planNames.includes(target))
+  ) throw new Error("価格変更の逐次計画が依頼対象と一致しません");
+
+  const siteBaselines = asObject(parameters.siteBaselines);
+  const recoveryPlanSites = Array.isArray(parameters.recoveryPlanSites)
+    ? parameters.recoveryPlanSites.map(asObject)
+    : [];
+  for (const target of requestedTargets) {
+    const resultSite = resultSites.find((site) => site.site === target);
+    const planSite = planSites.find((site) => site.site === target);
+    if (!resultSite || !planSite) throw new Error(`${target}の逐次結果がありません`);
+    if (resultSite.status === "blocked") continue;
+    const scopedParameters = {
+      ...parameters,
+      targets: [target],
+      siteBaselines: { [target]: siteBaselines[target] ?? null },
+      recoveryPlanSites: recoveryPlanSites.filter((site) => site.site === target),
+      lpUpdate: false,
+      lpUrl: null,
+    };
+    validatedPricePlan(scopedParameters, {
+      status: "ready",
+      summary: String(plan.summary || "逐次計画"),
+      reference_standard_price: referencePrice,
+      sites: [planSite],
+      lp: notApplicableLpPlan(),
+    });
+    if (resultSite.status === "not_found" && planSite.status !== "not_found") {
+      throw new Error(`${target}の対象商品なし結果が計画と一致しません`);
+    }
+    if (["updated", "submitted_pending"].includes(String(resultSite.status)) && planSite.status !== "planned") {
+      throw new Error(`${target}の反映結果に検証済み計画がありません`);
+    }
+  }
+
+  const resultLp = asObject(submittedResult.lp);
+  if (parameters.lpUpdate === true && resultLp.status === "updated") {
+    validatedPricePlan({ ...parameters, targets: [], siteBaselines: {}, recoveryPlanSites: [] }, {
+      status: "ready",
+      summary: String(plan.summary || "商品LP逐次計画"),
+      reference_standard_price: referencePrice,
+      sites: [],
+      lp: asObject(plan.lp),
+    });
+  }
+  return plan;
+}
+
+function validatedEcPriceProgress(parametersInput: unknown, resultInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const result = asObject(resultInput);
+  const requestedTargets = Array.isArray(parameters.targets)
+    ? parameters.targets.map((target: unknown) => String(target))
+    : [];
+  if (Number(result.new_standard_price) !== Number(parameters.newPriceInclTax)) {
+    throw new Error("価格変更途中結果の標準価格が依頼と一致しません");
+  }
+  const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (
+    new Set(names).size !== names.length
+    || names.some((target) => !requestedTargets.includes(target))
+    || sites.some((site) => !["updated", "submitted_pending", "not_found", "blocked"].includes(String(site.status)))
+  ) throw new Error("価格変更途中結果の対象が不正です");
+  const lp = asObject(result.lp);
+  if (parameters.lpUpdate === true && lp.url != null && String(lp.url) !== String(parameters.lpUrl || "")) {
+    throw new Error("価格変更途中結果の商品LPが依頼と一致しません");
+  }
+  return result;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -382,15 +496,20 @@ export async function POST(
       : null;
     if (claimedJob.task_key === "ec_price_update" && submittedResult) {
       if (!isFinal) {
-        if (String(body.eventType || "") !== "ec_price_plan_saved") {
+        const eventType = String(body.eventType || "");
+        if (eventType === "ec_price_plan_saved") {
+          const plan = validatedPricePlan(claimedJob.parameters, submittedResult.plan);
+          submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
+        } else if (eventType === "ec_price_progress_checkpoint") {
+          submittedResult = validatedEcPriceProgress(claimedJob.parameters, submittedResult);
+        } else {
           return NextResponse.json({ error: "Invalid EC price checkpoint" }, { status: 400 });
         }
-        const plan = validatedPricePlan(claimedJob.parameters, submittedResult.plan);
-        submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
-      } else if (asObject(claimedJob.result).validated_plan_checkpoint === true) {
+      } else {
+        const plan = validatedFinalPricePlan(claimedJob.parameters, submittedResult);
         submittedResult = {
           ...submittedResult,
-          plan: asObject(claimedJob.result).plan,
+          plan,
           validated_plan_checkpoint: true,
         };
       }

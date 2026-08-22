@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.22";
+const VERSION = "1.8.23";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -346,191 +346,546 @@ async function executeEcPriceUpdateJob(job) {
   mkdirSync(workDir, { recursive: true });
   if (!await validateEcPriceRecipeSnapshot(job, parameters, null, "開始前")) return;
 
+  const totalSteps = parameters.targets.length + (parameters.lpUpdate ? 1 : 0);
+  const aggregate = createSequentialEcPriceResult(parameters);
+  let operatorWaitDetected = false;
+  let globalSafetyStop = null;
+
+  await updateEcPriceProgressCheckpoint(job, aggregate, 5,
+    `全${totalSteps}工程を1件ずつ開始します`, "ec_price_sequential_start");
+
+  for (let index = 0; index < parameters.targets.length; index += 1) {
+    const site = parameters.targets[index];
+    const range = ecPriceStepRange(index, totalSteps);
+    let outcome;
+    try {
+      outcome = await executeSingleEcPriceSite({ job, workDir, parameters, site, index, totalSteps, range });
+    } catch (error) {
+      const message = `予期しない処理エラー: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1200);
+      outcome = {
+        planSite: blockedEcPricePlanSite(site, message),
+        resultSite: blockedEcPriceResultSite(site, message),
+        referencePrice: null,
+        operatorWait: false,
+      };
+    }
+    upsertEcPriceSite(aggregate.plan.sites, outcome.planSite);
+    upsertEcPriceSite(aggregate.sites, outcome.resultSite);
+    if (!aggregate.plan.reference_standard_price && outcome.referencePrice) {
+      aggregate.plan.reference_standard_price = outcome.referencePrice;
+    }
+    operatorWaitDetected ||= outcome.operatorWait;
+    await updateEcPriceProgressCheckpoint(
+      job,
+      aggregate,
+      range.end,
+      `工程 ${index + 1}/${totalSteps} ${ecPriceTargetLabel(site)}: ${ecPriceSiteStatusLabel(outcome.resultSite.status)}`,
+      "ec_price_site_finished",
+      { site, status: outcome.resultSite.status },
+    );
+
+    if (outcome.globalSafetyStop) {
+      globalSafetyStop = outcome.globalSafetyStop;
+      for (const remaining of parameters.targets.slice(index + 1)) {
+        upsertEcPriceSite(aggregate.plan.sites, blockedEcPricePlanSite(remaining, globalSafetyStop));
+        upsertEcPriceSite(aggregate.sites, blockedEcPriceResultSite(remaining, globalSafetyStop));
+      }
+      break;
+    }
+  }
+
+  if (parameters.lpUpdate) {
+    const lpIndex = parameters.targets.length;
+    const range = ecPriceStepRange(lpIndex, totalSteps);
+    if (globalSafetyStop) {
+      aggregate.plan.lp = blockedEcPriceLpPlan(parameters, globalSafetyStop);
+      aggregate.lp = blockedLpResult(parameters, globalSafetyStop, aggregate.plan.lp);
+    } else {
+      let lpOutcome;
+      try {
+        lpOutcome = await executeSingleEcPriceLp({ job, workDir, parameters, index: lpIndex, totalSteps, range });
+      } catch (error) {
+        const message = `商品LP処理エラー: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1200);
+        lpOutcome = {
+          planLp: blockedEcPriceLpPlan(parameters, message),
+          resultLp: blockedLpResult(parameters, message),
+          referencePrice: null,
+          operatorWait: false,
+        };
+      }
+      aggregate.plan.lp = lpOutcome.planLp;
+      aggregate.lp = lpOutcome.resultLp;
+      if (!aggregate.plan.reference_standard_price && lpOutcome.referencePrice) {
+        aggregate.plan.reference_standard_price = lpOutcome.referencePrice;
+      }
+      operatorWaitDetected ||= lpOutcome.operatorWait;
+    }
+    await updateEcPriceProgressCheckpoint(
+      job,
+      aggregate,
+      range.end,
+      `工程 ${lpIndex + 1}/${totalSteps} 商品LP: ${ecPriceLpStatusLabel(aggregate.lp.status)}`,
+      "ec_price_lp_finished",
+      { status: aggregate.lp.status },
+    );
+  }
+
+  const blockedSites = aggregate.sites.filter((site) => site.status === "blocked");
+  const pendingSites = aggregate.sites.filter((site) => site.status === "submitted_pending");
+  const lpBlocked = parameters.lpUpdate && aggregate.lp.status !== "updated";
+  const hasUnfinished = blockedSites.length > 0 || pendingSites.length > 0 || lpBlocked;
+  const status = !hasUnfinished
+    ? "completed"
+    : operatorWaitDetected
+      ? "waiting_for_user"
+      : "needs_review";
+  aggregate.status = status;
+  aggregate.plan.status = hasUnfinished ? "needs_review" : "ready";
+  aggregate.plan.summary = hasUnfinished
+    ? "完了した工程を保持し、未完了工程だけを再実行できます"
+    : "全工程の価格計画と反映確認が完了しました";
+  if (!aggregate.plan.reference_standard_price) {
+    aggregate.plan.reference_standard_price = parameters.newPriceInclTax;
+  }
+  aggregate.summary = summarizeSequentialEcPriceResult(aggregate, parameters);
+  await finishEcPriceJob(job.id, status, 100, aggregate.summary, aggregate);
+}
+
+function createSequentialEcPriceResult(parameters) {
+  return {
+    status: "running",
+    phase: "sequential",
+    summary: "ECと商品LPを1件ずつ処理しています",
+    new_standard_price: parameters.newPriceInclTax,
+    sites: [],
+    lp: parameters.lpUpdate
+      ? blockedLpResult(parameters, "商品LPはまだ処理していません")
+      : notApplicableEcPriceLpResult(),
+    plan: {
+      status: "needs_review",
+      summary: "処理中",
+      reference_standard_price: null,
+      sites: [],
+      lp: parameters.lpUpdate
+        ? blockedEcPriceLpPlan(parameters, "商品LPはまだ計画していません")
+        : notApplicableEcPriceLpPlan(),
+    },
+    validated_plan_checkpoint: false,
+  };
+}
+
+async function executeSingleEcPriceSite({ job, workDir, parameters, site, index, totalSteps, range }) {
+  const scoped = scopeEcPriceSiteParameters(parameters, site);
+  const label = ecPriceTargetLabel(site);
+  const prefix = `工程 ${index + 1}/${totalSteps} ${label}: `;
+  const planOutput = join(workDir, `ec-price-${site}-plan.json`);
+  const planLog = join(workDir, `ec-price-${site}-plan-events.jsonl`);
   await updateJob(job.id, {
     status: "running",
-    progress: 5,
-    currentStep: parameters.lpUpdate ? "ECと商品LPの事前計画を作成しています" : "価格改定の事前計画を作成しています",
-    message: parameters.lpUpdate
-      ? "価格改定SkillでEC商品・商品LP・現在価格・編集元を確認します。この段階では外部へ保存しません"
-      : "価格改定Skillで対象商品と現在価格を読取確認します。この段階では保存しません",
-    eventType: "ec_price_plan_starting",
-    payload: { targets: parameters.targets, newPriceInclTax: parameters.newPriceInclTax, lpUrl: parameters.lpUrl },
+    progress: range.start,
+    currentStep: `${prefix}変更前価格を確認しています`,
+    message: `${label}だけを確認します。この時点では保存しません`,
+    eventType: "ec_price_site_plan_starting",
+    payload: { site },
   });
-
-  const planOutput = join(workDir, "ec-price-plan.json");
-  const planLog = join(workDir, "ec-price-plan-events.jsonl");
   const planned = await runEcPriceCodexPhase({
     job,
     workDir,
-    workspaceDir: parameters.lpUpdate ? config.workspace : null,
     outputFile: planOutput,
     jsonlLog: planLog,
     schema: EC_PRICE_PLAN_SCHEMA,
-    prompt: buildEcPricePlanPrompt(parameters),
-    progressStart: 8,
-    progressMax: 42,
-    eventType: "ec_price_plan_progress",
-    activityLabel: "変更前価格を確認中（まだECへ書き込んでいません）",
+    prompt: buildEcPricePlanPrompt(scoped),
+    progressStart: range.start,
+    progressMax: range.middle,
+    eventType: "ec_price_site_plan_progress",
+    activityLabel: `${label}の変更前価格を確認中（まだ書き込んでいません）`,
+    stepPrefix: prefix,
     abortOnTabPolicyViolation: false,
-    maxTemporaryTabs: parameters.targets.length,
+    maxTemporaryTabs: 1,
   });
-  const plan = planned.result;
-  if (planned.tabPolicyViolation) {
-    const summary = `${planned.tabPolicyViolation}。EC書込前に停止したため、価格変更・保存はありません。`.slice(0, 4000);
-    const result = planToFinalResult(plan, parameters, "failed", summary);
-    await uploadArtifact(job.id, planLog, "log").catch(() => undefined);
-    if (existsSync(planOutput)) await uploadArtifact(job.id, planOutput, "output").catch(() => undefined);
-    await finishEcPriceJob(job.id, "failed", Math.max(planned.progress, 10), summary, result);
-    return;
-  }
-  const planIssue = validateEcPricePlan(plan, parameters);
-  if (!plan || planned.exitCode !== 0 || plan.status !== "ready" || planIssue) {
-    const planStatus = plan?.status === "waiting_for_user"
-      ? "waiting_for_user"
-      : plan?.status === "failed" || !plan
-        ? "failed"
-        : "needs_review";
-    const summary = [
-      String(plan?.summary || summarizeCodexPhaseFailure(
-        planned.stderr,
-        "価格変更の事前確認が途中終了しました。ECサイトは変更していません",
-      )),
-      planIssue,
-    ].filter(Boolean).join(" / ").slice(0, 4000);
-    const result = planToFinalResult(plan, parameters, planStatus, summary);
-    await uploadArtifact(job.id, planLog, "log").catch(() => undefined);
-    if (existsSync(planOutput)) await uploadArtifact(job.id, planOutput, "output").catch(() => undefined);
-    await finishEcPriceJob(job.id, planStatus, Math.max(planned.progress, 45), summary, result);
-    return;
-  }
-
-  const checkpoint = {
-    status: "running",
-    phase: "planned",
-    summary: plan.summary,
-    new_standard_price: parameters.newPriceInclTax,
-    sites: [],
-    plan,
-  };
-  await updateJob(job.id, {
-    status: "running",
-    progress: 48,
-    currentStep: "サイト別の最終価格を保存しました",
-    message: "外部書込前の価格計画を保存しました。再実行時も同じ絶対価格を使用します",
-    eventType: "ec_price_plan_saved",
-    result: checkpoint,
-    payload: { phase: "planned", targets: parameters.targets },
-  });
-  await uploadArtifact(job.id, planOutput, "output").catch(() => undefined);
   await uploadArtifact(job.id, planLog, "log").catch(() => undefined);
+  if (existsSync(planOutput)) await uploadArtifact(job.id, planOutput, "output").catch(() => undefined);
+  const plan = planned.result;
+  const planIssue = planned.tabPolicyViolation || validateEcPricePlan(plan, scoped);
+  if (!plan || planned.exitCode !== 0 || plan.status !== "ready" || planIssue) {
+    const message = [
+      planned.tabPolicyViolation,
+      planIssue,
+      plan?.summary,
+      summarizeCodexPhaseFailure(planned.stderr, `${label}の事前確認を完了できませんでした`),
+    ].filter(Boolean).join(" / ").slice(0, 1200);
+    return {
+      planSite: blockedEcPricePlanSite(site, message, plan?.sites?.find((entry) => entry?.site === site)),
+      resultSite: blockedEcPriceResultSite(site, message),
+      referencePrice: positiveEcPriceInteger(plan?.reference_standard_price),
+      operatorWait: plan?.status === "waiting_for_user" || browserPermissionRequired(plan),
+    };
+  }
+  const planSite = plan.sites[0];
+  if (planSite.status === "not_found") {
+    return {
+      planSite,
+      resultSite: {
+        site,
+        status: "not_found",
+        final_price: null,
+        product_identifier: null,
+        message: planSite.message,
+      },
+      referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+      operatorWait: false,
+    };
+  }
 
-  if (!await validateEcPriceRecipeSnapshot(job, parameters, checkpoint, "書込直前")) return;
+  try {
+    await assertEcPriceRecipeSnapshot(job, parameters, `工程 ${index + 1}/${totalSteps} ${label}書込直前`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      planSite,
+      resultSite: blockedEcPriceResultSite(site, message, planSite.product_identifier),
+      referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+      operatorWait: false,
+      globalSafetyStop: message,
+    };
+  }
 
-  await updateJob(job.id, {
-    status: "running",
-    progress: 52,
-    currentStep: parameters.lpUpdate ? "ECと商品LPへ計画価格を反映しています" : "EC管理画面へ計画価格を反映しています",
-    message: parameters.lpUpdate
-      ? "ECの現在値とLP編集元が計画に一致する場合だけ更新し、商品LPは本番公開まで確認します"
-      : "現在値が計画の変更前価格と一致するサイトだけを更新します",
-    eventType: "ec_price_write_starting",
-  });
-  const writeOutput = join(workDir, "ec-price-result.json");
-  const writeLog = join(workDir, "ec-price-write-events.jsonl");
+  const writeOutput = join(workDir, `ec-price-${site}-result.json`);
+  const writeLog = join(workDir, `ec-price-${site}-write-events.jsonl`);
   const written = await runEcPriceCodexPhase({
     job,
     workDir,
-    workspaceDir: parameters.lpUpdate ? config.workspace : null,
     outputFile: writeOutput,
     jsonlLog: writeLog,
     schema: EC_PRICE_RESULT_SCHEMA,
-    prompt: buildEcPriceWritePrompt(parameters, plan),
-    progressStart: 54,
-    progressMax: 90,
-    eventType: "ec_price_write_progress",
-    activityLabel: parameters.lpUpdate ? "計画済みの価格をECと商品LPへ反映中" : "計画済みの価格をEC管理画面へ反映中",
+    prompt: buildEcPriceWritePrompt(scoped, plan),
+    progressStart: range.middle,
+    progressMax: range.end,
+    eventType: "ec_price_site_write_progress",
+    activityLabel: `${label}へ計画済み価格を反映中`,
+    stepPrefix: prefix,
     abortOnTabPolicyViolation: true,
-    maxTemporaryTabs: parameters.targets.length,
+    maxTemporaryTabs: 1,
   });
-  let result = written.result || {
-    status: "failed",
-    summary: written.stderr || `価格変更結果を取得できませんでした (exit code ${written.exitCode})`,
-    new_standard_price: parameters.newPriceInclTax,
-    sites: [],
-    lp: blockedLpResult(parameters, "価格変更結果を取得できませんでした", plan.lp),
-  };
-  if (written.tabPolicyViolation) {
-    result = {
-      status: "needs_review",
-      summary: `${written.tabPolicyViolation}。処理を停止したため、サイト別の反映状態を確認してください。`,
-      new_standard_price: parameters.newPriceInclTax,
-      sites: parameters.targets.map((site) => ({
-        site,
-        status: "blocked",
-        final_price: null,
-        product_identifier: null,
-        message: "Chromeタブ安全ルール違反を検出して停止しました",
-      })),
-      lp: blockedLpResult(parameters, "EC操作中に停止したため商品LPは変更していません", plan.lp),
-    };
-  }
-  const resultIssue = validateEcPriceResultV2(result, parameters, plan);
-  if (resultIssue) {
-    result = {
-      status: "needs_review",
-      summary: `${String(result.summary || "価格変更結果を確認してください")} / ${resultIssue}`,
-      new_standard_price: parameters.newPriceInclTax,
-      sites: parameters.targets.map((site) => ({
-        site,
-        status: "blocked",
-        final_price: null,
-        product_identifier: null,
-        message: resultIssue,
-      })),
-      lp: blockedLpResult(parameters, resultIssue, plan.lp),
-    };
-  }
-  if (result.status === "completed" && result.sites.some((site) => {
-    const planned = plan.sites.find((entry) => entry.site === site.site);
-    return site.status === "blocked" || (site.status === "not_found" && planned?.status !== "not_found");
-  })) {
-    result = {
-      ...result,
-      status: "needs_review",
-      summary: `${String(result.summary || "価格変更結果を確認してください")} / 未反映のECサイトがあります`,
-    };
-  }
-  if (result.status === "completed" && result.sites.some((site) => site.status === "submitted_pending")) {
-    result = {
-      ...result,
-      status: "needs_review",
-      summary: `${String(result.summary || "価格変更結果を確認してください")} / 反映待ちのECサイトがあります`,
-    };
-  }
-  if (result.status === "completed" && parameters.lpUpdate && result.lp?.status !== "updated") {
-    result = {
-      ...result,
-      status: "needs_review",
-      summary: `${String(result.summary || "価格変更結果を確認してください")} / 商品LPが未反映です`,
-    };
-  }
-  result = { ...result, plan };
   await uploadArtifact(job.id, writeLog, "log").catch(() => undefined);
   if (existsSync(writeOutput)) await uploadArtifact(job.id, writeOutput, "output").catch(() => undefined);
-  const summary = String(result.summary || written.stderr || "価格変更処理が終了しました").slice(0, 4000);
-  const status = browserPermissionRequired(result)
-    ? "waiting_for_user"
-    : normalizeResultStatus(result.status, written.exitCode);
-  result = { ...result, status };
-  await finishEcPriceJob(job.id, status, written.progress, summary, result);
+  const result = written.result;
+  const resultIssue = written.tabPolicyViolation || validateEcPriceResultV2(result, scoped, plan);
+  if (!result || resultIssue) {
+    const message = [
+      written.tabPolicyViolation,
+      resultIssue,
+      result?.summary,
+      summarizeCodexPhaseFailure(written.stderr, `${label}の更新結果を確認できませんでした`),
+    ].filter(Boolean).join(" / ").slice(0, 1200);
+    return {
+      planSite,
+      resultSite: blockedEcPriceResultSite(site, message, planSite.product_identifier),
+      referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+      operatorWait: result?.status === "waiting_for_user" || browserPermissionRequired(result),
+    };
+  }
+  const resultSite = result.sites[0];
+  return {
+    planSite,
+    resultSite,
+    referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+    operatorWait: result.status === "waiting_for_user" || browserPermissionRequired(result),
+  };
+}
+
+async function executeSingleEcPriceLp({ job, workDir, parameters, index, totalSteps, range }) {
+  const scoped = scopeEcPriceLpParameters(parameters);
+  const prefix = `工程 ${index + 1}/${totalSteps} 商品LP: `;
+  const planOutput = join(workDir, "ec-price-lp-plan.json");
+  const planLog = join(workDir, "ec-price-lp-plan-events.jsonl");
+  await updateJob(job.id, {
+    status: "running",
+    progress: range.start,
+    currentStep: `${prefix}編集元と公開価格を確認しています`,
+    message: "商品LPだけを確認します。この時点では編集・デプロイしません",
+    eventType: "ec_price_lp_plan_starting",
+  });
+  const planned = await runEcPriceCodexPhase({
+    job,
+    workDir,
+    workspaceDir: config.workspace,
+    outputFile: planOutput,
+    jsonlLog: planLog,
+    schema: EC_PRICE_PLAN_SCHEMA,
+    prompt: buildEcPricePlanPrompt(scoped),
+    progressStart: range.start,
+    progressMax: range.middle,
+    eventType: "ec_price_lp_plan_progress",
+    activityLabel: "商品LPの編集元と変更箇所を確認中（まだ書き込んでいません）",
+    stepPrefix: prefix,
+    abortOnTabPolicyViolation: false,
+    maxTemporaryTabs: 0,
+  });
+  await uploadArtifact(job.id, planLog, "log").catch(() => undefined);
+  if (existsSync(planOutput)) await uploadArtifact(job.id, planOutput, "output").catch(() => undefined);
+  const plan = planned.result;
+  const planIssue = planned.tabPolicyViolation || validateEcPricePlan(plan, scoped);
+  if (!plan || planned.exitCode !== 0 || plan.status !== "ready" || planIssue) {
+    const message = [
+      planned.tabPolicyViolation,
+      planIssue,
+      plan?.summary,
+      summarizeCodexPhaseFailure(planned.stderr, "商品LPの事前確認を完了できませんでした"),
+    ].filter(Boolean).join(" / ").slice(0, 1200);
+    return {
+      planLp: blockedEcPriceLpPlan(parameters, message, plan?.lp),
+      resultLp: blockedLpResult(parameters, message, plan?.lp),
+      referencePrice: positiveEcPriceInteger(plan?.reference_standard_price),
+      operatorWait: plan?.status === "waiting_for_user" || browserPermissionRequired(plan),
+    };
+  }
+  try {
+    await assertEcPriceRecipeSnapshot(job, parameters, `工程 ${index + 1}/${totalSteps} 商品LP書込直前`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      planLp: plan.lp,
+      resultLp: blockedLpResult(parameters, message, plan.lp),
+      referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+      operatorWait: false,
+    };
+  }
+  const writeOutput = join(workDir, "ec-price-lp-result.json");
+  const writeLog = join(workDir, "ec-price-lp-write-events.jsonl");
+  const written = await runEcPriceCodexPhase({
+    job,
+    workDir,
+    workspaceDir: config.workspace,
+    outputFile: writeOutput,
+    jsonlLog: writeLog,
+    schema: EC_PRICE_RESULT_SCHEMA,
+    prompt: buildEcPriceWritePrompt(scoped, plan),
+    progressStart: range.middle,
+    progressMax: range.end,
+    eventType: "ec_price_lp_write_progress",
+    activityLabel: "商品LPを編集・デプロイし、登録URLを確認中",
+    stepPrefix: prefix,
+    abortOnTabPolicyViolation: true,
+    maxTemporaryTabs: 0,
+  });
+  await uploadArtifact(job.id, writeLog, "log").catch(() => undefined);
+  if (existsSync(writeOutput)) await uploadArtifact(job.id, writeOutput, "output").catch(() => undefined);
+  const result = written.result;
+  let resultIssue = written.tabPolicyViolation || validateEcPriceResultV2(result, scoped, plan);
+  if (!resultIssue && result?.lp?.status === "updated") {
+    resultIssue = await verifyRegisteredEcPriceLp(parameters.lpUrl, result.lp.final_prices);
+  }
+  if (!result || resultIssue) {
+    const message = [
+      written.tabPolicyViolation,
+      resultIssue,
+      result?.summary,
+      summarizeCodexPhaseFailure(written.stderr, "商品LPの公開反映を確認できませんでした"),
+    ].filter(Boolean).join(" / ").slice(0, 1200);
+    return {
+      planLp: plan.lp,
+      resultLp: blockedLpResult(parameters, message, plan.lp),
+      referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+      operatorWait: result?.status === "waiting_for_user" || browserPermissionRequired(result),
+    };
+  }
+  return {
+    planLp: plan.lp,
+    resultLp: result.lp,
+    referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+    operatorWait: result.status === "waiting_for_user" || browserPermissionRequired(result),
+  };
+}
+
+function scopeEcPriceSiteParameters(parameters, site) {
+  return {
+    ...parameters,
+    targets: [site],
+    productLpUrl: null,
+    recipeSnapshot: { ...parameters.recipeSnapshot, productLpUrl: null },
+    siteBaselines: { [site]: parameters.siteBaselines[site] ?? null },
+    recoveryPlanSites: parameters.recoveryPlanSites.filter((entry) => entry.site === site),
+    productMappings: { [site]: parameters.productMappings[site] || [] },
+    verifiedProductIdentifiers: { [site]: parameters.verifiedProductIdentifiers[site] || [] },
+    lpUpdate: false,
+    lpUrl: null,
+    lpSource: null,
+    operatorAuthorization: { ...parameters.operatorAuthorization, targets: [site] },
+  };
+}
+
+function scopeEcPriceLpParameters(parameters) {
+  return {
+    ...parameters,
+    targets: [],
+    siteBaselines: {},
+    recoveryPlanSites: [],
+    productMappings: {},
+    verifiedProductIdentifiers: {},
+    operatorAuthorization: { ...parameters.operatorAuthorization, targets: [] },
+  };
+}
+
+async function updateEcPriceProgressCheckpoint(job, aggregate, progress, currentStep, eventType, payload = {}) {
+  aggregate.summary = currentStep;
+  await updateJob(job.id, {
+    status: "running",
+    progress,
+    currentStep,
+    message: currentStep,
+    eventType: "ec_price_progress_checkpoint",
+    result: aggregate,
+    payload: { ...payload, sourceEvent: eventType },
+  });
+}
+
+function ecPriceStepRange(index, totalSteps) {
+  const safeTotal = Math.max(1, totalSteps);
+  const start = Math.round(5 + (index * 90) / safeTotal);
+  const end = Math.round(5 + ((index + 1) * 90) / safeTotal);
+  return { start, middle: Math.round((start + end) / 2), end };
+}
+
+function upsertEcPriceSite(collection, entry) {
+  const index = collection.findIndex((candidate) => candidate.site === entry.site);
+  if (index >= 0) collection[index] = entry;
+  else collection.push(entry);
+}
+
+function blockedEcPricePlanSite(site, message, candidate = null) {
+  return {
+    site,
+    status: "blocked",
+    pricing_rule: candidate?.pricing_rule || "standard_price",
+    shipping_mode: candidate?.shipping_mode || "not_checked",
+    unit_multiplier: positiveEcPriceInteger(candidate?.unit_multiplier) || 1,
+    unit_evidence: String(candidate?.unit_evidence || message || "確認未完了"),
+    observed_price: positiveEcPriceInteger(candidate?.observed_price),
+    basis_price: positiveEcPriceInteger(candidate?.basis_price),
+    standard_baseline_price: positiveEcPriceInteger(candidate?.standard_baseline_price),
+    target_price: positiveEcPriceInteger(candidate?.target_price),
+    product_identifier: String(candidate?.product_identifier || "").trim() || null,
+    message: String(message || "確認未完了"),
+  };
+}
+
+function blockedEcPriceResultSite(site, message, productIdentifier = null) {
+  return {
+    site,
+    status: "blocked",
+    final_price: null,
+    product_identifier: String(productIdentifier || "").trim() || null,
+    message: String(message || "未完了").slice(0, 1200),
+  };
+}
+
+function notApplicableEcPriceLpPlan() {
+  return {
+    required: false,
+    url: null,
+    status: "not_applicable",
+    project_root: null,
+    github_repository: "",
+    production_branch: "",
+    source_commit: "",
+    product_evidence: "",
+    updates: [],
+    message: "商品LPは登録されていないため対象外です",
+  };
+}
+
+function notApplicableEcPriceLpResult() {
+  return {
+    required: false,
+    url: null,
+    status: "not_applicable",
+    final_prices: [],
+    changed_files: [],
+    deployment_url: null,
+    deployed_commit: null,
+    message: "商品LPは登録されていないため対象外です",
+  };
+}
+
+function blockedEcPriceLpPlan(parameters, message, candidate = null) {
+  return {
+    required: true,
+    url: parameters.lpUrl,
+    status: "blocked",
+    project_root: candidate?.project_root || null,
+    github_repository: String(candidate?.github_repository || parameters.lpSource?.githubRepository || ""),
+    production_branch: String(candidate?.production_branch || parameters.lpSource?.productionBranch || ""),
+    source_commit: String(candidate?.source_commit || ""),
+    product_evidence: String(candidate?.product_evidence || ""),
+    updates: Array.isArray(candidate?.updates) ? candidate.updates : [],
+    message: String(message || "商品LPは未完了です").slice(0, 1200),
+  };
+}
+
+function positiveEcPriceInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+async function verifyRegisteredEcPriceLp(lpUrl, prices) {
+  try {
+    const response = await fetch(lpUrl, {
+      redirect: "follow",
+      headers: { "cache-control": "no-cache", pragma: "no-cache" },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) return `商品LP登録URLのHTTP確認に失敗しました (${response.status})`;
+    const normalized = (await response.text()).replace(/,/g, "").replace(/&#44;|&#x2c;/gi, "");
+    const missing = [...new Set((Array.isArray(prices) ? prices : []).map(Number))]
+      .filter((price) => Number.isInteger(price) && price > 0)
+      .filter((price) => !normalized.includes(String(price)));
+    if (missing.length > 0) return `商品LP登録URLで目標価格${missing.join("・")}円を確認できません`;
+    return null;
+  } catch (error) {
+    return `商品LP登録URLを確認できません: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+function summarizeSequentialEcPriceResult(result, parameters) {
+  const updated = result.sites.filter((site) => site.status === "updated").length;
+  const notFound = result.sites.filter((site) => site.status === "not_found").length;
+  const pending = result.sites.filter((site) => site.status === "submitted_pending").length;
+  const blocked = result.sites.filter((site) => site.status === "blocked").length;
+  const parts = [`EC反映済み${updated}件`];
+  if (notFound) parts.push(`対象商品なし${notFound}件`);
+  if (pending) parts.push(`反映待ち${pending}件`);
+  if (blocked) parts.push(`未完了${blocked}件`);
+  if (parameters.lpUpdate) parts.push(`商品LP ${result.lp.status === "updated" ? "反映済み" : "未完了"}`);
+  if (blocked || pending || (parameters.lpUpdate && result.lp.status !== "updated")) {
+    parts.push("完了分は保持し、未完了だけ再実行できます");
+  }
+  return parts.join(" / ").slice(0, 4000);
+}
+
+function ecPriceTargetLabel(site) {
+  return ({
+    amazon: "Amazon",
+    rakuten: "楽天",
+    yahoo: "Yahoo",
+    mercari: "メルカリ",
+    base: "BASE",
+    qoo10: "Qoo10",
+    tiktok: "TikTok",
+  })[site] || site;
+}
+
+function ecPriceSiteStatusLabel(status) {
+  return ({ updated: "反映確認済み", submitted_pending: "送信済み・反映待ち", not_found: "対象商品なし", blocked: "未完了" })[status] || status;
+}
+
+function ecPriceLpStatusLabel(status) {
+  return status === "updated" ? "公開反映確認済み" : status === "not_applicable" ? "対象外" : "未完了";
 }
 
 async function validateEcPriceRecipeSnapshot(job, parameters, checkpoint, phase) {
   try {
-    await api(`/api/web-sales/codex-bridge/jobs/${job.id}/ec-price-validate`, {
-      method: "POST",
-      body: { workerId: config.workerId },
-    });
+    await assertEcPriceRecipeSnapshot(job, parameters, phase);
     return true;
   } catch (error) {
     const summary = `${phase}の再検証で停止しました: ${error instanceof Error ? error.message : String(error)}`.slice(0, 4000);
@@ -553,7 +908,18 @@ async function validateEcPriceRecipeSnapshot(job, parameters, checkpoint, phase)
   }
 }
 
-async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputFile, jsonlLog, schema, prompt, progressStart, progressMax, eventType, activityLabel, abortOnTabPolicyViolation, maxTemporaryTabs = 0 }) {
+async function assertEcPriceRecipeSnapshot(job, parameters, phase) {
+  try {
+    await api(`/api/web-sales/codex-bridge/jobs/${job.id}/ec-price-validate`, {
+      method: "POST",
+      body: { workerId: config.workerId },
+    });
+  } catch (error) {
+    throw new Error(`${phase}の再検証で停止しました: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputFile, jsonlLog, schema, prompt, progressStart, progressMax, eventType, activityLabel, stepPrefix = "", abortOnTabPolicyViolation, maxTemporaryTabs = 0 }) {
   const args = buildIsolatedCodexArgs(outputFile, [workDir, workspaceDir], {
     schema,
     reasoningEffort: "high",
@@ -600,11 +966,12 @@ async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputF
       const mapped = mapCodexEvent(event, progress);
       if (!mapped) continue;
       progress = Math.min(progressMax, Math.max(progress, mapped.progress));
-      const phaseMessage = ecPriceEventLabel(event) || (mapped.message === "Chromeを操作しています"
+      const rawPhaseMessage = ecPriceEventLabel(event) || (mapped.message === "Chromeを操作しています"
         || mapped.message === "処理を進めています"
         || mapped.message === "対象期間と保存先を確認しています"
         ? activityLabel
         : mapped.message);
+      const phaseMessage = `${stepPrefix}${rawPhaseMessage}`.slice(0, 500);
       const now = Date.now();
       if (now - lastProgressSent > 1200 || mapped.important) {
         lastProgressSent = now;
@@ -753,7 +1120,12 @@ function validateEcPriceJobParametersV2(input) {
   const parameters = input && typeof input === "object" && !Array.isArray(input) ? input : {};
   const inputTargets = Array.isArray(parameters.targets) ? parameters.targets : [];
   const targets = [...new Set(inputTargets.map((value) => String(value).trim().toLowerCase()))];
-  if (targets.length === 0 || targets.length !== inputTargets.length || targets.some((target) => !EC_PRICE_TARGETS.has(target))) {
+  const hasLpTarget = parameters.lpUpdate === true;
+  if (
+    (targets.length === 0 && !hasLpTarget)
+    || targets.length !== inputTargets.length
+    || targets.some((target) => !EC_PRICE_TARGETS.has(target))
+  ) {
     throw new Error("価格変更先ECが正しくありません");
   }
   const newPriceInclTax = Number(parameters.newPriceInclTax);
@@ -782,9 +1154,11 @@ function validateEcPriceJobParametersV2(input) {
   ) {
     throw new Error("TSA管理者による価格変更の実行確認記録がありません。画面から実行し直してください");
   }
-  const lpUrl = String(parameters.lpUrl || parameters.recipeSnapshot?.productLpUrl || "").trim();
-  const lpUpdate = Boolean(lpUrl);
-  if (parameters.lpUpdate !== lpUpdate) throw new Error("商品LPの必須更新設定がレシピ情報と一致しません");
+  const lpUpdate = parameters.lpUpdate === true;
+  const lpUrl = lpUpdate
+    ? String(parameters.lpUrl || parameters.recipeSnapshot?.productLpUrl || "").trim()
+    : "";
+  if (lpUpdate && !lpUrl) throw new Error("商品LPの必須更新URLがありません");
   if (lpUrl) {
     let parsedLpUrl;
     try { parsedLpUrl = new URL(lpUrl); } catch { throw new Error("商品LPのURLが正しくありません"); }
@@ -1119,12 +1493,20 @@ function validateEcPriceLpResult(input, parameters, plan, overallStatus) {
     if (plannedTargets.length !== finalPrices.length || plannedTargets.some((price, index) => price !== finalPrices[index])) {
       return "商品LPの公開価格が保存済み計画と一致しません";
     }
-    if (String(lp.deployment_url || "").trim() !== parameters.lpUrl) return "商品LPの公開URL確認が完了していません";
+    if (!isHttpEcPriceUrl(lp.deployment_url)) return "商品LPのデプロイURLを確認できません";
     if (!/^[0-9a-f]{40}$/i.test(String(lp.deployed_commit || "").trim())) return "商品LPの公開コミットが確認できていません";
     if (!Array.isArray(lp.changed_files)) return "商品LPの変更ファイル結果がありません";
   }
   if (overallStatus === "completed" && lp.status !== "updated") return "商品LPが未反映のため完了にできません";
   return null;
+}
+
+function isHttpEcPriceUrl(value) {
+  try {
+    return /^https?:$/.test(new URL(String(value || "").trim()).protocol);
+  } catch {
+    return false;
+  }
 }
 
 function planToFinalResult(plan, parameters, status, summary) {
@@ -2324,7 +2706,7 @@ function workerPayload() {
       codexRuntimeAutoRefresh: true,
       codexRuntimeCheckIntervalSeconds: CODEX_RUNTIME_CHECK_MS / 1000,
       ecPriceUpdate: true,
-      ecPriceProtocolVersion: 2,
+      ecPriceProtocolVersion: 3,
       codexTaskKeys: ["connection_test", "web_sales_import", "ad_cost_import", "ec_profit_import", "ec_price_update", "web_sales_analysis"],
     },
   };

@@ -119,6 +119,13 @@
 - 価格変更ジョブはLPを対象外とし、ジョブ専用ディレクトリだけを書込可能にした。
 - `recipe_ec_price_revisions` とサイト別同期stateを追加。価格ジョブのfinal化と同期state更新はDB RPCで原子的に行う。
 - 旧Bridgeが価格ジョブを取得しないよう `ecPriceProtocolVersion: 2` をclaim条件に追加。installerは実行中ジョブを中断せず、再起動後のPID・version・heartbeatまで確認する。
+
+## 2026-08-22（逐次実行・未完了再開）
+
+- job `cb85e47c-90fe-4967-a406-24b03f9eb9ff` はEC各サイトと商品LPの外部反映に成功していたが、Bridge 1.8.22がVercel生成deployment URLとTSA登録公開URLの文字列一致を要求したため、正常結果を全件ブロックへ置き換えていた。登録公開URL `https://buta.aizubrandhall-lp2.com/` を直接HTTP確認する方式へ修正した。
+- Bridge 1.8.23／EC価格protocol 3はAmazon、楽天、Yahoo、メルカリ、BASE、Qoo10、TikTok、商品LPを1工程ずつ独立したCodexセッションで順次処理する。DBのclaim条件もprotocol 3へ更新し、旧Bridgeには新方式のジョブを渡さない。1工程の失敗・ログイン待ち・対象なしは記録して次へ進み、成功済み結果を後続工程の失敗で無効化しない。
+- 再実行は `blocked`、`submitted_pending`、未結果のECと、未完了の商品LPだけを新しいジョブへ引き継ぐ。商品識別子、販売単位、基準価格、絶対目標価格は過去の検証済み計画から固定し、AI説明文の表現差だけでは停止しない。
+- 画面の固定2分警告を廃止。実行中は `工程 n/全件` と対象EC・LPの現在工程を表示し、完了後はサイト別に反映済み／対象商品なし／反映待ち／未完了を表示する。
 - 伝票発行システムを含む本番ソースはVercelの正常稼働版から完全復旧し、価格機能はその復旧ソースへ統合。古いGit mainをそのまま再デプロイしない。
 
 ### Verification

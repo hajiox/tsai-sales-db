@@ -83,7 +83,6 @@ export default function EcPriceSyncControls({
   const [priceHistory, setPriceHistory] = useState<EcPriceHistoryEntry[]>([]);
   const [priceHistoryExpanded, setPriceHistoryExpanded] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const [progressStableSince, setProgressStableSince] = useState(() => Date.now());
   const [reservations, setReservations] = useState<ReservationView[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueAction, setQueueAction] = useState(false);
@@ -93,7 +92,12 @@ export default function EcPriceSyncControls({
   const hasProductLp = Boolean(productLpUrl?.trim());
   const jobIsActive = Boolean(job && ACTIVE_STATUSES.has(job.status));
   const blockedByAnotherJob = dispatchMode === "immediate" && Boolean(blockingJob);
-  const jobCanRetry = Boolean(job && job.status !== "completed" && !jobIsActive && job.targets.length > 0);
+  const unfinishedTargets = job?.targets.filter((target) => {
+    const site = job.sites.find((candidate) => candidate.site === target);
+    return !site || site.status === "blocked" || site.status === "submitted_pending";
+  }) || [];
+  const unfinishedLp = Boolean(job?.lp?.required && job.lp.status !== "updated");
+  const jobCanRetry = Boolean(job && !jobIsActive && (unfinishedTargets.length > 0 || unfinishedLp));
   const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || blockedByAnotherJob || !hasPrice;
 
   const refreshPriceHistory = useCallback(async () => {
@@ -131,10 +135,6 @@ export default function EcPriceSyncControls({
   useEffect(() => {
     void refreshPriceHistory();
   }, [refreshPriceHistory]);
-
-  useEffect(() => {
-    setProgressStableSince(Date.now());
-  }, [job?.id, job?.progress]);
 
   useEffect(() => {
     if (!jobIsActive) return;
@@ -253,6 +253,47 @@ export default function EcPriceSyncControls({
     }
   };
 
+  const retryUnfinished = async () => {
+    if (!job || disabled || !jobCanRetry) return;
+    const labels = [
+      ...(unfinishedTargets.length > 0 ? [getEcPriceTargetLabel(unfinishedTargets)] : []),
+      ...(unfinishedLp ? ["商品LP"] : []),
+    ];
+    if (!window.confirm([
+      "未完了の工程だけを再実行します。",
+      "",
+      `対象: ${labels.join("・")}`,
+      `商品: ${ecProductName || recipeName}`,
+      `価格（税込）: ¥${sellingPriceInclTax.toLocaleString("ja-JP")}`,
+      "",
+      "反映済み・対象商品なしの工程は再実行しません。実行しますか？",
+    ].join("\n"))) return;
+
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/recipe/${recipeId}/ec-price-jobs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          retryUnfinishedFromJobId: job.id,
+          dispatchMode: "immediate",
+          expectedPriceInclTax: sellingPriceInclTax,
+          expectedRecipeSnapshot,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "未完了工程を再実行できません");
+      setDispatchMode("immediate");
+      setJob(payload.job as EcPriceJobView);
+      notifiedJobId.current = null;
+      toast.success("未完了工程だけを事務所PCのCodexへ登録しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "未完了工程を再実行できません");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const executeAllReservations = async () => {
     if (reservations.length === 0 || queueAction) return;
     if (!window.confirm(`予約済み${reservations.length}件をまとめて実行します。\n事務所PCのCodexが順番にEC価格を変更します。実行しますか？`)) return;
@@ -304,15 +345,12 @@ export default function EcPriceSyncControls({
   const heartbeatAgeSeconds = Number.isFinite(heartbeatAt) ? Math.max(0, Math.floor((clockNow - heartbeatAt) / 1000)) : null;
   const elapsedSeconds = Number.isFinite(startedAt) ? Math.max(0, Math.floor((clockNow - startedAt) / 1000)) : 0;
   const completionEstimate = jobIsActive && job
-    ? estimateCompletion(job.status, activeProgress, elapsedSeconds, job.targets.length, clockNow)
+    ? estimateCompletion(job.status, activeProgress, elapsedSeconds, job.targets.length + (hasProductLp ? 1 : 0), clockNow)
     : null;
   const heartbeatStale = jobIsActive && heartbeatAgeSeconds !== null && heartbeatAgeSeconds >= 70;
-  const progressUnchanged = job?.status === "running" && clockNow - progressStableSince >= 120_000;
   const executionPhase = job?.status === "queued"
     ? "開始待ち"
-    : activeProgress < 48
-      ? "工程1/2 変更前価格を確認中"
-      : "工程2/2 EC価格へ反映中";
+    : "1件ずつ順次実行中";
   const jobStatusLabel = jobIsActive
     ? executionPhase
     : job?.status === "completed"
@@ -332,7 +370,7 @@ export default function EcPriceSyncControls({
       ? "border-red-200 bg-red-50 text-red-700"
       : job?.status === "cancelled"
         ? "border-slate-200 bg-slate-50 text-slate-600"
-        : job?.status === "waiting_for_user" || job?.status === "needs_review" || heartbeatStale || progressUnchanged
+    : job?.status === "waiting_for_user" || job?.status === "needs_review" || heartbeatStale
           ? "border-amber-300 bg-amber-50 text-amber-800"
           : "border-blue-200 bg-blue-50 text-blue-700";
   const previousSitePrices = EC_PRICE_TARGETS.flatMap((target) => {
@@ -484,17 +522,15 @@ export default function EcPriceSyncControls({
                   </div>
                 )}
               </dl>
-              {activeProgress < 48 && (
+              {/変更前価格|事前確認|編集元/.test(job.currentStep || "") && (
                 <p className="mt-2 rounded bg-white/70 px-2 py-1.5 text-[11px] font-bold">
-                  この工程では対象商品と変更前価格を確認するだけで、ECサイトへはまだ書き込みません。
+                  現在の対象だけを確認中です。この工程ではまだ外部へ書き込みません。
                 </p>
               )}
-              {(heartbeatStale || progressUnchanged) && (
+              {heartbeatStale && (
                 <p className="mt-2 flex items-start gap-1.5 font-bold text-amber-800">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  {heartbeatStale
-                    ? "事務所PCから70秒以上応答がありません。処理停止の可能性があります。"
-                    : "同じ工程が2分以上続いています。案内画面・ログイン確認・権限待ちの可能性があります。"}
+                  事務所PCのBridgeから70秒以上ハートビートがありません。Bridge自体の停止を確認してください。
                 </p>
               )}
             </>
@@ -504,7 +540,13 @@ export default function EcPriceSyncControls({
           {job.sites.length > 0 && job.status !== "cancelled" && (
             <ul className="mt-2 space-y-1">
               {job.sites.map((site) => (
-                <li key={site.site}>{getEcPriceTargetLabel([site.site])}: {site.message}</li>
+                <li key={site.site} className="grid gap-1 rounded bg-white/70 px-2 py-1.5 sm:grid-cols-[5rem_6.5rem_1fr] sm:items-start">
+                  <strong>{getEcPriceTargetLabel([site.site])}</strong>
+                  <span className={`w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${site.status === "updated" ? "bg-emerald-100 text-emerald-700" : site.status === "not_found" ? "bg-slate-100 text-slate-600" : site.status === "submitted_pending" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-800"}`}>
+                    {site.status === "updated" ? "反映確認済み" : site.status === "not_found" ? "対象商品なし" : site.status === "submitted_pending" ? "反映待ち" : "未完了"}
+                  </span>
+                  <span className="leading-relaxed">{site.message}</span>
+                </li>
               ))}
             </ul>
           )}
@@ -517,12 +559,12 @@ export default function EcPriceSyncControls({
           {jobCanRetry && (
             <button
               type="button"
-              onClick={() => enqueue(job.targets)}
+              onClick={retryUnfinished}
               disabled={disabled}
               className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-current/20 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-              同じ対象で再実行
+              未完了だけ再実行
             </button>
           )}
         </div>
@@ -699,7 +741,7 @@ function estimateCompletion(
   targetCount: number,
   now: number,
 ) {
-  const safeTargetCount = Math.max(1, Math.min(EC_PRICE_TARGETS.length, Math.floor(targetCount) || 1));
+  const safeTargetCount = Math.max(1, Math.min(EC_PRICE_TARGETS.length + 1, Math.floor(targetCount) || 1));
   const safeElapsed = Number.isFinite(elapsedSeconds) ? Math.max(0, elapsedSeconds) : 0;
   const remainingFraction = Math.max(0.01, (100 - Math.min(progress, 99)) / 100);
 
