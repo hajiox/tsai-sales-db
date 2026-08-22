@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.18";
+const VERSION = "1.8.19";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -876,7 +876,7 @@ function buildEcPriceWritePrompt(parameters, plan) {
     "If current price equals basis_price, set the exact target_price, save/submit using the Skill procedure, reload/list-verify it, and report updated or submitted_pending.",
     "If current price is neither basis_price nor target_price, do not change it and report blocked. Never overwrite an unexpected concurrent price.",
     "AMAZON PRICE-ONLY RULE: after identifying the exact SKU/ASIN, keep the claimed existing Amazon tab and navigate that same tab to the offer-only editor path /interactive/listing/workflow/edit/offer for that SKU/ASIN. Confirm the URL still contains /offer and edit only the field labeled 商品の販売価格. Do not submit the full product_details editor for a price-only change.",
-    "If Amazon redirects to product_details or shows error 90220 that Amazon.co.jp限定商品 is missing, do not fill or alter that unrelated catalog attribute. Return once to the offer-only editor in the same claimed tab and retry the price-only save one time. If the offer-only save still cannot complete, report Amazon blocked with the exact error and leave the saved price unchanged.",
+    "If Amazon redirects to product_details or shows error 90220 that Amazon.co.jp限定商品 is missing, read the exact product entry in the Skill's verified-products.md. When that entry explicitly proves the same product is sold on other marketplaces and records Amazon exclusive as false, set only 'この商品はAmazon.co.jp限定商品ですか？' to 'いいえ', save that attribute, return to the offer-only editor, submit the planned price once, and reload to verify the saved price. Do not change any other catalog attribute. If the Skill has no explicit multi-market proof for the exact ASIN/SKU, do not guess; report the missing attribute as blocked and leave the saved price unchanged.",
     "Do not touch a site not listed in targets. Do not substitute a similar product. Follow the Skill's site-specific save and verification steps.",
     "After EC sites, when PLAN_JSON.lp.required is true, run git fetch origin in the planned fresh clone and verify HEAD still equals Vercel's origin production branch before editing. Update only the exact planned LP source occurrences. Before editing, confirm each current source price still equals observed_price or already equals target_price; otherwise block the LP without overwriting. Build with the repository's existing command, commit and push only the planned files through the existing production branch, wait for the existing Vercel deployment, then verify every planned price at TASK_JSON.lpUrl using a direct public HTTP read. Do not create a Chrome tab for LP verification.",
     "Report lp.status=updated only after the public TASK_JSON.lpUrl displays all planned target prices for the exact product. Otherwise report blocked/not_found with the real partial state; a required LP that is not updated prevents overall completed status.",
