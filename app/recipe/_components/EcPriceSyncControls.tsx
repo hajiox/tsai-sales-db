@@ -88,6 +88,7 @@ export default function EcPriceSyncControls({
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueAction, setQueueAction] = useState(false);
   const notifiedJobId = useRef<string | null>(null);
+  const hasHydratedJobHistory = useRef(false);
   const hasPrice = Number.isFinite(sellingPriceInclTax) && sellingPriceInclTax > 0;
   const hasProductLp = Boolean(productLpUrl?.trim());
   const jobIsActive = Boolean(job && ACTIVE_STATUSES.has(job.status));
@@ -100,8 +101,13 @@ export default function EcPriceSyncControls({
       const response = await fetch(`/api/recipe/${recipeId}/ec-price-jobs`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "価格変更履歴を取得できません");
+      const nextJob = (payload.activeJob || payload.latestJob || null) as EcPriceJobView | null;
+      if (!hasHydratedJobHistory.current) {
+        if (nextJob && FINAL_STATUSES.has(nextJob.status)) notifiedJobId.current = nextJob.id;
+        hasHydratedJobHistory.current = true;
+      }
       setPriceHistory(Array.isArray(payload.history) ? payload.history : []);
-      setJob((payload.activeJob || payload.latestJob || null) as EcPriceJobView | null);
+      setJob(nextJob);
       setBlockingJob((payload.blockingJob || null) as BlockingJobView | null);
     } catch (error) {
       console.error("EC price history fetch error:", error);
