@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.19";
+const VERSION = "1.8.20";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -870,6 +870,10 @@ function buildEcPriceWritePrompt(parameters, plan) {
     "Process requested EC sites one at a time. Do not operate multiple seller sites concurrently and do not open all sites at once.",
     "Keep browser reads compact: never emit a full seller-dashboard DOM snapshot. Inspect only the exact planned product row and required price/save controls.",
     "At the start of each site, navigate or reload the exact planned edit page and re-read the server-saved current price. Discard any unsaved staged input left by a previously stopped job before comparing with basis_price or target_price.",
+    "BOUNDED RECOVERY POLICY FOR ALL EC SITES: seller UIs and validation rules can change. When a requested Amazon, Rakuten, Yahoo, Mercari Shops, BASE, Qoo10, or TikTok price update encounters a visible error, changed route, or newly required field, inspect the exact visible state and adapt instead of blindly replaying stale clicks. Preserve the exact planned site, product_identifier, and target_price, and apply only the smallest repair needed to complete that price update.",
+    "A newly mandatory field may be changed only when its exact value is explicitly proven for the exact product by this Skill, verified-products.md, TSA's product linkage or LP data, or the currently server-saved official listing. Record every non-price field changed during recovery in the site result summary. If the exact value is not proven, stop that site as blocked without writing or guessing.",
+    "ABSOLUTE PROHIBITIONS DURING RECOVERY FOR ALL EC SITES: never switch to another product, ASIN, SKU, JAN, capacity, storage method, account, or shop; never use a target price different from PLAN_JSON; never change inventory, fulfilment, shipping, tax, title, images, description, variations, sale unit, or another catalog attribute unless the exact field and exact value are both deterministically required and proven for this product; never guess an unverified value; never bypass login, MFA, CAPTCHA, account selection, or permissions; never use bulk actions; never use another browser, profile, or window; and never close an operator-owned tab.",
+    "Recovery is bounded: make at most two attempts for one distinct repair-and-save path on one site. If the same error remains after two attempts, a different unproven field is requested, or any absolute prohibition would be crossed, stop that site with the exact evidence and leave all unrelated data unchanged.",
     "Use only the requested sites and the exact absolute target_price persisted in PLAN_JSON. Never recompute or add a price difference during this phase.",
     "Before each write, identify the exact product again and read its current saved price.",
     "If current price equals target_price, do not save again; verify it and report updated with target_price.",
@@ -930,7 +934,7 @@ function validateEcPricePlan(plan, parameters) {
     } else return `${site.site}の価格ルールが不正です`;
     const recovery = parameters.recoveryPlanSites.find((entry) => entry.site === site.site);
     if (recovery) {
-      for (const field of ["pricing_rule", "shipping_mode", "unit_multiplier", "unit_evidence", "basis_price", "standard_baseline_price", "target_price", "product_identifier"]) {
+      for (const field of ["pricing_rule", "shipping_mode", "unit_multiplier", "basis_price", "standard_baseline_price", "target_price", "product_identifier"]) {
         if ((recovery[field] ?? null) !== (site[field] ?? null)) return `${site.site}の保存済み価格計画が変更されています`;
       }
       if (observed !== basis && observed !== target) return `${site.site}の現在価格が保存済み計画と競合しています`;
