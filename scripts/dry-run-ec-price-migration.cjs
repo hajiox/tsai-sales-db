@@ -51,6 +51,10 @@ async function main() {
       path.join(__dirname, "..", "supabase", "migrations", "20260819123000_recipe_price_tsg_notifications.sql"),
       "utf8",
     ));
+    await client.query(fs.readFileSync(
+      path.join(__dirname, "..", "supabase", "migrations", "20260822190000_ec_price_protocol_v3.sql"),
+      "utf8",
+    ));
     const checks = await client.query(`
       SELECT
         to_regclass('public.recipe_ec_price_revisions') IS NOT NULL AS revisions_table,
@@ -84,7 +88,11 @@ async function main() {
         position(
           'floor(floor('
           in replace(lower(pg_get_functiondef('public.record_recipe_ec_price_revision()'::regprocedure)), ' ', '')
-        ) = 0 AS fractional_tax_excluded_supported
+        ) = 0 AS fractional_tax_excluded_supported,
+        position(
+          $$capabilities->>'ecPriceProtocolVersion' = '3'$$
+          in pg_get_functiondef('public.claim_web_sales_codex_job(text,integer)'::regprocedure)
+        ) > 0 AS sequential_protocol_v3_required
     `);
     const probeRecipe = await client.query(`
       SELECT id, selling_price

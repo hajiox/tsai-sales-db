@@ -86,7 +86,9 @@ export async function POST(
         { status: 409 },
       );
     }
-    const currentLpSource = getEcPriceLpSource(currentSnapshot.productLpUrl);
+    const currentLpSource = jobParams.lpUpdate === true
+      ? getEcPriceLpSource(currentSnapshot.productLpUrl)
+      : null;
     if (!ecPriceLpSourcesMatch(jobParams.lpSource, currentLpSource)) {
       return NextResponse.json(
         { error: "キュー登録後に商品LPの公開元が変更されたため停止しました" },

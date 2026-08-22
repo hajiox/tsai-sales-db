@@ -20,6 +20,7 @@ const requiredBridgeVersion = requiredBridgeVersionSource.match(
 )?.[1];
 assert.ok(bridgeVersion, "Bridge runtime version not found");
 assert.equal(requiredBridgeVersion, bridgeVersion, "TSA required Bridge version must match the bundled runtime");
+assert.match(bridgeSource, /ecPriceProtocolVersion: 3/);
 const verifiedFourPack = verifiedRegistry.products.find((product) => product.janCode === "4571318633625");
 assert.ok(verifiedFourPack, "オーション麺4食の確定識別子が必要です");
 assert.deepEqual(
@@ -95,7 +96,11 @@ assert.doesNotMatch(pricePromptSource, /Close temporary tabs/);
 assert.doesNotMatch(pricePromptSource, /Never inspect, edit, deploy, or update any company LP/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: false/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: true/);
-assert.match(bridgeSource, /maxTemporaryTabs: parameters\.targets\.length/);
+assert.match(bridgeSource, /executeSingleEcPriceSite/);
+assert.match(bridgeSource, /executeSingleEcPriceLp/);
+assert.match(bridgeSource, /eventType: "ec_price_progress_checkpoint"/);
+assert.match(bridgeSource, /maxTemporaryTabs: 1/);
+assert.match(bridgeSource, /maxTemporaryTabs: 0/);
 assert.match(bridgeSource, /temporaryTabCreations > maxTemporaryTabs/);
 assert.doesNotMatch(bridgeSource, /"exec", "--ephemeral"/);
 assert.equal(detectsBrowserSessionContention("別のブラウザ作業セッションで使用中です"), true);
@@ -214,6 +219,9 @@ assert.match(recipePriceRouteSource, /findGlobalImmediateEcPriceJob/);
 assert.match(recipePriceControlsSource, /hasHydratedJobHistory/);
 assert.match(recipePriceControlsSource, /FINAL_STATUSES\.has\(nextJob\.status\).*notifiedJobId\.current = nextJob\.id/);
 assert.match(recipePriceRouteSource, /現在「\$\{blockingView\.productName\}」の価格変更を実行中/);
+assert.match(recipePriceRouteSource, /retryUnfinishedFromJobId/);
+assert.match(recipePriceControlsSource, /未完了だけ再実行/);
+assert.doesNotMatch(recipePriceControlsSource, /同じ工程が2分以上/);
 const reservationRouteSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "recipe", "ec-price-reservations", "route.ts"),
   "utf8",
@@ -257,6 +265,21 @@ assert.deepEqual(validateJobParameters(authorizedJobParameters).verifiedProductI
   { kind: "asin", value: "B0BYV7DRDS" },
   { kind: "sku", value: "YG-XN24-7D2K" },
 ]);
+assert.equal(validateJobParameters({
+  ...authorizedJobParameters,
+  targets: [],
+  lpUpdate: true,
+  lpUrl: "https://example.com/product",
+  lpSource: {
+    host: "example.com",
+    githubRepository: "hajiox/example",
+    productionBranch: "main",
+  },
+  operatorAuthorization: {
+    ...authorizedJobParameters.operatorAuthorization,
+    targets: [],
+  },
+}).lpUpdate, true, "商品LPだけの未完了再実行を許可する");
 assert.throws(
   () => validateJobParameters({ ...authorizedJobParameters, operatorAuthorization: undefined }),
   /実行確認記録/,
@@ -592,6 +615,13 @@ const validLpResult = {
   },
 };
 assert.equal(validateResult(validLpResult, lpParameters, lpPlan), null);
+assert.equal(validateResult({
+  ...validLpResult,
+  lp: {
+    ...validLpResult.lp,
+    deployment_url: "https://example-generated-deployment.vercel.app",
+  },
+}, lpParameters, lpPlan), null, "生成deployment URLと登録公開URLが異なっても許可する");
 assert.match(
   validateResult({ ...validLpResult, lp: { ...validLpResult.lp, status: "blocked" } }, lpParameters, lpPlan),
   /完了にできません/,
@@ -620,20 +650,26 @@ const claimedBaseJob = {
   result: { plan: basePlan, validated_plan_checkpoint: true },
 };
 assert.equal(
-  buildSyncRows(claimedBaseJob, validResult, "00000000-0000-0000-0000-000000000010", "2026-08-19T00:00:00.000Z").length,
+  buildSyncRows(claimedBaseJob, {
+    ...validResult,
+    plan: basePlan,
+    validated_plan_checkpoint: true,
+  }, "00000000-0000-0000-0000-000000000010", "2026-08-19T00:00:00.000Z").length,
   1,
 );
 assert.equal(
   buildSyncRows(claimedBaseJob, {
     ...validResult,
     sites: [{ ...validResult.sites[0], status: "submitted_pending" }],
+    plan: basePlan,
+    validated_plan_checkpoint: true,
   }, "00000000-0000-0000-0000-000000000010", "2026-08-19T00:00:00.000Z").length,
   0,
 );
 assert.throws(
   () => buildSyncRows(
     { ...claimedBaseJob, result: { plan: basePlan } },
-    validResult,
+    { ...validResult, plan: basePlan },
     "00000000-0000-0000-0000-000000000010",
     "2026-08-19T00:00:00.000Z",
   ),
