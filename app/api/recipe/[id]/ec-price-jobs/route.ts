@@ -26,7 +26,7 @@ export const dynamic = "force-dynamic";
 
 const ADMIN_EMAIL = "aizubrandhall@gmail.com";
 const ACTIVE_STATUSES = ["queued", "running"];
-const EC_PRICE_TAB_CONTENTION_MESSAGE = "Chromeの別の操作セッションがEC管理タブを使用中です。Chrome上部の「キャンセル」で前の操作を終了し、タブを閉じずに再実行してください。ログイン切れではなく、外部データは変更されていません。";
+const EC_PRICE_TAB_CONTENTION_MESSAGE = "旧Bridgeの既存タブ固定ロジックで停止しました。Chrome上部の操作は不要です。現行Bridgeは同じログイン済みChromeの一時タブへ自動退避するため、そのまま再実行してください。ログイン切れではなく、外部データは変更されていません。";
 const EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE = "TSAで実行確認済みの価格変更に対して、旧Bridgeが不要な返信確認を求めて停止しました。EC価格は保存されていません。Bridge更新後に同じ対象で再実行してください。";
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -97,7 +97,7 @@ function toJobView(job: Record<string, unknown>): EcPriceJobView {
     status: String(job.status) as EcPriceJobView["status"],
     progress: Number(job.progress) || 0,
     currentStep: browserSessionContention
-      ? "Chromeの前の操作セッションを終了して再実行してください"
+      ? "旧Bridgeのタブ固定ロジックで停止しました。再実行してください"
       : duplicateConfirmation
         ? "旧Bridgeの不要な確認で停止しました。再実行してください"
       : String(job.current_step || "実行待ち"),
@@ -112,7 +112,7 @@ function toJobView(job: Record<string, unknown>): EcPriceJobView {
     sites: sites.map((site) => {
       const siteObject = asObject(site);
       return isEcPriceBrowserSessionContention(siteObject.message)
-        ? { ...siteObject, message: "別のChrome操作セッションがこの管理タブを使用中です。ログイン切れではなく、価格は変更していません。" }
+        ? { ...siteObject, message: "旧Bridgeが既存タブの競合で停止しました。ログイン切れではなく、価格は変更していません。" }
         : siteObject;
     }) as EcPriceJobView["sites"],
     lp: ecPriceLpResultFromUnknown(result.lp),
