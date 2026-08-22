@@ -139,6 +139,15 @@ export async function POST(request: Request) {
         ...parameters,
         dispatchMode: "batch",
         releasedAt,
+        operatorAuthorization: {
+          executionAuthorized: true,
+          source: "tsa_batch_execution_confirmation",
+          authorizedAt: releasedAt,
+          authorizedBy: session.user?.email || ADMIN_EMAIL,
+          recipeId,
+          targets: normalizeEcPriceTargets(parameters.targets),
+          newPriceInclTax: Number(parameters.newPriceInclTax) || 0,
+        },
       };
       const { data: updated } = await supabase
         .from("web_sales_codex_jobs")
