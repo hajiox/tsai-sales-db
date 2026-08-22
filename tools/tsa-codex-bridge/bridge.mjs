@@ -1,11 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.24";
+const VERSION = "1.8.25";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -1424,12 +1424,15 @@ function validateEcPriceLpPlan(input, parameters, plan) {
   if (!Array.isArray(lp.updates) || lp.updates.length === 0) return "商品LPの価格変更箇所がありません";
   const seenOccurrences = new Set();
   for (const update of lp.updates) {
-    const sourceFile = resolve(String(update?.source_file || ""));
+    const sourceFileInput = String(update?.source_file || "").trim();
+    const sourceFile = isAbsolute(sourceFileInput)
+      ? resolve(sourceFileInput)
+      : resolve(projectRoot, sourceFileInput);
     const occurrenceEvidence = String(update?.occurrence_evidence || "").trim();
     const pricingBasis = String(update?.pricing_basis || "");
     const observedPrice = Number(update?.observed_price);
     const targetPrice = Number(update?.target_price);
-    if (!String(update?.source_file || "").trim() || !pathIsInside(sourceFile, projectRoot) || !occurrenceEvidence) {
+    if (!sourceFileInput || !pathIsInside(sourceFile, projectRoot) || !occurrenceEvidence) {
       return "商品LPの変更ファイルまたは対象箇所が不正です";
     }
     const occurrenceKey = `${sourceFile.toLowerCase()}::${occurrenceEvidence}`;

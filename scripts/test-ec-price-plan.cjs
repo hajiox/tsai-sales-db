@@ -38,7 +38,7 @@ function loadFunction(name, nextName) {
   const end = bridgeSource.indexOf(`function ${nextName}(`, start);
   assert.ok(start >= 0 && end > start, `${name} source not found`);
   const source = bridgeSource.slice(start, end);
-  return new Function(`const resolve = (value) => value; const config = { workspace: "C:\\\\work" }; const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]);\n${source}\nreturn ${name};`)();
+  return new Function("resolve", "isAbsolute", `const config = { workspace: "C:\\\\work" }; const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]);\n${source}\nreturn ${name};`)(path.win32.resolve, path.win32.isAbsolute);
 }
 
 const validatePlan = loadFunction("validateEcPricePlan", "validateEcPriceResultV2");
@@ -548,6 +548,17 @@ assert.equal(
   validateServerPlan(lpOnlyParameters, lpOnlyPlan).status,
   "ready",
   "サーバーもLPだけの検証済み計画を受理する",
+);
+assert.equal(
+  validatePlan({
+    ...lpOnlyPlan,
+    lp: {
+      ...lpOnlyPlan.lp,
+      updates: [{ ...lpOnlyPlan.lp.updates[0], source_file: "app/page.tsx" }],
+    },
+  }, lpOnlyParameters),
+  null,
+  "LPの相対ソースパスはFresh Cloneのプロジェクトルート基準で検証する",
 );
 assert.match(
   validatePlan({ ...lpPlan, lp: { ...lpPlan.lp, updates: [{ ...lpPlan.lp.updates[0], target_price: 4600 }] } }, lpParameters),
