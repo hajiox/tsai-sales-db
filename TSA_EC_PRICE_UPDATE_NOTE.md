@@ -32,6 +32,8 @@
 - `npm run test:ec-price-plan`: success
 - `npm run test:recipe-selling-price`: success
 - `update-aizu-ec-prices` Skill validation: success
+- 2026-08-22: Amazon 50食の再実行で、読取専用計画と書込が別のCodexブラウザセッションになり、前半が取得した既存Amazonタブを後半が `another browser session` と判定するBridge内部競合を確認した。Chrome上部にキャンセル表示があるという前提は誤りで、利用者操作を案内しない。
+- Bridge 1.8.18では、既存公式タブを全て試した後、競合または未開放なら同じログイン済みChromeプロファイル内の一時タブへ自動退避する。対象ECごと・各フェーズ1枚までをコード側でも監視し、別ブラウザ、新規ウィンドウ、シークレット、一時プロファイルは引き続き禁止する。ユーザー所有タブは閉じず、Bridge作成の一時タブだけを最終確認後に閉じる。
 - 本番ビルド、Bridge更新、Amazon再実行、本番画面確認はデプロイ工程で追記する。
 
 ## 2026-08-20

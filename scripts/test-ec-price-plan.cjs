@@ -17,6 +17,7 @@ function loadFunction(name, nextName) {
 
 const validatePlan = loadFunction("validateEcPricePlan", "validateEcPriceResultV2");
 const validateResult = loadFunction("validateEcPriceResultV2", "planToFinalResult");
+const countsTemporaryTabActions = loadFunction("countEcPriceTemporaryTabActions", "isForbiddenEcPriceTabAction");
 const detectsForbiddenTabAction = loadFunction("isForbiddenEcPriceTabAction", "terminateChildProcessTree");
 const estimateDesktopCompletion = loadFunction("estimateDesktopCompletion", "bridgeTaskLabel");
 const ecPriceEventLabel = loadFunction("ecPriceEventLabel", "isForbiddenEcPriceTabAction");
@@ -28,11 +29,15 @@ const pricePromptSource = bridgeSource.slice(
   bridgeSource.indexOf("function buildEcPricePlanPrompt("),
   bridgeSource.indexOf("function validateEcPricePlan("),
 );
-assert.match(pricePromptSource, /EXISTING-TAB-ONLY POLICY/);
-assert.match(pricePromptSource, /Never create a browser tab or window/);
+assert.match(pricePromptSource, /SAME-CHROME TAB POLICY/);
+assert.match(pricePromptSource, /SAME-CHROME TEMPORARY-TAB FALLBACK/);
+assert.match(pricePromptSource, /create exactly one temporary tab.*chrome\.tabs\.new\(\)/i);
+assert.match(pricePromptSource, /same logged-in Chrome profile/i);
+assert.match(pricePromptSource, /Do not ask the operator to click a Chrome-top cancellation control/i);
 assert.match(pricePromptSource, /try the remaining existing matching official tabs/);
+assert.doesNotMatch(pricePromptSource, /EXISTING-TAB-ONLY POLICY/);
 assert.match(pricePromptSource, /TAB FINALIZATION IS MANDATORY/);
-assert.match(pricePromptSource, /Never call this signed-out or ask the operator to sign in/i);
+assert.match(pricePromptSource, /only treat a visible official login\/authentication screen.*as signed out/i);
 assert.match(pricePromptSource, /OPERATOR AUTHORIZATION/);
 assert.match(pricePromptSource, /has no chat reply channel/);
 assert.match(pricePromptSource, /Do not ask the operator to reply, confirm again/);
@@ -47,11 +52,24 @@ assert.doesNotMatch(pricePromptSource, /Close temporary tabs/);
 assert.doesNotMatch(pricePromptSource, /Never inspect, edit, deploy, or update any company LP/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: false/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: true/);
+assert.match(bridgeSource, /maxTemporaryTabs: parameters\.targets\.length/);
+assert.match(bridgeSource, /temporaryTabCreations > maxTemporaryTabs/);
 assert.doesNotMatch(bridgeSource, /"exec", "--ephemeral"/);
 assert.equal(detectsBrowserSessionContention("別のブラウザ作業セッションで使用中です"), true);
 assert.equal(detectsBrowserSessionContention("公式ログイン画面が表示されています"), false);
 assert.equal(detectsDuplicateConfirmation("「保存を実行」と返信してください"), true);
 assert.equal(detectsDuplicateConfirmation("保存後の価格を確認しました"), false);
+assert.equal(
+  countsTemporaryTabActions({
+    type: "item.started",
+    item: {
+      type: "mcp_tool_call",
+      arguments: { code: "const tab = await chrome.tabs.new();" },
+    },
+  }),
+  1,
+  "同じChrome内の一時タブ作成を数える",
+);
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",
@@ -60,8 +78,19 @@ assert.equal(
       arguments: { code: "const tab = await chrome.tabs.new();" },
     },
   }),
+  false,
+  "制限内の同一Chrome一時タブは許可する",
+);
+assert.equal(
+  detectsForbiddenTabAction({
+    type: "item.started",
+    item: {
+      type: "mcp_tool_call",
+      arguments: { code: "const tab = await browser.tabs.new();" },
+    },
+  }),
   true,
-  "価格ジョブの新規Chromeタブ作成を検出する",
+  "別ブラウザ変数からのタブ作成は拒否する",
 );
 assert.equal(
   ecPriceEventLabel({
@@ -127,6 +156,8 @@ const recipePriceRouteSource = fs.readFileSync(
   "utf8",
 );
 assert.match(recipePriceRouteSource, /EC_PRICE_TAB_CONTENTION_MESSAGE/);
+assert.match(recipePriceRouteSource, /同じログイン済みChromeの一時タブへ自動退避/);
+assert.doesNotMatch(recipePriceRouteSource, /Chrome上部の「キャンセル」/);
 assert.match(recipePriceRouteSource, /EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE/);
 assert.match(recipePriceRouteSource, /operatorAuthorization/);
 assert.match(recipePriceRouteSource, /findGlobalImmediateEcPriceJob/);
