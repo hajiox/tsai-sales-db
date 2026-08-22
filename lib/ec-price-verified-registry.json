@@ -1,0 +1,36 @@
+{
+  "products": [
+    {
+      "janCode": "4571318633625",
+      "identifiers": {
+        "amazon": [
+          { "kind": "asin", "value": "B0BYV7DRDS" },
+          { "kind": "sku", "value": "YG-XN24-7D2K" }
+        ],
+        "rakuten": [
+          { "kind": "product_management_number", "value": "10000028x" }
+        ],
+        "yahoo": [
+          { "kind": "product_code", "value": "10000028" }
+        ],
+        "mercari": [],
+        "base": [
+          { "kind": "product_id", "value": "63140045" }
+        ],
+        "qoo10": [
+          { "kind": "product_number", "value": "1166048679" }
+        ],
+        "tiktok": [
+          { "kind": "base_product_id", "value": "121846020" }
+        ]
+      }
+    }
+  ],
+  "lpSources": [
+    {
+      "host": "buta.aizubrandhall-lp2.com",
+      "githubRepository": "hajiox/BUTA",
+      "productionBranch": "main"
+    }
+  ]
+}
