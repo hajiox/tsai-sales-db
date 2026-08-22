@@ -1,5 +1,23 @@
 # TSA EC Price Update Note
 
+## 2026-08-22 オーション麺4食の誤判定対策
+
+- ジョブ `052e68d2-3426-4d9e-a0df-b63a3451a0cf` は価格を書き込まず、読取計画で停止した。原因はBridgeへTSAのEC別学習商品名を渡しておらず、一般名とJANの検索だけでAmazon・楽天・BASE等を誤って「対象商品なし」と判定したこと。
+- 価格ジョブ作成時に、連携商品IDからAmazon・楽天・Yahoo・メルカリShops・BASE・Qoo10・TikTokの学習済み商品名を取得して `productMappings` として固定する。書込直前にも同じ紐付けを再取得し、キュー登録後に変更されていたら外部操作前に停止する。
+- Bridge 1.8.21は各ECの全学習候補を試してからだけ対象商品なしを判定する。証拠付きで未登録のECは除外し、他ECと商品LPの反映を止めない。類似商品への置換は禁止する。
+- 4食の確認済み識別子はAmazon `B0BYV7DRDS` / `YG-XN24-7D2K`、楽天 `10000028x`、Yahoo `10000028`、BASE通常品 `63140045`、BASEのTikTok連携品 `121846020`、Qoo10 `1166048679`。メルカリShopsは2026-08-22時点で該当商品なし。
+- 本修正の検証時点では外部EC価格とLPを変更していない。
+
+### Verification
+
+- `node --check tools/tsa-codex-bridge/bridge.mjs`: success
+- `npm run test:ec-price-plan`: success（対象商品なしを含む部分継続、学習商品名の正規化を含む）
+- `npm run test:recipe-selling-price`: success
+- `npm run build`: success
+- `npm run lint`: success（既存警告134件、エラー0件）
+- `npm run security`: success（secret scan / Supabase RLS）。
+- `update-aizu-ec-prices` Skill validation: success。
+
 ## 2026-08-21
 
 ### Bridge実行の可視化・Amazon価格専用経路

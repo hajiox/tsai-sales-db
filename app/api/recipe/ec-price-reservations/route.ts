@@ -4,6 +4,10 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { normalizeEcPriceTargets } from "@/lib/ec-price-codex";
 import { buildEcPriceRecipeSnapshot, ecPriceSnapshotsMatch } from "@/lib/ec-price-job-server";
+import {
+  ecPriceProductMappingsMatch,
+  loadEcPriceProductMappings,
+} from "@/lib/ec-price-product-mappings";
 import { isReservedEcPriceJob } from "@/lib/ec-price-reservations";
 
 export const runtime = "nodejs";
@@ -101,7 +105,19 @@ export async function POST(request: Request) {
       const currentSnapshot = recipe
         ? buildEcPriceRecipeSnapshot(recipe as Record<string, unknown>)
         : null;
-      if (!currentSnapshot || !ecPriceSnapshotsMatch(parameters.recipeSnapshot, currentSnapshot)) {
+      const currentMappings = currentSnapshot
+        ? await loadEcPriceProductMappings(
+          supabase,
+          currentSnapshot.linkedProductId,
+          normalizeEcPriceTargets(parameters.targets),
+        )
+        : null;
+      if (
+        !currentSnapshot
+        || !ecPriceSnapshotsMatch(parameters.recipeSnapshot, currentSnapshot)
+        || !currentMappings
+        || !ecPriceProductMappingsMatch(parameters.productMappings, currentMappings)
+      ) {
         const message = "予約後に価格または商品情報が変更されました。内容を確認して予約し直してください";
         const { data: updated } = await supabase
           .from("web_sales_codex_jobs")

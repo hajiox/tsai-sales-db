@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.20";
+const VERSION = "1.8.21";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -490,7 +490,10 @@ async function executeEcPriceUpdateJob(job) {
       lp: blockedLpResult(parameters, resultIssue, plan.lp),
     };
   }
-  if (result.status === "completed" && result.sites.some((site) => site.status === "blocked" || site.status === "not_found")) {
+  if (result.status === "completed" && result.sites.some((site) => {
+    const planned = plan.sites.find((entry) => entry.site === site.site);
+    return site.status === "blocked" || (site.status === "not_found" && planned?.status !== "not_found");
+  })) {
     result = {
       ...result,
       status: "needs_review",
@@ -801,6 +804,17 @@ function validateEcPriceJobParametersV2(input) {
   const recoveryPlanSites = Array.isArray(parameters.recoveryPlanSites)
     ? parameters.recoveryPlanSites.filter((site) => site && typeof site === "object" && targets.includes(String(site.site)))
     : [];
+  const mappingInput = parameters.productMappings && typeof parameters.productMappings === "object" && !Array.isArray(parameters.productMappings)
+    ? parameters.productMappings
+    : {};
+  const productMappings = Object.fromEntries(targets.map((target) => [
+    target,
+    Array.isArray(mappingInput[target])
+      ? [...new Set(mappingInput[target]
+        .map((value) => String(value || "").replace(/\s+/g, " ").trim().slice(0, 500))
+        .filter(Boolean))]
+      : [],
+  ]));
   return {
     ...parameters,
     recipeId,
@@ -810,6 +824,7 @@ function validateEcPriceJobParametersV2(input) {
     newPriceExTax,
     siteBaselines,
     recoveryPlanSites,
+    productMappings,
     lpUpdate,
     lpUrl: lpUrl || null,
     operatorAuthorization: {
@@ -837,6 +852,7 @@ function buildEcPricePlanPrompt(parameters) {
     "Keep browser reads compact: never emit a full seller-dashboard DOM snapshot. Search first, then inspect only the matching row, price field, product identifier, sale unit, and shipping condition.",
     "Before reading a current saved price, navigate or reload the exact official edit/list page so an unsaved value left in the tab by a previously stopped job is discarded. Never treat a staged DOM value as the server-saved price.",
     "For every requested site, identify the exact product using name, JAN, quantity, storage method, SKU or product ID, and read the currently saved price.",
+    "TASK_JSON.productMappings contains product titles previously matched and confirmed by TSA sales imports for this linked product. For each site, search every supplied mapped title before reporting not_found. These titles are strong identity evidence but do not replace the required quantity, storage-method, and official listing verification. For BASE exclude TikTok-linked titles; for TikTok use the supplied BASE-managed TikTok title. Never substitute a similar title.",
     "Determine each listing's sale-unit multiplier relative to the saved TSA recipe product. A single matching unit is 1; a verified 2-item listing is 2. Never infer this from price alone. Record unit_multiplier and concrete unit_evidence from the product title/details or verified-products reference. If the multiplier is uncertain, block without writing.",
     "Use pricing_rule=standard_price only when the EC listing is exactly the same sale unit as the TSA recipe (unit_multiplier=1) and its item price should equal TASK_JSON.newPriceInclTax.",
     "Use pricing_rule=delta_from_reference whenever the EC listing has a different price basis, including multi-item sets or shipping-excluded BASE items. Calculate target_price = basis_price + (new standard price - standard_baseline_price) * unit_multiplier.",
@@ -847,7 +863,7 @@ function buildEcPricePlanPrompt(parameters) {
     "RECOVERY_PLAN_SITES are previously persisted absolute plans. For those sites preserve product_identifier, pricing_rule, shipping_mode, unit_multiplier, unit_evidence, basis_price, standard_baseline_price and target_price exactly; only re-read observed_price. Mark planned only when both the exact product_identifier still matches and observed_price equals either basis_price or target_price, otherwise blocked.",
     "For a new plan set basis_price equal to observed_price. Never guess a product, shipping condition, old standard price, or target price.",
     "For a required LP, return lp.status=planned only after proving the public URL, exact product, fresh-clone project root, github_repository, Vercel production_branch, source_commit matching origin/production_branch, source files, current prices, and target prices. Each LP target_price must equal TASK_JSON.newPriceInclTax or the target_price of the corresponding pricing_basis site in this same plan. A price string shared by other products must not be planned as a broad replacement.",
-    "Return one sites entry for every requested target and no others. Use status=ready only when every site is planned and every required LP occurrence is planned. If the required LP cannot be mapped safely, stop before all external writes with needs_review/not_found/blocked. Output only JSON matching the schema.",
+    "Return one sites entry for every requested target and no others. A site may be not_found only after every TASK_JSON.productMappings title for that site and the recipe identity have been searched on the official seller screen. A verified not_found site is not an error and must not block other planned sites. Use status=ready when every site is either planned or evidence-backed not_found and every required LP occurrence is planned. blocked remains a stop condition. If the required LP cannot be mapped safely, stop before all external writes with needs_review/not_found/blocked. Output only JSON matching the schema.",
     "TASK_JSON:",
     JSON.stringify(parameters),
   ].join("\n");
@@ -882,6 +898,7 @@ function buildEcPriceWritePrompt(parameters, plan) {
     "AMAZON PRICE-ONLY RULE: after identifying the exact SKU/ASIN, keep the claimed existing Amazon tab and navigate that same tab to the offer-only editor path /interactive/listing/workflow/edit/offer for that SKU/ASIN. Confirm the URL still contains /offer and edit only the field labeled 商品の販売価格. Do not submit the full product_details editor for a price-only change.",
     "If Amazon redirects to product_details or shows error 90220 that Amazon.co.jp限定商品 is missing, read the exact product entry in the Skill's verified-products.md. When that entry explicitly proves the same product is sold on other marketplaces and records Amazon exclusive as false, set only 'この商品はAmazon.co.jp限定商品ですか？' to 'いいえ', save that attribute, return to the offer-only editor, submit the planned price once, and reload to verify the saved price. Do not change any other catalog attribute. If the Skill has no explicit multi-market proof for the exact ASIN/SKU, do not guess; report the missing attribute as blocked and leave the saved price unchanged.",
     "Do not touch a site not listed in targets. Do not substitute a similar product. Follow the Skill's site-specific save and verification steps.",
+    "For every PLAN_JSON site with status=not_found, do not open or modify that site during the write phase. Copy it to the final result as status=not_found with null final_price and product_identifier, preserving the plan message. Process only PLAN_JSON sites with status=planned.",
     "After EC sites, when PLAN_JSON.lp.required is true, run git fetch origin in the planned fresh clone and verify HEAD still equals Vercel's origin production branch before editing. Update only the exact planned LP source occurrences. Before editing, confirm each current source price still equals observed_price or already equals target_price; otherwise block the LP without overwriting. Build with the repository's existing command, commit and push only the planned files through the existing production branch, wait for the existing Vercel deployment, then verify every planned price at TASK_JSON.lpUrl using a direct public HTTP read. Do not create a Chrome tab for LP verification.",
     "Report lp.status=updated only after the public TASK_JSON.lpUrl displays all planned target prices for the exact product. Otherwise report blocked/not_found with the real partial state; a required LP that is not updated prevents overall completed status.",
     "When PLAN_JSON.lp.required is false return lp.status=not_applicable with null URL/deployment/deployed_commit and empty final_prices/changed_files, and do not inspect or edit any LP.",
@@ -903,6 +920,18 @@ function validateEcPricePlan(plan, parameters) {
   if (plan.status !== "ready") return null;
   if (!Number.isInteger(Number(plan.reference_standard_price)) || Number(plan.reference_standard_price) <= 0) return "改定前の標準価格が確認できていません";
   for (const site of sites) {
+    if (site.status === "not_found") {
+      if (
+        site.observed_price != null
+        || site.basis_price != null
+        || site.standard_baseline_price != null
+        || site.target_price != null
+        || site.product_identifier != null
+        || !String(site.unit_evidence || "").trim()
+        || !String(site.message || "").trim()
+      ) return `${site.site}の対象商品なし計画が不正です`;
+      continue;
+    }
     if (site.status !== "planned") return `${site.site}の価格計画が確定していません`;
     const observed = Number(site.observed_price);
     const basis = Number(site.basis_price);
@@ -1001,6 +1030,13 @@ function validateEcPriceResultV2(result, parameters, plan) {
   for (const site of result.sites) {
     const planned = plan.sites.find((entry) => entry.site === site.site);
     if (!planned) return `${site.site}の保存済み価格計画がありません`;
+    if (planned.status === "not_found") {
+      if (site.status !== "not_found" || site.final_price != null || site.product_identifier != null) {
+        return `${site.site}の対象商品なし結果が保存済み計画と一致しません`;
+      }
+      continue;
+    }
+    if (site.status === "not_found") return `${site.site}で計画済み商品を確認できませんでした`;
     if (site.status === "updated" || site.status === "submitted_pending") {
       if (Number(site.final_price) !== Number(planned.target_price)) {
         return `${site.site}の最終価格が保存済み目標価格と一致しません`;

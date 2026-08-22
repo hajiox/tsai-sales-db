@@ -152,8 +152,16 @@ function validateFinalPriceResult(
     || names.some((target) => !requestedTargets.includes(target))
     || requestedTargets.some((target: string) => !names.includes(target))
   ) throw new Error("価格変更の最終結果が依頼内容と一致しません");
-  if (status === "completed" && sites.some((site) => site.status !== "updated")) {
-    throw new Error("未確認のECサイトがあるため完了にできません");
+  if (status === "completed") {
+    const planSites = Array.isArray(asObject(submittedResult.plan).sites)
+      ? asObject(submittedResult.plan).sites as unknown[]
+      : [];
+    const incomplete = sites.some((site) => {
+      if (site.status === "updated") return false;
+      const planned = planSites.map(asObject).find((entry) => entry.site === site.site);
+      return site.status !== "not_found" || planned?.status !== "not_found";
+    });
+    if (incomplete) throw new Error("未確認のECサイトがあるため完了にできません");
   }
   const lp = asObject(submittedResult.lp);
   const lpRequired = parameters.lpUpdate === true;
@@ -217,6 +225,18 @@ function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
     : [];
   for (const site of sites) {
     const target = String(site.site || "");
+    if (site.status === "not_found") {
+      if (
+        site.observed_price != null
+        || site.basis_price != null
+        || site.standard_baseline_price != null
+        || site.target_price != null
+        || site.product_identifier != null
+        || !String(site.unit_evidence || "").trim()
+        || !String(site.message || "").trim()
+      ) throw new Error(`${target}の対象商品なし計画が不正です`);
+      continue;
+    }
     const observed = Number(site.observed_price);
     const basis = Number(site.basis_price);
     const targetPrice = Number(site.target_price);
