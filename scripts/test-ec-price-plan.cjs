@@ -6,6 +6,16 @@ const bridgeSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge.mjs"),
   "utf8",
 );
+const requiredBridgeVersionSource = fs.readFileSync(
+  path.join(__dirname, "..", "lib", "web-sales-codex", "bridge-version.ts"),
+  "utf8",
+);
+const bridgeVersion = bridgeSource.match(/const VERSION = "([^"]+)";/)?.[1];
+const requiredBridgeVersion = requiredBridgeVersionSource.match(
+  /REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/,
+)?.[1];
+assert.ok(bridgeVersion, "Bridge runtime version not found");
+assert.equal(requiredBridgeVersion, bridgeVersion, "TSA required Bridge version must match the bundled runtime");
 
 function loadFunction(name, nextName) {
   const start = bridgeSource.indexOf(`function ${name}(`);
