@@ -8,16 +8,20 @@
 - 4食の確認済み識別子はAmazon `B0BYV7DRDS` / `YG-XN24-7D2K`、楽天 `10000028x`、Yahoo `10000028`、BASE通常品 `63140045`、BASEのTikTok連携品 `121846020`、Qoo10 `1166048679`。メルカリShopsは2026-08-22時点で該当商品なし。
 - 本修正の検証時点では外部EC価格とLPを変更していない。
 - 初回配備後、Bridge本体だけ1.8.21でTSA必須版が1.8.20のままという厳密一致不整合を検出した。必須版を1.8.21へ統一し、今後はBridge本体とTSA必須版が一致しなければテストを失敗させる。
+- 再計画ジョブ `0864a4a4-602b-4ebe-80d5-9becb4bb4a19` では画面移動ではなく、Amazon/Qoo10が確定済み識別子を使わず商品名・JAN検索だけで対象なしとし、VercelがGitHub連携情報を返さないLPを更新不能としたため、外部書込前に停止した。
+- Bridge 1.8.22はJAN単位の確定識別子をTSAから構造化して渡す。識別子があるECを `not_found` にできず、計画の商品識別子にも確定IDを要求する。予約解放時と書込直前に、識別子対応表とLP公開元対応表を再検証する。
+- `buta.aizubrandhall-lp2.com` は許可済み公開元 `hajiox/BUTA` の `main` として固定した。Vercelメタデータが未接続でも、既存クローンを使わずGitHubから新規取得し、origin・ブランチ・コミット一致・クリーン状態を検証する。
 
 ### Verification
 
 - `node --check tools/tsa-codex-bridge/bridge.mjs`: success
-- `npm run test:ec-price-plan`: success（対象商品なしを含む部分継続、学習商品名の正規化を含む）
+- `npm run test:ec-price-plan`: success（学習商品名、確定識別子、LP許可公開元、対象商品なし防止を含む）
 - `npm run test:recipe-selling-price`: success
 - `npm run build`: success
 - `npm run lint`: success（既存警告134件、エラー0件）
 - `npm run security`: success（secret scan / Supabase RLS）。
 - `update-aizu-ec-prices` Skill validation: success。
+- LP source resolver dry run: success（`hajiox/BUTA/main`、`HEAD == origin/main`）。
 
 ## 2026-08-21
 

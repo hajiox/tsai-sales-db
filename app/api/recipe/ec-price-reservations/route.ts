@@ -8,6 +8,12 @@ import {
   ecPriceProductMappingsMatch,
   loadEcPriceProductMappings,
 } from "@/lib/ec-price-product-mappings";
+import {
+  ecPriceLpSourcesMatch,
+  ecPriceVerifiedIdentifiersMatch,
+  getEcPriceLpSource,
+  getEcPriceVerifiedIdentifiers,
+} from "@/lib/ec-price-verified-registry";
 import { isReservedEcPriceJob } from "@/lib/ec-price-reservations";
 
 export const runtime = "nodejs";
@@ -112,11 +118,24 @@ export async function POST(request: Request) {
           normalizeEcPriceTargets(parameters.targets),
         )
         : null;
+      const currentTargets = normalizeEcPriceTargets(parameters.targets);
+      const currentVerifiedIdentifiers = currentSnapshot
+        ? getEcPriceVerifiedIdentifiers(currentSnapshot.janCode, currentTargets)
+        : null;
+      const currentLpSource = currentSnapshot
+        ? getEcPriceLpSource(currentSnapshot.productLpUrl)
+        : null;
       if (
         !currentSnapshot
         || !ecPriceSnapshotsMatch(parameters.recipeSnapshot, currentSnapshot)
         || !currentMappings
         || !ecPriceProductMappingsMatch(parameters.productMappings, currentMappings)
+        || !currentVerifiedIdentifiers
+        || !ecPriceVerifiedIdentifiersMatch(
+          parameters.verifiedProductIdentifiers,
+          currentVerifiedIdentifiers,
+        )
+        || !ecPriceLpSourcesMatch(parameters.lpSource, currentLpSource)
       ) {
         const message = "予約後に価格または商品情報が変更されました。内容を確認して予約し直してください";
         const { data: updated } = await supabase

@@ -6,6 +6,12 @@ import {
   ecPriceProductMappingsMatch,
   loadEcPriceProductMappings,
 } from "@/lib/ec-price-product-mappings";
+import {
+  ecPriceLpSourcesMatch,
+  ecPriceVerifiedIdentifiersMatch,
+  getEcPriceLpSource,
+  getEcPriceVerifiedIdentifiers,
+} from "@/lib/ec-price-verified-registry";
 import { normalizeEcPriceTargets } from "@/lib/ec-price-codex";
 
 export const runtime = "nodejs";
@@ -63,6 +69,27 @@ export async function POST(
     if (!ecPriceProductMappingsMatch(jobParams.productMappings, currentMappings)) {
       return NextResponse.json(
         { error: "キュー登録後にEC商品の紐付けが変更されたため停止しました" },
+        { status: 409 },
+      );
+    }
+    const currentTargets = normalizeEcPriceTargets(jobParams.targets);
+    const currentVerifiedIdentifiers = getEcPriceVerifiedIdentifiers(
+      currentSnapshot.janCode,
+      currentTargets,
+    );
+    if (!ecPriceVerifiedIdentifiersMatch(
+      jobParams.verifiedProductIdentifiers,
+      currentVerifiedIdentifiers,
+    )) {
+      return NextResponse.json(
+        { error: "キュー登録後にEC商品の確定識別子が変更されたため停止しました" },
+        { status: 409 },
+      );
+    }
+    const currentLpSource = getEcPriceLpSource(currentSnapshot.productLpUrl);
+    if (!ecPriceLpSourcesMatch(jobParams.lpSource, currentLpSource)) {
+      return NextResponse.json(
+        { error: "キュー登録後に商品LPの公開元が変更されたため停止しました" },
         { status: 409 },
       );
     }

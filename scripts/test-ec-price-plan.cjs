@@ -10,12 +10,27 @@ const requiredBridgeVersionSource = fs.readFileSync(
   path.join(__dirname, "..", "lib", "web-sales-codex", "bridge-version.ts"),
   "utf8",
 );
+const verifiedRegistry = JSON.parse(fs.readFileSync(
+  path.join(__dirname, "..", "lib", "ec-price-verified-registry.json"),
+  "utf8",
+));
 const bridgeVersion = bridgeSource.match(/const VERSION = "([^"]+)";/)?.[1];
 const requiredBridgeVersion = requiredBridgeVersionSource.match(
   /REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/,
 )?.[1];
 assert.ok(bridgeVersion, "Bridge runtime version not found");
 assert.equal(requiredBridgeVersion, bridgeVersion, "TSA required Bridge version must match the bundled runtime");
+const verifiedFourPack = verifiedRegistry.products.find((product) => product.janCode === "4571318633625");
+assert.ok(verifiedFourPack, "オーション麺4食の確定識別子が必要です");
+assert.deepEqual(
+  verifiedFourPack.identifiers.amazon,
+  [{ kind: "asin", value: "B0BYV7DRDS" }, { kind: "sku", value: "YG-XN24-7D2K" }],
+);
+assert.deepEqual(verifiedFourPack.identifiers.qoo10, [{ kind: "product_number", value: "1166048679" }]);
+assert.deepEqual(
+  verifiedRegistry.lpSources.find((source) => source.host === "buta.aizubrandhall-lp2.com"),
+  { host: "buta.aizubrandhall-lp2.com", githubRepository: "hajiox/BUTA", productionBranch: "main" },
+);
 
 function loadFunction(name, nextName) {
   const start = bridgeSource.indexOf(`function ${name}(`);
@@ -66,6 +81,10 @@ assert.match(pricePromptSource, /90220/);
 assert.match(pricePromptSource, /verified-products\.md/);
 assert.match(pricePromptSource, /TASK_JSON\.productMappings/);
 assert.match(pricePromptSource, /search every supplied mapped title before reporting not_found/);
+assert.match(pricePromptSource, /TASK_JSON\.verifiedProductIdentifiers/);
+assert.match(pricePromptSource, /must never be returned as not_found/);
+assert.match(pricePromptSource, /TASK_JSON\.lpSource is a server allow-listed source/);
+assert.match(pricePromptSource, /ExpectedGithubRepository/);
 assert.match(pricePromptSource, /verified not_found site is not an error/);
 assert.match(pricePromptSource, /Process only PLAN_JSON sites with status=planned/);
 assert.match(pricePromptSource, /explicitly proves the same product is sold on other marketplaces/);
@@ -189,6 +208,8 @@ assert.doesNotMatch(recipePriceRouteSource, /Chrome上部の「キャンセル�
 assert.match(recipePriceRouteSource, /EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE/);
 assert.match(recipePriceRouteSource, /operatorAuthorization/);
 assert.match(recipePriceRouteSource, /loadEcPriceProductMappings/);
+assert.match(recipePriceRouteSource, /getEcPriceVerifiedIdentifiers/);
+assert.match(recipePriceRouteSource, /getEcPriceLpSource/);
 assert.match(recipePriceRouteSource, /findGlobalImmediateEcPriceJob/);
 assert.match(recipePriceControlsSource, /hasHydratedJobHistory/);
 assert.match(recipePriceControlsSource, /FINAL_STATUSES\.has\(nextJob\.status\).*notifiedJobId\.current = nextJob\.id/);
@@ -209,8 +230,16 @@ const authorizedJobParameters = {
   siteBaselines: { amazon: 5990 },
   recoveryPlanSites: [],
   productMappings: { amazon: ["  4食   商品  ", "4食 商品"] },
+  verifiedProductIdentifiers: {
+    amazon: [
+      { kind: "sku", value: "YG-XN24-7D2K" },
+      { kind: "asin", value: "B0BYV7DRDS" },
+      { kind: "asin", value: "B0BYV7DRDS" },
+    ],
+  },
   lpUpdate: false,
   lpUrl: null,
+  lpSource: null,
   recipeSnapshot: { recipeId: "00000000-0000-0000-0000-000000000050" },
   operatorAuthorization: {
     executionAuthorized: true,
@@ -224,6 +253,10 @@ const authorizedJobParameters = {
 };
 assert.equal(validateJobParameters(authorizedJobParameters).operatorAuthorization.executionAuthorized, true);
 assert.deepEqual(validateJobParameters(authorizedJobParameters).productMappings.amazon, ["4食 商品"]);
+assert.deepEqual(validateJobParameters(authorizedJobParameters).verifiedProductIdentifiers.amazon, [
+  { kind: "asin", value: "B0BYV7DRDS" },
+  { kind: "sku", value: "YG-XN24-7D2K" },
+]);
 assert.throws(
   () => validateJobParameters({ ...authorizedJobParameters, operatorAuthorization: undefined }),
   /実行確認記録/,
@@ -405,6 +438,7 @@ const amazonParameters = {
   newPriceInclTax: 4550,
   siteBaselines: { amazon: 4290 },
   recoveryPlanSites: [],
+  verifiedProductIdentifiers: { amazon: [{ kind: "asin", value: "ASIN" }] },
 };
 const amazonPlan = {
   status: "ready",
@@ -427,6 +461,21 @@ const amazonPlan = {
   lp: noLpPlan,
 };
 assert.equal(validatePlan(amazonPlan, amazonParameters), null);
+assert.match(
+  validatePlan({ ...amazonPlan, sites: [{ ...amazonPlan.sites[0], product_identifier: "OTHER" }] }, amazonParameters),
+  /確定登録と一致/,
+);
+assert.match(
+  validatePlan({
+    ...amazonPlan,
+    sites: [{
+      ...notFoundMercari,
+      site: "amazon",
+      unit_evidence: "商品名とJANでは検索結果なし",
+    }],
+  }, amazonParameters),
+  /確定識別子があるため対象商品なしにできません/,
+);
 
 const lpParameters = {
   ...amazonParameters,
