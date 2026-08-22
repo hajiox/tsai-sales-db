@@ -50,6 +50,7 @@ const ecPriceEventLabel = loadFunction("ecPriceEventLabel", "isForbiddenEcPriceT
 const detectsBrowserSessionContention = loadFunction("isEcPriceBrowserSessionContention", "normalizeEcPriceContentionSummary");
 const detectsDuplicateConfirmation = loadFunction("isEcPriceDuplicateConfirmation", "normalizeEcPriceContentionSummary");
 const validateJobParameters = loadFunction("validateEcPriceJobParametersV2", "buildEcPricePlanPrompt");
+const currentLpTargetPrices = loadFunction("ecPriceLpCurrentTargetPrices", "positiveEcPriceInteger");
 
 const pricePromptSource = bridgeSource.slice(
   bridgeSource.indexOf("function buildEcPricePlanPrompt("),
@@ -98,6 +99,10 @@ assert.match(bridgeSource, /abortOnTabPolicyViolation: false/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: true/);
 assert.match(bridgeSource, /executeSingleEcPriceSite/);
 assert.match(bridgeSource, /executeSingleEcPriceLp/);
+assert.ok(
+  bridgeSource.indexOf("ecPriceLpCurrentTargetPrices(plan)") < bridgeSource.indexOf('const writeOutput = join(workDir, "ec-price-lp-result.json")'),
+  "変更不要のLPはAI書込工程を起動する前に公開確認する",
+);
 assert.match(bridgeSource, /eventType: "ec_price_progress_checkpoint"/);
 assert.match(bridgeSource, /maxTemporaryTabs: 1/);
 assert.match(bridgeSource, /maxTemporaryTabs: 0/);
@@ -549,6 +554,30 @@ assert.equal(
   "ready",
   "サーバーもLPだけの検証済み計画を受理する",
 );
+assert.deepEqual(
+  currentLpTargetPrices({
+    lp: {
+      updates: [
+        { observed_price: 1080, target_price: 1080 },
+        { observed_price: 1080, target_price: 1080 },
+      ],
+    },
+  }),
+  [1080],
+  "Fresh Clone上の全対象価格が目標値なら変更不要の公開確認へ進める",
+);
+assert.deepEqual(
+  currentLpTargetPrices({
+    lp: {
+      updates: [
+        { observed_price: 1045, target_price: 1080 },
+        { observed_price: 1080, target_price: 1080 },
+      ],
+    },
+  }),
+  [],
+  "旧価格が一か所でも残るLPを変更不要扱いしない",
+);
 assert.equal(
   validatePlan({
     ...lpOnlyPlan,
@@ -647,6 +676,16 @@ const validLpResult = {
   },
 };
 assert.equal(validateResult(validLpResult, lpParameters, lpPlan), null);
+assert.equal(validateResult({
+  ...validLpResult,
+  lp: {
+    ...validLpResult.lp,
+    changed_files: [],
+    deployment_url: lpParameters.lpUrl,
+    deployed_commit: lpPlan.lp.source_commit,
+    message: "現行ソースと公開URLがすでに目標価格",
+  },
+}, lpParameters, lpPlan), null, "変更不要のLPも公開URLと現行コミットを証跡に完了できる");
 assert.equal(validateResult({
   ...validLpResult,
   lp: {

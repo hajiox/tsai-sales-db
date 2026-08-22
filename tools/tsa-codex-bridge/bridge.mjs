@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.25";
+const VERSION = "1.8.26";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -651,6 +651,44 @@ async function executeSingleEcPriceLp({ job, workDir, parameters, index, totalSt
       operatorWait: false,
     };
   }
+  const unchangedLpPrices = ecPriceLpCurrentTargetPrices(plan);
+  if (unchangedLpPrices.length > 0) {
+    await updateJob(job.id, {
+      status: "running",
+      progress: range.middle,
+      currentStep: `${prefix}変更不要を公開URLで確認しています`,
+      message: "Fresh Cloneはすでに目標価格です。登録済み公開URLだけを再確認します",
+      eventType: "ec_price_lp_idempotent_verifying",
+    });
+    const publicVerificationIssue = await verifyRegisteredEcPriceLp(parameters.lpUrl, unchangedLpPrices);
+    if (!publicVerificationIssue) {
+      const result = {
+        status: "completed",
+        summary: "商品LPはFresh Cloneと登録済み公開URLの両方ですでに目標価格のため、変更不要で確認完了しました",
+        new_standard_price: parameters.newPriceInclTax,
+        sites: [],
+        lp: {
+          required: true,
+          url: parameters.lpUrl,
+          status: "updated",
+          final_prices: unchangedLpPrices,
+          changed_files: [],
+          deployment_url: parameters.lpUrl,
+          deployed_commit: plan.lp.source_commit,
+          message: "Fresh Cloneの現行ソースと登録済み公開URLが目標価格に一致しています。書込・再デプロイは不要でした",
+        },
+      };
+      const resultIssue = validateEcPriceResultV2(result, scoped, plan);
+      if (!resultIssue) {
+        return {
+          planLp: plan.lp,
+          resultLp: result.lp,
+          referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+          operatorWait: false,
+        };
+      }
+    }
+  }
   const writeOutput = join(workDir, "ec-price-lp-result.json");
   const writeLog = join(workDir, "ec-price-lp-write-events.jsonl");
   const written = await runEcPriceCodexPhase({
@@ -821,6 +859,19 @@ function blockedEcPriceLpPlan(parameters, message, candidate = null) {
     updates: Array.isArray(candidate?.updates) ? candidate.updates : [],
     message: String(message || "商品LPは未完了です").slice(0, 1200),
   };
+}
+
+function ecPriceLpCurrentTargetPrices(plan) {
+  const updates = Array.isArray(plan?.lp?.updates) ? plan.lp.updates : [];
+  if (updates.length === 0) return [];
+  const prices = [];
+  for (const update of updates) {
+    const observedPrice = Number(update?.observed_price);
+    const targetPrice = Number(update?.target_price);
+    if (!Number.isInteger(observedPrice) || observedPrice <= 0 || observedPrice !== targetPrice) return [];
+    prices.push(targetPrice);
+  }
+  return [...new Set(prices)].sort((a, b) => a - b);
 }
 
 function positiveEcPriceInteger(value) {
