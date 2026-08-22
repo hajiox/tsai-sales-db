@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { isCodexBridgeAuthorized, normalizeWorkerId } from "@/lib/web-sales-codex/server";
 import { buildEcPriceRecipeSnapshot, ecPriceSnapshotsMatch } from "@/lib/ec-price-job-server";
+import {
+  ecPriceProductMappingsMatch,
+  loadEcPriceProductMappings,
+} from "@/lib/ec-price-product-mappings";
+import { normalizeEcPriceTargets } from "@/lib/ec-price-codex";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +52,17 @@ export async function POST(
     if (!ecPriceSnapshotsMatch(snapshot, currentSnapshot)) {
       return NextResponse.json(
         { error: "キュー登録後に価格または商品情報が変更されたため停止しました" },
+        { status: 409 },
+      );
+    }
+    const currentMappings = await loadEcPriceProductMappings(
+      supabase,
+      currentSnapshot.linkedProductId,
+      normalizeEcPriceTargets(jobParams.targets),
+    );
+    if (!ecPriceProductMappingsMatch(jobParams.productMappings, currentMappings)) {
+      return NextResponse.json(
+        { error: "キュー登録後にEC商品の紐付けが変更されたため停止しました" },
         { status: 409 },
       );
     }

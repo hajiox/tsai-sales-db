@@ -54,6 +54,10 @@ assert.match(pricePromptSource, /AMAZON PRICE-ONLY RULE/);
 assert.match(pricePromptSource, /\/interactive\/listing\/workflow\/edit\/offer/);
 assert.match(pricePromptSource, /90220/);
 assert.match(pricePromptSource, /verified-products\.md/);
+assert.match(pricePromptSource, /TASK_JSON\.productMappings/);
+assert.match(pricePromptSource, /search every supplied mapped title before reporting not_found/);
+assert.match(pricePromptSource, /verified not_found site is not an error/);
+assert.match(pricePromptSource, /Process only PLAN_JSON sites with status=planned/);
 assert.match(pricePromptSource, /explicitly proves the same product is sold on other marketplaces/);
 assert.match(pricePromptSource, /set only 'この商品はAmazon\.co\.jp限定商品ですか？' to 'いいえ'/);
 assert.match(pricePromptSource, /Do not change any other catalog attribute/);
@@ -174,6 +178,7 @@ assert.match(recipePriceRouteSource, /同じログイン済みChromeの一時タ
 assert.doesNotMatch(recipePriceRouteSource, /Chrome上部の「キャンセル」/);
 assert.match(recipePriceRouteSource, /EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE/);
 assert.match(recipePriceRouteSource, /operatorAuthorization/);
+assert.match(recipePriceRouteSource, /loadEcPriceProductMappings/);
 assert.match(recipePriceRouteSource, /findGlobalImmediateEcPriceJob/);
 assert.match(recipePriceControlsSource, /hasHydratedJobHistory/);
 assert.match(recipePriceControlsSource, /FINAL_STATUSES\.has\(nextJob\.status\).*notifiedJobId\.current = nextJob\.id/);
@@ -183,6 +188,7 @@ const reservationRouteSource = fs.readFileSync(
   "utf8",
 );
 assert.match(reservationRouteSource, /tsa_batch_execution_confirmation/);
+assert.match(reservationRouteSource, /ecPriceProductMappingsMatch/);
 
 const authorizedJobParameters = {
   recipeId: "00000000-0000-0000-0000-000000000050",
@@ -192,6 +198,7 @@ const authorizedJobParameters = {
   newPriceExTax: 6100,
   siteBaselines: { amazon: 5990 },
   recoveryPlanSites: [],
+  productMappings: { amazon: ["  4食   商品  ", "4食 商品"] },
   lpUpdate: false,
   lpUrl: null,
   recipeSnapshot: { recipeId: "00000000-0000-0000-0000-000000000050" },
@@ -206,6 +213,7 @@ const authorizedJobParameters = {
   },
 };
 assert.equal(validateJobParameters(authorizedJobParameters).operatorAuthorization.executionAuthorized, true);
+assert.deepEqual(validateJobParameters(authorizedJobParameters).productMappings.amazon, ["4食 商品"]);
 assert.throws(
   () => validateJobParameters({ ...authorizedJobParameters, operatorAuthorization: undefined }),
   /実行確認記録/,
@@ -231,7 +239,8 @@ function loadRouteFunction(name, nextName) {
     .replace(/: CodexJobStatus/g, "")
     .replace(/: Record<string, any>\[\]/g, "")
     .replace(/: Record<string, any>/g, "")
-    .replace(/ as Record<string, any>/g, "");
+    .replace(/ as Record<string, any>/g, "")
+    .replace(/ as unknown\[\]/g, "");
   const source = [
     'const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]);',
     stripTypes(routeSource.slice(asObjectStart, asObjectEnd)),
@@ -319,6 +328,39 @@ assert.match(
 assert.match(
   validatePlan({ ...basePlan, sites: [{ ...basePlan.sites[0], product_identifier: null }] }, baseParameters),
   /商品識別子/,
+);
+
+const mixedParameters = {
+  ...baseParameters,
+  targets: ["base", "mercari"],
+  siteBaselines: { base: 4290, mercari: 4290 },
+};
+const notFoundMercari = {
+  site: "mercari",
+  status: "not_found",
+  pricing_rule: "standard_price",
+  shipping_mode: "not_checked",
+  unit_multiplier: 1,
+  unit_evidence: "TSAの紐付け名と商品名・容量で公式商品一覧を検索したが一致なし",
+  observed_price: null,
+  basis_price: null,
+  standard_baseline_price: null,
+  target_price: null,
+  product_identifier: null,
+  message: "対象商品なし",
+};
+const mixedPlan = {
+  ...basePlan,
+  sites: [basePlan.sites[0], notFoundMercari],
+};
+assert.equal(validatePlan(mixedPlan, mixedParameters), null);
+assert.equal(validateServerPlan(mixedParameters, mixedPlan).status, "ready");
+assert.match(
+  validatePlan({
+    ...mixedPlan,
+    sites: [basePlan.sites[0], { ...notFoundMercari, target_price: 4550 }],
+  }, mixedParameters),
+  /対象商品なし計画/,
 );
 
 const recoveryParameters = {
@@ -466,6 +508,16 @@ const validResult = {
   lp: noLpResult,
 };
 assert.equal(validateResult(validResult, baseParameters, basePlan), null);
+assert.equal(validateResult({
+  ...validResult,
+  sites: [validResult.sites[0], {
+    site: "mercari",
+    status: "not_found",
+    final_price: null,
+    product_identifier: null,
+    message: "対象商品なし",
+  }],
+}, mixedParameters, mixedPlan), null);
 const validLpResult = {
   ...validResult,
   sites: [{ ...validResult.sites[0], site: "amazon", product_identifier: "ASIN", final_price: 4550 }],

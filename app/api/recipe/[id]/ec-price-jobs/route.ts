@@ -14,6 +14,7 @@ import {
   ecPriceSnapshotsMatch,
   type EcPriceRecipeSnapshot,
 } from "@/lib/ec-price-job-server";
+import { loadEcPriceProductMappings } from "@/lib/ec-price-product-mappings";
 import {
   EC_PRICE_RESERVATION_SCHEDULED_AT,
   isReservedEcPriceJob,
@@ -333,6 +334,11 @@ export async function POST(
     }
 
     const recipeSnapshot = buildEcPriceRecipeSnapshot(recipe as Record<string, unknown>);
+    const productMappings = await loadEcPriceProductMappings(
+      supabase,
+      recipeSnapshot.linkedProductId,
+      targets,
+    );
     const { newPriceExTax, newPriceInclTax } = recipeSnapshot;
     if (!Number.isFinite(newPriceExTax) || newPriceExTax <= 0 || newPriceInclTax <= 0) {
       return NextResponse.json({ error: "保存済み販売価格が正しくありません" }, { status: 400 });
@@ -476,6 +482,7 @@ export async function POST(
       priceRevisionId: currentRevision?.id || null,
       siteBaselines,
       recoveryPlanSites,
+      productMappings,
       newPriceExTax,
       newPriceInclTax,
       lpUpdate: Boolean(recipeSnapshot.productLpUrl),
