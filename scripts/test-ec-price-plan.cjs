@@ -12,7 +12,7 @@ function loadFunction(name, nextName) {
   const end = bridgeSource.indexOf(`function ${nextName}(`, start);
   assert.ok(start >= 0 && end > start, `${name} source not found`);
   const source = bridgeSource.slice(start, end);
-  return new Function(`const resolve = (value) => value; const config = { workspace: "C:\\\\work" };\n${source}\nreturn ${name};`)();
+  return new Function(`const resolve = (value) => value; const config = { workspace: "C:\\\\work" }; const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]);\n${source}\nreturn ${name};`)();
 }
 
 const validatePlan = loadFunction("validateEcPricePlan", "validateEcPriceResultV2");
@@ -21,6 +21,8 @@ const detectsForbiddenTabAction = loadFunction("isForbiddenEcPriceTabAction", "t
 const estimateDesktopCompletion = loadFunction("estimateDesktopCompletion", "bridgeTaskLabel");
 const ecPriceEventLabel = loadFunction("ecPriceEventLabel", "isForbiddenEcPriceTabAction");
 const detectsBrowserSessionContention = loadFunction("isEcPriceBrowserSessionContention", "normalizeEcPriceContentionSummary");
+const detectsDuplicateConfirmation = loadFunction("isEcPriceDuplicateConfirmation", "normalizeEcPriceContentionSummary");
+const validateJobParameters = loadFunction("validateEcPriceJobParametersV2", "buildEcPricePlanPrompt");
 
 const pricePromptSource = bridgeSource.slice(
   bridgeSource.indexOf("function buildEcPricePlanPrompt("),
@@ -31,6 +33,11 @@ assert.match(pricePromptSource, /Never create a browser tab or window/);
 assert.match(pricePromptSource, /try the remaining existing matching official tabs/);
 assert.match(pricePromptSource, /TAB FINALIZATION IS MANDATORY/);
 assert.match(pricePromptSource, /Never call this signed-out or ask the operator to sign in/i);
+assert.match(pricePromptSource, /OPERATOR AUTHORIZATION/);
+assert.match(pricePromptSource, /has no chat reply channel/);
+assert.match(pricePromptSource, /Do not ask the operator to reply, confirm again/);
+assert.match(pricePromptSource, /save\/submit confirmation.*never waiting_for_user/i);
+assert.match(pricePromptSource, /unsaved staged input left by a previously stopped job/);
 assert.match(pricePromptSource, /find-lp-source\.ps1 with -FreshClone/);
 assert.match(pricePromptSource, /mandatory product LP plan/);
 assert.match(pricePromptSource, /AMAZON PRICE-ONLY RULE/);
@@ -43,6 +50,8 @@ assert.match(bridgeSource, /abortOnTabPolicyViolation: true/);
 assert.doesNotMatch(bridgeSource, /"exec", "--ephemeral"/);
 assert.equal(detectsBrowserSessionContention("別のブラウザ作業セッションで使用中です"), true);
 assert.equal(detectsBrowserSessionContention("公式ログイン画面が表示されています"), false);
+assert.equal(detectsDuplicateConfirmation("「保存を実行」と返信してください"), true);
+assert.equal(detectsDuplicateConfirmation("保存後の価格を確認しました"), false);
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",
@@ -118,8 +127,49 @@ const recipePriceRouteSource = fs.readFileSync(
   "utf8",
 );
 assert.match(recipePriceRouteSource, /EC_PRICE_TAB_CONTENTION_MESSAGE/);
+assert.match(recipePriceRouteSource, /EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE/);
+assert.match(recipePriceRouteSource, /operatorAuthorization/);
 assert.match(recipePriceRouteSource, /findGlobalImmediateEcPriceJob/);
 assert.match(recipePriceRouteSource, /現在「\$\{blockingView\.productName\}」の価格変更を実行中/);
+const reservationRouteSource = fs.readFileSync(
+  path.join(__dirname, "..", "app", "api", "recipe", "ec-price-reservations", "route.ts"),
+  "utf8",
+);
+assert.match(reservationRouteSource, /tsa_batch_execution_confirmation/);
+
+const authorizedJobParameters = {
+  recipeId: "00000000-0000-0000-0000-000000000050",
+  recipeName: "50食",
+  targets: ["amazon"],
+  newPriceInclTax: 6588,
+  newPriceExTax: 6100,
+  siteBaselines: { amazon: 5990 },
+  recoveryPlanSites: [],
+  lpUpdate: false,
+  lpUrl: null,
+  recipeSnapshot: { recipeId: "00000000-0000-0000-0000-000000000050" },
+  operatorAuthorization: {
+    executionAuthorized: true,
+    source: "tsa_immediate_execution_confirmation",
+    authorizedAt: "2026-08-22T04:00:00.000Z",
+    authorizedBy: "admin@example.com",
+    recipeId: "00000000-0000-0000-0000-000000000050",
+    targets: ["amazon"],
+    newPriceInclTax: 6588,
+  },
+};
+assert.equal(validateJobParameters(authorizedJobParameters).operatorAuthorization.executionAuthorized, true);
+assert.throws(
+  () => validateJobParameters({ ...authorizedJobParameters, operatorAuthorization: undefined }),
+  /実行確認記録/,
+);
+assert.throws(
+  () => validateJobParameters({
+    ...authorizedJobParameters,
+    operatorAuthorization: { ...authorizedJobParameters.operatorAuthorization, newPriceInclTax: 5990 },
+  }),
+  /実行確認記録/,
+);
 
 function loadRouteFunction(name, nextName) {
   const asObjectStart = routeSource.indexOf("function asObject(");

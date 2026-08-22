@@ -27,6 +27,7 @@ export const dynamic = "force-dynamic";
 const ADMIN_EMAIL = "aizubrandhall@gmail.com";
 const ACTIVE_STATUSES = ["queued", "running"];
 const EC_PRICE_TAB_CONTENTION_MESSAGE = "Chromeの別の操作セッションがEC管理タブを使用中です。Chrome上部の「キャンセル」で前の操作を終了し、タブを閉じずに再実行してください。ログイン切れではなく、外部データは変更されていません。";
+const EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE = "TSAで実行確認済みの価格変更に対して、旧Bridgeが不要な返信確認を求めて停止しました。EC価格は保存されていません。Bridge更新後に同じ対象で再実行してください。";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -58,6 +59,10 @@ function isEcPriceBrowserSessionContention(...values: unknown[]) {
   return values.some((value) => /(?:already part of (?:another )?browser session|another browser session|別のブラウザ作業セッション|別のブラウザ操作セッション|別のブラウザ作業で使用中|別のブラウザ.*セッション.*使用中)/i.test(String(value || "")));
 }
 
+function isEcPriceDuplicateConfirmation(...values: unknown[]) {
+  return values.some((value) => /(?:「?保存を実行」?と返信|保存(?:実行|送信)?(?:するため|の)?確認が必要|返信してください)/i.test(String(value || "")));
+}
+
 function compactOperationalMessage(value: unknown) {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) return null;
@@ -81,18 +86,28 @@ function toJobView(job: Record<string, unknown>): EcPriceJobView {
     result.summary,
     ...sites.map((site) => asObject(site).message),
   );
+  const duplicateConfirmation = isEcPriceDuplicateConfirmation(
+    job.current_step,
+    job.error_message,
+    result.summary,
+    ...sites.map((site) => asObject(site).message),
+  );
   return {
     id: String(job.id),
     status: String(job.status) as EcPriceJobView["status"],
     progress: Number(job.progress) || 0,
     currentStep: browserSessionContention
       ? "Chromeの前の操作セッションを終了して再実行してください"
+      : duplicateConfirmation
+        ? "旧Bridgeの不要な確認で停止しました。再実行してください"
       : String(job.current_step || "実行待ち"),
     errorMessage: compactOperationalMessage(job.error_message),
     targets: normalizeEcPriceTargets(parameters.targets),
     newPriceInclTax: Number(parameters.newPriceInclTax) || 0,
     summary: browserSessionContention
       ? EC_PRICE_TAB_CONTENTION_MESSAGE
+      : duplicateConfirmation
+        ? EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE
       : compactOperationalMessage(result.summary),
     sites: sites.map((site) => {
       const siteObject = asObject(site);
@@ -159,8 +174,9 @@ async function resolveExistingJob(input: {
   newPriceInclTax: number;
   targets: string[];
   recipeSnapshot: EcPriceRecipeSnapshot;
+  authorizedBy: string;
 }) {
-  const { supabase, active, dispatchMode, newPriceInclTax, targets, recipeSnapshot } = input;
+  const { supabase, active, dispatchMode, newPriceInclTax, targets, recipeSnapshot, authorizedBy } = input;
   if (!jobMatchesRequest(active, newPriceInclTax, targets, recipeSnapshot)) {
     return NextResponse.json(
       { error: "この商品の別の価格変更が実行中または予約済みです。完了または取消後に再実行してください" },
@@ -197,6 +213,15 @@ async function resolveExistingJob(input: {
         ...activeParameters,
         dispatchMode: "immediate",
         releasedAt,
+        operatorAuthorization: {
+          executionAuthorized: true,
+          source: "tsa_immediate_execution_confirmation",
+          authorizedAt: releasedAt,
+          authorizedBy,
+          recipeId: String(activeParameters.recipeId || ""),
+          targets,
+          newPriceInclTax,
+        },
       },
       scheduled_at: releasedAt,
       current_step: "事務所PCの価格改定開始待ち",
@@ -356,6 +381,7 @@ export async function POST(
         newPriceInclTax,
         targets,
         recipeSnapshot,
+        authorizedBy: session.user?.email || ADMIN_EMAIL,
       });
     }
 
@@ -440,6 +466,8 @@ export async function POST(
       return [];
     });
 
+    const authorizedAt = new Date().toISOString();
+    const isReservation = dispatchMode === "reserved";
     const parameters = {
       taskKey: "ec_price_update",
       targets,
@@ -454,9 +482,16 @@ export async function POST(
       lpUrl: recipeSnapshot.productLpUrl,
       dispatchMode,
       executionPolicy: "signed_in_browser_isolated_codex",
+      operatorAuthorization: {
+        executionAuthorized: !isReservation,
+        source: isReservation ? "tsa_reservation_confirmation" : "tsa_immediate_execution_confirmation",
+        authorizedAt,
+        authorizedBy: session.user?.email || ADMIN_EMAIL,
+        recipeId,
+        targets,
+        newPriceInclTax,
+      },
     };
-
-    const isReservation = dispatchMode === "reserved";
 
     const { data: job, error: insertError } = await supabase
       .from("web_sales_codex_jobs")
@@ -495,6 +530,7 @@ export async function POST(
           newPriceInclTax,
           targets,
           recipeSnapshot,
+          authorizedBy: session.user?.email || ADMIN_EMAIL,
         });
       }
     }
