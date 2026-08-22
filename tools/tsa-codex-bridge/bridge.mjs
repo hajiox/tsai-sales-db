@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.23";
+const VERSION = "1.8.24";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -1340,7 +1340,10 @@ function validateEcPricePlan(plan, parameters) {
     }
   }
   if (plan.status !== "ready") return null;
-  if (!Number.isInteger(Number(plan.reference_standard_price)) || Number(plan.reference_standard_price) <= 0) return "改定前の標準価格が確認できていません";
+  if (
+    parameters.targets.length > 0
+    && (!Number.isInteger(Number(plan.reference_standard_price)) || Number(plan.reference_standard_price) <= 0)
+  ) return "改定前の標準価格が確認できていません";
   for (const site of sites) {
     const verifiedIdentifiers = Array.isArray(parameters.verifiedProductIdentifiers?.[site.site])
       ? parameters.verifiedProductIdentifiers[site.site]

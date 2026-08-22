@@ -528,6 +528,27 @@ const lpPlan = {
 };
 assert.equal(validatePlan(lpPlan, lpParameters), null);
 assert.equal(validateServerPlan(lpParameters, lpPlan).status, "ready");
+const lpOnlyParameters = {
+  ...lpParameters,
+  targets: [],
+  siteBaselines: {},
+  recoveryPlanSites: [],
+};
+const lpOnlyPlan = {
+  ...lpPlan,
+  reference_standard_price: null,
+  sites: [],
+};
+assert.equal(
+  validatePlan(lpOnlyPlan, lpOnlyParameters),
+  null,
+  "LPだけの再実行ではECの旧標準価格を要求しない",
+);
+assert.equal(
+  validateServerPlan(lpOnlyParameters, lpOnlyPlan).status,
+  "ready",
+  "サーバーもLPだけの検証済み計画を受理する",
+);
 assert.match(
   validatePlan({ ...lpPlan, lp: { ...lpPlan.lp, updates: [{ ...lpPlan.lp.updates[0], target_price: 4600 }] } }, lpParameters),
   /商品LPの目標価格/,
