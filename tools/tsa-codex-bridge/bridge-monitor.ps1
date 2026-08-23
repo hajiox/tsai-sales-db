@@ -30,6 +30,7 @@ public static class TsaBridgeMonitorWindow {
   [DllImport("kernel32.dll")] public static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
   [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
 }
 "@
 
@@ -41,8 +42,13 @@ if ($inputHandle -ne [IntPtr]::Zero -and [TsaBridgeMonitorWindow]::GetConsoleMod
   [void][TsaBridgeMonitorWindow]::SetConsoleMode($inputHandle, $consoleMode)
 }
 $foregroundActivated = $false
+$broughtForward = $false
 if ($windowHandle -ne [IntPtr]::Zero) {
   [void][TsaBridgeMonitorWindow]::ShowWindowAsync($windowHandle, 9)
+  $topmostShown = [TsaBridgeMonitorWindow]::SetWindowPos($windowHandle, [IntPtr](-1), 0, 0, 0, 0, 0x0043)
+  Start-Sleep -Milliseconds 150
+  $topmostReleased = [TsaBridgeMonitorWindow]::SetWindowPos($windowHandle, [IntPtr](-2), 0, 0, 0, 0, 0x0043)
+  $broughtForward = $topmostShown -and $topmostReleased
   $foregroundActivated = [TsaBridgeMonitorWindow]::SetForegroundWindow($windowHandle)
 }
 $acknowledgement = @{
@@ -50,6 +56,7 @@ $acknowledgement = @{
   monitorPid = $PID
   windowHandle = $windowHandle.ToInt64()
   foregroundActivated = $foregroundActivated
+  broughtForward = $broughtForward
   startedAt = [DateTimeOffset]::UtcNow.ToString("o")
 } | ConvertTo-Json
 [System.IO.File]::WriteAllText($AckPath, $acknowledgement, [System.Text.UTF8Encoding]::new($false))

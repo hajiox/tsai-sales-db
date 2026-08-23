@@ -180,6 +180,8 @@ assert.match(monitorSource, /TsaCodexBridgeMonitor_/);
 assert.doesNotMatch(monitorSource, /Clear-Host/);
 assert.match(monitorSource, /SetConsoleMode/);
 assert.match(monitorSource, /-band \(-bnot 0x40\)/);
+assert.match(monitorSource, /SetWindowPos/);
+assert.match(monitorSource, /broughtForward/);
 const installerSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "install-bridge.ps1"),
   "utf8",
