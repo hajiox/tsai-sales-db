@@ -10,7 +10,9 @@ if (-not (Test-Path -LiteralPath $monitorScript)) {
   throw "Bridge monitor script not found: $monitorScript"
 }
 
+$consoleHost = Join-Path $env:SystemRoot "System32\conhost.exe"
 $arguments = @(
+  "powershell.exe"
   "-NoProfile"
   "-ExecutionPolicy", "Bypass"
   "-File", "`"$monitorScript`""
@@ -19,7 +21,7 @@ $arguments = @(
   "-AckPath", "`"$AckPath`""
 )
 
-$monitor = Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WindowStyle Normal -PassThru
+$monitor = Start-Process -FilePath $consoleHost -ArgumentList $arguments -WindowStyle Normal -PassThru
 if (-not $monitor) {
-  throw "Bridge monitor process did not start"
+  throw "Bridge monitor console host did not start"
 }

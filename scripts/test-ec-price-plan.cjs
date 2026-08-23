@@ -176,6 +176,10 @@ assert.match(monitorSource, /Codex PID/);
 assert.match(monitorSource, /目安超過（処理継続中）/);
 assert.match(monitorSource, /foregroundActivated/);
 assert.match(monitorSource, /monitorPid/);
+assert.match(monitorSource, /TsaCodexBridgeMonitor_/);
+assert.doesNotMatch(monitorSource, /Clear-Host/);
+assert.match(monitorSource, /SetConsoleMode/);
+assert.match(monitorSource, /-band \(-bnot 0x40\)/);
 const installerSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "install-bridge.ps1"),
   "utf8",
@@ -190,6 +194,7 @@ const monitorLauncherSource = fs.readFileSync(
 assert.match(monitorLauncherSource, /Start-Process/);
 assert.match(monitorLauncherSource, /-WindowStyle Normal/);
 assert.match(monitorLauncherSource, /AckPath/);
+assert.match(monitorLauncherSource, /conhost\.exe/);
 assert.match(bridgeSource, /desktop monitor visible/);
 const desktopMonitorLaunchSource = bridgeSource.slice(
   bridgeSource.indexOf("function startDesktopMonitor("),
@@ -205,6 +210,11 @@ assert.equal(
   2,
   "初回と再試行の両方を可視ウィンドウ専用ランチャー経由にする",
 );
+const alreadyCurrentCheck = bridgeSource.indexOf('planSite.observed_price) === Number(planSite.target_price');
+const siteWritePhase = bridgeSource.indexOf('const writeOutput = join(workDir, `ec-price-${site}-result.json`)');
+assert.ok(alreadyCurrentCheck >= 0, "保存価格が目標価格と一致するECを変更不要として確定する");
+assert.ok(alreadyCurrentCheck < siteWritePhase, "変更不要判定は書込用Codexセッションの前に行う");
+assert.match(bridgeSource, /ec_price_site_already_current/);
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",

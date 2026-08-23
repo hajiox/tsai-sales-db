@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.28";
+const VERSION = "1.8.29";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -549,6 +549,43 @@ async function executeSingleEcPriceSite({ job, workDir, parameters, site, index,
       operatorWait: false,
       globalSafetyStop: message,
     };
+  }
+
+  if (
+    planSite.status === "planned"
+    && Number(planSite.observed_price) === Number(planSite.target_price)
+  ) {
+    const resultSite = {
+      site,
+      status: "updated",
+      final_price: Number(planSite.target_price),
+      product_identifier: planSite.product_identifier,
+      message: "読取専用の事前確認で、商品識別子とサーバー保存価格が目標価格に一致しました。変更は不要なため、書込用Codexセッションを省略しました。",
+    };
+    const noChangeResult = {
+      status: "completed",
+      summary: `${label}は保存済み価格が目標価格と一致しています`,
+      new_standard_price: scoped.newPriceInclTax,
+      sites: [resultSite],
+      lp: notApplicableEcPriceLpResult(),
+    };
+    const noChangeIssue = validateEcPriceResultV2(noChangeResult, scoped, plan);
+    if (!noChangeIssue) {
+      await updateJob(job.id, {
+        status: "running",
+        progress: range.end,
+        currentStep: `${prefix}保存済み価格が目標価格と一致（変更不要）`,
+        message: `${label}は変更不要として確認を完了しました`,
+        eventType: "ec_price_site_already_current",
+        payload: { site, finalPrice: resultSite.final_price },
+      });
+      return {
+        planSite,
+        resultSite,
+        referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+        operatorWait: false,
+      };
+    }
   }
 
   const writeOutput = join(workDir, `ec-price-${site}-result.json`);
