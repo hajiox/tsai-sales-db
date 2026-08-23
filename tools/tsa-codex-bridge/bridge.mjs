@@ -5,8 +5,10 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.31";
+const VERSION = "1.8.32";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
+const DESKTOP_MONITOR_FORCE_CLOSE_MS = 40_000;
+const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
   : join(homedir(), ".tsa-codex-bridge");
@@ -40,10 +42,12 @@ let lastError = null;
 let lastHeartbeatAt = null;
 let currentCodexPid = null;
 let desktopMonitorState = null;
+let desktopMonitorCloseTimer = null;
 
 process.on("SIGINT", () => { stopping = true; });
 process.on("SIGTERM", () => { stopping = true; });
 process.on("exit", () => {
+  terminateAcknowledgedDesktopMonitor(null, "Bridge終了時の後片付け");
   writeBridgeState();
   releaseLock();
 });
@@ -3351,6 +3355,20 @@ function startDesktopMonitor(job) {
     || !existsSync(MONITOR_LAUNCHER_PATH)
   ) return;
   try {
+    if (desktopMonitorCloseTimer) {
+      clearTimeout(desktopMonitorCloseTimer);
+      desktopMonitorCloseTimer = null;
+    }
+    const existing = readDesktopMonitorAcknowledgement();
+    if (
+      existing
+      && String(existing.jobId || "") === String(job.id)
+      && isProcessRunning(Number(existing.monitorPid))
+    ) {
+      log(`desktop monitor already visible for ${job.id} (pid ${existing.monitorPid})`);
+      return;
+    }
+    terminateAcknowledgedDesktopMonitor(null, "次のジョブ開始前の後片付け");
     rmSync(MONITOR_ACK_PATH, { force: true });
     const monitor = spawn("powershell.exe", [
       "-NoProfile",
@@ -3418,6 +3436,52 @@ function verifyDesktopMonitorLaunch(jobId, attempt) {
   }, 500);
 }
 
+function readDesktopMonitorAcknowledgement() {
+  try {
+    if (!existsSync(MONITOR_ACK_PATH)) return null;
+    const acknowledgement = JSON.parse(readFileSync(MONITOR_ACK_PATH, "utf8"));
+    return acknowledgement && typeof acknowledgement === "object" ? acknowledgement : null;
+  } catch {
+    return null;
+  }
+}
+
+function terminateAcknowledgedDesktopMonitor(expectedJobId, reason) {
+  const acknowledgement = readDesktopMonitorAcknowledgement();
+  if (!acknowledgement) return false;
+  const jobId = String(acknowledgement.jobId || "");
+  if (expectedJobId && jobId !== String(expectedJobId)) return false;
+  const monitorPid = Number(acknowledgement.monitorPid);
+  if (Number.isInteger(monitorPid) && isProcessRunning(monitorPid)) {
+    const stopped = spawnSync("taskkill", ["/PID", String(monitorPid), "/T", "/F"], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    if (stopped.status === 0 || !isProcessRunning(monitorPid)) {
+      log(`desktop monitor closed for ${jobId || "unknown"} (${reason}, pid ${monitorPid})`);
+    } else {
+      log(`WARN desktop monitor could not be closed for ${jobId || "unknown"} (pid ${monitorPid})`);
+      return false;
+    }
+  }
+  try {
+    const latest = readDesktopMonitorAcknowledgement();
+    if (latest && String(latest.jobId || "") === jobId) rmSync(MONITOR_ACK_PATH, { force: true });
+  } catch {
+    // A newer monitor may be replacing the acknowledgement file.
+  }
+  return true;
+}
+
+function scheduleDesktopMonitorClose(jobId) {
+  if (desktopMonitorCloseTimer) clearTimeout(desktopMonitorCloseTimer);
+  desktopMonitorCloseTimer = setTimeout(() => {
+    terminateAcknowledgedDesktopMonitor(jobId, "終了状態から40秒経過");
+    desktopMonitorCloseTimer = null;
+  }, DESKTOP_MONITOR_FORCE_CLOSE_MS);
+  desktopMonitorCloseTimer.unref?.();
+}
+
 function updateDesktopMonitor(jobId, payload) {
   if (!desktopMonitorState || !jobId || desktopMonitorState.jobId !== String(jobId)) return;
   const now = new Date().toISOString();
@@ -3440,6 +3504,7 @@ function updateDesktopMonitor(jobId, payload) {
   } catch (error) {
     log(`WARN desktop monitor state write failed: ${error instanceof Error ? error.message : String(error)}`);
   }
+  if (FINAL_DESKTOP_MONITOR_STATUSES.has(nextStatus)) scheduleDesktopMonitorClose(String(jobId));
 }
 
 function estimateDesktopCompletion(state, progress, nowIso) {
