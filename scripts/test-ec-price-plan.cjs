@@ -27,6 +27,10 @@ assert.deepEqual(
   verifiedFourPack.identifiers.amazon,
   [{ kind: "asin", value: "B0BYV7DRDS" }, { kind: "sku", value: "YG-XN24-7D2K" }],
 );
+assert.deepEqual(verifiedFourPack.identifiers.mercari, [
+  { kind: "product_id", value: "S2fzMSKZZMSQczXxU2R7HT" },
+  { kind: "sku", value: "YG-XN24-7D2K" },
+]);
 assert.deepEqual(verifiedFourPack.identifiers.qoo10, [{ kind: "product_number", value: "1166048679" }]);
 const verifiedFiftyPack = verifiedRegistry.products.find((product) => product.janCode === "4571318633120");
 assert.ok(verifiedFiftyPack, "オーション麺50食の確定識別子が必要です");

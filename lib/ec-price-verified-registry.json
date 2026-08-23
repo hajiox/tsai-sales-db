@@ -13,7 +13,10 @@
         "yahoo": [
           { "kind": "product_code", "value": "10000028" }
         ],
-        "mercari": [],
+        "mercari": [
+          { "kind": "product_id", "value": "S2fzMSKZZMSQczXxU2R7HT" },
+          { "kind": "sku", "value": "YG-XN24-7D2K" }
+        ],
         "base": [
           { "kind": "product_id", "value": "63140045" }
         ],
