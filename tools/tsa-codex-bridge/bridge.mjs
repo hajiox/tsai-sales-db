@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.27";
+const VERSION = "1.8.28";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -3322,11 +3322,9 @@ function startDesktopMonitor(job) {
       "-JobId", String(job.id),
       "-AckPath", MONITOR_ACK_PATH,
     ], {
-      detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
-    monitor.unref();
     log(`desktop monitor launch requested for ${job.id} (launcher pid ${monitor.pid || "unknown"})`);
     verifyDesktopMonitorLaunch(String(job.id), 0);
   } catch (error) {
@@ -3358,20 +3356,17 @@ function verifyDesktopMonitorLaunch(jobId, attempt) {
     if (attempt === 9) {
       log(`WARN desktop monitor did not acknowledge for ${jobId}; retrying with a direct visible process`);
       try {
-        const fallback = spawn("powershell.exe", [
+        spawn("powershell.exe", [
           "-NoProfile",
-          "-WindowStyle", "Normal",
           "-ExecutionPolicy", "Bypass",
-          "-File", MONITOR_SCRIPT_PATH,
+          "-File", MONITOR_LAUNCHER_PATH,
           "-StatePath", MONITOR_STATE_PATH,
           "-JobId", jobId,
           "-AckPath", MONITOR_ACK_PATH,
         ], {
-          detached: true,
           stdio: "ignore",
-          windowsHide: false,
+          windowsHide: true,
         });
-        fallback.unref();
       } catch (error) {
         log(`WARN desktop monitor direct retry failed: ${error instanceof Error ? error.message : String(error)}`);
       }

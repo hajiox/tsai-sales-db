@@ -191,6 +191,20 @@ assert.match(monitorLauncherSource, /Start-Process/);
 assert.match(monitorLauncherSource, /-WindowStyle Normal/);
 assert.match(monitorLauncherSource, /AckPath/);
 assert.match(bridgeSource, /desktop monitor visible/);
+const desktopMonitorLaunchSource = bridgeSource.slice(
+  bridgeSource.indexOf("function startDesktopMonitor("),
+  bridgeSource.indexOf("function updateDesktopMonitor("),
+);
+assert.doesNotMatch(
+  desktopMonitorLaunchSource,
+  /detached:\s*true/,
+  "非表示ランチャーをdetached起動すると可視PowerShellの生成が失敗するため禁止する",
+);
+assert.equal(
+  (desktopMonitorLaunchSource.match(/"-File", MONITOR_LAUNCHER_PATH/g) || []).length,
+  2,
+  "初回と再試行の両方を可視ウィンドウ専用ランチャー経由にする",
+);
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",
