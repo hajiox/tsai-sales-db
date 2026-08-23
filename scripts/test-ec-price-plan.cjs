@@ -28,6 +28,13 @@ assert.deepEqual(
   [{ kind: "asin", value: "B0BYV7DRDS" }, { kind: "sku", value: "YG-XN24-7D2K" }],
 );
 assert.deepEqual(verifiedFourPack.identifiers.qoo10, [{ kind: "product_number", value: "1166048679" }]);
+const verifiedFiftyPack = verifiedRegistry.products.find((product) => product.janCode === "4571318633120");
+assert.ok(verifiedFiftyPack, "オーション麺50食の確定識別子が必要です");
+assert.deepEqual(verifiedFiftyPack.identifiers.rakuten, [{ kind: "product_management_number", value: "10000029" }]);
+assert.deepEqual(verifiedFiftyPack.identifiers.tiktok, [
+  { kind: "base_product_id", value: "121847320" },
+  { kind: "product_id", value: "1732857167447033086" },
+]);
 assert.deepEqual(
   verifiedRegistry.lpSources.find((source) => source.host === "buta.aizubrandhall-lp2.com"),
   { host: "buta.aizubrandhall-lp2.com", githubRepository: "hajiox/BUTA", productionBranch: "main" },
@@ -84,6 +91,7 @@ assert.match(pricePromptSource, /verified-products\.md/);
 assert.match(pricePromptSource, /TASK_JSON\.productMappings/);
 assert.match(pricePromptSource, /search every supplied mapped title before reporting not_found/);
 assert.match(pricePromptSource, /TASK_JSON\.verifiedProductIdentifiers/);
+assert.match(pricePromptSource, /optional seller-side storage\/delivery field that is blank/);
 assert.match(pricePromptSource, /must never be returned as not_found/);
 assert.match(pricePromptSource, /TASK_JSON\.lpSource is a server allow-listed source/);
 assert.match(pricePromptSource, /ExpectedGithubRepository/);

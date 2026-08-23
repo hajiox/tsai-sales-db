@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.30";
+const VERSION = "1.8.31";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -1353,6 +1353,7 @@ function buildEcPricePlanPrompt(parameters) {
     "Keep browser reads compact: never emit a full seller-dashboard DOM snapshot. Search first, then inspect only the matching row, price field, product identifier, sale unit, and shipping condition.",
     "Before reading a current saved price, navigate or reload the exact official edit/list page so an unsaved value left in the tab by a previously stopped job is discarded. Never treat a staged DOM value as the server-saved price.",
     "For every requested site, identify the exact product using name, JAN, quantity, storage method, SKU or product ID, and read the currently saved price.",
+    "If an exact server-locked identifier, title, quantity, and sale unit all match, an optional seller-side storage/delivery field that is blank is not a contradiction. In that case TASK_JSON.recipeSnapshot.storageMethod plus the exact product entry in the Skill's verified-products.md are accepted storage evidence; do not block solely because the seller UI omits the same value. A visible conflicting storage method still blocks the site.",
     "TASK_JSON.productMappings contains product titles previously matched and confirmed by TSA sales imports for this linked product. For each site, search every supplied mapped title before reporting not_found. These titles are strong identity evidence but do not replace the required quantity, storage-method, and official listing verification. For BASE exclude TikTok-linked titles; for TikTok use the supplied BASE-managed TikTok title. Never substitute a similar title.",
     "TASK_JSON.verifiedProductIdentifiers contains server-locked identifiers already verified for this exact JAN. For each site with identifiers, use the official identifier route first (for example ASIN/SKU, product management number, product code, product ID, or product number), then confirm title, quantity, storage method, and sale unit. A site with one or more verified identifiers must never be returned as not_found solely because a title or JAN search returned zero results. If the official screen cannot resolve a supplied identifier, return blocked with the exact evidence instead of not_found. Include at least one supplied identifier value in product_identifier for a planned site.",
     "Determine each listing's sale-unit multiplier relative to the saved TSA recipe product. A single matching unit is 1; a verified 2-item listing is 2. Never infer this from price alone. Record unit_multiplier and concrete unit_evidence from the product title/details or verified-products reference. If the multiplier is uncertain, block without writing.",

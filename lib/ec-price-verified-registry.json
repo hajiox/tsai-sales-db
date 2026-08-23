@@ -24,6 +24,34 @@
           { "kind": "base_product_id", "value": "121846020" }
         ]
       }
+    },
+    {
+      "janCode": "4571318633120",
+      "identifiers": {
+        "amazon": [
+          { "kind": "asin", "value": "B0C9Z96L2S" },
+          { "kind": "sku", "value": "CO-BI4Y-F5QJ" }
+        ],
+        "rakuten": [
+          { "kind": "product_management_number", "value": "10000029" }
+        ],
+        "yahoo": [
+          { "kind": "product_code", "value": "10000029" }
+        ],
+        "mercari": [
+          { "kind": "product_id", "value": "sCxtqNMNaqkFtN8GN2AvjC" }
+        ],
+        "base": [
+          { "kind": "product_id", "value": "95814284" }
+        ],
+        "qoo10": [
+          { "kind": "product_number", "value": "1166050450" }
+        ],
+        "tiktok": [
+          { "kind": "base_product_id", "value": "121847320" },
+          { "kind": "product_id", "value": "1732857167447033086" }
+        ]
+      }
     }
   ],
   "lpSources": [
