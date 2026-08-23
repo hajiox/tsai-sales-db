@@ -1,6 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$StatePath,
-  [Parameter(Mandatory = $true)][string]$JobId
+  [Parameter(Mandatory = $true)][string]$JobId,
+  [Parameter(Mandatory = $true)][string]$AckPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +16,10 @@ $arguments = @(
   "-File", "`"$monitorScript`""
   "-StatePath", "`"$StatePath`""
   "-JobId", "`"$JobId`""
+  "-AckPath", "`"$AckPath`""
 )
 
-Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WindowStyle Normal
+$monitor = Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WindowStyle Normal -PassThru
+if (-not $monitor) {
+  throw "Bridge monitor process did not start"
+}

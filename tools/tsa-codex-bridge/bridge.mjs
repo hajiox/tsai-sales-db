@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.26";
+const VERSION = "1.8.27";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -15,6 +15,7 @@ const LOG_DIR = join(APP_DIR, "logs");
 const LOCK_PATH = join(APP_DIR, "bridge.lock");
 const STATE_PATH = join(APP_DIR, "bridge-state.json");
 const MONITOR_STATE_PATH = join(APP_DIR, "monitor-state.json");
+const MONITOR_ACK_PATH = join(APP_DIR, "monitor-ack.json");
 const MONITOR_SCRIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "bridge-monitor.ps1");
 const MONITOR_LAUNCHER_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "launch-bridge-monitor.ps1");
 const MAINTENANCE_PATH = join(APP_DIR, "bridge-maintenance.lock");
@@ -3312,22 +3313,76 @@ function startDesktopMonitor(job) {
     || !existsSync(MONITOR_LAUNCHER_PATH)
   ) return;
   try {
+    rmSync(MONITOR_ACK_PATH, { force: true });
     const monitor = spawn("powershell.exe", [
       "-NoProfile",
       "-ExecutionPolicy", "Bypass",
       "-File", MONITOR_LAUNCHER_PATH,
       "-StatePath", MONITOR_STATE_PATH,
       "-JobId", String(job.id),
+      "-AckPath", MONITOR_ACK_PATH,
     ], {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
     monitor.unref();
-    log(`desktop monitor started for ${job.id} (pid ${monitor.pid || "unknown"})`);
+    log(`desktop monitor launch requested for ${job.id} (launcher pid ${monitor.pid || "unknown"})`);
+    verifyDesktopMonitorLaunch(String(job.id), 0);
   } catch (error) {
     log(`WARN desktop monitor could not start: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function verifyDesktopMonitorLaunch(jobId, attempt) {
+  setTimeout(() => {
+    try {
+      if (existsSync(MONITOR_ACK_PATH)) {
+        const acknowledgement = JSON.parse(readFileSync(MONITOR_ACK_PATH, "utf8"));
+        const monitorPid = Number(acknowledgement?.monitorPid);
+        if (
+          String(acknowledgement?.jobId || "") === jobId
+          && Number.isInteger(monitorPid)
+          && isProcessRunning(monitorPid)
+        ) {
+          log(
+            `desktop monitor visible for ${jobId} (pid ${monitorPid}, foreground ${acknowledgement?.foregroundActivated === true ? "confirmed" : "requested"})`,
+          );
+          return;
+        }
+      }
+    } catch {
+      // The monitor may be replacing its small acknowledgement file.
+    }
+
+    if (attempt === 9) {
+      log(`WARN desktop monitor did not acknowledge for ${jobId}; retrying with a direct visible process`);
+      try {
+        const fallback = spawn("powershell.exe", [
+          "-NoProfile",
+          "-WindowStyle", "Normal",
+          "-ExecutionPolicy", "Bypass",
+          "-File", MONITOR_SCRIPT_PATH,
+          "-StatePath", MONITOR_STATE_PATH,
+          "-JobId", jobId,
+          "-AckPath", MONITOR_ACK_PATH,
+        ], {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: false,
+        });
+        fallback.unref();
+      } catch (error) {
+        log(`WARN desktop monitor direct retry failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    if (attempt < 19) {
+      verifyDesktopMonitorLaunch(jobId, attempt + 1);
+    } else {
+      log(`WARN desktop monitor visibility could not be confirmed for ${jobId}`);
+    }
+  }, 500);
 }
 
 function updateDesktopMonitor(jobId, payload) {

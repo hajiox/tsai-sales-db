@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
+import { dispatchRecipePriceTsgNotifications } from "@/lib/recipe-price-tsg-notification";
 import {
   isCodexBridgeAuthorized,
   normalizeWorkerId,
@@ -514,6 +515,12 @@ export async function POST(
     }
 
     let successfulSites: Record<string, any>[] = [];
+    let tsgNotification: {
+      claimed: number;
+      posted: number;
+      failed: number;
+      error?: string;
+    } | null = null;
     if (claimedJob.task_key === "ec_price_update" && isFinal) {
       validateFinalPriceResult(claimedJob, submittedResult, status);
       successfulSites = priceSyncRows(claimedJob, submittedResult, id, now);
@@ -546,6 +553,30 @@ export async function POST(
       });
       if (completeError) throw completeError;
       if (!completed) return NextResponse.json({ error: "Job is no longer running" }, { status: 409 });
+      if (status === "completed") {
+        try {
+          const recipeId = String(asObject(claimedJob.parameters).recipeId || "");
+          const dispatched = await dispatchRecipePriceTsgNotifications(supabase, {
+            recipeId,
+            limit: 5,
+          });
+          tsgNotification = {
+            claimed: dispatched.claimed,
+            posted: dispatched.posted,
+            failed: dispatched.failed,
+          };
+        } catch (notificationError) {
+          // EC/LP completion is authoritative. The durable TSG outbox retries hourly.
+          tsgNotification = {
+            claimed: 0,
+            posted: 0,
+            failed: 1,
+            error: notificationError instanceof Error
+              ? notificationError.message
+              : "TSG価格変更報告を再試行待ちにしました",
+          };
+        }
+      }
     } else {
       const { data: job, error } = await supabase
         .from("web_sales_codex_jobs")
@@ -579,7 +610,7 @@ export async function POST(
         })
         .eq("id", workerId);
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, tsgNotification });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Job update failed" },

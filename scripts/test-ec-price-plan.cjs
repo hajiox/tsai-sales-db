@@ -174,6 +174,8 @@ assert.match(monitorSource, /TSA Codex Bridge 実行モニター/);
 assert.match(monitorSource, /完了目安/);
 assert.match(monitorSource, /Codex PID/);
 assert.match(monitorSource, /目安超過（処理継続中）/);
+assert.match(monitorSource, /foregroundActivated/);
+assert.match(monitorSource, /monitorPid/);
 const installerSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "install-bridge.ps1"),
   "utf8",
@@ -187,6 +189,8 @@ const monitorLauncherSource = fs.readFileSync(
 );
 assert.match(monitorLauncherSource, /Start-Process/);
 assert.match(monitorLauncherSource, /-WindowStyle Normal/);
+assert.match(monitorLauncherSource, /AckPath/);
+assert.match(bridgeSource, /desktop monitor visible/);
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",
@@ -203,6 +207,21 @@ const routeSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "route.ts"),
   "utf8",
 );
+assert.match(routeSource, /dispatchRecipePriceTsgNotifications/);
+assert.match(routeSource, /status === "completed"/);
+
+const tsgCompletionMigrationSource = fs.readFileSync(
+  path.join(
+    __dirname,
+    "..",
+    "supabase",
+    "migrations",
+    "20260823120000_gate_recipe_price_tsg_after_ec_completion.sql",
+  ),
+  "utf8",
+);
+assert.match(tsgCompletionMigrationSource, /job\.status = 'completed'/);
+assert.match(tsgCompletionMigrationSource, /job\.created_at >= revision\.created_at/);
 
 const recipePriceRouteSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "recipe", "[id]", "ec-price-jobs", "route.ts"),

@@ -2,7 +2,9 @@
   [Parameter(Mandatory = $true)]
   [string]$StatePath,
   [Parameter(Mandatory = $true)]
-  [string]$JobId
+  [string]$JobId,
+  [Parameter(Mandatory = $true)]
+  [string]$AckPath
 )
 
 $ErrorActionPreference = "SilentlyContinue"
@@ -11,6 +13,31 @@ $shortJobId = if ($JobId.Length -gt 8) { $JobId.Substring(0, 8) } else { $JobId 
 $Host.UI.RawUI.WindowTitle = "TSA Codex Bridge 実行モニター [$shortJobId]"
 $finalStatuses = @("completed", "waiting_for_user", "needs_review", "failed", "cancelled")
 $finalSince = $null
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class TsaBridgeMonitorWindow {
+  [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+}
+"@
+
+$windowHandle = [TsaBridgeMonitorWindow]::GetConsoleWindow()
+$foregroundActivated = $false
+if ($windowHandle -ne [IntPtr]::Zero) {
+  [void][TsaBridgeMonitorWindow]::ShowWindowAsync($windowHandle, 9)
+  $foregroundActivated = [TsaBridgeMonitorWindow]::SetForegroundWindow($windowHandle)
+}
+$acknowledgement = @{
+  jobId = $JobId
+  monitorPid = $PID
+  windowHandle = $windowHandle.ToInt64()
+  foregroundActivated = $foregroundActivated
+  startedAt = [DateTimeOffset]::UtcNow.ToString("o")
+} | ConvertTo-Json
+[System.IO.File]::WriteAllText($AckPath, $acknowledgement, [System.Text.UTF8Encoding]::new($false))
 
 function Format-Duration([double]$Seconds) {
   $value = [Math]::Max(0, [Math]::Floor($Seconds))
