@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "new_product_name", "sites"],
+  "properties": {
+    "status": { "enum": ["completed", "waiting_for_user", "needs_review", "failed"] },
+    "summary": { "type": "string" },
+    "new_product_name": { "type": "string" },
+    "sites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["site", "status", "final_name", "product_identifier", "message"],
+        "properties": {
+          "site": { "enum": ["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"] },
+          "status": { "enum": ["updated", "submitted_pending", "not_found", "blocked"] },
+          "final_name": { "type": ["string", "null"] },
+          "product_identifier": { "type": ["string", "null"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

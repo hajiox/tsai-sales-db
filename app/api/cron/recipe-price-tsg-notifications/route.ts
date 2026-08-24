@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { dispatchRecipePriceTsgNotifications } from "@/lib/recipe-price-tsg-notification";
+import { dispatchRecipeProductNameTsgNotifications } from "@/lib/recipe-product-name-tsg-notification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,14 +14,15 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await dispatchRecipePriceTsgNotifications(
-      getWebSalesAutomationServiceClient(),
-      { limit: 50 },
-    );
-    return NextResponse.json({ ok: true, ...result });
+    const supabase = getWebSalesAutomationServiceClient();
+    const [price, productName] = await Promise.all([
+      dispatchRecipePriceTsgNotifications(supabase, { limit: 50 }),
+      dispatchRecipeProductNameTsgNotifications(supabase, { limit: 50 }),
+    ]);
+    return NextResponse.json({ ok: true, price, productName });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "TSG価格変更通知の再試行に失敗しました" },
+      { error: error instanceof Error ? error.message : "TSG変更通知の再試行に失敗しました" },
       { status: 500 },
     );
   }

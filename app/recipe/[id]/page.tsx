@@ -23,6 +23,7 @@ import NutritionDisplay, {
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 import InlineEdit from "../_components/InlineEdit";
 import EcPriceSyncControls from "../_components/EcPriceSyncControls";
+import EcProductNameSyncControls from "../_components/EcProductNameSyncControls";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
@@ -2570,7 +2571,7 @@ function RecipeDetailContent() {
                 <EcPriceSyncControls
                   recipeId={recipe.id}
                   recipeName={recipe.name}
-                  ecProductName={recipe.ec_product_name}
+                  ecProductName={recipe.ec_product_name ?? null}
                   productLpUrl={recipe.product_lp_url}
                   sellingPriceInclTax={sellingPriceInclTax}
                   expectedRecipeSnapshot={{
@@ -4498,6 +4499,25 @@ function RecipeDetailContent() {
                 {(recipe.ec_product_name || '').length > 60 && (recipe.ec_product_name || '').length <= 75 && (
                   <p className="text-xs text-amber-500 mt-1">残り{75 - (recipe.ec_product_name || '').length}文字</p>
                 )}
+                <EcProductNameSyncControls
+                  recipeId={recipe.id}
+                  recipeName={recipe.name}
+                  ecProductName={recipe.ec_product_name}
+                  expectedRecipeSnapshot={{
+                    recipeId: recipe.id,
+                    recipeName: recipe.name,
+                    ecProductName: (recipe.ec_product_name || '').trim().slice(0, 75),
+                    linkedProductId: recipe.linked_product_id ? String(recipe.linked_product_id).trim().slice(0, 100) : null,
+                    janCode: recipe.jan_code ? String(recipe.jan_code).trim().slice(0, 32) : null,
+                    seriesCode: recipe.series_code ? String(recipe.series_code).trim().slice(0, 100) : null,
+                    productCode: recipe.product_code ? String(recipe.product_code).trim().slice(0, 100) : null,
+                    fillingQuantity: recipe.filling_quantity != null ? String(recipe.filling_quantity).trim().slice(0, 50) : null,
+                    fillingQuantityUnit: recipe.filling_quantity_unit ? String(recipe.filling_quantity_unit).trim().slice(0, 30) : null,
+                    storageMethod: recipe.storage_method ? String(recipe.storage_method).trim().slice(0, 100) : null,
+                  }}
+                  hasUnsavedChanges={hasChanges}
+                  isSaving={isSaving}
+                />
               </div>
               {/* キャッチコピー（楽天・Yahoo用） */}
               <div>

@@ -17,6 +17,8 @@ Each production job starts with a fresh `codex exec` session and never resumes t
 
 Every TSA button that invokes Codex must route to a dedicated Skill. Do not send a task/thread ID or development-chat history to the worker. A new recurring workflow is not production-ready until its Skill and compact structured input are defined.
 
+EC product-name jobs use the dedicated `update-aizu-ec-product-names` Skill. They process one marketplace at a time, mutate only the exact product-name field, preserve successful sites when another site fails, and expose an unfinished-only retry. Immediate changes create one TSG report; jobs released from the shared reservation queue create one aggregate report after the batch completes.
+
 The production screen is `/web-sales/automation`. It supports both product-sales aggregation and advertising-cost collection. Use `PC接続テスト` before the first run.
 
 Advertising jobs reuse TSA's existing import, auto-match, and cost-update routes. Google Ads uses the configured Google Ads API; Meta, Rakuten RPP, Yahoo item reach, and Amazon Sponsored Products use the signed-in Chrome session and the `tsa-ad-cost-csv` Skill. A report with positive-cost unmapped rows finishes as `needs_review` instead of updating advertising costs.
@@ -33,6 +35,7 @@ The TSA automation screen shows both versions and warns when the installed Bridg
 
 ## Operation note
 
+- 2026-08-24: Bridge 1.8.33 adds protocol 1 for `ec_product_name_update`. The recipe screen supports individual EC execution, all-EC execution, shared batch reservations, progress/ETA, per-site results, unfinished-only retry, and separate product-name history. The Bridge uses a dedicated compact Skill, verifies the recipe snapshot immediately before each write, and prohibits price, stock, shipping, tax, description, image, category, variation, advertising, and bulk mutations.
 - 2026-08-23: Bridge 1.8.28 requires a monitor-side acknowledgement before logging the visible PowerShell monitor as started. The worker verifies the monitor PID and foreground request. Both initial launch and retry use the visible-window launcher without Node's detached mode, which was reproduced to suppress the monitor on the office PC. Recipe price reports to TSG are released only after the later EC/LP Bridge campaign completes; the hourly durable outbox remains the retry path.
 - 2026-08-23: Bridge 1.8.29 starts the visible monitor through `conhost.exe`, uses one named mutex per job, disables console Quick Edit so a click cannot pause monitoring or auto-close, and appends progress when a step changes instead of repeatedly clearing the screen. It also accepts a validated read-only EC plan as final verification when the exact product's server-saved price already equals the locked target, avoiding a second Codex write session while preserving the same validation and audit trail.
 - 2026-08-23: Bridge 1.8.30 briefly raises the single monitor window to the foreground before returning it to normal z-order, so Windows cannot leave a successfully created monitor hidden behind Chrome when direct focus activation is denied.

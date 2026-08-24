@@ -17,6 +17,8 @@ $requiredSourceFiles = @(
   "analysis-result.schema.json",
   "ec-price-result.schema.json",
   "ec-price-plan.schema.json",
+  "ec-product-name-result.schema.json",
+  "ec-product-name-plan.schema.json",
   "bridge-monitor.ps1",
   "launch-bridge-monitor.ps1",
   "start-bridge.ps1"
@@ -37,7 +39,7 @@ $priceSkill = Join-Path $env:USERPROFILE ".codex\skills\update-aizu-ec-prices\SK
 if (-not (Test-Path -LiteralPath $priceSkill)) {
   throw "update-aizu-ec-prices Skillがありません。共有Skillsを同期してから再実行してください。"
 }
-foreach ($skillName in @("tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report", "tsa-web-sales-analysis")) {
+foreach ($skillName in @("tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report", "tsa-web-sales-analysis", "update-aizu-ec-product-names")) {
   $skillSource = Join-Path $sourceDir "skills\$skillName"
   if (-not (Test-Path -LiteralPath (Join-Path $skillSource "SKILL.md"))) {
     throw "Bridge同梱Skillがありません: $skillSource"
@@ -147,9 +149,11 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "result.schema.json") -Destination 
 Copy-Item -LiteralPath (Join-Path $sourceDir "analysis-result.schema.json") -Destination (Join-Path $installDir "analysis-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-price-result.schema.json") -Destination (Join-Path $installDir "ec-price-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-price-plan.schema.json") -Destination (Join-Path $installDir "ec-price-plan.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-name-result.schema.json") -Destination (Join-Path $installDir "ec-product-name-result.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-name-plan.schema.json") -Destination (Join-Path $installDir "ec-product-name-plan.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "start-bridge.ps1") -Destination (Join-Path $installDir "start-bridge.ps1") -Force
 
-foreach ($skillName in @("tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report", "tsa-web-sales-analysis")) {
+foreach ($skillName in @("tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report", "tsa-web-sales-analysis", "update-aizu-ec-product-names")) {
   $skillSource = Join-Path $sourceDir "skills\$skillName"
   $skillRoot = Join-Path (Join-Path $env:USERPROFILE ".codex\skills") $skillName
   New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null

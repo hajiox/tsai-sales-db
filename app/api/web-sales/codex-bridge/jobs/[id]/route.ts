@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { dispatchRecipePriceTsgNotifications } from "@/lib/recipe-price-tsg-notification";
+import { dispatchRecipeProductNameTsgNotifications } from "@/lib/recipe-product-name-tsg-notification";
 import {
   isCodexBridgeAuthorized,
   normalizeWorkerId,
@@ -18,6 +19,7 @@ const FINAL_STATUSES: CodexJobStatus[] = [
   "cancelled",
 ];
 const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]);
+const EC_PRODUCT_NAME_STATUSES = new Set(["updated", "submitted_pending", "not_found", "blocked"]);
 
 function asObject(value: unknown): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -124,6 +126,159 @@ function priceSyncRows(
       target,
       last_standard_price_incl_tax: standardPrice,
       last_site_price: finalPrice,
+      last_job_id: jobId,
+      recipe_snapshot: parameters.recipeSnapshot,
+      updated_at: updatedAt,
+    }];
+  });
+}
+
+function normalizedProductName(value: unknown) {
+  return String(value ?? "").trim().slice(0, 75);
+}
+
+function validatedProductNamePlan(parametersInput: unknown, planInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const plan = asObject(planInput);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const targetName = normalizedProductName(parameters.newProductName);
+  const sites = Array.isArray(plan.sites) ? plan.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (
+    plan.status !== "ready"
+    || !targetName
+    || targets.length === 0
+    || new Set(targets).size !== targets.length
+    || targets.some((target: string) => !EC_PRICE_TARGETS.has(target))
+    || names.length !== targets.length
+    || new Set(names).size !== names.length
+    || targets.some((target: string) => !names.includes(target))
+  ) throw new Error("EC商品名変更計画の対象が不正です");
+  for (const site of sites) {
+    const target = String(site.site || "");
+    if (site.status === "not_found") {
+      if (site.observed_name != null || site.target_name != null || site.product_identifier != null || !String(site.message || "").trim()) {
+        throw new Error(`${target}の対象商品なし計画が不正です`);
+      }
+      continue;
+    }
+    if (
+      site.status !== "planned"
+      || normalizedProductName(site.target_name) !== targetName
+      || !String(site.product_identifier || "").trim()
+      || !String(site.message || "").trim()
+    ) throw new Error(`${target}の商品名変更計画が確定していません`);
+  }
+  return plan;
+}
+
+function validatedProductNameProgress(parametersInput: unknown, resultInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const result = asObject(resultInput);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  if (normalizedProductName(result.new_product_name) !== normalizedProductName(parameters.newProductName)) {
+    throw new Error("EC商品名変更途中結果が依頼名と一致しません");
+  }
+  const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (new Set(names).size !== names.length
+    || names.some((target) => !targets.includes(target))
+    || sites.some((site) => !EC_PRODUCT_NAME_STATUSES.has(String(site.status)))) {
+    throw new Error("EC商品名変更途中結果の対象が不正です");
+  }
+  return result;
+}
+
+function validatedFinalProductNamePlan(parametersInput: unknown, resultInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const result = asObject(resultInput);
+  const plan = asObject(result.plan);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const resultSites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  const planSites = Array.isArray(plan.sites) ? plan.sites.map(asObject) : [];
+  if (resultSites.length !== targets.length || planSites.length !== targets.length) {
+    throw new Error("EC商品名変更の逐次結果が依頼対象と一致しません");
+  }
+  for (const target of targets) {
+    const resultSite = resultSites.find((site) => site.site === target);
+    const planSite = planSites.find((site) => site.site === target);
+    if (!resultSite || !planSite) throw new Error(`${target}の逐次結果がありません`);
+    if (resultSite.status === "blocked") continue;
+    validatedProductNamePlan({ ...parameters, targets: [target] }, {
+      status: "ready",
+      summary: String(plan.summary || "逐次計画"),
+      sites: [planSite],
+    });
+    if (resultSite.status === "not_found" && planSite.status !== "not_found") {
+      throw new Error(`${target}の対象商品なし結果が計画と一致しません`);
+    }
+    if (["updated", "submitted_pending"].includes(String(resultSite.status)) && planSite.status !== "planned") {
+      throw new Error(`${target}の反映結果に検証済み計画がありません`);
+    }
+  }
+  return plan;
+}
+
+function validateFinalProductNameResult(
+  claimedJob: Record<string, any>,
+  submittedResult: Record<string, any> | null,
+  status: CodexJobStatus,
+) {
+  if (!submittedResult) {
+    if (status === "failed" || status === "cancelled") return;
+    throw new Error("EC商品名変更の最終結果がありません");
+  }
+  const parameters = asObject(claimedJob.parameters);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const sites = Array.isArray(submittedResult.sites) ? submittedResult.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  const targetName = normalizedProductName(parameters.newProductName);
+  if (
+    submittedResult.status !== status
+    || normalizedProductName(submittedResult.new_product_name) !== targetName
+    || names.length !== targets.length
+    || new Set(names).size !== names.length
+    || targets.some((target: string) => !names.includes(target))
+  ) throw new Error("EC商品名変更の最終結果が依頼内容と一致しません");
+  if (status === "completed") {
+    const planSites = Array.isArray(asObject(submittedResult.plan).sites)
+      ? asObject(submittedResult.plan).sites as unknown[]
+      : [];
+    const incomplete = sites.some((site) => {
+      if (site.status === "updated" && normalizedProductName(site.final_name) === targetName) return false;
+      const planned = planSites.map(asObject).find((entry) => entry.site === site.site);
+      return site.status !== "not_found" || planned?.status !== "not_found";
+    });
+    if (incomplete) throw new Error("未確認のECサイトがあるため完了にできません");
+  }
+}
+
+function productNameSyncRows(
+  claimedJob: Record<string, any>,
+  submittedResult: unknown,
+  jobId: string,
+  updatedAt: string,
+) {
+  const parameters = asObject(claimedJob.parameters);
+  const targetName = normalizedProductName(parameters.newProductName);
+  const result = asObject(submittedResult);
+  const planSites = Array.isArray(asObject(result.plan).sites) ? asObject(result.plan).sites as unknown[] : [];
+  const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  if (result.validated_plan_checkpoint !== true) throw new Error("サーバー検証済みの商品名計画がありません");
+  return sites.flatMap((site) => {
+    if (site.status !== "updated") return [];
+    const target = String(site.site || "");
+    const planned = planSites.map(asObject).find((entry) => entry.site === target);
+    if (!planned || planned.status !== "planned") throw new Error(`${target}の商品名計画が見つかりません`);
+    if (normalizedProductName(planned.target_name) !== targetName
+      || normalizedProductName(site.final_name) !== targetName
+      || String(site.product_identifier || "").trim() !== String(planned.product_identifier || "").trim()) {
+      throw new Error(`${target}の商品名変更結果が保存済み計画と一致しません`);
+    }
+    return [{
+      recipe_id: String(parameters.recipeId || ""),
+      target,
+      last_product_name: targetName,
       last_job_id: jobId,
       recipe_snapshot: parameters.recipeSnapshot,
       updated_at: updatedAt,
@@ -513,6 +668,22 @@ export async function POST(
         };
       }
     }
+    if (claimedJob.task_key === "ec_product_name_update" && submittedResult) {
+      if (!isFinal) {
+        const eventType = String(body.eventType || "");
+        if (eventType === "ec_product_name_plan_saved") {
+          const plan = validatedProductNamePlan(claimedJob.parameters, submittedResult.plan);
+          submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
+        } else if (eventType === "ec_product_name_progress_checkpoint") {
+          submittedResult = validatedProductNameProgress(claimedJob.parameters, submittedResult);
+        } else {
+          return NextResponse.json({ error: "Invalid EC product name checkpoint" }, { status: 400 });
+        }
+      } else {
+        const plan = validatedFinalProductNamePlan(claimedJob.parameters, submittedResult);
+        submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
+      }
+    }
 
     let successfulSites: Record<string, any>[] = [];
     let tsgNotification: {
@@ -524,6 +695,10 @@ export async function POST(
     if (claimedJob.task_key === "ec_price_update" && isFinal) {
       validateFinalPriceResult(claimedJob, submittedResult, status);
       successfulSites = priceSyncRows(claimedJob, submittedResult, id, now);
+    }
+    if (claimedJob.task_key === "ec_product_name_update" && isFinal) {
+      validateFinalProductNameResult(claimedJob, submittedResult, status);
+      successfulSites = productNameSyncRows(claimedJob, submittedResult, id, now);
     }
 
     const updates: Record<string, any> = {
@@ -576,6 +751,45 @@ export async function POST(
             error: notificationError instanceof Error
               ? notificationError.message
               : "TSG価格変更報告を再試行待ちにしました",
+          };
+        }
+      }
+    } else if (claimedJob.task_key === "ec_product_name_update" && isFinal) {
+      const { data: completed, error: completeError } = await supabase.rpc("complete_ec_product_name_codex_job", {
+        p_job_id: id,
+        p_worker_id: workerId,
+        p_status: status,
+        p_progress: updates.progress,
+        p_current_step: updates.current_step,
+        p_error_message: updates.error_message,
+        p_result: submittedResult,
+        p_completed_at: now,
+        p_sync_rows: successfulSites,
+      });
+      if (completeError) throw completeError;
+      if (!completed) return NextResponse.json({ error: "Job is no longer running" }, { status: 409 });
+      if (status === "completed") {
+        try {
+          const jobParameters = asObject(claimedJob.parameters);
+          const recipeId = String(jobParameters.recipeId || "");
+          const batchId = String(jobParameters.batchId || "").trim();
+          const dispatched = await dispatchRecipeProductNameTsgNotifications(supabase, {
+            ...(batchId ? { batchId } : { recipeId }),
+            limit: 5,
+          });
+          tsgNotification = {
+            claimed: dispatched.claimed,
+            posted: dispatched.posted,
+            failed: dispatched.failed,
+          };
+        } catch (notificationError) {
+          tsgNotification = {
+            claimed: 0,
+            posted: 0,
+            failed: 1,
+            error: notificationError instanceof Error
+              ? notificationError.message
+              : "TSG商品名変更報告を再試行待ちにしました",
           };
         }
       }
