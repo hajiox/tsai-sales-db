@@ -344,6 +344,7 @@ export async function POST(
 
     const recipeSnapshot = buildEcPriceRecipeSnapshot(recipe as Record<string, unknown>);
     let lpUpdate = Boolean(recipeSnapshot.productLpUrl);
+    let inheritedBatchId: string | null = null;
     if (retryUnfinishedFromJobId) {
       const { data: retrySource, error: retrySourceError } = await supabase
         .from("web_sales_codex_jobs")
@@ -363,6 +364,10 @@ export async function POST(
       ) {
         return NextResponse.json({ error: "再実行元の価格・商品情報が現在のレシピと一致しません" }, { status: 409 });
       }
+      const sourceBatchId = String(retryParameters.batchId || "").trim();
+      inheritedBatchId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceBatchId)
+        ? sourceBatchId
+        : null;
       const sourceTargets = normalizeEcPriceTargets(retryParameters.targets);
       const sourceSites = Array.isArray(retryResult.sites) ? retryResult.sites.map(asObject) : [];
       targets = sourceTargets.filter((target) => {
@@ -540,6 +545,7 @@ export async function POST(
       lpSource,
       retryUnfinishedFromJobId: retryUnfinishedFromJobId || null,
       dispatchMode,
+      ...(inheritedBatchId ? { batchId: inheritedBatchId } : {}),
       executionPolicy: "signed_in_browser_isolated_codex",
       operatorAuthorization: {
         executionAuthorized: !isReservation,

@@ -141,3 +141,11 @@
 - Vercel preview `dpl_6y5RvrNb2erutqFUMmUo3Jx3frhv`: READY
 - TSA Codex Bridge 1.8.9: heartbeat成功
 - 接続テストjob `0feeca43-5261-4a6e-988e-753a2be7cf88`: completed
+
+## 2026-08-24（一括改定のTSG報告集約）
+
+- 「一括実行へ予約」からまとめて開始した価格改定へ共通の一括改定IDを付与し、全商品ジョブが完了するまでTSG報告を保留するようにした。
+- 一部商品が停止した場合は先に完了した商品を再実行せず、未完了商品の再実行へ同じ一括改定IDを引き継ぐ。全商品の完了後、前回価格・新価格・TSAレシピURLを1件のTSG投稿へまとめる。
+- 単品の「今すぐ実行」は従来どおり1商品1投稿。価格履歴ごとの送信状態と決定的なTSG投稿IDを維持し、通信再試行でも二重投稿しない。
+- 本番DBへ `20260824120000_batch_recipe_price_tsg_notifications.sql` を適用し、列・一括解放RPC・一括claim RPCを確認した。
+- `npm run test:ec-price-plan`、`npm run test:recipe-price-tsg-batch`、対象ESLint、環境変数付き `npm run build` に成功。実商品を変更する本番一括ジョブは検証目的では実行していない。

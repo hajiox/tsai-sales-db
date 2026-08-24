@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { randomUUID } from "node:crypto";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { normalizeEcPriceTargets } from "@/lib/ec-price-codex";
@@ -100,9 +101,13 @@ export async function POST(request: Request) {
     if (recipesError) throw recipesError;
     const recipeMap = new Map((recipes || []).map((recipe) => [String(recipe.id), recipe]));
     const releasedAt = new Date().toISOString();
-    let released = 0;
+    const batchId = randomUUID();
     let stale = 0;
     const details: Array<{ id: string; recipeId: string; status: "released" | "stale" | "skipped" }> = [];
+    const releasable: Array<{
+      reservation: Record<string, unknown>;
+      recipeId: string;
+    }> = [];
 
     for (const reservation of reservations) {
       const parameters = asObject(reservation.parameters);
@@ -169,50 +174,59 @@ export async function POST(request: Request) {
         }
         continue;
       }
+      releasable.push({
+        reservation: reservation as Record<string, unknown>,
+        recipeId,
+      });
+    }
 
-      const nextParameters = {
-        ...parameters,
-        dispatchMode: "batch",
-        releasedAt,
-        operatorAuthorization: {
-          executionAuthorized: true,
-          source: "tsa_batch_execution_confirmation",
-          authorizedAt: releasedAt,
-          authorizedBy: session.user?.email || ADMIN_EMAIL,
-          recipeId,
-          targets: normalizeEcPriceTargets(parameters.targets),
-          newPriceInclTax: Number(parameters.newPriceInclTax) || 0,
+    let released = 0;
+    if (releasable.length > 0) {
+      const { data: releasedRows, error: releaseError } = await supabase.rpc(
+        "release_recipe_ec_price_batch_jobs",
+        {
+          p_job_ids: releasable.map(({ reservation }) => String(reservation.id)),
+          p_batch_id: batchId,
+          p_released_at: releasedAt,
+          p_authorized_by: session.user?.email || ADMIN_EMAIL,
         },
-      };
-      const { data: updated } = await supabase
-        .from("web_sales_codex_jobs")
-        .update({
-          parameters: nextParameters,
-          scheduled_at: releasedAt,
-          current_step: "一括実行待ち",
-          updated_at: releasedAt,
-        })
-        .eq("id", reservation.id)
-        .eq("status", "queued")
-        .contains("parameters", { dispatchMode: "reserved" })
-        .select("id")
-        .maybeSingle();
-      if (updated) {
+      );
+      if (releaseError) throw releaseError;
+      const releasedIds = new Set((releasedRows || []).map((row: unknown) => {
+        if (typeof row === "string") return row;
+        return String(asObject(row).job_id || "");
+      }).filter(Boolean));
+
+      for (const entry of releasable) {
+        const jobId = String(entry.reservation.id);
+        if (!releasedIds.has(jobId)) {
+          details.push({ id: jobId, recipeId: entry.recipeId, status: "skipped" });
+          continue;
+        }
         released += 1;
-        details.push({ id: reservation.id, recipeId, status: "released" });
+        details.push({ id: jobId, recipeId: entry.recipeId, status: "released" });
         await supabase.from("web_sales_codex_job_events").insert({
-          job_id: reservation.id,
+          job_id: jobId,
           event_type: "queued",
           message: "予約した価格変更を一括実行へ移しました",
           progress: 0,
-          payload: { recipeId, releasedAt },
+          payload: {
+            recipeId: entry.recipeId,
+            releasedAt,
+            batchId,
+            batchSize: releasedIds.size,
+          },
         });
-      } else {
-        details.push({ id: reservation.id, recipeId, status: "skipped" });
       }
     }
 
-    return NextResponse.json({ ok: true, released, stale, details });
+    return NextResponse.json({
+      ok: true,
+      released,
+      stale,
+      batchId: released > 0 ? batchId : null,
+      details,
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "価格変更予約を一括実行できません" },

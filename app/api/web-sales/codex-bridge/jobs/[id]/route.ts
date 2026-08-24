@@ -555,9 +555,11 @@ export async function POST(
       if (!completed) return NextResponse.json({ error: "Job is no longer running" }, { status: 409 });
       if (status === "completed") {
         try {
-          const recipeId = String(asObject(claimedJob.parameters).recipeId || "");
+          const jobParameters = asObject(claimedJob.parameters);
+          const recipeId = String(jobParameters.recipeId || "");
+          const batchId = String(jobParameters.batchId || "").trim();
           const dispatched = await dispatchRecipePriceTsgNotifications(supabase, {
-            recipeId,
+            ...(batchId ? { batchId } : { recipeId }),
             limit: 5,
           });
           tsgNotification = {

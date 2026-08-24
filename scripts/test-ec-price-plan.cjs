@@ -288,7 +288,18 @@ const reservationRouteSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "recipe", "ec-price-reservations", "route.ts"),
   "utf8",
 );
-assert.match(reservationRouteSource, /tsa_batch_execution_confirmation/);
+const batchNotificationMigrationSource = fs.readFileSync(
+  path.join(
+    __dirname,
+    "..",
+    "supabase",
+    "migrations",
+    "20260824120000_batch_recipe_price_tsg_notifications.sql",
+  ),
+  "utf8",
+);
+assert.match(reservationRouteSource, /release_recipe_ec_price_batch_jobs/);
+assert.match(batchNotificationMigrationSource, /tsa_batch_execution_confirmation/);
 assert.match(reservationRouteSource, /ecPriceProductMappingsMatch/);
 
 const authorizedJobParameters = {
