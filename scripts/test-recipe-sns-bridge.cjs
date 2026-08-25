@@ -76,4 +76,17 @@ function assertStrictObjectSchemas(value, location = "$") {
 }
 assertStrictObjectSchemas(schema);
 
+function assertCodexOutputSchemaCompatibility(value, location = "$") {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  assert.equal(
+    Object.hasOwn(value, "uniqueItems"),
+    false,
+    `${location} uses uniqueItems, which Codex structured output rejects`,
+  );
+  for (const [key, child] of Object.entries(value)) {
+    assertCodexOutputSchemaCompatibility(child, `${location}.${key}`);
+  }
+}
+assertCodexOutputSchemaCompatibility(schema);
+
 console.log("Recipe SNS Bridge checks passed.");
