@@ -17,6 +17,10 @@
 - Sharp crop smoke test: success
 - `npm run build`: success
 - Security secret scan and RLS check: success
+- Codex structured outputで未対応の`uniqueItems`を除去し、同じ問題を検出するBridgeテストを追加。
+- 再生成時は、過去に選択していた版ではなく実行中ジョブの新しい版へ自動で切り替わることを回帰テストで固定。
+- 本番`v0-tsa-19.vercel.app`で「酒塩アウトドアMIX」を生成し、4媒体の投稿文、文字数・ハッシュタグ制限、1600x900 / 1080x1080 / 1080x1920 / 1200x900画像、履歴保存を確認。
+- Bridge 1.8.39を事務所PCへ再インストールし、専用Skill配置とheartbeatを確認。
 
 ### Remaining
 
