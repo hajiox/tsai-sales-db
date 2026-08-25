@@ -11,6 +11,7 @@ export type CodexTaskKey =
   | "ec_product_name_generate"
   | "ec_catchcopy_update"
   | "ec_catchcopy_generate"
+  | "recipe_sns_generate"
   | "web_sales_analysis";
 
 export type CodexJobStatus =
@@ -30,7 +31,7 @@ export type CodexJobTrigger =
   | "test";
 
 export type CodexTaskDefinition = {
-  key: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_name_update" | "ec_product_name_generate" | "ec_catchcopy_update" | "ec_catchcopy_generate">;
+  key: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_name_update" | "ec_product_name_generate" | "ec_catchcopy_update" | "ec_catchcopy_generate" | "recipe_sns_generate">;
   channel: CodexChannel;
   label: string;
   shortLabel: string;
@@ -40,7 +41,7 @@ export type CodexTaskDefinition = {
 };
 
 export type EnqueueCodexJobsInput = {
-  taskKey?: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_name_update" | "ec_product_name_generate" | "ec_catchcopy_update" | "ec_catchcopy_generate">;
+  taskKey?: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_name_update" | "ec_product_name_generate" | "ec_catchcopy_update" | "ec_catchcopy_generate" | "recipe_sns_generate">;
   channels: CodexChannel[];
   startDate: string;
   endDate: string;

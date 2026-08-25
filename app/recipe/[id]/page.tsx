@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback, Suspense } from "react";
+import { useEffect, useState, useRef, useCallback, Suspense, type KeyboardEvent } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowDownWideNarrow, ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database, ClipboardCopy, ListOrdered, ExternalLink, Link2, Images } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowLeft, Edit, Save, Printer, Plus, Trash2, FlaskConical, Loader2, X, AlertTriangle, Camera, ImageIcon, Upload, History, RotateCcw, ChevronDown, Database, ClipboardCopy, ListOrdered, ExternalLink, Link2, Images, BookOpen, ShoppingBag, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import NutritionDisplay, {
   NutritionData,
@@ -27,6 +27,7 @@ import EcProductNameSyncControls from "../_components/EcProductNameSyncControls"
 import EcProductNameAiEditor from "../_components/EcProductNameAiEditor";
 import EcCatchcopySyncControls from "../_components/EcCatchcopySyncControls";
 import EcCatchcopyAiEditor from "../_components/EcCatchcopyAiEditor";
+import RecipeSnsStudio from "../_components/RecipeSnsStudio";
 import type { EcProductNamesBySite } from "@/lib/ec-product-name-codex";
 import type { EcCatchcopiesBySite } from "@/lib/ec-catchcopy-codex";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
@@ -159,6 +160,22 @@ interface RecipeItem {
 }
 
 type IngredientSortMode = "registered" | "weight";
+type RecipeDetailTab = "recipe" | "ec" | "sns";
+
+const RECIPE_DETAIL_TABS: Array<{
+  id: RecipeDetailTab;
+  label: string;
+  description: string;
+  icon: typeof BookOpen;
+}> = [
+  { id: "recipe", label: "レシピ", description: "配合・原価・製造情報", icon: BookOpen },
+  { id: "ec", label: "EC情報", description: "商品説明・EC名・画像", icon: ShoppingBag },
+  { id: "sns", label: "SNS", description: "画像切り出し・投稿文", icon: Share2 },
+];
+
+function normalizeRecipeDetailTab(value: string | null): RecipeDetailTab {
+  return value === "ec" || value === "sns" ? value : "recipe";
+}
 
 type WebProductImage = {
   id: string;
@@ -564,6 +581,35 @@ function RecipeDetailContent() {
   };
 
   const searchParams = useSearchParams();
+  const [activeDetailTab, setActiveDetailTab] = useState<RecipeDetailTab>(() =>
+    normalizeRecipeDetailTab(searchParams.get("detailTab")),
+  );
+
+  useEffect(() => {
+    setActiveDetailTab(normalizeRecipeDetailTab(searchParams.get("detailTab")));
+  }, [searchParams]);
+
+  const changeDetailTab = useCallback((tab: RecipeDetailTab) => {
+    setActiveDetailTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === "recipe") url.searchParams.delete("detailTab");
+    else url.searchParams.set("detailTab", tab);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+
+  const handleDetailTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, tab: RecipeDetailTab) => {
+    const currentIndex = RECIPE_DETAIL_TABS.findIndex((item) => item.id === tab);
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % RECIPE_DETAIL_TABS.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + RECIPE_DETAIL_TABS.length) % RECIPE_DETAIL_TABS.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = RECIPE_DETAIL_TABS.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextTab = RECIPE_DETAIL_TABS[nextIndex].id;
+    changeDetailTab(nextTab);
+    window.requestAnimationFrame(() => document.getElementById(`recipe-detail-tab-${nextTab}`)?.focus());
+  }, [changeDetailTab]);
 
   useEffect(() => {
     if (params.id) {
@@ -621,7 +667,7 @@ function RecipeDetailContent() {
       // URLからパラメータを除去（履歴汚染防止）
       const url = new URL(window.location.href);
       url.searchParams.delete('jan_code');
-      window.history.replaceState({}, '', url.pathname);
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
     }
   }, [searchParams, recipe?.id]);
 
@@ -1820,8 +1866,49 @@ function RecipeDetailContent() {
           )}
         </div>
       </header>
+      <nav className="border-b border-gray-200 bg-white print:hidden" aria-label="レシピ詳細の表示切り替え">
+        <div
+          className="mx-auto grid max-w-[1400px] grid-cols-3 gap-1 px-3 py-2 sm:px-4 lg:px-8"
+          role="tablist"
+          aria-label="レシピ詳細"
+        >
+          {RECIPE_DETAIL_TABS.map(({ id, label, description, icon: Icon }) => {
+            const selected = activeDetailTab === id;
+            return (
+              <button
+                key={id}
+                id={`recipe-detail-tab-${id}`}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={`recipe-detail-panel-${id}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => changeDetailTab(id)}
+                onKeyDown={(event) => handleDetailTabKeyDown(event, id)}
+                className={`flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-md border px-2 py-2 text-left transition-colors sm:px-4 ${selected
+                  ? "border-gray-900 bg-gray-900 text-white"
+                  : "border-transparent bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-white hover:text-gray-900"
+                  }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-bold">{label}</span>
+                  <span className={`hidden truncate text-[10px] sm:block ${selected ? "text-gray-300" : "text-gray-400"}`}>
+                    {description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
       {/* Main Content - Screen Only */}
-      <main className="mx-auto max-w-[1400px] min-w-0 px-3 py-4 sm:px-4 lg:p-8 print:hidden">
+      <main
+        id="recipe-detail-panel-recipe"
+        role="tabpanel"
+        aria-labelledby="recipe-detail-tab-recipe"
+        className={`mx-auto max-w-[1400px] min-w-0 px-3 py-4 sm:px-4 lg:p-8 print:hidden ${activeDetailTab === "recipe" ? "block" : "hidden"}`}
+      >
         {/* Header Section */}
         {/* Header Section (Recipe Name & Pricing Card) */}
         <div className="border-b-2 border-gray-800 pb-4 mb-6">
@@ -4247,7 +4334,7 @@ function RecipeDetailContent() {
       </div>
 
       {/* ── 商品写真セクション (PC用・印刷非表示) ── */}
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-5 print:hidden">
+      <div className={`mx-auto my-6 max-w-[1400px] rounded-md border border-gray-200 bg-white p-3 shadow-sm sm:p-5 print:hidden ${activeDetailTab === "recipe" ? "block" : "hidden"}`}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
             <Camera className="w-4 h-4 text-blue-600" />
@@ -4417,20 +4504,22 @@ function RecipeDetailContent() {
         const isOver = totalChars > 500;
         const overCount = totalChars - 500;
         return (
-          <details className="print:hidden mt-6 bg-white rounded-xl border border-gray-200 shadow-sm group">
-            <summary className="flex cursor-pointer list-none select-none flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-4 transition-colors hover:bg-gray-50 sm:px-5 [&::-webkit-details-marker]:hidden">
+          <section
+            id="recipe-detail-panel-ec"
+            role="tabpanel"
+            aria-labelledby="recipe-detail-tab-ec"
+            className={`mx-auto max-w-[1400px] bg-white px-3 py-5 sm:px-4 lg:px-8 print:hidden ${activeDetailTab === "ec" ? "block" : "hidden"}`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-4">
               <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
                 📝 商品ポイント & Web商品説明
               </h3>
-              <div className="flex items-center gap-3">
-                <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${isOver ? 'bg-red-100 text-red-600 font-bold' : 'bg-gray-100 text-gray-500'}`}>
-                  {totalChars}文字
-                  {isOver && <span className="ml-1">（{overCount}文字超過）</span>}
-                </span>
-                <ChevronDown className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180" />
-              </div>
-            </summary>
-            <div className="space-y-4 border-t border-gray-100 px-3 pb-4 pt-4 sm:px-5 sm:pb-5">
+              <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${isOver ? 'bg-red-100 text-red-600 font-bold' : 'bg-gray-100 text-gray-500'}`}>
+                {totalChars}文字
+                {isOver && <span className="ml-1">（{overCount}文字超過）</span>}
+              </span>
+            </div>
+            <div className="space-y-4 pb-4 pt-4">
               {recipe.category === "ネット専用" && (() => {
                 const productLpUrl = (recipe.product_lp_url || '').trim();
                 const canOpenProductLp = /^https?:\/\/\S+$/i.test(productLpUrl);
@@ -4887,9 +4976,17 @@ function RecipeDetailContent() {
                 </div>
               </div>
             </div>
-          </details>
+          </section>
         );
       })()}
+      <div
+        id="recipe-detail-panel-sns"
+        role="tabpanel"
+        aria-labelledby="recipe-detail-tab-sns"
+        className={`print:hidden ${activeDetailTab === "sns" ? "block" : "hidden"}`}
+      >
+        <RecipeSnsStudio recipeId={recipe.id} hasUnsavedChanges={hasChanges} />
+      </div>
       <style jsx global>
         {`
           @media print {

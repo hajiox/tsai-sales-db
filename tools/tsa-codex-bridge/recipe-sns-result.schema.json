@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["overall_angle", "variation_key", "source_gaps", "posts"],
+  "properties": {
+    "overall_angle": { "type": "string", "maxLength": 600 },
+    "variation_key": { "type": "string", "maxLength": 120 },
+    "source_gaps": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "type": "string", "maxLength": 240 }
+    },
+    "posts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "instagram", "instagram_story", "threads"],
+      "properties": {
+        "x": { "$ref": "#/$defs/xPost" },
+        "instagram": { "$ref": "#/$defs/instagramPost" },
+        "instagram_story": { "$ref": "#/$defs/storyPost" },
+        "threads": { "$ref": "#/$defs/threadsPost" }
+      }
+    }
+  },
+  "$defs": {
+    "xPost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "hashtags", "rationale"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "hashtags": { "type": "array", "minItems": 0, "maxItems": 3, "uniqueItems": true, "items": { "type": "string", "maxLength": 40 } },
+        "rationale": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "instagramPost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "hashtags", "rationale"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 2200 },
+        "hashtags": { "type": "array", "minItems": 10, "maxItems": 15, "uniqueItems": true, "items": { "type": "string", "maxLength": 40 } },
+        "rationale": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "storyPost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "hashtags", "rationale"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 50 },
+        "hashtags": { "type": "array", "minItems": 0, "maxItems": 0, "items": { "type": "string" } },
+        "rationale": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "threadsPost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "hashtags", "rationale"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "hashtags": { "type": "array", "minItems": 0, "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "maxLength": 40 } },
+        "rationale": { "type": "string", "maxLength": 500 }
+      }
+    }
+  }
+}
