@@ -1,17 +1,19 @@
 # TSA Codex Bridge
 
-The bridge runs on the signed-in office Windows PC and claims allow-listed TSA jobs over outbound HTTPS. It uses the local Codex login and Chrome plugin configuration, streams progress back to TSA, and uploads source reports and execution logs.
+The bridge runs on the office Windows PC and claims allow-listed TSA jobs over outbound HTTPS. An interactive worker uses the signed-in Chrome session, while a separate S4U worker can run browserless Codex jobs before Windows login. Both stream progress back to TSA and upload execution artifacts.
 
 ## Runtime
 
-- Windows user must be signed in.
-- Codex desktop should be running when Chrome control is required.
-- The EC seller account must already be signed in to Chrome.
+- Browserless jobs continue before Windows login through the `TSA Codex Bridge (Pre-login)` scheduled task.
+- Chrome-dependent sales, advertising, settlement, price, product-name, and catchcopy jobs wait in the durable queue until the Windows user is signed in and the interactive worker is online.
+- Codex desktop and the signed-in EC Chrome session are required only for Chrome control.
 - The shared archive path must be reachable.
 
 ## Install
 
-Run `install-bridge.ps1` with the same secret stored in Vercel as `TSA_CODEX_BRIDGE_TOKEN`. The installer copies runtime files to `%LOCALAPPDATA%\TSA Codex Bridge`, registers a current-user startup entry, and starts the worker hidden.
+Run `install-bridge.ps1` with the same secret stored in Vercel as `TSA_CODEX_BRIDGE_TOKEN`. The installer copies runtime files to `%LOCALAPPDATA%\TSA Codex Bridge`, keeps the current-user startup entry for the interactive worker, and registers `TSA Codex Bridge (Pre-login)` as an `AtStartup` S4U task. The first registration requires one Windows administrator confirmation, but stores no Windows password. Later Bridge updates reuse the same task.
+
+The pre-login worker has a different worker ID and runtime directory. It advertises only `connection_test`, EC product-name generation, EC catchcopy generation, recipe SNS generation, and WEB sales analysis. The database claim function filters on that exact capability list, so it cannot claim a Chrome or shared-folder collection job. Both workers share a maintenance lock, and the installer waits until every active worker is idle before replacing files.
 
 Each production job starts with a fresh `codex exec` session and never resumes the TSA development chat or another long-lived task. The rollout is retained only so the Chrome plugin can observe turn completion and release claimed tabs; it is not reused as operational context. Signed-in EC jobs first list and claim the user's already-open matching Chrome tab. If every matching tab is owned by another Codex browser session, the job creates at most one temporary tab per target EC in the same selected Chrome profile and reuses that profile's login state. It never opens another browser, window, incognito session, or temporary profile, and never closes an operator-owned tab. Login, MFA, CAPTCHA, account selection, or a real permission denial stops only after the actual official authentication screen or prompt is visible.
 
@@ -37,6 +39,7 @@ The TSA automation screen shows both versions and warns when the installed Bridg
 
 ## Operation note
 
+- 2026-08-25: Bridge 1.8.40 adds a second S4U/AtStartup worker that survives Windows Update restarts and runs before interactive login. It is fail-closed to five browserless jobs, uses a separate lock/state/log/job directory and worker ID, exposes no Chrome capability or desktop monitor, and shares safe installer maintenance with the interactive worker. Chrome-dependent EC jobs remain queued until login. The automation screen now reports browser operation and pre-login processing separately.
 - 2026-08-25: Bridge 1.8.39 adds `recipe_sns_generate`. The recipe detail screen is split into Recipe, EC information, and SNS tabs. TSA deterministically selects a random portrait image (or the first Web product image), crops separate 16:9, 1:1, 9:16, and 4:3 WebP assets with Sharp, and stores immutable versions. A fresh isolated GPT-5.6 Sol / medium session reads only the dedicated `generate-aizu-sns-posts` Skill and compact saved EC/allow-listed LP snapshot to create X, Instagram, Instagram Story, and Threads copy. It cannot browse, post, or modify external data.
 - 2026-08-25: Bridge 1.8.38 adds site-specific catchcopy management for Rakuten and Yahoo only. Yahoo uses the official `headline` field (30 full-width characters, HTML prohibited, search-indexed); Rakuten uses the dedicated RMS catchcopy field. The recipe screen stores separate values, generates both with GPT-5.6 Sol, supports individual or black `全EC` execution, reservations, progress/ETA, immutable generation and change history, and unfinished-only retry. Bridge updates one site at a time and preserves completed work when the other site is blocked. Amazon, Mercari Shops, BASE, Qoo10, and TikTok are excluded because this workflow has no dedicated catchcopy target for them.
 - 2026-08-25: Recipe price and product-name sync controls place the black `全EC` action directly after the seven marketplace buttons. Immediate and reservation behavior remains selected by the mode control above the row.

@@ -5,14 +5,15 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.39";
+const VERSION = "1.8.40";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const DESKTOP_MONITOR_FORCE_CLOSE_MS = 40_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
-const APP_DIR = process.env.LOCALAPPDATA
+const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
   : join(homedir(), ".tsa-codex-bridge");
-const CONFIG_PATH = process.env.TSA_CODEX_BRIDGE_CONFIG || join(APP_DIR, "bridge.config.json");
+const APP_DIR = resolve(process.env.TSA_CODEX_BRIDGE_APP_DIR || DEFAULT_APP_DIR);
+const CONFIG_PATH = resolve(process.env.TSA_CODEX_BRIDGE_CONFIG || join(APP_DIR, "bridge.config.json"));
 const LOG_DIR = join(APP_DIR, "logs");
 const LOCK_PATH = join(APP_DIR, "bridge.lock");
 const STATE_PATH = join(APP_DIR, "bridge-state.json");
@@ -20,7 +21,7 @@ const MONITOR_STATE_PATH = join(APP_DIR, "monitor-state.json");
 const MONITOR_ACK_PATH = join(APP_DIR, "monitor-ack.json");
 const MONITOR_SCRIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "bridge-monitor.ps1");
 const MONITOR_LAUNCHER_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "launch-bridge-monitor.ps1");
-const MAINTENANCE_PATH = join(APP_DIR, "bridge-maintenance.lock");
+const MAINTENANCE_PATH = resolve(process.env.TSA_CODEX_BRIDGE_MAINTENANCE_PATH || join(APP_DIR, "bridge-maintenance.lock"));
 const RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "result.schema.json");
 const ANALYSIS_RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "analysis-result.schema.json");
 const EC_PRICE_PLAN_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "ec-price-plan.schema.json");
@@ -44,6 +45,26 @@ const RECIPE_SNS_PLATFORM_RULES = {
   instagram_story: { label: "IGストーリー", aspectLabel: "9:16", width: 1080, height: 1920, maxLength: 50, minHashtags: 0, maxHashtags: 0 },
   threads: { label: "Threads", aspectLabel: "4:3", width: 1200, height: 900, maxLength: 500, minHashtags: 0, maxHashtags: 5 },
 };
+const ALL_CODEX_TASK_KEYS = Object.freeze([
+  "connection_test",
+  "web_sales_import",
+  "ad_cost_import",
+  "ec_profit_import",
+  "ec_price_update",
+  "ec_product_name_update",
+  "ec_product_name_generate",
+  "ec_catchcopy_update",
+  "ec_catchcopy_generate",
+  "recipe_sns_generate",
+  "web_sales_analysis",
+]);
+const HEADLESS_SAFE_TASK_KEYS = new Set([
+  "connection_test",
+  "ec_product_name_generate",
+  "ec_catchcopy_generate",
+  "recipe_sns_generate",
+  "web_sales_analysis",
+]);
 
 mkdirSync(LOG_DIR, { recursive: true });
 acquireLock();
@@ -96,6 +117,9 @@ async function main() {
         continue;
       }
       currentJobId = claimed.job.id;
+      if (!config.allowedTaskKeys.includes(String(claimed.job.task_key || ""))) {
+        throw new Error(`許可されていないタスクを取得しました: ${claimed.job.task_key || "unknown"}`);
+      }
       startDesktopMonitor(claimed.job);
       writeBridgeState();
       lastError = null;
@@ -4070,6 +4094,7 @@ async function heartbeat() {
 }
 
 function workerPayload() {
+  const supports = (taskKey) => config.allowedTaskKeys.includes(taskKey);
   return {
     workerId: config.workerId,
     name: config.workerName,
@@ -4078,12 +4103,15 @@ function workerPayload() {
     lastError,
     capabilities: {
       codex: true,
-      chrome: true,
+      chrome: config.executionMode === "interactive",
+      executionMode: config.executionMode,
+      preLogin: config.executionMode === "headless-prelogin",
+      desktopMonitor: config.desktopMonitor,
       sharedSession: false,
       isolatedEphemeralSession: true,
       tokenSavingPreflight: true,
       archivedArtifactReuse: true,
-      monthlyAnalysis: true,
+      monthlyAnalysis: supports("web_sales_analysis"),
       analysisModel: "gpt-5.6-sol",
       archiveRoot: true,
       platform: process.platform,
@@ -4098,22 +4126,22 @@ function workerPayload() {
       codexRuntimeError,
       codexRuntimeAutoRefresh: true,
       codexRuntimeCheckIntervalSeconds: CODEX_RUNTIME_CHECK_MS / 1000,
-      ecPriceUpdate: true,
+      ecPriceUpdate: supports("ec_price_update"),
       ecPriceProtocolVersion: 3,
-      ecProductNameUpdate: true,
+      ecProductNameUpdate: supports("ec_product_name_update"),
       ecProductNameProtocolVersion: 2,
-      ecProductNameAi: true,
+      ecProductNameAi: supports("ec_product_name_generate"),
       ecProductNameAiProtocolVersion: 1,
       ecProductNameAiModel: "gpt-5.6-sol",
-      ecCatchcopyUpdate: true,
+      ecCatchcopyUpdate: supports("ec_catchcopy_update"),
       ecCatchcopyProtocolVersion: 1,
-      ecCatchcopyAi: true,
+      ecCatchcopyAi: supports("ec_catchcopy_generate"),
       ecCatchcopyAiProtocolVersion: 1,
       ecCatchcopyAiModel: "gpt-5.6-sol",
-      recipeSns: true,
+      recipeSns: supports("recipe_sns_generate"),
       recipeSnsProtocolVersion: 1,
       recipeSnsModel: "gpt-5.6-sol",
-      codexTaskKeys: ["connection_test", "web_sales_import", "ad_cost_import", "ec_profit_import", "ec_price_update", "ec_product_name_update", "ec_product_name_generate", "ec_catchcopy_update", "ec_catchcopy_generate", "recipe_sns_generate", "web_sales_analysis"],
+      codexTaskKeys: config.allowedTaskKeys,
     },
   };
 }
@@ -4373,6 +4401,15 @@ async function api(path, options = {}) {
 function loadConfig() {
   if (!existsSync(CONFIG_PATH)) throw new Error(`設定ファイルがありません: ${CONFIG_PATH}`);
   const stored = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+  const executionMode = String(process.env.TSA_CODEX_BRIDGE_EXECUTION_MODE || stored.executionMode || "interactive").trim().toLowerCase();
+  const configuredTaskKeys = String(process.env.TSA_CODEX_BRIDGE_TASK_KEYS || "").trim()
+    ? String(process.env.TSA_CODEX_BRIDGE_TASK_KEYS).split(",")
+    : stored.allowedTaskKeys;
+  const requestedTaskKeys = Array.isArray(configuredTaskKeys) ? configuredTaskKeys.map((entry) => String(entry).trim()) : ALL_CODEX_TASK_KEYS;
+  const knownTaskKeys = [...new Set(requestedTaskKeys.filter((entry) => ALL_CODEX_TASK_KEYS.includes(entry)))];
+  const allowedTaskKeys = executionMode === "headless-prelogin"
+    ? knownTaskKeys.filter((entry) => HEADLESS_SAFE_TASK_KEYS.has(entry))
+    : knownTaskKeys;
   const value = {
     baseUrl: String(process.env.TSA_BASE_URL || stored.baseUrl || "").replace(/\/$/, ""),
     token: String(process.env.TSA_CODEX_BRIDGE_TOKEN || stored.token || ""),
@@ -4386,11 +4423,20 @@ function loadConfig() {
     legacySessionId: String(process.env.TSA_CODEX_SESSION_ID || stored.codexSessionId || "").trim(),
     reasoningEffort: String(process.env.TSA_CODEX_REASONING_EFFORT || stored.reasoningEffort || "low").trim().toLowerCase(),
     pollMs: Math.max(3000, Number(process.env.TSA_CODEX_POLL_MS || stored.pollMs || 5000)),
+    executionMode,
+    allowedTaskKeys,
+    desktopMonitor: executionMode === "interactive" && stored.desktopMonitor !== false,
   };
   if (!/^https:\/\//.test(value.baseUrl)) throw new Error("baseUrlはhttpsで指定してください");
   if (value.token.length < 32) throw new Error("Bridge tokenが設定されていません");
   if (!["low", "medium", "high", "xhigh"].includes(value.reasoningEffort)) {
     throw new Error("reasoningEffortが正しくありません");
+  }
+  if (!["interactive", "headless-prelogin"].includes(value.executionMode)) {
+    throw new Error("executionModeが正しくありません");
+  }
+  if (value.allowedTaskKeys.length === 0) {
+    throw new Error("実行可能なBridgeタスクが設定されていません");
   }
   if (!existsSync(value.workspace)) {
     const standardWorkspace = String.raw`C:\作業用`;
@@ -4463,6 +4509,8 @@ function inspectCodexRuntime(candidate) {
 
 function runtimeSnapshot() {
   return {
+    workerId: config.workerId,
+    executionMode: config.executionMode,
     bridgeVersion: VERSION,
     codexVersion: codexRuntime.version,
     codexExecutablePath: codexRuntime.path,
@@ -4619,6 +4667,9 @@ function writeBridgeState() {
     writeFileSync(STATE_PATH, `${JSON.stringify({
       pid: process.pid,
       version: VERSION,
+      workerId: config.workerId,
+      executionMode: config.executionMode,
+      allowedTaskKeys: config.allowedTaskKeys,
       currentJobId,
       maintenanceObserved,
       lastHeartbeatAt,

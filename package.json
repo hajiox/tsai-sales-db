@@ -18,6 +18,7 @@
     "apply:ec-product-name-migration": "node scripts/apply-ec-product-name-migration.cjs",
     "test:ec-catchcopy-bridge": "node scripts/test-ec-catchcopy-bridge.cjs",
     "test:recipe-sns-bridge": "node scripts/test-recipe-sns-bridge.cjs",
+    "test:bridge-prelogin": "node scripts/test-bridge-prelogin.cjs",
     "test:recipe-sns-feature": "node scripts/test-recipe-sns-feature.cjs",
     "test:recipe-sns-migration": "node scripts/dry-run-recipe-sns-migration.cjs",
     "apply:recipe-sns-migration": "node scripts/apply-recipe-sns-migration.cjs",

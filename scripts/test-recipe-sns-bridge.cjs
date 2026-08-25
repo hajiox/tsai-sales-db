@@ -11,12 +11,13 @@ const types = read("lib", "web-sales-codex", "types.ts");
 const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-posts", "SKILL.md");
 const schema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-result.schema.json"));
 
-assert.match(bridge, /const VERSION = "1\.8\.39"/);
-assert.match(requiredVersion, /REQUIRED_TSA_CODEX_BRIDGE_VERSION = "1\.8\.39"/);
+assert.match(bridge, /const VERSION = "1\.8\.40"/);
+assert.match(requiredVersion, /REQUIRED_TSA_CODEX_BRIDGE_VERSION = "1\.8\.40"/);
 assert.match(types, /\| "recipe_sns_generate"/);
 assert.match(bridge, /recipeSnsProtocolVersion: 1/);
 assert.match(bridge, /recipeSnsModel: "gpt-5\.6-sol"/);
-assert.match(bridge, /codexTaskKeys: \[[^\]]*"recipe_sns_generate"/);
+assert.match(bridge, /const HEADLESS_SAFE_TASK_KEYS = new Set\(\[[\s\S]*?"recipe_sns_generate"/);
+assert.match(bridge, /codexTaskKeys: config\.allowedTaskKeys/);
 assert.match(bridge, /job\.task_key === "recipe_sns_generate"/);
 assert.match(bridge, /executeRecipeSnsGenerateJob\(job\)/);
 

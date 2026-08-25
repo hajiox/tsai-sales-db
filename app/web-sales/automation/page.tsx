@@ -225,7 +225,13 @@ export default function WebSalesAutomationPage() {
       .slice(0, 40),
     [data?.jobs, taskKey],
   );
-  const primaryWorker = data?.workers.find((worker) => worker.online) || data?.workers[0] || null;
+  const interactiveWorker = data?.workers.find((worker) => worker.online && worker.capabilities?.chrome === true)
+    || data?.workers.find((worker) => worker.capabilities?.chrome === true)
+    || null;
+  const preLoginWorker = data?.workers.find((worker) => worker.online && worker.capabilities?.preLogin === true)
+    || data?.workers.find((worker) => worker.capabilities?.preLogin === true)
+    || null;
+  const primaryWorker = interactiveWorker || preLoginWorker || data?.workers.find((worker) => worker.online) || data?.workers[0] || null;
   const codexVersion = typeof primaryWorker?.capabilities?.codexVersion === "string"
     ? primaryWorker.capabilities.codexVersion
     : null;
@@ -526,10 +532,13 @@ export default function WebSalesAutomationPage() {
                       {primaryWorker?.online ? (primaryWorker.status === "busy" ? "実行中" : "オンライン") : "オフライン"}
                     </span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-slate-600">
-                    {primaryWorker?.online
-                      ? `最終接続 ${formatDateTime(primaryWorker.last_seen_at)}${primaryWorker.version ? ` / Bridge ${primaryWorker.version}` : ""}`
-                      : primaryWorker ? `最終接続 ${formatDateTime(primaryWorker.last_seen_at)}` : "接続待ち"}
+                  <p className="mt-1 text-xs text-slate-600">
+                    ブラウザ操作 {interactiveWorker?.online ? "オンライン" : "オフライン"}
+                    {interactiveWorker ? ` / 最終接続 ${formatDateTime(interactiveWorker.last_seen_at)}` : ""}
+                  </p>
+                  <p className={`mt-0.5 text-xs ${preLoginWorker?.online ? "text-emerald-700" : "text-slate-500"}`}>
+                    ログイン前処理 {preLoginWorker?.online ? "オンライン" : "オフライン"}
+                    {preLoginWorker ? ` / 最終接続 ${formatDateTime(preLoginWorker.last_seen_at)}` : ""}
                   </p>
                   {primaryWorker && (
                     <p className={`mt-1 text-xs ${codexRuntimeReady && !bridgeUpdateRequired ? "text-slate-600" : "font-semibold text-red-700"}`}>
