@@ -216,6 +216,7 @@ $headlessTaskKeys = @(
 $nodePath = (Get-Command node -ErrorAction Stop).Source
 $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
 $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+$windowsUserId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $headlessWorkerId = "$WorkerId-headless"
 if ($headlessWorkerId.Length -gt 80) {
   $headlessWorkerId = "$($WorkerId.Substring(0, 71))-headless"
@@ -255,6 +256,7 @@ $headlessConfig = @{
   userProfile = $userProfile
   localAppData = $localAppData
   nodePath = $nodePath
+  windowsUserId = $windowsUserId
 } | ConvertTo-Json -Depth 4
 [System.IO.File]::WriteAllText((Join-Path $installDir "headless\bridge.config.json"), $headlessConfig, [System.Text.UTF8Encoding]::new($false))
 
@@ -272,7 +274,7 @@ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $startArguments
 $taskName = "TSA Codex Bridge (Pre-login)"
 $taskRegistered = $false
 if (-not $SkipPreloginTaskRegistration) {
-  $userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+  $userId = $windowsUserId
   $registeredTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
   $expectedTaskScript = Join-Path $installDir "start-bridge-prelogin.ps1"
   $registeredActionArguments = if ($registeredTask -and $registeredTask.Actions.Count -eq 1) {
@@ -291,7 +293,11 @@ if (-not $SkipPreloginTaskRegistration) {
     $hasStartupTrigger
   if (-not $taskRegistered) {
     $registrationScript = Join-Path $installDir "register-prelogin-task.ps1"
-    $registrationArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$registrationScript`" -InstallDir `"$installDir`" -UserId `"$userId`" -TaskName `"$taskName`""
+    $escapedRegistrationScript = $registrationScript.Replace("'", "''")
+    $registrationCommand = "& '$escapedRegistrationScript'"
+    $registrationCommandBytes = [System.Text.Encoding]::Unicode.GetBytes($registrationCommand)
+    $encodedRegistrationCommand = [Convert]::ToBase64String($registrationCommandBytes)
+    $registrationArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand $encodedRegistrationCommand"
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
     $isAdministrator = $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -301,7 +307,17 @@ if (-not $SkipPreloginTaskRegistration) {
       $registrationProcess = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList $registrationArguments -Wait -PassThru
     }
     if ($registrationProcess.ExitCode -ne 0) {
-      throw "ログイン前BridgeのWindows起動タスクを登録できませんでした。"
+      $registrationStatusPath = Join-Path $installDir "headless\task-registration.json"
+      $registrationDetail = ""
+      if (Test-Path -LiteralPath $registrationStatusPath) {
+        try {
+          $registrationStatus = Get-Content -LiteralPath $registrationStatusPath -Raw | ConvertFrom-Json
+          $registrationDetail = [string]$registrationStatus.message
+        } catch {
+          # Registration status is advisory; preserve the primary exit code.
+        }
+      }
+      throw "ログイン前BridgeのWindows起動タスクを登録できませんでした。 $registrationDetail"
     }
     $registeredTask = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
     $taskRegistered = $registeredTask.Principal.LogonType -eq "S4U"
