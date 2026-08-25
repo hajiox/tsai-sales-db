@@ -44,6 +44,23 @@ const generationImport = fs.readFileSync(path.join(root, "app", "api", "web-sale
 assert.match(generationImport, /validateEcProductNameAiResult/);
 assert.match(generationImport, /recipe_ec_product_name_ai_generations/);
 
+const generationSchema = JSON.parse(fs.readFileSync(path.join(root, "tools", "tsa-codex-bridge", "ec-product-name-ai.schema.json"), "utf8"));
+function assertStrictObjectSchemas(value, location = "$") {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  if (value.type === "object" && value.properties) {
+    assert.deepEqual(
+      [...(value.required || [])].sort(),
+      Object.keys(value.properties).sort(),
+      `${location} must require every declared property for OpenAI strict structured output`,
+    );
+    assert.equal(value.additionalProperties, false, `${location} must reject undeclared properties`);
+  }
+  for (const [key, child] of Object.entries(value)) {
+    assertStrictObjectSchemas(child, `${location}.${key}`);
+  }
+}
+assertStrictObjectSchemas(generationSchema);
+
 const completionRoute = fs.readFileSync(path.join(root, "app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "route.ts"), "utf8");
 assert.match(completionRoute, /complete_ec_product_name_codex_job/);
 assert.match(completionRoute, /dispatchRecipeProductNameTsgNotifications/);
