@@ -20,6 +20,7 @@ import {
   Store,
   Truck,
   Warehouse,
+  Zap,
 } from "lucide-react";
 import { PwaInstallButton } from "@/components/pwa-install-button";
 
@@ -33,6 +34,14 @@ type MobileAction = {
 };
 
 const mobileActions: MobileAction[] = [
+  {
+    title: "裏ラベルチェック",
+    label: "賞味期限・簡易判定",
+    href: "/system/label-check/check?mode=simple",
+    icon: Zap,
+    iconClassName: "text-cyan-800",
+    iconBackgroundClassName: "bg-cyan-100",
+  },
   {
     title: "ラベルAI取込",
     label: "原材料ラベル",
@@ -160,7 +169,7 @@ export default function MobileTopPage() {
                 スマホで作業
               </h2>
             </div>
-            <span className="text-xs font-medium text-slate-500">9機能</span>
+            <span className="text-xs font-medium text-slate-500">{mobileActions.length}機能</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">

@@ -19,6 +19,7 @@ type Module =
   | "links"
   | "shipping-labels"
   | "backup"
+  | "label-check"
   | "ai-tools";
 
 export default function MainSidebar() {
@@ -39,6 +40,7 @@ export default function MainSidebar() {
     else if (pathname.startsWith("/recipe")) setActiveModule("recipe");
     else if (pathname.startsWith("/links")) setActiveModule("links");
     else if (pathname.startsWith("/shipping-labels")) setActiveModule("shipping-labels");
+    else if (pathname.startsWith("/system/label-check")) setActiveModule("label-check");
     else if (pathname.startsWith("/system/backup")) setActiveModule("backup");
     else if (pathname.startsWith("/ai-tools")) setActiveModule("ai-tools");
     else setActiveModule("sales");
@@ -58,6 +60,7 @@ export default function MainSidebar() {
       links: "/links",
       "shipping-labels": "/shipping-labels",
       backup: "/system/backup",
+      "label-check": "/system/label-check",
       "ai-tools": "/ai-tools",
     } as const;
     router.push(map[module]);
@@ -206,6 +209,13 @@ export default function MainSidebar() {
             onClick={() => goto("backup")}
           >
             バックアップ管理
+          </Button>
+          <Button
+            variant={activeVariant("label-check")}
+            className={baseBtn("label-check")}
+            onClick={() => goto("label-check")}
+          >
+            裏ラベルチェック
           </Button>
         </div>
       </nav>

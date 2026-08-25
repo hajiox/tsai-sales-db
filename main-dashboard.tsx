@@ -17,6 +17,7 @@ const FULL_SCREEN_ROUTES = [
   '/wholesale/inventory',
   '/brand-store-analysis/inventory',
   '/recipe/inventory',
+  '/system/label-check/check',
 ]
 
 // 専用スマホ画面は自身のヘッダー・戻る導線を持つため、共通ナビを重ねない。
@@ -26,6 +27,7 @@ const DEDICATED_MOBILE_ROUTES = [
   '/recipe/database/label-import/mobile',
   '/recipe/photo/mobile',
   '/recipe/char-siu-production/scan',
+  '/system/label-check/check',
 ]
 
 export default function MainDashboard({ children }: { children: React.ReactNode }) {

@@ -31,6 +31,7 @@ import {
   Truck,
   Warehouse,
   X,
+  Zap,
   type LucideIcon,
 } from "lucide-react"
 
@@ -48,6 +49,8 @@ type NavigationSection = {
 }
 
 const titleRoutes = [
+  ["/system/label-check/check", "裏ラベルチェック"],
+  ["/system/label-check", "裏ラベル履歴"],
   ["/recipe/char-siu-production/scan", "納品書撮影"],
   ["/recipe/database/label-import/mobile", "ラベル撮影"],
   ["/recipe/photo/mobile", "レシピ写真登録"],
@@ -80,6 +83,12 @@ const navigationSections: NavigationSection[] = [
   {
     label: "スマホで使う",
     items: [
+      {
+        label: "裏ラベル簡易チェック",
+        href: "/system/label-check/check?mode=simple",
+        icon: Zap,
+        description: "賞味期限を撮影して判定",
+      },
       {
         label: "チャーシュー納品書撮影",
         href: "/recipe/char-siu-production/scan",
@@ -146,6 +155,7 @@ const navigationSections: NavigationSection[] = [
       { label: "自社リンク集", href: "/links", icon: Link2 },
       { label: "使用可能AI", href: "/ai-tools", icon: Bot },
       { label: "バックアップ管理", href: "/system/backup", icon: HardDrive },
+      { label: "裏ラベルチェック", href: "/system/label-check", icon: Zap },
       {
         label: "TS Groupware",
         href: "https://v0-line-blush.vercel.app",
