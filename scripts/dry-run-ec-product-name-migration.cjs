@@ -24,6 +24,10 @@ async function main() {
       path.join(__dirname, "..", "supabase", "migrations", "20260825120000_ec_product_names_by_site_ai.sql"),
       "utf8",
     ));
+    await client.query(fs.readFileSync(
+      path.join(__dirname, "..", "supabase", "migrations", "20260825130000_ec_product_name_ai_sol.sql"),
+      "utf8",
+    ));
     const checks = await client.query(`
       SELECT
         to_regclass('public.recipe_ec_product_name_revisions') IS NOT NULL AS revisions_table,
@@ -61,9 +65,9 @@ async function main() {
           in pg_get_functiondef('public.claim_web_sales_codex_job(text,integer)'::regprocedure)
         ) > 0 AS ai_protocol_v1_required,
         position(
-          $$capabilities->>'ecProductNameAiModel' = 'gpt-5.6-terra'$$
+          $$capabilities->>'ecProductNameAiModel' = 'gpt-5.6-sol'$$
           in pg_get_functiondef('public.claim_web_sales_codex_job(text,integer)'::regprocedure)
-        ) > 0 AS terra_model_required
+        ) > 0 AS sol_model_required
     `);
 
     const probeRecipe = await client.query(`

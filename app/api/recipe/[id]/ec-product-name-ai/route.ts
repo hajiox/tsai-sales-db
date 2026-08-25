@@ -201,7 +201,7 @@ export async function POST(
         report_month: null,
         status: "queued",
         progress: 0,
-        current_step: "GPT-5.6 Terraの商品名分析待ち",
+        current_step: "GPT-5.6 Solの商品名分析待ち",
         requested_by: session.user?.email || ADMIN_EMAIL,
         parameters,
         priority: 40,
@@ -214,7 +214,7 @@ export async function POST(
     await supabase.from("web_sales_codex_job_events").insert({
       job_id: job.id,
       event_type: "queued",
-      message: "GPT-5.6 Terra専用Skillの商品名分析を実行待ちに登録しました",
+      message: "GPT-5.6 Sol専用Skillの商品名分析を実行待ちに登録しました",
       progress: 0,
       payload: { recipeId, model: EC_PRODUCT_NAME_AI_MODEL, rulesVersion: EC_PRODUCT_NAME_AI_RULES_VERSION },
     });

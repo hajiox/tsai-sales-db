@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.36";
+const VERSION = "1.8.37";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const DESKTOP_MONITOR_FORCE_CLOSE_MS = 40_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
@@ -2026,10 +2026,10 @@ function validateEcProductNameGenerateJobParameters(input) {
   if (!recipeId || !sourceSnapshot || String(sourceSnapshot.recipeId || "") !== recipeId || !siteRules) {
     throw new Error("AI商品名生成の対象商品情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-5.6-terra"
+  if (String(parameters.model || "") !== "gpt-5.6-sol"
     || String(parameters.reasoningEffort || "") !== "medium"
     || !String(parameters.rulesVersion || "").startsWith("2026-08-25.")) {
-    throw new Error("AI商品名生成はGPT-5.6 Terra / medium専用です");
+    throw new Error("AI商品名生成はGPT-5.6 Sol / medium専用です");
   }
   for (const site of EC_PRICE_TARGETS) {
     const rule = siteRules[site] && typeof siteRules[site] === "object" && !Array.isArray(siteRules[site])
@@ -2049,7 +2049,7 @@ function validateEcProductNameGenerateJobParameters(input) {
     recipeId,
     sourceSnapshot,
     siteRules,
-    model: "gpt-5.6-terra",
+    model: "gpt-5.6-sol",
     reasoningEffort: "medium",
   };
 }
@@ -2130,7 +2130,7 @@ async function executeEcProductNameGenerateJob(job) {
         updateJob(job.id, {
           status: "running",
           progress,
-          currentStep: "GPT-5.6 TerraがEC別の商品名を分析しています",
+          currentStep: "GPT-5.6 SolがEC別の商品名を分析しています",
           message: mapped.message,
           eventType: "ec_product_name_ai_progress",
           payload: mapped.payload,
@@ -2150,7 +2150,7 @@ async function executeEcProductNameGenerateJob(job) {
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
   writeFileSync(jsonlLog, `${eventLines.join("\n")}\n`, "utf8");
   if (exitCode !== 0 || !existsSync(outputFile)) {
-    throw new Error(stderr || `GPT-5.6 Terraの商品名分析に失敗しました (exit ${exitCode})`);
+    throw new Error(stderr || `GPT-5.6 Solの商品名分析に失敗しました (exit ${exitCode})`);
   }
 
   let result;
@@ -2188,7 +2188,7 @@ async function executeEcProductNameGenerateJob(job) {
     eventType: "ec_product_name_ai_completed",
     result: {
       status: "completed",
-      summary: "GPT-5.6 Terraで7サイトの商品名候補を作成しました",
+      summary: "GPT-5.6 Solで7サイトの商品名候補を作成しました",
       ...imported,
     },
     errorMessage: null,
@@ -3349,7 +3349,7 @@ function workerPayload() {
       ecProductNameProtocolVersion: 2,
       ecProductNameAi: true,
       ecProductNameAiProtocolVersion: 1,
-      ecProductNameAiModel: "gpt-5.6-terra",
+      ecProductNameAiModel: "gpt-5.6-sol",
       codexTaskKeys: ["connection_test", "web_sales_import", "ad_cost_import", "ec_profit_import", "ec_price_update", "ec_product_name_update", "ec_product_name_generate", "web_sales_analysis"],
     },
   };

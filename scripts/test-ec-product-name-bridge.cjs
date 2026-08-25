@@ -9,7 +9,7 @@ const version = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.equal(required.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], version);
 assert.match(bridge, /ecProductNameProtocolVersion: 2/);
 assert.match(bridge, /ecProductNameAiProtocolVersion: 1/);
-assert.match(bridge, /ecProductNameAiModel: "gpt-5\.6-terra"/);
+assert.match(bridge, /ecProductNameAiModel: "gpt-5\.6-sol"/);
 assert.match(bridge, /newProductNames/);
 assert.match(bridge, /EC_PRODUCT_NAME_MAX_LENGTHS/);
 assert.match(bridge, /"ec_product_name_update"/);
@@ -60,6 +60,12 @@ function assertStrictObjectSchemas(value, location = "$") {
   }
 }
 assertStrictObjectSchemas(generationSchema);
+
+const solMigration = fs.readFileSync(
+  path.join(root, "supabase", "migrations", "20260825130000_ec_product_name_ai_sol.sql"),
+  "utf8",
+);
+assert.match(solMigration, /ecProductNameAiModel' = 'gpt-5\.6-sol'/);
 
 const completionRoute = fs.readFileSync(path.join(root, "app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "route.ts"), "utf8");
 assert.match(completionRoute, /complete_ec_product_name_codex_job/);

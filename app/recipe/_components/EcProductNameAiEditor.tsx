@@ -82,12 +82,12 @@ export default function EcProductNameAiEditor({ recipeId, fallbackName, namesByS
     setGeneration({
       ...validated,
       generationId,
-      model: String(resultObject.model || "gpt-5.6-terra"),
+      model: String(resultObject.model || "gpt-5.6-sol"),
       reasoningEffort: String(resultObject.reasoningEffort || "medium"),
       createdAt: String(resultObject.createdAt || ""),
     });
     setOpen(true);
-    toast.success("GPT-5.6 Terraの商品名候補を作成しました");
+    toast.success("GPT-5.6 Solの商品名候補を作成しました");
   }, []);
 
   const pollJob = useCallback(async (jobId: string) => {
@@ -105,7 +105,7 @@ export default function EcProductNameAiEditor({ recipeId, fallbackName, namesByS
         if (!job) throw new Error("AI商品名生成タスクが見つかりませんでした");
         if (!mountedRef.current) return;
         setJobProgress(job.progress);
-        setJobStep(job.currentStep || "GPT-5.6 Terraで分析しています");
+        setJobStep(job.currentStep || "GPT-5.6 Solで分析しています");
         if (job.status === "completed") {
           finishGeneration(job);
           return;
@@ -206,14 +206,14 @@ export default function EcProductNameAiEditor({ recipeId, fallbackName, namesByS
             className="inline-flex min-h-10 items-center rounded-md bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
           >
             {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            {generating ? `GPT-5.6 Terraで分析中 ${jobProgress}%` : "AIで各EC向け商品名を作成"}
+            {generating ? `GPT-5.6 Solで分析中 ${jobProgress}%` : "AIで各EC向け商品名を作成"}
           </button>
         </div>
       </div>
 
       {generating && <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2" aria-live="polite">
         <div className="flex items-center justify-between gap-3 text-[11px] font-bold text-blue-900">
-          <span className="truncate">{jobStep || "GPT-5.6 Terraで分析しています"}</span>
+          <span className="truncate">{jobStep || "GPT-5.6 Solで分析しています"}</span>
           <span className="shrink-0 font-mono">{jobProgress}%</span>
         </div>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
@@ -253,7 +253,7 @@ export default function EcProductNameAiEditor({ recipeId, fallbackName, namesByS
         <DialogContent className="max-h-[90vh] max-w-5xl overflow-hidden p-0">
           <DialogHeader className="border-b px-5 pb-4 pt-5 pr-12">
             <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" />EC商品名 AI分析</DialogTitle>
-            <DialogDescription>GPT-5.6 Terraが保存済みの商品情報だけを根拠に作成した候補です。採用しても、レシピ保存まではECへ反映されません。</DialogDescription>
+            <DialogDescription>GPT-5.6 Solが保存済みの商品情報だけを根拠に作成した候補です。採用しても、レシピ保存まではECへ反映されません。</DialogDescription>
           </DialogHeader>
           {generation && <div className="overflow-y-auto px-5 py-4">
             <div className="mb-4 border-l-4 border-blue-500 bg-blue-50 px-4 py-3 text-sm text-blue-950">

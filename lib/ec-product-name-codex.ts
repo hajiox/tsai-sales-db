@@ -18,7 +18,7 @@ export type EcProductNameRule = {
   guidance: string;
 };
 
-export const EC_PRODUCT_NAME_AI_MODEL = "gpt-5.6-terra";
+export const EC_PRODUCT_NAME_AI_MODEL = "gpt-5.6-sol";
 export const EC_PRODUCT_NAME_AI_REASONING_EFFORT = "medium";
 export const EC_PRODUCT_NAME_AI_RULES_VERSION = "2026-08-25.2";
 
