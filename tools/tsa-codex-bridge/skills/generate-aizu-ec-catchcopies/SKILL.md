@@ -5,6 +5,11 @@ description: TSAが渡す保存済み商品情報だけを分析し、楽天とY
 
 # ECキャッチコピー候補の生成
 
+## Bridge Input Contract
+
+- Run only from a fresh, non-resumed `codex exec`. Never open, read, search, or reuse app Chats, prior tasks or threads, transcripts, rollouts, or saved sessions.
+- Treat the compact Bridge job input as complete. Use only that input and the references explicitly required by this Skill.
+
 ## 目的
 
 `TASK_JSON.sourceSnapshot` の現状商品名、商品ポイント、Web商品説明、商品仕様、現在のキャッチコピーを分析し、楽天とYahooそれぞれに最適な日本語キャッチコピーを1件ずつ作る。

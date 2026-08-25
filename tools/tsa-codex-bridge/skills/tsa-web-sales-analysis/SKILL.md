@@ -5,6 +5,11 @@ description: Analyze TSA's compact WEB sales packet for either the 1st-15th inte
 
 # TSA WEB Sales Analysis
 
+## Bridge Input Contract
+
+- Run only from a fresh, non-resumed `codex exec`. Never open, read, search, or reuse app Chats, prior tasks or threads, transcripts, rollouts, or saved sessions.
+- Treat the compact Bridge job input as complete. Use only that input and the references explicitly required by this Skill.
+
 Analyze only the compact JSON packet embedded in the task prompt. Do not browse, inspect the repository, read chat history, fetch other files, or run shell commands. The packet already contains the required comparisons and rates.
 
 ## Required Method

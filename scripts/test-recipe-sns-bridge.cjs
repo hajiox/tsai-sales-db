@@ -10,9 +10,11 @@ const requiredVersion = read("lib", "web-sales-codex", "bridge-version.ts");
 const types = read("lib", "web-sales-codex", "types.ts");
 const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-posts", "SKILL.md");
 const schema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-result.schema.json"));
+const skillContract = JSON.parse(read("tools", "tsa-codex-bridge", "skill-contract.json"));
 
-assert.match(bridge, /const VERSION = "1\.8\.40"/);
-assert.match(requiredVersion, /REQUIRED_TSA_CODEX_BRIDGE_VERSION = "1\.8\.40"/);
+const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
+assert.ok(bridgeVersion);
+assert.equal(requiredVersion.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);
 assert.match(types, /\| "recipe_sns_generate"/);
 assert.match(bridge, /recipeSnsProtocolVersion: 1/);
 assert.match(bridge, /recipeSnsModel: "gpt-5\.6-sol"/);
@@ -55,9 +57,10 @@ assert.match(handler, /uploadArtifact\(job\.id, jsonlLog, "log"\)/);
 assert.match(handler, /status: "completed"/);
 assert.match(handler, /progress: 100/);
 
-for (const expected of ["recipe-sns-result.schema.json", "generate-aizu-sns-posts"]) {
+for (const expected of ["recipe-sns-result.schema.json"]) {
   assert.match(installer, new RegExp(expected.replace(/[.]/g, "\\.")));
 }
+assert.equal(skillContract.tasks.recipe_sns_generate.skill, "generate-aizu-sns-posts");
 assert.match(skill, /外部サイト閲覧/);
 assert.match(skill, /過去チャット参照/);
 

@@ -25,11 +25,12 @@ assert.match(bridge, /Continue no other sites in this session/);
 assert.match(bridge, /for \(let index = 0; index < parameters\.targets\.length/);
 
 const installer = fs.readFileSync(path.join(root, "tools", "tsa-codex-bridge", "install-bridge.ps1"), "utf8");
+const skillContract = JSON.parse(fs.readFileSync(path.join(root, "tools", "tsa-codex-bridge", "skill-contract.json"), "utf8"));
 assert.match(installer, /ec-product-name-plan\.schema\.json/);
 assert.match(installer, /ec-product-name-result\.schema\.json/);
-assert.match(installer, /update-aizu-ec-product-names/);
-assert.match(installer, /generate-aizu-ec-product-names/);
 assert.match(installer, /ec-product-name-ai\.schema\.json/);
+assert.equal(skillContract.tasks.ec_product_name_update.skill, "update-aizu-ec-product-names");
+assert.equal(skillContract.tasks.ec_product_name_generate.skill, "generate-aizu-ec-product-names");
 
 const generationSkill = fs.readFileSync(path.join(root, "tools", "tsa-codex-bridge", "skills", "generate-aizu-ec-product-names", "SKILL.md"), "utf8");
 assert.match(generationSkill, /外部サイトの閲覧や変更は行わない/);

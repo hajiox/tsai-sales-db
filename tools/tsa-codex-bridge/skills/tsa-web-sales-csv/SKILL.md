@@ -5,6 +5,11 @@ description: Download, validate, archive, and import TSA product-sales CSV files
 
 # TSA Web Sales CSV Operations
 
+## Bridge Input Contract
+
+- Run only from a fresh, non-resumed `codex exec`. Never open, read, search, or reuse app Chats, prior tasks or threads, transcripts, rollouts, or saved sessions.
+- Treat the compact Bridge job input as complete. Use only that input and the references explicitly required by this Skill.
+
 ## Browser Session Reuse
 
 - Select the browser using the requested official URL with `agent.browsers.getForUrl(targetUrl)`. Do not select a generic Chrome instance first; more than one Chrome profile or extension instance can be connected.

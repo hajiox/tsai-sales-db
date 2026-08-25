@@ -5,6 +5,11 @@ description: Download, archive, classify, and normalize monthly EC settlement de
 
 # TSA EC Profit Report
 
+## Bridge Input Contract
+
+- Run only from a fresh, non-resumed `codex exec`. Never open, read, search, or reuse app Chats, prior tasks or threads, transcripts, rollouts, or saved sessions.
+- Treat the compact Bridge job input as complete. Use only that input and the references explicitly required by this Skill.
+
 Use the signed-in Chrome session and official seller/admin pages only. Read the requested channel section in [references/channels.md](references/channels.md) and the fixed output contract in [references/schema.md](references/schema.md).
 
 ## Browser Session Reuse

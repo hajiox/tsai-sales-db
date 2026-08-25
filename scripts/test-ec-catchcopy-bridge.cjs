@@ -6,6 +6,7 @@ const root = path.join(__dirname, "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const bridge = read("tools", "tsa-codex-bridge", "bridge.mjs");
 const required = read("lib", "web-sales-codex", "bridge-version.ts");
+const skillContract = JSON.parse(read("tools", "tsa-codex-bridge", "skill-contract.json"));
 const version = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 
 assert.equal(required.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], version);
@@ -25,9 +26,9 @@ for (const expected of [
   "ec-catchcopy-plan.schema.json",
   "ec-catchcopy-result.schema.json",
   "ec-catchcopy-ai.schema.json",
-  "update-aizu-ec-catchcopies",
-  "generate-aizu-ec-catchcopies",
 ]) assert.match(installer, new RegExp(expected.replace(/[.]/g, "\\.")));
+assert.equal(skillContract.tasks.ec_catchcopy_update.skill, "update-aizu-ec-catchcopies");
+assert.equal(skillContract.tasks.ec_catchcopy_generate.skill, "generate-aizu-ec-catchcopies");
 
 const generationSkill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-ec-catchcopies", "SKILL.md");
 assert.match(generationSkill, /外部サイト/);

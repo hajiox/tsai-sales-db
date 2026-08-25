@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.40";
+const VERSION = "1.8.41";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const DESKTOP_MONITOR_FORCE_CLOSE_MS = 40_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
@@ -33,6 +33,9 @@ const EC_CATCHCOPY_PLAN_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url))
 const EC_CATCHCOPY_RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "ec-catchcopy-result.schema.json");
 const EC_CATCHCOPY_AI_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "ec-catchcopy-ai.schema.json");
 const RECIPE_SNS_RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "recipe-sns-result.schema.json");
+const SKILL_CONTRACT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "skill-contract.json");
+const SKILL_CONTRACT = loadSkillContract(SKILL_CONTRACT_PATH);
+const TASK_CONTRACTS = Object.freeze(SKILL_CONTRACT.tasks);
 const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]);
 const EC_PRODUCT_NAME_MAX_LENGTHS = {
   amazon: 75, rakuten: 127, yahoo: 75, mercari: 130, base: 255, qoo10: 100, tiktok: 255,
@@ -45,18 +48,21 @@ const RECIPE_SNS_PLATFORM_RULES = {
   instagram_story: { label: "IGストーリー", aspectLabel: "9:16", width: 1080, height: 1920, maxLength: 50, minHashtags: 0, maxHashtags: 0 },
   threads: { label: "Threads", aspectLabel: "4:3", width: 1200, height: 900, maxLength: 500, minHashtags: 0, maxHashtags: 5 },
 };
-const ALL_CODEX_TASK_KEYS = Object.freeze([
-  "connection_test",
-  "web_sales_import",
-  "ad_cost_import",
-  "ec_profit_import",
-  "ec_price_update",
-  "ec_product_name_update",
-  "ec_product_name_generate",
-  "ec_catchcopy_update",
-  "ec_catchcopy_generate",
-  "recipe_sns_generate",
-  "web_sales_analysis",
+const ALL_CODEX_TASK_KEYS = Object.freeze(Object.keys(TASK_CONTRACTS));
+const FORBIDDEN_CONVERSATION_CONTEXT_KEYS = new Set([
+  "chatid",
+  "chathistory",
+  "codexsessionid",
+  "conversation",
+  "conversationhistory",
+  "conversationid",
+  "messages",
+  "previousmessages",
+  "previousresponseid",
+  "rolloutid",
+  "sessionid",
+  "threadid",
+  "transcript",
 ]);
 const HEADLESS_SAFE_TASK_KEYS = new Set([
   "connection_test",
@@ -94,9 +100,7 @@ process.on("exit", () => {
 log(`TSA Codex Bridge ${VERSION} started`);
 writeBridgeState();
 log(`Codex: ${codexPath} (${codexRuntime.version || "version unknown"})`);
-if (config.legacySessionId) {
-  log("WARN 旧codexSessionIdは無視します。各タスクは独立した一時セッションで実行します");
-}
+log(`Skill contract: ${SKILL_CONTRACT.version} (${Object.values(TASK_CONTRACTS).filter((entry) => entry.skill).length} dedicated Skills)`);
 void main();
 
 async function main() {
@@ -150,6 +154,7 @@ async function main() {
 }
 
 async function executeJob(job) {
+  assertNoConversationContext(job);
   if (job.task_key === "connection_test") {
     const version = spawnSync(refreshCodexPath(), ["--version"], { encoding: "utf8", windowsHide: true });
     if (version.status !== 0) throw new Error(version.stderr || "Codex CLIを起動できません");
@@ -225,13 +230,12 @@ async function executeJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir]);
-  const codex = await spawnCodex(args, {
+  const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: config.workspace,
     env: { ...process.env, CODEX_HOME: config.codexHome },
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  codex.stdin.end(prompt, "utf8");
 
   let stdoutBuffer = "";
   let stderr = "";
@@ -1765,13 +1769,12 @@ async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputF
     reasoningEffort: "high",
     cwd: workspaceDir || workDir,
   });
-  const codex = await spawnCodex(args, {
+  const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: workspaceDir || workDir,
     env: { ...process.env, CODEX_HOME: config.codexHome },
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  codex.stdin.end(prompt, "utf8");
   let stdoutBuffer = "";
   let stderr = "";
   let progress = progressStart;
@@ -2485,13 +2488,12 @@ async function executeEcProductNameGenerateJob(job) {
     reasoningEffort: parameters.reasoningEffort,
     cwd: workDir,
   });
-  const codex = await spawnCodex(args, {
+  const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: workDir,
     env: { ...process.env, CODEX_HOME: config.codexHome },
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  codex.stdin.end(prompt, "utf8");
 
   let stdoutBuffer = "";
   let stderr = "";
@@ -2664,13 +2666,12 @@ async function executeEcCatchcopyGenerateJob(job) {
     reasoningEffort: parameters.reasoningEffort,
     cwd: workDir,
   });
-  const codex = await spawnCodex(args, {
+  const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: workDir,
     env: { ...process.env, CODEX_HOME: config.codexHome },
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  codex.stdin.end(prompt, "utf8");
 
   let stdoutBuffer = "";
   let stderr = "";
@@ -2865,13 +2866,12 @@ async function executeRecipeSnsGenerateJob(job) {
     reasoningEffort: parameters.reasoningEffort,
     cwd: workDir,
   });
-  const codex = await spawnCodex(args, {
+  const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: workDir,
     env: { ...process.env, CODEX_HOME: config.codexHome },
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  codex.stdin.end(prompt, "utf8");
 
   let stdoutBuffer = "";
   let stderr = "";
@@ -3022,13 +3022,12 @@ async function executeAnalysisJob(job) {
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
   });
-  const codex = await spawnCodex(args, {
+  const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: config.workspace,
     env: { ...process.env, CODEX_HOME: config.codexHome },
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  codex.stdin.end(prompt, "utf8");
 
   let stdoutBuffer = "";
   let stderr = "";
@@ -3181,13 +3180,12 @@ async function executeAdCostJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, archiveDir, workDir]);
-  const codex = await spawnCodex(args, {
+  const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: config.workspace,
     env: { ...process.env, CODEX_HOME: config.codexHome },
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  codex.stdin.end(prompt, "utf8");
 
   let stdoutBuffer = "";
   let stderr = "";
@@ -3333,13 +3331,12 @@ async function executeEcProfitJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir]);
-  const codex = await spawnCodex(args, {
+  const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: config.workspace,
     env: { ...process.env, CODEX_HOME: config.codexHome },
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  codex.stdin.end(prompt, "utf8");
 
   let stdoutBuffer = "";
   let stderr = "";
@@ -3682,6 +3679,88 @@ async function directEstimateEcProfit(job) {
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = { error: text }; }
   if (!response.ok) throw new Error(`EC profit estimate ${response.status}: ${payload.error || text.slice(0, 800)}`);
   return payload;
+}
+
+function loadSkillContract(contractPath) {
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(contractPath, "utf8"));
+  } catch (error) {
+    throw new Error(`Bridge Skill契約を読み込めません: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!parsed || typeof parsed !== "object" || !/^\d{4}-\d{2}-\d{2}\.\d+$/.test(String(parsed.version || ""))) {
+    throw new Error("Bridge Skill契約のバージョンが正しくありません");
+  }
+  if (!parsed.tasks || typeof parsed.tasks !== "object" || Array.isArray(parsed.tasks)) {
+    throw new Error("Bridge Skill契約にタスク定義がありません");
+  }
+  for (const [taskKey, entry] of Object.entries(parsed.tasks)) {
+    if (!/^[a-z][a-z0-9_]{2,79}$/.test(taskKey) || !entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`Bridge Skill契約のタスク定義が正しくありません: ${taskKey}`);
+    }
+    if (!new Set(["deterministic", "preflight_then_codex", "codex"]).has(String(entry.mode || ""))) {
+      throw new Error(`Bridge Skill契約の実行方式が正しくありません: ${taskKey}`);
+    }
+    const skill = entry.skill == null ? null : String(entry.skill).trim();
+    if (entry.mode === "deterministic" ? skill !== null : !/^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/.test(skill || "")) {
+      throw new Error(`Bridge Skill契約のSkill指定が正しくありません: ${taskKey}`);
+    }
+  }
+  if (parsed.tasks.connection_test?.mode !== "deterministic") {
+    throw new Error("Bridge接続テストは決定的処理として定義してください");
+  }
+  return Object.freeze({
+    version: String(parsed.version),
+    tasks: Object.freeze(Object.fromEntries(Object.entries(parsed.tasks).map(([taskKey, entry]) => [
+      taskKey,
+      Object.freeze({ mode: String(entry.mode), skill: entry.skill == null ? null : String(entry.skill) }),
+    ]))),
+  });
+}
+
+function assertNoConversationContext(job) {
+  const forbiddenPaths = [];
+  const visit = (value, path, depth) => {
+    if (depth > 20 || value == null || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => visit(entry, `${path}[${index}]`, depth + 1));
+      return;
+    }
+    for (const [key, entry] of Object.entries(value)) {
+      const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+      const nextPath = `${path}.${key}`;
+      if (FORBIDDEN_CONVERSATION_CONTEXT_KEYS.has(normalizedKey)) forbiddenPaths.push(nextPath);
+      visit(entry, nextPath, depth + 1);
+    }
+  };
+  visit(job?.parameters, "parameters", 0);
+  if (forbiddenPaths.length > 0) {
+    throw new Error(`Bridgeジョブに禁止されたChat・セッション文脈が含まれています: ${forbiddenPaths.slice(0, 5).join(" / ")}`);
+  }
+}
+
+function prepareSkillControlledPrompt(taskKey, prompt) {
+  const contract = TASK_CONTRACTS[String(taskKey || "")];
+  if (!contract || !contract.skill) {
+    throw new Error(`Codex起動用の専用Skill契約がありません: ${taskKey || "unknown"}`);
+  }
+  const skillPath = join(config.codexHome, "skills", contract.skill, "SKILL.md");
+  if (!existsSync(skillPath)) {
+    throw new Error(`Bridge専用Skillが見つかりません: ${contract.skill}`);
+  }
+  const promptText = String(prompt || "").trim();
+  if (!promptText.includes(`Use $${contract.skill}`)) {
+    throw new Error(`Bridgeプロンプトが専用Skill契約と一致しません: ${taskKey} -> ${contract.skill}`);
+  }
+  return [
+    "TSA CODEX BRIDGE EXECUTION CONTRACT",
+    `- This job is controlled by the dedicated $${contract.skill} Skill. Its task-specific instructions are authoritative.`,
+    "- Start and finish this job as a new non-resumed codex exec session.",
+    "- Never read, search, summarize, or resume any app Chat, prior Codex task/thread, conversation history, transcript, rollout, or saved session.",
+    "- Use only the compact job input below and the dedicated Skill resources it explicitly requires.",
+    "",
+    promptText,
+  ].join("\n");
 }
 
 function buildIsolatedCodexArgs(outputFile, writableDirectories, options = {}) {
@@ -4109,6 +4188,12 @@ function workerPayload() {
       desktopMonitor: config.desktopMonitor,
       sharedSession: false,
       isolatedEphemeralSession: true,
+      freshNonResumedSession: true,
+      chatHistoryLoaded: false,
+      skillContractVersion: SKILL_CONTRACT.version,
+      skillControlledTasks: Object.fromEntries(Object.entries(TASK_CONTRACTS)
+        .filter(([, entry]) => entry.skill)
+        .map(([taskKey, entry]) => [taskKey, entry.skill])),
       tokenSavingPreflight: true,
       archivedArtifactReuse: true,
       monthlyAnalysis: supports("web_sales_analysis"),
@@ -4420,7 +4505,6 @@ function loadConfig() {
     downloadsDir: String(process.env.TSA_CODEX_DOWNLOADS || stored.downloadsDir || join(homedir(), "Downloads")),
     codexHome: String(process.env.CODEX_HOME || stored.codexHome || join(homedir(), ".codex")),
     codexPath: String(process.env.TSA_CODEX_PATH || stored.codexPath || ""),
-    legacySessionId: String(process.env.TSA_CODEX_SESSION_ID || stored.codexSessionId || "").trim(),
     reasoningEffort: String(process.env.TSA_CODEX_REASONING_EFFORT || stored.reasoningEffort || "low").trim().toLowerCase(),
     pollMs: Math.max(3000, Number(process.env.TSA_CODEX_POLL_MS || stored.pollMs || 5000)),
     executionMode,
@@ -4557,7 +4641,17 @@ function refreshCodexPath(force = false) {
   return codexPath;
 }
 
-async function spawnCodex(args, options) {
+async function spawnSkillCodex(taskKey, prompt, args, options) {
+  const controlledPrompt = prepareSkillControlledPrompt(taskKey, prompt);
+  if (!Array.isArray(args) || args[0] !== "exec" || args.some((arg) => String(arg).toLowerCase() === "resume")) {
+    throw new Error("Bridgeは新規のcodex execだけを起動できます");
+  }
+  const child = await spawnCodexProcess(args, options);
+  child.stdin.end(controlledPrompt, "utf8");
+  return child;
+}
+
+async function spawnCodexProcess(args, options) {
   let lastError;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const executable = refreshCodexPath(true);

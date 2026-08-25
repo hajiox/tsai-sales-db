@@ -5,6 +5,11 @@ description: 会津ブランド館の商品について、TSAが固定した商�
 
 # EC用商品名変更
 
+## Bridge Input Contract
+
+- Run only from a fresh, non-resumed `codex exec`. Never open, read, search, or reuse app Chats, prior tasks or threads, transcripts, rollouts, or saved sessions.
+- Treat the compact Bridge job input as complete. Use only that input and the references explicitly required by this Skill.
+
 ## 目的
 
 TSAが保存・承認した1商品のサイト別 `newProductNames` を、指定されたECへ1サイトずつ反映する。各サイトの実行時にはBridgeがそのサイトの確定名を `newProductName` として渡す。サイトごとの失敗は後続サイトを止めず、未完了だけ再実行できる結果を返す。

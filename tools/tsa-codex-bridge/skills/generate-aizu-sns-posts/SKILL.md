@@ -5,6 +5,11 @@ description: TSAが渡す保存済み商品情報と許可済み商品LPの抜�
 
 # 会津ブランド館 SNS投稿文の生成
 
+## Bridge Input Contract
+
+- Run only from a fresh, non-resumed `codex exec`. Never open, read, search, or reuse app Chats, prior tasks or threads, transcripts, rollouts, or saved sessions.
+- Treat the compact Bridge job input as complete. Use only that input and the references explicitly required by this Skill.
+
 ## 目的
 
 `TASK_JSON.sourceSnapshot` に固定されたEC商品名、キャッチコピー、商品ポイント、Web商品説明、商品仕様、許可済み商品LP抜粋を横断して分析し、媒体ごとにユニークで訴求力のある日本語投稿文を1件ずつ作る。

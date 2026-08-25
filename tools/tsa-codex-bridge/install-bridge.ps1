@@ -4,7 +4,6 @@ param(
   [string]$WorkerId = "tsa-office-01",
   [string]$WorkerName = "事務所PC",
   [string]$Workspace = "C:\作業用",
-  [string]$CodexSessionId = "",
   [ValidateSet("low", "medium", "high", "xhigh")][string]$ReasoningEffort = "low",
   [switch]$SkipPreloginTaskRegistration
 )
@@ -14,6 +13,7 @@ $sourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $installDir = Join-Path $env:LOCALAPPDATA "TSA Codex Bridge"
 $requiredSourceFiles = @(
   "bridge.mjs",
+  "skill-contract.json",
   "result.schema.json",
   "analysis-result.schema.json",
   "ec-price-result.schema.json",
@@ -43,11 +43,14 @@ if (-not $bridgeVersionMatch.Success) {
   throw "Bridgeバージョンを確認できません。"
 }
 $expectedBridgeVersion = $bridgeVersionMatch.Groups[1].Value
-$priceSkill = Join-Path $env:USERPROFILE ".codex\skills\update-aizu-ec-prices\SKILL.md"
-if (-not (Test-Path -LiteralPath $priceSkill)) {
-  throw "update-aizu-ec-prices Skillがありません。共有Skillsを同期してから再実行してください。"
+$skillContractPath = Join-Path $sourceDir "skill-contract.json"
+$skillContract = Get-Content -LiteralPath $skillContractPath -Raw | ConvertFrom-Json
+$bridgeSkillNames = @($skillContract.tasks.PSObject.Properties.Value | ForEach-Object { $_.skill } | Where-Object { $_ } | Select-Object -Unique)
+$allTaskKeys = @($skillContract.tasks.PSObject.Properties.Name)
+if (-not $skillContract.version -or $bridgeSkillNames.Count -eq 0 -or $allTaskKeys.Count -eq 0) {
+  throw "Bridge Skill契約が正しくありません: $skillContractPath"
 }
-foreach ($skillName in @("tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report", "tsa-web-sales-analysis", "update-aizu-ec-product-names", "generate-aizu-ec-product-names", "update-aizu-ec-catchcopies", "generate-aizu-ec-catchcopies", "generate-aizu-sns-posts")) {
+foreach ($skillName in $bridgeSkillNames) {
   $skillSource = Join-Path $sourceDir "skills\$skillName"
   if (-not (Test-Path -LiteralPath (Join-Path $skillSource "SKILL.md"))) {
     throw "Bridge同梱Skillがありません: $skillSource"
@@ -169,6 +172,7 @@ try {
   }
 
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor.ps1") -Destination (Join-Path $installDir "bridge-monitor.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "launch-bridge-monitor.ps1") -Destination (Join-Path $installDir "launch-bridge-monitor.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "result.schema.json") -Destination (Join-Path $installDir "result.schema.json") -Force
@@ -186,26 +190,13 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "start-bridge.ps1") -Destination (J
 Copy-Item -LiteralPath (Join-Path $sourceDir "start-bridge-prelogin.ps1") -Destination (Join-Path $installDir "start-bridge-prelogin.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "register-prelogin-task.ps1") -Destination (Join-Path $installDir "register-prelogin-task.ps1") -Force
 
-foreach ($skillName in @("tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report", "tsa-web-sales-analysis", "update-aizu-ec-product-names", "generate-aizu-ec-product-names", "update-aizu-ec-catchcopies", "generate-aizu-ec-catchcopies", "generate-aizu-sns-posts")) {
+foreach ($skillName in $bridgeSkillNames) {
   $skillSource = Join-Path $sourceDir "skills\$skillName"
   $skillRoot = Join-Path (Join-Path $env:USERPROFILE ".codex\skills") $skillName
   New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null
   Copy-Item -Path (Join-Path $skillSource "*") -Destination $skillRoot -Recurse -Force
 }
 
-$allTaskKeys = @(
-  "connection_test",
-  "web_sales_import",
-  "ad_cost_import",
-  "ec_profit_import",
-  "ec_price_update",
-  "ec_product_name_update",
-  "ec_product_name_generate",
-  "ec_catchcopy_update",
-  "ec_catchcopy_generate",
-  "recipe_sns_generate",
-  "web_sales_analysis"
-)
 $headlessTaskKeys = @(
   "connection_test",
   "ec_product_name_generate",
@@ -230,7 +221,6 @@ $config = @{
   jobRoot = (Join-Path $installDir "jobs")
   downloadsDir = (Join-Path $env:USERPROFILE "Downloads")
   codexHome = (Join-Path $env:USERPROFILE ".codex")
-  codexSessionId = $CodexSessionId
   reasoningEffort = $ReasoningEffort
   pollMs = 5000
   executionMode = "interactive"
@@ -247,7 +237,6 @@ $headlessConfig = @{
   jobRoot = (Join-Path $installDir "headless\jobs")
   downloadsDir = (Join-Path $userProfile "Downloads")
   codexHome = (Join-Path $userProfile ".codex")
-  codexSessionId = ""
   reasoningEffort = $ReasoningEffort
   pollMs = 5000
   executionMode = "headless-prelogin"

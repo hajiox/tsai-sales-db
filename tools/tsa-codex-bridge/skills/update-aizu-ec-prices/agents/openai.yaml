@@ -1,0 +1,4 @@
+interface:
+  display_name: "EC・自社LP価格改定"
+  short_description: "各ECサイトとTSA参照の自社LP価格を安全に一括改定"
+  default_prompt: "Use $update-aizu-ec-prices to update a product price across the EC sites and its matching company LP."

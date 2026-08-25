@@ -5,6 +5,11 @@ description: TSAが固定した商品識別子とサイト別キャッチコピ�
 
 # ECキャッチコピー変更
 
+## Bridge Input Contract
+
+- Run only from a fresh, non-resumed `codex exec`. Never open, read, search, or reuse app Chats, prior tasks or threads, transcripts, rollouts, or saved sessions.
+- Treat the compact Bridge job input as complete. Use only that input and the references explicitly required by this Skill.
+
 ## 目的
 
 TSAが保存・承認した1商品のキャッチコピーを、指定された楽天またはYahooへ1サイトずつ反映する。Bridgeが現在のサイトだけを `TASK_JSON.targets` と `TASK_JSON.newCatchcopy` に固定して渡す。
