@@ -102,9 +102,12 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
     setJob(next.job || null);
     setGenerations(next.generations || []);
     setSelectedGenerationId((current) => {
+      const currentJobGeneration = next.job?.id
+        ? next.generations.find((generation) => generation.jobId === next.job?.id)
+        : null;
+      if (currentJobGeneration) return currentJobGeneration.id;
       if (current && next.generations.some((generation) => generation.id === current)) return current;
-      const preferred = next.generations.find((generation) => generation.jobId === next.job?.id)
-        || next.generations.find((generation) => generation.status === "completed")
+      const preferred = next.generations.find((generation) => generation.status === "completed")
         || next.generations[0];
       return preferred?.id || null;
     });

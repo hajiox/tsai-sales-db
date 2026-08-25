@@ -18,6 +18,12 @@ assert.match(page, /role="tablist"/);
 assert.match(page, /role="tabpanel"/);
 assert.match(page, /window\.history\.replaceState/);
 assert.match(page, /RecipeSnsStudio recipeId=\{recipe\.id\} hasUnsavedChanges=\{hasChanges\}/);
+assert.match(studio, /const currentJobGeneration = next\.job\?\.id/);
+assert.ok(
+  studio.indexOf("if (currentJobGeneration) return currentJobGeneration.id")
+    < studio.indexOf("if (current && next.generations.some"),
+  "a newly started generation must replace the previously selected history entry",
+);
 
 const expectedPlatforms = {
   x: [1600, 900, 400, 0, 3],
