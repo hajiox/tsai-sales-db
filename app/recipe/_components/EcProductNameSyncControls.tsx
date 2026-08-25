@@ -5,7 +5,10 @@ import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clo
 import { toast } from "sonner";
 import {
   EC_PRODUCT_NAME_TARGETS,
+  ecProductNameMapsEqual,
   getEcProductNameTargetLabel,
+  normalizeEcProductNamesBySite,
+  type EcProductNamesBySite,
   type EcProductNameHistoryEntry,
   type EcProductNameJobView,
   type EcProductNameTarget,
@@ -24,6 +27,7 @@ type Props = {
   recipeId: string;
   recipeName: string;
   ecProductName: string | null;
+  ecProductNamesBySite: EcProductNamesBySite | null | undefined;
   expectedRecipeSnapshot: Record<string, unknown>;
   hasUnsavedChanges: boolean;
   isSaving: boolean;
@@ -55,6 +59,7 @@ export default function EcProductNameSyncControls({
   recipeId,
   recipeName,
   ecProductName,
+  ecProductNamesBySite,
   expectedRecipeSnapshot,
   hasUnsavedChanges,
   isSaving,
@@ -69,7 +74,12 @@ export default function EcProductNameSyncControls({
   const [showReservations, setShowReservations] = useState(false);
   const notified = useRef<string | null>(null);
   const targetName = (ecProductName || "").trim();
-  const disabled = isSaving || hasUnsavedChanges || !targetName || submitting;
+  const targetNames = useMemo(
+    () => normalizeEcProductNamesBySite(ecProductNamesBySite, targetName),
+    [ecProductNamesBySite, targetName],
+  );
+  const summaryName = targetName || targetNames.amazon || Object.values(targetNames)[0] || "";
+  const disabled = isSaving || hasUnsavedChanges || submitting;
   const activeJobId = job?.id || null;
   const activeJobStatus = job?.status || null;
 
@@ -116,18 +126,22 @@ export default function EcProductNameSyncControls({
       return !site || site.status === "blocked" || site.status === "submitted_pending";
     });
   }, [job]);
-  const canRetry = Boolean(job && FINAL_STATUSES.has(job.status) && unfinishedTargets.length > 0 && targetName === job.newProductName);
+  const canRetry = Boolean(job
+    && FINAL_STATUSES.has(job.status)
+    && unfinishedTargets.length > 0
+    && ecProductNameMapsEqual(targetNames, job.newProductNames, summaryName));
   const elapsedSeconds = job?.startedAt ? Math.max(0, (Date.now() - new Date(job.startedAt).getTime()) / 1000) : 0;
   const etaMinutes = job && job.progress > 2 && job.progress < 100
     ? Math.max(1, Math.ceil((elapsedSeconds * (100 - job.progress) / job.progress) / 60))
     : null;
 
   async function enqueue(targets: EcProductNameTarget[]) {
-    if (disabled) return;
+    if (disabled || targets.some((target) => !targetNames[target])) return;
     const reserved = dispatchMode === "reserved";
     if (!window.confirm([
       `${getEcProductNameTargetLabel(targets)}のEC用商品名を${reserved ? "一括実行予約へ追加" : "変更"}します。`,
-      "", `商品: ${recipeName}`, `変更後: ${targetName}`, "",
+      "", `商品: ${recipeName}`,
+      ...targets.map((target) => `${getEcProductNameTargetLabel([target])}: ${targetNames[target]}`), "",
       reserved ? "予約分をまとめて実行するまで外部サイトは変更しません。" : "商品名以外の価格・説明・画像・在庫は変更しません。",
       "実行しますか？",
     ].join("\n"))) return;
@@ -139,7 +153,8 @@ export default function EcProductNameSyncControls({
         body: JSON.stringify({
           targets,
           dispatchMode,
-          expectedProductName: targetName,
+          expectedProductName: summaryName,
+          expectedProductNames: targetNames,
           expectedRecipeSnapshot,
         }),
       });
@@ -169,7 +184,8 @@ export default function EcProductNameSyncControls({
         body: JSON.stringify({
           retryUnfinishedFromJobId: job.id,
           dispatchMode: "immediate",
-          expectedProductName: targetName,
+          expectedProductName: summaryName,
+          expectedProductNames: targetNames,
           expectedRecipeSnapshot,
         }),
       });
@@ -231,13 +247,13 @@ export default function EcProductNameSyncControls({
       {hasUnsavedChanges && <p className="mt-2 text-xs font-medium text-amber-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />先にレシピを保存してください。</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         {EC_PRODUCT_NAME_TARGETS.map((target) => (
-          <button key={target.id} type="button" disabled={disabled} onClick={() => void enqueue([target.id])}
+          <button key={target.id} type="button" disabled={disabled || !targetNames[target.id]} onClick={() => void enqueue([target.id])}
             className={`${SITE_COLORS[target.id]} min-h-9 rounded-md px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40`}>
             {target.label}
           </button>
         ))}
       </div>
-      <button type="button" disabled={disabled} onClick={() => void enqueue(EC_PRODUCT_NAME_TARGETS.map((target) => target.id))}
+      <button type="button" disabled={disabled || EC_PRODUCT_NAME_TARGETS.some(({ id }) => !targetNames[id])} onClick={() => void enqueue(EC_PRODUCT_NAME_TARGETS.map((target) => target.id))}
         className="mt-2 flex min-h-10 w-full items-center justify-center rounded-md bg-gray-950 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40">
         <Play className="mr-2 h-4 w-4" />全ECへ反映
       </button>

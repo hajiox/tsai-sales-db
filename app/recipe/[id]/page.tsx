@@ -24,6 +24,8 @@ import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
 import InlineEdit from "../_components/InlineEdit";
 import EcPriceSyncControls from "../_components/EcPriceSyncControls";
 import EcProductNameSyncControls from "../_components/EcProductNameSyncControls";
+import EcProductNameAiEditor from "../_components/EcProductNameAiEditor";
+import type { EcProductNamesBySite } from "@/lib/ec-product-name-codex";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
@@ -130,6 +132,7 @@ interface Recipe {
   web_description?: string | null;
   product_points?: string | null;
   ec_product_name?: string | null;
+  ec_product_names_by_site?: EcProductNamesBySite | null;
   catchcopy?: string | null;
   product_lp_url?: string | null;
 }
@@ -1448,6 +1451,7 @@ function RecipeDetailContent() {
             web_description: recipe.web_description,
             product_points: recipe.product_points,
             ec_product_name: recipe.ec_product_name,
+            ec_product_names_by_site: recipe.ec_product_names_by_site || {},
             catchcopy: recipe.catchcopy,
             product_lp_url: recipe.product_lp_url,
           },
@@ -4474,7 +4478,7 @@ function RecipeDetailContent() {
               {/* EC用商品名 */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-semibold text-gray-700">🏷️ EC用商品名</label>
+                    <label className="block text-sm font-semibold text-gray-700">🏷️ 共通商品名（予備）</label>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${(recipe.ec_product_name || '').length > 75 ? 'bg-red-100 text-red-600 font-bold' : (recipe.ec_product_name || '').length > 60 ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
                       {(recipe.ec_product_name || '').length} / 75文字
@@ -4493,20 +4497,35 @@ function RecipeDetailContent() {
                     setHasChanges(true);
                   }}
                   maxLength={75}
-                  placeholder="ECサイトに掲載する商品名を入力（最大75文字）"
+                  placeholder="EC別の商品名が未設定の場合に使う予備名（最大75文字）"
                   className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none ${(recipe.ec_product_name || '').length > 75 ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                 />
                 {(recipe.ec_product_name || '').length > 60 && (recipe.ec_product_name || '').length <= 75 && (
                   <p className="text-xs text-amber-500 mt-1">残り{75 - (recipe.ec_product_name || '').length}文字</p>
                 )}
+                <EcProductNameAiEditor
+                  recipeId={recipe.id}
+                  fallbackName={recipe.ec_product_name}
+                  namesBySite={recipe.ec_product_names_by_site}
+                  onChange={(names, fallbackName) => {
+                    setRecipe(prev => prev ? {
+                      ...prev,
+                      ec_product_names_by_site: names,
+                      ...(fallbackName ? { ec_product_name: fallbackName } : {}),
+                    } : null);
+                    setHasChanges(true);
+                  }}
+                />
                 <EcProductNameSyncControls
                   recipeId={recipe.id}
                   recipeName={recipe.name}
-                  ecProductName={recipe.ec_product_name}
+                  ecProductName={recipe.ec_product_name ?? null}
+                  ecProductNamesBySite={recipe.ec_product_names_by_site}
                   expectedRecipeSnapshot={{
                     recipeId: recipe.id,
                     recipeName: recipe.name,
                     ecProductName: (recipe.ec_product_name || '').trim().slice(0, 75),
+                    ecProductNamesBySite: recipe.ec_product_names_by_site || {},
                     linkedProductId: recipe.linked_product_id ? String(recipe.linked_product_id).trim().slice(0, 100) : null,
                     janCode: recipe.jan_code ? String(recipe.jan_code).trim().slice(0, 32) : null,
                     seriesCode: recipe.series_code ? String(recipe.series_code).trim().slice(0, 100) : null,

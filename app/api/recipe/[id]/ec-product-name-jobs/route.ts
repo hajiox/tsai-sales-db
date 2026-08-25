@@ -4,7 +4,10 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import {
   ecProductNameHistoryFromJobs,
+  ecProductNameMapsEqual,
+  normalizeEcProductNamesBySite,
   normalizeEcProductNameTargets,
+  type EcProductNamesBySite,
   type EcProductNameJobView,
 } from "@/lib/ec-product-name-codex";
 import {
@@ -60,6 +63,7 @@ function toJobView(job: Record<string, unknown>): EcProductNameJobView {
     errorMessage: compactMessage(job.error_message),
     targets: normalizeEcProductNameTargets(parameters.targets),
     newProductName: normalizeEcProductName(parameters.newProductName),
+    newProductNames: normalizeEcProductNamesBySite(parameters.newProductNames, parameters.newProductName),
     summary: compactMessage(result.summary),
     sites: (Array.isArray(result.sites) ? result.sites : []) as EcProductNameJobView["sites"],
     createdAt: String(job.created_at || ""),
@@ -78,11 +82,13 @@ async function requireAdmin() {
 function jobMatchesRequest(
   job: Record<string, unknown>,
   newProductName: string,
+  newProductNames: EcProductNamesBySite,
   targets: string[],
   recipeSnapshot: EcProductNameRecipeSnapshot,
 ) {
   const parameters = asObject(job.parameters);
   return normalizeEcProductName(parameters.newProductName) === newProductName
+    && ecProductNameMapsEqual(parameters.newProductNames, newProductNames, newProductName)
     && sameTargets(parameters.targets, targets)
     && ecProductNameSnapshotsMatch(parameters.recipeSnapshot, recipeSnapshot);
 }
@@ -92,12 +98,13 @@ async function resolveExistingJob(input: {
   active: Record<string, unknown>;
   dispatchMode: EcPriceDispatchMode;
   newProductName: string;
+  newProductNames: EcProductNamesBySite;
   targets: string[];
   recipeSnapshot: EcProductNameRecipeSnapshot;
   authorizedBy: string;
 }) {
-  const { supabase, active, dispatchMode, newProductName, targets, recipeSnapshot, authorizedBy } = input;
-  if (!jobMatchesRequest(active, newProductName, targets, recipeSnapshot)) {
+  const { supabase, active, dispatchMode, newProductName, newProductNames, targets, recipeSnapshot, authorizedBy } = input;
+  if (!jobMatchesRequest(active, newProductName, newProductNames, targets, recipeSnapshot)) {
     return NextResponse.json(
       { error: "この商品の別の商品名変更が実行中または予約済みです。完了または取消後に再実行してください" },
       { status: 409 },
@@ -127,6 +134,7 @@ async function resolveExistingJob(input: {
           recipeId: String(activeParameters.recipeId || ""),
           targets,
           newProductName,
+          newProductNames,
         },
       },
       scheduled_at: releasedAt,
@@ -196,16 +204,20 @@ export async function POST(
     const supabase = getWebSalesAutomationServiceClient();
     const { data: recipe, error: recipeError } = await supabase
       .from("recipes")
-      .select("id,name,is_intermediate,ec_product_name,linked_product_id,jan_code,series_code,product_code,filling_quantity,filling_quantity_unit,storage_method")
+      .select("id,name,is_intermediate,ec_product_name,ec_product_names_by_site,linked_product_id,jan_code,series_code,product_code,filling_quantity,filling_quantity_unit,storage_method")
       .eq("id", recipeId)
       .single();
     if (recipeError || !recipe) return NextResponse.json({ error: "レシピが見つかりません" }, { status: 404 });
     if (recipe.is_intermediate) return NextResponse.json({ error: "中間加工品はEC商品名反映の対象外です" }, { status: 400 });
 
     const recipeSnapshot = buildEcProductNameRecipeSnapshot(recipe as Record<string, unknown>);
-    const newProductName = recipeSnapshot.ecProductName;
-    if (!newProductName) return NextResponse.json({ error: "EC用商品名を保存してください" }, { status: 400 });
+    const newProductNames = normalizeEcProductNamesBySite(recipeSnapshot.ecProductNamesBySite, recipeSnapshot.ecProductName);
+    const newProductName = recipeSnapshot.ecProductName || newProductNames.amazon || newProductNames[targets[0]] || "";
+    if (targets.some((target) => !newProductNames[target])) {
+      return NextResponse.json({ error: "選択したECの商品名を保存してください" }, { status: 400 });
+    }
     if (normalizeEcProductName(body.expectedProductName) !== newProductName
+      || !ecProductNameMapsEqual(body.expectedProductNames, newProductNames, newProductName)
       || !ecProductNameSnapshotsMatch(body.expectedRecipeSnapshot, recipeSnapshot)) {
       return NextResponse.json(
         { error: "確認後にEC用商品名または商品情報が変わりました。再読込して確認し直してください" },
@@ -229,6 +241,7 @@ export async function POST(
         || String(sourceParams.recipeId || "") !== recipeId
         || !FINAL_RETRY_STATUSES.has(String(source.status || ""))
         || normalizeEcProductName(sourceParams.newProductName) !== newProductName
+        || !ecProductNameMapsEqual(sourceParams.newProductNames, newProductNames, newProductName)
         || !ecProductNameSnapshotsMatch(sourceParams.recipeSnapshot, recipeSnapshot)) {
         return NextResponse.json({ error: "再実行元の商品名・商品情報が現在のレシピと一致しません" }, { status: 409 });
       }
@@ -261,6 +274,7 @@ export async function POST(
         active: activeRows[0] as Record<string, unknown>,
         dispatchMode,
         newProductName,
+        newProductNames,
         targets,
         recipeSnapshot,
         authorizedBy: session.user?.email || ADMIN_EMAIL,
@@ -271,12 +285,13 @@ export async function POST(
     if (!revisionId) {
       const { data: revisionRows, error } = await supabase
         .from("recipe_ec_product_name_revisions")
-        .select("id,new_product_name,recipe_snapshot,created_at")
+        .select("id,new_product_name,new_product_names_by_site,recipe_snapshot,created_at")
         .eq("recipe_id", recipeId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       const revision = (revisionRows || []).find((row) =>
         normalizeEcProductName(row.new_product_name) === newProductName
+        && ecProductNameMapsEqual(row.new_product_names_by_site, newProductNames, newProductName)
         && ecProductNameRecipeIdentitiesMatch(row.recipe_snapshot, recipeSnapshot));
       revisionId = revision?.id || null;
       if (!revisionId) {
@@ -286,6 +301,8 @@ export async function POST(
             recipe_id: recipeId,
             previous_product_name: newProductName,
             new_product_name: newProductName,
+            previous_product_names_by_site: newProductNames,
+            new_product_names_by_site: newProductNames,
             recipe_snapshot: recipeSnapshot,
             tsg_post_status: "skipped",
             tsg_post_error: "既存商品名の初回EC同期のため変更報告対象外",
@@ -308,6 +325,7 @@ export async function POST(
       productMappings,
       verifiedProductIdentifiers,
       newProductName,
+      newProductNames,
       retryUnfinishedFromJobId: retryFromId || null,
       dispatchMode,
       ...(inheritedBatchId ? { batchId: inheritedBatchId } : {}),
@@ -321,6 +339,7 @@ export async function POST(
         recipeId,
         targets,
         newProductName,
+        newProductNames,
       },
     };
     const { data: job, error: insertError } = await supabase
@@ -349,7 +368,7 @@ export async function POST(
       event_type: reserved ? "reserved" : "queued",
       message: reserved ? "EC商品名変更を一括実行予約へ登録しました" : "EC商品名変更を実行待ちに登録しました",
       progress: 0,
-      payload: { recipeId, targets, newProductName },
+      payload: { recipeId, targets, newProductName, newProductNames },
     });
     return NextResponse.json({ ok: true, reserved, job: toJobView(job) });
   } catch (error) {

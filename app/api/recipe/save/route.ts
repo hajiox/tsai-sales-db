@@ -5,6 +5,7 @@ import {
     recalculateRecipeTotalCost,
 } from "@/lib/recipe-cost-sync";
 import { dispatchRecipePriceTsgNotifications } from "@/lib/recipe-price-tsg-notification";
+import { normalizeEcProductNamesBySite } from "@/lib/ec-product-name-codex";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -158,6 +159,12 @@ export async function POST(request: Request) {
                     ? sanitized.product_lp_url.trim()
                     : "";
                 sanitized.product_lp_url = productLpUrl || null;
+            }
+            if ("ec_product_names_by_site" in sanitized) {
+                sanitized.ec_product_names_by_site = normalizeEcProductNamesBySite(
+                    sanitized.ec_product_names_by_site,
+                    sanitized.ec_product_name,
+                );
             }
 
             const { error: recipeError } = await supabase

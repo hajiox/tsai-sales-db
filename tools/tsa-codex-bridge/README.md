@@ -19,6 +19,8 @@ Every TSA button that invokes Codex must route to a dedicated Skill. Do not send
 
 EC product-name jobs use the dedicated `update-aizu-ec-product-names` Skill. They process one marketplace at a time, mutate only the exact product-name field, preserve successful sites when another site fails, and expose an unfinished-only retry. Immediate changes create one TSG report; jobs released from the shared reservation queue create one aggregate report after the batch completes.
 
+As of 2026-08-25, EC product-name candidate generation uses Bridge `1.8.35` with the dedicated `generate-aizu-ec-product-names` Skill and `gpt-5.6-terra` at medium reasoning. The job receives only the compact saved recipe snapshot, never resumes a development chat, never opens an EC site, and saves a versioned generation result without changing the recipe or external listings. Each marketplace candidate remains editable and requires explicit adoption and recipe save before the existing EC name-update workflow can run.
+
 The production screen is `/web-sales/automation`. It supports both product-sales aggregation and advertising-cost collection. Use `PC接続テスト` before the first run.
 
 Advertising jobs reuse TSA's existing import, auto-match, and cost-update routes. Google Ads uses the configured Google Ads API; Meta, Rakuten RPP, Yahoo item reach, and Amazon Sponsored Products use the signed-in Chrome session and the `tsa-ad-cost-csv` Skill. A report with positive-cost unmapped rows finishes as `needs_review` instead of updating advertising costs.

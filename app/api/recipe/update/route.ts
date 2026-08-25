@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { syncRecipeLinkedProductPrices } from "@/lib/recipe-linked-product-prices";
+import { normalizeEcProductNamesBySite } from "@/lib/ec-product-name-codex";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -53,7 +54,7 @@ export async function PATCH(request: Request) {
             "storage_method", "label_quantity", "net_content_unit", "shelf_life",
             "sterilization_method", "sterilization_temperature", "sterilization_time",
             "amazon_fee_enabled", "total_cost", "total_weight",
-            "yield_rate", "web_description", "product_points", "ec_product_name",
+            "yield_rate", "web_description", "product_points", "ec_product_name", "ec_product_names_by_site",
             "catchcopy", "product_lp_url",
         ];
 
@@ -80,6 +81,12 @@ export async function PATCH(request: Request) {
                 ? safeUpdates.product_lp_url.trim()
                 : "";
             safeUpdates.product_lp_url = productLpUrl || null;
+        }
+        if ("ec_product_names_by_site" in safeUpdates) {
+            safeUpdates.ec_product_names_by_site = normalizeEcProductNamesBySite(
+                safeUpdates.ec_product_names_by_site,
+                safeUpdates.ec_product_name,
+            );
         }
 
         const { error } = await supabase

@@ -8,6 +8,7 @@ export type CodexTaskKey =
   | "ec_profit_import"
   | "ec_price_update"
   | "ec_product_name_update"
+  | "ec_product_name_generate"
   | "web_sales_analysis";
 
 export type CodexJobStatus =
@@ -27,7 +28,7 @@ export type CodexJobTrigger =
   | "test";
 
 export type CodexTaskDefinition = {
-  key: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_name_update">;
+  key: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_name_update" | "ec_product_name_generate">;
   channel: CodexChannel;
   label: string;
   shortLabel: string;
@@ -37,7 +38,7 @@ export type CodexTaskDefinition = {
 };
 
 export type EnqueueCodexJobsInput = {
-  taskKey?: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_name_update">;
+  taskKey?: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_name_update" | "ec_product_name_generate">;
   channels: CodexChannel[];
   startDate: string;
   endDate: string;

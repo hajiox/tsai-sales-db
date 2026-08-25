@@ -5,6 +5,8 @@ type RevisionRow = {
   recipe_id: string;
   previous_product_name: string | null;
   new_product_name: string;
+  previous_product_names_by_site?: Record<string, unknown> | null;
+  new_product_names_by_site?: Record<string, unknown> | null;
   recipe_snapshot: Record<string, unknown> | null;
   tsg_batch_id?: string | null;
   created_at: string;
@@ -21,14 +23,43 @@ function textValue(value: unknown) {
   return text || null;
 }
 
+const SITE_LABELS: Record<string, string> = {
+  amazon: "Amazon", rakuten: "楽天", yahoo: "Yahoo", mercari: "メルカリ",
+  base: "BASE", qoo10: "Qoo10", tiktok: "TikTok",
+};
+
+function siteNameSummary(
+  names: Record<string, unknown> | null | undefined,
+  fallback: string | null,
+  changedAgainst?: Record<string, unknown> | null,
+) {
+  const rows = Object.entries(SITE_LABELS).flatMap(([site, label]) => {
+    const name = textValue(names?.[site]) || fallback;
+    const other = changedAgainst ? textValue(changedAgainst[site]) : null;
+    if (!name || (changedAgainst && name === other)) return [];
+    return [`${label}: ${name}`];
+  });
+  return rows.length > 0 ? rows.join("\n").slice(0, 2200) : fallback;
+}
+
 function revisionItem(revision: RevisionRow) {
   const snapshot = revision.recipe_snapshot || {};
+  const previousFallback = textValue(revision.previous_product_name);
+  const newFallback = textValue(revision.new_product_name) || "名称未登録";
   return {
     revisionId: revision.id,
     recipeId: revision.recipe_id,
     recipeName: textValue(snapshot.recipeName) || "名称未登録",
-    previousProductName: textValue(revision.previous_product_name),
-    newProductName: textValue(revision.new_product_name) || "名称未登録",
+    previousProductName: siteNameSummary(
+      revision.previous_product_names_by_site,
+      previousFallback,
+      revision.new_product_names_by_site,
+    ),
+    newProductName: siteNameSummary(
+      revision.new_product_names_by_site,
+      newFallback,
+      revision.previous_product_names_by_site,
+    ) || newFallback,
     changedAt: revision.created_at,
   };
 }

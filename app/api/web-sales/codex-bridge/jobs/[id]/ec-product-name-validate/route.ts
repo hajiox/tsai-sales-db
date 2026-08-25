@@ -43,7 +43,7 @@ export async function POST(
     const recipeId = String(parameters.recipeId || "");
     const { data: recipe, error: recipeError } = await supabase
       .from("recipes")
-      .select("id,name,is_intermediate,ec_product_name,linked_product_id,jan_code,series_code,product_code,filling_quantity,filling_quantity_unit,storage_method")
+      .select("id,name,is_intermediate,ec_product_name,ec_product_names_by_site,linked_product_id,jan_code,series_code,product_code,filling_quantity,filling_quantity_unit,storage_method")
       .eq("id", recipeId)
       .single();
     if (recipeError || !recipe) throw recipeError || new Error("レシピが見つかりません");

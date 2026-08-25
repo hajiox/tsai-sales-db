@@ -133,20 +133,29 @@ function priceSyncRows(
   });
 }
 
-function normalizedProductName(value: unknown) {
-  return String(value ?? "").trim().slice(0, 75);
+const EC_PRODUCT_NAME_MAX_LENGTHS: Record<string, number> = {
+  amazon: 75, rakuten: 127, yahoo: 75, mercari: 130, base: 255, qoo10: 100, tiktok: 255,
+};
+
+function normalizedProductName(value: unknown, maxLength = 255) {
+  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function productNameForTarget(parameters: Record<string, unknown>, target: string) {
+  const names = asObject(parameters.newProductNames);
+  return normalizedProductName(names[target] ?? parameters.newProductName, EC_PRODUCT_NAME_MAX_LENGTHS[target] || 255);
 }
 
 function validatedProductNamePlan(parametersInput: unknown, planInput: unknown) {
   const parameters = asObject(parametersInput);
   const plan = asObject(planInput);
   const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
-  const targetName = normalizedProductName(parameters.newProductName);
+  const summaryName = normalizedProductName(parameters.newProductName, 75);
   const sites = Array.isArray(plan.sites) ? plan.sites.map(asObject) : [];
   const names = sites.map((site) => String(site.site || ""));
   if (
     plan.status !== "ready"
-    || !targetName
+    || !summaryName
     || targets.length === 0
     || new Set(targets).size !== targets.length
     || targets.some((target: string) => !EC_PRICE_TARGETS.has(target))
@@ -156,6 +165,8 @@ function validatedProductNamePlan(parametersInput: unknown, planInput: unknown) 
   ) throw new Error("EC商品名変更計画の対象が不正です");
   for (const site of sites) {
     const target = String(site.site || "");
+    const targetName = productNameForTarget(parameters, target);
+    if (!targetName) throw new Error(`${target}の商品名が保存されていません`);
     if (site.status === "not_found") {
       if (site.observed_name != null || site.target_name != null || site.product_identifier != null || !String(site.message || "").trim()) {
         throw new Error(`${target}の対象商品なし計画が不正です`);
@@ -176,7 +187,7 @@ function validatedProductNameProgress(parametersInput: unknown, resultInput: unk
   const parameters = asObject(parametersInput);
   const result = asObject(resultInput);
   const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
-  if (normalizedProductName(result.new_product_name) !== normalizedProductName(parameters.newProductName)) {
+  if (normalizedProductName(result.new_product_name, 75) !== normalizedProductName(parameters.newProductName, 75)) {
     throw new Error("EC商品名変更途中結果が依頼名と一致しません");
   }
   const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
@@ -185,6 +196,12 @@ function validatedProductNameProgress(parametersInput: unknown, resultInput: unk
     || names.some((target) => !targets.includes(target))
     || sites.some((site) => !EC_PRODUCT_NAME_STATUSES.has(String(site.status)))) {
     throw new Error("EC商品名変更途中結果の対象が不正です");
+  }
+  for (const site of sites) {
+    if (["updated", "submitted_pending"].includes(String(site.status))
+      && normalizedProductName(site.final_name) !== productNameForTarget(parameters, String(site.site || ""))) {
+      throw new Error(`${site.site}の商品名変更途中結果が依頼名と一致しません`);
+    }
   }
   return result;
 }
@@ -232,10 +249,10 @@ function validateFinalProductNameResult(
   const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
   const sites = Array.isArray(submittedResult.sites) ? submittedResult.sites.map(asObject) : [];
   const names = sites.map((site) => String(site.site || ""));
-  const targetName = normalizedProductName(parameters.newProductName);
+  const summaryName = normalizedProductName(parameters.newProductName, 75);
   if (
     submittedResult.status !== status
-    || normalizedProductName(submittedResult.new_product_name) !== targetName
+    || normalizedProductName(submittedResult.new_product_name, 75) !== summaryName
     || names.length !== targets.length
     || new Set(names).size !== names.length
     || targets.some((target: string) => !names.includes(target))
@@ -245,6 +262,7 @@ function validateFinalProductNameResult(
       ? asObject(submittedResult.plan).sites as unknown[]
       : [];
     const incomplete = sites.some((site) => {
+      const targetName = productNameForTarget(parameters, String(site.site || ""));
       if (site.status === "updated" && normalizedProductName(site.final_name) === targetName) return false;
       const planned = planSites.map(asObject).find((entry) => entry.site === site.site);
       return site.status !== "not_found" || planned?.status !== "not_found";
@@ -260,7 +278,6 @@ function productNameSyncRows(
   updatedAt: string,
 ) {
   const parameters = asObject(claimedJob.parameters);
-  const targetName = normalizedProductName(parameters.newProductName);
   const result = asObject(submittedResult);
   const planSites = Array.isArray(asObject(result.plan).sites) ? asObject(result.plan).sites as unknown[] : [];
   const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
@@ -268,6 +285,7 @@ function productNameSyncRows(
   return sites.flatMap((site) => {
     if (site.status !== "updated") return [];
     const target = String(site.site || "");
+    const targetName = productNameForTarget(parameters, target);
     const planned = planSites.map(asObject).find((entry) => entry.site === target);
     if (!planned || planned.status !== "planned") throw new Error(`${target}の商品名計画が見つかりません`);
     if (normalizedProductName(planned.target_name) !== targetName
