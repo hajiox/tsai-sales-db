@@ -37,6 +37,7 @@ The TSA automation screen shows both versions and warns when the installed Bridg
 
 ## Operation note
 
+- 2026-08-25: Recipe price and product-name sync controls place the black `全EC` action directly after the seven marketplace buttons. Immediate and reservation behavior remains selected by the mode control above the row.
 - 2026-08-25: Bridge 1.8.37 switches dedicated EC product-name candidate generation from GPT-5.6 Terra to GPT-5.6 Sol at medium reasoning. The worker capability, job guard, UI labels, generation audit model, and database claim condition now use the same model identifier.
 - 2026-08-24: Bridge 1.8.33 adds protocol 1 for `ec_product_name_update`. The recipe screen supports individual EC execution, all-EC execution, shared batch reservations, progress/ETA, per-site results, unfinished-only retry, and separate product-name history. The Bridge uses a dedicated compact Skill, verifies the recipe snapshot immediately before each write, and prohibits price, stock, shipping, tax, description, image, category, variation, advertising, and bulk mutations.
 - 2026-08-23: Bridge 1.8.28 requires a monitor-side acknowledgement before logging the visible PowerShell monitor as started. The worker verifies the monitor PID and foreground request. Both initial launch and retry use the visible-window launcher without Node's detached mode, which was reproduced to suppress the monitor on the office PC. Recipe price reports to TSG are released only after the later EC/LP Bridge campaign completes; the hourly durable outbox remains the retry path.

@@ -435,17 +435,16 @@ export default function EcPriceSyncControls({
             {target.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => enqueue(allTargets)}
+          disabled={disabled}
+          className="inline-flex items-center rounded bg-slate-900 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+        >
+          {submitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+          全EC
+        </button>
       </div>
-
-      <button
-        type="button"
-        onClick={() => enqueue(allTargets)}
-        disabled={disabled}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
-      >
-        {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-        {dispatchMode === "reserved" ? "全サイトを予約" : "全て反映"}
-      </button>
 
       {blockingJob && (
         <p className="mt-3 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">

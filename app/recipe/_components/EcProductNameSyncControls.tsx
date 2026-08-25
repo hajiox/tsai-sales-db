@@ -252,11 +252,11 @@ export default function EcProductNameSyncControls({
             {target.label}
           </button>
         ))}
+        <button type="button" disabled={disabled || EC_PRODUCT_NAME_TARGETS.some(({ id }) => !targetNames[id])} onClick={() => void enqueue(EC_PRODUCT_NAME_TARGETS.map((target) => target.id))}
+          className="min-h-9 rounded-md bg-gray-950 px-3 text-xs font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40">
+          全EC
+        </button>
       </div>
-      <button type="button" disabled={disabled || EC_PRODUCT_NAME_TARGETS.some(({ id }) => !targetNames[id])} onClick={() => void enqueue(EC_PRODUCT_NAME_TARGETS.map((target) => target.id))}
-        className="mt-2 flex min-h-10 w-full items-center justify-center rounded-md bg-gray-950 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40">
-        <Play className="mr-2 h-4 w-4" />全ECへ反映
-      </button>
 
       {(job || reservations.length > 0 || history.length > 0) && <div className="mt-3 space-y-2">
         {job && <div className={`rounded-md border p-3 text-xs ${job.status === "completed" ? "border-emerald-200 bg-emerald-50" : FINAL_STATUSES.has(job.status) ? "border-amber-200 bg-amber-50" : "border-blue-200 bg-blue-50"}`}>
