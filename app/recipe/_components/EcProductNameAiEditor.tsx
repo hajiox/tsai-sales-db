@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Eye, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -164,6 +164,12 @@ export default function EcProductNameAiEditor({ recipeId, fallbackName, namesByS
     }
   }
 
+  async function regenerate() {
+    if (generating) return;
+    setOpen(false);
+    await generate();
+  }
+
   function applyAll() {
     if (!generation) return;
     const names = Object.fromEntries(EC_PRODUCT_NAME_TARGETS.map(({ id }) => [id, generation.suggestions[id].name])) as EcProductNamesBySite;
@@ -185,15 +191,24 @@ export default function EcProductNameAiEditor({ recipeId, fallbackName, namesByS
           <p className="text-sm font-bold text-gray-800">EC別の商品名</p>
           <p className="text-[11px] text-gray-500">各ECのSEO・表示特性・文字数制限に合わせて個別に保存します。</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void generate()}
-          disabled={generating}
-          className="inline-flex min-h-10 items-center rounded-md bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
-        >
-          {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-          {generating ? `GPT-5.6 Terraで分析中 ${jobProgress}%` : "AIで各EC向け商品名を作成"}
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {generation && !generating && <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="inline-flex min-h-10 items-center rounded-md border border-gray-300 bg-white px-3 text-sm font-bold text-gray-700 hover:bg-gray-50"
+          >
+            <Eye className="mr-2 h-4 w-4" />生成結果を見る
+          </button>}
+          <button
+            type="button"
+            onClick={() => void generate()}
+            disabled={generating}
+            className="inline-flex min-h-10 items-center rounded-md bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+          >
+            {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            {generating ? `GPT-5.6 Terraで分析中 ${jobProgress}%` : "AIで各EC向け商品名を作成"}
+          </button>
+        </div>
       </div>
 
       {generating && <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2" aria-live="polite">
@@ -268,7 +283,12 @@ export default function EcProductNameAiEditor({ recipeId, fallbackName, namesByS
             </div>
           </div>}
           <DialogFooter className="border-t bg-gray-50 px-5 py-4">
-            <button type="button" onClick={() => setOpen(false)} className="min-h-10 rounded-md border border-gray-300 bg-white px-4 text-sm font-bold">閉じる</button>
+            <button type="button" onClick={() => setOpen(false)} className="inline-flex min-h-10 items-center justify-center rounded-md border border-gray-300 bg-white px-4 text-sm font-bold hover:bg-gray-100">
+              <ArrowLeft className="mr-2 h-4 w-4" />戻す
+            </button>
+            <button type="button" onClick={() => void regenerate()} disabled={generating} className="inline-flex min-h-10 items-center justify-center rounded-md border border-blue-300 bg-white px-4 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60">
+              <RefreshCw className={`mr-2 h-4 w-4 ${generating ? "animate-spin" : ""}`} />再生成
+            </button>
             <button type="button" onClick={applyAll} className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-950 px-5 text-sm font-bold text-white hover:bg-gray-800">
               <Check className="mr-2 h-4 w-4" />全候補を採用
             </button>
