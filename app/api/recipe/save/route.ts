@@ -6,6 +6,7 @@ import {
 } from "@/lib/recipe-cost-sync";
 import { dispatchRecipePriceTsgNotifications } from "@/lib/recipe-price-tsg-notification";
 import { normalizeEcProductNamesBySite } from "@/lib/ec-product-name-codex";
+import { normalizeEcCatchcopiesBySite } from "@/lib/ec-catchcopy-codex";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -164,6 +165,12 @@ export async function POST(request: Request) {
                 sanitized.ec_product_names_by_site = normalizeEcProductNamesBySite(
                     sanitized.ec_product_names_by_site,
                     sanitized.ec_product_name,
+                );
+            }
+            if ("ec_catchcopies_by_site" in sanitized) {
+                sanitized.ec_catchcopies_by_site = normalizeEcCatchcopiesBySite(
+                    sanitized.ec_catchcopies_by_site,
+                    sanitized.catchcopy,
                 );
             }
 

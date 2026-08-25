@@ -20,13 +20,14 @@ const FINAL_STATUSES: CodexJobStatus[] = [
 ];
 const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]);
 const EC_PRODUCT_NAME_STATUSES = new Set(["updated", "submitted_pending", "not_found", "blocked"]);
+const EC_CATCHCOPY_TARGETS = new Set(["rakuten", "yahoo"]);
+const EC_CATCHCOPY_STATUSES = new Set(["updated", "submitted_pending", "not_found", "blocked"]);
 
 function asObject(value: unknown): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, any>
     : {};
 }
-
 function priceSyncRows(
   claimedJob: Record<string, any>,
   submittedResult: unknown,
@@ -297,6 +298,169 @@ function productNameSyncRows(
       recipe_id: String(parameters.recipeId || ""),
       target,
       last_product_name: targetName,
+      last_job_id: jobId,
+      recipe_snapshot: parameters.recipeSnapshot,
+      updated_at: updatedAt,
+    }];
+  });
+}
+
+const EC_CATCHCOPY_MAX_LENGTHS: Record<string, number> = {
+  rakuten: 87, yahoo: 30,
+};
+
+function normalizedCatchcopy(value: unknown, maxLength = 255) {
+  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function catchcopyForTarget(parameters: Record<string, unknown>, target: string) {
+  return normalizedCatchcopy(asObject(parameters.catchcopies)[target], EC_CATCHCOPY_MAX_LENGTHS[target] || 87);
+}
+
+function validatedCatchcopyPlan(parametersInput: unknown, planInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const plan = asObject(planInput);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const sites = Array.isArray(plan.sites) ? plan.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (
+    plan.status !== "ready"
+    || targets.length === 0
+    || new Set(targets).size !== targets.length
+    || targets.some((target: string) => !EC_CATCHCOPY_TARGETS.has(target))
+    || names.length !== targets.length
+    || new Set(names).size !== names.length
+    || targets.some((target: string) => !names.includes(target))
+  ) throw new Error("ECキャッチコピー変更計画の対象が不正です");
+  for (const site of sites) {
+    const target = String(site.site || "");
+    const targetName = catchcopyForTarget(parameters, target);
+    if (!targetName) throw new Error(`${target}のキャッチコピーが保存されていません`);
+    if (site.status === "not_found") {
+      if (site.observed_catchcopy != null || site.target_catchcopy != null || site.product_identifier != null || !String(site.message || "").trim()) {
+        throw new Error(`${target}の対象商品なし計画が不正です`);
+      }
+      continue;
+    }
+    if (
+      site.status !== "planned"
+      || normalizedCatchcopy(site.target_catchcopy, EC_CATCHCOPY_MAX_LENGTHS[target]) !== targetName
+      || !String(site.product_identifier || "").trim()
+      || !String(site.message || "").trim()
+    ) throw new Error(`${target}のキャッチコピー変更計画が確定していません`);
+  }
+  return plan;
+}
+
+function validatedCatchcopyProgress(parametersInput: unknown, resultInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const result = asObject(resultInput);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (new Set(names).size !== names.length
+    || names.some((target) => !targets.includes(target))
+    || sites.some((site) => !EC_CATCHCOPY_STATUSES.has(String(site.status)))) {
+    throw new Error("ECキャッチコピー変更途中結果の対象が不正です");
+  }
+  for (const site of sites) {
+    if (["updated", "submitted_pending"].includes(String(site.status))
+      && normalizedCatchcopy(site.final_catchcopy, EC_CATCHCOPY_MAX_LENGTHS[String(site.site || "")]) !== catchcopyForTarget(parameters, String(site.site || ""))) {
+      throw new Error(`${site.site}のキャッチコピー変更途中結果が依頼名と一致しません`);
+    }
+  }
+  return result;
+}
+
+function validatedFinalCatchcopyPlan(parametersInput: unknown, resultInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const result = asObject(resultInput);
+  const plan = asObject(result.plan);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const resultSites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  const planSites = Array.isArray(plan.sites) ? plan.sites.map(asObject) : [];
+  if (resultSites.length !== targets.length || planSites.length !== targets.length) {
+    throw new Error("ECキャッチコピー変更の逐次結果が依頼対象と一致しません");
+  }
+  for (const target of targets) {
+    const resultSite = resultSites.find((site) => site.site === target);
+    const planSite = planSites.find((site) => site.site === target);
+    if (!resultSite || !planSite) throw new Error(`${target}の逐次結果がありません`);
+    if (resultSite.status === "blocked") continue;
+    validatedCatchcopyPlan({ ...parameters, targets: [target] }, {
+      status: "ready",
+      summary: String(plan.summary || "逐次計画"),
+      sites: [planSite],
+    });
+    if (resultSite.status === "not_found" && planSite.status !== "not_found") {
+      throw new Error(`${target}の対象商品なし結果が計画と一致しません`);
+    }
+    if (["updated", "submitted_pending"].includes(String(resultSite.status)) && planSite.status !== "planned") {
+      throw new Error(`${target}の反映結果に検証済み計画がありません`);
+    }
+  }
+  return plan;
+}
+
+function validateFinalCatchcopyResult(
+  claimedJob: Record<string, any>,
+  submittedResult: Record<string, any> | null,
+  status: CodexJobStatus,
+) {
+  if (!submittedResult) {
+    if (status === "failed" || status === "cancelled") return;
+    throw new Error("ECキャッチコピー変更の最終結果がありません");
+  }
+  const parameters = asObject(claimedJob.parameters);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const sites = Array.isArray(submittedResult.sites) ? submittedResult.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (
+    submittedResult.status !== status
+    || names.length !== targets.length
+    || new Set(names).size !== names.length
+    || targets.some((target: string) => !names.includes(target))
+  ) throw new Error("ECキャッチコピー変更の最終結果が依頼内容と一致しません");
+  if (status === "completed") {
+    const planSites = Array.isArray(asObject(submittedResult.plan).sites)
+      ? asObject(submittedResult.plan).sites as unknown[]
+      : [];
+    const incomplete = sites.some((site) => {
+      const targetName = catchcopyForTarget(parameters, String(site.site || ""));
+      if (site.status === "updated" && normalizedCatchcopy(site.final_catchcopy, EC_CATCHCOPY_MAX_LENGTHS[String(site.site || "")]) === targetName) return false;
+      const planned = planSites.map(asObject).find((entry) => entry.site === site.site);
+      return site.status !== "not_found" || planned?.status !== "not_found";
+    });
+    if (incomplete) throw new Error("未確認のECサイトがあるため完了にできません");
+  }
+}
+
+function catchcopySyncRows(
+  claimedJob: Record<string, any>,
+  submittedResult: unknown,
+  jobId: string,
+  updatedAt: string,
+) {
+  const parameters = asObject(claimedJob.parameters);
+  const result = asObject(submittedResult);
+  const planSites = Array.isArray(asObject(result.plan).sites) ? asObject(result.plan).sites as unknown[] : [];
+  const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  if (result.validated_plan_checkpoint !== true) throw new Error("サーバー検証済みのキャッチコピー計画がありません");
+  return sites.flatMap((site) => {
+    if (site.status !== "updated") return [];
+    const target = String(site.site || "");
+    const targetName = catchcopyForTarget(parameters, target);
+    const planned = planSites.map(asObject).find((entry) => entry.site === target);
+    if (!planned || planned.status !== "planned") throw new Error(`${target}のキャッチコピー計画が見つかりません`);
+    if (normalizedCatchcopy(planned.target_catchcopy, EC_CATCHCOPY_MAX_LENGTHS[target]) !== targetName
+      || normalizedCatchcopy(site.final_catchcopy, EC_CATCHCOPY_MAX_LENGTHS[target]) !== targetName
+      || String(site.product_identifier || "").trim() !== String(planned.product_identifier || "").trim()) {
+      throw new Error(`${target}のキャッチコピー変更結果が保存済み計画と一致しません`);
+    }
+    return [{
+      recipe_id: String(parameters.recipeId || ""),
+      target,
+      last_catchcopy: targetName,
       last_job_id: jobId,
       recipe_snapshot: parameters.recipeSnapshot,
       updated_at: updatedAt,
@@ -702,6 +866,19 @@ export async function POST(
         submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
       }
     }
+    if (claimedJob.task_key === "ec_catchcopy_update" && submittedResult) {
+      if (!isFinal) {
+        const eventType = String(body.eventType || "");
+        if (eventType === "ec_catchcopy_progress_checkpoint") {
+          submittedResult = validatedCatchcopyProgress(claimedJob.parameters, submittedResult);
+        } else {
+          return NextResponse.json({ error: "Invalid EC catchcopy checkpoint" }, { status: 400 });
+        }
+      } else {
+        const plan = validatedFinalCatchcopyPlan(claimedJob.parameters, submittedResult);
+        submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
+      }
+    }
 
     let successfulSites: Record<string, any>[] = [];
     let tsgNotification: {
@@ -717,6 +894,10 @@ export async function POST(
     if (claimedJob.task_key === "ec_product_name_update" && isFinal) {
       validateFinalProductNameResult(claimedJob, submittedResult, status);
       successfulSites = productNameSyncRows(claimedJob, submittedResult, id, now);
+    }
+    if (claimedJob.task_key === "ec_catchcopy_update" && isFinal) {
+      validateFinalCatchcopyResult(claimedJob, submittedResult, status);
+      successfulSites = catchcopySyncRows(claimedJob, submittedResult, id, now);
     }
 
     const updates: Record<string, any> = {
@@ -811,6 +992,20 @@ export async function POST(
           };
         }
       }
+    } else if (claimedJob.task_key === "ec_catchcopy_update" && isFinal) {
+      const { data: completed, error: completeError } = await supabase.rpc("complete_ec_catchcopy_codex_job", {
+        p_job_id: id,
+        p_worker_id: workerId,
+        p_status: status,
+        p_progress: updates.progress,
+        p_current_step: updates.current_step,
+        p_error_message: updates.error_message,
+        p_result: submittedResult,
+        p_completed_at: now,
+        p_sync_rows: successfulSites,
+      });
+      if (completeError) throw completeError;
+      if (!completed) return NextResponse.json({ error: "Job is no longer running" }, { status: 409 });
     } else {
       const { data: job, error } = await supabase
         .from("web_sales_codex_jobs")

@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { syncRecipeLinkedProductPrices } from "@/lib/recipe-linked-product-prices";
 import { normalizeEcProductNamesBySite } from "@/lib/ec-product-name-codex";
+import { normalizeEcCatchcopiesBySite } from "@/lib/ec-catchcopy-codex";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -55,7 +56,7 @@ export async function PATCH(request: Request) {
             "sterilization_method", "sterilization_temperature", "sterilization_time",
             "amazon_fee_enabled", "total_cost", "total_weight",
             "yield_rate", "web_description", "product_points", "ec_product_name", "ec_product_names_by_site",
-            "catchcopy", "product_lp_url",
+            "catchcopy", "ec_catchcopies_by_site", "product_lp_url",
         ];
 
         const safeUpdates: Record<string, any> = {};
@@ -86,6 +87,12 @@ export async function PATCH(request: Request) {
             safeUpdates.ec_product_names_by_site = normalizeEcProductNamesBySite(
                 safeUpdates.ec_product_names_by_site,
                 safeUpdates.ec_product_name,
+            );
+        }
+        if ("ec_catchcopies_by_site" in safeUpdates) {
+            safeUpdates.ec_catchcopies_by_site = normalizeEcCatchcopiesBySite(
+                safeUpdates.ec_catchcopies_by_site,
+                safeUpdates.catchcopy,
             );
         }
 

@@ -25,7 +25,10 @@ import InlineEdit from "../_components/InlineEdit";
 import EcPriceSyncControls from "../_components/EcPriceSyncControls";
 import EcProductNameSyncControls from "../_components/EcProductNameSyncControls";
 import EcProductNameAiEditor from "../_components/EcProductNameAiEditor";
+import EcCatchcopySyncControls from "../_components/EcCatchcopySyncControls";
+import EcCatchcopyAiEditor from "../_components/EcCatchcopyAiEditor";
 import type { EcProductNamesBySite } from "@/lib/ec-product-name-codex";
+import type { EcCatchcopiesBySite } from "@/lib/ec-catchcopy-codex";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
@@ -134,6 +137,7 @@ interface Recipe {
   ec_product_name?: string | null;
   ec_product_names_by_site?: EcProductNamesBySite | null;
   catchcopy?: string | null;
+  ec_catchcopies_by_site?: EcCatchcopiesBySite | null;
   product_lp_url?: string | null;
 }
 
@@ -1453,6 +1457,7 @@ function RecipeDetailContent() {
             ec_product_name: recipe.ec_product_name,
             ec_product_names_by_site: recipe.ec_product_names_by_site || {},
             catchcopy: recipe.catchcopy,
+            ec_catchcopies_by_site: recipe.ec_catchcopies_by_site || {},
             product_lp_url: recipe.product_lp_url,
           },
         }),
@@ -4552,12 +4557,47 @@ function RecipeDetailContent() {
                 <input
                   type="text"
                   value={recipe.catchcopy || ''}
+                  maxLength={87}
                   onChange={(e) => {
                     setRecipe(prev => prev ? { ...prev, catchcopy: e.target.value } : null);
                     setHasChanges(true);
                   }}
                   placeholder="商品のキャッチコピーを入力（楽天・Yahoo掲載用）"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+                <EcCatchcopyAiEditor
+                  recipeId={recipe.id}
+                  fallbackCatchcopy={recipe.catchcopy}
+                  catchcopiesBySite={recipe.ec_catchcopies_by_site}
+                  onChange={(catchcopies, fallbackCatchcopy) => {
+                    setRecipe(prev => prev ? {
+                      ...prev,
+                      ec_catchcopies_by_site: catchcopies,
+                      ...(fallbackCatchcopy ? { catchcopy: fallbackCatchcopy } : {}),
+                    } : null);
+                    setHasChanges(true);
+                  }}
+                />
+                <EcCatchcopySyncControls
+                  recipeId={recipe.id}
+                  recipeName={recipe.name}
+                  fallbackCatchcopy={recipe.catchcopy ?? null}
+                  ecCatchcopiesBySite={recipe.ec_catchcopies_by_site}
+                  expectedRecipeSnapshot={{
+                    recipeId: recipe.id,
+                    recipeName: recipe.name,
+                    fallbackCatchcopy: (recipe.catchcopy || '').replace(/\s+/g, ' ').trim().slice(0, 87),
+                    ecCatchcopiesBySite: recipe.ec_catchcopies_by_site || {},
+                    linkedProductId: recipe.linked_product_id ? String(recipe.linked_product_id).trim().slice(0, 100) : null,
+                    janCode: recipe.jan_code ? String(recipe.jan_code).trim().slice(0, 32) : null,
+                    seriesCode: recipe.series_code ? String(recipe.series_code).trim().slice(0, 100) : null,
+                    productCode: recipe.product_code ? String(recipe.product_code).trim().slice(0, 100) : null,
+                    fillingQuantity: recipe.filling_quantity != null ? String(recipe.filling_quantity).trim().slice(0, 50) : null,
+                    fillingQuantityUnit: recipe.filling_quantity_unit ? String(recipe.filling_quantity_unit).trim().slice(0, 30) : null,
+                    storageMethod: recipe.storage_method ? String(recipe.storage_method).trim().slice(0, 100) : null,
+                  }}
+                  hasUnsavedChanges={hasChanges}
+                  isSaving={isSaving}
                 />
               </div>
               {/* 商品ポイント — 2カラム横並び */}
