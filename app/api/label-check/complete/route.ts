@@ -17,6 +17,7 @@ const optionalText = (max: number) => z.string().trim().max(max).nullable().opti
 const payloadSchema = z.object({
   request_id: z.string().uuid(),
   mode: z.enum(["simple", "normal"]),
+  worker_name: z.string().trim().min(1).max(50),
   file_name: optionalText(500),
   product_name: optionalText(500),
   raw_materials: optionalText(12000),
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
       source: mobile ? "mobile" : "tsa",
       notes: payload.mode === "simple" ? "簡易チェック" : "通常チェック",
       label_data: payload.label_data,
+      worker_name: payload.worker_name,
       checked_by: email,
     });
     if (insertError) throw insertError;

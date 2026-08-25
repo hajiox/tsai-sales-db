@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("label_checks")
       .select(
-        "id, mode, file_name, product_name, expiry_date_printed, expiry_date_normalized, manufacturing_date, matched_recipe_name, shelf_life, shelf_life_days, expected_expiry, judgment, deviation_percent, deviation_days, confidence, source, notes, checked_by, created_at, label_check_images(id, sort_order)",
+        "id, mode, file_name, product_name, expiry_date_printed, expiry_date_normalized, manufacturing_date, matched_recipe_name, shelf_life, shelf_life_days, expected_expiry, judgment, deviation_percent, deviation_days, confidence, source, notes, worker_name, checked_by, created_at, label_check_images(id, sort_order)",
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     if (judgment === "UNKNOWN") query = query.in("judgment", ["UNKNOWN", "MANUAL"]);
     if (search) {
       const pattern = `%${search}%`;
-      query = query.or(`product_name.ilike.${pattern},matched_recipe_name.ilike.${pattern},file_name.ilike.${pattern}`);
+      query = query.or(`product_name.ilike.${pattern},matched_recipe_name.ilike.${pattern},worker_name.ilike.${pattern},file_name.ilike.${pattern}`);
     }
 
     const [rowsResult, total, ok, ng, unknown, simple, normal] = await Promise.all([

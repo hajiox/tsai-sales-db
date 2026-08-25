@@ -32,6 +32,7 @@ type HistoryRow = {
   judgment: "OK" | "NG" | "UNKNOWN" | "MANUAL";
   deviation_percent: number | null;
   deviation_days: number | null;
+  worker_name: string | null;
   checked_by: string | null;
   created_at: string;
   image_id: string | null;
@@ -134,7 +135,7 @@ export default function LabelCheckDashboard() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="商品名・レシピ名で検索"
+              placeholder="商品名・レシピ名・作業者で検索"
               className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
             />
           </label>
@@ -173,7 +174,7 @@ export default function LabelCheckDashboard() {
                   <th className="px-3 py-3">設定期間</th>
                   <th className="px-3 py-3">計算日</th>
                   <th className="px-3 py-3">判定</th>
-                  <th className="px-3 py-3">実行者</th>
+                  <th className="px-3 py-3">作業者</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -208,7 +209,7 @@ export default function LabelCheckDashboard() {
                     <td className="whitespace-nowrap px-3 py-3">{row.shelf_life || "-"}</td>
                     <td className="whitespace-nowrap px-3 py-3">{row.expected_expiry || "-"}</td>
                     <td className="px-3 py-3"><JudgmentBadge value={row.judgment} /></td>
-                    <td className="max-w-[180px] truncate px-3 py-3 text-xs text-slate-600">{row.checked_by || "移行データ"}</td>
+                    <td className="max-w-[180px] truncate px-3 py-3 font-semibold text-slate-700">{row.worker_name || "未記録（旧データ）"}</td>
                   </tr>
                 ))}
                 {!loading && data.rows.length === 0 && (

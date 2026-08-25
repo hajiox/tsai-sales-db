@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
@@ -60,6 +60,7 @@ export default function LabelCheckWorkflow() {
   const [ocrElapsedMs, setOcrElapsedMs] = useState<number | null>(null);
   const [candidates, setCandidates] = useState<RecipeCandidate[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeCandidate | null>(null);
+  const [workerName, setWorkerName] = useState("");
   const [productName, setProductName] = useState("");
   const [rawMaterials, setRawMaterials] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
@@ -76,6 +77,7 @@ export default function LabelCheckWorkflow() {
   const [error, setError] = useState("");
   const cameraInput = useRef<HTMLInputElement>(null);
   const galleryInput = useRef<HTMLInputElement>(null);
+  const workerNameInput = useRef<HTMLInputElement>(null);
   const photoUrls = useRef<string[]>([]);
   const requestId = useRef(crypto.randomUUID());
 
@@ -174,6 +176,16 @@ export default function LabelCheckWorkflow() {
     }
   }, [mode, photos.length, runOcr]);
 
+  const openFilePicker = (input: RefObject<HTMLInputElement | null>) => {
+    if (!workerName.trim()) {
+      setError("作業者名を入力してください。名字だけでOKです");
+      workerNameInput.current?.focus();
+      return;
+    }
+    setError("");
+    input.current?.click();
+  };
+
   const removePhoto = (index: number) => {
     setPhotos((current) => {
       const target = current[index];
@@ -221,6 +233,10 @@ export default function LabelCheckWorkflow() {
   };
 
   const completeCheck = async () => {
+    if (!workerName.trim()) {
+      setError("作業者名を入力してください。名字だけでOKです");
+      return;
+    }
     if (!expiryDate) {
       setError("賞味期限を確認してください");
       return;
@@ -241,6 +257,7 @@ export default function LabelCheckWorkflow() {
       formData.set("payload", JSON.stringify({
         request_id: requestId.current,
         mode,
+        worker_name: workerName.trim(),
         file_name: photos[0]?.file.name || null,
         product_name: productName || null,
         raw_materials: rawMaterials || null,
@@ -302,6 +319,10 @@ export default function LabelCheckWorkflow() {
               <button type="button" onClick={() => reset("normal")} className={`flex flex-1 items-center justify-center gap-2 rounded text-sm font-bold ${mode === "normal" ? "bg-violet-700 text-white" : "text-slate-600"}`}><ScanLine className="h-4 w-4" />通常チェック</button>
             </div>
 
+            <div className="mb-4 border-y border-slate-200 bg-white px-3 py-3">
+              <WorkerNameField value={workerName} onChange={setWorkerName} inputRef={workerNameInput} />
+            </div>
+
             <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" multiple={mode === "normal"} onChange={(event) => { void addFiles(event.target.files); event.target.value = ""; }} />
             <input ref={galleryInput} type="file" accept="image/*" className="hidden" multiple={mode === "normal"} onChange={(event) => { void addFiles(event.target.files); event.target.value = ""; }} />
 
@@ -311,8 +332,8 @@ export default function LabelCheckWorkflow() {
               </div>
               <h1 className="mt-4 text-xl font-bold">{mode === "simple" ? "ラベルを1枚撮影" : "ラベルを撮影"}</h1>
               <div className="mt-5 grid grid-cols-2 gap-2 px-3 sm:mx-auto sm:max-w-md">
-                <button type="button" onClick={() => cameraInput.current?.click()} className={`inline-flex h-14 items-center justify-center gap-2 rounded-md text-base font-bold text-white ${mode === "simple" ? "bg-cyan-700 hover:bg-cyan-800" : "bg-violet-700 hover:bg-violet-800"}`}><Camera className="h-5 w-5" />撮影</button>
-                <button type="button" onClick={() => galleryInput.current?.click()} className="inline-flex h-14 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-base font-bold hover:bg-slate-100"><FileImage className="h-5 w-5" />写真を選択</button>
+                <button type="button" onClick={() => openFilePicker(cameraInput)} className={`inline-flex h-14 items-center justify-center gap-2 rounded-md text-base font-bold text-white ${mode === "simple" ? "bg-cyan-700 hover:bg-cyan-800" : "bg-violet-700 hover:bg-violet-800"}`}><Camera className="h-5 w-5" />撮影</button>
+                <button type="button" onClick={() => openFilePicker(galleryInput)} className="inline-flex h-14 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-base font-bold hover:bg-slate-100"><FileImage className="h-5 w-5" />写真を選択</button>
               </div>
             </div>
 
@@ -320,7 +341,7 @@ export default function LabelCheckWorkflow() {
               <div className="mt-4">
                 <PhotoGrid photos={photos} onRemove={removePhoto} />
                 <div className="mt-3 flex gap-2">
-                  {photos.length < 4 && <button type="button" onClick={() => cameraInput.current?.click()} className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-sm font-bold"><Camera className="h-4 w-4" />追加撮影</button>}
+                  {photos.length < 4 && <button type="button" onClick={() => openFilePicker(cameraInput)} className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-sm font-bold"><Camera className="h-4 w-4" />追加撮影</button>}
                   <button type="button" onClick={() => void runOcr(photos, "normal")} className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md bg-violet-700 text-sm font-bold text-white"><Sparkles className="h-4 w-4" />{photos.length}枚を解析</button>
                 </div>
               </div>
@@ -348,6 +369,7 @@ export default function LabelCheckWorkflow() {
                 {ocrElapsedMs !== null && <span className="text-xs font-semibold text-slate-500">OCR {(ocrElapsedMs / 1000).toFixed(1)}秒</span>}
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2"><WorkerNameField value={workerName} onChange={setWorkerName} /></div>
                 <Field label="商品名" value={productName} onChange={setProductName} />
                 <DateField label="印字賞味期限" value={expiryDate} onChange={setExpiryDate} required />
                 <DateField label="製造日" value={manufacturingDate} onChange={setManufacturingDate} />
@@ -425,6 +447,7 @@ export default function LabelCheckWorkflow() {
               {result.judgment === "OK" ? <CheckCircle2 className="mx-auto h-16 w-16 text-emerald-700" /> : <AlertTriangle className="mx-auto h-16 w-16 text-red-700" />}
               <div className={`mt-3 text-4xl font-black ${result.judgment === "OK" ? "text-emerald-800" : "text-red-800"}`}>{result.judgment}</div>
               <div className="mt-1 text-sm font-semibold text-slate-600">{productName || "裏ラベル"}</div>
+              <div className="mt-1 text-sm font-bold text-slate-700">作業者：{workerName.trim()}</div>
             </div>
             <dl className="grid grid-cols-2 border-b border-slate-200 bg-white text-sm">
               <ResultCell label="印字賞味期限" value={expiryDate} />
@@ -459,6 +482,26 @@ function PhotoGrid({ photos, onRemove }: { photos: Photo[]; onRemove?: (index: n
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return <label className="block text-xs font-bold text-slate-600">{label}<input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-950" /></label>;
+}
+
+function WorkerNameField({ value, onChange, inputRef }: { value: string; onChange: (value: string) => void; inputRef?: RefObject<HTMLInputElement | null> }) {
+  return (
+    <label className="block text-left text-xs font-bold text-slate-700">
+      作業者名 <span className="ml-1 text-red-600">必須</span>
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        maxLength={50}
+        required
+        aria-required="true"
+        autoComplete="family-name"
+        placeholder="例：佐藤"
+        className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base font-semibold text-slate-950 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+      />
+      <span className="mt-1 block text-xs font-medium text-slate-500">名字だけでOKです</span>
+    </label>
+  );
 }
 
 function DateField({ label, value, onChange, required = false }: { label: string; value: string; onChange: (value: string) => void; required?: boolean }) {
