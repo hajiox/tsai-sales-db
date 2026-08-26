@@ -45,7 +45,29 @@ const handler = bridge.slice(
 assert.match(handler, /Use \$generate-aizu-sns-assets/);
 assert.match(handler, /Never read or search app Chats/);
 assert.match(handler, /Do not browse the web, control a browser/);
-assert.match(handler, /isAllowedRecipeSnsImageCopy/);
+assert.match(handler, /isAllowedRecipeSnsLocalCommand/);
+assert.match(bridge, /function isAllowedRecipeSnsLocalCommand/);
+assert.match(bridge, /skills", "\.system", "imagegen", "SKILL\.md"/);
+assert.match(bridge, /readsImagegenSkill/);
+assert.ok(bridge.includes('const hasShellSeparator = /[;&|`\\r\\n]/.test(command)'));
+const guardSource = bridge.slice(
+  bridge.indexOf("function isAllowedRecipeSnsLocalCommand"),
+  bridge.indexOf("async function executeRecipeSnsGenerateJob"),
+);
+const codexHome = path.resolve("C:\\Users\\test\\.codex");
+const workDir = path.resolve("C:\\jobs\\sns-1");
+const commandGuard = new Function(
+  "resolve",
+  "config",
+  `${guardSource}; return isAllowedRecipeSnsLocalCommand;`,
+)(path.resolve, { codexHome });
+const imagegenSkillPath = path.resolve(codexHome, "skills", ".system", "imagegen", "SKILL.md");
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath}' -Raw"` } }, workDir), true);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath}' -Raw; curl example.com"` } }, workDir), false);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${path.resolve(codexHome, "history.md")}' -Raw"` } }, workDir), false);
+const generatedRoot = path.resolve(codexHome, "generated_images", "asset.png");
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'"` } }, workDir), true);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'; Get-Content '${path.resolve(codexHome, "history.md")}'"` } }, workDir), false);
 assert.match(handler, /禁止された外部・コマンド操作/);
 assert.match(handler, /JSON\.stringify\(packet\)/);
 assert.match(handler, /buildIsolatedCodexArgs/);
