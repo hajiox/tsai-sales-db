@@ -8,6 +8,7 @@ import {
   RECIPE_SNS_RULES_VERSION,
   RECIPE_SNS_PLATFORMS,
   isRecipeSnsImageMode,
+  isRecipeSnsPlatform,
   recipeSnsPlatformRules,
   validateRecipeSnsAiResult,
   type RecipeSnsGenerationView,
@@ -55,6 +56,7 @@ function toJobView(job: Record<string, unknown>) {
     result: job.result && typeof job.result === "object" ? job.result : null,
     generationId: String(parameters.generationId || ""),
     imageMode: isRecipeSnsImageMode(parameters.imageMode) ? parameters.imageMode : "normal",
+    targetPlatform: isRecipeSnsPlatform(parameters.targetPlatform) ? parameters.targetPlatform : null,
     model: String(parameters.model || RECIPE_SNS_MODEL),
     reasoningEffort: String(parameters.reasoningEffort || RECIPE_SNS_REASONING_EFFORT),
     rulesVersion: String(parameters.rulesVersion || RECIPE_SNS_RULES_VERSION),
@@ -105,6 +107,7 @@ function toGenerationView(
     sourceImageUrl: String(row.source_image_url || ""),
     sourceImageRole: String(row.source_image_role || "gallery") as "portrait" | "gallery",
     imageMode: isRecipeSnsImageMode(sourceSnapshot.imageMode) ? sourceSnapshot.imageMode : "normal",
+    targetPlatform: isRecipeSnsPlatform(sourceSnapshot.targetPlatform) ? sourceSnapshot.targetPlatform : null,
     variationKey: String(row.variation_key || ""),
     imageVariants: parseImageVariants(row.image_variants),
     posts: rawPosts && typeof rawPosts === "object" ? validateRecipeSnsAiResult(rawPosts) : null,
@@ -181,12 +184,33 @@ export async function POST(
   if (!isRecipeSnsImageMode(imageMode)) {
     return NextResponse.json({ error: "SNS画像生成モードを選択してください" }, { status: 400 });
   }
+  const rawTargetPlatform = String(requestBody.targetPlatform || "").trim();
+  const targetPlatform = rawTargetPlatform && isRecipeSnsPlatform(rawTargetPlatform) ? rawTargetPlatform : null;
+  if (rawTargetPlatform && !targetPlatform) {
+    return NextResponse.json({ error: "個別再生成のSNS媒体が正しくありません" }, { status: 400 });
+  }
+  const baseGenerationId = String(requestBody.baseGenerationId || "").trim();
+  if (targetPlatform && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(baseGenerationId)) {
+    return NextResponse.json({ error: "個別再生成の基準履歴が正しくありません" }, { status: 400 });
+  }
+  if (!targetPlatform && baseGenerationId) {
+    return NextResponse.json({ error: "全媒体生成に基準履歴は指定できません" }, { status: 400 });
+  }
 
   const supabase = getWebSalesAutomationServiceClient();
   let createdJobId: string | null = null;
   try {
     const { id: recipeId } = await params;
-    const [recipeResult, imageResult, latestGenerationResult, activeResult] = await Promise.all([
+    const baseGenerationPromise = targetPlatform
+      ? supabase
+        .from("recipe_sns_generations")
+        .select("id,recipe_id,status,source_image_id,variation_key,image_variants,source_snapshot,posts")
+        .eq("id", baseGenerationId)
+        .eq("recipe_id", recipeId)
+        .eq("status", "completed")
+        .maybeSingle()
+      : Promise.resolve({ data: null, error: null });
+    const [recipeResult, imageResult, latestGenerationResult, activeResult, baseGenerationResult] = await Promise.all([
       supabase
         .from("recipes")
         .select("id,name,category,series,ec_product_name,ec_product_names_by_site,catchcopy,ec_catchcopies_by_site,product_points,web_description,product_lp_url,ingredient_label,filling_quantity,filling_quantity_unit,storage_method,shelf_life,jan_code,product_code")
@@ -212,11 +236,13 @@ export async function POST(
         .in("status", ACTIVE_STATUSES)
         .order("created_at", { ascending: false })
         .limit(1),
+      baseGenerationPromise,
     ]);
     if (recipeResult.error || !recipeResult.data) throw new Error("レシピが見つかりません");
     if (imageResult.error) throw imageResult.error;
     if (latestGenerationResult.error) throw latestGenerationResult.error;
     if (activeResult.error) throw activeResult.error;
+    if (baseGenerationResult.error) throw baseGenerationResult.error;
     if (activeResult.data?.[0]) {
       return NextResponse.json({
         ok: true,
@@ -225,14 +251,30 @@ export async function POST(
       });
     }
 
+    const baseGeneration = baseGenerationResult.data as Record<string, unknown> | null;
+    if (targetPlatform && !baseGeneration) {
+      return NextResponse.json({ error: "個別再生成の基準履歴が見つかりません" }, { status: 404 });
+    }
+    const baseSnapshot = asObject(baseGeneration?.source_snapshot);
+    if (targetPlatform && (!baseGeneration?.posts || !isRecipeSnsImageMode(baseSnapshot.imageMode) || baseSnapshot.imageMode !== imageMode)) {
+      return NextResponse.json({ error: "選択中の生成履歴と画像モードが一致しません" }, { status: 409 });
+    }
+    const basePosts = targetPlatform ? validateRecipeSnsAiResult(baseGeneration?.posts) : null;
+    const baseImageVariants = targetPlatform ? parseImageVariants(baseGeneration?.image_variants) : {};
+    if (targetPlatform && RECIPE_SNS_PLATFORMS.some((platform) => !baseImageVariants[platform.id])) {
+      return NextResponse.json({ error: "個別再生成の基準履歴に4媒体の画像が揃っていません" }, { status: 409 });
+    }
+
     const sourceImage = chooseRecipeSnsSourceImage(
       (imageResult.data || []) as RecipeSnsSourceImage[],
-      latestGenerationResult.data?.source_image_id,
+      String(baseGeneration?.source_image_id || latestGenerationResult.data?.source_image_id || "") || null,
     );
     if (!sourceImage) {
       return NextResponse.json({ error: "SNS用の画像がありません。EC情報でポートレート画像またはWeb商品画像を登録してください" }, { status: 400 });
     }
-    const variationKey = chooseRecipeSnsVariation(latestGenerationResult.data?.variation_key);
+    const variationKey = chooseRecipeSnsVariation(
+      String(baseGeneration?.variation_key || latestGenerationResult.data?.variation_key || "") || null,
+    );
     const recipe = recipeResult.data;
     const lpSummary = await fetchCompanyLpSummary(recipe.product_lp_url);
     const generationId = randomUUID();
@@ -258,6 +300,9 @@ export async function POST(
       sourceImage: { id: sourceImage.id, role: sourceImage.image_role },
       imageMode,
       variationKey,
+      targetPlatform,
+      targetPlatforms: targetPlatform ? [targetPlatform] : RECIPE_SNS_PLATFORMS.map((platform) => platform.id),
+      baseGenerationId: targetPlatform ? baseGenerationId : null,
     };
     const now = new Date().toISOString();
     const parameters = {
@@ -266,13 +311,17 @@ export async function POST(
       recipeName: clip(recipe.name, 300),
       generationId,
       imageMode,
+      targetPlatform,
+      baseGenerationId: targetPlatform ? baseGenerationId : null,
       sourceImageUrl: sourceImage.image_url,
       sourceSnapshot,
       platformRules: recipeSnsPlatformRules(),
       model: RECIPE_SNS_MODEL,
       reasoningEffort: RECIPE_SNS_REASONING_EFFORT,
       rulesVersion: RECIPE_SNS_RULES_VERSION,
-      executionPolicy: "one_image_compact_packet_then_fresh_skill_session",
+      executionPolicy: targetPlatform
+        ? "one_platform_one_image_compact_packet_then_fresh_skill_session"
+        : "one_image_compact_packet_then_fresh_skill_session",
       mutationScope: "recipe_sns_generation_only",
     };
     const { data: job, error: jobError } = await supabase
@@ -286,7 +335,9 @@ export async function POST(
         report_month: null,
         status: "queued",
         progress: 0,
-        current_step: `${imageMode === "creative" ? "クリエイティブ" : imageMode === "arrange" ? "アレンジ" : "通常リサイズ"}の生成待ち`,
+        current_step: targetPlatform
+          ? `${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === targetPlatform)?.label}だけ再生成待ち`
+          : `${imageMode === "creative" ? "クリエイティブ" : imageMode === "arrange" ? "アレンジ" : "通常リサイズ"}の生成待ち`,
         requested_by: session.user?.email || ADMIN_EMAIL,
         parameters,
         priority: 35,
@@ -306,9 +357,9 @@ export async function POST(
       source_image_url: sourceImage.image_url,
       source_image_role: sourceImage.image_role,
       variation_key: variationKey,
-      image_variants: {},
+      image_variants: baseImageVariants,
       source_snapshot: sourceSnapshot,
-      posts: null,
+      posts: basePosts,
       model: RECIPE_SNS_MODEL,
       reasoning_effort: RECIPE_SNS_REASONING_EFFORT,
       rules_version: RECIPE_SNS_RULES_VERSION,
@@ -324,6 +375,8 @@ export async function POST(
         recipeId,
         generationId,
         imageMode,
+        targetPlatform,
+        baseGenerationId: targetPlatform ? baseGenerationId : null,
         sourceImageRole: sourceImage.image_role,
         model: RECIPE_SNS_MODEL,
         rulesVersion: RECIPE_SNS_RULES_VERSION,

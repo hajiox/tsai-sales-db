@@ -14,6 +14,10 @@ async function main() {
   const sourcePath = path.join(workDir, "source.png");
   const outputPath = path.join(workDir, "creative.jpg");
   const rendererPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "render-recipe-sns-image.ps1");
+  const rendererSource = fs.readFileSync(rendererPath, "utf8");
+  assert.match(rendererSource, /Add-EdgeScrim/);
+  assert.match(rendererSource, /会津ブランド館/);
+  assert.doesNotMatch(rendererSource, /panelBrush|FillRectangle\(\$panelBrush/);
   try {
     await sharp({
       create: {

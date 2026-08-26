@@ -42,6 +42,77 @@ function New-FittingFont {
   return [System.Drawing.Font]::new("Meiryo", $MinimumSize, $Style, [System.Drawing.GraphicsUnit]::Pixel)
 }
 
+function Add-EdgeScrim {
+  param(
+    [System.Drawing.Graphics]$Graphics,
+    [int]$CanvasWidth,
+    [int]$CanvasHeight,
+    [string]$Anchor
+  )
+  $isPortrait = $CanvasHeight -gt ($CanvasWidth * 1.15)
+  $isBottom = $Anchor.StartsWith("bottom")
+  $isRight = $Anchor.EndsWith("right")
+  $dark = [System.Drawing.Color]::FromArgb(188, 12, 17, 20)
+  $transparent = [System.Drawing.Color]::FromArgb(0, 12, 17, 20)
+  $scrim = $null
+  if ($isPortrait) {
+    $extent = [float]($CanvasHeight * 0.46)
+    $y = if ($isBottom) { [float]($CanvasHeight - $extent) } else { [float]0 }
+    $bounds = [System.Drawing.RectangleF]::new(0, $y, $CanvasWidth, $extent)
+    $start = if ($isBottom) { $transparent } else { $dark }
+    $end = if ($isBottom) { $dark } else { $transparent }
+    $scrim = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+      $bounds,
+      $start,
+      $end,
+      [System.Drawing.Drawing2D.LinearGradientMode]::Vertical
+    )
+  } else {
+    $extent = [float]($CanvasWidth * 0.62)
+    $x = if ($isRight) { [float]($CanvasWidth - $extent) } else { [float]0 }
+    $bounds = [System.Drawing.RectangleF]::new($x, 0, $extent, $CanvasHeight)
+    $start = if ($isRight) { $transparent } else { $dark }
+    $end = if ($isRight) { $dark } else { $transparent }
+    $scrim = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+      $bounds,
+      $start,
+      $end,
+      [System.Drawing.Drawing2D.LinearGradientMode]::Horizontal
+    )
+  }
+  try {
+    $Graphics.FillRectangle($scrim, $bounds)
+  } finally {
+    if ($null -ne $scrim) {
+      $scrim.Dispose()
+    }
+  }
+}
+
+function Draw-StringWithShadow {
+  param(
+    [System.Drawing.Graphics]$Graphics,
+    [string]$Text,
+    [System.Drawing.Font]$Font,
+    [System.Drawing.Brush]$Brush,
+    [System.Drawing.RectangleF]$Bounds,
+    [float]$Offset
+  )
+  $shadow = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(150, 0, 0, 0))
+  try {
+    $shadowBounds = [System.Drawing.RectangleF]::new(
+      $Bounds.X + $Offset,
+      $Bounds.Y + $Offset,
+      $Bounds.Width,
+      $Bounds.Height
+    )
+    $Graphics.DrawString($Text, $Font, $shadow, $shadowBounds)
+    $Graphics.DrawString($Text, $Font, $Brush, $Bounds)
+  } finally {
+    $shadow.Dispose()
+  }
+}
+
 $source = $null
 $canvas = $null
 $graphics = $null
@@ -83,49 +154,59 @@ try {
   )
 
   if ($Mode -eq "creative") {
-    $margin = [float]([Math]::Round([Math]::Min($Width, $Height) * 0.055))
-    $panelWidthRatio = if ($Height -gt $Width) { 0.78 } else { 0.47 }
-    $panelHeightRatio = if ($Height -gt $Width) { 0.25 } else { 0.38 }
-    $panelWidth = [float]([Math]::Round($Width * $panelWidthRatio))
-    $panelHeight = [float]([Math]::Round($Height * $panelHeightRatio))
-    $panelX = if ($Placement.EndsWith("right")) { [float]($Width - $panelWidth - $margin) } else { $margin }
-    $panelY = if ($Placement.StartsWith("bottom")) { [float]($Height - $panelHeight - $margin) } else { $margin }
-    $panel = [System.Drawing.RectangleF]::new($panelX, $panelY, $panelWidth, $panelHeight)
-    $panelBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(188, 14, 18, 26))
-    $accentBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 220, 38, 38))
-    $textBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::White)
-    $sublineBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(235, 255, 255, 255))
+    Add-EdgeScrim -Graphics $graphics -CanvasWidth $Width -CanvasHeight $Height -Anchor $Placement
+    $isPortrait = $Height -gt ($Width * 1.15)
+    $margin = [float]([Math]::Round([Math]::Min($Width, $Height) * 0.062))
+    $contentWidth = if ($isPortrait) { [float]($Width - ($margin * 2)) } else { [float]($Width * 0.44) }
+    $contentHeight = if ($isPortrait) { [float]($Height * 0.29) } else { [float]($Height * 0.56) }
+    $contentX = if ($Placement.EndsWith("right")) { [float]($Width - $contentWidth - $margin) } else { $margin }
+    $contentY = if ($Placement.StartsWith("bottom")) { [float]($Height - $contentHeight - $margin) } else { $margin }
+    $brandBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(230, 255, 250, 244))
+    $textBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 255, 253, 249))
+    $sublineBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(232, 255, 253, 249))
+    $accentPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 226, 74, 51), [float]([Math]::Max(4, $Width * 0.004)))
+    $brandFont = [System.Drawing.Font]::new("Meiryo", [float]([Math]::Max(16, [Math]::Min($Width, $Height) * 0.021)), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     try {
-      $graphics.FillRectangle($panelBrush, $panel)
-      $accentWidth = [float]([Math]::Max(6, [Math]::Round($Width * 0.006)))
-      $graphics.FillRectangle($accentBrush, [System.Drawing.RectangleF]::new($panelX, $panelY, $accentWidth, $panelHeight))
+      $brandHeight = [float]([Math]::Max(24, $contentHeight * 0.1))
+      $brandBounds = [System.Drawing.RectangleF]::new($contentX, $contentY, $contentWidth, $brandHeight)
+      Draw-StringWithShadow -Graphics $graphics -Text "会津ブランド館" -Font $brandFont -Brush $brandBrush -Bounds $brandBounds -Offset 2
+      $ruleY = [float]($contentY + $brandHeight + ($margin * 0.13))
+      $ruleLength = [float]([Math]::Min($contentWidth * 0.22, [Math]::Max(64, $Width * 0.09)))
+      $graphics.DrawLine($accentPen, $contentX, $ruleY, $contentX + $ruleLength, $ruleY)
 
-      $innerX = $panelX + $accentWidth + ($margin * 0.48)
-      $innerWidth = $panelWidth - $accentWidth - ($margin * 0.9)
-      $headlineHeightRatio = if ([string]::IsNullOrWhiteSpace($Subline)) { 0.78 } else { 0.57 }
-      $headlineHeight = $panelHeight * $headlineHeightRatio
-      $headlineBounds = [System.Drawing.RectangleF]::new($innerX, $panelY + ($margin * 0.42), $innerWidth, $headlineHeight)
-      $headlineFont = New-FittingFont -Graphics $graphics -Text $Headline -Bounds $headlineBounds -MaximumSize ([float]([Math]::Max(34, $Width * 0.055))) -MinimumSize 24 -Style ([System.Drawing.FontStyle]::Bold)
+      $headlineY = [float]($ruleY + ($margin * 0.26))
+      $headlineHeightRatio = if ([string]::IsNullOrWhiteSpace($Subline)) { 0.72 } else { 0.54 }
+      $headlineHeight = [float]($contentHeight * $headlineHeightRatio)
+      $headlineBounds = [System.Drawing.RectangleF]::new($contentX, $headlineY, $contentWidth, $headlineHeight)
+      $headlineMaximum = if ($isPortrait) { [float]($Width * 0.064) } else { [float]([Math]::Min($Width, $Height) * 0.057) }
+      if ($Headline.Length -le 18) {
+        $singleLineMaximum = [float](($contentWidth / [Math]::Max(1, $Headline.Length)) * 0.9)
+        $headlineMaximum = [float]([Math]::Min($headlineMaximum, $singleLineMaximum))
+      }
+      $headlineFont = New-FittingFont -Graphics $graphics -Text $Headline -Bounds $headlineBounds -MaximumSize $headlineMaximum -MinimumSize 26 -Style ([System.Drawing.FontStyle]::Bold)
+      $headlineMeasuredHeight = [float]($graphics.MeasureString($Headline, $headlineFont, [int]$contentWidth).Height)
       try {
-        $graphics.DrawString($Headline, $headlineFont, $textBrush, $headlineBounds)
+        Draw-StringWithShadow -Graphics $graphics -Text $Headline -Font $headlineFont -Brush $textBrush -Bounds $headlineBounds -Offset 3
       } finally {
         $headlineFont.Dispose()
       }
 
       if (-not [string]::IsNullOrWhiteSpace($Subline)) {
-        $sublineBounds = [System.Drawing.RectangleF]::new($innerX, $panelY + ($panelHeight * 0.66), $innerWidth, $panelHeight * 0.24)
-        $sublineFont = New-FittingFont -Graphics $graphics -Text $Subline -Bounds $sublineBounds -MaximumSize ([float]([Math]::Max(22, $Width * 0.027))) -MinimumSize 16 -Style ([System.Drawing.FontStyle]::Regular)
+        $sublineY = [float]($headlineY + [Math]::Min($headlineHeight, $headlineMeasuredHeight) + ($margin * 0.32))
+        $sublineBounds = [System.Drawing.RectangleF]::new($contentX, $sublineY, $contentWidth, $contentHeight * 0.24)
+        $sublineFont = New-FittingFont -Graphics $graphics -Text $Subline -Bounds $sublineBounds -MaximumSize ([float]([Math]::Max(20, [Math]::Min($Width, $Height) * 0.029))) -MinimumSize 17 -Style ([System.Drawing.FontStyle]::Regular)
         try {
-          $graphics.DrawString($Subline, $sublineFont, $sublineBrush, $sublineBounds)
+          Draw-StringWithShadow -Graphics $graphics -Text $Subline -Font $sublineFont -Brush $sublineBrush -Bounds $sublineBounds -Offset 2
         } finally {
           $sublineFont.Dispose()
         }
       }
     } finally {
-      $panelBrush.Dispose()
-      $accentBrush.Dispose()
+      $brandFont.Dispose()
+      $brandBrush.Dispose()
       $textBrush.Dispose()
       $sublineBrush.Dispose()
+      $accentPen.Dispose()
     }
   }
 

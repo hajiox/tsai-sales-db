@@ -10,13 +10,14 @@ const requiredVersion = read("lib", "web-sales-codex", "bridge-version.ts");
 const types = read("lib", "web-sales-codex", "types.ts");
 const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-assets", "SKILL.md");
 const schema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-result.schema.json"));
+const targetSchema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-target-result.schema.json"));
 const skillContract = JSON.parse(read("tools", "tsa-codex-bridge", "skill-contract.json"));
 
 const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.ok(bridgeVersion);
 assert.equal(requiredVersion.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);
 assert.match(types, /\| "recipe_sns_generate"/);
-assert.match(bridge, /recipeSnsProtocolVersion: 2/);
+assert.match(bridge, /recipeSnsProtocolVersion: 3/);
 assert.match(bridge, /recipeSnsModel: "gpt-5\.6-sol"/);
 assert.match(bridge, /const HEADLESS_SAFE_TASK_KEYS = new Set\(\[[\s\S]*?"recipe_sns_generate"/);
 assert.match(bridge, /codexTaskKeys: config\.allowedTaskKeys/);
@@ -75,6 +76,9 @@ assert.match(handler, /buildIsolatedCodexArgs/);
 assert.match(handler, /minimalContext: true/);
 assert.match(handler, /ephemeral: true/);
 assert.match(handler, /images: parameters\.imageMode === "normal" \? \[\] : \[sourceImagePath\]/);
+assert.match(handler, /requestedPlatformIds/);
+assert.match(handler, /RECIPE_SNS_TARGET_RESULT_SCHEMA/);
+assert.match(handler, /targetPlatform: parameters\.targetPlatform/);
 assert.doesNotMatch(handler, /\bresume\b/i);
 assert.match(handler, /recipe-sns-import/);
 assert.match(handler, /uploadArtifact\(job\.id, packetFile, "source"\)/);
@@ -86,7 +90,7 @@ assert.match(handler, /imageArtifactIds/);
 assert.match(handler, /status: "completed"/);
 assert.match(handler, /progress: 100/);
 
-for (const expected of ["recipe-sns-result.schema.json", "render-recipe-sns-image.ps1"]) {
+for (const expected of ["recipe-sns-result.schema.json", "recipe-sns-target-result.schema.json", "render-recipe-sns-image.ps1"]) {
   assert.match(installer, new RegExp(expected.replace(/[.]/g, "\\.")));
 }
 assert.equal(skillContract.tasks.recipe_sns_generate.skill, "generate-aizu-sns-assets");
@@ -109,6 +113,7 @@ function assertStrictObjectSchemas(value, location = "$") {
   }
 }
 assertStrictObjectSchemas(schema);
+assertStrictObjectSchemas(targetSchema);
 
 function assertCodexOutputSchemaCompatibility(value, location = "$") {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
@@ -122,5 +127,6 @@ function assertCodexOutputSchemaCompatibility(value, location = "$") {
   }
 }
 assertCodexOutputSchemaCompatibility(schema);
+assertCodexOutputSchemaCompatibility(targetSchema);
 
 console.log("Recipe SNS Bridge checks passed.");

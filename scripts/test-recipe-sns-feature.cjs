@@ -21,6 +21,10 @@ assert.match(page, /window\.history\.replaceState/);
 assert.match(page, /RecipeSnsStudio recipeId=\{recipe\.id\} hasUnsavedChanges=\{hasChanges\}/);
 assert.match(studio, /const currentJobGeneration = next\.job\?\.id/);
 for (const mode of ["通常リサイズ", "クリエイティブ", "アレンジ"]) assert.match(studio, new RegExp(mode));
+assert.match(studio, /generatingPlatform/);
+assert.match(studio, /baseGenerationId/);
+assert.match(studio, /RefreshCw/);
+assert.match(studio, /だけを同じモードで再生成/);
 assert.doesNotMatch(studio, /画像だけ切り直す/);
 assert.ok(
   studio.indexOf("if (currentJobGeneration) return currentJobGeneration.id")
@@ -60,7 +64,9 @@ assert.match(snsRoute, /task_key: "recipe_sns_generate"/);
 assert.match(snsRoute, /isRecipeSnsImageMode\(imageMode\)/);
 assert.match(snsRoute, /imageMode,/);
 assert.match(snsRoute, /sourceImageUrl: sourceImage\.image_url/);
-assert.match(snsRoute, /image_variants: \{\}/);
+assert.match(snsRoute, /image_variants: baseImageVariants/);
+assert.match(snsRoute, /targetPlatforms: targetPlatform/);
+assert.match(snsRoute, /baseGenerationId: targetPlatform/);
 assert.match(snsRoute, /one_image_compact_packet_then_fresh_skill_session/);
 assert.doesNotMatch(snsRoute, /action === "recrop"|deterministic_image_recrop_without_codex/);
 assert.match(snsRoute, /sourceImage\.id/);
@@ -68,12 +74,16 @@ assert.doesNotMatch(snsRoute, /body\.sourceImage/);
 
 assert.match(importRoute, /isCodexBridgeAuthorized/);
 assert.match(importRoute, /validateRecipeSnsBridgeResult/);
+assert.match(importRoute, /validateRecipeSnsTargetBridgeResult/);
 assert.match(importRoute, /JSON\.stringify\(parameters\.sourceSnapshot\) !== JSON\.stringify\(body\.sourceSnapshot\)/);
 assert.match(importRoute, /result\.variation_key !== String\(sourceSnapshot\.variationKey/);
 assert.match(importRoute, /web_sales_codex_artifacts/);
-assert.match(importRoute, /requestedMode === "normal" \? 1 : RECIPE_SNS_PLATFORMS\.length/);
+assert.match(importRoute, /requestedMode === "normal" \? 1 : requestedPlatforms\.length/);
+assert.match(importRoute, /requestedPlatforms\.length/);
+assert.match(importRoute, /mergeRecipeSnsTargetResult\(baseResult, targetResult\)/);
+assert.match(importRoute, /storedImageVariants/);
 assert.match(importRoute, /publishRecipeSnsImageVariants/);
-assert.match(importRoute, /image_variants: published\.variants/);
+assert.match(importRoute, /image_variants: storedImageVariants/);
 assert.match(importRoute, /posts: storedResult/);
 
 for (const prohibition of ["Web検索", "ブラウザ操作", "過去チャット参照", "SNS投稿"]) {

@@ -135,14 +135,17 @@ export async function publishRecipeSnsImageVariants(
   recipeId: string,
   generationId: string,
   imageMode: RecipeSnsImageMode,
-  sourceBuffers: Record<RecipeSnsPlatform, Buffer>,
+  sourceBuffers: Partial<Record<RecipeSnsPlatform, Buffer>>,
+  platformIds: RecipeSnsPlatform[] = RECIPE_SNS_PLATFORMS.map((platform) => platform.id),
 ) {
   const uploadedUrls: string[] = [];
-  const variants = {} as Record<RecipeSnsPlatform, RecipeSnsImageVariant>;
+  const variants: Partial<Record<RecipeSnsPlatform, RecipeSnsImageVariant>> = {};
   try {
-    for (const platform of RECIPE_SNS_PLATFORMS) {
+    for (const platform of RECIPE_SNS_PLATFORMS.filter((candidate) => platformIds.includes(candidate.id))) {
+      const sourceBuffer = sourceBuffers[platform.id];
+      if (!sourceBuffer) throw new Error(`${platform.label}のSNS画像がありません`);
       const rendered = await renderRecipeSnsImageVariant(
-        sourceBuffers[platform.id],
+        sourceBuffer,
         platform.width,
         platform.height,
         imageMode,

@@ -25,6 +25,7 @@ $requiredSourceFiles = @(
   "ec-catchcopy-plan.schema.json",
   "ec-catchcopy-ai.schema.json",
   "recipe-sns-result.schema.json",
+  "recipe-sns-target-result.schema.json",
   "render-recipe-sns-image.ps1",
   "bridge-monitor.ps1",
   "launch-bridge-monitor.ps1",
@@ -187,6 +188,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "ec-catchcopy-result.schema.json") 
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-catchcopy-plan.schema.json") -Destination (Join-Path $installDir "ec-catchcopy-plan.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-catchcopy-ai.schema.json") -Destination (Join-Path $installDir "ec-catchcopy-ai.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-result.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-target-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-target-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "render-recipe-sns-image.ps1") -Destination (Join-Path $installDir "render-recipe-sns-image.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "start-bridge.ps1") -Destination (Join-Path $installDir "start-bridge.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "start-bridge-prelogin.ps1") -Destination (Join-Path $installDir "start-bridge-prelogin.ps1") -Force

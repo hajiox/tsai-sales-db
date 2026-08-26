@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.44";
+const VERSION = "1.8.45";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const DESKTOP_MONITOR_FORCE_CLOSE_MS = 40_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
@@ -34,6 +34,7 @@ const EC_CATCHCOPY_PLAN_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url))
 const EC_CATCHCOPY_RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "ec-catchcopy-result.schema.json");
 const EC_CATCHCOPY_AI_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "ec-catchcopy-ai.schema.json");
 const RECIPE_SNS_RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "recipe-sns-result.schema.json");
+const RECIPE_SNS_TARGET_RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "recipe-sns-target-result.schema.json");
 const SKILL_CONTRACT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "skill-contract.json");
 const SKILL_CONTRACT = loadSkillContract(SKILL_CONTRACT_PATH);
 const TASK_CONTRACTS = Object.freeze(SKILL_CONTRACT.tasks);
@@ -2775,6 +2776,10 @@ function validateRecipeSnsGenerateJobParameters(input) {
     ? parameters.sourceSnapshot : null;
   const platformRules = parameters.platformRules && typeof parameters.platformRules === "object" && !Array.isArray(parameters.platformRules)
     ? parameters.platformRules : null;
+  const rawTargetPlatform = String(parameters.targetPlatform || "").trim();
+  const targetPlatform = rawTargetPlatform && Object.hasOwn(RECIPE_SNS_PLATFORM_RULES, rawTargetPlatform)
+    ? rawTargetPlatform : null;
+  const baseGenerationId = String(parameters.baseGenerationId || "").trim();
   if (!recipeId
     || !sourceSnapshot
     || String(sourceSnapshot.recipeId || "").trim() !== recipeId
@@ -2784,6 +2789,20 @@ function validateRecipeSnsGenerateJobParameters(input) {
     || !RECIPE_SNS_IMAGE_MODES.has(imageMode)
     || !sourceImageUrl) {
     throw new Error("SNS投稿生成の対象商品情報が正しくありません");
+  }
+  if (rawTargetPlatform && !targetPlatform) throw new Error("個別再生成のSNS媒体が正しくありません");
+  if (targetPlatform && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(baseGenerationId)) {
+    throw new Error("個別再生成の基準履歴IDが正しくありません");
+  }
+  if (!targetPlatform && baseGenerationId) throw new Error("全媒体生成に基準履歴は指定できません");
+  const snapshotTargets = Array.isArray(sourceSnapshot.targetPlatforms)
+    ? sourceSnapshot.targetPlatforms.map((value) => String(value || "").trim())
+    : [];
+  const expectedTargets = targetPlatform ? [targetPlatform] : Object.keys(RECIPE_SNS_PLATFORM_RULES);
+  if (snapshotTargets.sort().join("|") !== [...expectedTargets].sort().join("|")
+    || String(sourceSnapshot.targetPlatform || "").trim() !== (targetPlatform || "")
+    || String(sourceSnapshot.baseGenerationId || "").trim() !== (targetPlatform ? baseGenerationId : "")) {
+    throw new Error("SNS個別再生成の対象範囲が正しくありません");
   }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(generationId)) {
     throw new Error("SNS投稿生成履歴IDが正しくありません");
@@ -2820,6 +2839,8 @@ function validateRecipeSnsGenerateJobParameters(input) {
     sourceImageUrl,
     sourceSnapshot,
     platformRules,
+    targetPlatform,
+    baseGenerationId: targetPlatform ? baseGenerationId : null,
     model: "gpt-5.6-sol",
     reasoningEffort: "medium",
   };
@@ -2926,12 +2947,16 @@ async function executeRecipeSnsGenerateJob(job) {
   const skill = join(config.codexHome, "skills", "generate-aizu-sns-assets", "SKILL.md");
   if (!existsSync(skill)) throw new Error("SNS素材生成Skillが見つかりません。Bridgeを再インストールしてください");
   if (!existsSync(RECIPE_SNS_RESULT_SCHEMA)) throw new Error("SNS素材生成スキーマが見つかりません");
+  if (!existsSync(RECIPE_SNS_TARGET_RESULT_SCHEMA)) throw new Error("SNS個別再生成スキーマが見つかりません");
   const workDir = join(config.jobRoot, job.id);
   const packetFile = join(workDir, "recipe-sns-packet.json");
   const outputFile = join(workDir, "recipe-sns-result.json");
   const jsonlLog = join(workDir, "recipe-sns-events.jsonl");
   mkdirSync(workDir, { recursive: true });
   const sourceImagePath = await downloadRecipeSnsSourceImage(parameters.sourceImageUrl, workDir);
+  const requestedPlatformIds = parameters.targetPlatform
+    ? [parameters.targetPlatform]
+    : Object.keys(RECIPE_SNS_PLATFORM_RULES);
   const packet = {
     generationId: parameters.generationId,
     imageMode: parameters.imageMode,
@@ -2940,6 +2965,8 @@ async function executeRecipeSnsGenerateJob(job) {
     model: parameters.model,
     reasoningEffort: parameters.reasoningEffort,
     rulesVersion: parameters.rulesVersion,
+    targetPlatforms: requestedPlatformIds,
+    outputShape: parameters.targetPlatform ? "single_platform" : "all_platforms",
   };
   writeFileSync(packetFile, `${JSON.stringify(packet, null, 2)}\n`, "utf8");
 
@@ -2955,6 +2982,7 @@ async function executeRecipeSnsGenerateJob(job) {
       reasoningEffort: parameters.reasoningEffort,
       rulesVersion: parameters.rulesVersion,
       imageMode: parameters.imageMode,
+      targetPlatform: parameters.targetPlatform,
       chatHistoryLoaded: false,
       freshNonResumedSession: true,
       ephemeralSession: true,
@@ -2967,15 +2995,17 @@ async function executeRecipeSnsGenerateJob(job) {
     "Never read or search app Chats, prior tasks, threads, transcripts, rollouts, saved sessions, repositories, or unrelated files.",
     "Do not browse the web, control a browser, post externally, or modify external data. Commands are limited to reading the built-in imagegen SKILL.md and one Copy-Item per generated image when the image tool requires copying from CODEX_HOME/generated_images into the current job directory.",
     "Use only TASK_JSON.sourceSnapshot as factual evidence and follow TASK_JSON.platformRules as absolute limits.",
-    "Create one distinct Japanese post for each platform and follow TASK_JSON.imageMode exactly.",
-    "For creative or arrange mode, the single attached image is the exact product reference. Use the built-in image generation tool once per platform and return its saved absolute path without moving or copying the file.",
-    "For normal mode, do not call image generation and return source=original with an empty file_path for every platform.",
+    parameters.targetPlatform
+      ? `Regenerate only ${parameters.targetPlatform}. Do not create output for any other platform.`
+      : "Create one distinct Japanese post for each platform and follow TASK_JSON.imageMode exactly.",
+    "For creative or arrange mode, the single attached image is the exact product reference. Use the built-in image generation tool exactly once per platform listed in TASK_JSON.targetPlatforms and return its saved absolute path without moving or copying the file.",
+    "For normal mode, do not call image generation and return source=original with an empty file_path for each requested platform.",
     "Return only JSON matching the required schema.",
     "TASK_JSON:",
     JSON.stringify(packet),
   ].join("\n");
   const args = buildIsolatedCodexArgs(outputFile, [workDir], {
-    schema: RECIPE_SNS_RESULT_SCHEMA,
+    schema: parameters.targetPlatform ? RECIPE_SNS_TARGET_RESULT_SCHEMA : RECIPE_SNS_RESULT_SCHEMA,
     model: parameters.model,
     reasoningEffort: parameters.reasoningEffort,
     cwd: workDir,
@@ -3077,18 +3107,22 @@ async function executeRecipeSnsGenerateJob(job) {
   if (String(result.image_mode || "") !== parameters.imageMode) {
     throw new Error("SNS画像生成モードが依頼内容と一致しません");
   }
+  if (parameters.targetPlatform && String(result.platform || "") !== parameters.targetPlatform) {
+    throw new Error("個別再生成のSNS媒体が依頼内容と一致しません");
+  }
   const imageArtifactIds = {};
   if (parameters.imageMode === "normal") {
     const uploaded = await uploadArtifact(job.id, sourceImagePath, "screenshot");
     if (!uploaded?.id) throw new Error("通常リサイズ用の元画像をTSAへ転送できませんでした");
-    for (const platformId of Object.keys(RECIPE_SNS_PLATFORM_RULES)) {
+    for (const platformId of requestedPlatformIds) {
       imageArtifactIds[platformId] = uploaded.id;
     }
   }
   let platformIndex = 0;
-  for (const [platformId, platform] of Object.entries(RECIPE_SNS_PLATFORM_RULES)) {
-    const generated = result.generated_images?.[platformId];
-    const overlay = result.creative_overlays?.[platformId];
+  for (const platformId of requestedPlatformIds) {
+    const platform = RECIPE_SNS_PLATFORM_RULES[platformId];
+    const generated = parameters.targetPlatform ? result.generated_image : result.generated_images?.[platformId];
+    const overlay = parameters.targetPlatform ? result.creative_overlay : result.creative_overlays?.[platformId];
     if (!generated || !overlay) throw new Error(`${platform.label}のSNS画像生成結果がありません`);
     const inputPath = parameters.imageMode === "normal"
       ? sourceImagePath
@@ -3121,7 +3155,7 @@ async function executeRecipeSnsGenerateJob(job) {
     await updateJob(job.id, {
       status: "running",
       progress: 82 + platformIndex * 2,
-      currentStep: `${platform.label}画像を準備しました（${platformIndex}/4）`,
+      currentStep: `${platform.label}画像を準備しました（${platformIndex}/${requestedPlatformIds.length}）`,
       message: parameters.imageMode === "creative"
         ? `${platform.width}x${platform.height}へ変換し、広告テキストを正確に描画しました`
         : "AI生成元または登録済み元画像をTSAの最終変換処理へ転送しました",
@@ -3132,7 +3166,9 @@ async function executeRecipeSnsGenerateJob(job) {
   await updateJob(job.id, {
     status: "running",
     progress: 92,
-    currentStep: "投稿文と4媒体画像を検証し、生成履歴へ保存しています",
+    currentStep: parameters.targetPlatform
+      ? `${RECIPE_SNS_PLATFORM_RULES[parameters.targetPlatform].label}の投稿文と画像を検証し、前版へ合成しています`
+      : "投稿文と4媒体画像を検証し、生成履歴へ保存しています",
     message: "文字数、画像寸法、生成モード、生成元情報をTSA側で再検証します",
     eventType: "recipe_sns_import_started",
   });
@@ -3146,6 +3182,7 @@ async function executeRecipeSnsGenerateJob(job) {
       rulesVersion: parameters.rulesVersion,
       data: result,
       imageMode: parameters.imageMode,
+      targetPlatform: parameters.targetPlatform,
       imageArtifactIds,
       sourceSnapshot: parameters.sourceSnapshot,
       platformRules: parameters.platformRules,
@@ -3158,11 +3195,15 @@ async function executeRecipeSnsGenerateJob(job) {
     status: "completed",
     progress: 100,
     currentStep: `${recipeSnsImageModeLabel(parameters.imageMode)}のSNS素材を作成しました`,
-    message: "生成した4媒体の投稿文と画像を確認できます",
+    message: parameters.targetPlatform
+      ? `${RECIPE_SNS_PLATFORM_RULES[parameters.targetPlatform].label}だけを更新し、他媒体は前版を保持しました`
+      : "生成した4媒体の投稿文と画像を確認できます",
     eventType: "recipe_sns_completed",
     result: {
       status: "completed",
-      summary: `GPT-5.6 Solで4媒体の${recipeSnsImageModeLabel(parameters.imageMode)}素材を作成しました`,
+      summary: parameters.targetPlatform
+        ? `GPT-5.6 Solで${RECIPE_SNS_PLATFORM_RULES[parameters.targetPlatform].label}の${recipeSnsImageModeLabel(parameters.imageMode)}素材だけを再生成しました`
+        : `GPT-5.6 Solで4媒体の${recipeSnsImageModeLabel(parameters.imageMode)}素材を作成しました`,
       ...imported,
     },
     errorMessage: null,
@@ -4431,7 +4472,7 @@ function workerPayload() {
       ecCatchcopyAiProtocolVersion: 1,
       ecCatchcopyAiModel: "gpt-5.6-sol",
       recipeSns: supports("recipe_sns_generate"),
-      recipeSnsProtocolVersion: 2,
+      recipeSnsProtocolVersion: 3,
       recipeSnsModel: "gpt-5.6-sol",
       codexTaskKeys: config.allowedTaskKeys,
     },

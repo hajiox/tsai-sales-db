@@ -1,6 +1,6 @@
 export const RECIPE_SNS_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
-export const RECIPE_SNS_RULES_VERSION = "2026-08-26.2";
+export const RECIPE_SNS_RULES_VERSION = "2026-08-26.3";
 
 export const RECIPE_SNS_IMAGE_MODES = [
   { id: "normal", label: "通常リサイズ" },
@@ -100,6 +100,17 @@ export type RecipeSnsBridgeResult = RecipeSnsAiResult & {
   generated_images: Record<RecipeSnsPlatform, RecipeSnsGeneratedImageResult>;
 };
 
+export type RecipeSnsTargetBridgeResult = {
+  overall_angle: string;
+  variation_key: string;
+  source_gaps: string[];
+  image_mode: RecipeSnsImageMode;
+  platform: RecipeSnsPlatform;
+  post: RecipeSnsPost;
+  creative_overlay: RecipeSnsCreativeOverlay;
+  generated_image: RecipeSnsGeneratedImageResult;
+};
+
 export type RecipeSnsImageVariant = {
   url: string;
   width: number;
@@ -116,6 +127,7 @@ export type RecipeSnsGenerationView = {
   sourceImageUrl: string;
   sourceImageRole: "portrait" | "gallery";
   imageMode: RecipeSnsImageMode;
+  targetPlatform: RecipeSnsPlatform | null;
   variationKey: string;
   imageVariants: Record<RecipeSnsPlatform, RecipeSnsImageVariant>;
   posts: RecipeSnsAiResult | null;
@@ -138,6 +150,10 @@ function clippedText(value: unknown, max: number) {
 
 export function isRecipeSnsImageMode(value: unknown): value is RecipeSnsImageMode {
   return RECIPE_SNS_IMAGE_MODES.some((mode) => mode.id === value);
+}
+
+export function isRecipeSnsPlatform(value: unknown): value is RecipeSnsPlatform {
+  return RECIPE_SNS_PLATFORMS.some((platform) => platform.id === value);
 }
 
 export function recipeSnsImageModeLabel(value: RecipeSnsImageMode) {
@@ -174,6 +190,51 @@ function normalizeCreativeOverlay(value: unknown, imageMode: RecipeSnsImageMode)
   };
 }
 
+function validateRecipeSnsPost(value: unknown, platformId: RecipeSnsPlatform): RecipeSnsPost {
+  const platform = RECIPE_SNS_PLATFORMS.find((candidate) => candidate.id === platformId);
+  if (!platform) throw new Error("SNS媒体が正しくありません");
+  const candidate = asObject(value);
+  const text = clippedText(candidate.text, platform.maxLength * 2);
+  const hashtags = Array.isArray(candidate.hashtags)
+    ? [...new Set(candidate.hashtags.map(normalizeRecipeSnsHashtag).filter(Boolean))]
+    : [];
+  if (!text) throw new Error(`${platform.label}の投稿文が空欄です`);
+  if (hashtags.length < platform.minHashtags || hashtags.length > platform.maxHashtags) {
+    throw new Error(`${platform.label}のハッシュタグ数が${platform.minHashtags}〜${platform.maxHashtags}件の範囲外です`);
+  }
+  if (countRecipeSnsCharacters(formatRecipeSnsPost({ text, hashtags })) > platform.maxLength) {
+    throw new Error(`${platform.label}の投稿文が${platform.maxLength}文字を超えています`);
+  }
+  return {
+    text,
+    hashtags,
+    rationale: clippedText(candidate.rationale, 500),
+  };
+}
+
+function validateGeneratedImage(
+  value: unknown,
+  expectedMode: RecipeSnsImageMode,
+  platformId: RecipeSnsPlatform,
+): RecipeSnsGeneratedImageResult {
+  const platform = RECIPE_SNS_PLATFORMS.find((candidate) => candidate.id === platformId);
+  const image = asObject(value);
+  const imageSource = image.source === "generated" ? "generated" : image.source === "original" ? "original" : null;
+  if (!imageSource) throw new Error(`${platform?.label || platformId}の画像生成結果が不正です`);
+  const filePath = clippedText(image.file_path, 1000);
+  if (expectedMode === "normal" && (imageSource !== "original" || filePath)) {
+    throw new Error(`${platform?.label || platformId}の通常リサイズ結果に生成画像が混在しています`);
+  }
+  if (expectedMode !== "normal" && (imageSource !== "generated" || !filePath)) {
+    throw new Error(`${platform?.label || platformId}のAI生成画像ファイルがありません`);
+  }
+  return {
+    source: imageSource,
+    file_path: filePath,
+    prompt_summary: clippedText(image.prompt_summary, 500),
+  };
+}
+
 export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
   const source = asObject(value);
   const sourcePosts = asObject(source.posts);
@@ -183,24 +244,7 @@ export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
   const creativeOverlays = {} as Record<RecipeSnsPlatform, RecipeSnsCreativeOverlay>;
 
   for (const platform of RECIPE_SNS_PLATFORMS) {
-    const candidate = asObject(sourcePosts[platform.id]);
-    const text = clippedText(candidate.text, platform.maxLength * 2);
-    const hashtags = Array.isArray(candidate.hashtags)
-      ? [...new Set(candidate.hashtags.map(normalizeRecipeSnsHashtag).filter(Boolean))]
-      : [];
-    if (!text) throw new Error(`${platform.label}の投稿文が空欄です`);
-    if (hashtags.length < platform.minHashtags || hashtags.length > platform.maxHashtags) {
-      throw new Error(`${platform.label}のハッシュタグ数が${platform.minHashtags}〜${platform.maxHashtags}件の範囲外です`);
-    }
-    const combined = formatRecipeSnsPost({ text, hashtags });
-    if (countRecipeSnsCharacters(combined) > platform.maxLength) {
-      throw new Error(`${platform.label}の投稿文が${platform.maxLength}文字を超えています`);
-    }
-    posts[platform.id] = {
-      text,
-      hashtags,
-      rationale: clippedText(candidate.rationale, 500),
-    };
+    posts[platform.id] = validateRecipeSnsPost(sourcePosts[platform.id], platform.id);
     creativeOverlays[platform.id] = normalizeCreativeOverlay(sourceOverlays[platform.id], imageMode);
   }
 
@@ -237,23 +281,59 @@ export function validateRecipeSnsBridgeResult(
   const sourceImages = asObject(source.generated_images);
   const generatedImages = {} as Record<RecipeSnsPlatform, RecipeSnsGeneratedImageResult>;
   for (const platform of RECIPE_SNS_PLATFORMS) {
-    const image = asObject(sourceImages[platform.id]);
-    const imageSource = image.source === "generated" ? "generated" : image.source === "original" ? "original" : null;
-    if (!imageSource) throw new Error(`${platform.label}の画像生成結果が不正です`);
-    const filePath = clippedText(image.file_path, 1000);
-    if (expectedMode === "normal" && (imageSource !== "original" || filePath)) {
-      throw new Error(`${platform.label}の通常リサイズ結果に生成画像が混在しています`);
-    }
-    if (expectedMode !== "normal" && (imageSource !== "generated" || !filePath)) {
-      throw new Error(`${platform.label}のAI生成画像ファイルがありません`);
-    }
-    generatedImages[platform.id] = {
-      source: imageSource,
-      file_path: filePath,
-      prompt_summary: clippedText(image.prompt_summary, 500),
-    };
+    generatedImages[platform.id] = validateGeneratedImage(sourceImages[platform.id], expectedMode, platform.id);
   }
   return { ...normalized, generated_images: generatedImages };
+}
+
+export function validateRecipeSnsTargetBridgeResult(
+  value: unknown,
+  expectedMode: RecipeSnsImageMode,
+  expectedPlatform: RecipeSnsPlatform,
+): RecipeSnsTargetBridgeResult {
+  const source = asObject(value);
+  if (source.platform !== expectedPlatform) {
+    throw new Error("個別再生成のSNS媒体が依頼内容と一致しません");
+  }
+  const imageMode = isRecipeSnsImageMode(source.image_mode) ? source.image_mode : "normal";
+  if (imageMode !== expectedMode) throw new Error("SNS画像生成モードが依頼内容と一致しません");
+  const creativeOverlay = normalizeCreativeOverlay(source.creative_overlay, imageMode);
+  if (imageMode === "creative" && (!creativeOverlay.headline || creativeOverlay.placement === "none")) {
+    const label = RECIPE_SNS_PLATFORMS.find((platform) => platform.id === expectedPlatform)?.label || expectedPlatform;
+    throw new Error(`${label}の広告クリエイティブ用テキスト配置が不足しています`);
+  }
+  return {
+    overall_angle: clippedText(source.overall_angle, 600),
+    variation_key: clippedText(source.variation_key, 120),
+    source_gaps: Array.isArray(source.source_gaps)
+      ? source.source_gaps.map((item) => clippedText(item, 240)).filter(Boolean).slice(0, 12)
+      : [],
+    image_mode: imageMode,
+    platform: expectedPlatform,
+    post: validateRecipeSnsPost(source.post, expectedPlatform),
+    creative_overlay: creativeOverlay,
+    generated_image: validateGeneratedImage(source.generated_image, expectedMode, expectedPlatform),
+  };
+}
+
+export function mergeRecipeSnsTargetResult(
+  base: RecipeSnsAiResult,
+  target: RecipeSnsTargetBridgeResult,
+): RecipeSnsAiResult {
+  if (target.image_mode !== base.image_mode) {
+    throw new Error("個別再生成結果を基準履歴へ合成できません");
+  }
+  return {
+    overall_angle: target.overall_angle,
+    variation_key: target.variation_key,
+    source_gaps: [...target.source_gaps],
+    posts: { ...base.posts, [target.platform]: target.post },
+    image_mode: target.image_mode,
+    creative_overlays: {
+      ...base.creative_overlays,
+      [target.platform]: target.creative_overlay,
+    },
+  };
 }
 
 export function recipeSnsPlatformRules() {

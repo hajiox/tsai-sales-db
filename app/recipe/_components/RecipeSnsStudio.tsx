@@ -10,6 +10,7 @@ import {
   ImageIcon,
   Loader2,
   Megaphone,
+  RefreshCw,
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ type RecipeSnsJob = {
   errorMessage: string | null;
   generationId: string;
   imageMode: RecipeSnsImageMode;
+  targetPlatform: RecipeSnsPlatform | null;
 };
 
 type SnsResponse = {
@@ -77,6 +79,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [generatingMode, setGeneratingMode] = useState<RecipeSnsImageMode | null>(null);
+  const [generatingPlatform, setGeneratingPlatform] = useState<RecipeSnsPlatform | null>(null);
   const [editedPosts, setEditedPosts] = useState<Record<RecipeSnsPlatform, RecipeSnsPost> | null>(null);
   const mountedRef = useRef(true);
   const pollingRef = useRef<string | null>(null);
@@ -127,10 +130,14 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
         const state = await loadState(jobId);
         const current = state.job;
         if (!current) throw new Error("SNS生成タスクが見つかりませんでした");
-        if (mountedRef.current) setGeneratingMode(current.imageMode);
+        if (mountedRef.current) {
+          setGeneratingMode(current.imageMode);
+          setGeneratingPlatform(current.targetPlatform);
+        }
         if (current.status === "completed") {
           await loadState();
-          toast.success("SNS画像と投稿文を作成しました");
+          const target = RECIPE_SNS_PLATFORMS.find((platform) => platform.id === current.targetPlatform);
+          toast.success(target ? `${target.label}の画像と投稿文を再生成しました` : "SNS画像と投稿文を作成しました");
           return;
         }
         if (["waiting_for_user", "needs_review", "failed", "cancelled"].includes(current.status)) {
@@ -144,6 +151,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
       if (mountedRef.current) {
         setGenerating(false);
         setGeneratingMode(null);
+        setGeneratingPlatform(null);
       }
     }
   }, [loadState]);
@@ -168,15 +176,20 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
     };
   }, [loadState, pollJob]);
 
-  async function generate(imageMode: RecipeSnsImageMode) {
+  async function generate(
+    imageMode: RecipeSnsImageMode,
+    targetPlatform?: RecipeSnsPlatform,
+    baseGenerationId?: string,
+  ) {
     if (generating || hasUnsavedChanges) return;
     setGenerating(true);
     setGeneratingMode(imageMode);
+    setGeneratingPlatform(targetPlatform || null);
     try {
       const response = await fetch(`/api/recipe/${recipeId}/sns-generations`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ imageMode }),
+        body: JSON.stringify({ imageMode, targetPlatform, baseGenerationId }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "SNS生成を開始できませんでした");
@@ -188,6 +201,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
     } catch (error) {
       setGenerating(false);
       setGeneratingMode(null);
+      setGeneratingPlatform(null);
       toast.error(error instanceof Error ? error.message : "SNS生成を開始できませんでした");
     }
   }
@@ -226,8 +240,11 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                 className="max-w-48 bg-transparent text-sm font-medium outline-none"
               >
                 {generations.map((generation, index) => (
-                  <option key={generation.id} value={generation.id}>
-                    第{generations.length - index}版 {recipeSnsImageModeLabel(generation.imageMode)} {formatGenerationDate(generation.createdAt)}
+                    <option key={generation.id} value={generation.id}>
+                      第{generations.length - index}版 {recipeSnsImageModeLabel(generation.imageMode)}
+                      {generation.targetPlatform
+                        ? `・${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === generation.targetPlatform)?.label}再生成`
+                        : ""} {formatGenerationDate(generation.createdAt)}
                   </option>
                 ))}
               </select>
@@ -241,7 +258,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
               className="inline-flex min-h-10 items-center rounded-md border border-gray-300 bg-white px-4 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               title={hasUnsavedChanges ? "EC情報を保存してから生成してください" : "元画像を媒体推奨サイズへ変換"}
             >
-              {generatingMode === "normal" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+              {generatingMode === "normal" && !generatingPlatform ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
               通常リサイズ
             </button>
             <button
@@ -251,7 +268,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
               className="inline-flex min-h-10 items-center rounded-md bg-gray-900 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
               title={hasUnsavedChanges ? "EC情報を保存してから生成してください" : "広告用の構図と正確な日本語見出しを生成"}
             >
-              {generatingMode === "creative" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Megaphone className="mr-2 h-4 w-4" />}
+              {generatingMode === "creative" && !generatingPlatform ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Megaphone className="mr-2 h-4 w-4" />}
               クリエイティブ
             </button>
             <button
@@ -261,7 +278,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
               className="inline-flex min-h-10 items-center rounded-md border border-pink-300 bg-pink-50 px-4 text-sm font-bold text-pink-800 hover:bg-pink-100 disabled:cursor-not-allowed disabled:opacity-50"
               title={hasUnsavedChanges ? "EC情報を保存してから生成してください" : "料理を自然な生活シーンへ配置"}
             >
-              {generatingMode === "arrange" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              {generatingMode === "arrange" && !generatingPlatform ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               アレンジ
             </button>
           </div>
@@ -317,7 +334,11 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                     : "素材生成中"}
               </span>
               <span>生成: {recipeSnsImageModeLabel(selectedGeneration.imageMode)}</span>
-              <span>画像元: {selectedGeneration.sourceImageRole === "portrait" ? "ポートレート画像" : "Web商品画像（先頭）"}</span>
+              <span>
+                {selectedGeneration.targetPlatform
+                  ? `${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === selectedGeneration.targetPlatform)?.label}だけ再生成（他媒体は前版を保持）`
+                  : `画像元: ${selectedGeneration.sourceImageRole === "portrait" ? "ポートレート画像" : "Web商品画像（先頭）"}`}
+              </span>
               <span>訴求軸: {selectedGeneration.variationKey}</span>
             </div>
             <span>GPT-5.6 Sol / {selectedGeneration.reasoningEffort}</span>
@@ -340,18 +361,32 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                         {` / ${recipeSnsImageModeLabel(selectedGeneration.imageMode)}`}
                       </p>
                     </div>
-                    {variant?.url && (
-                      <a
-                        href={variant.url}
-                        download
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                        title={`${platform.label}画像を保存`}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => void generate(selectedGeneration.imageMode, platform.id, selectedGeneration.id)}
+                        disabled={generating || hasUnsavedChanges || selectedGeneration.status !== "completed"}
+                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-gray-200 px-2.5 text-xs font-bold text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
+                        title={`${platform.label}だけを同じモードで再生成`}
                       >
-                        <Download className="h-4 w-4" />
-                      </a>
-                    )}
+                        {generatingPlatform === platform.id
+                          ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          : <RefreshCw className="mr-1.5 h-4 w-4" />}
+                        再生成
+                      </button>
+                      {variant?.url && (
+                        <a
+                          href={variant.url}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                          title={`${platform.label}画像を保存`}
+                        >
+                          <Download className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                   <div className="grid gap-0 sm:grid-cols-[minmax(160px,0.8fr)_minmax(0,1.2fr)]">
                     {variant?.url ? (
