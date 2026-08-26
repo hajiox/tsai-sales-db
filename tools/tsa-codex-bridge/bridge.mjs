@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.43";
+const VERSION = "1.8.44";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const DESKTOP_MONITOR_FORCE_CLOSE_MS = 40_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
@@ -2903,7 +2903,7 @@ function renderRecipeSnsImage({ inputPath, outputPath, platform, imageMode, over
 }
 
 function isAllowedRecipeSnsLocalCommand(event, workDir) {
-  const command = String(event?.item?.command || "").toLowerCase();
+  const command = String(event?.item?.command || "").toLowerCase().replace(/\\{2,}/g, "\\");
   const prohibited = /remove-item|move-item|invoke-|start-process|curl|wget|git\s|npm\s|node\s|python\s|\brm\b|\bdel\b|set-content|add-content|out-file|new-item/i;
   const hasShellSeparator = /[;&|`\r\n]/.test(command);
   const imagegenSkill = resolve(config.codexHome, "skills", ".system", "imagegen", "SKILL.md").toLowerCase();
