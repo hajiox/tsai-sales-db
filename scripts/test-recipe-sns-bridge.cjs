@@ -8,7 +8,7 @@ const bridge = read("tools", "tsa-codex-bridge", "bridge.mjs");
 const installer = read("tools", "tsa-codex-bridge", "install-bridge.ps1");
 const requiredVersion = read("lib", "web-sales-codex", "bridge-version.ts");
 const types = read("lib", "web-sales-codex", "types.ts");
-const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-posts", "SKILL.md");
+const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-assets", "SKILL.md");
 const schema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-result.schema.json"));
 const skillContract = JSON.parse(read("tools", "tsa-codex-bridge", "skill-contract.json"));
 
@@ -16,7 +16,7 @@ const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.ok(bridgeVersion);
 assert.equal(requiredVersion.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);
 assert.match(types, /\| "recipe_sns_generate"/);
-assert.match(bridge, /recipeSnsProtocolVersion: 1/);
+assert.match(bridge, /recipeSnsProtocolVersion: 2/);
 assert.match(bridge, /recipeSnsModel: "gpt-5\.6-sol"/);
 assert.match(bridge, /const HEADLESS_SAFE_TASK_KEYS = new Set\(\[[\s\S]*?"recipe_sns_generate"/);
 assert.match(bridge, /codexTaskKeys: config\.allowedTaskKeys/);
@@ -29,7 +29,7 @@ const validator = bridge.slice(
 );
 assert.match(validator, /parameters\.model \|\| ""\) !== "gpt-5\.6-sol"/);
 assert.match(validator, /parameters\.reasoningEffort \|\| ""\) !== "medium"/);
-assert.match(validator, /\^2026-08-25\\\.\.\+\$/);
+assert.match(validator, /\^2026-08-26\\\.\.\+\$/);
 assert.match(validator, /sourceSnapshot\.recipeId/);
 assert.match(validator, /sourceSnapshot\.variationKey/);
 assert.match(validator, /generationId/);
@@ -42,27 +42,34 @@ const handler = bridge.slice(
   bridge.indexOf("async function executeRecipeSnsGenerateJob"),
   bridge.indexOf("async function executeAnalysisJob"),
 );
-assert.match(handler, /Use \$generate-aizu-sns-posts/);
-assert.match(handler, /Do not call tools, run commands, browse the web, control a browser/);
-assert.match(handler, /or read chat history/);
-assert.match(handler, /tool_call\|command_execution\|web_search/);
-assert.match(handler, /禁止されたツール操作/);
+assert.match(handler, /Use \$generate-aizu-sns-assets/);
+assert.match(handler, /Never read or search app Chats/);
+assert.match(handler, /Do not browse the web, control a browser/);
+assert.match(handler, /isAllowedRecipeSnsImageCopy/);
+assert.match(handler, /禁止された外部・コマンド操作/);
 assert.match(handler, /JSON\.stringify\(packet\)/);
 assert.match(handler, /buildIsolatedCodexArgs/);
+assert.match(handler, /minimalContext: true/);
+assert.match(handler, /ephemeral: true/);
+assert.match(handler, /images: parameters\.imageMode === "normal" \? \[\] : \[sourceImagePath\]/);
 assert.doesNotMatch(handler, /\bresume\b/i);
 assert.match(handler, /recipe-sns-import/);
 assert.match(handler, /uploadArtifact\(job\.id, packetFile, "source"\)/);
 assert.match(handler, /uploadArtifact\(job\.id, outputFile, "output"\)/);
 assert.match(handler, /uploadArtifact\(job\.id, jsonlLog, "log"\)/);
+assert.match(handler, /uploadArtifact\(job\.id, uploadPath, "screenshot"\)/);
+assert.match(handler, /renderRecipeSnsImage/);
+assert.match(handler, /imageArtifactIds/);
 assert.match(handler, /status: "completed"/);
 assert.match(handler, /progress: 100/);
 
-for (const expected of ["recipe-sns-result.schema.json"]) {
+for (const expected of ["recipe-sns-result.schema.json", "render-recipe-sns-image.ps1"]) {
   assert.match(installer, new RegExp(expected.replace(/[.]/g, "\\.")));
 }
-assert.equal(skillContract.tasks.recipe_sns_generate.skill, "generate-aizu-sns-posts");
+assert.equal(skillContract.tasks.recipe_sns_generate.skill, "generate-aizu-sns-assets");
 assert.match(skill, /外部サイト閲覧/);
 assert.match(skill, /過去チャット参照/);
+for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
 
 function assertStrictObjectSchemas(value, location = "$") {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;

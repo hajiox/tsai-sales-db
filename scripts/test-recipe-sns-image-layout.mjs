@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import sharp from "sharp";
-import {
-  recipeSnsCoverRetention,
-  renderRecipeSnsImageVariant,
-} from "../lib/recipe-sns-image.ts";
+import { renderRecipeSnsImageVariant } from "../lib/recipe-sns-image.ts";
 
 const source = await sharp({
   create: {
@@ -14,21 +11,21 @@ const source = await sharp({
   },
 }).png().toBuffer();
 
-assert.equal(recipeSnsCoverRetention(1200, 1200, 1600, 900), 0.5625);
+const cases = [
+  ["normal", "normal-resize", 1600, 900],
+  ["creative", "creative", 1080, 1080],
+  ["arrange", "arrange", 1080, 1920],
+];
 
-const x = await renderRecipeSnsImageVariant(source, 1600, 900);
-const xMetadata = await sharp(x.buffer).metadata();
-assert.equal(x.layoutMode, "subject-preserve");
-assert.equal(xMetadata.width, 1600);
-assert.equal(xMetadata.height, 900);
+let checks = 0;
+for (const [mode, expectedLayout, width, height] of cases) {
+  const rendered = await renderRecipeSnsImageVariant(source, width, height, mode);
+  const metadata = await sharp(rendered.buffer).metadata();
+  assert.equal(rendered.layoutMode, expectedLayout);
+  assert.equal(metadata.width, width);
+  assert.equal(metadata.height, height);
+  assert.equal(metadata.format, "webp");
+  checks += 4;
+}
 
-const instagram = await renderRecipeSnsImageVariant(source, 1080, 1080);
-const instagramMetadata = await sharp(instagram.buffer).metadata();
-assert.equal(instagram.layoutMode, "smart-crop");
-assert.equal(instagramMetadata.width, 1080);
-assert.equal(instagramMetadata.height, 1080);
-
-const threads = await renderRecipeSnsImageVariant(source, 1200, 900);
-assert.equal(threads.layoutMode, "subject-preserve");
-
-console.log("recipe SNS image layout: 7 checks passed");
+console.log(`recipe SNS image modes: ${checks} checks passed`);

@@ -1,6 +1,24 @@
 export const RECIPE_SNS_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
-export const RECIPE_SNS_RULES_VERSION = "2026-08-26.1";
+export const RECIPE_SNS_RULES_VERSION = "2026-08-26.2";
+
+export const RECIPE_SNS_IMAGE_MODES = [
+  { id: "normal", label: "通常リサイズ" },
+  { id: "creative", label: "クリエイティブ" },
+  { id: "arrange", label: "アレンジ" },
+] as const;
+
+export type RecipeSnsImageMode = typeof RECIPE_SNS_IMAGE_MODES[number]["id"];
+
+export const RECIPE_SNS_OVERLAY_PLACEMENTS = [
+  "none",
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+] as const;
+
+export type RecipeSnsOverlayPlacement = typeof RECIPE_SNS_OVERLAY_PLACEMENTS[number];
 
 export const RECIPE_SNS_PLATFORMS = [
   {
@@ -57,11 +75,29 @@ export type RecipeSnsPost = {
   rationale: string;
 };
 
+export type RecipeSnsCreativeOverlay = {
+  headline: string;
+  subline: string;
+  placement: RecipeSnsOverlayPlacement;
+};
+
+export type RecipeSnsGeneratedImageResult = {
+  source: "original" | "generated";
+  file_path: string;
+  prompt_summary: string;
+};
+
 export type RecipeSnsAiResult = {
   overall_angle: string;
   variation_key: string;
   source_gaps: string[];
   posts: Record<RecipeSnsPlatform, RecipeSnsPost>;
+  image_mode: RecipeSnsImageMode;
+  creative_overlays: Record<RecipeSnsPlatform, RecipeSnsCreativeOverlay>;
+};
+
+export type RecipeSnsBridgeResult = RecipeSnsAiResult & {
+  generated_images: Record<RecipeSnsPlatform, RecipeSnsGeneratedImageResult>;
 };
 
 export type RecipeSnsImageVariant = {
@@ -69,7 +105,7 @@ export type RecipeSnsImageVariant = {
   width: number;
   height: number;
   aspectLabel: string;
-  layoutMode: "smart-crop" | "subject-preserve";
+  layoutMode: "smart-crop" | "subject-preserve" | "normal-resize" | "creative" | "arrange";
 };
 
 export type RecipeSnsGenerationView = {
@@ -79,6 +115,7 @@ export type RecipeSnsGenerationView = {
   sourceImageId: string | null;
   sourceImageUrl: string;
   sourceImageRole: "portrait" | "gallery";
+  imageMode: RecipeSnsImageMode;
   variationKey: string;
   imageVariants: Record<RecipeSnsPlatform, RecipeSnsImageVariant>;
   posts: RecipeSnsAiResult | null;
@@ -99,6 +136,14 @@ function clippedText(value: unknown, max: number) {
   return String(value ?? "").trim().slice(0, max);
 }
 
+export function isRecipeSnsImageMode(value: unknown): value is RecipeSnsImageMode {
+  return RECIPE_SNS_IMAGE_MODES.some((mode) => mode.id === value);
+}
+
+export function recipeSnsImageModeLabel(value: RecipeSnsImageMode) {
+  return RECIPE_SNS_IMAGE_MODES.find((mode) => mode.id === value)?.label || "通常リサイズ";
+}
+
 export function countRecipeSnsCharacters(value: string) {
   return Array.from(value).length;
 }
@@ -117,10 +162,25 @@ export function formatRecipeSnsPost(post: Pick<RecipeSnsPost, "text" | "hashtags
   return hashtags ? `${post.text.trim()}\n\n${hashtags}` : post.text.trim();
 }
 
+function normalizeCreativeOverlay(value: unknown, imageMode: RecipeSnsImageMode): RecipeSnsCreativeOverlay {
+  const source = asObject(value);
+  const placement = RECIPE_SNS_OVERLAY_PLACEMENTS.includes(source.placement as RecipeSnsOverlayPlacement)
+    ? source.placement as RecipeSnsOverlayPlacement
+    : "none";
+  return {
+    headline: imageMode === "creative" ? clippedText(source.headline, 48) : "",
+    subline: imageMode === "creative" ? clippedText(source.subline, 90) : "",
+    placement: imageMode === "creative" ? placement : "none",
+  };
+}
+
 export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
   const source = asObject(value);
   const sourcePosts = asObject(source.posts);
+  const imageMode = isRecipeSnsImageMode(source.image_mode) ? source.image_mode : "normal";
+  const sourceOverlays = asObject(source.creative_overlays);
   const posts = {} as Record<RecipeSnsPlatform, RecipeSnsPost>;
+  const creativeOverlays = {} as Record<RecipeSnsPlatform, RecipeSnsCreativeOverlay>;
 
   for (const platform of RECIPE_SNS_PLATFORMS) {
     const candidate = asObject(sourcePosts[platform.id]);
@@ -141,6 +201,16 @@ export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
       hashtags,
       rationale: clippedText(candidate.rationale, 500),
     };
+    creativeOverlays[platform.id] = normalizeCreativeOverlay(sourceOverlays[platform.id], imageMode);
+  }
+
+  if (imageMode === "creative") {
+    for (const platform of RECIPE_SNS_PLATFORMS) {
+      const overlay = creativeOverlays[platform.id];
+      if (!overlay.headline || overlay.placement === "none") {
+        throw new Error(`${platform.label}の広告クリエイティブ用テキスト配置が不足しています`);
+      }
+    }
   }
 
   return {
@@ -150,7 +220,40 @@ export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
       ? source.source_gaps.map((item) => clippedText(item, 240)).filter(Boolean).slice(0, 12)
       : [],
     posts,
+    image_mode: imageMode,
+    creative_overlays: creativeOverlays,
   };
+}
+
+export function validateRecipeSnsBridgeResult(
+  value: unknown,
+  expectedMode: RecipeSnsImageMode,
+): RecipeSnsBridgeResult {
+  const source = asObject(value);
+  const normalized = validateRecipeSnsAiResult(source);
+  if (normalized.image_mode !== expectedMode) {
+    throw new Error("SNS画像生成モードが依頼内容と一致しません");
+  }
+  const sourceImages = asObject(source.generated_images);
+  const generatedImages = {} as Record<RecipeSnsPlatform, RecipeSnsGeneratedImageResult>;
+  for (const platform of RECIPE_SNS_PLATFORMS) {
+    const image = asObject(sourceImages[platform.id]);
+    const imageSource = image.source === "generated" ? "generated" : image.source === "original" ? "original" : null;
+    if (!imageSource) throw new Error(`${platform.label}の画像生成結果が不正です`);
+    const filePath = clippedText(image.file_path, 1000);
+    if (expectedMode === "normal" && (imageSource !== "original" || filePath)) {
+      throw new Error(`${platform.label}の通常リサイズ結果に生成画像が混在しています`);
+    }
+    if (expectedMode !== "normal" && (imageSource !== "generated" || !filePath)) {
+      throw new Error(`${platform.label}のAI生成画像ファイルがありません`);
+    }
+    generatedImages[platform.id] = {
+      source: imageSource,
+      file_path: filePath,
+      prompt_summary: clippedText(image.prompt_summary, 500),
+    };
+  }
+  return { ...normalized, generated_images: generatedImages };
 }
 
 export function recipeSnsPlatformRules() {

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["overall_angle", "variation_key", "source_gaps", "posts"],
+  "required": ["overall_angle", "variation_key", "source_gaps", "posts", "image_mode", "creative_overlays", "generated_images"],
   "properties": {
     "overall_angle": { "type": "string", "maxLength": 600 },
     "variation_key": { "type": "string", "maxLength": 120 },
@@ -11,6 +11,7 @@
       "maxItems": 12,
       "items": { "type": "string", "maxLength": 240 }
     },
+    "image_mode": { "type": "string", "enum": ["normal", "creative", "arrange"] },
     "posts": {
       "type": "object",
       "additionalProperties": false,
@@ -20,6 +21,28 @@
         "instagram": { "$ref": "#/$defs/instagramPost" },
         "instagram_story": { "$ref": "#/$defs/storyPost" },
         "threads": { "$ref": "#/$defs/threadsPost" }
+      }
+    },
+    "creative_overlays": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "instagram", "instagram_story", "threads"],
+      "properties": {
+        "x": { "$ref": "#/$defs/overlay" },
+        "instagram": { "$ref": "#/$defs/overlay" },
+        "instagram_story": { "$ref": "#/$defs/overlay" },
+        "threads": { "$ref": "#/$defs/overlay" }
+      }
+    },
+    "generated_images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "instagram", "instagram_story", "threads"],
+      "properties": {
+        "x": { "$ref": "#/$defs/generatedImage" },
+        "instagram": { "$ref": "#/$defs/generatedImage" },
+        "instagram_story": { "$ref": "#/$defs/generatedImage" },
+        "threads": { "$ref": "#/$defs/generatedImage" }
       }
     }
   },
@@ -62,6 +85,26 @@
         "text": { "type": "string", "minLength": 1, "maxLength": 500 },
         "hashtags": { "type": "array", "minItems": 0, "maxItems": 5, "items": { "type": "string", "maxLength": 40 } },
         "rationale": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "overlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headline", "subline", "placement"],
+      "properties": {
+        "headline": { "type": "string", "maxLength": 48 },
+        "subline": { "type": "string", "maxLength": 90 },
+        "placement": { "type": "string", "enum": ["none", "top-left", "top-right", "bottom-left", "bottom-right"] }
+      }
+    },
+    "generatedImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "file_path", "prompt_summary"],
+      "properties": {
+        "source": { "type": "string", "enum": ["original", "generated"] },
+        "file_path": { "type": "string", "maxLength": 1000 },
+        "prompt_summary": { "type": "string", "maxLength": 500 }
       }
     }
   }

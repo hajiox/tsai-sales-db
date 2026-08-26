@@ -5,12 +5,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCopy,
-  Crop,
   Download,
   History,
   ImageIcon,
   Loader2,
-  RefreshCw,
+  Megaphone,
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -19,7 +18,9 @@ import {
   countRecipeSnsCharacters,
   formatRecipeSnsPost,
   normalizeRecipeSnsHashtag,
+  recipeSnsImageModeLabel,
   type RecipeSnsGenerationView,
+  type RecipeSnsImageMode,
   type RecipeSnsPlatform,
   type RecipeSnsPost,
 } from "@/lib/recipe-sns";
@@ -31,6 +32,7 @@ type RecipeSnsJob = {
   currentStep: string;
   errorMessage: string | null;
   generationId: string;
+  imageMode: RecipeSnsImageMode;
 };
 
 type SnsResponse = {
@@ -74,7 +76,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
   const [job, setJob] = useState<RecipeSnsJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [recropping, setRecropping] = useState(false);
+  const [generatingMode, setGeneratingMode] = useState<RecipeSnsImageMode | null>(null);
   const [editedPosts, setEditedPosts] = useState<Record<RecipeSnsPlatform, RecipeSnsPost> | null>(null);
   const mountedRef = useRef(true);
   const pollingRef = useRef<string | null>(null);
@@ -121,10 +123,11 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
     pollingRef.current = jobId;
     setGenerating(true);
     try {
-      for (let count = 0; count < 240; count += 1) {
+      for (let count = 0; count < 720; count += 1) {
         const state = await loadState(jobId);
         const current = state.job;
         if (!current) throw new Error("SNS生成タスクが見つかりませんでした");
+        if (mountedRef.current) setGeneratingMode(current.imageMode);
         if (current.status === "completed") {
           await loadState();
           toast.success("SNS画像と投稿文を作成しました");
@@ -135,10 +138,13 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
         }
         await new Promise((resolve) => window.setTimeout(resolve, 2500));
       }
-      throw new Error("SNS文章生成が10分を超えました。Bridgeでは処理を継続しています");
+      throw new Error("SNS素材生成が30分を超えました。Bridgeでは処理を継続しています");
     } finally {
       if (pollingRef.current === jobId) pollingRef.current = null;
-      if (mountedRef.current) setGenerating(false);
+      if (mountedRef.current) {
+        setGenerating(false);
+        setGeneratingMode(null);
+      }
     }
   }, [loadState]);
 
@@ -162,13 +168,15 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
     };
   }, [loadState, pollJob]);
 
-  async function generate() {
+  async function generate(imageMode: RecipeSnsImageMode) {
     if (generating || hasUnsavedChanges) return;
     setGenerating(true);
+    setGeneratingMode(imageMode);
     try {
       const response = await fetch(`/api/recipe/${recipeId}/sns-generations`, {
         method: "POST",
         headers: { "content-type": "application/json" },
+        body: JSON.stringify({ imageMode }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "SNS生成を開始できませんでした");
@@ -179,28 +187,8 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
       await pollJob(nextJob.id);
     } catch (error) {
       setGenerating(false);
+      setGeneratingMode(null);
       toast.error(error instanceof Error ? error.message : "SNS生成を開始できませんでした");
-    }
-  }
-
-  async function recropImages() {
-    if (recropping || generating || !selectedGeneration || selectedGeneration.status !== "completed") return;
-    setRecropping(true);
-    try {
-      const response = await fetch(`/api/recipe/${recipeId}/sns-generations`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "recrop", generationId: selectedGeneration.id }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "SNS画像を切り直せませんでした");
-      await loadState();
-      if (payload.generationId) setSelectedGenerationId(payload.generationId);
-      toast.success("投稿文はそのまま、画像だけ切り直しました");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "SNS画像を切り直せませんでした");
-    } finally {
-      if (mountedRef.current) setRecropping(false);
     }
   }
 
@@ -224,10 +212,10 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
             <h2 id="recipe-sns-heading" className="text-lg font-bold text-gray-900">SNS投稿作成</h2>
           </div>
           <p className="mt-1 text-sm text-gray-500">
-            商品全体を残しつつ媒体比率へ自動調整し、保存済みEC情報と商品LPを専用Sol Skillで分析します。
+            保存済み商品情報と元画像1枚だけを、専用の新規Bridgeセッションで媒体別素材にします。
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
           {generations.length > 0 && (
             <label className="flex min-h-10 items-center gap-2 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-600">
               <History className="h-4 w-4" />
@@ -239,34 +227,44 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
               >
                 {generations.map((generation, index) => (
                   <option key={generation.id} value={generation.id}>
-                    第{generations.length - index}版 {formatGenerationDate(generation.createdAt)}
+                    第{generations.length - index}版 {recipeSnsImageModeLabel(generation.imageMode)} {formatGenerationDate(generation.createdAt)}
                   </option>
                 ))}
               </select>
             </label>
           )}
-          {selectedGeneration?.status === "completed" && (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <button
               type="button"
-              onClick={() => void recropImages()}
-              disabled={recropping || generating}
+              onClick={() => void generate("normal")}
+              disabled={generating || hasUnsavedChanges}
               className="inline-flex min-h-10 items-center rounded-md border border-gray-300 bg-white px-4 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-              title="投稿文を再生成せず、現在の元画像から媒体別画像だけを切り直します"
+              title={hasUnsavedChanges ? "EC情報を保存してから生成してください" : "元画像を媒体推奨サイズへ変換"}
             >
-              {recropping ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Crop className="mr-2 h-4 w-4" />}
-              {recropping ? "画像を切り直し中" : "画像だけ切り直す"}
+              {generatingMode === "normal" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+              通常リサイズ
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => void generate()}
-            disabled={generating || hasUnsavedChanges}
-            className="inline-flex min-h-10 items-center rounded-md bg-gray-900 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-            title={hasUnsavedChanges ? "EC情報を保存してから生成してください" : undefined}
-          >
-            {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : generations.length > 0 ? <RefreshCw className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            {generating ? "Solで生成中" : generations.length > 0 ? "別案を生成" : "SNS投稿を生成"}
-          </button>
+            <button
+              type="button"
+              onClick={() => void generate("creative")}
+              disabled={generating || hasUnsavedChanges}
+              className="inline-flex min-h-10 items-center rounded-md bg-gray-900 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              title={hasUnsavedChanges ? "EC情報を保存してから生成してください" : "広告用の構図と正確な日本語見出しを生成"}
+            >
+              {generatingMode === "creative" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Megaphone className="mr-2 h-4 w-4" />}
+              クリエイティブ
+            </button>
+            <button
+              type="button"
+              onClick={() => void generate("arrange")}
+              disabled={generating || hasUnsavedChanges}
+              className="inline-flex min-h-10 items-center rounded-md border border-pink-300 bg-pink-50 px-4 text-sm font-bold text-pink-800 hover:bg-pink-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title={hasUnsavedChanges ? "EC情報を保存してから生成してください" : "料理を自然な生活シーンへ配置"}
+            >
+              {generatingMode === "arrange" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              アレンジ
+            </button>
+          </div>
         </div>
       </div>
 
@@ -277,21 +275,17 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
         </div>
       )}
 
-      {(recropping || generating || (job && ["queued", "running"].includes(job.status))) && (
+      {(generating || (job && ["queued", "running"].includes(job.status))) && (
         <div className="mt-4 border-l-4 border-blue-600 bg-blue-50 px-4 py-3" aria-live="polite">
           <div className="flex items-center justify-between gap-3 text-sm font-bold text-blue-950">
-            <span className="truncate">{recropping ? "投稿文を変えずに画像を切り直しています" : job?.currentStep || "媒体別画像を作成しています"}</span>
-            <span className="shrink-0 font-mono">{recropping ? "画像のみ" : `${job?.progress || 0}%`}</span>
+            <span className="truncate">{job?.currentStep || "媒体別SNS素材を作成しています"}</span>
+            <span className="shrink-0 font-mono">{job?.progress || 0}%</span>
           </div>
-          {!recropping && (
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
-              <div className="h-full bg-blue-600 transition-[width] duration-500" style={{ width: `${Math.max(2, job?.progress || 0)}%` }} />
-            </div>
-          )}
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
+            <div className="h-full bg-blue-600 transition-[width] duration-500" style={{ width: `${Math.max(2, job?.progress || 0)}%` }} />
+          </div>
           <p className="mt-1 text-xs text-blue-700">
-            {recropping
-              ? "画像処理だけをTSA内で実行しています。Sol・Bridge・追加トークンは使いません。"
-              : "画像処理はTSA、文章は巨大Chatを読まない専用Skillの新規Bridgeセッションで実行しています。"}
+            巨大な過去Chatは読み込みません。専用Skill、固定済み商品情報、元画像1枚だけを新規Bridgeセッションで処理しています。
           </p>
         </div>
       )}
@@ -304,7 +298,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
         <div className="mt-6 flex min-h-64 flex-col items-center justify-center border border-dashed border-gray-300 bg-gray-50 px-4 text-center">
           <ImageIcon className="h-9 w-9 text-gray-300" />
           <p className="mt-3 text-sm font-bold text-gray-700">まだSNS投稿はありません</p>
-          <p className="mt-1 max-w-lg text-xs text-gray-500">ポートレート画像を優先し、なければWeb商品画像の先頭から媒体別画像を作ります。</p>
+          <p className="mt-1 max-w-lg text-xs text-gray-500">上の3モードから、最初のSNS素材を作成してください。</p>
         </div>
       ) : (
         <>
@@ -319,9 +313,10 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                 {selectedGeneration.status === "completed"
                   ? "生成完了"
                   : selectedGeneration.status === "failed"
-                    ? "文章生成は未完了"
-                    : "文章生成中"}
+                    ? "素材生成は未完了"
+                    : "素材生成中"}
               </span>
+              <span>生成: {recipeSnsImageModeLabel(selectedGeneration.imageMode)}</span>
               <span>画像元: {selectedGeneration.sourceImageRole === "portrait" ? "ポートレート画像" : "Web商品画像（先頭）"}</span>
               <span>訴求軸: {selectedGeneration.variationKey}</span>
             </div>
@@ -342,26 +337,34 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                       <h3 className="text-sm font-bold text-gray-900">{platform.label}</h3>
                       <p className="text-[10px] text-gray-400">
                         {platform.aspectLabel} / {platform.maxLength.toLocaleString()}文字以内
-                        {variant.layoutMode === "subject-preserve" ? " / 全体保持" : ""}
+                        {` / ${recipeSnsImageModeLabel(selectedGeneration.imageMode)}`}
                       </p>
                     </div>
-                    <a
-                      href={variant.url}
-                      download
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                      title={`${platform.label}画像を保存`}
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
+                    {variant?.url && (
+                      <a
+                        href={variant.url}
+                        download
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                        title={`${platform.label}画像を保存`}
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
+                    )}
                   </div>
                   <div className="grid gap-0 sm:grid-cols-[minmax(160px,0.8fr)_minmax(0,1.2fr)]">
-                    <a href={variant.url} target="_blank" rel="noreferrer" className="block bg-gray-100" style={{ aspectRatio: `${variant.width}/${variant.height}` }}>
-                      {/* Generated Blob URLs are dynamic and are not part of the static Next Image allow-list. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={variant.url} alt={`${platform.label}用に切り出した商品画像`} className="h-full w-full object-cover" />
-                    </a>
+                    {variant?.url ? (
+                      <a href={variant.url} target="_blank" rel="noreferrer" className="block bg-gray-100" style={{ aspectRatio: `${variant.width}/${variant.height}` }}>
+                        {/* Generated Blob URLs are dynamic and are not part of the static Next Image allow-list. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={variant.url} alt={`${platform.label}用の${recipeSnsImageModeLabel(selectedGeneration.imageMode)}画像`} className="h-full w-full object-cover" />
+                      </a>
+                    ) : (
+                      <div className="flex min-h-48 items-center justify-center bg-gray-100 text-xs text-gray-400">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />画像生成中
+                      </div>
+                    )}
                     <div className="min-w-0 space-y-3 border-t border-gray-100 p-3 sm:border-l sm:border-t-0">
                       {post ? (
                         <>
@@ -402,7 +405,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                         </>
                       ) : selectedGeneration.status === "failed" ? (
                         <div className="flex min-h-36 items-center justify-center text-center text-xs text-amber-700">
-                          <AlertTriangle className="mr-2 h-4 w-4" />文章を生成できませんでした。上の「別案を生成」で再実行できます。
+                          <AlertTriangle className="mr-2 h-4 w-4" />素材を生成できませんでした。上の3モードから再実行できます。
                         </div>
                       ) : (
                         <div className="flex min-h-36 items-center justify-center text-center text-xs text-gray-400">

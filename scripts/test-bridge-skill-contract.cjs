@@ -24,7 +24,7 @@ const expectedTasks = {
   ec_product_name_generate: "generate-aizu-ec-product-names",
   ec_catchcopy_update: "update-aizu-ec-catchcopies",
   ec_catchcopy_generate: "generate-aizu-ec-catchcopies",
-  recipe_sns_generate: "generate-aizu-sns-posts",
+  recipe_sns_generate: "generate-aizu-sns-assets",
   web_sales_analysis: "tsa-web-sales-analysis",
 };
 

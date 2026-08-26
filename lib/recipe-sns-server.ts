@@ -1,15 +1,14 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { randomInt } from "node:crypto";
 import { load } from "cheerio";
-import sharp from "sharp";
 import { del, put } from "@vercel/blob";
 import {
   RECIPE_SNS_PLATFORMS,
   type RecipeSnsImageVariant,
+  type RecipeSnsImageMode,
   type RecipeSnsPlatform,
 } from "@/lib/recipe-sns";
 import { renderRecipeSnsImageVariant } from "@/lib/recipe-sns-image";
 
-const MAX_SOURCE_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_LP_HTML_BYTES = 1_500_000;
 const LP_TEXT_LIMIT = 8_000;
 
@@ -38,11 +37,6 @@ function isAllowedLpHostname(hostname: string) {
     || host.endsWith(".aizubrandhall-lp.com")
     || host === "aizubrandhall-lp2.com"
     || host.endsWith(".aizubrandhall-lp2.com");
-}
-
-function isVercelBlobHostname(hostname: string) {
-  const host = hostname.toLowerCase();
-  return host === "blob.vercel-storage.com" || host.endsWith(".blob.vercel-storage.com");
 }
 
 async function fetchWithByteLimit(
@@ -137,33 +131,21 @@ export function chooseRecipeSnsVariation(previousVariationKey?: string | null) {
   return alternatives[randomInt(alternatives.length)];
 }
 
-async function loadSourceImage(source: RecipeSnsSourceImage) {
-  const url = new URL(source.image_url);
-  if (url.protocol !== "https:" || !isVercelBlobHostname(url.hostname)) {
-    throw new Error("SNS生成元はTSAが保存したVercel Blob画像に限ります");
-  }
-  const { buffer, finalUrl } = await fetchWithByteLimit(
-    url,
-    MAX_SOURCE_IMAGE_BYTES,
-    /^image\/(?:jpeg|png|webp|gif|avif)\b/i,
-    isVercelBlobHostname,
-  );
-  if (!isVercelBlobHostname(finalUrl.hostname)) throw new Error("SNS生成元画像が許可外の場所へ転送されました");
-  await sharp(buffer, { failOn: "warning" }).metadata();
-  return buffer;
-}
-
-export async function createRecipeSnsImageVariants(recipeId: string, source: RecipeSnsSourceImage) {
-  const sourceBuffer = await loadSourceImage(source);
-  const generationId = randomUUID();
+export async function publishRecipeSnsImageVariants(
+  recipeId: string,
+  generationId: string,
+  imageMode: RecipeSnsImageMode,
+  sourceBuffers: Record<RecipeSnsPlatform, Buffer>,
+) {
   const uploadedUrls: string[] = [];
   const variants = {} as Record<RecipeSnsPlatform, RecipeSnsImageVariant>;
   try {
     for (const platform of RECIPE_SNS_PLATFORMS) {
       const rendered = await renderRecipeSnsImageVariant(
-        sourceBuffer,
+        sourceBuffers[platform.id],
         platform.width,
         platform.height,
+        imageMode,
       );
       const blob = await put(
         `recipe-sns/${recipeId}/${generationId}/${platform.id}.webp`,
@@ -179,7 +161,7 @@ export async function createRecipeSnsImageVariants(recipeId: string, source: Rec
         layoutMode: rendered.layoutMode,
       };
     }
-    return { generationId, variants, uploadedUrls };
+    return { variants, uploadedUrls };
   } catch (error) {
     if (uploadedUrls.length > 0) await del(uploadedUrls).catch(() => undefined);
     throw error;
