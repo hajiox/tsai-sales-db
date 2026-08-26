@@ -21,6 +21,7 @@
     "test:bridge-skill-contract": "node scripts/test-bridge-skill-contract.cjs",
     "test:bridge-prelogin": "node scripts/test-bridge-prelogin.cjs",
     "test:recipe-sns-feature": "node scripts/test-recipe-sns-feature.cjs",
+    "test:desktop-shell-layout": "node scripts/test-desktop-shell-layout.cjs",
     "test:recipe-sns-migration": "node scripts/dry-run-recipe-sns-migration.cjs",
     "apply:recipe-sns-migration": "node scripts/apply-recipe-sns-migration.cjs",
     "test:ec-catchcopy-migration": "node scripts/dry-run-ec-catchcopy-migration.cjs",

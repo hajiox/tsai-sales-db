@@ -74,7 +74,7 @@ export default function MainSidebar() {
   const activeVariant = (_m: Module) => "ghost" as const;
 
   return (
-    <div className="w-64 bg-slate-800 text-white flex flex-col">
+    <div className="flex h-full min-h-0 w-64 flex-col overflow-hidden bg-slate-800 text-white">
       <div className="p-6 pb-4 border-b border-slate-700">
         <h1 className="text-xl font-bold">TSAシステム</h1>
         <div className="mt-2">
@@ -82,7 +82,7 @@ export default function MainSidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
         <Button
           variant="ghost"
           className="w-full justify-start text-emerald-400 font-bold hover:bg-slate-700 hover:text-emerald-300"

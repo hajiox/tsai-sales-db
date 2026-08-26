@@ -70,17 +70,17 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div className="min-h-[100dvh] min-w-0 bg-gray-100 lg:flex lg:h-screen print:h-auto print:block">
+    <div className="min-h-[100dvh] min-w-0 bg-gray-100 lg:flex lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden print:h-auto print:block print:overflow-visible">
 
       <MobileNavigation />
 
-      <div className="hidden lg:block print:hidden">
+      <div className="hidden lg:h-full lg:min-h-0 lg:shrink-0 lg:block print:hidden">
         <MainSidebar />
       </div>
 
       <main
         ref={mainRef}
-        className="tsa-mobile-content min-w-0 w-full overflow-x-auto px-3 pt-[calc(4.25rem+env(safe-area-inset-top))] pb-[calc(4.75rem+env(safe-area-inset-bottom))] sm:px-4 lg:flex-grow lg:overflow-auto lg:p-6 print:p-0 print:overflow-visible"
+        className="tsa-mobile-content min-w-0 w-full overflow-x-auto px-3 pt-[calc(4.25rem+env(safe-area-inset-top))] pb-[calc(4.75rem+env(safe-area-inset-bottom))] sm:px-4 lg:h-full lg:min-h-0 lg:flex-grow lg:overflow-auto lg:p-6 print:h-auto print:p-0 print:overflow-visible"
       >
         {children}
       </main>
