@@ -194,6 +194,10 @@ assert.match(monitorSource, /SetConsoleMode/);
 assert.match(monitorSource, /-band \(-bnot 0x40\)/);
 assert.match(monitorSource, /SetWindowPos/);
 assert.match(monitorSource, /broughtForward/);
+assert.match(monitorSource, /\[System\.IO\.File\]::ReadAllText/);
+assert.match(monitorSource, /\[System\.Text\.UTF8Encoding\]::new\(\$false, \$true\)/);
+assert.doesNotMatch(monitorSource, /Get-Content\s+-LiteralPath\s+\$StatePath/);
+assert.match(monitorSource, /ジョブ情報を読み直しています/);
 const installerSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "install-bridge.ps1"),
   "utf8",
@@ -378,6 +382,8 @@ function loadRouteFunction(name, nextName) {
     .replace(/: CodexJobStatus/g, "")
     .replace(/: Record<string, any>\[\]/g, "")
     .replace(/: Record<string, any>/g, "")
+    .replace(/: Record<string, number>/g, "")
+    .replace(/: Record<string, unknown>/g, "")
     .replace(/ as Record<string, any>/g, "")
     .replace(/ as unknown\[\]/g, "");
   const source = [

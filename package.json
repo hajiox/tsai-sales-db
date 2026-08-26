@@ -13,6 +13,7 @@
     "test:shipping-label-address": "node scripts/test-shipping-label-address.cjs",
     "test:recipe-selling-price": "node scripts/test-recipe-selling-price.cjs",
     "test:ec-price-plan": "node scripts/test-ec-price-plan.cjs",
+    "test:bridge-monitor": "node scripts/test-bridge-monitor.cjs",
     "test:ec-product-name-bridge": "node scripts/test-ec-product-name-bridge.cjs",
     "test:ec-product-name-migration": "node scripts/dry-run-ec-product-name-migration.cjs",
     "apply:ec-product-name-migration": "node scripts/apply-ec-product-name-migration.cjs",

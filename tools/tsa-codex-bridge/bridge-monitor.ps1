@@ -4,10 +4,12 @@
   [Parameter(Mandatory = $true)]
   [string]$JobId,
   [Parameter(Mandatory = $true)]
-  [string]$AckPath
+  [string]$AckPath,
+  [ValidateRange(0, 300)]
+  [int]$ExitDelaySeconds = 30
 )
 
-$ErrorActionPreference = "SilentlyContinue"
+$ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $shortJobId = if ($JobId.Length -gt 8) { $JobId.Substring(0, 8) } else { $JobId }
 $Host.UI.RawUI.WindowTitle = "TSA Codex Bridge 実行モニター [$shortJobId]"
@@ -98,11 +100,23 @@ function Status-Label([string]$Status) {
   }
 }
 
+function Read-MonitorState([string]$Path) {
+  $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+  $json = [System.IO.File]::ReadAllText($Path, $strictUtf8)
+  if ([string]::IsNullOrWhiteSpace($json)) {
+    throw "モニター状態ファイルが空です"
+  }
+  return $json | ConvertFrom-Json -ErrorAction Stop
+}
+
 try {
   $lastRenderKey = ""
   $waitingRendered = $false
+  $readErrorStartedAt = $null
+  $readErrorRendered = $false
   Write-Host "TSA Codex Bridge 実行モニター" -ForegroundColor Cyan
   Write-Host ("=" * 72) -ForegroundColor DarkGray
+  Write-Host "ジョブ情報を読み込んでいます..." -ForegroundColor DarkCyan
 
   while ($true) {
     if (-not (Test-Path -LiteralPath $StatePath)) {
@@ -115,12 +129,26 @@ try {
     }
 
     try {
-      $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
+      $state = Read-MonitorState $StatePath
     } catch {
+      if ($null -eq $readErrorStartedAt) {
+        $readErrorStartedAt = [DateTimeOffset]::Now
+      } elseif (-not $readErrorRendered -and (([DateTimeOffset]::Now - $readErrorStartedAt).TotalSeconds -ge 2)) {
+        Write-Host "ジョブ情報を読み直しています。状態ファイルの更新完了を待っています..." -ForegroundColor Yellow
+        $readErrorRendered = $true
+      }
       Start-Sleep -Milliseconds 500
       continue
     }
-    if ([string]$state.jobId -ne $JobId) { break }
+    if ($readErrorRendered) {
+      Write-Host "ジョブ情報を正常に読み込めました。" -ForegroundColor Green
+    }
+    $readErrorStartedAt = $null
+    $readErrorRendered = $false
+    if ([string]$state.jobId -ne $JobId) {
+      Write-Host "別のジョブへ切り替わったため、このモニターを終了します。" -ForegroundColor Yellow
+      break
+    }
 
     $now = [DateTimeOffset]::Now
     try { $started = ([DateTimeOffset]::Parse([string]$state.startedAt)).ToLocalTime() } catch { $started = $now }
@@ -158,12 +186,20 @@ try {
     }
 
     if ($isFinal) {
-      Write-Host "処理は終了しました。この画面は30秒後に閉じます。" -ForegroundColor $statusColor
-      Start-Sleep -Seconds 30
+      if ($ExitDelaySeconds -gt 0) {
+        Write-Host ("処理は終了しました。この画面は{0}秒後に閉じます。" -f $ExitDelaySeconds) -ForegroundColor $statusColor
+        Start-Sleep -Seconds $ExitDelaySeconds
+      } else {
+        Write-Host "処理は終了しました。" -ForegroundColor $statusColor
+      }
       break
     }
     Start-Sleep -Seconds 1
   }
+} catch {
+  Write-Host "モニター表示エラーが発生しました。Bridge本体の処理は継続しています。" -ForegroundColor Red
+  Write-Host ("詳細: {0}" -f $_.Exception.Message) -ForegroundColor DarkYellow
+  if ($ExitDelaySeconds -gt 0) { Start-Sleep -Seconds $ExitDelaySeconds }
 } finally {
   if ($createdNew) { [void]$monitorMutex.ReleaseMutex() }
   $monitorMutex.Dispose()
