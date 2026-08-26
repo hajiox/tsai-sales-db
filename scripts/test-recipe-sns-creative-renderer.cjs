@@ -16,7 +16,8 @@ async function main() {
   const rendererPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "render-recipe-sns-image.ps1");
   const rendererSource = fs.readFileSync(rendererPath, "utf8");
   assert.match(rendererSource, /Add-EdgeScrim/);
-  assert.match(rendererSource, /会津ブランド館/);
+  assert.match(rendererSource, /0x4F1A, 0x6D25, 0x30D6, 0x30E9, 0x30F3, 0x30C9, 0x9928/);
+  assert.doesNotMatch(rendererSource, /-Text "会津ブランド館"/);
   assert.doesNotMatch(rendererSource, /panelBrush|FillRectangle\(\$panelBrush/);
   try {
     await sharp({

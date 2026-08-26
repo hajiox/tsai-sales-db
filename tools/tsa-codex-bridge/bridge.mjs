@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.45";
+const VERSION = "1.8.46";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const DESKTOP_MONITOR_FORCE_CLOSE_MS = 40_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);

@@ -166,10 +166,11 @@ try {
     $sublineBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(232, 255, 253, 249))
     $accentPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 226, 74, 51), [float]([Math]::Max(4, $Width * 0.004)))
     $brandFont = [System.Drawing.Font]::new("Meiryo", [float]([Math]::Max(16, [Math]::Min($Width, $Height) * 0.021)), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $brandText = -join ([char[]](0x4F1A, 0x6D25, 0x30D6, 0x30E9, 0x30F3, 0x30C9, 0x9928))
     try {
       $brandHeight = [float]([Math]::Max(24, $contentHeight * 0.1))
       $brandBounds = [System.Drawing.RectangleF]::new($contentX, $contentY, $contentWidth, $brandHeight)
-      Draw-StringWithShadow -Graphics $graphics -Text "会津ブランド館" -Font $brandFont -Brush $brandBrush -Bounds $brandBounds -Offset 2
+      Draw-StringWithShadow -Graphics $graphics -Text $brandText -Font $brandFont -Brush $brandBrush -Bounds $brandBounds -Offset 2
       $ruleY = [float]($contentY + $brandHeight + ($margin * 0.13))
       $ruleLength = [float]([Math]::Min($contentWidth * 0.22, [Math]::Max(64, $Width * 0.09)))
       $graphics.DrawLine($accentPen, $contentX, $ruleY, $contentX + $ruleLength, $ruleY)
