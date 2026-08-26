@@ -1,5 +1,19 @@
 # TSA Recipe SNS Note
 
+## 2026-08-26
+
+- 一律`cover`だった媒体別画像処理を、縦横比に応じた2方式へ変更した。切り落としが20%以内ならSharpの注目領域クロップを継続し、それを超える場合は元画像全体を保持して、同じ画像の暗いぼかし背景と境界フェードで媒体比率を満たす。
+- 完了済み履歴へ「画像だけ切り直す」を追加した。投稿文を再生成せず、元の履歴を変更せずに画像だけを新しい履歴版として保存するため、Sol・Bridge・追加トークンを使用しない。
+- 1280x1280の商品実画像で、X・Threads・IGストーリーは全体保持、Instagramは注目領域クロップとなることを確認した。
+
+### Verification
+
+- `npm run test:recipe-sns-feature`: success
+- `npm run test:recipe-sns-image-layout`: 7 checks passed
+- `npm run test:recipe-sns-bridge`: success
+- Changed-file ESLint: success
+- `npm run build`: success
+
 ## 2026-08-25
 
 - レシピ詳細を「レシピ」「EC情報」「SNS」の3タブへ分割。タブ切替時も未保存編集とEC内のBridge進捗を保持し、印刷レイアウトは従来どおりレシピ内容を使用する。

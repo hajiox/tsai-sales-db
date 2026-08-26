@@ -76,6 +76,7 @@ function parseImageVariants(value: unknown) {
       width: Number(variant.width) || platform.width,
       height: Number(variant.height) || platform.height,
       aspectLabel: String(variant.aspectLabel || platform.aspectLabel),
+      layoutMode: variant.layoutMode === "subject-preserve" ? "subject-preserve" : "smart-crop",
     };
   }
   return result;
@@ -115,6 +116,119 @@ async function requireAdmin() {
 
 const JOB_SELECT = "id,status,progress,current_step,error_message,parameters,result,created_at,started_at,updated_at,completed_at";
 const GENERATION_SELECT = "id,job_id,status,source_image_id,source_image_url,source_image_role,variation_key,image_variants,posts,model,reasoning_effort,rules_version,created_at,completed_at";
+
+async function recropRecipeSnsGeneration(
+  recipeId: string,
+  generationId: string,
+  createdBy: string,
+) {
+  const supabase = getWebSalesAutomationServiceClient();
+  let uploadedUrls: string[] = [];
+  let createdJobId: string | null = null;
+  try {
+    const { data: sourceGeneration, error: sourceError } = await supabase
+      .from("recipe_sns_generations")
+      .select(`${GENERATION_SELECT},source_snapshot,created_by`)
+      .eq("id", generationId)
+      .eq("recipe_id", recipeId)
+      .single();
+    if (sourceError || !sourceGeneration) throw new Error("切り直すSNS生成履歴が見つかりません");
+    if (sourceGeneration.status !== "completed" || !sourceGeneration.posts) {
+      throw new Error("文章生成まで完了した履歴だけ画像を切り直せます");
+    }
+
+    const sourceImage: RecipeSnsSourceImage = {
+      id: String(sourceGeneration.source_image_id || sourceGeneration.id),
+      image_url: String(sourceGeneration.source_image_url || ""),
+      image_role: sourceGeneration.source_image_role === "portrait" ? "portrait" : "gallery",
+      sort_order: 0,
+      created_at: String(sourceGeneration.created_at || ""),
+    };
+    if (!sourceImage.image_url) throw new Error("元画像の保存先が見つかりません");
+
+    const generatedImages = await createRecipeSnsImageVariants(recipeId, sourceImage);
+    uploadedUrls = generatedImages.uploadedUrls;
+    const now = new Date().toISOString();
+    const parameters = {
+      taskKey: "recipe_sns_generate",
+      recipeId,
+      generationId: generatedImages.generationId,
+      sourceGenerationId: generationId,
+      imageOnly: true,
+      model: String(sourceGeneration.model || RECIPE_SNS_MODEL),
+      reasoningEffort: String(sourceGeneration.reasoning_effort || RECIPE_SNS_REASONING_EFFORT),
+      rulesVersion: RECIPE_SNS_RULES_VERSION,
+      executionPolicy: "deterministic_image_recrop_without_codex",
+      mutationScope: "recipe_sns_generation_only",
+    };
+    const { data: job, error: jobError } = await supabase
+      .from("web_sales_codex_jobs")
+      .insert({
+        task_key: "recipe_sns_generate",
+        channel: null,
+        trigger_type: "manual",
+        period_start: null,
+        period_end: null,
+        report_month: null,
+        status: "completed",
+        progress: 100,
+        current_step: "SNS画像の切り直し完了",
+        requested_by: createdBy,
+        parameters,
+        result: {
+          generationId: generatedImages.generationId,
+          sourceGenerationId: generationId,
+          imageOnly: true,
+        },
+        priority: 35,
+        max_attempts: 1,
+        scheduled_at: now,
+        started_at: now,
+        completed_at: now,
+      })
+      .select(JOB_SELECT)
+      .single();
+    if (jobError || !job) throw jobError || new Error("画像切り直し履歴を作成できません");
+    createdJobId = job.id;
+
+    const { error: generationError } = await supabase.from("recipe_sns_generations").insert({
+      id: generatedImages.generationId,
+      job_id: job.id,
+      recipe_id: recipeId,
+      status: "completed",
+      source_image_id: sourceGeneration.source_image_id,
+      source_image_url: sourceGeneration.source_image_url,
+      source_image_role: sourceGeneration.source_image_role,
+      variation_key: sourceGeneration.variation_key,
+      image_variants: generatedImages.variants,
+      source_snapshot: sourceGeneration.source_snapshot,
+      posts: sourceGeneration.posts,
+      model: sourceGeneration.model,
+      reasoning_effort: sourceGeneration.reasoning_effort,
+      rules_version: RECIPE_SNS_RULES_VERSION,
+      created_by: createdBy,
+      completed_at: now,
+    });
+    if (generationError) throw generationError;
+    await supabase.from("web_sales_codex_job_events").insert({
+      job_id: job.id,
+      event_type: "completed",
+      message: "投稿文を変更せず、媒体別画像だけを新しい履歴版として切り直しました",
+      progress: 100,
+      payload: {
+        recipeId,
+        generationId: generatedImages.generationId,
+        sourceGenerationId: generationId,
+        rulesVersion: RECIPE_SNS_RULES_VERSION,
+      },
+    });
+    return { generationId: generatedImages.generationId, job: toJobView(job as Record<string, unknown>) };
+  } catch (error) {
+    if (createdJobId) await supabase.from("web_sales_codex_jobs").delete().eq("id", createdJobId);
+    await deleteRecipeSnsImages(uploadedUrls);
+    throw error;
+  }
+}
 
 export async function GET(
   request: Request,
@@ -162,11 +276,30 @@ export async function GET(
 }
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "管理者ログインが必要です" }, { status: 401 });
+
+  const requestBody = asObject(await request.json().catch(() => null));
+  if (requestBody.action === "recrop") {
+    const generationId = String(requestBody.generationId || "").trim();
+    if (!generationId) return NextResponse.json({ error: "切り直す生成履歴を指定してください" }, { status: 400 });
+    try {
+      const { id: recipeId } = await params;
+      const result = await recropRecipeSnsGeneration(
+        recipeId,
+        generationId,
+        session.user?.email || ADMIN_EMAIL,
+      );
+      return NextResponse.json({ ok: true, ...result });
+    } catch (error) {
+      return NextResponse.json({
+        error: error instanceof Error ? error.message : "SNS画像を切り直せませんでした",
+      }, { status: 500 });
+    }
+  }
 
   const supabase = getWebSalesAutomationServiceClient();
   let uploadedUrls: string[] = [];

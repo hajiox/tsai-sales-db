@@ -9,6 +9,7 @@ const page = read("app", "recipe", "[id]", "page.tsx");
 const studio = read("app", "recipe", "_components", "RecipeSnsStudio.tsx");
 const snsRules = read("lib", "recipe-sns.ts");
 const snsServer = read("lib", "recipe-sns-server.ts");
+const snsImage = read("lib", "recipe-sns-image.ts");
 const snsRoute = read("app", "api", "recipe", "[id]", "sns-generations", "route.ts");
 const importRoute = read("app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "recipe-sns-import", "route.ts");
 const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-posts", "SKILL.md");
@@ -19,6 +20,7 @@ assert.match(page, /role="tabpanel"/);
 assert.match(page, /window\.history\.replaceState/);
 assert.match(page, /RecipeSnsStudio recipeId=\{recipe\.id\} hasUnsavedChanges=\{hasChanges\}/);
 assert.match(studio, /const currentJobGeneration = next\.job\?\.id/);
+assert.match(studio, /画像だけ切り直す/);
 assert.ok(
   studio.indexOf("if (currentJobGeneration) return currentJobGeneration.id")
     < studio.indexOf("if (current && next.generations.some"),
@@ -42,16 +44,24 @@ assert.match(snsRules, /formatRecipeSnsPost/);
 assert.match(snsServer, /images\.filter\(\(image\) => image\.image_role === "portrait"\)/);
 assert.match(snsServer, /return gallery\[0\] \|\| null/);
 assert.match(snsServer, /randomInt\(alternatives\.length\)/);
-assert.match(snsServer, /sharp\.strategy\.attention/);
+assert.match(snsServer, /renderRecipeSnsImageVariant/);
 assert.match(snsServer, /recipe-sns\/\$\{recipeId\}/);
 assert.match(snsServer, /redirect: "manual"/);
 assert.match(snsServer, /isAllowedLpHostname/);
 assert.doesNotMatch(snsServer, /source_image_url/);
+assert.match(snsImage, /RECIPE_SNS_MIN_COVER_RETENTION = 4 \/ 5/);
+assert.match(snsImage, /layoutMode: "subject-preserve"/);
+assert.match(snsImage, /sharp\.strategy\.attention/);
+assert.match(snsImage, /fit: "inside"/);
+assert.match(snsImage, /\.blur\(blurSigma\)/);
+assert.match(snsImage, /createFeatherMask/);
 
 assert.match(snsRoute, /getServerSession\(authOptions\)/);
 assert.match(snsRoute, /session\?\.user\?\.email\?\.toLowerCase\(\) === ADMIN_EMAIL/);
 assert.match(snsRoute, /createRecipeSnsImageVariants/);
 assert.match(snsRoute, /task_key: "recipe_sns_generate"/);
+assert.match(snsRoute, /requestBody\.action === "recrop"/);
+assert.match(snsRoute, /deterministic_image_recrop_without_codex/);
 assert.match(snsRoute, /compact_packet_then_isolated_codex_skill/);
 assert.match(snsRoute, /sourceImage\.id/);
 assert.doesNotMatch(snsRoute, /body\.sourceImage/);

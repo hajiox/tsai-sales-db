@@ -1,6 +1,6 @@
 export const RECIPE_SNS_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
-export const RECIPE_SNS_RULES_VERSION = "2026-08-25.1";
+export const RECIPE_SNS_RULES_VERSION = "2026-08-26.1";
 
 export const RECIPE_SNS_PLATFORMS = [
   {
@@ -69,6 +69,7 @@ export type RecipeSnsImageVariant = {
   width: number;
   height: number;
   aspectLabel: string;
+  layoutMode: "smart-crop" | "subject-preserve";
 };
 
 export type RecipeSnsGenerationView = {

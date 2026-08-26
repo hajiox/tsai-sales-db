@@ -7,6 +7,7 @@ import {
   type RecipeSnsImageVariant,
   type RecipeSnsPlatform,
 } from "@/lib/recipe-sns";
+import { renderRecipeSnsImageVariant } from "@/lib/recipe-sns-image";
 
 const MAX_SOURCE_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_LP_HTML_BYTES = 1_500_000;
@@ -159,18 +160,14 @@ export async function createRecipeSnsImageVariants(recipeId: string, source: Rec
   const variants = {} as Record<RecipeSnsPlatform, RecipeSnsImageVariant>;
   try {
     for (const platform of RECIPE_SNS_PLATFORMS) {
-      const output = await sharp(sourceBuffer, { failOn: "warning" })
-        .rotate()
-        .resize(platform.width, platform.height, {
-          fit: "cover",
-          position: sharp.strategy.attention,
-          withoutEnlargement: false,
-        })
-        .webp({ quality: 88, effort: 5 })
-        .toBuffer();
+      const rendered = await renderRecipeSnsImageVariant(
+        sourceBuffer,
+        platform.width,
+        platform.height,
+      );
       const blob = await put(
         `recipe-sns/${recipeId}/${generationId}/${platform.id}.webp`,
-        output,
+        rendered.buffer,
         { access: "public", addRandomSuffix: true, contentType: "image/webp" },
       );
       uploadedUrls.push(blob.url);
@@ -179,6 +176,7 @@ export async function createRecipeSnsImageVariants(recipeId: string, source: Rec
         width: platform.width,
         height: platform.height,
         aspectLabel: platform.aspectLabel,
+        layoutMode: rendered.layoutMode,
       };
     }
     return { generationId, variants, uploadedUrls };

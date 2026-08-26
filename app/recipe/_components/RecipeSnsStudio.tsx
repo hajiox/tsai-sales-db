@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCopy,
+  Crop,
   Download,
   History,
   ImageIcon,
@@ -73,6 +74,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
   const [job, setJob] = useState<RecipeSnsJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [recropping, setRecropping] = useState(false);
   const [editedPosts, setEditedPosts] = useState<Record<RecipeSnsPlatform, RecipeSnsPost> | null>(null);
   const mountedRef = useRef(true);
   const pollingRef = useRef<string | null>(null);
@@ -181,6 +183,27 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
     }
   }
 
+  async function recropImages() {
+    if (recropping || generating || !selectedGeneration || selectedGeneration.status !== "completed") return;
+    setRecropping(true);
+    try {
+      const response = await fetch(`/api/recipe/${recipeId}/sns-generations`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "recrop", generationId: selectedGeneration.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "SNS画像を切り直せませんでした");
+      await loadState();
+      if (payload.generationId) setSelectedGenerationId(payload.generationId);
+      toast.success("投稿文はそのまま、画像だけ切り直しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "SNS画像を切り直せませんでした");
+    } finally {
+      if (mountedRef.current) setRecropping(false);
+    }
+  }
+
   function updatePost(platform: RecipeSnsPlatform, next: RecipeSnsPost) {
     setEditedPosts((current) => current ? { ...current, [platform]: next } : current);
   }
@@ -201,7 +224,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
             <h2 id="recipe-sns-heading" className="text-lg font-bold text-gray-900">SNS投稿作成</h2>
           </div>
           <p className="mt-1 text-sm text-gray-500">
-            登録画像を媒体比率へ切り出し、保存済みEC情報と商品LPを専用Sol Skillで分析します。
+            商品全体を残しつつ媒体比率へ自動調整し、保存済みEC情報と商品LPを専用Sol Skillで分析します。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -221,6 +244,18 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                 ))}
               </select>
             </label>
+          )}
+          {selectedGeneration?.status === "completed" && (
+            <button
+              type="button"
+              onClick={() => void recropImages()}
+              disabled={recropping || generating}
+              className="inline-flex min-h-10 items-center rounded-md border border-gray-300 bg-white px-4 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              title="投稿文を再生成せず、現在の元画像から媒体別画像だけを切り直します"
+            >
+              {recropping ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Crop className="mr-2 h-4 w-4" />}
+              {recropping ? "画像を切り直し中" : "画像だけ切り直す"}
+            </button>
           )}
           <button
             type="button"
@@ -242,16 +277,22 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
         </div>
       )}
 
-      {(generating || (job && ["queued", "running"].includes(job.status))) && (
+      {(recropping || generating || (job && ["queued", "running"].includes(job.status))) && (
         <div className="mt-4 border-l-4 border-blue-600 bg-blue-50 px-4 py-3" aria-live="polite">
           <div className="flex items-center justify-between gap-3 text-sm font-bold text-blue-950">
-            <span className="truncate">{job?.currentStep || "媒体別画像を作成しています"}</span>
-            <span className="shrink-0 font-mono">{job?.progress || 0}%</span>
+            <span className="truncate">{recropping ? "投稿文を変えずに画像を切り直しています" : job?.currentStep || "媒体別画像を作成しています"}</span>
+            <span className="shrink-0 font-mono">{recropping ? "画像のみ" : `${job?.progress || 0}%`}</span>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
-            <div className="h-full bg-blue-600 transition-[width] duration-500" style={{ width: `${Math.max(2, job?.progress || 0)}%` }} />
-          </div>
-          <p className="mt-1 text-xs text-blue-700">画像処理はTSA、文章は巨大Chatを読まない専用Skillの新規Bridgeセッションで実行しています。</p>
+          {!recropping && (
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
+              <div className="h-full bg-blue-600 transition-[width] duration-500" style={{ width: `${Math.max(2, job?.progress || 0)}%` }} />
+            </div>
+          )}
+          <p className="mt-1 text-xs text-blue-700">
+            {recropping
+              ? "画像処理だけをTSA内で実行しています。Sol・Bridge・追加トークンは使いません。"
+              : "画像処理はTSA、文章は巨大Chatを読まない専用Skillの新規Bridgeセッションで実行しています。"}
+          </p>
         </div>
       )}
 
@@ -299,7 +340,10 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                   <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
                     <div>
                       <h3 className="text-sm font-bold text-gray-900">{platform.label}</h3>
-                      <p className="text-[10px] text-gray-400">{platform.aspectLabel} / {platform.maxLength.toLocaleString()}文字以内</p>
+                      <p className="text-[10px] text-gray-400">
+                        {platform.aspectLabel} / {platform.maxLength.toLocaleString()}文字以内
+                        {variant.layoutMode === "subject-preserve" ? " / 全体保持" : ""}
+                      </p>
                     </div>
                     <a
                       href={variant.url}
