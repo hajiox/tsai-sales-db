@@ -64,6 +64,15 @@ const MATERIAL_KEYWORDS = [
 const isLikelyMaterialName = (name: string) =>
     MATERIAL_KEYWORDS.some(keyword => name.includes(keyword));
 
+const formatYen = (value: number | null, fallback = "-") => {
+    if (value == null) return fallback;
+    const hasFraction = Math.abs(value - Math.round(value)) > 0.000001;
+    return `¥${value.toLocaleString("ja-JP", {
+        minimumFractionDigits: hasFraction ? 2 : 0,
+        maximumFractionDigits: 2,
+    })}`;
+};
+
 // --- 材料選択ドロップダウン ---
 function IngredientSelector({
     itemId,
@@ -159,8 +168,6 @@ function IngredientSelector({
         });
 
     const selectedIng = selectedId ? ingredients.find(i => i.id === selectedId) : null;
-    const formatPrice = (v: number | null) => v != null ? `¥${Math.round(v).toLocaleString()}` : "";
-
     return (
         <div ref={ref} className="relative mt-2">
             {/* 選択済み表示 or 検索フィールド */}
@@ -169,7 +176,7 @@ function IngredientSelector({
                 {selectedIng ? (
                     <div className="flex items-center gap-1">
                         <span className="text-xs px-2 py-1 rounded border border-blue-400 bg-blue-50 text-blue-700">
-                            {selectedIng.name} {selectedIng.price != null && <span className="text-blue-400">({formatPrice(selectedIng.price)})</span>}
+                            {selectedIng.name} {selectedIng.price != null && <span className="text-blue-400">({formatYen(selectedIng.price, "")})</span>}
                         </span>
                         <button onClick={() => { onSelect(""); setOpen(false); }} className="text-gray-400 hover:text-red-500 text-xs">✕</button>
                     </div>
@@ -221,7 +228,7 @@ function IngredientSelector({
                                     {ing.name}
                                 </span>
                                 <span className="text-gray-400 shrink-0 ml-2">
-                                    {ing.price != null && formatPrice(ing.price)}
+                                    {ing.price != null && formatYen(ing.price, "")}
                                 </span>
                             </button>
                         ))
@@ -496,7 +503,6 @@ export default function EstimatesPage() {
         }
     };
 
-    const formatPrice = (v: number | null) => v != null ? `¥${Math.round(v).toLocaleString()}` : "-";
     const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString("ja-JP") : "-";
     const pendingCount = items.filter(i => i.status === "pending").length;
 
@@ -594,7 +600,7 @@ export default function EstimatesPage() {
                                             </div>
                                             <div className="text-xs text-gray-500">
                                                 {formatDate(group.docDate)} ・ {group.items.length}品目
-                                                {group.totalAmount != null && ` ・ 合計 ${formatPrice(group.totalAmount)}`}
+                                                {group.totalAmount != null && ` ・ 合計 ${formatYen(group.totalAmount)}`}
                                             </div>
                                         </div>
                                     </button>
@@ -652,14 +658,14 @@ export default function EstimatesPage() {
                                                             {item.quantity != null && <span>数量: {item.quantity}{item.unit || "個"}</span>}
                                                             {item.unit_price != null && (
                                                                 <span>
-                                                                    単価: {formatPrice(item.unit_price)}
+                                                                    単価: {formatYen(item.unit_price)}
                                                                     <span className="text-[10px] text-gray-400 ml-0.5">(税別)</span>
                                                                     <span className="text-[10px] text-blue-500 ml-1">
-                                                                        →税込{formatPrice(Math.round(item.unit_price * (1 + (item.tax_rate || 0.1)) * 100) / 100)}
+                                                                        →税込{formatYen(Math.round(item.unit_price * (1 + (item.tax_rate || 0.1)) * 100) / 100)}
                                                                     </span>
                                                                 </span>
                                                             )}
-                                                            {item.amount != null && <span className="font-medium text-gray-700">金額: {formatPrice(item.amount)}</span>}
+                                                            {item.amount != null && <span className="font-medium text-gray-700">金額: {formatYen(item.amount)}</span>}
                                                         </div>
 
                                                         {/* 材料選択（pending時のみ） */}
