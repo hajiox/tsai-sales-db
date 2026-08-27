@@ -24,6 +24,9 @@ $requiredSourceFiles = @(
   "ec-catchcopy-result.schema.json",
   "ec-catchcopy-plan.schema.json",
   "ec-catchcopy-ai.schema.json",
+  "ec-product-content-result.schema.json",
+  "ec-product-content-plan.schema.json",
+  "ec-product-content-ai.schema.json",
   "recipe-sns-result.schema.json",
   "recipe-sns-target-result.schema.json",
   "render-recipe-sns-image.ps1",
@@ -228,6 +231,9 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-name-ai.schema.json") -
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-catchcopy-result.schema.json") -Destination (Join-Path $installDir "ec-catchcopy-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-catchcopy-plan.schema.json") -Destination (Join-Path $installDir "ec-catchcopy-plan.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-catchcopy-ai.schema.json") -Destination (Join-Path $installDir "ec-catchcopy-ai.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-result.schema.json") -Destination (Join-Path $installDir "ec-product-content-result.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-plan.schema.json") -Destination (Join-Path $installDir "ec-product-content-plan.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-ai.schema.json") -Destination (Join-Path $installDir "ec-product-content-ai.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-target-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-target-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "render-recipe-sns-image.ps1") -Destination (Join-Path $installDir "render-recipe-sns-image.ps1") -Force
@@ -246,6 +252,7 @@ $headlessTaskKeys = @(
   "connection_test",
   "ec_product_name_generate",
   "ec_catchcopy_generate",
+  "ec_product_content_generate",
   "recipe_sns_generate",
   "web_sales_analysis"
 )

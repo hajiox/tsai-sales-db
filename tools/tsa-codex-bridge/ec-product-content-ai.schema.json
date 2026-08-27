@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["product_points", "web_description", "total_characters", "preserved_facts", "removed_or_condensed", "rationale"],
+  "properties": {
+    "product_points": { "type": "string", "maxLength": 500 },
+    "web_description": { "type": "string", "maxLength": 500 },
+    "total_characters": { "type": "integer", "minimum": 1, "maximum": 500 },
+    "preserved_facts": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 200 } },
+    "removed_or_condensed": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 200 } },
+    "rationale": { "type": "string", "maxLength": 1000 }
+  }
+}

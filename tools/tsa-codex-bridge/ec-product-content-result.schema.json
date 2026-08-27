@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "sites"],
+  "properties": {
+    "status": { "enum": ["completed", "waiting_for_user", "needs_review", "failed"] },
+    "summary": { "type": "string", "maxLength": 1200 },
+    "sites": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["site", "status", "field_layout", "marker_style", "final_product_points", "final_web_description", "final_combined_content", "product_identifier", "message"],
+        "properties": {
+          "site": { "enum": ["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"] },
+          "status": { "enum": ["updated", "submitted_pending", "not_found", "blocked"] },
+          "field_layout": { "enum": ["separate", "combined"] },
+          "marker_style": { "enum": ["check", "square"] },
+          "final_product_points": { "type": ["string", "null"], "maxLength": 12000 },
+          "final_web_description": { "type": ["string", "null"], "maxLength": 12000 },
+          "final_combined_content": { "type": ["string", "null"], "maxLength": 24000 },
+          "product_identifier": { "type": ["string", "null"], "maxLength": 500 },
+          "message": { "type": "string", "maxLength": 1200 }
+        }
+      }
+    }
+  }
+}

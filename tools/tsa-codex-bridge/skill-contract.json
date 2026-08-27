@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-26.2",
+  "version": "2026-08-27.2",
   "tasks": {
     "connection_test": {
       "mode": "deterministic",
@@ -36,6 +36,14 @@
     "ec_catchcopy_generate": {
       "mode": "codex",
       "skill": "generate-aizu-ec-catchcopies"
+    },
+    "ec_product_content_update": {
+      "mode": "codex",
+      "skill": "update-aizu-ec-product-content"
+    },
+    "ec_product_content_generate": {
+      "mode": "codex",
+      "skill": "optimize-aizu-ec-product-content"
     },
     "recipe_sns_generate": {
       "mode": "codex",

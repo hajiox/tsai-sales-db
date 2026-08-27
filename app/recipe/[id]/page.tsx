@@ -27,6 +27,8 @@ import EcProductNameSyncControls from "../_components/EcProductNameSyncControls"
 import EcProductNameAiEditor from "../_components/EcProductNameAiEditor";
 import EcCatchcopySyncControls from "../_components/EcCatchcopySyncControls";
 import EcCatchcopyAiEditor from "../_components/EcCatchcopyAiEditor";
+import EcProductContentAiAdjuster from "../_components/EcProductContentAiAdjuster";
+import EcProductContentSyncControls from "../_components/EcProductContentSyncControls";
 import RecipeSnsStudio from "../_components/RecipeSnsStudio";
 import ScopedEcImageSection from "../_components/ScopedEcImageSection";
 import {
@@ -41,6 +43,11 @@ import {
   normalizeCommonEcCatchcopy,
   type EcCatchcopiesBySite,
 } from "@/lib/ec-catchcopy-codex";
+import {
+  ecProductContentCharacterCount,
+  normalizeEcProductContentText,
+  toSquareProductPoints,
+} from "@/lib/ec-product-content-codex";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
@@ -4684,9 +4691,9 @@ function RecipeDetailContent() {
         </div>
       </div>
 
-      {/* ── Web商品説明 & 商品ポイント セクション (PC用・印刷非表示) ── */}
+      {/* ── EC情報セクション (PC用・印刷非表示) ── */}
       {(() => {
-        const totalChars = (recipe.product_points || '').length + (recipe.web_description || '').length;
+        const totalChars = ecProductContentCharacterCount(recipe.product_points, recipe.web_description);
         const isOver = totalChars > 500;
         const overCount = totalChars - 500;
         return (
@@ -4696,14 +4703,10 @@ function RecipeDetailContent() {
             aria-labelledby="recipe-detail-tab-ec"
             className={`mx-auto max-w-[1400px] bg-white px-3 py-5 sm:px-4 lg:px-8 print:hidden ${activeDetailTab === "ec" ? "block" : "hidden"}`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-4">
+            <div className="border-b border-gray-200 pb-4">
               <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
-                📝 商品ポイント & Web商品説明
+                🛍️ EC登録情報
               </h3>
-              <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${isOver ? 'bg-red-100 text-red-600 font-bold' : 'bg-gray-100 text-gray-500'}`}>
-                {totalChars}文字
-                {isOver && <span className="ml-1">（{overCount}文字超過）</span>}
-              </span>
             </div>
             <div className="space-y-4 pb-4 pt-4">
               {recipe.category === "ネット専用" && (() => {
@@ -4884,6 +4887,32 @@ function RecipeDetailContent() {
                   isSaving={isSaving}
                 />
               </div>
+              <div className={`flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-3 ${isOver ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div>
+                  <h4 className="text-sm font-bold text-gray-800">📝 商品ポイント & Web商品説明</h4>
+                  <p className="mt-0.5 text-[11px] text-gray-500">2項目の合計を500文字以内にすると、全ECへ同じ内容を反映できます。</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <span className={`rounded-full px-2.5 py-1 font-mono text-xs ${isOver ? 'bg-red-100 font-bold text-red-700' : 'bg-white text-gray-600'}`}>
+                    {totalChars}/500文字
+                    {isOver && <span className="ml-1">（{overCount}文字超過）</span>}
+                  </span>
+                  <EcProductContentAiAdjuster
+                    recipeId={recipe.id}
+                    productPoints={recipe.product_points || ''}
+                    webDescription={recipe.web_description || ''}
+                    totalCharacters={totalChars}
+                    onApply={({ productPoints, webDescription }) => {
+                      setRecipe(prev => prev ? {
+                        ...prev,
+                        product_points: productPoints,
+                        web_description: webDescription,
+                      } : null);
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+              </div>
               {/* 商品ポイント — 2カラム横並び */}
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -4948,6 +4977,29 @@ function RecipeDetailContent() {
                   style={{ fieldSizing: 'content' as any, minHeight: '180px' }}
                 />
               </div>
+
+              <EcProductContentSyncControls
+                recipeId={recipe.id}
+                recipeName={recipe.name}
+                productPoints={toSquareProductPoints(recipe.product_points)}
+                webDescription={normalizeEcProductContentText(recipe.web_description)}
+                expectedRecipeSnapshot={{
+                  recipeId: recipe.id,
+                  recipeName: recipe.name.trim().slice(0, 200),
+                  productPoints: toSquareProductPoints(recipe.product_points),
+                  webDescription: normalizeEcProductContentText(recipe.web_description),
+                  ecProductName: recipe.ec_product_name ? String(recipe.ec_product_name).trim().slice(0, 75) : null,
+                  linkedProductId: recipe.linked_product_id ? String(recipe.linked_product_id).trim().slice(0, 100) : null,
+                  janCode: recipe.jan_code ? String(recipe.jan_code).trim().slice(0, 32) : null,
+                  seriesCode: recipe.series_code != null ? String(recipe.series_code).trim().slice(0, 100) : null,
+                  productCode: recipe.product_code != null ? String(recipe.product_code).trim().slice(0, 100) : null,
+                  fillingQuantity: recipe.filling_quantity != null ? String(recipe.filling_quantity).trim().slice(0, 50) : null,
+                  fillingQuantityUnit: recipe.filling_quantity_unit ? String(recipe.filling_quantity_unit).trim().slice(0, 30) : null,
+                  storageMethod: recipe.storage_method ? String(recipe.storage_method).trim().slice(0, 100) : null,
+                }}
+                hasUnsavedChanges={hasChanges}
+                isSaving={isSaving}
+              />
 
               {/* ポートレート画像 */}
               <div

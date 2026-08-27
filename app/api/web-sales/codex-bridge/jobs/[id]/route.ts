@@ -22,6 +22,7 @@ const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base
 const EC_PRODUCT_NAME_STATUSES = new Set(["updated", "submitted_pending", "not_found", "blocked"]);
 const EC_CATCHCOPY_TARGETS = new Set(["rakuten", "yahoo"]);
 const EC_CATCHCOPY_STATUSES = new Set(["updated", "submitted_pending", "not_found", "blocked"]);
+const EC_PRODUCT_CONTENT_STATUSES = new Set(["updated", "submitted_pending", "not_found", "blocked"]);
 
 function asObject(value: unknown): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -469,6 +470,145 @@ function catchcopySyncRows(
   });
 }
 
+function normalizedProductContentText(value: unknown) {
+  return String(value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function productContentForTarget(parametersInput: unknown, target: string) {
+  const parameters = asObject(parametersInput);
+  const contents = asObject(parameters.targetContents);
+  const value = asObject(contents[target]);
+  return {
+    fieldLayout: String(value.fieldLayout || ""),
+    markerStyle: String(value.markerStyle || ""),
+    productPoints: normalizedProductContentText(value.productPoints),
+    webDescription: normalizedProductContentText(value.webDescription),
+    combinedContent: value.combinedContent == null ? null : normalizedProductContentText(value.combinedContent),
+  };
+}
+
+function productContentOutputMatches(site: Record<string, any>, target: ReturnType<typeof productContentForTarget>, prefix: "target" | "final") {
+  const points = normalizedProductContentText(site[`${prefix}_product_points`]);
+  const description = normalizedProductContentText(site[`${prefix}_web_description`]);
+  const combined = site[`${prefix}_combined_content`] == null ? null : normalizedProductContentText(site[`${prefix}_combined_content`]);
+  return String(site.field_layout || "") === target.fieldLayout
+    && String(site.marker_style || "") === target.markerStyle
+    && points === (target.fieldLayout === "separate" ? target.productPoints : "")
+    && description === (target.fieldLayout === "separate" ? target.webDescription : "")
+    && combined === target.combinedContent;
+}
+
+function validatedProductContentPlan(parametersInput: unknown, planInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const plan = asObject(planInput);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const sites = Array.isArray(plan.sites) ? plan.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (plan.status !== "ready"
+    || targets.length === 0
+    || new Set(targets).size !== targets.length
+    || targets.some((target) => !EC_PRICE_TARGETS.has(target))
+    || names.length !== targets.length
+    || new Set(names).size !== names.length
+    || targets.some((target) => !names.includes(target))) {
+    throw new Error("EC商品文章反映計画の対象が不正です");
+  }
+  for (const site of sites) {
+    const targetName = String(site.site || "");
+    const target = productContentForTarget(parameters, targetName);
+    if (site.status === "not_found") {
+      if ([site.observed_product_points, site.observed_web_description, site.observed_combined_content, site.target_product_points, site.target_web_description, site.target_combined_content, site.product_identifier].some((value) => value != null) || !String(site.message || "").trim()) {
+        throw new Error(`${targetName}の対象商品なし計画が不正です`);
+      }
+      continue;
+    }
+    if (site.status !== "planned"
+      || !productContentOutputMatches(site, target, "target")
+      || !String(site.product_identifier || "").trim()
+      || !String(site.message || "").trim()) {
+      throw new Error(`${targetName}の商品文章反映計画が確定していません`);
+    }
+  }
+  return plan;
+}
+
+function validatedProductContentProgress(parametersInput: unknown, resultInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const result = asObject(resultInput);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (new Set(names).size !== names.length
+    || names.some((target) => !targets.includes(target))
+    || sites.some((site) => !EC_PRODUCT_CONTENT_STATUSES.has(String(site.status)))) {
+    throw new Error("EC商品文章反映途中結果の対象が不正です");
+  }
+  for (const site of sites) {
+    const target = productContentForTarget(parameters, String(site.site || ""));
+    if (["updated", "submitted_pending"].includes(String(site.status)) && !productContentOutputMatches(site, target, "final")) {
+      throw new Error(`${site.site}の商品文章反映途中結果が依頼内容と一致しません`);
+    }
+  }
+  return result;
+}
+
+function validatedFinalProductContentPlan(parametersInput: unknown, resultInput: unknown) {
+  const parameters = asObject(parametersInput);
+  const result = asObject(resultInput);
+  const plan = asObject(result.plan);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const resultSites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+  const planSites = Array.isArray(plan.sites) ? plan.sites.map(asObject) : [];
+  if (resultSites.length !== targets.length || planSites.length !== targets.length) {
+    throw new Error("EC商品文章反映の逐次結果が依頼対象と一致しません");
+  }
+  for (const target of targets) {
+    const resultSite = resultSites.find((site) => site.site === target);
+    const planSite = planSites.find((site) => site.site === target);
+    if (!resultSite || !planSite) throw new Error(`${target}の逐次結果がありません`);
+    if (resultSite.status === "blocked") continue;
+    validatedProductContentPlan({ ...parameters, targets: [target] }, { status: "ready", summary: String(plan.summary || "逐次計画"), sites: [planSite] });
+    if (resultSite.status === "not_found" && planSite.status !== "not_found") throw new Error(`${target}の対象商品なし結果が計画と一致しません`);
+    if (["updated", "submitted_pending"].includes(String(resultSite.status)) && planSite.status !== "planned") throw new Error(`${target}の反映結果に検証済み計画がありません`);
+  }
+  return plan;
+}
+
+function validateFinalProductContentResult(
+  claimedJob: Record<string, any>,
+  submittedResult: Record<string, any> | null,
+  status: CodexJobStatus,
+) {
+  if (!submittedResult) {
+    if (status === "failed" || status === "cancelled") return;
+    throw new Error("EC商品文章反映の最終結果がありません");
+  }
+  const parameters = asObject(claimedJob.parameters);
+  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const sites = Array.isArray(submittedResult.sites) ? submittedResult.sites.map(asObject) : [];
+  const names = sites.map((site) => String(site.site || ""));
+  if (submittedResult.status !== status
+    || names.length !== targets.length
+    || new Set(names).size !== names.length
+    || targets.some((target) => !names.includes(target))) {
+    throw new Error("EC商品文章反映の最終結果が依頼内容と一致しません");
+  }
+  if (status === "completed") {
+    const planSites = Array.isArray(asObject(submittedResult.plan).sites) ? asObject(submittedResult.plan).sites as unknown[] : [];
+    const incomplete = sites.some((site) => {
+      const target = productContentForTarget(parameters, String(site.site || ""));
+      if (site.status === "updated" && productContentOutputMatches(site, target, "final")) return false;
+      const planned = planSites.map(asObject).find((entry) => entry.site === site.site);
+      return site.status !== "not_found" || planned?.status !== "not_found";
+    });
+    if (incomplete) throw new Error("未確認のECサイトがあるため完了にできません");
+  }
+}
+
 function validateFinalPriceResult(
   claimedJob: Record<string, any>,
   submittedResult: Record<string, any> | null,
@@ -880,6 +1020,18 @@ export async function POST(
         submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
       }
     }
+    if (claimedJob.task_key === "ec_product_content_update" && submittedResult) {
+      if (!isFinal) {
+        if (String(body.eventType || "") === "ec_product_content_progress_checkpoint") {
+          submittedResult = validatedProductContentProgress(claimedJob.parameters, submittedResult);
+        } else {
+          return NextResponse.json({ error: "Invalid EC product content checkpoint" }, { status: 400 });
+        }
+      } else {
+        const plan = validatedFinalProductContentPlan(claimedJob.parameters, submittedResult);
+        submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
+      }
+    }
 
     let successfulSites: Record<string, any>[] = [];
     let tsgNotification: {
@@ -899,6 +1051,9 @@ export async function POST(
     if (claimedJob.task_key === "ec_catchcopy_update" && isFinal) {
       validateFinalCatchcopyResult(claimedJob, submittedResult, status);
       successfulSites = catchcopySyncRows(claimedJob, submittedResult, id, now);
+    }
+    if (claimedJob.task_key === "ec_product_content_update" && isFinal) {
+      validateFinalProductContentResult(claimedJob, submittedResult, status);
     }
 
     const updates: Record<string, any> = {
