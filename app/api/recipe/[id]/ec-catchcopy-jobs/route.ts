@@ -3,9 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import {
+  buildUnifiedEcCatchcopies,
   ecCatchcopyHistoryFromJobs,
   ecCatchcopyMapsEqual,
-  normalizeEcCatchcopiesBySite,
   normalizeEcCatchcopyTargets,
   type EcCatchcopiesBySite,
   type EcCatchcopyJobView,
@@ -61,7 +61,7 @@ function toJobView(job: Record<string, unknown>): EcCatchcopyJobView {
     currentStep: String(job.current_step || "実行待ち"),
     errorMessage: compactMessage(job.error_message),
     targets: normalizeEcCatchcopyTargets(parameters.targets),
-    catchcopies: normalizeEcCatchcopiesBySite(parameters.catchcopies),
+    catchcopies: buildUnifiedEcCatchcopies(asObject(parameters.catchcopies).rakuten || asObject(parameters.catchcopies).yahoo),
     summary: compactMessage(result.summary),
     sites: (Array.isArray(result.sites) ? result.sites : []) as EcCatchcopyJobView["sites"],
     createdAt: String(job.created_at || ""),
@@ -205,7 +205,7 @@ export async function POST(
     if (recipe.is_intermediate) return NextResponse.json({ error: "中間加工品はECキャッチコピー反映の対象外です" }, { status: 400 });
 
     const recipeSnapshot = buildEcCatchcopyRecipeSnapshot(recipe as Record<string, unknown>);
-    const catchcopies = normalizeEcCatchcopiesBySite(recipeSnapshot.ecCatchcopiesBySite, recipeSnapshot.fallbackCatchcopy);
+    const catchcopies = buildUnifiedEcCatchcopies(recipeSnapshot.fallbackCatchcopy);
     if (targets.some((target) => !catchcopies[target])) {
       return NextResponse.json({ error: "選択したECのキャッチコピーを保存してください" }, { status: 400 });
     }

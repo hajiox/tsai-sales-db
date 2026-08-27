@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, History, Play, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import {
+  buildUnifiedEcCatchcopies,
   EC_CATCHCOPY_TARGETS,
   ecCatchcopyMapsEqual,
   getEcCatchcopyTargetLabel,
-  normalizeEcCatchcopiesBySite,
-  type EcCatchcopiesBySite,
+  normalizeCommonEcCatchcopy,
   type EcCatchcopyHistoryEntry,
   type EcCatchcopyJobView,
   type EcCatchcopyTarget,
@@ -27,7 +27,6 @@ type Props = {
   recipeId: string;
   recipeName: string;
   fallbackCatchcopy: string | null;
-  ecCatchcopiesBySite: EcCatchcopiesBySite | null | undefined;
   expectedRecipeSnapshot: Record<string, unknown>;
   hasUnsavedChanges: boolean;
   isSaving: boolean;
@@ -53,7 +52,6 @@ export default function EcCatchcopySyncControls({
   recipeId,
   recipeName,
   fallbackCatchcopy,
-  ecCatchcopiesBySite,
   expectedRecipeSnapshot,
   hasUnsavedChanges,
   isSaving,
@@ -67,13 +65,12 @@ export default function EcCatchcopySyncControls({
   const [showHistory, setShowHistory] = useState(false);
   const [showReservations, setShowReservations] = useState(false);
   const notified = useRef<string | null>(null);
-  const targetCatchcopy = (fallbackCatchcopy || "").trim();
-  const targetCatchcopies = useMemo(
-    () => normalizeEcCatchcopiesBySite(ecCatchcopiesBySite, targetCatchcopy),
-    [ecCatchcopiesBySite, targetCatchcopy],
-  );
-  const summaryCatchcopy = targetCatchcopy || targetCatchcopies.rakuten || targetCatchcopies.yahoo || "";
-  const disabled = isSaving || hasUnsavedChanges || submitting;
+  const rawTargetCatchcopy = String(fallbackCatchcopy || "").replace(/\s+/g, " ").trim();
+  const targetCatchcopy = normalizeCommonEcCatchcopy(rawTargetCatchcopy);
+  const targetCatchcopies = buildUnifiedEcCatchcopies(targetCatchcopy);
+  const summaryCatchcopy = targetCatchcopy;
+  const commonValueInvalid = rawTargetCatchcopy !== targetCatchcopy;
+  const disabled = isSaving || hasUnsavedChanges || commonValueInvalid || submitting;
   const activeJobId = job?.id || null;
   const activeJobStatus = job?.status || null;
 
@@ -135,7 +132,8 @@ export default function EcCatchcopySyncControls({
     if (!window.confirm([
       `${getEcCatchcopyTargetLabel(targets)}のEC用キャッチコピーを${reserved ? "一括実行予約へ追加" : "変更"}します。`,
       "", `商品: ${recipeName}`,
-      ...targets.map((target) => `${getEcCatchcopyTargetLabel([target])}: ${targetCatchcopies[target]}`), "",
+      `共通キャッチコピー: ${summaryCatchcopy}`,
+      `反映先: ${getEcCatchcopyTargetLabel(targets)}`, "",
       reserved ? "予約分をまとめて実行するまで外部サイトは変更しません。" : "キャッチコピー以外の価格・説明・画像・在庫は変更しません。",
       "実行しますか？",
     ].join("\n"))) return;
@@ -230,7 +228,7 @@ export default function EcCatchcopySyncControls({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold text-gray-800">EC用キャッチコピーを反映</p>
-          <p className="text-[11px] text-gray-500">保存済みのキャッチコピーだけを、各ECへ1件ずつ変更します。</p>
+          <p className="text-[11px] text-gray-500">保存済みの同じキャッチコピーを、楽天・Yahooへ1件ずつ変更します。</p>
         </div>
         <div className="inline-flex rounded-md bg-gray-100 p-1 text-xs">
           <button type="button" className={`rounded px-3 py-1.5 ${dispatchMode === "immediate" ? "bg-white font-bold shadow-sm" : "text-gray-500"}`} onClick={() => setDispatchMode("immediate")}>今すぐ</button>
@@ -239,6 +237,7 @@ export default function EcCatchcopySyncControls({
       </div>
 
       {hasUnsavedChanges && <p className="mt-2 text-xs font-medium text-amber-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />先にレシピを保存してください。</p>}
+      {commonValueInvalid && <p className="mt-2 text-xs font-medium text-red-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />共通キャッチコピーを30文字以内へ直して保存してください。</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         {EC_CATCHCOPY_TARGETS.map((target) => (
           <button key={target.id} type="button" disabled={disabled || !targetCatchcopies[target.id]} onClick={() => void enqueue([target.id])}

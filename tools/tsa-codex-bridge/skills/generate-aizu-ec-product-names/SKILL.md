@@ -1,9 +1,9 @@
 ---
 name: generate-aizu-ec-product-names
-description: TSAが渡す保存済み商品情報だけを分析し、Amazon、楽天、Yahoo、メルカリShops、BASE、Qoo10、TikTok向けの商品名候補を生成するCodex Bridge専用Skill。外部サイトの閲覧や変更は行わない。
+description: TSAが渡す保存済み商品情報だけを分析し、Amazon、楽天、Yahoo、メルカリShops、BASE、Qoo10、TikTokで一字一句同じ共通商品名候補を生成するCodex Bridge専用Skill。外部サイトの閲覧や変更は行わない。
 ---
 
-# EC別商品名候補の生成
+# 全EC共通商品名候補の生成
 
 ## Bridge Input Contract
 
@@ -12,7 +12,7 @@ description: TSAが渡す保存済み商品情報だけを分析し、Amazon、�
 
 ## 目的
 
-`TASK_JSON` に含まれる現状商品名、商品ポイント、Web商品説明、商品仕様とサイト別ルールを根拠に、各ECで商品を正確に見つけやすく、読みやすい商品名候補を1件ずつ作る。
+`TASK_JSON` に含まれる現状の共通商品名、商品ポイント、Web商品説明、商品仕様と全サイトのルールを根拠に、7つのECすべてへ一字一句同じ文字列で登録する商品名候補を1件だけ作る。
 
 ## 根拠
 
@@ -28,19 +28,17 @@ description: TSAが渡す保存済み商品情報だけを分析し、Amazon、�
 - 関係のない検索語、同義語の羅列、過剰な記号、煽り表現を入れない。
 - レシピ、EC、LP、データベースを変更しない。候補生成だけを行う。
 
-## サイト別判断
+## 共通名の判断
 
-- `TASK_JSON.siteRules` の `platformMaxLength` は絶対上限とする。
-- 原則 `preferredMaxLength` 以内に収める。超える具体的な利益がある場合でも絶対上限は超えない。
-- Amazon、Yahooは重要な商品特定語を前半へ置き、短く明確にする。
-- 楽天、Qoo10は自然な日本語を保ったまま、根拠のある検索語を補完する。
-- メルカリShopsは一覧で判別できる簡潔さを優先する。
-- BASEはブランドの読みやすさ、TikTokは商品種別と特徴の即時理解を優先する。
-- 各ECの候補は同一である必要はない。ただし商品そのものの意味を変えない。
+- `TASK_JSON.siteRules` の7サイト分を横断して判断し、特定サイトだけへ偏らせない。
+- AmazonとYahooを含む最も厳しい共通上限の75文字以内を絶対条件とする。
+- 主要な商品特定語を前半へ置き、自然な日本語、一覧での判別性、根拠のある検索語を両立する。
+- Amazon、楽天、Yahoo、メルカリShops、BASE、Qoo10、TikTokへ渡す値は一字一句同じでなければならない。サイト別候補は作らない。
 
 ## 出力
 
 - 日本語で記述する。
 - 指定されたJSON Schemaに一致するJSONだけを返す。
-- `selected_keywords` は実際に候補名へ採用した重要語だけを入れる。
-- `rationale` はそのECでの判断理由を簡潔に示す。
+- `suggestion` は1件だけ返す。
+- `selected_keywords` は実際に共通候補へ採用した重要語だけを入れる。
+- `rationale` は7サイトの条件をどう両立したか簡潔に示す。

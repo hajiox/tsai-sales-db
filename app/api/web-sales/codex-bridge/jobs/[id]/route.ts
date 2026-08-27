@@ -134,17 +134,15 @@ function priceSyncRows(
   });
 }
 
-const EC_PRODUCT_NAME_MAX_LENGTHS: Record<string, number> = {
-  amazon: 75, rakuten: 127, yahoo: 75, mercari: 130, base: 255, qoo10: 100, tiktok: 255,
-};
-
 function normalizedProductName(value: unknown, maxLength = 255) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
 function productNameForTarget(parameters: Record<string, unknown>, target: string) {
   const names = asObject(parameters.newProductNames);
-  return normalizedProductName(names[target] ?? parameters.newProductName, EC_PRODUCT_NAME_MAX_LENGTHS[target] || 255);
+  const commonName = normalizedProductName(parameters.newProductName, 75);
+  const targetName = normalizedProductName(names[target], 75);
+  return commonName && targetName === commonName ? commonName : "";
 }
 
 function validatedProductNamePlan(parametersInput: unknown, planInput: unknown) {
@@ -314,7 +312,10 @@ function normalizedCatchcopy(value: unknown, maxLength = 255) {
 }
 
 function catchcopyForTarget(parameters: Record<string, unknown>, target: string) {
-  return normalizedCatchcopy(asObject(parameters.catchcopies)[target], EC_CATCHCOPY_MAX_LENGTHS[target] || 87);
+  const catchcopies = asObject(parameters.catchcopies);
+  const commonCatchcopy = normalizedCatchcopy(catchcopies.rakuten ?? catchcopies.yahoo, 30);
+  const targetCatchcopy = normalizedCatchcopy(catchcopies[target], 30);
+  return commonCatchcopy && targetCatchcopy === commonCatchcopy ? commonCatchcopy : "";
 }
 
 function validatedCatchcopyPlan(parametersInput: unknown, planInput: unknown) {

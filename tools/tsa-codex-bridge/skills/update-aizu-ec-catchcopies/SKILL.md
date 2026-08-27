@@ -1,6 +1,6 @@
 ---
 name: update-aizu-ec-catchcopies
-description: TSAが固定した商品識別子とサイト別キャッチコピーを使い、ログイン済み楽天RMSとYahoo!ショッピングの商品キャッチコピー欄だけを安全に確認・変更するCodex Bridge専用Skill。
+description: TSAが固定した商品識別子と共通キャッチコピーを使い、ログイン済み楽天RMSとYahoo!ショッピングへ一字一句同じ文言を安全に反映するCodex Bridge専用Skill。
 ---
 
 # ECキャッチコピー変更
@@ -12,12 +12,13 @@ description: TSAが固定した商品識別子とサイト別キャッチコピ�
 
 ## 目的
 
-TSAが保存・承認した1商品のキャッチコピーを、指定された楽天またはYahooへ1サイトずつ反映する。Bridgeが現在のサイトだけを `TASK_JSON.targets` と `TASK_JSON.newCatchcopy` に固定して渡す。
+TSAが保存・承認した1商品の共通キャッチコピーを、指定された楽天またはYahooへ1サイトずつ反映する。Bridgeが現在のサイトだけを `TASK_JSON.targets` に固定し、両サイト共通の値を `TASK_JSON.newCatchcopy` として渡す。
 
 ## 絶対条件
 
 - `TASK_JSON.targets` の1サイトだけを操作する。
-- `TASK_JSON.newCatchcopy` を一字一句そのまま使い、整形、追記、省略、SEO調整をしない。
+- `TASK_JSON.newCatchcopy` は楽天・Yahoo共通の確定値である。一字一句そのまま使い、サイト別の整形、追記、省略、SEO調整をしない。
+- 互換用の `catchcopies` がある場合も、楽天・Yahooの値が共通値と完全一致していなければ停止する。
 - `productMappings`、`verifiedProductIdentifiers`、JAN、内容量、保存方法を使って同一商品を確認する。類似商品へ変更しない。
 - 変更可能なのはキャッチコピー欄だけ。商品名、価格、セール価格、ポイント、在庫、配送、送料、税、画像、説明、バリエーション、カテゴリ、広告を変更しない。
 - 一括選択・一括編集を使わない。
@@ -34,7 +35,7 @@ TSAが保存・承認した1商品のキャッチコピーを、指定された�
 
 ## 対象欄
 
-- 楽天: RMSの商品編集にある「キャッチコピー」。商品管理番号を再確認する。87文字以内。
+- 楽天: RMSの商品編集にある「キャッチコピー」。商品管理番号を再確認する。共通上限30文字以内。
 - Yahoo: ストアクリエイターProの商品編集にある「キャッチコピー」。API/CSV上の項目は `headline`。商品コードを再確認し、全角30文字以内、HTMLなし。
 
 Amazon、メルカリShops、BASE、Qoo10、TikTokは専用キャッチコピー欄の対象外であり操作しない。

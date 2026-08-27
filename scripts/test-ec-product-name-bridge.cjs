@@ -12,6 +12,8 @@ assert.match(bridge, /ecProductNameAiProtocolVersion: 1/);
 assert.match(bridge, /ecProductNameAiModel: "gpt-5\.6-sol"/);
 assert.match(bridge, /newProductNames/);
 assert.match(bridge, /EC_PRODUCT_NAME_MAX_LENGTHS/);
+assert.match(bridge, /EC_COMMON_PRODUCT_NAME_MAX_LENGTH = 75/);
+assert.match(bridge, /全EC共通商品名と一致しません/);
 assert.match(bridge, /"ec_product_name_update"/);
 assert.match(bridge, /executeEcProductNameUpdateJob/);
 assert.match(bridge, /executeEcProductNameGenerateJob/);
@@ -35,6 +37,8 @@ assert.equal(skillContract.tasks.ec_product_name_generate.skill, "generate-aizu-
 const generationSkill = fs.readFileSync(path.join(root, "tools", "tsa-codex-bridge", "skills", "generate-aizu-ec-product-names", "SKILL.md"), "utf8");
 assert.match(generationSkill, /外部サイトの閲覧や変更は行わない/);
 assert.match(generationSkill, /過去チャット参照をしない/);
+assert.match(generationSkill, /一字一句同じ/);
+assert.doesNotMatch(generationSkill, /候補は同一である必要はない/);
 
 const generationRoute = fs.readFileSync(path.join(root, "app", "api", "recipe", "[id]", "ec-product-name-ai", "route.ts"), "utf8");
 assert.match(generationRoute, /ec_product_name_generate/);
@@ -46,6 +50,9 @@ assert.match(generationImport, /validateEcProductNameAiResult/);
 assert.match(generationImport, /recipe_ec_product_name_ai_generations/);
 
 const generationSchema = JSON.parse(fs.readFileSync(path.join(root, "tools", "tsa-codex-bridge", "ec-product-name-ai.schema.json"), "utf8"));
+assert.ok(generationSchema.properties.suggestion);
+assert.equal(generationSchema.properties.suggestions, undefined);
+assert.equal(generationSchema.$defs.suggestion.properties.name.maxLength, 75);
 function assertStrictObjectSchemas(value, location = "$") {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   if (value.type === "object" && value.properties) {
@@ -61,6 +68,12 @@ function assertStrictObjectSchemas(value, location = "$") {
   }
 }
 assertStrictObjectSchemas(generationSchema);
+
+const editor = fs.readFileSync(path.join(root, "app", "recipe", "_components", "EcProductNameAiEditor.tsx"), "utf8");
+assert.match(editor, /全EC共通の商品名をAI生成/);
+assert.doesNotMatch(editor, /EC_PRODUCT_NAME_TARGETS\.map/);
+const saveRoute = fs.readFileSync(path.join(root, "app", "api", "recipe", "save", "route.ts"), "utf8");
+assert.match(saveRoute, /buildUnifiedEcProductNames/);
 
 const solMigration = fs.readFileSync(
   path.join(root, "supabase", "migrations", "20260825130000_ec_product_name_ai_sol.sql"),

@@ -5,9 +5,10 @@ import {
   EC_CATCHCOPY_AI_MODEL,
   EC_CATCHCOPY_AI_REASONING_EFFORT,
   EC_CATCHCOPY_AI_RULES_VERSION,
+  EC_COMMON_CATCHCOPY_MAX_LENGTH,
   EC_CATCHCOPY_RULES,
   EC_CATCHCOPY_TARGETS,
-  normalizeEcCatchcopiesBySite,
+  normalizeCommonEcCatchcopy,
 } from "@/lib/ec-catchcopy-codex";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import type { CodexJobStatus } from "@/lib/web-sales-codex/types";
@@ -58,35 +59,20 @@ async function requireAdmin() {
 
 async function loadGenerationInput(recipeId: string) {
   const supabase = getWebSalesAutomationServiceClient();
-  const [{ data: recipe, error: recipeError }, { data: syncRows, error: syncError }] = await Promise.all([
-    supabase
-      .from("recipes")
-      .select("id,name,category,series,ec_product_name,ec_product_names_by_site,ec_catchcopies_by_site,product_points,web_description,catchcopy,ingredient_label,filling_quantity,filling_quantity_unit,storage_method,shelf_life,jan_code,product_code")
-      .eq("id", recipeId)
-      .single(),
-    supabase
-      .from("recipe_ec_catchcopy_sync_state")
-      .select("target,last_catchcopy,updated_at")
-      .eq("recipe_id", recipeId),
-  ]);
+  const { data: recipe, error: recipeError } = await supabase
+    .from("recipes")
+    .select("id,name,category,series,ec_product_name,product_points,web_description,catchcopy,ingredient_label,filling_quantity,filling_quantity_unit,storage_method,shelf_life,jan_code,product_code")
+    .eq("id", recipeId)
+    .single();
   if (recipeError || !recipe) throw new Error("レシピが見つかりません");
-  if (syncError) throw syncError;
 
-  const currentCatchcopies = normalizeEcCatchcopiesBySite(recipe.ec_catchcopies_by_site, recipe.catchcopy);
-  const lastVerifiedExternalCatchcopies = Object.fromEntries((syncRows || []).map((row) => [row.target, {
-    catchcopy: clip(row.last_catchcopy, 87),
-    verifiedAt: row.updated_at,
-  }]));
   const sourceSnapshot = {
     recipeId: recipe.id,
     recipeName: clip(recipe.name, 300),
     category: clip(recipe.category, 100),
     series: clip(recipe.series, 120),
     currentProductName: clip(recipe.ec_product_name, 75),
-    currentProductNames: recipe.ec_product_names_by_site || {},
-    currentFallbackCatchcopy: clip(recipe.catchcopy, 87),
-    currentCatchcopies,
-    lastVerifiedExternalCatchcopies,
+    currentCatchcopy: normalizeCommonEcCatchcopy(recipe.catchcopy),
     productPoints: clip(recipe.product_points, 8_000),
     webDescription: clip(recipe.web_description, 12_000),
     ingredientLabel: clip(recipe.ingredient_label, 4_000),
@@ -103,7 +89,12 @@ async function loadGenerationInput(recipeId: string) {
     preferredMaxLength: EC_CATCHCOPY_RULES[id].generationMaxLength,
     guidance: EC_CATCHCOPY_RULES[id].guidance,
   }]));
-  return { supabase, recipe, sourceSnapshot, siteRules };
+  const unifiedRule = {
+    exactSameValueForAllSites: true,
+    maxLength: EC_COMMON_CATCHCOPY_MAX_LENGTH,
+    targets: EC_CATCHCOPY_TARGETS.map(({ id, label }) => ({ id, label })),
+  };
+  return { supabase, recipe, sourceSnapshot, siteRules, unifiedRule };
 }
 
 export async function GET(
@@ -156,7 +147,7 @@ export async function POST(
 
   try {
     const { id: recipeId } = await params;
-    const { supabase, recipe, sourceSnapshot, siteRules } = await loadGenerationInput(recipeId);
+    const { supabase, recipe, sourceSnapshot, siteRules, unifiedRule } = await loadGenerationInput(recipeId);
     const { data: activeRows, error: activeError } = await supabase
       .from("web_sales_codex_jobs")
       .select("id,status,progress,current_step,error_message,parameters,result,created_at,started_at,updated_at,completed_at")
@@ -184,6 +175,7 @@ export async function POST(
       recipeName: clip(recipe.name, 300),
       sourceSnapshot,
       siteRules,
+      unifiedRule,
       model: EC_CATCHCOPY_AI_MODEL,
       reasoningEffort: EC_CATCHCOPY_AI_REASONING_EFFORT,
       rulesVersion: EC_CATCHCOPY_AI_RULES_VERSION,

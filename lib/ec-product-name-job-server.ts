@@ -1,8 +1,9 @@
 import "server-only";
 
 import {
+  buildUnifiedEcProductNames,
   ecProductNameMapsEqual,
-  normalizeEcProductNamesBySite,
+  normalizeCommonEcProductName,
   type EcProductNamesBySite,
 } from "@/lib/ec-product-name-codex";
 
@@ -26,7 +27,7 @@ function nullableText(value: unknown, maxLength: number) {
 }
 
 export function normalizeEcProductName(value: unknown) {
-  return String(value ?? "").trim().slice(0, 75);
+  return normalizeCommonEcProductName(value);
 }
 
 export function buildEcProductNameRecipeSnapshot(
@@ -36,10 +37,7 @@ export function buildEcProductNameRecipeSnapshot(
     recipeId: String(recipe.id || ""),
     recipeName: String(recipe.name || "").trim().slice(0, 200),
     ecProductName: normalizeEcProductName(recipe.ec_product_name),
-    ecProductNamesBySite: normalizeEcProductNamesBySite(
-      recipe.ec_product_names_by_site,
-      recipe.ec_product_name,
-    ),
+    ecProductNamesBySite: buildUnifiedEcProductNames(recipe.ec_product_name),
     linkedProductId: nullableText(recipe.linked_product_id, 100),
     janCode: nullableText(recipe.jan_code, 32),
     seriesCode: nullableText(recipe.series_code, 100),

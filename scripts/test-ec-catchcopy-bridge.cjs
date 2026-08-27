@@ -14,6 +14,8 @@ assert.match(bridge, /ecCatchcopyProtocolVersion: 1/);
 assert.match(bridge, /ecCatchcopyAiProtocolVersion: 1/);
 assert.match(bridge, /ecCatchcopyAiModel: "gpt-5\.6-sol"/);
 assert.match(bridge, /const EC_CATCHCOPY_TARGETS = new Set\(\["rakuten", "yahoo"\]\)/);
+assert.match(bridge, /EC_COMMON_CATCHCOPY_MAX_LENGTH = 30/);
+assert.match(bridge, /共通キャッチコピーと一致しません/);
 assert.match(bridge, /executeEcCatchcopyUpdateJob/);
 assert.match(bridge, /executeEcCatchcopyGenerateJob/);
 assert.match(bridge, /ec_catchcopy_progress_checkpoint/);
@@ -33,6 +35,8 @@ assert.equal(skillContract.tasks.ec_catchcopy_generate.skill, "generate-aizu-ec-
 const generationSkill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-ec-catchcopies", "SKILL.md");
 assert.match(generationSkill, /外部サイト/);
 assert.match(generationSkill, /過去チャット/);
+assert.match(generationSkill, /一字一句同じ/);
+assert.doesNotMatch(generationSkill, /候補は同一である必要はない/);
 
 const updateSkill = read("tools", "tsa-codex-bridge", "skills", "update-aizu-ec-catchcopies", "SKILL.md");
 assert.match(updateSkill, /楽天/);
@@ -42,6 +46,16 @@ assert.doesNotMatch(updateSkill, /Amazonのキャッチコピー/);
 for (const schemaName of ["ec-catchcopy-plan.schema.json", "ec-catchcopy-result.schema.json", "ec-catchcopy-ai.schema.json"]) {
   JSON.parse(read("tools", "tsa-codex-bridge", schemaName));
 }
+const aiSchema = JSON.parse(read("tools", "tsa-codex-bridge", "ec-catchcopy-ai.schema.json"));
+assert.ok(aiSchema.properties.suggestion);
+assert.equal(aiSchema.properties.suggestions, undefined);
+assert.equal(aiSchema.$defs.suggestion.properties.catchcopy.maxLength, 30);
+
+const editor = read("app", "recipe", "_components", "EcCatchcopyAiEditor.tsx");
+assert.match(editor, /楽天・Yahoo共通のキャッチコピーをAI生成/);
+assert.doesNotMatch(editor, /EC_CATCHCOPY_TARGETS\.map/);
+const saveRoute = read("app", "api", "recipe", "save", "route.ts");
+assert.match(saveRoute, /buildUnifiedEcCatchcopies/);
 
 const generationRoute = read("app", "api", "recipe", "[id]", "ec-catchcopy-ai", "route.ts");
 assert.match(generationRoute, /ec_catchcopy_generate/);

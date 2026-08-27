@@ -9,94 +9,15 @@
       "maxItems": 12,
       "items": { "type": "string", "maxLength": 200 }
     },
-    "suggestions": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "amazon": { "$ref": "#/$defs/amazonSuggestion" },
-        "rakuten": { "$ref": "#/$defs/rakutenSuggestion" },
-        "yahoo": { "$ref": "#/$defs/yahooSuggestion" },
-        "mercari": { "$ref": "#/$defs/mercariSuggestion" },
-        "base": { "$ref": "#/$defs/baseSuggestion" },
-        "qoo10": { "$ref": "#/$defs/qoo10Suggestion" },
-        "tiktok": { "$ref": "#/$defs/tiktokSuggestion" }
-      },
-      "required": ["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]
-    }
+    "suggestion": { "$ref": "#/$defs/suggestion" }
   },
-  "required": ["overall_analysis", "source_gaps", "suggestions"],
+  "required": ["overall_analysis", "source_gaps", "suggestion"],
   "$defs": {
-    "amazonSuggestion": {
+    "suggestion": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string", "minLength": 1, "maxLength": 75 },
-        "selected_keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 80 } },
-        "rationale": { "type": "string", "maxLength": 500 },
-        "cautions": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } }
-      },
-      "required": ["name", "selected_keywords", "rationale", "cautions"]
-    },
-    "rakutenSuggestion": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 127 },
-        "selected_keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 80 } },
-        "rationale": { "type": "string", "maxLength": 500 },
-        "cautions": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } }
-      },
-      "required": ["name", "selected_keywords", "rationale", "cautions"]
-    },
-    "yahooSuggestion": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 75 },
-        "selected_keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 80 } },
-        "rationale": { "type": "string", "maxLength": 500 },
-        "cautions": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } }
-      },
-      "required": ["name", "selected_keywords", "rationale", "cautions"]
-    },
-    "mercariSuggestion": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 130 },
-        "selected_keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 80 } },
-        "rationale": { "type": "string", "maxLength": 500 },
-        "cautions": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } }
-      },
-      "required": ["name", "selected_keywords", "rationale", "cautions"]
-    },
-    "baseSuggestion": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
-        "selected_keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 80 } },
-        "rationale": { "type": "string", "maxLength": 500 },
-        "cautions": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } }
-      },
-      "required": ["name", "selected_keywords", "rationale", "cautions"]
-    },
-    "qoo10Suggestion": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "selected_keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 80 } },
-        "rationale": { "type": "string", "maxLength": 500 },
-        "cautions": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } }
-      },
-      "required": ["name", "selected_keywords", "rationale", "cautions"]
-    },
-    "tiktokSuggestion": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
         "selected_keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 80 } },
         "rationale": { "type": "string", "maxLength": 500 },
         "cautions": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } }

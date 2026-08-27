@@ -20,7 +20,8 @@ export type EcProductNameRule = {
 
 export const EC_PRODUCT_NAME_AI_MODEL = "gpt-5.6-sol";
 export const EC_PRODUCT_NAME_AI_REASONING_EFFORT = "medium";
-export const EC_PRODUCT_NAME_AI_RULES_VERSION = "2026-08-25.2";
+export const EC_PRODUCT_NAME_AI_RULES_VERSION = "2026-08-27.1";
+export const EC_COMMON_PRODUCT_NAME_MAX_LENGTH = 75;
 
 export type EcProductNameAiSuggestion = {
   name: string;
@@ -32,7 +33,7 @@ export type EcProductNameAiSuggestion = {
 export type EcProductNameAiResult = {
   overall_analysis: string;
   source_gaps: string[];
-  suggestions: Record<EcProductNameTarget, EcProductNameAiSuggestion>;
+  suggestion: EcProductNameAiSuggestion;
 };
 
 export const EC_PRODUCT_NAME_RULES: Record<EcProductNameTarget, EcProductNameRule> = {
@@ -85,16 +86,27 @@ function clippedText(value: unknown, maxLength: number) {
 
 export function validateEcProductNameAiResult(value: unknown): EcProductNameAiResult {
   const result = asObject(value);
-  const suggestions = asObject(result.suggestions);
-  const normalized = {} as Record<EcProductNameTarget, EcProductNameAiSuggestion>;
-  for (const { id } of EC_PRODUCT_NAME_TARGETS) {
-    const candidate = asObject(suggestions[id]);
-    const rawName = String(candidate.name ?? "").replace(/\s+/g, " ").trim();
-    const name = normalizeEcProductNameForTarget(id, rawName);
-    if (!name || name !== rawName) {
-      throw new Error(`${id}の商品名が空欄または文字数上限を超えています`);
+  let candidate = asObject(result.suggestion);
+  if (Object.keys(candidate).length === 0) {
+    const legacySuggestions = asObject(result.suggestions);
+    const legacyCandidates = EC_PRODUCT_NAME_TARGETS.map(({ id }) => asObject(legacySuggestions[id]));
+    const legacyNames = legacyCandidates.map((entry) => normalizeCommonEcProductName(entry.name));
+    if (!legacyNames[0] || legacyNames.some((name) => name !== legacyNames[0])) {
+      throw new Error("全ECで統一する商品名候補がありません");
     }
-    normalized[id] = {
+    candidate = legacyCandidates[0];
+  }
+  const rawName = String(candidate.name ?? "").replace(/\s+/g, " ").trim();
+  const name = normalizeCommonEcProductName(rawName);
+  if (!name || name !== rawName) {
+    throw new Error(`共通商品名が空欄または${EC_COMMON_PRODUCT_NAME_MAX_LENGTH}文字上限を超えています`);
+  }
+  return {
+    overall_analysis: clippedText(result.overall_analysis, 1200),
+    source_gaps: Array.isArray(result.source_gaps)
+      ? result.source_gaps.map((item) => clippedText(item, 200)).filter(Boolean).slice(0, 12)
+      : [],
+    suggestion: {
       name,
       selected_keywords: Array.isArray(candidate.selected_keywords)
         ? candidate.selected_keywords.map((item) => clippedText(item, 80)).filter(Boolean).slice(0, 10)
@@ -103,15 +115,23 @@ export function validateEcProductNameAiResult(value: unknown): EcProductNameAiRe
       cautions: Array.isArray(candidate.cautions)
         ? candidate.cautions.map((item) => clippedText(item, 200)).filter(Boolean).slice(0, 8)
         : [],
-    };
-  }
-  return {
-    overall_analysis: clippedText(result.overall_analysis, 1200),
-    source_gaps: Array.isArray(result.source_gaps)
-      ? result.source_gaps.map((item) => clippedText(item, 200)).filter(Boolean).slice(0, 12)
-      : [],
-    suggestions: normalized,
+    },
   };
+}
+
+export function normalizeCommonEcProductName(value: unknown) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, EC_COMMON_PRODUCT_NAME_MAX_LENGTH);
+}
+
+export function buildUnifiedEcProductNames(value: unknown): EcProductNamesBySite {
+  const name = normalizeCommonEcProductName(value);
+  if (!name) return {};
+  return Object.fromEntries(
+    EC_PRODUCT_NAME_TARGETS.map(({ id }) => [id, name]),
+  ) as EcProductNamesBySite;
 }
 
 export function normalizeEcProductNameForTarget(target: EcProductNameTarget, value: unknown) {

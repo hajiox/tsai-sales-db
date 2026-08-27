@@ -1,8 +1,9 @@
 import "server-only";
 
 import {
+  buildUnifiedEcCatchcopies,
   ecCatchcopyMapsEqual,
-  normalizeEcCatchcopiesBySite,
+  normalizeCommonEcCatchcopy,
   type EcCatchcopiesBySite,
 } from "@/lib/ec-catchcopy-codex";
 
@@ -26,7 +27,7 @@ function nullableText(value: unknown, maxLength: number) {
 }
 
 export function normalizeFallbackCatchcopy(value: unknown) {
-  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 87);
+  return normalizeCommonEcCatchcopy(value);
 }
 
 export function buildEcCatchcopyRecipeSnapshot(
@@ -37,10 +38,7 @@ export function buildEcCatchcopyRecipeSnapshot(
     recipeId: String(recipe.id || ""),
     recipeName: String(recipe.name || "").trim().slice(0, 200),
     fallbackCatchcopy,
-    ecCatchcopiesBySite: normalizeEcCatchcopiesBySite(
-      recipe.ec_catchcopies_by_site,
-      fallbackCatchcopy,
-    ),
+    ecCatchcopiesBySite: buildUnifiedEcCatchcopies(fallbackCatchcopy),
     linkedProductId: nullableText(recipe.linked_product_id, 100),
     janCode: nullableText(recipe.jan_code, 32),
     seriesCode: nullableText(recipe.series_code, 100),

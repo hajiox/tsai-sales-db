@@ -29,8 +29,18 @@ import EcCatchcopySyncControls from "../_components/EcCatchcopySyncControls";
 import EcCatchcopyAiEditor from "../_components/EcCatchcopyAiEditor";
 import RecipeSnsStudio from "../_components/RecipeSnsStudio";
 import ScopedEcImageSection from "../_components/ScopedEcImageSection";
-import type { EcProductNamesBySite } from "@/lib/ec-product-name-codex";
-import type { EcCatchcopiesBySite } from "@/lib/ec-catchcopy-codex";
+import {
+  buildUnifiedEcProductNames,
+  EC_COMMON_PRODUCT_NAME_MAX_LENGTH,
+  normalizeCommonEcProductName,
+  type EcProductNamesBySite,
+} from "@/lib/ec-product-name-codex";
+import {
+  buildUnifiedEcCatchcopies,
+  EC_COMMON_CATCHCOPY_MAX_LENGTH,
+  normalizeCommonEcCatchcopy,
+  type EcCatchcopiesBySite,
+} from "@/lib/ec-catchcopy-codex";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
@@ -1580,6 +1590,17 @@ function RecipeDetailContent() {
       return;
     }
 
+    const commonProductName = String(recipe.ec_product_name || "").replace(/\s+/g, " ").trim();
+    if (commonProductName.length > EC_COMMON_PRODUCT_NAME_MAX_LENGTH) {
+      toast.error(`EC共通商品名を${EC_COMMON_PRODUCT_NAME_MAX_LENGTH}文字以内にしてください`);
+      return;
+    }
+    const commonCatchcopy = String(recipe.catchcopy || "").replace(/\s+/g, " ").trim();
+    if (commonCatchcopy.length > EC_COMMON_CATCHCOPY_MAX_LENGTH) {
+      toast.error(`EC共通キャッチコピーを${EC_COMMON_CATCHCOPY_MAX_LENGTH}文字以内にしてください`);
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -1665,10 +1686,10 @@ function RecipeDetailContent() {
             product_code: recipe.product_code,
             web_description: recipe.web_description,
             product_points: recipe.product_points,
-            ec_product_name: recipe.ec_product_name,
-            ec_product_names_by_site: recipe.ec_product_names_by_site || {},
-            catchcopy: recipe.catchcopy,
-            ec_catchcopies_by_site: recipe.ec_catchcopies_by_site || {},
+            ec_product_name: normalizeCommonEcProductName(recipe.ec_product_name) || null,
+            ec_product_names_by_site: buildUnifiedEcProductNames(recipe.ec_product_name),
+            catchcopy: normalizeCommonEcCatchcopy(recipe.catchcopy) || null,
+            ec_catchcopies_by_site: buildUnifiedEcCatchcopies(recipe.catchcopy),
             product_lp_url: recipe.product_lp_url,
           },
         }),
@@ -4737,7 +4758,7 @@ function RecipeDetailContent() {
               {/* EC用商品名 */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-semibold text-gray-700">🏷️ 共通商品名（予備）</label>
+                    <label className="block text-sm font-semibold text-gray-700">🏷️ EC共通商品名</label>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${(recipe.ec_product_name || '').length > 75 ? 'bg-red-100 text-red-600 font-bold' : (recipe.ec_product_name || '').length > 60 ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
                       {(recipe.ec_product_name || '').length} / 75文字
@@ -4752,11 +4773,16 @@ function RecipeDetailContent() {
                   type="text"
                   value={recipe.ec_product_name || ''}
                   onChange={(e) => {
-                    setRecipe(prev => prev ? { ...prev, ec_product_name: e.target.value } : null);
+                    const commonName = e.target.value.slice(0, 75);
+                    setRecipe(prev => prev ? {
+                      ...prev,
+                      ec_product_name: commonName,
+                      ec_product_names_by_site: buildUnifiedEcProductNames(commonName),
+                    } : null);
                     setHasChanges(true);
                   }}
                   maxLength={75}
-                  placeholder="EC別の商品名が未設定の場合に使う予備名（最大75文字）"
+                  placeholder="全ECへ同じ商品名を登録（最大75文字）"
                   className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none ${(recipe.ec_product_name || '').length > 75 ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                 />
                 {(recipe.ec_product_name || '').length > 60 && (recipe.ec_product_name || '').length <= 75 && (
@@ -4764,13 +4790,11 @@ function RecipeDetailContent() {
                 )}
                 <EcProductNameAiEditor
                   recipeId={recipe.id}
-                  fallbackName={recipe.ec_product_name}
-                  namesBySite={recipe.ec_product_names_by_site}
-                  onChange={(names, fallbackName) => {
+                  onChange={(commonName) => {
                     setRecipe(prev => prev ? {
                       ...prev,
-                      ec_product_names_by_site: names,
-                      ...(fallbackName ? { ec_product_name: fallbackName } : {}),
+                      ec_product_name: commonName,
+                      ec_product_names_by_site: buildUnifiedEcProductNames(commonName),
                     } : null);
                     setHasChanges(true);
                   }}
@@ -4779,12 +4803,11 @@ function RecipeDetailContent() {
                   recipeId={recipe.id}
                   recipeName={recipe.name}
                   ecProductName={recipe.ec_product_name ?? null}
-                  ecProductNamesBySite={recipe.ec_product_names_by_site}
                   expectedRecipeSnapshot={{
                     recipeId: recipe.id,
                     recipeName: recipe.name,
-                    ecProductName: (recipe.ec_product_name || '').trim().slice(0, 75),
-                    ecProductNamesBySite: recipe.ec_product_names_by_site || {},
+                    ecProductName: normalizeCommonEcProductName(recipe.ec_product_name),
+                    ecProductNamesBySite: buildUnifiedEcProductNames(recipe.ec_product_name),
                     linkedProductId: recipe.linked_product_id ? String(recipe.linked_product_id).trim().slice(0, 100) : null,
                     janCode: recipe.jan_code ? String(recipe.jan_code).trim().slice(0, 32) : null,
                     seriesCode: recipe.series_code ? String(recipe.series_code).trim().slice(0, 100) : null,
@@ -4801,33 +4824,41 @@ function RecipeDetailContent() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm font-semibold text-gray-700">
-                    ✨ キャッチコピー <span className="text-xs font-normal text-amber-500">※楽天・Yahooのみ</span>
+                    ✨ EC共通キャッチコピー <span className="text-xs font-normal text-amber-500">※楽天・Yahooへ同じ文言を登録</span>
                   </label>
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(recipe.catchcopy || ''); toast.success('キャッチコピーをコピーしました'); }}
-                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="コピー"
-                  ><ClipboardCopy className="w-3.5 h-3.5" /></button>
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 font-mono text-xs ${(recipe.catchcopy || '').length >= 30 ? 'bg-amber-100 font-bold text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {(recipe.catchcopy || '').length} / 30文字
+                    </span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(recipe.catchcopy || ''); toast.success('キャッチコピーをコピーしました'); }}
+                      className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition" title="コピー"
+                    ><ClipboardCopy className="w-3.5 h-3.5" /></button>
+                  </div>
                 </div>
                 <input
                   type="text"
                   value={recipe.catchcopy || ''}
-                  maxLength={87}
+                  maxLength={30}
                   onChange={(e) => {
-                    setRecipe(prev => prev ? { ...prev, catchcopy: e.target.value } : null);
+                    const commonCatchcopy = e.target.value.slice(0, 30);
+                    setRecipe(prev => prev ? {
+                      ...prev,
+                      catchcopy: commonCatchcopy,
+                      ec_catchcopies_by_site: buildUnifiedEcCatchcopies(commonCatchcopy),
+                    } : null);
                     setHasChanges(true);
                   }}
-                  placeholder="商品のキャッチコピーを入力（楽天・Yahoo掲載用）"
+                  placeholder="楽天・Yahooへ同じキャッチコピーを登録（最大30文字）"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
                 <EcCatchcopyAiEditor
                   recipeId={recipe.id}
-                  fallbackCatchcopy={recipe.catchcopy}
-                  catchcopiesBySite={recipe.ec_catchcopies_by_site}
-                  onChange={(catchcopies, fallbackCatchcopy) => {
+                  onChange={(commonCatchcopy) => {
                     setRecipe(prev => prev ? {
                       ...prev,
-                      ec_catchcopies_by_site: catchcopies,
-                      ...(fallbackCatchcopy ? { catchcopy: fallbackCatchcopy } : {}),
+                      catchcopy: commonCatchcopy,
+                      ec_catchcopies_by_site: buildUnifiedEcCatchcopies(commonCatchcopy),
                     } : null);
                     setHasChanges(true);
                   }}
@@ -4836,12 +4867,11 @@ function RecipeDetailContent() {
                   recipeId={recipe.id}
                   recipeName={recipe.name}
                   fallbackCatchcopy={recipe.catchcopy ?? null}
-                  ecCatchcopiesBySite={recipe.ec_catchcopies_by_site}
                   expectedRecipeSnapshot={{
                     recipeId: recipe.id,
                     recipeName: recipe.name,
-                    fallbackCatchcopy: (recipe.catchcopy || '').replace(/\s+/g, ' ').trim().slice(0, 87),
-                    ecCatchcopiesBySite: recipe.ec_catchcopies_by_site || {},
+                    fallbackCatchcopy: normalizeCommonEcCatchcopy(recipe.catchcopy),
+                    ecCatchcopiesBySite: buildUnifiedEcCatchcopies(recipe.catchcopy),
                     linkedProductId: recipe.linked_product_id ? String(recipe.linked_product_id).trim().slice(0, 100) : null,
                     janCode: recipe.jan_code ? String(recipe.jan_code).trim().slice(0, 32) : null,
                     seriesCode: recipe.series_code ? String(recipe.series_code).trim().slice(0, 100) : null,

@@ -15,7 +15,8 @@ export type EcCatchcopyRule = {
 
 export const EC_CATCHCOPY_AI_MODEL = "gpt-5.6-sol";
 export const EC_CATCHCOPY_AI_REASONING_EFFORT = "medium";
-export const EC_CATCHCOPY_AI_RULES_VERSION = "2026-08-25.1";
+export const EC_CATCHCOPY_AI_RULES_VERSION = "2026-08-27.1";
+export const EC_COMMON_CATCHCOPY_MAX_LENGTH = 30;
 
 export const EC_CATCHCOPY_RULES: Record<EcCatchcopyTarget, EcCatchcopyRule> = {
   rakuten: {
@@ -42,7 +43,7 @@ export type EcCatchcopyAiSuggestion = {
 export type EcCatchcopyAiResult = {
   overall_analysis: string;
   source_gaps: string[];
-  suggestions: Record<EcCatchcopyTarget, EcCatchcopyAiSuggestion>;
+  suggestion: EcCatchcopyAiSuggestion;
 };
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -73,6 +74,21 @@ export function normalizeEcCatchcopyForTarget(target: EcCatchcopyTarget, value: 
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, EC_CATCHCOPY_RULES[target].platformMaxLength);
 }
 
+export function normalizeCommonEcCatchcopy(value: unknown) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, EC_COMMON_CATCHCOPY_MAX_LENGTH);
+}
+
+export function buildUnifiedEcCatchcopies(value: unknown): EcCatchcopiesBySite {
+  const catchcopy = normalizeCommonEcCatchcopy(value);
+  if (!catchcopy) return {};
+  return Object.fromEntries(
+    EC_CATCHCOPY_TARGETS.map(({ id }) => [id, catchcopy]),
+  ) as EcCatchcopiesBySite;
+}
+
 export function normalizeEcCatchcopiesBySite(value: unknown, fallback: unknown = ""): EcCatchcopiesBySite {
   const source = asObject(value);
   const fallbackValue = String(fallback ?? "").replace(/\s+/g, " ").trim();
@@ -90,16 +106,27 @@ export function ecCatchcopyMapsEqual(left: unknown, right: unknown, fallback: un
 
 export function validateEcCatchcopyAiResult(value: unknown): EcCatchcopyAiResult {
   const result = asObject(value);
-  const suggestions = asObject(result.suggestions);
-  const normalized = {} as Record<EcCatchcopyTarget, EcCatchcopyAiSuggestion>;
-  for (const { id } of EC_CATCHCOPY_TARGETS) {
-    const candidate = asObject(suggestions[id]);
-    const rawCatchcopy = String(candidate.catchcopy ?? "").replace(/\s+/g, " ").trim();
-    const catchcopy = normalizeEcCatchcopyForTarget(id, rawCatchcopy);
-    if (!catchcopy || catchcopy !== rawCatchcopy) {
-      throw new Error(`${id}のキャッチコピーが空欄または文字数上限を超えています`);
+  let candidate = asObject(result.suggestion);
+  if (Object.keys(candidate).length === 0) {
+    const legacySuggestions = asObject(result.suggestions);
+    const legacyCandidates = EC_CATCHCOPY_TARGETS.map(({ id }) => asObject(legacySuggestions[id]));
+    const legacyValues = legacyCandidates.map((entry) => normalizeCommonEcCatchcopy(entry.catchcopy));
+    if (!legacyValues[0] || legacyValues.some((entry) => entry !== legacyValues[0])) {
+      throw new Error("楽天・Yahooで統一するキャッチコピー候補がありません");
     }
-    normalized[id] = {
+    candidate = legacyCandidates[0];
+  }
+  const rawCatchcopy = String(candidate.catchcopy ?? "").replace(/\s+/g, " ").trim();
+  const catchcopy = normalizeCommonEcCatchcopy(rawCatchcopy);
+  if (!catchcopy || catchcopy !== rawCatchcopy) {
+    throw new Error(`共通キャッチコピーが空欄または${EC_COMMON_CATCHCOPY_MAX_LENGTH}文字上限を超えています`);
+  }
+  return {
+    overall_analysis: clippedText(result.overall_analysis, 1200),
+    source_gaps: Array.isArray(result.source_gaps)
+      ? result.source_gaps.map((item) => clippedText(item, 200)).filter(Boolean).slice(0, 12)
+      : [],
+    suggestion: {
       catchcopy,
       selected_keywords: Array.isArray(candidate.selected_keywords)
         ? candidate.selected_keywords.map((item) => clippedText(item, 80)).filter(Boolean).slice(0, 10)
@@ -108,14 +135,7 @@ export function validateEcCatchcopyAiResult(value: unknown): EcCatchcopyAiResult
       cautions: Array.isArray(candidate.cautions)
         ? candidate.cautions.map((item) => clippedText(item, 200)).filter(Boolean).slice(0, 8)
         : [],
-    };
-  }
-  return {
-    overall_analysis: clippedText(result.overall_analysis, 1200),
-    source_gaps: Array.isArray(result.source_gaps)
-      ? result.source_gaps.map((item) => clippedText(item, 200)).filter(Boolean).slice(0, 12)
-      : [],
-    suggestions: normalized,
+    },
   };
 }
 

@@ -1,8 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { syncRecipeLinkedProductPrices } from "@/lib/recipe-linked-product-prices";
-import { normalizeEcProductNamesBySite } from "@/lib/ec-product-name-codex";
-import { normalizeEcCatchcopiesBySite } from "@/lib/ec-catchcopy-codex";
+import {
+    buildUnifiedEcProductNames,
+    normalizeCommonEcProductName,
+    normalizeEcProductNamesBySite,
+} from "@/lib/ec-product-name-codex";
+import {
+    buildUnifiedEcCatchcopies,
+    normalizeCommonEcCatchcopy,
+    normalizeEcCatchcopiesBySite,
+} from "@/lib/ec-catchcopy-codex";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -83,17 +91,23 @@ export async function PATCH(request: Request) {
                 : "";
             safeUpdates.product_lp_url = productLpUrl || null;
         }
-        if ("ec_product_names_by_site" in safeUpdates) {
-            safeUpdates.ec_product_names_by_site = normalizeEcProductNamesBySite(
-                safeUpdates.ec_product_names_by_site,
-                safeUpdates.ec_product_name,
-            );
+        if ("ec_product_name" in safeUpdates || "ec_product_names_by_site" in safeUpdates) {
+            const legacyNames = normalizeEcProductNamesBySite(safeUpdates.ec_product_names_by_site);
+            const rawCommonName = String(safeUpdates.ec_product_name || legacyNames.amazon || Object.values(legacyNames)[0] || "")
+                .replace(/\s+/g, " ").trim();
+            const commonName = normalizeCommonEcProductName(rawCommonName);
+            if (rawCommonName !== commonName) throw new Error("EC共通商品名は75文字以内で入力してください");
+            safeUpdates.ec_product_name = commonName || null;
+            safeUpdates.ec_product_names_by_site = buildUnifiedEcProductNames(commonName);
         }
-        if ("ec_catchcopies_by_site" in safeUpdates) {
-            safeUpdates.ec_catchcopies_by_site = normalizeEcCatchcopiesBySite(
-                safeUpdates.ec_catchcopies_by_site,
-                safeUpdates.catchcopy,
-            );
+        if ("catchcopy" in safeUpdates || "ec_catchcopies_by_site" in safeUpdates) {
+            const legacyCatchcopies = normalizeEcCatchcopiesBySite(safeUpdates.ec_catchcopies_by_site);
+            const rawCommonCatchcopy = String(safeUpdates.catchcopy || legacyCatchcopies.yahoo || legacyCatchcopies.rakuten || "")
+                .replace(/\s+/g, " ").trim();
+            const commonCatchcopy = normalizeCommonEcCatchcopy(rawCommonCatchcopy);
+            if (rawCommonCatchcopy !== commonCatchcopy) throw new Error("EC共通キャッチコピーは30文字以内で入力してください");
+            safeUpdates.catchcopy = commonCatchcopy || null;
+            safeUpdates.ec_catchcopies_by_site = buildUnifiedEcCatchcopies(commonCatchcopy);
         }
 
         const { error } = await supabase

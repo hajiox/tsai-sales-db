@@ -3,9 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import {
+  buildUnifiedEcProductNames,
   ecProductNameHistoryFromJobs,
   ecProductNameMapsEqual,
-  normalizeEcProductNamesBySite,
   normalizeEcProductNameTargets,
   type EcProductNamesBySite,
   type EcProductNameJobView,
@@ -63,7 +63,7 @@ function toJobView(job: Record<string, unknown>): EcProductNameJobView {
     errorMessage: compactMessage(job.error_message),
     targets: normalizeEcProductNameTargets(parameters.targets),
     newProductName: normalizeEcProductName(parameters.newProductName),
-    newProductNames: normalizeEcProductNamesBySite(parameters.newProductNames, parameters.newProductName),
+    newProductNames: buildUnifiedEcProductNames(parameters.newProductName),
     summary: compactMessage(result.summary),
     sites: (Array.isArray(result.sites) ? result.sites : []) as EcProductNameJobView["sites"],
     createdAt: String(job.created_at || ""),
@@ -211,8 +211,8 @@ export async function POST(
     if (recipe.is_intermediate) return NextResponse.json({ error: "中間加工品はEC商品名反映の対象外です" }, { status: 400 });
 
     const recipeSnapshot = buildEcProductNameRecipeSnapshot(recipe as Record<string, unknown>);
-    const newProductNames = normalizeEcProductNamesBySite(recipeSnapshot.ecProductNamesBySite, recipeSnapshot.ecProductName);
-    const newProductName = recipeSnapshot.ecProductName || newProductNames.amazon || newProductNames[targets[0]] || "";
+    const newProductName = recipeSnapshot.ecProductName;
+    const newProductNames = buildUnifiedEcProductNames(newProductName);
     if (targets.some((target) => !newProductNames[target])) {
       return NextResponse.json({ error: "選択したECの商品名を保存してください" }, { status: 400 });
     }

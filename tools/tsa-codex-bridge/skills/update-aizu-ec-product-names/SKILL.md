@@ -12,12 +12,13 @@ description: 会津ブランド館の商品について、TSAが固定した商�
 
 ## 目的
 
-TSAが保存・承認した1商品のサイト別 `newProductNames` を、指定されたECへ1サイトずつ反映する。各サイトの実行時にはBridgeがそのサイトの確定名を `newProductName` として渡す。サイトごとの失敗は後続サイトを止めず、未完了だけ再実行できる結果を返す。
+TSAが保存・承認した1商品の共通 `newProductName` を、指定されたECへ1サイトずつ一字一句同じまま反映する。サイトごとの失敗は後続サイトを止めず、未完了だけ再実行できる結果を返す。
 
 ## 絶対条件
 
 - `TASK_JSON.targets` にあるECだけを操作する。
-- 現在処理中のサイトに渡された `TASK_JSON.newProductName` を一字一句そのまま使う。別サイトの名称へ置換せず、整形、追記、省略、SEO調整をしない。
+- `TASK_JSON.newProductName` は全EC共通の確定値である。一字一句そのまま使い、サイト別の整形、追記、省略、SEO調整をしない。
+- 互換用の `newProductNames` がある場合も、すべて `newProductName` と完全一致していなければ停止する。
 - `productMappings` と `verifiedProductIdentifiers`、JAN、内容量、保存方法を使って同一商品を確認する。類似商品へ変更しない。
 - 商品名・タイトル欄以外を変更しない。価格、セール価格、ポイント、在庫、配送、送料、税、画像、説明、バリエーション、カテゴリ、広告を変更しない。
 - ログイン、MFA、CAPTCHA、アカウント選択、権限確認は停止して `waiting_for_user` にする。迂回しない。

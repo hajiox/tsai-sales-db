@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, History, Play, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import {
+  buildUnifiedEcProductNames,
   EC_PRODUCT_NAME_TARGETS,
   ecProductNameMapsEqual,
   getEcProductNameTargetLabel,
-  normalizeEcProductNamesBySite,
-  type EcProductNamesBySite,
+  normalizeCommonEcProductName,
   type EcProductNameHistoryEntry,
   type EcProductNameJobView,
   type EcProductNameTarget,
@@ -27,7 +27,6 @@ type Props = {
   recipeId: string;
   recipeName: string;
   ecProductName: string | null;
-  ecProductNamesBySite: EcProductNamesBySite | null | undefined;
   expectedRecipeSnapshot: Record<string, unknown>;
   hasUnsavedChanges: boolean;
   isSaving: boolean;
@@ -59,7 +58,6 @@ export default function EcProductNameSyncControls({
   recipeId,
   recipeName,
   ecProductName,
-  ecProductNamesBySite,
   expectedRecipeSnapshot,
   hasUnsavedChanges,
   isSaving,
@@ -73,13 +71,12 @@ export default function EcProductNameSyncControls({
   const [showHistory, setShowHistory] = useState(false);
   const [showReservations, setShowReservations] = useState(false);
   const notified = useRef<string | null>(null);
-  const targetName = (ecProductName || "").trim();
-  const targetNames = useMemo(
-    () => normalizeEcProductNamesBySite(ecProductNamesBySite, targetName),
-    [ecProductNamesBySite, targetName],
-  );
-  const summaryName = targetName || targetNames.amazon || Object.values(targetNames)[0] || "";
-  const disabled = isSaving || hasUnsavedChanges || submitting;
+  const rawTargetName = String(ecProductName || "").replace(/\s+/g, " ").trim();
+  const targetName = normalizeCommonEcProductName(rawTargetName);
+  const targetNames = buildUnifiedEcProductNames(targetName);
+  const summaryName = targetName;
+  const commonValueInvalid = rawTargetName !== targetName;
+  const disabled = isSaving || hasUnsavedChanges || commonValueInvalid || submitting;
   const activeJobId = job?.id || null;
   const activeJobStatus = job?.status || null;
 
@@ -141,7 +138,8 @@ export default function EcProductNameSyncControls({
     if (!window.confirm([
       `${getEcProductNameTargetLabel(targets)}のEC用商品名を${reserved ? "一括実行予約へ追加" : "変更"}します。`,
       "", `商品: ${recipeName}`,
-      ...targets.map((target) => `${getEcProductNameTargetLabel([target])}: ${targetNames[target]}`), "",
+      `共通商品名: ${summaryName}`,
+      `反映先: ${getEcProductNameTargetLabel(targets)}`, "",
       reserved ? "予約分をまとめて実行するまで外部サイトは変更しません。" : "商品名以外の価格・説明・画像・在庫は変更しません。",
       "実行しますか？",
     ].join("\n"))) return;
@@ -236,7 +234,7 @@ export default function EcProductNameSyncControls({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold text-gray-800">EC用商品名を反映</p>
-          <p className="text-[11px] text-gray-500">保存済みの商品名だけを、各ECへ1件ずつ変更します。</p>
+          <p className="text-[11px] text-gray-500">保存済みの同じ商品名を、選択したECへ1件ずつ変更します。</p>
         </div>
         <div className="inline-flex rounded-md bg-gray-100 p-1 text-xs">
           <button type="button" className={`rounded px-3 py-1.5 ${dispatchMode === "immediate" ? "bg-white font-bold shadow-sm" : "text-gray-500"}`} onClick={() => setDispatchMode("immediate")}>今すぐ</button>
@@ -245,6 +243,7 @@ export default function EcProductNameSyncControls({
       </div>
 
       {hasUnsavedChanges && <p className="mt-2 text-xs font-medium text-amber-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />先にレシピを保存してください。</p>}
+      {commonValueInvalid && <p className="mt-2 text-xs font-medium text-red-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />共通商品名を75文字以内へ直して保存してください。</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         {EC_PRODUCT_NAME_TARGETS.map((target) => (
           <button key={target.id} type="button" disabled={disabled || !targetNames[target.id]} onClick={() => void enqueue([target.id])}
