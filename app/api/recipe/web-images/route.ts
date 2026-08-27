@@ -1,12 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { del, put } from "@vercel/blob";
 import { createClient } from "@supabase/supabase-js";
-import { getRecipeEcImagePlacement } from "@/lib/recipe-ec-images";
+import {
+  RECIPE_EC_IMAGE_SITES,
+  RECIPE_WEB_IMAGE_SOURCE_TYPES,
+  getRecipeEcImagePlacement,
+  getRecipeEcImagePlanForSite,
+  type RecipeEcListingImageRole,
+  type RecipeWebImageRole,
+  type RecipeWebImageSourceType,
+} from "@/lib/recipe-ec-images";
 
 const MAX_IMAGE_BYTES = 250 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const ALLOWED_SOURCE_TYPES = new Set(["manual", "rakuten", "base", "shared_folder"]);
-const ALLOWED_IMAGE_ROLES = new Set(["gallery", "portrait"]);
+const ALLOWED_SOURCE_TYPES = new Set<string>(RECIPE_WEB_IMAGE_SOURCE_TYPES);
+const ALLOWED_IMAGE_ROLES = new Set<string>([
+  "gallery",
+  "portrait",
+  "non_amazon",
+  "base_only",
+] satisfies RecipeWebImageRole[]);
 const IMAGE_SELECT = "id, image_url, image_role, source_type, source_page_url, source_image_url, original_filename, file_size_bytes, sort_order, created_at, copied_from_image_id";
 
 const supabaseAdmin = createClient(
@@ -49,12 +62,41 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const allImages = data || [];
   const galleryImages = allImages.filter((image) => image.image_role === "gallery");
+  const portraitImages = allImages.filter((image) => image.image_role === "portrait");
+  const nonAmazonImages = allImages.filter((image) => image.image_role === "non_amazon");
+  const baseOnlyImages = allImages.filter((image) => image.image_role === "base_only");
+  const listingImagesByRole: Record<RecipeEcListingImageRole, typeof allImages> = {
+    gallery: galleryImages,
+    non_amazon: nonAmazonImages,
+    base_only: baseOnlyImages,
+  };
+  const counts = {
+    gallery: galleryImages.length,
+    nonAmazon: nonAmazonImages.length,
+    baseOnly: baseOnlyImages.length,
+  };
+  const ecImageSets = Object.fromEntries(
+    RECIPE_EC_IMAGE_SITES.map((site) => [
+      site,
+      getRecipeEcImagePlanForSite(site, counts).map((entry) => ({
+        ...listingImagesByRole[entry.imageRole][entry.imageIndex],
+        ec_placement: {
+          slot: entry.slot,
+          listingOrder: entry.listingOrder,
+          sites: entry.sites,
+        },
+      })),
+    ]),
+  );
   return NextResponse.json({
     images: galleryImages.map((image, index) => ({
       ...image,
       ec_placement: getRecipeEcImagePlacement(index),
     })),
-    portraitImages: allImages.filter((image) => image.image_role === "portrait"),
+    portraitImages,
+    nonAmazonImages,
+    baseOnlyImages,
+    ecImageSets,
   });
 }
 
@@ -65,9 +107,13 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file");
     const recipeId = cleanText(formData.get("recipeId"), 100);
     const requestedSourceType = cleanText(formData.get("sourceType"), 30) || "manual";
-    const sourceType = ALLOWED_SOURCE_TYPES.has(requestedSourceType) ? requestedSourceType : "manual";
+    const sourceType: RecipeWebImageSourceType = ALLOWED_SOURCE_TYPES.has(requestedSourceType)
+      ? requestedSourceType as RecipeWebImageSourceType
+      : "manual";
     const requestedImageRole = cleanText(formData.get("imageRole"), 30) || "gallery";
-    const imageRole = ALLOWED_IMAGE_ROLES.has(requestedImageRole) ? requestedImageRole : "gallery";
+    const imageRole: RecipeWebImageRole = ALLOWED_IMAGE_ROLES.has(requestedImageRole)
+      ? requestedImageRole as RecipeWebImageRole
+      : "gallery";
 
     if (!(file instanceof File) || !recipeId) {
       return NextResponse.json({ error: "画像ファイルとrecipeIdが必要です" }, { status: 400 });
@@ -265,7 +311,9 @@ export async function PATCH(request: NextRequest) {
     const recipeId = String(body.recipeId || "");
     const imageOrder = Array.isArray(body.imageOrder) ? body.imageOrder : [];
     const requestedImageRole = String(body.imageRole || "gallery");
-    const imageRole = ALLOWED_IMAGE_ROLES.has(requestedImageRole) ? requestedImageRole : "gallery";
+    const imageRole: RecipeWebImageRole = ALLOWED_IMAGE_ROLES.has(requestedImageRole)
+      ? requestedImageRole as RecipeWebImageRole
+      : "gallery";
     if (!recipeId || imageOrder.length === 0) {
       return NextResponse.json({ error: "recipeIdと画像順が必要です" }, { status: 400 });
     }

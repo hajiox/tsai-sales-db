@@ -28,12 +28,19 @@ import EcProductNameAiEditor from "../_components/EcProductNameAiEditor";
 import EcCatchcopySyncControls from "../_components/EcCatchcopySyncControls";
 import EcCatchcopyAiEditor from "../_components/EcCatchcopyAiEditor";
 import RecipeSnsStudio from "../_components/RecipeSnsStudio";
+import ScopedEcImageSection from "../_components/ScopedEcImageSection";
 import type { EcProductNamesBySite } from "@/lib/ec-product-name-codex";
 import type { EcCatchcopiesBySite } from "@/lib/ec-catchcopy-codex";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
-import { getRecipeEcImagePlacement, type RecipeEcImagePlacement } from "@/lib/recipe-ec-images";
+import {
+  getRecipeEcImageIndexesForSite,
+  getRecipeEcImagePlacement,
+  type RecipeEcImagePlacement,
+  type RecipeWebImageRole,
+  type RecipeWebImageSourceType,
+} from "@/lib/recipe-ec-images";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -181,8 +188,8 @@ function normalizeRecipeDetailTab(value: string | null): RecipeDetailTab {
 type WebProductImage = {
   id: string;
   image_url: string;
-  image_role: "gallery" | "portrait";
-  source_type: "manual" | "rakuten" | "base" | "shared_folder";
+  image_role: RecipeWebImageRole;
+  source_type: RecipeWebImageSourceType;
   source_page_url: string | null;
   source_image_url: string | null;
   original_filename: string | null;
@@ -197,6 +204,7 @@ const WEB_IMAGE_MAX_BYTES = 250 * 1024;
 const WEB_IMAGE_INDEX_DRAG_TYPE = 'application/x-recipe-web-image-index';
 const WEB_IMAGE_ID_DRAG_TYPE = 'application/x-recipe-web-image-id';
 const PORTRAIT_IMAGE_INDEX_DRAG_TYPE = 'application/x-recipe-portrait-image-index';
+type ScopedWebImageRole = Extract<RecipeWebImageRole, 'non_amazon' | 'base_only'>;
 
 async function compressWebProductImage(file: File): Promise<File> {
   if (file.size <= WEB_IMAGE_MAX_BYTES) return file;
@@ -340,6 +348,10 @@ function RecipeDetailContent() {
   const [portraitCopyingImageId, setPortraitCopyingImageId] = useState<string | null>(null);
   const [portraitDragOver, setPortraitDragOver] = useState(false);
   const portraitInputRef = useRef<HTMLInputElement>(null);
+  const [nonAmazonImages, setNonAmazonImages] = useState<WebProductImage[]>([]);
+  const [nonAmazonImagesUploading, setNonAmazonImagesUploading] = useState(false);
+  const [baseOnlyImages, setBaseOnlyImages] = useState<WebProductImage[]>([]);
+  const [baseOnlyImagesUploading, setBaseOnlyImagesUploading] = useState(false);
 
   // バージョン管理
   interface RecipeVersion {
@@ -914,6 +926,8 @@ function RecipeDetailContent() {
       const data = await response.json();
       setWebProductImages(data.images || []);
       setPortraitImages(data.portraitImages || []);
+      setNonAmazonImages(data.nonAmazonImages || []);
+      setBaseOnlyImages(data.baseOnlyImages || []);
     } catch { }
   };
 
@@ -981,6 +995,89 @@ function RecipeDetailContent() {
     }
     setWebProductImages((current) => current.filter((image) => image.id !== imageId));
     toast.success('Web商品画像を削除しました');
+  };
+
+  const uploadScopedWebImages = async (imageRole: ScopedWebImageRole, files: File[]) => {
+    if (!recipe || files.length === 0) return;
+    const isNonAmazon = imageRole === 'non_amazon';
+    const setUploading = isNonAmazon ? setNonAmazonImagesUploading : setBaseOnlyImagesUploading;
+    const setImages = isNonAmazon ? setNonAmazonImages : setBaseOnlyImages;
+    const label = isNonAmazon ? 'Amazon以外の画像' : 'BASE専用画像';
+    setUploading(true);
+    let uploadedCount = 0;
+    let resizedCount = 0;
+    try {
+      for (const sourceFile of files) {
+        if (!sourceFile.type.startsWith('image/')) continue;
+        const file = await compressWebProductImage(sourceFile);
+        if (file.size < sourceFile.size) resizedCount++;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('recipeId', recipe.id);
+        formData.append('sourceType', 'manual');
+        formData.append('imageRole', imageRole);
+        formData.append('originalFilename', sourceFile.name);
+        const response = await fetch('/api/recipe/web-images', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `${sourceFile.name}の登録に失敗しました`);
+        setImages((current) => [...current, data.image]);
+        uploadedCount++;
+      }
+      if (uploadedCount === 0) throw new Error('JPEG・PNG・WebP画像を選択してください');
+      toast.success(`${label}を${uploadedCount}枚登録しました${resizedCount ? `（${resizedCount}枚を自動縮小）` : ''}`);
+    } catch (error: any) {
+      toast.error(error.message || `${label}の登録に失敗しました`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const reorderScopedWebImages = async (
+    imageRole: ScopedWebImageRole,
+    fromIndex: number,
+    toIndex: number,
+  ) => {
+    if (!recipe || fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    const current = imageRole === 'non_amazon' ? nonAmazonImages : baseOnlyImages;
+    const setImages = imageRole === 'non_amazon' ? setNonAmazonImages : setBaseOnlyImages;
+    const next = [...current];
+    const [moved] = next.splice(fromIndex, 1);
+    if (!moved) return;
+    next.splice(toIndex, 0, moved);
+    const reordered = next.map((image, index) => ({ ...image, sort_order: index }));
+    setImages(reordered);
+    const response = await fetch('/api/recipe/web-images', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipeId: recipe.id,
+        imageRole,
+        imageOrder: reordered.map(({ id }) => ({ id })),
+      }),
+    });
+    if (!response.ok) {
+      await fetchWebProductImages(recipe.id);
+      toast.error('発送画像の並び替えに失敗しました');
+    }
+  };
+
+  const deleteScopedWebImage = async (imageRole: ScopedWebImageRole, imageId: string) => {
+    if (!recipe) return;
+    const label = imageRole === 'non_amazon' ? 'Amazon以外の画像' : 'BASE専用画像';
+    if (!confirm(`この${label}を削除しますか？`)) return;
+    const response = await fetch('/api/recipe/web-images', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageId, recipeId: recipe.id }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      toast.error(data.error || `${label}を削除できませんでした`);
+      return;
+    }
+    const setImages = imageRole === 'non_amazon' ? setNonAmazonImages : setBaseOnlyImages;
+    setImages((current) => current.filter((image) => image.id !== imageId));
+    toast.success(`${label}を削除しました`);
   };
 
   const uploadPortraitImages = async (files: File[]) => {
@@ -4946,10 +5043,10 @@ function RecipeDetailContent() {
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 border-y border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-gray-700">
-                  <span className="font-semibold text-emerald-700"><strong>1</strong> Amazon・BASE専用TOP</span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-700"><strong className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[11px] text-white">1</strong> Amazon・BASE専用TOP</span>
                   <span><strong className="text-blue-700">1</strong> 他EC TOP</span>
                   <span><strong className="text-blue-700">2以降</strong> 全EC共通</span>
-                  <span className="text-gray-500">Amazon・BASEは掲載順1を使用しません</span>
+                  <span className="text-gray-500">各ECは自サイト用TOPから始まり、共通画像へ続きます</span>
                 </div>
 
                 {webProductImages.length > 0 && (
@@ -4958,6 +5055,8 @@ function RecipeDetailContent() {
                       const placement = getRecipeEcImagePlacement(index);
                       const sourceLabel = image.source_type === 'rakuten'
                         ? '楽天'
+                        : image.source_type === 'mercari'
+                          ? 'メルカリ'
                         : image.source_type === 'base'
                           ? 'BASE'
                           : image.source_type === 'shared_folder'
@@ -5080,6 +5179,32 @@ function RecipeDetailContent() {
                   )}
                 </div>
               </div>
+
+              <ScopedEcImageSection
+                role="non_amazon"
+                title="Amazon以外の画像"
+                description="メルカリ由来の発送案内・発送企業情報です。楽天・Yahoo・メルカリ・Qoo10・TikTokの末尾に追加し、AmazonとBASEには登録しません。"
+                images={nonAmazonImages}
+                startingOrder={getRecipeEcImageIndexesForSite('mercari', webProductImages.length).length + 1}
+                badgeTone="red"
+                uploading={nonAmazonImagesUploading}
+                onUpload={(files) => uploadScopedWebImages('non_amazon', files)}
+                onReorder={(fromIndex, toIndex) => reorderScopedWebImages('non_amazon', fromIndex, toIndex)}
+                onDelete={(imageId) => deleteScopedWebImage('non_amazon', imageId)}
+              />
+
+              <ScopedEcImageSection
+                role="base_only"
+                title="BASE専用画像"
+                description="BASEの商品設定に合う発送案内・発送企業情報です。BASEの末尾だけに追加し、Amazonと他ECには登録しません。"
+                images={baseOnlyImages}
+                startingOrder={getRecipeEcImageIndexesForSite('base', webProductImages.length).length + 1}
+                badgeTone="yellow"
+                uploading={baseOnlyImagesUploading}
+                onUpload={(files) => uploadScopedWebImages('base_only', files)}
+                onReorder={(fromIndex, toIndex) => reorderScopedWebImages('base_only', fromIndex, toIndex)}
+                onDelete={(imageId) => deleteScopedWebImage('base_only', imageId)}
+              />
             </div>
           </section>
         );

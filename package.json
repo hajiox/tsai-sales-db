@@ -15,6 +15,8 @@
     "test:recipe-ec-images": "node --experimental-strip-types scripts/test-recipe-ec-images.mjs",
     "test:recipe-web-image-copy-migration": "node scripts/dry-run-recipe-web-image-copy-migration.cjs",
     "apply:recipe-web-image-copy-migration": "node scripts/apply-recipe-web-image-copy-migration.cjs",
+    "test:recipe-ec-scoped-images-migration": "node scripts/dry-run-recipe-ec-scoped-images-migration.cjs",
+    "apply:recipe-ec-scoped-images-migration": "node scripts/apply-recipe-ec-scoped-images-migration.cjs",
     "test:ec-price-plan": "node scripts/test-ec-price-plan.cjs",
     "test:bridge-monitor": "node scripts/test-bridge-monitor.cjs",
     "test:ec-product-name-bridge": "node scripts/test-ec-product-name-bridge.cjs",
