@@ -12,6 +12,7 @@ const schema = JSON.parse(read("tools", "tsa-codex-bridge", "ingredient-label-ai
 const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-ingredient-label", "SKILL.md");
 const legal = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-ingredient-label", "references", "japan-food-labeling-rules.md");
 const sourceBuilder = read("lib", "ingredient-label-codex-server.ts");
+const controls = read("app", "recipe", "_components", "IngredientLabelAiControls.tsx");
 
 assert.equal(contract.tasks.ingredient_label_generate.skill, "generate-aizu-ingredient-label");
 assert.equal(contract.tasks.ingredient_label_generate.mode, "codex");
@@ -29,6 +30,11 @@ assert.match(importer, /currentSnapshot\.sourceHash !== requestedSnapshot\.sourc
 assert.match(importer, /ai_ingredient_label/);
 assert.match(sourceBuilder, /resolution,/);
 assert.doesNotMatch(sourceBuilder, /lcs|fuzzy|similar/i);
+assert.match(controls, /window\.setTimeout\(tick, POLL_INTERVAL_MS\)/);
+assert.match(controls, /window\.setTimeout\(restore, POLL_INTERVAL_MS\)/);
+assert.match(controls, /visibilitychange/);
+assert.match(controls, /applyServerJob\(latest\)/);
+assert.doesNotMatch(controls, /for \(let count = 0; count < 240/);
 assert.match(skill, /Never open, read, search, or reuse app Chats/);
 assert.match(skill, /Never use a 5% threshold to declare an additive a carry-over/);
 assert.match(legal, /カシューナッツ/);
