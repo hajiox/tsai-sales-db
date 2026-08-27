@@ -20,6 +20,7 @@ for (const taskKey of [
   "ec_product_name_generate",
   "ec_catchcopy_generate",
   "recipe_sns_generate",
+  "docscanner_fax_summary",
   "web_sales_analysis",
 ]) {
   assert.match(headlessSafeBlock, new RegExp(`"${taskKey}"`));

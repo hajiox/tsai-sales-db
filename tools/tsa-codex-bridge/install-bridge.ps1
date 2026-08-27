@@ -4,6 +4,7 @@
   [string]$WorkerId = "tsa-office-01",
   [string]$WorkerName = "事務所PC",
   [string]$Workspace = "C:\作業用",
+  [string]$DocScannerFaxSummaryRoot = "C:\作業用\doc-scanner\data\codex-bridge\fax-summary",
   [ValidateSet("low", "medium", "high", "xhigh")][string]$ReasoningEffort = "low",
   [switch]$SkipPreloginTaskRegistration
 )
@@ -29,6 +30,7 @@ $requiredSourceFiles = @(
   "ec-product-content-plan.schema.json",
   "ec-product-content-ai.schema.json",
   "ingredient-label-ai.schema.json",
+  "fax-summary-result.schema.json",
   "recipe-sns-result.schema.json",
   "recipe-sns-target-result.schema.json",
   "render-recipe-sns-image.ps1",
@@ -238,6 +240,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-result.schema.j
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-plan.schema.json") -Destination (Join-Path $installDir "ec-product-content-plan.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-ai.schema.json") -Destination (Join-Path $installDir "ec-product-content-ai.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ingredient-label-ai.schema.json") -Destination (Join-Path $installDir "ingredient-label-ai.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "fax-summary-result.schema.json") -Destination (Join-Path $installDir "fax-summary-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-target-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-target-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "render-recipe-sns-image.ps1") -Destination (Join-Path $installDir "render-recipe-sns-image.ps1") -Force
@@ -259,6 +262,7 @@ $headlessTaskKeys = @(
   "ec_product_content_generate",
   "ingredient_label_generate",
   "recipe_sns_generate",
+  "docscanner_fax_summary",
   "web_sales_analysis"
 )
 $nodePath = (Get-Command node -ErrorAction Stop).Source
@@ -278,6 +282,7 @@ $config = @{
   jobRoot = (Join-Path $installDir "jobs")
   downloadsDir = (Join-Path $env:USERPROFILE "Downloads")
   codexHome = (Join-Path $env:USERPROFILE ".codex")
+  docScannerFaxSummaryRoot = $DocScannerFaxSummaryRoot
   reasoningEffort = $ReasoningEffort
   pollMs = 5000
   executionMode = "interactive"
@@ -294,6 +299,7 @@ $headlessConfig = @{
   jobRoot = (Join-Path $installDir "headless\jobs")
   downloadsDir = (Join-Path $userProfile "Downloads")
   codexHome = (Join-Path $userProfile ".codex")
+  docScannerFaxSummaryRoot = $DocScannerFaxSummaryRoot
   reasoningEffort = $ReasoningEffort
   pollMs = 5000
   executionMode = "headless-prelogin"
