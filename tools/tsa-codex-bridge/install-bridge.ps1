@@ -119,6 +119,12 @@ function Stop-VerifiedMonitor([string]$AckPath, [string[]]$AllowedScripts) {
   }
   Remove-Item -LiteralPath $AckPath -Force -ErrorAction SilentlyContinue
 }
+function Copy-WindowsPowerShellScript([string]$SourceName, [string]$DestinationPath) {
+  $sourcePath = Join-Path $sourceDir $SourceName
+  $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+  $scriptText = [System.IO.File]::ReadAllText($sourcePath, $strictUtf8)
+  [System.IO.File]::WriteAllText($DestinationPath, $scriptText, [System.Text.UTF8Encoding]::new($true))
+}
 $maintenanceNonce = [guid]::NewGuid().ToString("N")
 [System.IO.File]::WriteAllText($maintenancePath, $maintenanceNonce, [System.Text.UTF8Encoding]::new($false))
 
@@ -220,11 +226,11 @@ try {
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destination (Join-Path $installDir "monitor-state-file.cjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
-Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor.ps1") -Destination (Join-Path $installDir "bridge-monitor.ps1") -Force
-Copy-Item -LiteralPath (Join-Path $sourceDir "launch-bridge-monitor.ps1") -Destination (Join-Path $installDir "launch-bridge-monitor.ps1") -Force
+Copy-WindowsPowerShellScript "bridge-monitor.ps1" (Join-Path $installDir "bridge-monitor.ps1")
+Copy-WindowsPowerShellScript "launch-bridge-monitor.ps1" (Join-Path $installDir "launch-bridge-monitor.ps1")
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor-state.schema.json") -Destination (Join-Path $installDir "bridge-monitor-state.schema.json") -Force
-Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor.ps1") -Destination $unifiedMonitorPath -Force
-Copy-Item -LiteralPath (Join-Path $sourceDir "launch-bridge-monitor.ps1") -Destination $unifiedMonitorLauncherPath -Force
+Copy-WindowsPowerShellScript "bridge-monitor.ps1" $unifiedMonitorPath
+Copy-WindowsPowerShellScript "launch-bridge-monitor.ps1" $unifiedMonitorLauncherPath
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor-state.schema.json") -Destination (Join-Path $unifiedMonitorDir "bridge-monitor-state.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "result.schema.json") -Destination (Join-Path $installDir "result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "analysis-result.schema.json") -Destination (Join-Path $installDir "analysis-result.schema.json") -Force
@@ -243,10 +249,10 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "ingredient-label-ai.schema.json") 
 Copy-Item -LiteralPath (Join-Path $sourceDir "fax-summary-result.schema.json") -Destination (Join-Path $installDir "fax-summary-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-target-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-target-result.schema.json") -Force
-Copy-Item -LiteralPath (Join-Path $sourceDir "render-recipe-sns-image.ps1") -Destination (Join-Path $installDir "render-recipe-sns-image.ps1") -Force
-Copy-Item -LiteralPath (Join-Path $sourceDir "start-bridge.ps1") -Destination (Join-Path $installDir "start-bridge.ps1") -Force
-Copy-Item -LiteralPath (Join-Path $sourceDir "start-bridge-prelogin.ps1") -Destination (Join-Path $installDir "start-bridge-prelogin.ps1") -Force
-Copy-Item -LiteralPath (Join-Path $sourceDir "register-prelogin-task.ps1") -Destination (Join-Path $installDir "register-prelogin-task.ps1") -Force
+Copy-WindowsPowerShellScript "render-recipe-sns-image.ps1" (Join-Path $installDir "render-recipe-sns-image.ps1")
+Copy-WindowsPowerShellScript "start-bridge.ps1" (Join-Path $installDir "start-bridge.ps1")
+Copy-WindowsPowerShellScript "start-bridge-prelogin.ps1" (Join-Path $installDir "start-bridge-prelogin.ps1")
+Copy-WindowsPowerShellScript "register-prelogin-task.ps1" (Join-Path $installDir "register-prelogin-task.ps1")
 
 foreach ($skillName in $bridgeSkillNames) {
   $skillSource = Join-Path $sourceDir "skills\$skillName"

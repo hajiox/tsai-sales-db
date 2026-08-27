@@ -1,5 +1,7 @@
 const assert = require("node:assert/strict");
+const childProcess = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const root = path.join(__dirname, "..");
@@ -54,6 +56,9 @@ assert.match(installer, /Start-ScheduledTask -TaskName \$interactiveTaskName/);
 assert.match(installer, /Start-ScheduledTask -TaskName \$taskName/);
 assert.match(installer, /headless\\bridge-state\.json/);
 assert.match(installer, /maintenanceObserved -eq \$maintenanceNonce/);
+assert.match(installer, /function Copy-WindowsPowerShellScript/);
+assert.match(installer, /UTF8Encoding\]::new\(\$true\)/);
+assert.match(installer, /Copy-WindowsPowerShellScript "register-prelogin-task\.ps1"/);
 
 assert.match(launcher, /TSA_CODEX_BRIDGE_EXECUTION_MODE = "headless-prelogin"/);
 assert.match(launcher, /TSA_CODEX_BRIDGE_MAINTENANCE_PATH/);
@@ -67,5 +72,22 @@ assert.match(claimMigration, /jobs\.task_key IN \([\s\S]*jsonb_array_elements_te
 assert.match(automationPage, /worker\.capabilities\?\.chrome === true/);
 assert.match(automationPage, /worker\.capabilities\?\.preLogin === true/);
 assert.match(automationPage, /ログイン前処理/);
+
+if (process.platform === "win32") {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-bridge-prelogin-"));
+  try {
+    const scriptPath = path.join(tempDir, "register-prelogin-task.ps1");
+    fs.writeFileSync(scriptPath, `\uFEFF${registration}`, "utf8");
+    const escapedPath = scriptPath.replaceAll("'", "''");
+    const parsed = childProcess.spawnSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", `$text = Get-Content -LiteralPath '${escapedPath}' -Raw; [void][scriptblock]::Create($text)`],
+      { encoding: "utf8" },
+    );
+    assert.equal(parsed.status, 0, parsed.stderr || parsed.stdout);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
 
 console.log("Pre-login Bridge checks passed.");
