@@ -21,6 +21,9 @@ import NutritionDisplay, {
   NutritionData,
 } from "../_components/NutritionDisplay";
 import ItemNameSelect, { ItemCandidate } from "../_components/ItemNameSelect";
+import IngredientSourceDetailDialog, {
+  hasIngredientSourceDetails,
+} from "../_components/IngredientSourceDetailDialog";
 import InlineEdit from "../_components/InlineEdit";
 import EcPriceSyncControls from "../_components/EcPriceSyncControls";
 import EcProductNameSyncControls from "../_components/EcProductNameSyncControls";
@@ -319,6 +322,7 @@ function RecipeDetailContent() {
 
   // Master Data
   const [ingredients, setIngredients] = useState<ItemCandidate[]>([]);
+  const [selectedIngredientDetail, setSelectedIngredientDetail] = useState<ItemCandidate | null>(null);
   const [materials, setMaterials] = useState<ItemCandidate[]>([]);
   const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
   const [products, setProducts] = useState<ItemCandidate[]>([]);
@@ -720,7 +724,7 @@ function RecipeDetailContent() {
     const { data: ingData } = await supabase
       .from("ingredients")
       .select(
-        "id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, tax_included, raw_materials",
+        "id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, tax_included, raw_materials, allergens, origin, manufacturer, product_description, nutrition_per, label_images",
       );
     if (ingData) {
       setIngredients(
@@ -731,6 +735,12 @@ function RecipeDetailContent() {
           unit_price: i.price ?? 0,
           tax_included: i.tax_included ?? true,
           raw_materials: i.raw_materials ?? null,
+          allergens: i.allergens ?? null,
+          origin: i.origin ?? null,
+          manufacturer: i.manufacturer ?? null,
+          product_description: i.product_description ?? null,
+          nutrition_per: i.nutrition_per ?? null,
+          label_images: Array.isArray(i.label_images) ? i.label_images : [],
           nutrition: {
             calories: i.calories,
             protein: i.protein,
@@ -3664,6 +3674,12 @@ function RecipeDetailContent() {
                           const isMaterialGroup =
                             group.type === "material" ||
                             group.type === "expense";
+                          const ingredientDetail = item.item_type === "ingredient"
+                            ? group.candidates.find((candidate) =>
+                                (item.ingredient_id && candidate.id === item.ingredient_id) ||
+                                candidate.name === item.item_name,
+                              )
+                            : undefined;
 
                           // Batch 1 Calcs
                           const b1Usage = unitUsage * batchSize1;
@@ -3681,13 +3697,18 @@ function RecipeDetailContent() {
                               <td className="py-2 text-gray-300 align-top">
                                 {idx + 1}
                               </td>
-                              <td className="py-2 align-top text-center" title={(() => { if (item.item_type !== 'ingredient') return ''; const cand = group.candidates.find((c: any) => c.name === item.item_name); return cand?.raw_materials ? `原材料: ${cand.raw_materials}` : ''; })()}>
-                                {item.item_type === 'ingredient' && (() => {
-                                  const cand = group.candidates.find((c: any) => c.name === item.item_name);
-                                  return cand?.raw_materials ? (
-                                    <FlaskConical className="w-3.5 h-3.5 text-emerald-500 inline-block" />
-                                  ) : null;
-                                })()}
+                              <td className="py-1 align-top text-center">
+                                {hasIngredientSourceDetails(ingredientDetail) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedIngredientDetail(ingredientDetail ?? null)}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded text-emerald-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                                    aria-label={`${item.item_name}の原材料情報を表示`}
+                                    title="原材料情報を表示"
+                                  >
+                                    <FlaskConical className="h-4 w-4" aria-hidden="true" />
+                                  </button>
+                                )}
                               </td>
                               <td className="py-2 font-medium text-gray-700 align-top pr-2">
                                 {isEditing ? (
@@ -5299,6 +5320,10 @@ function RecipeDetailContent() {
       >
         <RecipeSnsStudio recipeId={recipe.id} hasUnsavedChanges={hasChanges} />
       </div>
+      <IngredientSourceDetailDialog
+        ingredient={selectedIngredientDetail}
+        onClose={() => setSelectedIngredientDetail(null)}
+      />
       <style jsx global>
         {`
           @media print {

@@ -24,6 +24,18 @@ export interface ItemCandidate {
     yield_rate?: number // 歩留まり率（中間加工品用）
     nutrition?: NutritionData;
     raw_materials?: string | null; // 原材料取込済み判定用
+    allergens?: string | null;
+    origin?: string | null;
+    manufacturer?: string | null;
+    product_description?: string | null;
+    nutrition_per?: string | null;
+    label_images?: IngredientLabelImage[];
+}
+
+export interface IngredientLabelImage {
+    type: string;
+    url: string;
+    uploaded_at?: string | null;
 }
 
 interface ItemNameSelectProps {
