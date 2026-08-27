@@ -32,6 +32,7 @@ import EcCatchcopySyncControls from "../_components/EcCatchcopySyncControls";
 import EcCatchcopyAiEditor from "../_components/EcCatchcopyAiEditor";
 import EcProductContentAiAdjuster from "../_components/EcProductContentAiAdjuster";
 import EcProductContentSyncControls from "../_components/EcProductContentSyncControls";
+import IngredientLabelAiControls from "../_components/IngredientLabelAiControls";
 import RecipeSnsStudio from "../_components/RecipeSnsStudio";
 import ScopedEcImageSection from "../_components/ScopedEcImageSection";
 import {
@@ -51,6 +52,7 @@ import {
   normalizeEcProductContentText,
   toSquareProductPoints,
 } from "@/lib/ec-product-content-codex";
+import type { IngredientLabelAiResult } from "@/lib/ingredient-label-codex";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
@@ -347,11 +349,20 @@ function RecipeDetailContent() {
   const [labelTab, setLabelTab] = useState<'manual' | 'ai'>('manual');
   const [labelText, setLabelText] = useState("");
   const [aiLabelText, setAiLabelText] = useState("");
-  const [labelGenerating, setLabelGenerating] = useState(false);
   const [labelWarnings, setLabelWarnings] = useState<string[]>([]);
   const [labelMissing, setLabelMissing] = useState<string[]>([]);
-  const [labelCarryover, setLabelCarryover] = useState<string[]>([]);
+  const [labelReviewNotes, setLabelReviewNotes] = useState<string[]>([]);
+  const [labelAdoptionBlocked, setLabelAdoptionBlocked] = useState(false);
   const [labelEditing, setLabelEditing] = useState(false);
+
+  const handleIngredientLabelGenerated = useCallback((result: IngredientLabelAiResult) => {
+    setAiLabelText(result.label);
+    setRecipe((previous) => previous ? { ...previous, ai_ingredient_label: result.label } : previous);
+    setLabelWarnings(result.warnings);
+    setLabelMissing(result.missing_information);
+    setLabelReviewNotes(result.review_notes);
+    setLabelAdoptionBlocked(result.adoption_blocked);
+  }, []);
 
   // 商品写真
   const [recipeImages, setRecipeImages] = useState<{ id: string; image_url: string; sort_order: number }[]>([]);
@@ -3090,7 +3101,10 @@ function RecipeDetailContent() {
                                   toast.success('削除しました');
                                   setRecipe(prev => prev ? { ...prev, ai_ingredient_label: null } : prev);
                                   setAiLabelText("");
-                                  setLabelWarnings([]); setLabelMissing([]);
+                                  setLabelWarnings([]);
+                                  setLabelMissing([]);
+                                  setLabelReviewNotes([]);
+                                  setLabelAdoptionBlocked(false);
                                 } catch { toast.error('削除に失敗しました'); }
                               }}
                               className="text-xs text-red-500 hover:text-red-700 px-1 py-0.5 rounded hover:bg-red-50"
@@ -3110,7 +3124,9 @@ function RecipeDetailContent() {
                                   setLabelTab('manual');
                                 }
                               }}
-                              className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50 flex items-center gap-0.5"
+                              disabled={labelAdoptionBlocked}
+                              title={labelAdoptionBlocked ? "不足情報を解消して再生成してください" : "手動側へ採用"}
+                              className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-transparent"
                             >
                               📋 採用
                             </button>
@@ -3123,39 +3139,13 @@ function RecipeDetailContent() {
                             </button>
                           </>
                         )}
-                        <button
-                          onClick={async () => {
-                            if (!recipe) return;
-                            setLabelGenerating(true);
-                            setLabelWarnings([]); setLabelMissing([]); setLabelCarryover([]);
-                            try {
-                              const res = await fetch('/api/recipe/generate-label', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ recipeId: recipe.id }),
-                              });
-                              const data = await res.json();
-                              if (data.error) { toast.error(data.error); }
-                              else {
-                                setAiLabelText(data.label || '');
-                                setRecipe(prev => prev ? { ...prev, ai_ingredient_label: data.label || null } : prev);
-                                setLabelWarnings(data.warnings || []);
-                                setLabelMissing(data.missing_info || []);
-                                setLabelCarryover(data.carryover || []);
-                                toast.success('AI原材料表示を生成しました');
-                              }
-                            } catch (err: any) { toast.error('生成に失敗しました: ' + err.message); }
-                            finally { setLabelGenerating(false); }
-                          }}
-                          disabled={labelGenerating}
-                          className="text-xs text-emerald-600 hover:text-emerald-800 font-medium px-1.5 py-0.5 rounded hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-0.5"
-                        >
-                          {labelGenerating ? (
-                            <><Loader2 className="w-3 h-3 animate-spin" />生成中...</>
-                          ) : (
-                            <><FlaskConical className="w-3 h-3" />{aiLabelText ? '再生成' : 'AI生成'}</>
-                          )}
-                        </button>
+                        {recipe && (
+                          <IngredientLabelAiControls
+                            recipeId={recipe.id}
+                            hasLabel={Boolean(aiLabelText)}
+                            onGenerated={handleIngredientLabelGenerated}
+                          />
+                        )}
                       </div>
                       {aiLabelText ? (
                         <div className="text-sm leading-relaxed text-gray-700 whitespace-pre-wrap bg-emerald-50/50 rounded p-2 border border-emerald-100">
@@ -3189,14 +3179,13 @@ function RecipeDetailContent() {
                           </ul>
                         </div>
                       )}
-                      {labelCarryover.length > 0 && (
+                      {labelReviewNotes.length > 0 && (
                         <div className="mt-2 bg-blue-50 border border-blue-200 rounded p-1.5">
                           <div className="flex items-center gap-1 mb-0.5">
-                            <span className="text-xs">🔄</span>
-                            <span className="text-xs font-bold text-blue-800">キャリーオーバー省略</span>
+                            <span className="text-xs font-bold text-blue-800">最終確認項目</span>
                           </div>
                           <ul className="text-xs text-blue-700 space-y-0.5">
-                            {labelCarryover.map((c, i) => <li key={i}>• {c}</li>)}
+                            {labelReviewNotes.map((note, i) => <li key={i}>• {note}</li>)}
                           </ul>
                         </div>
                       )}

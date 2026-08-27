@@ -27,6 +27,7 @@ $requiredSourceFiles = @(
   "ec-product-content-result.schema.json",
   "ec-product-content-plan.schema.json",
   "ec-product-content-ai.schema.json",
+  "ingredient-label-ai.schema.json",
   "recipe-sns-result.schema.json",
   "recipe-sns-target-result.schema.json",
   "render-recipe-sns-image.ps1",
@@ -234,6 +235,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "ec-catchcopy-ai.schema.json") -Des
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-result.schema.json") -Destination (Join-Path $installDir "ec-product-content-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-plan.schema.json") -Destination (Join-Path $installDir "ec-product-content-plan.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-content-ai.schema.json") -Destination (Join-Path $installDir "ec-product-content-ai.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ingredient-label-ai.schema.json") -Destination (Join-Path $installDir "ingredient-label-ai.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-target-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-target-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "render-recipe-sns-image.ps1") -Destination (Join-Path $installDir "render-recipe-sns-image.ps1") -Force
@@ -253,6 +255,7 @@ $headlessTaskKeys = @(
   "ec_product_name_generate",
   "ec_catchcopy_generate",
   "ec_product_content_generate",
+  "ingredient_label_generate",
   "recipe_sns_generate",
   "web_sales_analysis"
 )

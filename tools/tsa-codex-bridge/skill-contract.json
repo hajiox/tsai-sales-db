@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-27.2",
+  "version": "2026-08-27.3",
   "tasks": {
     "connection_test": {
       "mode": "deterministic",
@@ -44,6 +44,10 @@
     "ec_product_content_generate": {
       "mode": "codex",
       "skill": "optimize-aizu-ec-product-content"
+    },
+    "ingredient_label_generate": {
+      "mode": "codex",
+      "skill": "generate-aizu-ingredient-label"
     },
     "recipe_sns_generate": {
       "mode": "codex",

@@ -1,0 +1,4 @@
+interface:
+  display_name: "会津ブランド館 原材料表示生成"
+  short_description: "保存済みレシピから法令確認付きの原材料表示案を生成"
+  default_prompt: "Use $generate-aizu-ingredient-label to generate a review-required Japanese ingredient label draft from the supplied compact TSA snapshot."

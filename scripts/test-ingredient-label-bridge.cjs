@@ -1,0 +1,41 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const root = path.resolve(__dirname, "..");
+const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
+const bridge = read("tools", "tsa-codex-bridge", "bridge.mjs");
+const route = read("app", "api", "recipe", "generate-label", "route.ts");
+const importer = read("app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "ingredient-label-ai-import", "route.ts");
+const contract = JSON.parse(read("tools", "tsa-codex-bridge", "skill-contract.json"));
+const schema = JSON.parse(read("tools", "tsa-codex-bridge", "ingredient-label-ai.schema.json"));
+const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-ingredient-label", "SKILL.md");
+const legal = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-ingredient-label", "references", "japan-food-labeling-rules.md");
+const sourceBuilder = read("lib", "ingredient-label-codex-server.ts");
+
+assert.equal(contract.tasks.ingredient_label_generate.skill, "generate-aizu-ingredient-label");
+assert.equal(contract.tasks.ingredient_label_generate.mode, "codex");
+assert.match(bridge, /reasoningEffort:\s*"ultra"/);
+assert.match(bridge, /ephemeral:\s*true/);
+assert.match(bridge, /minimalContext:\s*true/);
+assert.match(bridge, /sandbox:\s*"read-only"/);
+assert.match(bridge, /if \(!options\.sandbox\) args\.push\("--approve-for-me"\)/);
+assert.match(bridge, /Use \$generate-aizu-ingredient-label/);
+assert.match(bridge, /ingredient-label-ai-import/);
+assert.match(route, /buildIngredientLabelSourceSnapshot/);
+assert.match(route, /ingredient_label_generate/);
+assert.doesNotMatch(route, /GoogleGenerativeAI|GEMINI_API_KEY|fuzzyMatch/);
+assert.match(importer, /currentSnapshot\.sourceHash !== requestedSnapshot\.sourceHash/);
+assert.match(importer, /ai_ingredient_label/);
+assert.match(sourceBuilder, /resolution,/);
+assert.doesNotMatch(sourceBuilder, /lcs|fuzzy|similar/i);
+assert.match(skill, /Never open, read, search, or reuse app Chats/);
+assert.match(skill, /Never use a 5% threshold to declare an additive a carry-over/);
+assert.match(legal, /カシューナッツ/);
+assert.match(legal, /ピスタチオ/);
+assert.match(legal, /個別表示が原則/);
+assert.equal(schema.properties.human_review_required.type, "boolean");
+assert.equal(schema.properties.human_review_required.const, true);
+assert.ok(schema.required.includes("adoption_blocked"));
+
+console.log("Ingredient label Bridge contract verified.");

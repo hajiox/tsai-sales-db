@@ -26,6 +26,7 @@ const expectedTasks = {
   ec_catchcopy_generate: "generate-aizu-ec-catchcopies",
   ec_product_content_update: "update-aizu-ec-product-content",
   ec_product_content_generate: "optimize-aizu-ec-product-content",
+  ingredient_label_generate: "generate-aizu-ingredient-label",
   recipe_sns_generate: "generate-aizu-sns-assets",
   web_sales_analysis: "tsa-web-sales-analysis",
 };
@@ -62,7 +63,7 @@ assert.match(bridge, /String\(arg\)\.toLowerCase\(\) === "resume"/);
 assert.match(bridge, /chatHistoryLoaded: false/);
 assert.match(bridge, /freshNonResumedSession: true/);
 assert.match(bridge, /skillContractVersion: SKILL_CONTRACT\.version/);
-assert.equal((bridge.match(/spawnSkillCodex\(job\.task_key, prompt, args/g) || []).length, 9);
+assert.equal((bridge.match(/spawnSkillCodex\(job\.task_key, prompt, args/g) || []).length, 10);
 assert.equal((bridge.match(/spawnCodexProcess\(args, options\)/g) || []).length, 2);
 assert.doesNotMatch(bridge, /spawnCodex\(/);
 assert.doesNotMatch(bridge, /stdin\.end\(prompt/);
