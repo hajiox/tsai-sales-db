@@ -1,13 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "1.8.47";
+const VERSION = "1.9.0";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
-const DESKTOP_MONITOR_FORCE_CLOSE_MS = 40_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "TSA Codex Bridge")
@@ -17,10 +16,16 @@ const CONFIG_PATH = resolve(process.env.TSA_CODEX_BRIDGE_CONFIG || join(APP_DIR,
 const LOG_DIR = join(APP_DIR, "logs");
 const LOCK_PATH = join(APP_DIR, "bridge.lock");
 const STATE_PATH = join(APP_DIR, "bridge-state.json");
-const MONITOR_STATE_PATH = join(APP_DIR, "monitor-state.json");
-const MONITOR_ACK_PATH = join(APP_DIR, "monitor-ack.json");
-const MONITOR_SCRIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "bridge-monitor.ps1");
-const MONITOR_LAUNCHER_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "launch-bridge-monitor.ps1");
+const BUNDLED_MONITOR_SCRIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "bridge-monitor.ps1");
+const BUNDLED_MONITOR_LAUNCHER_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "launch-bridge-monitor.ps1");
+const DEFAULT_UNIFIED_MONITOR_DIR = process.env.LOCALAPPDATA
+  ? join(process.env.LOCALAPPDATA, "Codex Bridge Monitor")
+  : join(homedir(), ".codex-bridge-monitor");
+const UNIFIED_MONITOR_DIR = resolve(process.env.CODEX_BRIDGE_MONITOR_DIR || DEFAULT_UNIFIED_MONITOR_DIR);
+const UNIFIED_MONITOR_STATE_DIR = join(UNIFIED_MONITOR_DIR, "states");
+const UNIFIED_MONITOR_ACK_PATH = join(UNIFIED_MONITOR_DIR, "monitor-ack.json");
+const COMMON_MONITOR_SCRIPT_PATH = join(UNIFIED_MONITOR_DIR, "bridge-monitor.ps1");
+const COMMON_MONITOR_LAUNCHER_PATH = join(UNIFIED_MONITOR_DIR, "launch-bridge-monitor.ps1");
 const RECIPE_SNS_RENDERER_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "render-recipe-sns-image.ps1");
 const MAINTENANCE_PATH = resolve(process.env.TSA_CODEX_BRIDGE_MAINTENANCE_PATH || join(APP_DIR, "bridge-maintenance.lock"));
 const RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "result.schema.json");
@@ -79,6 +84,13 @@ mkdirSync(LOG_DIR, { recursive: true });
 acquireLock();
 
 const config = loadConfig();
+mkdirSync(UNIFIED_MONITOR_STATE_DIR, { recursive: true });
+const MONITOR_WORKER_KEY = config.executionMode === "headless-prelogin" ? "tsa-prelogin" : "tsa-interactive";
+const MONITOR_STATE_PATH = join(UNIFIED_MONITOR_STATE_DIR, `${MONITOR_WORKER_KEY}.json`);
+const MONITOR_ACK_PATH = UNIFIED_MONITOR_ACK_PATH;
+const MONITOR_SCRIPT_PATH = existsSync(COMMON_MONITOR_SCRIPT_PATH) ? COMMON_MONITOR_SCRIPT_PATH : BUNDLED_MONITOR_SCRIPT_PATH;
+const MONITOR_LAUNCHER_PATH = existsSync(COMMON_MONITOR_LAUNCHER_PATH) ? COMMON_MONITOR_LAUNCHER_PATH : BUNDLED_MONITOR_LAUNCHER_PATH;
+const BRIDGE_STARTED_AT = new Date().toISOString();
 let codexPath = findCodexPath(config.codexPath);
 let codexRuntime = inspectCodexRuntime(codexPath);
 let lastCodexRuntimeCheckAt = Date.now();
@@ -90,18 +102,21 @@ let lastError = null;
 let lastHeartbeatAt = null;
 let currentCodexPid = null;
 let desktopMonitorState = null;
-let desktopMonitorCloseTimer = null;
+let lastDesktopTerminalState = readPreviousDesktopTerminalState();
+let desktopMonitorLaunchRequestedAt = 0;
 
 process.on("SIGINT", () => { stopping = true; });
 process.on("SIGTERM", () => { stopping = true; });
 process.on("exit", () => {
-  terminateAcknowledgedDesktopMonitor(null, "Bridge終了時の後片付け");
+  publishDesktopMonitorOffline();
   writeBridgeState();
   releaseLock();
 });
 
 log(`TSA Codex Bridge ${VERSION} started`);
 writeBridgeState();
+publishDesktopMonitorIdle();
+ensureUnifiedDesktopMonitor(false);
 log(`Codex: ${codexPath} (${codexRuntime.version || "version unknown"})`);
 log(`Skill contract: ${SKILL_CONTRACT.version} (${Object.values(TASK_CONTRACTS).filter((entry) => entry.skill).length} dedicated Skills)`);
 void main();
@@ -4418,6 +4433,8 @@ async function heartbeat() {
   });
   lastHeartbeatAt = new Date().toISOString();
   writeBridgeState();
+  publishDesktopMonitorHeartbeat();
+  ensureUnifiedDesktopMonitor(false);
 }
 
 function workerPayload() {
@@ -4434,6 +4451,8 @@ function workerPayload() {
       executionMode: config.executionMode,
       preLogin: config.executionMode === "headless-prelogin",
       desktopMonitor: config.desktopMonitor,
+      unifiedDesktopMonitor: true,
+      monitorStateSchemaVersion: 1,
       sharedSession: false,
       isolatedEphemeralSession: true,
       freshNonResumedSession: true,
@@ -5033,13 +5052,15 @@ function startDesktopMonitor(job) {
   const parameters = job?.parameters && typeof job.parameters === "object" && !Array.isArray(job.parameters)
     ? job.parameters
     : {};
-  const targets = Array.isArray(parameters.targets) ? parameters.targets.map(String) : [];
+  const targets = Array.isArray(parameters.targets)
+    ? parameters.targets.map((value) => sanitizeMonitorText(value, 80)).slice(0, 30)
+    : [];
   const startedAt = new Date().toISOString();
-  desktopMonitorState = {
+  desktopMonitorState = monitorBaseState({
     jobId: String(job?.id || ""),
     taskKey: String(job?.task_key || ""),
     taskLabel: bridgeTaskLabel(job?.task_key),
-    productName: String(parameters.ecProductName || parameters.recipeName || "").slice(0, 160),
+    productName: sanitizeMonitorText(parameters.ecProductName || parameters.recipeName || "", 160),
     targets,
     status: "running",
     progress: 1,
@@ -5051,60 +5072,190 @@ function startDesktopMonitor(job) {
     codexPid: null,
     estimatedEarliestAt: null,
     estimatedLatestAt: null,
-  };
+  });
   updateDesktopMonitor(job.id, {});
+  ensureUnifiedDesktopMonitor(true);
+}
+
+function monitorBaseState(overrides = {}) {
+  const now = new Date().toISOString();
+  return {
+    schemaVersion: 1,
+    system: "tsa",
+    systemLabel: "TSA",
+    workerId: config.workerId,
+    workerName: config.workerName,
+    executionMode: config.executionMode,
+    bridgeVersion: VERSION,
+    status: "idle",
+    progress: 0,
+    jobId: null,
+    taskKey: null,
+    taskLabel: null,
+    productName: null,
+    targets: [],
+    currentStep: "次のジョブを待っています",
+    summary: null,
+    operatorWaitReason: null,
+    startedAt: BRIDGE_STARTED_AT,
+    lastResponseAt: null,
+    heartbeatAt: lastHeartbeatAt || now,
+    updatedAt: now,
+    estimatedEarliestAt: null,
+    estimatedLatestAt: null,
+    bridgePid: process.pid,
+    codexPid: currentCodexPid,
+    lastTerminal: lastDesktopTerminalState,
+    ...overrides,
+  };
+}
+
+function sanitizeMonitorText(value, maximum) {
+  return redactSensitiveEventText(String(value || ""))
+    .replace(/https?:\/\/\S+/gi, "[URL]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
+    .replace(/\b(password|passwd|token|secret|cookie|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .slice(0, maximum);
+}
+
+function readPreviousDesktopTerminalState() {
+  try {
+    if (!existsSync(MONITOR_STATE_PATH)) return null;
+    const previous = JSON.parse(readFileSync(MONITOR_STATE_PATH, "utf8"));
+    if (previous?.lastTerminal && typeof previous.lastTerminal === "object") {
+      return {
+        jobId: String(previous.lastTerminal.jobId || ""),
+        taskLabel: sanitizeMonitorText(previous.lastTerminal.taskLabel || "TSA自動処理", 160),
+        status: String(previous.lastTerminal.status || "failed"),
+        summary: sanitizeMonitorText(previous.lastTerminal.summary || "処理終了", 300),
+        finishedAt: String(previous.lastTerminal.finishedAt || new Date().toISOString()),
+      };
+    }
+    if (FINAL_DESKTOP_MONITOR_STATUSES.has(String(previous?.status || "")) && previous?.jobId) {
+      return {
+        jobId: String(previous.jobId),
+        taskLabel: sanitizeMonitorText(previous.taskLabel || "TSA自動処理", 160),
+        status: String(previous.status),
+        summary: sanitizeMonitorText(previous.summary || previous.currentStep || "処理終了", 300),
+        finishedAt: String(previous.updatedAt || new Date().toISOString()),
+      };
+    }
+  } catch {
+    // A previous process may have stopped during a state write. Start with no history.
+  }
+  return null;
+}
+
+function writeDesktopMonitorState() {
+  if (!desktopMonitorState) return;
+  const temporaryPath = `${MONITOR_STATE_PATH}.${process.pid}.tmp`;
+  try {
+    mkdirSync(UNIFIED_MONITOR_STATE_DIR, { recursive: true });
+    writeFileSync(temporaryPath, `${JSON.stringify(desktopMonitorState, null, 2)}\n`, "utf8");
+    renameSync(temporaryPath, MONITOR_STATE_PATH);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    log(`WARN unified monitor state write failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function publishDesktopMonitorIdle() {
+  if (desktopMonitorState && FINAL_DESKTOP_MONITOR_STATUSES.has(String(desktopMonitorState.status || ""))) {
+    lastDesktopTerminalState = {
+      jobId: String(desktopMonitorState.jobId || ""),
+      taskLabel: sanitizeMonitorText(desktopMonitorState.taskLabel || "TSA自動処理", 160),
+      status: String(desktopMonitorState.status),
+      summary: sanitizeMonitorText(desktopMonitorState.summary || desktopMonitorState.currentStep || "処理終了", 300),
+      finishedAt: String(desktopMonitorState.updatedAt || new Date().toISOString()),
+    };
+  }
+  desktopMonitorState = monitorBaseState();
+  writeDesktopMonitorState();
+}
+
+function publishDesktopMonitorHeartbeat() {
+  if (!currentJobId || !desktopMonitorState || desktopMonitorState.jobId !== String(currentJobId)) {
+    publishDesktopMonitorIdle();
+    return;
+  }
+  const now = new Date().toISOString();
+  desktopMonitorState = {
+    ...desktopMonitorState,
+    heartbeatAt: lastHeartbeatAt || now,
+    updatedAt: now,
+    bridgePid: process.pid,
+    codexPid: currentCodexPid,
+  };
+  writeDesktopMonitorState();
+}
+
+function publishDesktopMonitorOffline() {
+  const now = new Date().toISOString();
+  desktopMonitorState = monitorBaseState({
+    status: "offline",
+    progress: 0,
+    currentStep: "Bridgeプロセスが終了しました",
+    heartbeatAt: lastHeartbeatAt || now,
+    updatedAt: now,
+    codexPid: null,
+  });
+  writeDesktopMonitorState();
+}
+
+function ensureUnifiedDesktopMonitor(bringForward) {
   if (
     config.desktopMonitor === false
     || !existsSync(MONITOR_SCRIPT_PATH)
     || !existsSync(MONITOR_LAUNCHER_PATH)
   ) return;
   try {
-    if (desktopMonitorCloseTimer) {
-      clearTimeout(desktopMonitorCloseTimer);
-      desktopMonitorCloseTimer = null;
-    }
     const existing = readDesktopMonitorAcknowledgement();
-    if (
-      existing
-      && String(existing.jobId || "") === String(job.id)
-      && isProcessRunning(Number(existing.monitorPid))
-    ) {
-      log(`desktop monitor already visible for ${job.id} (pid ${existing.monitorPid})`);
+    const monitorAlive = existing
+      && existing.monitorId === "codex-bridge-unified"
+      && isProcessRunning(Number(existing.monitorPid));
+    if (monitorAlive && !bringForward) {
       return;
     }
-    terminateAcknowledgedDesktopMonitor(null, "次のジョブ開始前の後片付け");
-    rmSync(MONITOR_ACK_PATH, { force: true });
-    const monitor = spawn("powershell.exe", [
+    if (!monitorAlive && Date.now() - desktopMonitorLaunchRequestedAt < 10_000) return;
+    if (!monitorAlive) rmSync(MONITOR_ACK_PATH, { force: true });
+    const launcherArguments = [
       "-NoProfile",
       "-ExecutionPolicy", "Bypass",
       "-File", MONITOR_LAUNCHER_PATH,
-      "-StatePath", MONITOR_STATE_PATH,
-      "-JobId", String(job.id),
+      "-StateDirectory", UNIFIED_MONITOR_STATE_DIR,
       "-AckPath", MONITOR_ACK_PATH,
-    ], {
+    ];
+    if (bringForward) launcherArguments.push("-BringForward");
+    const monitor = spawn("powershell.exe", launcherArguments, {
       stdio: "ignore",
       windowsHide: true,
     });
-    log(`desktop monitor launch requested for ${job.id} (launcher pid ${monitor.pid || "unknown"})`);
-    verifyDesktopMonitorLaunch(String(job.id), 0);
+    if (monitorAlive) {
+      log(`unified desktop monitor foreground requested (pid ${existing.monitorPid})`);
+      return;
+    }
+    desktopMonitorLaunchRequestedAt = Date.now();
+    log(`unified desktop monitor launch requested (launcher pid ${monitor.pid || "unknown"})`);
+    verifyDesktopMonitorLaunch(0);
   } catch (error) {
-    log(`WARN desktop monitor could not start: ${error instanceof Error ? error.message : String(error)}`);
+    log(`WARN unified desktop monitor could not start: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function verifyDesktopMonitorLaunch(jobId, attempt) {
+function verifyDesktopMonitorLaunch(attempt) {
   setTimeout(() => {
     try {
       if (existsSync(MONITOR_ACK_PATH)) {
         const acknowledgement = JSON.parse(readFileSync(MONITOR_ACK_PATH, "utf8"));
         const monitorPid = Number(acknowledgement?.monitorPid);
         if (
-          String(acknowledgement?.jobId || "") === jobId
+          acknowledgement?.monitorId === "codex-bridge-unified"
           && Number.isInteger(monitorPid)
           && isProcessRunning(monitorPid)
         ) {
+          desktopMonitorLaunchRequestedAt = 0;
           log(
-            `desktop monitor visible for ${jobId} (pid ${monitorPid}, foreground ${acknowledgement?.foregroundActivated === true ? "confirmed" : "requested"})`,
+            `unified desktop monitor visible (pid ${monitorPid}, foreground ${acknowledgement?.foregroundActivated === true ? "confirmed" : "requested"})`,
           );
           return;
         }
@@ -5114,28 +5265,27 @@ function verifyDesktopMonitorLaunch(jobId, attempt) {
     }
 
     if (attempt === 9) {
-      log(`WARN desktop monitor did not acknowledge for ${jobId}; retrying with a direct visible process`);
+      log("WARN unified desktop monitor did not acknowledge; retrying launcher");
       try {
         spawn("powershell.exe", [
           "-NoProfile",
           "-ExecutionPolicy", "Bypass",
           "-File", MONITOR_LAUNCHER_PATH,
-          "-StatePath", MONITOR_STATE_PATH,
-          "-JobId", jobId,
+          "-StateDirectory", UNIFIED_MONITOR_STATE_DIR,
           "-AckPath", MONITOR_ACK_PATH,
         ], {
           stdio: "ignore",
           windowsHide: true,
         });
       } catch (error) {
-        log(`WARN desktop monitor direct retry failed: ${error instanceof Error ? error.message : String(error)}`);
+        log(`WARN unified desktop monitor retry failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
     if (attempt < 19) {
-      verifyDesktopMonitorLaunch(jobId, attempt + 1);
+      verifyDesktopMonitorLaunch(attempt + 1);
     } else {
-      log(`WARN desktop monitor visibility could not be confirmed for ${jobId}`);
+      log("WARN unified desktop monitor visibility could not be confirmed");
     }
   }, 500);
 }
@@ -5144,46 +5294,10 @@ function readDesktopMonitorAcknowledgement() {
   try {
     if (!existsSync(MONITOR_ACK_PATH)) return null;
     const acknowledgement = JSON.parse(readFileSync(MONITOR_ACK_PATH, "utf8"));
-    return acknowledgement && typeof acknowledgement === "object" ? acknowledgement : null;
+    return acknowledgement?.monitorId === "codex-bridge-unified" ? acknowledgement : null;
   } catch {
     return null;
   }
-}
-
-function terminateAcknowledgedDesktopMonitor(expectedJobId, reason) {
-  const acknowledgement = readDesktopMonitorAcknowledgement();
-  if (!acknowledgement) return false;
-  const jobId = String(acknowledgement.jobId || "");
-  if (expectedJobId && jobId !== String(expectedJobId)) return false;
-  const monitorPid = Number(acknowledgement.monitorPid);
-  if (Number.isInteger(monitorPid) && isProcessRunning(monitorPid)) {
-    const stopped = spawnSync("taskkill", ["/PID", String(monitorPid), "/T", "/F"], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
-    if (stopped.status === 0 || !isProcessRunning(monitorPid)) {
-      log(`desktop monitor closed for ${jobId || "unknown"} (${reason}, pid ${monitorPid})`);
-    } else {
-      log(`WARN desktop monitor could not be closed for ${jobId || "unknown"} (pid ${monitorPid})`);
-      return false;
-    }
-  }
-  try {
-    const latest = readDesktopMonitorAcknowledgement();
-    if (latest && String(latest.jobId || "") === jobId) rmSync(MONITOR_ACK_PATH, { force: true });
-  } catch {
-    // A newer monitor may be replacing the acknowledgement file.
-  }
-  return true;
-}
-
-function scheduleDesktopMonitorClose(jobId) {
-  if (desktopMonitorCloseTimer) clearTimeout(desktopMonitorCloseTimer);
-  desktopMonitorCloseTimer = setTimeout(() => {
-    terminateAcknowledgedDesktopMonitor(jobId, "終了状態から40秒経過");
-    desktopMonitorCloseTimer = null;
-  }, DESKTOP_MONITOR_FORCE_CLOSE_MS);
-  desktopMonitorCloseTimer.unref?.();
 }
 
 function updateDesktopMonitor(jobId, payload) {
@@ -5197,18 +5311,28 @@ function updateDesktopMonitor(jobId, payload) {
     ...desktopMonitorState,
     status: nextStatus,
     progress: nextProgress,
-    currentStep: payload?.currentStep ? String(payload.currentStep).slice(0, 300) : desktopMonitorState.currentStep,
-    summary: payload?.message ? String(payload.message).slice(0, 800) : desktopMonitorState.summary,
+    currentStep: payload?.currentStep ? sanitizeMonitorText(payload.currentStep, 300) : desktopMonitorState.currentStep,
+    summary: payload?.message ? sanitizeMonitorText(payload.message, 800) : desktopMonitorState.summary,
     lastResponseAt: now,
+    heartbeatAt: lastHeartbeatAt || now,
+    updatedAt: now,
     codexPid: currentCodexPid,
+    operatorWaitReason: ["waiting_for_user", "needs_review"].includes(nextStatus)
+      ? sanitizeMonitorText(payload?.message || desktopMonitorState.operatorWaitReason || "操作または確認が必要です", 500)
+      : null,
     ...estimateDesktopCompletion({ ...desktopMonitorState, status: nextStatus }, nextProgress, now),
   };
-  try {
-    writeFileSync(MONITOR_STATE_PATH, `${JSON.stringify(desktopMonitorState, null, 2)}\n`, "utf8");
-  } catch (error) {
-    log(`WARN desktop monitor state write failed: ${error instanceof Error ? error.message : String(error)}`);
+  if (FINAL_DESKTOP_MONITOR_STATUSES.has(nextStatus)) {
+    lastDesktopTerminalState = {
+      jobId: String(desktopMonitorState.jobId || ""),
+      taskLabel: sanitizeMonitorText(desktopMonitorState.taskLabel || "TSA自動処理", 160),
+      status: nextStatus,
+      summary: sanitizeMonitorText(desktopMonitorState.summary || desktopMonitorState.currentStep || "処理終了", 300),
+      finishedAt: now,
+    };
+    desktopMonitorState.lastTerminal = lastDesktopTerminalState;
   }
-  if (FINAL_DESKTOP_MONITOR_STATUSES.has(nextStatus)) scheduleDesktopMonitorClose(String(jobId));
+  writeDesktopMonitorState();
 }
 
 function estimateDesktopCompletion(state, progress, nowIso) {

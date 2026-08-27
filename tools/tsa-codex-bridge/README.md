@@ -9,6 +9,12 @@ The bridge runs on the office Windows PC and claims allow-listed TSA jobs over o
 - Codex desktop and the signed-in EC Chrome session are required only for Chrome control.
 - The shared archive path must be reachable.
 
+## Unified monitor
+
+Bridge `1.9.0` uses one persistent `Codex Bridge 統合モニター` window per signed-in Windows session. It reads strict UTF-8 state files from `%LOCALAPPDATA%\Codex Bridge Monitor\states` and displays TSA, TSG, and DocScanner together. Closing the monitor never stops a worker or Codex process; the next interactive Bridge event reopens the same monitor. The pre-login worker publishes state but never opens a desktop window.
+
+Each future TSG or DocScanner Bridge must publish one atomic `*.json` file that conforms to `bridge-monitor-state.schema.json`, using `system` values `tsg` or `docscanner`. Until such a Bridge exists, the monitor reports that system as `未導入` instead of inventing activity. A stale heartbeat is shown as `応答停止` when the worker PID still exists and `オフライン` when it does not.
+
 ## Install
 
 Run `install-bridge.ps1` with the same secret stored in Vercel as `TSA_CODEX_BRIDGE_TOKEN`. The installer copies runtime files to `%LOCALAPPDATA%\TSA Codex Bridge`, keeps the current-user startup entry for the interactive worker, and registers `TSA Codex Bridge (Pre-login)` as an `AtStartup` S4U task. The first registration requires one Windows administrator confirmation, but stores no Windows password. Later Bridge updates reuse the same task.
@@ -41,6 +47,7 @@ The TSA automation screen shows both versions and warns when the installed Bridg
 
 ## Operation note
 
+- 2026-08-27: Bridge 1.9.0 replaces per-job TSA monitor windows with one persistent unified monitor contract for TSA, TSG, and DocScanner. TSA interactive and pre-login workers publish atomic strict UTF-8 state snapshots to the common state directory; only the interactive worker opens or foregrounds the single mutex-protected console. The monitor shows progress, current step, elapsed time, ETA, last response, worker/Codex PIDs, operator waits, recent terminal history, malformed-state errors, stale heartbeats, and accurate `未導入` status for systems that do not yet have a Bridge. Runtime tests cover Windows PowerShell 5.1 Japanese parsing, all three systems, stale-state detection, restart from saved state, and proof that closing the monitor does not stop a worker.
 - 2026-08-26: Bridge 1.8.47 fixes the visible monitor appearing with only its header. Windows PowerShell 5.1 interpreted the Bridge's BOM-less UTF-8 `monitor-state.json` as the system ANSI code page, so Japanese JSON parsing failed inside a silent retry loop. The monitor now reads strict UTF-8 through `File.ReadAllText`, immediately shows a loading state, surfaces persistent read retries instead of staying blank, and has a Windows PowerShell 5.1 runtime test using Japanese task, product, step, and summary text.
 - 2026-08-26: Bridge 1.8.46 renders the fixed `会津ブランド館` creative label from Unicode code points so Windows PowerShell 5.1 cannot reinterpret the UTF-8 script literal. Production X targeted regeneration created a corrected 1600x900 creative with intact Japanese copy; URL comparison confirmed that only X changed while Instagram, IG Story, and Threads remained byte-for-byte referenced to the previous version.
 - 2026-08-26: Bridge 1.8.45 upgrades recipe SNS generation to protocol 3. Each platform card can regenerate only itself in a fresh minimal-context Skill session; the server merges that one validated result into a new immutable history version while preserving the other three platform outputs. Creative rendering replaces the opaque black panel with a photo-led edge scrim, restrained brand line, and responsive Japanese typography. The dedicated Skill now asks ImageGen for real negative space and rejects dark template panels. Focused feature, Bridge/schema, target-merge, image-layout, renderer, ESLint, migration dry-run, and production targeted-regeneration checks passed; the Windows PowerShell label issue found by the first smoke is corrected in 1.8.46.

@@ -182,13 +182,19 @@ const monitorSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor.ps1"),
   "utf8",
 );
-assert.match(monitorSource, /TSA Codex Bridge 実行モニター/);
+assert.match(monitorSource, /Codex Bridge 統合モニター/);
+assert.match(monitorSource, /TSA/);
+assert.match(monitorSource, /TSG/);
+assert.match(monitorSource, /DocScanner/);
 assert.match(monitorSource, /完了目安/);
 assert.match(monitorSource, /Codex PID/);
 assert.match(monitorSource, /目安超過（処理継続中）/);
 assert.match(monitorSource, /foregroundActivated/);
 assert.match(monitorSource, /monitorPid/);
-assert.match(monitorSource, /TsaCodexBridgeMonitor_/);
+assert.match(monitorSource, /Local\\CodexBridgeUnifiedMonitor/);
+assert.match(monitorSource, /Bridge状態ファイルがありません/);
+assert.match(monitorSource, /応答停止/);
+assert.match(monitorSource, /モニターを閉じてもBridgeジョブは停止しません/);
 assert.doesNotMatch(monitorSource, /Clear-Host/);
 assert.match(monitorSource, /SetConsoleMode/);
 assert.match(monitorSource, /-band \(-bnot 0x40\)/);
@@ -196,15 +202,17 @@ assert.match(monitorSource, /SetWindowPos/);
 assert.match(monitorSource, /broughtForward/);
 assert.match(monitorSource, /\[System\.IO\.File\]::ReadAllText/);
 assert.match(monitorSource, /\[System\.Text\.UTF8Encoding\]::new\(\$false, \$true\)/);
-assert.doesNotMatch(monitorSource, /Get-Content\s+-LiteralPath\s+\$StatePath/);
-assert.match(monitorSource, /ジョブ情報を読み直しています/);
+assert.doesNotMatch(monitorSource, /Get-Content\s+-LiteralPath/);
 const installerSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "install-bridge.ps1"),
   "utf8",
 );
 assert.match(installerSource, /"bridge-monitor\.ps1"/);
 assert.match(installerSource, /"launch-bridge-monitor\.ps1"/);
-assert.match(installerSource, /IndexOf\(\$monitorPath/);
+assert.match(installerSource, /"bridge-monitor-state\.schema\.json"/);
+assert.match(installerSource, /Codex Bridge Monitor/);
+assert.match(installerSource, /Stop-VerifiedMonitor/);
+assert.match(installerSource, /CommandLine\.IndexOf\(\$_/);
 const monitorLauncherSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "launch-bridge-monitor.ps1"),
   "utf8",
@@ -213,21 +221,34 @@ assert.match(monitorLauncherSource, /Start-Process/);
 assert.match(monitorLauncherSource, /-WindowStyle Normal/);
 assert.match(monitorLauncherSource, /AckPath/);
 assert.match(monitorLauncherSource, /conhost\.exe/);
-assert.match(bridgeSource, /desktop monitor visible/);
+assert.match(monitorLauncherSource, /BringForward/);
+assert.match(monitorLauncherSource, /codex-bridge-unified/);
+assert.match(bridgeSource, /unified desktop monitor visible/);
+assert.match(bridgeSource, /Codex Bridge Monitor/);
+assert.match(bridgeSource, /UNIFIED_MONITOR_STATE_DIR/);
+assert.match(bridgeSource, /schemaVersion: 1/);
+assert.match(bridgeSource, /system: "tsa"/);
+assert.match(bridgeSource, /tsa-prelogin/);
+assert.match(bridgeSource, /renameSync\(temporaryPath, MONITOR_STATE_PATH\)/);
+assert.match(bridgeSource, /Date\.now\(\) - desktopMonitorLaunchRequestedAt < 10_000/);
+assert.match(bridgeSource, /publishDesktopMonitorHeartbeat\(\);\s+ensureUnifiedDesktopMonitor\(false\);/);
+assert.match(bridgeSource, /function sanitizeMonitorText/);
+assert.match(bridgeSource, /Bearer \[REDACTED\]/);
 const desktopMonitorLaunchSource = bridgeSource.slice(
   bridgeSource.indexOf("function startDesktopMonitor("),
-  bridgeSource.indexOf("function updateDesktopMonitor("),
+  bridgeSource.indexOf("function updateDesktopMonitor(") + 1,
 );
 assert.doesNotMatch(
   desktopMonitorLaunchSource,
   /detached:\s*true/,
   "非表示ランチャーをdetached起動すると可視PowerShellの生成が失敗するため禁止する",
 );
-assert.equal(
-  (desktopMonitorLaunchSource.match(/"-File", MONITOR_LAUNCHER_PATH/g) || []).length,
-  2,
-  "初回と再試行の両方を可視ウィンドウ専用ランチャー経由にする",
+assert.ok(
+  (desktopMonitorLaunchSource.match(/"-File", MONITOR_LAUNCHER_PATH/g) || []).length >= 2,
+  "初回と再試行の両方を共通モニターランチャー経由にする",
 );
+assert.doesNotMatch(desktopMonitorLaunchSource, /taskkill/i, "モニターからBridgeまたはCodexを停止してはいけない");
+assert.doesNotMatch(bridgeSource, /terminateAcknowledgedDesktopMonitor/);
 const alreadyCurrentCheck = bridgeSource.indexOf('planSite.observed_price) === Number(planSite.target_price');
 const siteWritePhase = bridgeSource.indexOf('const writeOutput = join(workDir, `ec-price-${site}-result.json`)');
 assert.ok(alreadyCurrentCheck >= 0, "保存価格が目標価格と一致するECを変更不要として確定する");

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://v0-tsa-19.vercel.app/schemas/codex-bridge-monitor-state.v1.json",
+  "title": "Codex Bridge unified monitor worker state",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "system",
+    "systemLabel",
+    "workerId",
+    "workerName",
+    "executionMode",
+    "bridgeVersion",
+    "status",
+    "progress",
+    "currentStep",
+    "targets",
+    "heartbeatAt",
+    "updatedAt",
+    "bridgePid"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "system": { "enum": ["tsa", "tsg", "docscanner"] },
+    "systemLabel": { "type": "string", "minLength": 1, "maxLength": 40 },
+    "workerId": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "workerName": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "executionMode": { "enum": ["interactive", "headless-prelogin", "service"] },
+    "bridgeVersion": { "type": "string", "minLength": 1, "maxLength": 40 },
+    "status": { "enum": ["idle", "running", "completed", "waiting_for_user", "needs_review", "failed", "cancelled", "offline"] },
+    "progress": { "type": "number", "minimum": 0, "maximum": 100 },
+    "jobId": { "type": ["string", "null"], "maxLength": 100 },
+    "taskKey": { "type": ["string", "null"], "maxLength": 100 },
+    "taskLabel": { "type": ["string", "null"], "maxLength": 160 },
+    "productName": { "type": ["string", "null"], "maxLength": 160 },
+    "targets": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 80 } },
+    "currentStep": { "type": "string", "maxLength": 300 },
+    "summary": { "type": ["string", "null"], "maxLength": 800 },
+    "operatorWaitReason": { "type": ["string", "null"], "maxLength": 500 },
+    "startedAt": { "type": ["string", "null"], "format": "date-time" },
+    "lastResponseAt": { "type": ["string", "null"], "format": "date-time" },
+    "heartbeatAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "estimatedEarliestAt": { "type": ["string", "null"], "format": "date-time" },
+    "estimatedLatestAt": { "type": ["string", "null"], "format": "date-time" },
+    "bridgePid": { "type": "integer", "minimum": 1 },
+    "codexPid": { "type": ["integer", "null"], "minimum": 1 },
+    "lastTerminal": {
+      "type": ["object", "null"],
+      "properties": {
+        "jobId": { "type": "string", "maxLength": 100 },
+        "taskLabel": { "type": "string", "maxLength": 160 },
+        "status": { "enum": ["completed", "waiting_for_user", "needs_review", "failed", "cancelled"] },
+        "summary": { "type": "string", "maxLength": 300 },
+        "finishedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jobId", "taskLabel", "status", "summary", "finishedAt"],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory = $true)][string]$Token,
   [string]$BaseUrl = "https://v0-tsa-19.vercel.app",
   [string]$WorkerId = "tsa-office-01",
@@ -29,6 +29,7 @@ $requiredSourceFiles = @(
   "render-recipe-sns-image.ps1",
   "bridge-monitor.ps1",
   "launch-bridge-monitor.ps1",
+  "bridge-monitor-state.schema.json",
   "start-bridge.ps1",
   "start-bridge-prelogin.ps1",
   "register-prelogin-task.ps1"
@@ -64,12 +65,20 @@ New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-N
 New-Item -ItemType Directory -Path (Join-Path $installDir "jobs") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $installDir "headless\logs") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $installDir "headless\jobs") -Force | Out-Null
+$unifiedMonitorDir = Join-Path $env:LOCALAPPDATA "Codex Bridge Monitor"
+$unifiedMonitorStateDir = Join-Path $unifiedMonitorDir "states"
+New-Item -ItemType Directory -Path $unifiedMonitorDir -Force | Out-Null
+New-Item -ItemType Directory -Path $unifiedMonitorStateDir -Force | Out-Null
 
 $startScriptPath = Join-Path $installDir "start-bridge.ps1"
 $headlessStartScriptPath = Join-Path $installDir "start-bridge-prelogin.ps1"
 $bridgePath = Join-Path $installDir "bridge.mjs"
 $monitorPath = Join-Path $installDir "bridge-monitor.ps1"
 $monitorLauncherPath = Join-Path $installDir "launch-bridge-monitor.ps1"
+$unifiedMonitorPath = Join-Path $unifiedMonitorDir "bridge-monitor.ps1"
+$unifiedMonitorLauncherPath = Join-Path $unifiedMonitorDir "launch-bridge-monitor.ps1"
+$unifiedMonitorAckPath = Join-Path $unifiedMonitorDir "monitor-ack.json"
+$legacyMonitorAckPath = Join-Path $installDir "monitor-ack.json"
 $maintenancePath = Join-Path $installDir "bridge-maintenance.lock"
 $statePath = Join-Path $installDir "bridge-state.json"
 $headlessStatePath = Join-Path $installDir "headless\bridge-state.json"
@@ -82,6 +91,26 @@ function Get-BridgeProcesses {
       $_.CommandLine.IndexOf($bridgePath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
     )
   })
+}
+function Stop-VerifiedMonitor([string]$AckPath, [string[]]$AllowedScripts) {
+  if (-not (Test-Path -LiteralPath $AckPath)) { return }
+  try {
+    $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+    $acknowledgement = [System.IO.File]::ReadAllText($AckPath, $utf8) | ConvertFrom-Json -ErrorAction Stop
+    $monitorPid = [int]$acknowledgement.monitorPid
+    $monitorProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $monitorPid" -ErrorAction SilentlyContinue
+    if ($monitorProcess -and $monitorProcess.CommandLine) {
+      $matchesAllowedScript = @($AllowedScripts | Where-Object {
+        $monitorProcess.CommandLine.IndexOf($_, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+      }).Count -gt 0
+      if ($matchesAllowedScript) {
+        Stop-Process -Id $monitorPid -Force -ErrorAction SilentlyContinue
+      }
+    }
+  } catch {
+    # A stale or partial acknowledgement is removed below without touching a process.
+  }
+  Remove-Item -LiteralPath $AckPath -Force -ErrorAction SilentlyContinue
 }
 $maintenanceNonce = [guid]::NewGuid().ToString("N")
 [System.IO.File]::WriteAllText($maintenancePath, $maintenanceNonce, [System.Text.UTF8Encoding]::new($false))
@@ -144,7 +173,9 @@ try {
         $_.Name -ne "conhost.exe" -and
         (-not $_.CommandLine -or (
           $_.CommandLine.IndexOf($monitorPath, [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
-          $_.CommandLine.IndexOf($monitorLauncherPath, [System.StringComparison]::OrdinalIgnoreCase) -lt 0
+          $_.CommandLine.IndexOf($monitorLauncherPath, [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+          $_.CommandLine.IndexOf($unifiedMonitorPath, [System.StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+          $_.CommandLine.IndexOf($unifiedMonitorLauncherPath, [System.StringComparison]::OrdinalIgnoreCase) -lt 0
         ))
       })
       if ($children.Count -eq 0) { break }
@@ -165,6 +196,12 @@ try {
   if ($remainingBridgeProcesses.Count -gt 0) {
     throw "既存Bridgeを安全に停止できませんでした。"
   }
+  Stop-VerifiedMonitor -AckPath $legacyMonitorAckPath -AllowedScripts @($monitorPath)
+  Stop-VerifiedMonitor -AckPath $unifiedMonitorAckPath -AllowedScripts @(
+    $unifiedMonitorPath,
+    $monitorPath,
+    (Join-Path $sourceDir "bridge-monitor.ps1")
+  )
   $lockPath = Join-Path $installDir "bridge.lock"
   $headlessLockPath = Join-Path $installDir "headless\bridge.lock"
   if (Test-Path -LiteralPath $lockPath) { Remove-Item -LiteralPath $lockPath -Force }
@@ -177,6 +214,10 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Pa
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor.ps1") -Destination (Join-Path $installDir "bridge-monitor.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "launch-bridge-monitor.ps1") -Destination (Join-Path $installDir "launch-bridge-monitor.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor-state.schema.json") -Destination (Join-Path $installDir "bridge-monitor-state.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor.ps1") -Destination $unifiedMonitorPath -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "launch-bridge-monitor.ps1") -Destination $unifiedMonitorLauncherPath -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor-state.schema.json") -Destination (Join-Path $unifiedMonitorDir "bridge-monitor-state.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "result.schema.json") -Destination (Join-Path $installDir "result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "analysis-result.schema.json") -Destination (Join-Path $installDir "analysis-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-price-result.schema.json") -Destination (Join-Path $installDir "ec-price-result.schema.json") -Force
