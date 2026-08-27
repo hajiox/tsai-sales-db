@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
+const { writeMonitorStateJson } = require("../tools/tsa-codex-bridge/monitor-state-file.cjs");
 
 if (process.platform !== "win32") {
   console.log("unified bridge monitor test skipped: Windows only");
@@ -201,6 +202,8 @@ try {
     "-MutexName", mutexName,
     "-PlainOutput",
     "-SkipForeground",
+    "-RefreshMilliseconds", "100",
+    "-ReadHoldMilliseconds", "250",
   ], {
     stdio: "ignore",
     windowsHide: true,
@@ -210,6 +213,30 @@ try {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   }
   assert.ok(fs.existsSync(persistentAckPath), "常駐モニターが起動確認を書き込む");
+
+  const statePath = path.join(stateDirectory, "tsa-interactive.json");
+  const replaceDeadline = Date.now() + 2_500;
+  let replacements = 0;
+  let replacementRetries = 0;
+  while (Date.now() < replaceDeadline) {
+    const replacement = baseState({
+      system: "tsa",
+      systemLabel: "TSA",
+      workerId: "tsa-office-01",
+      workerName: "事務所PC",
+      status: "running",
+      progress: replacements % 101,
+      taskLabel: "状態ファイル競合テスト",
+      currentStep: `置換 ${replacements}`,
+    });
+    writeMonitorStateJson(statePath, replacement, {
+      onRetry: () => { replacementRetries += 1; },
+    });
+    replacements += 1;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+  }
+  assert.ok(replacements >= 5, "モニター読込中もBridge状態を継続して原子的に置換できる");
+  assert.ok(replacementRetries > 0, "Windowsの一時的な共有違反を上限付きリトライで回復する");
 
   const duplicateAckPath = path.join(tempDir, "ack-duplicate.json");
   const duplicate = spawnSync("powershell.exe", [

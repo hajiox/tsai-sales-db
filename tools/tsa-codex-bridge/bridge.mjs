@@ -1,11 +1,14 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import monitorStateFile from "./monitor-state-file.cjs";
 
-const VERSION = "1.9.3";
+const { writeMonitorStateJson } = monitorStateFile;
+
+const VERSION = "1.9.4";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -5955,13 +5958,9 @@ function readPreviousDesktopTerminalState() {
 
 function writeDesktopMonitorState() {
   if (!desktopMonitorState) return;
-  const temporaryPath = `${MONITOR_STATE_PATH}.${process.pid}.tmp`;
   try {
-    mkdirSync(UNIFIED_MONITOR_STATE_DIR, { recursive: true });
-    writeFileSync(temporaryPath, `${JSON.stringify(desktopMonitorState, null, 2)}\n`, "utf8");
-    renameSync(temporaryPath, MONITOR_STATE_PATH);
+    writeMonitorStateJson(MONITOR_STATE_PATH, desktopMonitorState);
   } catch (error) {
-    rmSync(temporaryPath, { force: true });
     log(`WARN unified monitor state write failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

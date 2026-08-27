@@ -13,6 +13,7 @@ $sourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $installDir = Join-Path $env:LOCALAPPDATA "TSA Codex Bridge"
 $requiredSourceFiles = @(
   "bridge.mjs",
+  "monitor-state-file.cjs",
   "skill-contract.json",
   "result.schema.json",
   "analysis-result.schema.json",
@@ -215,6 +216,7 @@ try {
   }
 
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destination (Join-Path $installDir "monitor-state-file.cjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor.ps1") -Destination (Join-Path $installDir "bridge-monitor.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "launch-bridge-monitor.ps1") -Destination (Join-Path $installDir "launch-bridge-monitor.ps1") -Force
@@ -304,16 +306,56 @@ $headlessConfig = @{
 } | ConvertTo-Json -Depth 4
 [System.IO.File]::WriteAllText((Join-Path $installDir "headless\bridge.config.json"), $headlessConfig, [System.Text.UTF8Encoding]::new($false))
 
-$runCommand = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $installDir 'start-bridge.ps1')`""
+$startScript = Join-Path $installDir "start-bridge.ps1"
+$startArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
+$interactiveTaskName = "TSA Codex Bridge (Interactive)"
+$interactiveTaskRegistered = $false
+$interactiveTaskRegistrationError = ""
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-New-ItemProperty -Path $runKey -Name "TSA Codex Bridge" -Value $runCommand -PropertyType String -Force | Out-Null
+try {
+  $interactiveAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $startArguments
+  $interactiveTrigger = New-ScheduledTaskTrigger -AtLogOn -User $windowsUserId
+  $interactivePrincipal = New-ScheduledTaskPrincipal -UserId $windowsUserId -LogonType Interactive -RunLevel Limited
+  $interactiveSettings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -RestartCount 999 `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -MultipleInstances IgnoreNew
+  $interactiveTask = New-ScheduledTask `
+    -Action $interactiveAction `
+    -Trigger $interactiveTrigger `
+    -Principal $interactivePrincipal `
+    -Settings $interactiveSettings `
+    -Description "Keeps the signed-in TSA Codex Bridge worker running and restarts its supervisor after an unexpected exit."
+  Register-ScheduledTask -TaskName $interactiveTaskName -InputObject $interactiveTask -Force | Out-Null
+  $registeredInteractiveTask = Get-ScheduledTask -TaskName $interactiveTaskName -ErrorAction Stop
+  $hasInteractiveLogonTrigger = @($registeredInteractiveTask.Triggers | Where-Object {
+    $_.CimClass.CimClassName -eq "MSFT_TaskLogonTrigger"
+  }).Count -gt 0
+  $interactiveTaskRegistered =
+    $registeredInteractiveTask.Principal.LogonType -eq "Interactive" -and
+    $registeredInteractiveTask.Actions.Count -eq 1 -and
+    ([string]$registeredInteractiveTask.Actions[0].Arguments).IndexOf($startScript, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+    $hasInteractiveLogonTrigger
+  if (-not $interactiveTaskRegistered) {
+    throw "登録した対話Bridgeタスクの構成を検証できませんでした。"
+  }
+  Remove-ItemProperty -Path $runKey -Name "TSA Codex Bridge" -ErrorAction SilentlyContinue
+} catch {
+  $interactiveTaskRegistrationError = $_.Exception.Message
+  $runCommand = "powershell.exe $startArguments"
+  New-ItemProperty -Path $runKey -Name "TSA Codex Bridge" -Value $runCommand -PropertyType String -Force | Out-Null
+}
 
 if (Test-Path -LiteralPath $maintenancePath) {
   Remove-Item -LiteralPath $maintenancePath -Force
 }
-$startScript = Join-Path $installDir "start-bridge.ps1"
-$startArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
-Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $startArguments
+if ($interactiveTaskRegistered) {
+  Start-ScheduledTask -TaskName $interactiveTaskName -ErrorAction Stop
+} else {
+  Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $startArguments
+}
 
 $taskName = "TSA Codex Bridge (Pre-login)"
 $taskRegistered = $false
@@ -417,9 +459,11 @@ if ($taskRegistered -and -not $headlessStartedState) {
 }
 
 if ($taskRegistered) {
-  Write-Output "TSA Codex Bridge $expectedBridgeVersion installed; interactive and pre-login S4U heartbeats confirmed: $installDir"
+  Write-Output "TSA Codex Bridge $expectedBridgeVersion installed; interactive watchdog and pre-login S4U heartbeats confirmed: $installDir"
+} elseif ($interactiveTaskRegistered) {
+  Write-Output "TSA Codex Bridge $expectedBridgeVersion installed; interactive watchdog heartbeat confirmed; pre-login task registration was skipped: $installDir"
 } else {
-  Write-Output "TSA Codex Bridge $expectedBridgeVersion installed; pre-login task registration was skipped: $installDir"
+  Write-Output "TSA Codex Bridge $expectedBridgeVersion installed with HKCU startup fallback; interactive task error: $interactiveTaskRegistrationError; pre-login task registration was skipped: $installDir"
 }
 } finally {
   if (Test-Path -LiteralPath $maintenancePath) {

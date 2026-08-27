@@ -6,6 +6,10 @@ const bridgeSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge.mjs"),
   "utf8",
 );
+const monitorStateFileSource = fs.readFileSync(
+  path.join(__dirname, "..", "tools", "tsa-codex-bridge", "monitor-state-file.cjs"),
+  "utf8",
+);
 const requiredBridgeVersionSource = fs.readFileSync(
   path.join(__dirname, "..", "lib", "web-sales-codex", "bridge-version.ts"),
   "utf8",
@@ -200,7 +204,8 @@ assert.match(monitorSource, /SetConsoleMode/);
 assert.match(monitorSource, /-band \(-bnot 0x40\)/);
 assert.match(monitorSource, /SetWindowPos/);
 assert.match(monitorSource, /broughtForward/);
-assert.match(monitorSource, /\[System\.IO\.File\]::ReadAllText/);
+assert.match(monitorSource, /\[System\.IO\.FileStream\]::new/);
+assert.match(monitorSource, /\[System\.IO\.FileShare\]::Delete/);
 assert.match(monitorSource, /\[System\.Text\.UTF8Encoding\]::new\(\$false, \$true\)/);
 assert.doesNotMatch(monitorSource, /Get-Content\s+-LiteralPath/);
 const installerSource = fs.readFileSync(
@@ -229,7 +234,10 @@ assert.match(bridgeSource, /UNIFIED_MONITOR_STATE_DIR/);
 assert.match(bridgeSource, /schemaVersion: 1/);
 assert.match(bridgeSource, /system: "tsa"/);
 assert.match(bridgeSource, /tsa-prelogin/);
-assert.match(bridgeSource, /renameSync\(temporaryPath, MONITOR_STATE_PATH\)/);
+assert.match(bridgeSource, /writeMonitorStateJson\(MONITOR_STATE_PATH, desktopMonitorState\)/);
+assert.match(monitorStateFileSource, /REPLACE_RETRY_DELAYS_MS/);
+assert.match(monitorStateFileSource, /renameSync\(temporaryPath, path\)/);
+assert.match(monitorStateFileSource, /RETRYABLE_REPLACE_CODES/);
 assert.match(bridgeSource, /Date\.now\(\) - desktopMonitorLaunchRequestedAt < 10_000/);
 assert.match(bridgeSource, /publishDesktopMonitorHeartbeat\(\);\s+ensureUnifiedDesktopMonitor\(false\);/);
 assert.match(bridgeSource, /function sanitizeMonitorText/);
@@ -405,6 +413,8 @@ function loadRouteFunction(name, nextName) {
     .replace(/: Record<string, any>/g, "")
     .replace(/: Record<string, number>/g, "")
     .replace(/: Record<string, unknown>/g, "")
+    .replace(/: ReturnType<typeof productContentForTarget>/g, "")
+    .replace(/: "target" \| "final"/g, "")
     .replace(/ as Record<string, any>/g, "")
     .replace(/ as unknown\[\]/g, "");
   const source = [

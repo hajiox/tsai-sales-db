@@ -9,7 +9,9 @@
   [ValidateRange(0, 10000)]
   [int]$ExitAfterIterations = 0,
   [switch]$PlainOutput,
-  [switch]$SkipForeground
+  [switch]$SkipForeground,
+  [ValidateRange(0, 5000)]
+  [int]$ReadHoldMilliseconds = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +39,26 @@ function Write-Utf8Json([string]$Path, $Value) {
 
 function Read-Utf8Json([string]$Path) {
   $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
-  $json = [System.IO.File]::ReadAllText($Path, $strictUtf8)
+  $shareMode = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete
+  $stream = [System.IO.FileStream]::new(
+    $Path,
+    [System.IO.FileMode]::Open,
+    [System.IO.FileAccess]::Read,
+    $shareMode
+  )
+  try {
+    $reader = [System.IO.StreamReader]::new($stream, $strictUtf8, $true, 1024, $true)
+    try {
+      $json = $reader.ReadToEnd()
+    } finally {
+      $reader.Dispose()
+    }
+    if ($ReadHoldMilliseconds -gt 0) {
+      Start-Sleep -Milliseconds $ReadHoldMilliseconds
+    }
+  } finally {
+    $stream.Dispose()
+  }
   if ([string]::IsNullOrWhiteSpace($json)) { throw "状態ファイルが空です" }
   return $json | ConvertFrom-Json -ErrorAction Stop
 }
