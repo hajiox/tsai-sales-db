@@ -17,7 +17,7 @@ export type RecipeEcImageSlot =
 
 export type RecipeEcImagePlacement = {
   slot: RecipeEcImageSlot;
-  listingOrder: number | null;
+  listingOrder: number;
   sites: RecipeEcImageSite[];
 };
 
@@ -38,7 +38,7 @@ export function getRecipeEcImagePlacement(index: number): RecipeEcImagePlacement
   if (index === 0) {
     return {
       slot: "amazon_base_top",
-      listingOrder: null,
+      listingOrder: 1,
       sites: [...AMAZON_BASE_SITES],
     };
   }

@@ -12,7 +12,7 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 assert.deepEqual(getRecipeEcImagePlacement(0), {
   slot: "amazon_base_top",
-  listingOrder: null,
+  listingOrder: 1,
   sites: ["amazon", "base"],
 });
 assert.deepEqual(getRecipeEcImagePlacement(1), {
@@ -39,6 +39,8 @@ const migration = read(
 assert.match(page, /application\/x-recipe-web-image-id/);
 assert.match(page, /copyWebProductImageToPortrait/);
 assert.match(page, /Amazon・BASE専用TOP/);
+assert.match(page, /bg-emerald-600/);
+assert.match(page, /掲載順1・専用TOP/);
 assert.match(page, /他EC TOP/);
 assert.match(route, /export async function PUT/);
 assert.match(route, /redirect: "error"/);

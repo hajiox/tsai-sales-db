@@ -4931,7 +4931,7 @@ function RecipeDetailContent() {
                       <label className="text-sm font-semibold text-gray-700">Web商品画像</label>
                       <span className="text-xs text-gray-400">{webProductImages.length}枚</span>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">左端はAmazon・BASE専用TOP、掲載順1は他ECのTOP、掲載順2以降は全EC共通です。</p>
+                    <p className="mt-1 text-xs text-gray-500">左端はAmazon・BASEの掲載順1（専用TOP）、2枚目は他ECの掲載順1（TOP）、掲載順2以降は全EC共通です。</p>
                   </div>
                   <Button
                     type="button"
@@ -4946,7 +4946,7 @@ function RecipeDetailContent() {
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 border-y border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-gray-700">
-                  <span className="font-semibold text-blue-800">Amazon・BASE専用TOP</span>
+                  <span className="font-semibold text-emerald-700"><strong>1</strong> Amazon・BASE専用TOP</span>
                   <span><strong className="text-blue-700">1</strong> 他EC TOP</span>
                   <span><strong className="text-blue-700">2以降</strong> 全EC共通</span>
                   <span className="text-gray-500">Amazon・BASEは掲載順1を使用しません</span>
@@ -4988,9 +4988,14 @@ function RecipeDetailContent() {
                           title="ドラッグで並び替え、ポートレート欄へドロップでコピー"
                         >
                           {placement.slot === 'amazon_base_top' ? (
-                            <span className="absolute left-2 top-2 z-10 rounded bg-gray-950 px-2 py-1 text-[10px] font-bold text-white shadow-sm">
-                              Amazon・BASE専用TOP
-                            </span>
+                            <>
+                              <span className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white shadow-sm">
+                                {placement.listingOrder}
+                              </span>
+                              <span className="absolute right-2 top-2 z-10 rounded bg-white/95 px-2 py-1 text-[10px] font-bold text-emerald-800 shadow-sm">
+                                Amazon・BASE TOP
+                              </span>
+                            </>
                           ) : (
                             <>
                               <span className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow-sm">
@@ -5010,7 +5015,7 @@ function RecipeDetailContent() {
                             <span className="min-w-0 text-[10px] leading-4 text-gray-600">
                               <strong className="block truncate text-gray-800">
                                 {placement.slot === 'amazon_base_top'
-                                  ? '専用TOP'
+                                  ? '掲載順1・専用TOP'
                                   : placement.slot === 'other_ec_top'
                                     ? '掲載順1・他EC TOP'
                                     : `掲載順${placement.listingOrder}・全EC共通`}
