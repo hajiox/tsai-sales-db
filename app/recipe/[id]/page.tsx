@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback, Suspense, type KeyboardEvent } from "react";
+import { useEffect, useState, useRef, useCallback, Suspense, type DragEvent, type KeyboardEvent } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import type { EcCatchcopiesBySite } from "@/lib/ec-catchcopy-codex";
 import { fetchSeriesList, SERIES_LIST, type SeriesItem } from "@/lib/series-list";
 import { taxExcludedForExactIncluded, taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import type { PreviousRecipePrice, RecipePriceRevision } from "@/lib/recipe-price-history";
+import { getRecipeEcImagePlacement, type RecipeEcImagePlacement } from "@/lib/recipe-ec-images";
 
 // カテゴリー一覧
 const CATEGORIES = [
@@ -188,9 +189,14 @@ type WebProductImage = {
   file_size_bytes: number;
   sort_order: number;
   created_at: string;
+  copied_from_image_id: string | null;
+  ec_placement?: RecipeEcImagePlacement;
 };
 
 const WEB_IMAGE_MAX_BYTES = 250 * 1024;
+const WEB_IMAGE_INDEX_DRAG_TYPE = 'application/x-recipe-web-image-index';
+const WEB_IMAGE_ID_DRAG_TYPE = 'application/x-recipe-web-image-id';
+const PORTRAIT_IMAGE_INDEX_DRAG_TYPE = 'application/x-recipe-portrait-image-index';
 
 async function compressWebProductImage(file: File): Promise<File> {
   if (file.size <= WEB_IMAGE_MAX_BYTES) return file;
@@ -331,6 +337,7 @@ function RecipeDetailContent() {
   const webImagesInputRef = useRef<HTMLInputElement>(null);
   const [portraitImages, setPortraitImages] = useState<WebProductImage[]>([]);
   const [portraitUploading, setPortraitUploading] = useState(false);
+  const [portraitCopyingImageId, setPortraitCopyingImageId] = useState<string | null>(null);
   const [portraitDragOver, setPortraitDragOver] = useState(false);
   const portraitInputRef = useRef<HTMLInputElement>(null);
 
@@ -1005,6 +1012,67 @@ function RecipeDetailContent() {
     } finally {
       setPortraitUploading(false);
     }
+  };
+
+  const copyWebProductImageToPortrait = async (sourceImageId: string) => {
+    if (!recipe || !sourceImageId || portraitCopyingImageId) return;
+    setPortraitCopyingImageId(sourceImageId);
+    try {
+      const response = await fetch('/api/recipe/web-images', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId: recipe.id, sourceImageId }),
+      });
+      const data = await response.json();
+      if (response.status === 409) {
+        await fetchWebProductImages(recipe.id);
+        toast.info(data.error || 'この画像はコピー済みです');
+        return;
+      }
+      if (!response.ok) throw new Error(data.error || 'ポートレート画像へコピーできませんでした');
+      setPortraitImages((current) => current.some((image) => image.id === data.image.id)
+        ? current
+        : [...current, data.image]);
+      toast.success('Web商品画像をポートレート画像へコピーしました');
+    } catch (error: any) {
+      toast.error(error.message || 'ポートレート画像へのコピーに失敗しました');
+    } finally {
+      setPortraitCopyingImageId(null);
+    }
+  };
+
+  const canDropIntoPortrait = (event: DragEvent<HTMLDivElement>) => {
+    const types = Array.from(event.dataTransfer.types);
+    return types.includes('Files') || types.includes(WEB_IMAGE_ID_DRAG_TYPE);
+  };
+
+  const handlePortraitDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    if (!canDropIntoPortrait(event)) return;
+    event.preventDefault();
+    setPortraitDragOver(true);
+  };
+
+  const handlePortraitDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!canDropIntoPortrait(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setPortraitDragOver(true);
+  };
+
+  const handlePortraitDrop = async (event: DragEvent<HTMLDivElement>) => {
+    if (!canDropIntoPortrait(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPortraitDragOver(false);
+
+    const sourceImageId = event.dataTransfer.getData(WEB_IMAGE_ID_DRAG_TYPE);
+    if (sourceImageId) {
+      await copyWebProductImageToPortrait(sourceImageId);
+      return;
+    }
+
+    const files = Array.from(event.dataTransfer.files).filter((item) => item.type.startsWith('image/'));
+    await uploadPortraitImages(files);
   };
 
   const reorderPortraitImages = async (fromIndex: number, toIndex: number) => {
@@ -4755,7 +4823,15 @@ function RecipeDetailContent() {
               </div>
 
               {/* ポートレート画像 */}
-              <div className="border-t border-gray-100 pt-4">
+              <div
+                onDragEnter={handlePortraitDragEnter}
+                onDragOver={handlePortraitDragOver}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPortraitDragOver(false);
+                }}
+                onDrop={handlePortraitDrop}
+                className={`rounded-md border-t pt-4 transition-colors ${portraitDragOver ? 'border-emerald-400 bg-emerald-50/50 ring-2 ring-emerald-200' : 'border-gray-100'}`}
+              >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
@@ -4763,14 +4839,14 @@ function RecipeDetailContent() {
                       <label className="text-sm font-semibold text-gray-700">ポートレート画像</label>
                       <span className="text-xs text-gray-400">{portraitImages.length}枚</span>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">縦長画像を枚数制限なしで登録できます。ドラッグで表示順を変更できます。</p>
+                    <p className="mt-1 text-xs text-gray-500">Web商品画像をここへドラッグすると、元画像を残したままコピーします。</p>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => portraitInputRef.current?.click()}
-                    disabled={portraitUploading}
+                    disabled={portraitUploading || Boolean(portraitCopyingImageId)}
                   >
                     {portraitUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                     画像を追加
@@ -4784,16 +4860,16 @@ function RecipeDetailContent() {
                         key={image.id}
                         draggable
                         onDragStart={(event) => {
-                          event.dataTransfer.setData('application/x-recipe-portrait-image-index', String(index));
+                          event.dataTransfer.setData(PORTRAIT_IMAGE_INDEX_DRAG_TYPE, String(index));
                           event.dataTransfer.effectAllowed = 'move';
                         }}
                         onDragOver={(event) => {
-                          if (!event.dataTransfer.types.includes('application/x-recipe-portrait-image-index')) return;
+                          if (!event.dataTransfer.types.includes(PORTRAIT_IMAGE_INDEX_DRAG_TYPE)) return;
                           event.preventDefault();
                           event.dataTransfer.dropEffect = 'move';
                         }}
                         onDrop={(event) => {
-                          const value = event.dataTransfer.getData('application/x-recipe-portrait-image-index');
+                          const value = event.dataTransfer.getData(PORTRAIT_IMAGE_INDEX_DRAG_TYPE);
                           if (!value) return;
                           event.preventDefault();
                           reorderPortraitImages(Number(value), index);
@@ -4823,27 +4899,8 @@ function RecipeDetailContent() {
                 )}
 
                 <div
-                    onDragEnter={(event) => {
-                      if (event.dataTransfer.types.includes('Files')) {
-                        event.preventDefault();
-                        setPortraitDragOver(true);
-                      }
-                    }}
-                    onDragOver={(event) => {
-                      if (event.dataTransfer.types.includes('Files')) event.preventDefault();
-                    }}
-                    onDragLeave={(event) => {
-                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPortraitDragOver(false);
-                    }}
-                    onDrop={async (event) => {
-                      if (!event.dataTransfer.types.includes('Files')) return;
-                      event.preventDefault();
-                      setPortraitDragOver(false);
-                      const files = Array.from(event.dataTransfer.files).filter((item) => item.type.startsWith('image/'));
-                      await uploadPortraitImages(files);
-                    }}
-                    onClick={() => !portraitUploading && portraitInputRef.current?.click()}
-                    className={`flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed px-4 py-5 text-center transition-colors ${portraitDragOver ? 'border-emerald-500 bg-emerald-50' : 'border-gray-300 bg-gray-50 hover:border-emerald-400 hover:bg-emerald-50/40'} ${portraitUploading ? 'pointer-events-none opacity-60' : ''}`}
+                    onClick={() => !portraitUploading && !portraitCopyingImageId && portraitInputRef.current?.click()}
+                    className={`flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed px-4 py-5 text-center transition-colors ${portraitDragOver ? 'border-emerald-500 bg-emerald-50' : 'border-gray-300 bg-gray-50 hover:border-emerald-400 hover:bg-emerald-50/40'} ${portraitUploading || portraitCopyingImageId ? 'pointer-events-none opacity-60' : ''}`}
                   >
                     <input
                       ref={portraitInputRef}
@@ -4857,10 +4914,10 @@ function RecipeDetailContent() {
                         await uploadPortraitImages(files);
                       }}
                     />
-                    {portraitUploading ? (
-                      <><Loader2 className="mb-2 h-6 w-6 animate-spin text-emerald-600" /><p className="text-sm font-medium text-gray-600">画像を処理しています</p></>
+                    {portraitUploading || portraitCopyingImageId ? (
+                      <><Loader2 className="mb-2 h-6 w-6 animate-spin text-emerald-600" /><p className="text-sm font-medium text-gray-600">画像をコピーしています</p></>
                     ) : (
-                      <><Upload className="mb-2 h-6 w-6 text-gray-400" /><p className="text-sm font-medium text-gray-700">PCから複数画像をドロップ</p><p className="mt-1 text-xs text-gray-500">JPEG・PNG・WebP／複数選択・枚数制限なし／250KB超は自動縮小</p></>
+                      <><Upload className="mb-2 h-6 w-6 text-gray-400" /><p className="text-sm font-medium text-gray-700">Web商品画像またはPC画像をドロップ</p><p className="mt-1 text-xs text-gray-500">複数選択・枚数制限なし／250KB超は自動縮小</p></>
                     )}
                 </div>
               </div>
@@ -4874,7 +4931,7 @@ function RecipeDetailContent() {
                       <label className="text-sm font-semibold text-gray-700">Web商品画像</label>
                       <span className="text-xs text-gray-400">{webProductImages.length}枚</span>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">EC掲載用の画像を順番どおり管理します。250KBを超える画像は自動縮小します。</p>
+                    <p className="mt-1 text-xs text-gray-500">左端はAmazon・BASE専用TOP、掲載順1は他ECのTOP、掲載順2以降は全EC共通です。</p>
                   </div>
                   <Button
                     type="button"
@@ -4888,48 +4945,91 @@ function RecipeDetailContent() {
                   </Button>
                 </div>
 
+                <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 border-y border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-gray-700">
+                  <span className="font-semibold text-blue-800">Amazon・BASE専用TOP</span>
+                  <span><strong className="text-blue-700">1</strong> 他EC TOP</span>
+                  <span><strong className="text-blue-700">2以降</strong> 全EC共通</span>
+                  <span className="text-gray-500">Amazon・BASEは掲載順1を使用しません</span>
+                </div>
+
                 {webProductImages.length > 0 && (
                   <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-                    {webProductImages.map((image, index) => (
-                      <div
-                        key={image.id}
-                        draggable
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData('application/x-recipe-web-image-index', String(index));
-                          event.dataTransfer.effectAllowed = 'move';
-                        }}
-                        onDragOver={(event) => {
-                          if (!event.dataTransfer.types.includes('application/x-recipe-web-image-index')) return;
-                          event.preventDefault();
-                          event.dataTransfer.dropEffect = 'move';
-                        }}
-                        onDrop={(event) => {
-                          const value = event.dataTransfer.getData('application/x-recipe-web-image-index');
-                          if (!value) return;
-                          event.preventDefault();
-                          reorderWebProductImages(Number(value), index);
-                        }}
-                        className="group relative overflow-hidden rounded-md border border-gray-200 bg-white"
-                      >
-                        <a href={image.image_url} target="_blank" rel="noreferrer" className="block aspect-square bg-gray-50">
-                          <img src={image.image_url} alt={`${recipe.name} Web商品画像 ${index + 1}`} className="h-full w-full object-contain" />
-                        </a>
-                        <div className="flex min-h-9 items-center justify-between gap-1 border-t border-gray-100 px-2 py-1">
-                          <span className="min-w-0 truncate text-[10px] text-gray-500">
-                            {index + 1}・{image.source_type === 'rakuten' ? '楽天' : image.source_type === 'base' ? 'BASE' : image.source_type === 'shared_folder' ? '共有' : '手動'}・{Math.ceil(image.file_size_bytes / 1024)}KB
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => deleteWebProductImage(image.id)}
-                            className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                            title="画像を削除"
-                            aria-label={`${index + 1}枚目を削除`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                    {webProductImages.map((image, index) => {
+                      const placement = getRecipeEcImagePlacement(index);
+                      const sourceLabel = image.source_type === 'rakuten'
+                        ? '楽天'
+                        : image.source_type === 'base'
+                          ? 'BASE'
+                          : image.source_type === 'shared_folder'
+                            ? '共有'
+                            : '手動';
+                      return (
+                        <div
+                          key={image.id}
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData(WEB_IMAGE_INDEX_DRAG_TYPE, String(index));
+                            event.dataTransfer.setData(WEB_IMAGE_ID_DRAG_TYPE, image.id);
+                            event.dataTransfer.effectAllowed = 'copyMove';
+                          }}
+                          onDragEnd={() => setPortraitDragOver(false)}
+                          onDragOver={(event) => {
+                            if (!event.dataTransfer.types.includes(WEB_IMAGE_INDEX_DRAG_TYPE)) return;
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = 'move';
+                          }}
+                          onDrop={(event) => {
+                            const value = event.dataTransfer.getData(WEB_IMAGE_INDEX_DRAG_TYPE);
+                            if (!value) return;
+                            event.preventDefault();
+                            reorderWebProductImages(Number(value), index);
+                          }}
+                          className="group relative overflow-hidden rounded-md border border-gray-200 bg-white"
+                          title="ドラッグで並び替え、ポートレート欄へドロップでコピー"
+                        >
+                          {placement.slot === 'amazon_base_top' ? (
+                            <span className="absolute left-2 top-2 z-10 rounded bg-gray-950 px-2 py-1 text-[10px] font-bold text-white shadow-sm">
+                              Amazon・BASE専用TOP
+                            </span>
+                          ) : (
+                            <>
+                              <span className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow-sm">
+                                {placement.listingOrder}
+                              </span>
+                              {placement.slot === 'other_ec_top' && (
+                                <span className="absolute right-2 top-2 z-10 rounded bg-white/95 px-2 py-1 text-[10px] font-bold text-blue-800 shadow-sm">
+                                  他EC TOP
+                                </span>
+                              )}
+                            </>
+                          )}
+                          <a href={image.image_url} target="_blank" rel="noreferrer" className="block aspect-square bg-gray-50">
+                            <img src={image.image_url} alt={`${recipe.name} Web商品画像 ${index + 1}`} className="h-full w-full object-contain" />
+                          </a>
+                          <div className="flex min-h-10 items-center justify-between gap-1 border-t border-gray-100 px-2 py-1">
+                            <span className="min-w-0 text-[10px] leading-4 text-gray-600">
+                              <strong className="block truncate text-gray-800">
+                                {placement.slot === 'amazon_base_top'
+                                  ? '専用TOP'
+                                  : placement.slot === 'other_ec_top'
+                                    ? '掲載順1・他EC TOP'
+                                    : `掲載順${placement.listingOrder}・全EC共通`}
+                              </strong>
+                              <span>{sourceLabel}・{Math.ceil(image.file_size_bytes / 1024)}KB</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => deleteWebProductImage(image.id)}
+                              className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                              title="画像を削除"
+                              aria-label={`${index + 1}枚目を削除`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 

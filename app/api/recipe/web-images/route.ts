@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { del, put } from "@vercel/blob";
 import { createClient } from "@supabase/supabase-js";
+import { getRecipeEcImagePlacement } from "@/lib/recipe-ec-images";
 
 const MAX_IMAGE_BYTES = 250 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_SOURCE_TYPES = new Set(["manual", "rakuten", "base", "shared_folder"]);
 const ALLOWED_IMAGE_ROLES = new Set(["gallery", "portrait"]);
-const IMAGE_SELECT = "id, image_url, image_role, source_type, source_page_url, source_image_url, original_filename, file_size_bytes, sort_order, created_at";
+const IMAGE_SELECT = "id, image_url, image_role, source_type, source_page_url, source_image_url, original_filename, file_size_bytes, sort_order, created_at, copied_from_image_id";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +16,22 @@ const supabaseAdmin = createClient(
 
 function cleanText(value: FormDataEntryValue | null, maxLength = 2000) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) || null : null;
+}
+
+function isManagedPublicBlobUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:"
+      && /^[a-z0-9-]+\.public\.blob\.vercel-storage\.com$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function extensionForImageType(contentType: string) {
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  return "jpg";
 }
 
 export async function GET(request: NextRequest) {
@@ -31,8 +48,12 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const allImages = data || [];
+  const galleryImages = allImages.filter((image) => image.image_role === "gallery");
   return NextResponse.json({
-    images: allImages.filter((image) => image.image_role === "gallery"),
+    images: galleryImages.map((image, index) => ({
+      ...image,
+      ec_placement: getRecipeEcImagePlacement(index),
+    })),
     portraitImages: allImages.filter((image) => image.image_role === "portrait"),
   });
 }
@@ -108,6 +129,133 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     if (uploadedUrl) await del(uploadedUrl).catch(() => undefined);
     return NextResponse.json({ error: error.message || "Web商品画像の登録に失敗しました" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  let uploadedUrl: string | null = null;
+  try {
+    const body = await request.json();
+    const recipeId = String(body.recipeId || "").trim();
+    const sourceImageId = String(body.sourceImageId || "").trim();
+    if (!recipeId || !sourceImageId) {
+      return NextResponse.json({ error: "recipeIdとコピー元画像IDが必要です" }, { status: 400 });
+    }
+
+    const { data: sourceImage, error: sourceError } = await supabaseAdmin
+      .from("recipe_web_images")
+      .select(IMAGE_SELECT)
+      .eq("id", sourceImageId)
+      .eq("recipe_id", recipeId)
+      .eq("image_role", "gallery")
+      .single();
+    if (sourceError || !sourceImage) {
+      return NextResponse.json({ error: "コピー元のWeb商品画像が見つかりません" }, { status: 404 });
+    }
+    if (!isManagedPublicBlobUrl(sourceImage.image_url)) {
+      return NextResponse.json({ error: "管理対象外の画像URLはコピーできません" }, { status: 400 });
+    }
+
+    const { data: existingCopy } = await supabaseAdmin
+      .from("recipe_web_images")
+      .select(IMAGE_SELECT)
+      .eq("recipe_id", recipeId)
+      .eq("image_role", "portrait")
+      .eq("copied_from_image_id", sourceImageId)
+      .maybeSingle();
+    if (existingCopy) {
+      return NextResponse.json(
+        { error: "この画像はポートレート画像へコピー済みです", image: existingCopy },
+        { status: 409 },
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    let response: Response;
+    try {
+      response = await fetch(sourceImage.image_url, {
+        cache: "no-store",
+        redirect: "error",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!response.ok) throw new Error("コピー元画像を取得できませんでした");
+
+    const contentType = (response.headers.get("content-type") || "")
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase();
+    if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+      return NextResponse.json({ error: "コピー元が対応画像形式ではありません" }, { status: 415 });
+    }
+    const contentLength = Number(response.headers.get("content-length") || 0);
+    if (contentLength > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: "コピー元画像が250KBを超えています" }, { status: 413 });
+    }
+    const imageBytes = await response.arrayBuffer();
+    if (imageBytes.byteLength === 0 || imageBytes.byteLength > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: "コピー元画像のサイズが不正です" }, { status: 413 });
+    }
+
+    const { data: lastPortrait } = await supabaseAdmin
+      .from("recipe_web_images")
+      .select("sort_order")
+      .eq("recipe_id", recipeId)
+      .eq("image_role", "portrait")
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const nextOrder = Number(lastPortrait?.sort_order ?? -1) + 1;
+    const extension = extensionForImageType(contentType);
+    const blob = await put(
+      `recipe-web-images/${recipeId}/portrait/${Date.now()}-gallery-copy.${extension}`,
+      imageBytes,
+      {
+        access: "public",
+        addRandomSuffix: true,
+        contentType,
+      },
+    );
+    uploadedUrl = blob.url;
+
+    const sourceFilename = String(sourceImage.original_filename || `web-product-image.${extension}`)
+      .slice(0, 480);
+    const { data: copiedImage, error: insertError } = await supabaseAdmin
+      .from("recipe_web_images")
+      .insert({
+        recipe_id: recipeId,
+        image_url: blob.url,
+        image_role: "portrait",
+        source_type: sourceImage.source_type,
+        source_page_url: sourceImage.source_page_url,
+        source_image_url: null,
+        original_filename: `portrait-copy-${sourceFilename}`,
+        file_size_bytes: imageBytes.byteLength,
+        sort_order: nextOrder,
+        copied_from_image_id: sourceImageId,
+      })
+      .select(IMAGE_SELECT)
+      .single();
+
+    if (insertError) {
+      await del(blob.url);
+      uploadedUrl = null;
+      if (insertError.code === "23505") {
+        return NextResponse.json({ error: "この画像はポートレート画像へコピー済みです" }, { status: 409 });
+      }
+      throw insertError;
+    }
+
+    return NextResponse.json({ image: copiedImage });
+  } catch (error: any) {
+    if (uploadedUrl) await del(uploadedUrl).catch(() => undefined);
+    const message = error?.name === "AbortError"
+      ? "コピー元画像の取得がタイムアウトしました"
+      : error.message || "ポートレート画像へのコピーに失敗しました";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
