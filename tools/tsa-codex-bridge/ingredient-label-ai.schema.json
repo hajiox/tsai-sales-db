@@ -5,6 +5,7 @@
   "required": [
     "label",
     "ingredient_statement",
+    "origin_label",
     "allergen_statement",
     "allergens",
     "warnings",
@@ -16,6 +17,16 @@
   "properties": {
     "label": { "type": "string", "minLength": 1, "maxLength": 5000 },
     "ingredient_statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "origin_label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_item_id", "target_name", "display_text"],
+      "properties": {
+        "target_item_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+        "target_name": { "type": "string", "maxLength": 300 },
+        "display_text": { "type": "string", "maxLength": 300 }
+      }
+    },
     "allergen_statement": { "type": "string", "maxLength": 1000 },
     "allergens": {
       "type": "array",

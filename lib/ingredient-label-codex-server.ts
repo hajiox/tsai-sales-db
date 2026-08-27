@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { INGREDIENT_LABEL_RULES_VERSION } from "@/lib/ingredient-label-codex";
+import {
+  ALLERGEN_DISPLAY_ORDER_2026,
+  INGREDIENT_LABEL_RULES_VERSION,
+  MANDATORY_ALLERGENS_2026,
+  RECOMMENDED_ALLERGENS_2026,
+  type IngredientLabelValidationPolicy,
+} from "@/lib/ingredient-label-codex";
 
 const MAX_DEPTH = 4;
 const MAX_ITEMS = 160;
@@ -33,6 +39,12 @@ function text(value: unknown, maxLength = 4_000) {
 function numberOrNull(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function sortedObject(value: unknown): unknown {
@@ -169,12 +181,114 @@ async function loadRecipeNode(
   };
 }
 
+function originLabelPolicy(recipeTree: Record<string, unknown>) {
+  const candidates = (Array.isArray(recipeTree.items) ? recipeTree.items : [])
+    .map(asObject)
+    .filter((item) => item.labelScope === "food_candidate");
+  const unknownWeights = candidates.filter((item) => (
+    item.estimatedContributionWeight === null
+    || item.estimatedContributionWeight === undefined
+    || !Number.isFinite(Number(item.estimatedContributionWeight))
+  ));
+  if (candidates.length === 0 || unknownWeights.length > 0) {
+    return {
+      scope: "top_level_weight_rank_1_only",
+      additionalOrigins: "omit",
+      target: null,
+      issue: candidates.length === 0
+        ? "原産地表示対象となる食品原材料がありません"
+        : `重量比較できない原材料があります: ${unknownWeights.map((item) => text(item.name, 300)).join("、")}`,
+    };
+  }
+  const [top] = [...candidates].sort((left, right) => {
+    const weightDifference = Number(right.estimatedContributionWeight) - Number(left.estimatedContributionWeight);
+    return weightDifference || Number(left.sourceOrder) - Number(right.sourceOrder);
+  });
+  const source = asObject(top.ingredientSource);
+  return {
+    scope: "top_level_weight_rank_1_only",
+    additionalOrigins: "omit",
+    target: {
+      sourceOrder: Number(top.sourceOrder),
+      itemId: text(top.itemId, 200),
+      name: text(top.name, 300),
+      itemType: text(top.itemType, 40),
+      estimatedContributionWeight: Number(top.estimatedContributionWeight),
+      declaredOrigin: text(source.origin, 500) || null,
+    },
+    issue: source.origin ? null : "重量順位1位の保存済み原産地・製造地がありません",
+  };
+}
+
+function allergensDeclaredInText(value: unknown) {
+  const source = text(value, 4_000);
+  if (!source) return [];
+  return ALLERGEN_DISPLAY_ORDER_2026.filter((allergen) => {
+    if (allergen === "乳成分") {
+      return source.includes("乳成分")
+        || /(?:^|[、,・／/\s（(])乳(?:由来)?(?:$|[、,・／/\s）)])/.test(source);
+    }
+    if (allergen === "落花生") return source.includes("落花生") || source.includes("ピーナッツ");
+    if (allergen === "卵") return source.includes("卵");
+    return source.includes(allergen);
+  });
+}
+
+function collectSnapshotEvidence(recipeNode: unknown, evidence: { allergens: Set<string>; origins: Map<string, string> }) {
+  const recipe = asObject(recipeNode);
+  for (const entry of Array.isArray(recipe.items) ? recipe.items : []) {
+    const item = asObject(entry);
+    if (item.labelScope !== "food_candidate") continue;
+    const source = asObject(item.ingredientSource);
+    for (const allergen of [
+      ...allergensDeclaredInText(source.allergens),
+      ...allergensDeclaredInText(source.rawMaterials),
+    ]) evidence.allergens.add(allergen);
+    const itemId = text(item.itemId, 200);
+    const origin = text(source.origin, 500);
+    if (itemId && origin) evidence.origins.set(itemId, origin);
+    if (item.subrecipe) collectSnapshotEvidence(item.subrecipe, evidence);
+  }
+}
+
+export function ingredientLabelValidationPolicyFromSnapshot(value: unknown): IngredientLabelValidationPolicy {
+  const snapshot = asObject(value);
+  const labelPolicy = asObject(snapshot.labelPolicy);
+  const originPolicy = asObject(labelPolicy.origin);
+  const target = asObject(originPolicy.target);
+  const expectedOriginTarget = target.itemId && target.name
+    ? {
+      itemId: text(target.itemId, 200),
+      name: text(target.name, 300),
+      declaredOrigin: text(target.declaredOrigin, 500) || null,
+    }
+    : null;
+  const evidence = { allergens: new Set<string>(), origins: new Map<string, string>() };
+  collectSnapshotEvidence(snapshot.recipe, evidence);
+  return {
+    expectedOriginTarget,
+    forbiddenOriginTexts: [...evidence.origins.entries()]
+      .filter(([itemId]) => itemId !== expectedOriginTarget?.itemId)
+      .map(([, origin]) => origin),
+    requiredAllergens: ALLERGEN_DISPLAY_ORDER_2026.filter((name) => evidence.allergens.has(name)),
+  };
+}
+
 export async function buildIngredientLabelSourceSnapshot(supabase: SupabaseClient, recipeId: string) {
   const recipeTree = await loadRecipeNode(supabase, recipeId, 0, [], { value: 0 });
   const snapshotWithoutHash = {
-    contractVersion: 1,
+    contractVersion: 2,
     rulesVersion: INGREDIENT_LABEL_RULES_VERSION,
     generatedFrom: "saved_tsa_recipe_and_ingredient_master_only",
+    labelPolicy: {
+      origin: originLabelPolicy(recipeTree),
+      allergens: {
+        displayMethod: "collective_review_draft",
+        scope: "all_present_supported_current_items",
+        mandatory: [...MANDATORY_ALLERGENS_2026],
+        recommended: [...RECOMMENDED_ALLERGENS_2026],
+      },
+    },
     recipe: recipeTree,
   };
   return {

@@ -68,6 +68,13 @@ export async function POST(request: Request) {
     const recipeId = String(body.recipeId || "").trim();
     if (!recipeId) return NextResponse.json({ error: "recipeId が必要です" }, { status: 400 });
     const supabase = getWebSalesAutomationServiceClient();
+    const sourceSnapshot = await buildIngredientLabelSourceSnapshot(supabase, recipeId);
+    const recipe = asObject(sourceSnapshot.recipe);
+    const items = Array.isArray(recipe.items) ? recipe.items : [];
+    if (items.length === 0) {
+      return NextResponse.json({ error: "保存済みのレシピ原材料がありません" }, { status: 400 });
+    }
+    const now = new Date().toISOString();
     const { data: activeRows, error: activeError } = await supabase
       .from("web_sales_codex_jobs")
       .select(JOB_SELECT)
@@ -78,20 +85,39 @@ export async function POST(request: Request) {
       .limit(1);
     if (activeError) throw activeError;
     if (activeRows?.[0]) {
-      return NextResponse.json({
-        ok: true,
-        reused: true,
-        job: ingredientLabelJobViewFromRow(activeRows[0]),
+      const activeParameters = asObject(activeRows[0].parameters);
+      const activeSnapshot = asObject(activeParameters.sourceSnapshot);
+      const isCurrentRequest = String(activeParameters.model || "") === INGREDIENT_LABEL_AI_MODEL
+        && String(activeParameters.reasoningEffort || "") === INGREDIENT_LABEL_AI_REASONING_EFFORT
+        && String(activeParameters.rulesVersion || "") === INGREDIENT_LABEL_RULES_VERSION
+        && String(activeSnapshot.sourceHash || "") === sourceSnapshot.sourceHash;
+      if (isCurrentRequest) {
+        return NextResponse.json({
+          ok: true,
+          reused: true,
+          job: ingredientLabelJobViewFromRow(activeRows[0]),
+        });
+      }
+      const { error: cancelError } = await supabase
+        .from("web_sales_codex_jobs")
+        .update({
+          status: "cancelled",
+          current_step: "旧ルールの生成を終了しました",
+          error_message: `食品表示ルール ${INGREDIENT_LABEL_RULES_VERSION} で再生成します`,
+          completed_at: now,
+          updated_at: now,
+        })
+        .eq("id", activeRows[0].id)
+        .in("status", ACTIVE_STATUSES);
+      if (cancelError) throw cancelError;
+      await supabase.from("web_sales_codex_job_events").insert({
+        job_id: activeRows[0].id,
+        event_type: "cancelled",
+        message: `食品表示ルール ${INGREDIENT_LABEL_RULES_VERSION} へ更新するため旧タスクを終了しました`,
+        progress: Number(activeRows[0].progress) || 0,
+        payload: { replacementRulesVersion: INGREDIENT_LABEL_RULES_VERSION },
       });
     }
-
-    const sourceSnapshot = await buildIngredientLabelSourceSnapshot(supabase, recipeId);
-    const recipe = asObject(sourceSnapshot.recipe);
-    const items = Array.isArray(recipe.items) ? recipe.items : [];
-    if (items.length === 0) {
-      return NextResponse.json({ error: "保存済みのレシピ原材料がありません" }, { status: 400 });
-    }
-    const now = new Date().toISOString();
     const parameters = {
       taskKey: "ingredient_label_generate",
       recipeId,

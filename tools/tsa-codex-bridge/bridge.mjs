@@ -8,7 +8,7 @@ import monitorStateFile from "./monitor-state-file.cjs";
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.4";
+const VERSION = "1.9.5";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -3405,22 +3405,34 @@ function validateIngredientLabelGenerateJobParameters(input) {
     ? parameters.sourceSnapshot : null;
   const sourceRecipe = sourceSnapshot?.recipe && typeof sourceSnapshot.recipe === "object" && !Array.isArray(sourceSnapshot.recipe)
     ? sourceSnapshot.recipe : null;
+  const labelPolicy = sourceSnapshot?.labelPolicy && typeof sourceSnapshot.labelPolicy === "object" && !Array.isArray(sourceSnapshot.labelPolicy)
+    ? sourceSnapshot.labelPolicy : null;
+  const originPolicy = labelPolicy?.origin && typeof labelPolicy.origin === "object" && !Array.isArray(labelPolicy.origin)
+    ? labelPolicy.origin : null;
+  const allergenPolicy = labelPolicy?.allergens && typeof labelPolicy.allergens === "object" && !Array.isArray(labelPolicy.allergens)
+    ? labelPolicy.allergens : null;
   if (!recipeId
     || !sourceSnapshot
-    || Number(sourceSnapshot.contractVersion) !== 1
+    || Number(sourceSnapshot.contractVersion) !== 2
     || !/^[0-9a-f]{64}$/i.test(String(sourceSnapshot.sourceHash || ""))
     || !sourceRecipe
     || String(sourceRecipe.recipeId || "") !== recipeId
     || !String(sourceRecipe.name || "").trim()
     || !Array.isArray(sourceRecipe.items)
-    || sourceRecipe.items.length === 0) {
+    || sourceRecipe.items.length === 0
+    || String(originPolicy?.scope || "") !== "top_level_weight_rank_1_only"
+    || String(originPolicy?.additionalOrigins || "") !== "omit"
+    || String(allergenPolicy?.displayMethod || "") !== "collective_review_draft"
+    || String(allergenPolicy?.scope || "") !== "all_present_supported_current_items"
+    || !Array.isArray(allergenPolicy?.mandatory)
+    || !Array.isArray(allergenPolicy?.recommended)) {
     throw new Error("原材料表示生成の保存済みレシピ情報が正しくありません");
   }
   if (String(parameters.model || "") !== "gpt-5.6-sol"
     || String(parameters.reasoningEffort || "") !== "ultra"
-    || String(parameters.rulesVersion || "") !== "2026-08-27.1"
-    || String(sourceSnapshot.rulesVersion || "") !== "2026-08-27.1") {
-    throw new Error("原材料表示生成はGPT-5.6 Sol / ultra / 2026-08-27.1専用です");
+    || String(parameters.rulesVersion || "") !== "2026-08-27.2"
+    || String(sourceSnapshot.rulesVersion || "") !== "2026-08-27.2") {
+    throw new Error("原材料表示生成はGPT-5.6 Sol / ultra / 2026-08-27.2専用です");
   }
   return {
     ...parameters,
@@ -3428,7 +3440,7 @@ function validateIngredientLabelGenerateJobParameters(input) {
     sourceSnapshot,
     model: "gpt-5.6-sol",
     reasoningEffort: "ultra",
-    rulesVersion: "2026-08-27.1",
+    rulesVersion: "2026-08-27.2",
   };
 }
 
@@ -3470,6 +3482,7 @@ async function executeIngredientLabelGenerateJob(job) {
     "Use only the dedicated Skill, its named legal reference, and this TASK_JSON.",
     "Never browse the web, inspect a repository or database, control a browser, read app Chats, or resume any prior session.",
     "Do not guess missing composition, additive exemptions, allergens, origins, or item matches. Return a review-required conservative draft and block adoption when evidence is material.",
+    "The rank-1 origin target and current allergen policy in TASK_JSON.sourceSnapshot.labelPolicy are locked. Apply origin only to that target, and include every supported present allergen in the collective statement.",
     "Return only JSON matching the required schema.",
     "TASK_JSON:",
     JSON.stringify(packet),

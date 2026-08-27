@@ -5,7 +5,10 @@ import {
   INGREDIENT_LABEL_RULES_VERSION,
   validateIngredientLabelAiResult,
 } from "@/lib/ingredient-label-codex";
-import { buildIngredientLabelSourceSnapshot } from "@/lib/ingredient-label-codex-server";
+import {
+  buildIngredientLabelSourceSnapshot,
+  ingredientLabelValidationPolicyFromSnapshot,
+} from "@/lib/ingredient-label-codex-server";
 import { isCodexBridgeAuthorized, normalizeWorkerId } from "@/lib/web-sales-codex/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 
@@ -35,7 +38,6 @@ export async function POST(
       || rulesVersion !== INGREDIENT_LABEL_RULES_VERSION) {
       return NextResponse.json({ error: "AIモデルまたは食品表示ルールが依頼内容と一致しません" }, { status: 409 });
     }
-    const result = validateIngredientLabelAiResult(body.data);
     const supabase = getWebSalesAutomationServiceClient();
     const { data: job, error: jobError } = await supabase
       .from("web_sales_codex_jobs")
@@ -61,6 +63,10 @@ export async function POST(
     if (!recipeId || !String(requestedSnapshot.sourceHash || "")) {
       return NextResponse.json({ error: "生成元のレシピ情報が不正です" }, { status: 409 });
     }
+    const result = validateIngredientLabelAiResult(
+      body.data,
+      ingredientLabelValidationPolicyFromSnapshot(requestedSnapshot),
+    );
     const currentSnapshot = await buildIngredientLabelSourceSnapshot(supabase, recipeId);
     if (currentSnapshot.sourceHash !== requestedSnapshot.sourceHash) {
       return NextResponse.json({
