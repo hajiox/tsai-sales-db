@@ -126,6 +126,15 @@ function Copy-WindowsPowerShellScript([string]$SourceName, [string]$DestinationP
   $scriptText = [System.IO.File]::ReadAllText($sourcePath, $strictUtf8)
   [System.IO.File]::WriteAllText($DestinationPath, $scriptText, [System.Text.UTF8Encoding]::new($true))
 }
+function Resolve-WindowsAccountSid([string]$AccountName) {
+  if ([string]::IsNullOrWhiteSpace($AccountName)) { return $null }
+  try {
+    $account = [System.Security.Principal.NTAccount]::new($AccountName)
+    return $account.Translate([System.Security.Principal.SecurityIdentifier]).Value
+  } catch {
+    return $null
+  }
+}
 $maintenanceNonce = [guid]::NewGuid().ToString("N")
 [System.IO.File]::WriteAllText($maintenancePath, $maintenanceNonce, [System.Text.UTF8Encoding]::new($false))
 
@@ -276,7 +285,9 @@ $headlessTaskKeys = @(
 $nodePath = (Get-Command node -ErrorAction Stop).Source
 $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
 $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
-$windowsUserId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$windowsIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$windowsUserId = $windowsIdentity.Name
+$windowsUserSid = $windowsIdentity.User.Value
 $headlessWorkerId = "$WorkerId-headless"
 if ($headlessWorkerId.Length -gt 80) {
   $headlessWorkerId = "$($WorkerId.Substring(0, 71))-headless"
@@ -385,9 +396,14 @@ if (-not $SkipPreloginTaskRegistration) {
   $hasStartupTrigger = $registeredTask -and @($registeredTask.Triggers | Where-Object {
     $_.CimClass.CimClassName -eq "MSFT_TaskBootTrigger"
   }).Count -gt 0
+  $registeredTaskUserSid = if ($registeredTask) {
+    Resolve-WindowsAccountSid ([string]$registeredTask.Principal.UserId)
+  } else {
+    $null
+  }
   $taskRegistered = $registeredTask -and
     $registeredTask.Principal.LogonType -eq "S4U" -and
-    $registeredTask.Principal.UserId -eq $userId -and
+    $registeredTaskUserSid -eq $windowsUserSid -and
     $registeredTask.Actions.Count -eq 1 -and
     $registeredActionArguments.IndexOf($expectedTaskScript, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
     $hasStartupTrigger

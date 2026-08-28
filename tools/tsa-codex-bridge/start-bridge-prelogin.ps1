@@ -29,16 +29,26 @@ function Prepare-HeadlessWorkerStart {
   if (-not (Test-Path -LiteralPath $statePath -PathType Leaf) -and -not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
     return "start"
   }
-  if (-not (Test-Path -LiteralPath $statePath -PathType Leaf) -or -not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
-    Write-LauncherLog "PRELOGIN START BLOCKED state/lock pair is incomplete; no process was stopped"
+  if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
+    Write-LauncherLog "PRELOGIN START BLOCKED state is missing while a lock remains; no process was stopped"
     return "blocked"
   }
 
   try {
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+    $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
     $statePid = [int]$state.pid
-    $lockPid = [int](Get-Content -LiteralPath $lockPath -Raw)
-    if ($statePid -le 0 -or $lockPid -ne $statePid -or $state.executionMode -ne "headless-prelogin") {
+    $lockPid = if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
+      [int](Get-Content -LiteralPath $lockPath -Raw)
+    } else {
+      $null
+    }
+    if (
+      $statePid -le 0 -or
+      ($null -ne $lockPid -and $lockPid -ne $statePid) -or
+      $state.executionMode -ne "headless-prelogin" -or
+      [string]$state.workerId -ne [string]$config.workerId
+    ) {
       Write-LauncherLog "PRELOGIN START BLOCKED state/lock identity mismatch; no process was stopped"
       return "blocked"
     }

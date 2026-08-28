@@ -57,6 +57,8 @@ assert.match(installer, /Start-ScheduledTask -TaskName \$interactiveTaskName/);
 assert.match(installer, /Start-ScheduledTask -TaskName \$taskName/);
 assert.match(installer, /headless\\bridge-state\.json/);
 assert.match(installer, /maintenanceObserved -eq \$maintenanceNonce/);
+assert.match(installer, /function Resolve-WindowsAccountSid/);
+assert.match(installer, /\$registeredTaskUserSid -eq \$windowsUserSid/);
 assert.match(installer, /function Copy-WindowsPowerShellScript/);
 assert.match(installer, /UTF8Encoding\]::new\(\$true\)/);
 assert.match(installer, /Copy-WindowsPowerShellScript "register-prelogin-task\.ps1"/);
@@ -66,6 +68,7 @@ assert.match(launcher, /TSA_CODEX_BRIDGE_MAINTENANCE_PATH/);
 assert.match(launcher, /\$env:CODEX_HOME/);
 assert.match(launcher, /Prepare-HeadlessWorkerStart/);
 assert.match(launcher, /\$state\.currentJobId/);
+assert.match(launcher, /\[string\]\$state\.workerId -ne \[string\]\$config\.workerId/);
 assert.match(launcher, /Stop-Process -Id \$statePid -Force/);
 assert.match(launcher, /already-running/);
 assert.match(launcher, /removed stale state for reused PID/);
@@ -84,15 +87,16 @@ if (process.platform === "win32") {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-bridge-prelogin-"));
   try {
     for (const [name, source] of [
+      ["install-bridge.ps1", installer],
       ["register-prelogin-task.ps1", registration],
       ["start-bridge-prelogin.ps1", launcher],
     ]) {
       const scriptPath = path.join(tempDir, name);
-      fs.writeFileSync(scriptPath, `\uFEFF${source}`, "utf8");
+      fs.writeFileSync(scriptPath, `\uFEFF${source.replace(/^\uFEFF/, "")}`, "utf8");
       const escapedPath = scriptPath.replaceAll("'", "''");
       const parsed = childProcess.spawnSync(
         "powershell.exe",
-        ["-NoProfile", "-NonInteractive", "-Command", `$text = Get-Content -LiteralPath '${escapedPath}' -Raw; [void][scriptblock]::Create($text)`],
+        ["-NoProfile", "-NonInteractive", "-Command", `$tokens = $null; $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile('${escapedPath}', [ref]$tokens, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }`],
         { encoding: "utf8" },
       );
       assert.equal(parsed.status, 0, `${name}: ${parsed.stderr || parsed.stdout}`);
