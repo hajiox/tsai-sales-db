@@ -13,6 +13,7 @@ if (process.platform !== "win32") {
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-bridge-unified-monitor-"));
 const stateDirectory = path.join(tempDir, "states");
 const monitorPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor.ps1");
+const monitorSource = fs.readFileSync(monitorPath, "utf8");
 const schemaPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor-state.schema.json");
 const mutexName = `Local\\CodexBridgeUnifiedMonitorTest_${process.pid}`;
 const worker = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
@@ -81,6 +82,12 @@ try {
   const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
   assert.deepEqual(schema.properties.system.enum, ["tsa", "tsg", "docscanner"]);
   assert.ok(schema.required.includes("heartbeatAt"));
+  assert.match(monitorSource, /\$previousRenderedLines = @\(\)/);
+  assert.match(monitorSource, /\$RenderKey -eq \$script:lastCursorKey/);
+  assert.match(monitorSource, /\$previous\.text -ceq \$entry\.text/);
+  assert.match(monitorSource, /\[Console\]::Write\(\$entry\.text\)/);
+  assert.match(monitorSource, /ConvertTo-StableConsoleLine/);
+  assert.doesNotMatch(monitorSource, /Write-Host \$text\.PadRight/);
 
   writeState("tsa-interactive", baseState({
     system: "tsa",
@@ -169,7 +176,7 @@ try {
   assert.match(first.output, /モニターを閉じてもBridgeジョブは停止しません/);
   assert.doesNotMatch(first.output, /繝|縺|蜿/);
   assert.equal(first.ack.monitorId, "codex-bridge-unified");
-  assert.equal(first.ack.monitorVersion, 1);
+  assert.equal(first.ack.monitorVersion, 2);
   assert.doesNotThrow(() => process.kill(worker.pid, 0), "モニター終了でBridge相当プロセスを停止してはいけない");
 
   const staleTsg = baseState({

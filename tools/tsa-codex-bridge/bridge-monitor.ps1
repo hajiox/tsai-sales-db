@@ -180,7 +180,7 @@ public static class CodexBridgeUnifiedMonitorWindow {
 
 $acknowledgement = @{
   monitorId = "codex-bridge-unified"
-  monitorVersion = 1
+  monitorVersion = 2
   monitorPid = $PID
   windowHandle = $windowHandle.ToInt64()
   stateDirectory = $StateDirectory
@@ -190,8 +190,71 @@ $acknowledgement = @{
 }
 Write-Utf8Json $AckPath $acknowledgement
 
-$previousLineCount = 0
+$previousRenderedLines = @()
+$previousRenderWidth = 0
+$lastCursorKey = ""
 $lastFallbackKey = ""
+function Get-ConsoleCodePointWidth([int]$CodePoint) {
+  if ($CodePoint -gt 0xFFFF) { return 2 }
+  if (
+    ($CodePoint -ge 0x1100 -and $CodePoint -le 0x115F) -or
+    ($CodePoint -ge 0x2329 -and $CodePoint -le 0x232A) -or
+    ($CodePoint -ge 0x2E80 -and $CodePoint -le 0xA4CF) -or
+    ($CodePoint -ge 0xAC00 -and $CodePoint -le 0xD7A3) -or
+    ($CodePoint -ge 0xF900 -and $CodePoint -le 0xFAFF) -or
+    ($CodePoint -ge 0xFE10 -and $CodePoint -le 0xFE19) -or
+    ($CodePoint -ge 0xFE30 -and $CodePoint -le 0xFE6F) -or
+    ($CodePoint -ge 0xFF00 -and $CodePoint -le 0xFF60) -or
+    ($CodePoint -ge 0xFFE0 -and $CodePoint -le 0xFFE6)
+  ) { return 2 }
+  return 1
+}
+
+function ConvertTo-StableConsoleLine([string]$Text, [int]$Width) {
+  $clean = Clean-Text $Text 1000
+  $fragments = New-Object System.Collections.Generic.List[object]
+  $totalCells = 0
+  for ($index = 0; $index -lt $clean.Length; $index += 1) {
+    $length = 1
+    $codePoint = [int][char]$clean[$index]
+    if (
+      [char]::IsHighSurrogate($clean[$index]) -and
+      $index + 1 -lt $clean.Length -and
+      [char]::IsLowSurrogate($clean[$index + 1])
+    ) {
+      $codePoint = [char]::ConvertToUtf32($clean, $index)
+      $length = 2
+    }
+    $cells = Get-ConsoleCodePointWidth $codePoint
+    $fragments.Add([pscustomobject]@{
+      text = $clean.Substring($index, $length)
+      cells = $cells
+    }) | Out-Null
+    $totalCells += $cells
+    if ($length -eq 2) { $index += 1 }
+  }
+
+  $builder = New-Object System.Text.StringBuilder
+  $usedCells = 0
+  if ($totalCells -le $Width) {
+    foreach ($fragment in $fragments) {
+      [void]$builder.Append($fragment.text)
+      $usedCells += $fragment.cells
+    }
+  } else {
+    $contentLimit = [Math]::Max(1, $Width - 3)
+    foreach ($fragment in $fragments) {
+      if ($usedCells + $fragment.cells -gt $contentLimit) { break }
+      [void]$builder.Append($fragment.text)
+      $usedCells += $fragment.cells
+    }
+    [void]$builder.Append("...")
+    $usedCells += 3
+  }
+  if ($usedCells -lt $Width) { [void]$builder.Append(" " * ($Width - $usedCells)) }
+  return $builder.ToString()
+}
+
 function Render-Dashboard($Lines, [string]$RenderKey) {
   if ($PlainOutput) {
     foreach ($line in $Lines) { Write-Output $line.text }
@@ -206,18 +269,34 @@ function Render-Dashboard($Lines, [string]$RenderKey) {
   }
   try {
     $width = [Math]::Max(60, [Math]::Min(140, [Console]::WindowWidth - 1))
-    [Console]::SetCursorPosition(0, 0)
-    $lineCount = [Math]::Max($script:previousLineCount, $Lines.Count)
-    for ($index = 0; $index -lt $lineCount; $index += 1) {
-      if ($index -lt $Lines.Count) {
-        $entry = $Lines[$index]
-        $text = Clean-Text $entry.text ([Math]::Max(20, $width - 1))
-        Write-Host $text.PadRight($width) -ForegroundColor $entry.color
-      } else {
-        Write-Host (" " * $width)
+    if ($RenderKey -eq $script:lastCursorKey -and $width -eq $script:previousRenderWidth) { return }
+    $renderedLines = @(
+      foreach ($entry in $Lines) {
+        [pscustomobject]@{
+          text = ConvertTo-StableConsoleLine $entry.text $width
+          color = [string]$entry.color
+        }
       }
+    )
+    $lineCount = [Math]::Max($script:previousRenderedLines.Count, $renderedLines.Count)
+    $originalColor = [Console]::ForegroundColor
+    for ($index = 0; $index -lt $lineCount; $index += 1) {
+      if ($index -lt $renderedLines.Count) {
+        $entry = $renderedLines[$index]
+      } else {
+        $entry = [pscustomobject]@{ text = " " * $width; color = "Gray" }
+      }
+      $previous = if ($index -lt $script:previousRenderedLines.Count) { $script:previousRenderedLines[$index] } else { $null }
+      if ($previous -and $previous.text -ceq $entry.text -and $previous.color -ceq $entry.color) { continue }
+      [Console]::SetCursorPosition(0, $index)
+      [Console]::ForegroundColor = [System.Enum]::Parse([ConsoleColor], $entry.color)
+      [Console]::Write($entry.text)
     }
-    $script:previousLineCount = $Lines.Count
+    [Console]::ForegroundColor = $originalColor
+    [Console]::SetCursorPosition(0, [Math]::Min($renderedLines.Count, [Console]::BufferHeight - 1))
+    $script:previousRenderedLines = $renderedLines
+    $script:previousRenderWidth = $width
+    $script:lastCursorKey = $RenderKey
   } catch {
     $script:cursorRendering = $false
     $script:lastFallbackKey = ""

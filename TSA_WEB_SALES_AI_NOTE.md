@@ -29,3 +29,4 @@
 - Sequential EC jobs retain completed sites, mark only the timed-out site unfinished, and continue to the next requested site. Manual retry remains explicit from the TSA screen.
 - The pre-login S4U launcher now verifies worker/state/PID/timestamps (and the lock when present), then retires an idle older Bridge process from the same S4U task context before starting an installed upgrade. Active jobs and ambiguous or reused PIDs are never terminated.
 - Pre-login task ownership is compared by Windows SID, so equivalent `ts` and `TSA\\ts` names no longer trigger a needless elevated re-registration wait.
+- Unified monitor v2 replaces full-screen redraws with render-key throttling and changed-row-only console writes. Japanese full-width and supplementary characters are measured in console cells so a long line cannot wrap and make the window flash.
