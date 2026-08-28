@@ -23,7 +23,7 @@ Use the signed-in Chrome session and official seller/admin pages only. Read the 
 
 ## Workflow
 
-1. Open the official seller/admin site for the requested channel.
+1. Open the current official seller/admin site for the requested channel once in every run that lacks a reusable `complete` normalized JSON. A prior screenshot showing an unpublished report, zero rows, or an older maximum month is expired availability evidence and must never replace this live check.
 2. Select the exact inclusive period supplied by the Bridge.
 3. Download the most detailed transaction, settlement, billing, or order reports needed to identify seller-borne deductions.
 4. Confirm the period inside each report. Do not infer it from a file name alone.

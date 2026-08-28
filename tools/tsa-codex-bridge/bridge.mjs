@@ -7,10 +7,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import monitorStateFile from "./monitor-state-file.cjs";
 import { isCodexRunGuardError, waitForCodexExitWithWatchdog } from "./codex-run-guard.mjs";
+import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs";
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.8";
+const VERSION = "1.9.9";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4809,8 +4810,10 @@ SAFETY AND SCOPE
 - Stop with waiting_for_user for login, MFA, CAPTCHA, account selection, or download permission.
 
 WORKFLOW
-1. Follow the skill for the exact period and preserve all required original reports unchanged in the job work folder.
-   Reuse a period-matched staged original when it contains the required official data. If it is incomplete, acquire the missing official report.
+1. Open the current official seller/admin page once in this run before deciding that a settlement report is unpublished, unavailable, or empty.
+   This isolated session starts only because no reusable complete normalized JSON exists. Staged originals may supply stable period data, but they never prove today's publication or row availability.
+   Follow the skill for the exact period and preserve all required original reports unchanged in the job work folder.
+   Reuse a period-matched staged original when it contains required transaction data. If the settlement data is incomplete, acquire or freshly verify the missing official report.
    If the official settlement page confirms zero rows, cross-check the official order/delivery report for the same period. Never interpret zero settlement rows as zero sales when orders exist.
    Save screenshots and downloaded originals under the job work folder. The local Bridge, not this isolated Codex session, copies them to the final network archive.
 2. Create ${join(workDir, `${job.channel}-${job.period_start}_${job.period_end}.ec-profit.json`)} using the fixed schema.
@@ -4834,8 +4837,7 @@ function stageExistingEcProfitOriginals(job, archiveDir, workDir) {
   const prefix = `${job.channel}-${job.period_start}_${job.period_end}-`.toLowerCase();
   const staged = [];
   for (const name of readdirSync(archiveDir)) {
-    if (!name.toLowerCase().startsWith(prefix) || !/\.original\.(csv|zip|xlsx|xls|txt|json|pdf|png|jpg|jpeg|webp)$/i.test(name)) continue;
-    if (/(?:login-required|login-expired|permission|captcha|mfa|account-selection|error)/i.test(name)) continue;
+    if (!name.toLowerCase().startsWith(prefix) || !isReusableEcProfitOriginalName(name)) continue;
     const source = join(archiveDir, name);
     if (!statSync(source).isFile()) continue;
     const target = join(workDir, name);

@@ -35,6 +35,7 @@
     "apply:ec-product-content-migration": "node scripts/apply-ec-product-content-migration.cjs",
     "test:recipe-sns-bridge": "node scripts/test-recipe-sns-bridge.cjs",
     "test:bridge-skill-contract": "node scripts/test-bridge-skill-contract.cjs",
+    "test:ec-profit-retry": "node scripts/test-ec-profit-retry.mjs",
     "test:docscanner-fax-summary-bridge": "node --experimental-strip-types scripts/test-docscanner-fax-summary-bridge.mjs",
     "test:bridge-prelogin": "node scripts/test-bridge-prelogin.cjs",
     "test:recipe-sns-feature": "node scripts/test-recipe-sns-feature.cjs",

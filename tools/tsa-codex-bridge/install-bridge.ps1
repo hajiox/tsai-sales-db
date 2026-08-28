@@ -15,6 +15,7 @@ $installDir = Join-Path $env:LOCALAPPDATA "TSA Codex Bridge"
 $requiredSourceFiles = @(
   "bridge.mjs",
   "codex-run-guard.mjs",
+  "ec-profit-artifact-policy.mjs",
   "monitor-state-file.cjs",
   "skill-contract.json",
   "result.schema.json",
@@ -285,6 +286,7 @@ try {
 
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "codex-run-guard.mjs") -Destination (Join-Path $installDir "codex-run-guard.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-profit-artifact-policy.mjs") -Destination (Join-Path $installDir "ec-profit-artifact-policy.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destination (Join-Path $installDir "monitor-state-file.cjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
 Copy-WindowsPowerShellScript "bridge-monitor.ps1" (Join-Path $installDir "bridge-monitor.ps1")

@@ -31,3 +31,4 @@
 - Pre-login task ownership is compared by Windows SID, so equivalent `ts` and `TSA\\ts` names no longer trigger a needless elevated re-registration wait.
 - Unified monitor v2 replaces full-screen redraws with render-key throttling and changed-row-only console writes. Japanese full-width and supplementary characters are measured in console cells so a long line cannot wrap and make the window flash.
 - The installer now finds an idle pre-login Bridge even when Session 0 hides its command line. It verifies the state file, lock, PID, execution mode, worker suffix, and recent heartbeat, stops the S4U supervisor first, then replaces only that verified process.
+- EC settlement retries no longer stage old screenshots that only proved an unpublished report, an older maximum month, or zero rows at a past check. Without a complete normalized JSON, each retry must inspect the current official page once; stable period transaction files may still be reused.
