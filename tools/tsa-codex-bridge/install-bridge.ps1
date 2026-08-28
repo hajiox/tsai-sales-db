@@ -90,15 +90,52 @@ $legacyMonitorAckPath = Join-Path $installDir "monitor-ack.json"
 $maintenancePath = Join-Path $installDir "bridge-maintenance.lock"
 $statePath = Join-Path $installDir "bridge-state.json"
 $headlessStatePath = Join-Path $installDir "headless\bridge-state.json"
+$headlessLockPath = Join-Path $installDir "headless\bridge.lock"
+$preloginTaskName = "TSA Codex Bridge (Pre-login)"
 $statePaths = @($statePath, $headlessStatePath)
+function Get-TrustedHeadlessBridgeProcess {
+  if (
+    -not (Test-Path -LiteralPath $headlessStatePath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $headlessLockPath -PathType Leaf)
+  ) {
+    return $null
+  }
+  try {
+    $headlessState = Get-Content -LiteralPath $headlessStatePath -Raw | ConvertFrom-Json
+    $statePid = [int]$headlessState.pid
+    $lockPid = [int](Get-Content -LiteralPath $headlessLockPath -Raw)
+    $updatedAt = [DateTimeOffset]::Parse([string]$headlessState.updatedAt).UtcDateTime
+    if (
+      $statePid -le 0 -or
+      $lockPid -ne $statePid -or
+      $headlessState.executionMode -ne "headless-prelogin" -or
+      -not ([string]$headlessState.workerId).EndsWith("-headless", [System.StringComparison]::OrdinalIgnoreCase) -or
+      $updatedAt -lt (Get-Date).ToUniversalTime().AddMinutes(-2)
+    ) {
+      return $null
+    }
+    $candidate = Get-CimInstance Win32_Process -Filter "ProcessId = $statePid" -ErrorAction SilentlyContinue
+    if (-not $candidate -or $candidate.Name -ne "node.exe") {
+      return $null
+    }
+    return $candidate
+  } catch {
+    return $null
+  }
+}
 function Get-BridgeProcesses {
-  return @(Get-CimInstance Win32_Process | Where-Object {
+  $processes = @(Get-CimInstance Win32_Process | Where-Object {
     $_.CommandLine -and (
       $_.CommandLine.IndexOf($startScriptPath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
       $_.CommandLine.IndexOf($headlessStartScriptPath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
       $_.CommandLine.IndexOf($bridgePath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
     )
   })
+  $trustedHeadless = Get-TrustedHeadlessBridgeProcess
+  if ($trustedHeadless -and @($processes | Where-Object { [int]$_.ProcessId -eq [int]$trustedHeadless.ProcessId }).Count -eq 0) {
+    $processes += $trustedHeadless
+  }
+  return @($processes)
 }
 function Stop-VerifiedMonitor([string]$AckPath, [string[]]$AllowedScripts) {
   if (-not (Test-Path -LiteralPath $AckPath)) { return }
@@ -211,6 +248,20 @@ try {
     }
   }
 
+  $preloginTask = Get-ScheduledTask -TaskName $preloginTaskName -ErrorAction SilentlyContinue
+  if ($preloginTask -and $preloginTask.State -eq "Running") {
+    Stop-ScheduledTask -TaskName $preloginTaskName -ErrorAction Stop
+    $taskStopDeadline = (Get-Date).AddSeconds(10)
+    while ((Get-Date) -lt $taskStopDeadline) {
+      $preloginTask = Get-ScheduledTask -TaskName $preloginTaskName -ErrorAction SilentlyContinue
+      if (-not $preloginTask -or $preloginTask.State -ne "Running") { break }
+      Start-Sleep -Milliseconds 250
+    }
+    if ($preloginTask -and $preloginTask.State -eq "Running") {
+      throw "ログイン前Bridgeの監視タスクを安全に停止できませんでした。"
+    }
+  }
+
   foreach ($process in @($bridgeProcesses | Sort-Object { if ($_.Name -like "powershell*") { 0 } else { 1 } })) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
   }
@@ -226,7 +277,6 @@ try {
     (Join-Path $sourceDir "bridge-monitor.ps1")
   )
   $lockPath = Join-Path $installDir "bridge.lock"
-  $headlessLockPath = Join-Path $installDir "headless\bridge.lock"
   if (Test-Path -LiteralPath $lockPath) { Remove-Item -LiteralPath $lockPath -Force }
   if (Test-Path -LiteralPath $headlessLockPath) { Remove-Item -LiteralPath $headlessLockPath -Force }
   foreach ($candidateStatePath in $statePaths) {
@@ -382,7 +432,7 @@ if ($interactiveTaskRegistered) {
   Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $startArguments
 }
 
-$taskName = "TSA Codex Bridge (Pre-login)"
+$taskName = $preloginTaskName
 $taskRegistered = $false
 if (-not $SkipPreloginTaskRegistration) {
   $userId = $windowsUserId
