@@ -64,6 +64,12 @@ assert.match(installer, /Copy-WindowsPowerShellScript "register-prelogin-task\.p
 assert.match(launcher, /TSA_CODEX_BRIDGE_EXECUTION_MODE = "headless-prelogin"/);
 assert.match(launcher, /TSA_CODEX_BRIDGE_MAINTENANCE_PATH/);
 assert.match(launcher, /\$env:CODEX_HOME/);
+assert.match(launcher, /Prepare-HeadlessWorkerStart/);
+assert.match(launcher, /\$state\.currentJobId/);
+assert.match(launcher, /Stop-Process -Id \$statePid -Force/);
+assert.match(launcher, /already-running/);
+assert.match(launcher, /removed stale state for reused PID/);
+assert.match(launcher, /PRELOGIN START BLOCKED/);
 assert.match(registration, /New-ScheduledTaskTrigger -AtStartup/);
 assert.match(registration, /-LogonType S4U/);
 assert.match(registration, /-RunLevel Limited/);
@@ -77,15 +83,20 @@ assert.match(automationPage, /ログイン前処理/);
 if (process.platform === "win32") {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-bridge-prelogin-"));
   try {
-    const scriptPath = path.join(tempDir, "register-prelogin-task.ps1");
-    fs.writeFileSync(scriptPath, `\uFEFF${registration}`, "utf8");
-    const escapedPath = scriptPath.replaceAll("'", "''");
-    const parsed = childProcess.spawnSync(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", `$text = Get-Content -LiteralPath '${escapedPath}' -Raw; [void][scriptblock]::Create($text)`],
-      { encoding: "utf8" },
-    );
-    assert.equal(parsed.status, 0, parsed.stderr || parsed.stdout);
+    for (const [name, source] of [
+      ["register-prelogin-task.ps1", registration],
+      ["start-bridge-prelogin.ps1", launcher],
+    ]) {
+      const scriptPath = path.join(tempDir, name);
+      fs.writeFileSync(scriptPath, `\uFEFF${source}`, "utf8");
+      const escapedPath = scriptPath.replaceAll("'", "''");
+      const parsed = childProcess.spawnSync(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-Command", `$text = Get-Content -LiteralPath '${escapedPath}' -Raw; [void][scriptblock]::Create($text)`],
+        { encoding: "utf8" },
+      );
+      assert.equal(parsed.status, 0, `${name}: ${parsed.stderr || parsed.stdout}`);
+    }
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

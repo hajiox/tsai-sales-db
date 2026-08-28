@@ -27,3 +27,4 @@
 - Added a shared finite watchdog to every TSA Codex Bridge `codex exec`. Browser jobs stop after 12 minutes without Codex output or 45 minutes for one phase; ImageGen receives 30/90 minutes, and other AI work receives 15/45 minutes.
 - A watchdog stop terminates the complete Codex child-process tree and finalizes the durable job as operator waiting for signed-in browser work or review required for non-browser AI work. It is never returned to the queue automatically.
 - Sequential EC jobs retain completed sites, mark only the timed-out site unfinished, and continue to the next requested site. Manual retry remains explicit from the TSA screen.
+- The pre-login S4U launcher now verifies its state/lock identity and retires an idle older Bridge process from the same S4U task context before starting an installed upgrade. Active jobs and ambiguous PIDs are never terminated.
