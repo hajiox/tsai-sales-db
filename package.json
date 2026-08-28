@@ -20,6 +20,7 @@
     "apply:recipe-ec-scoped-images-migration": "node scripts/apply-recipe-ec-scoped-images-migration.cjs",
     "test:ec-price-plan": "node scripts/test-ec-price-plan.cjs",
     "test:bridge-monitor": "node scripts/test-bridge-monitor.cjs",
+    "test:bridge-run-guard": "node scripts/test-bridge-run-guard.mjs",
     "test:ec-product-name-bridge": "node scripts/test-ec-product-name-bridge.cjs",
     "test:ec-product-name-migration": "node scripts/dry-run-ec-product-name-migration.cjs",
     "apply:ec-product-name-migration": "node scripts/apply-ec-product-name-migration.cjs",

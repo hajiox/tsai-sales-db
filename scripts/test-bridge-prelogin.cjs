@@ -47,6 +47,7 @@ assert.match(bridge, /TSA_CODEX_BRIDGE_APP_DIR/);
 assert.match(bridge, /TSA_CODEX_BRIDGE_MAINTENANCE_PATH/);
 
 assert.match(installer, /workerId = \$headlessWorkerId/);
+assert.match(installer, /"codex-run-guard\.mjs"/);
 assert.match(installer, /executionMode = "headless-prelogin"/);
 assert.match(installer, /desktopMonitor = \$false/);
 assert.match(installer, /\$interactiveTaskName = "TSA Codex Bridge \(Interactive\)"/);

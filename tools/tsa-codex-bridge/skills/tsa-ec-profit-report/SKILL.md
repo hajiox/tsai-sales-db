@@ -49,3 +49,5 @@ Use the signed-in Chrome session and official seller/admin pages only. Read the 
 ## Stop Conditions
 
 Return `waiting_for_user` for login, MFA, CAPTCHA, account selection, download permission, or changed UI requiring a person. Return `needs_review` when an official monthly report is not published, the settlement result is empty while period-matched orders exist, or the report type, funding source, or arithmetic cannot be confirmed. Network archive writes are owned by the Bridge and are never a user-action condition. Do not change orders, listings, prices, promotions, advertising, billing settings, or account settings.
+
+After observing any authentication or permission screen once, stop immediately. Never refresh it, retry sign-in, or search alternate routes in a loop; return `waiting_for_user`.

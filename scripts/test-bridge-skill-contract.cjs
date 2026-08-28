@@ -64,11 +64,28 @@ assert.match(bridge, /String\(arg\)\.toLowerCase\(\) === "resume"/);
 assert.match(bridge, /chatHistoryLoaded: false/);
 assert.match(bridge, /freshNonResumedSession: true/);
 assert.match(bridge, /skillContractVersion: SKILL_CONTRACT\.version/);
+assert.match(bridge, /Authentication stop rule:[\s\S]*Return waiting_for_user immediately/);
 assert.equal((bridge.match(/spawnSkillCodex\(job\.task_key, prompt, args/g) || []).length, 11);
+assert.equal((bridge.match(/waitForCodexExitWithWatchdog\(codex/g) || []).length, 11);
+assert.doesNotMatch(bridge, /const exitCode = await new Promise\(\(resolveExit/);
 assert.equal((bridge.match(/spawnCodexProcess\(args, options\)/g) || []).length, 2);
 assert.doesNotMatch(bridge, /spawnCodex\(/);
 assert.doesNotMatch(bridge, /stdin\.end\(prompt/);
 assert.doesNotMatch(bridge, /codexSessionId|TSA_CODEX_SESSION_ID/);
+
+for (const skillName of [
+  "tsa-web-sales-csv",
+  "tsa-ad-cost-csv",
+  "tsa-ec-profit-report",
+  "update-aizu-ec-prices",
+  "update-aizu-ec-product-names",
+  "update-aizu-ec-catchcopies",
+  "update-aizu-ec-product-content",
+]) {
+  const skill = read("tools", "tsa-codex-bridge", "skills", skillName, "SKILL.md");
+  assert.match(skill, /1回確認|observing any authentication or permission screen once/);
+  assert.match(skill, /waiting_for_user/);
+}
 
 const argBuilder = bridge.slice(
   bridge.indexOf("function buildIsolatedCodexArgs"),

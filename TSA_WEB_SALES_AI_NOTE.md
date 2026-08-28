@@ -21,3 +21,9 @@
 - Migrated `web_sales_ai_analyses` to keep separate numbered `half_month` and `monthly` histories plus period and TSG post metadata. Existing monthly reports were backfilled without replacement.
 - Verification: local and Vercel production builds passed; Bridge `1.8.7` is online. Production analysis job `5d5c200e-ffba-4bab-a9fb-5fc7639bb4d3` completed for 2026-08-01 through 2026-08-15 with expenses/comparisons excluded. TSG post `38cbaa43-8085-40a2-9422-abbeef34227b` was visually verified on the correct floor board under TSG君.
 - Production alias: `https://v0-tsa-19.vercel.app`.
+
+## 2026-08-28
+
+- Added a shared finite watchdog to every TSA Codex Bridge `codex exec`. Browser jobs stop after 12 minutes without Codex output or 45 minutes for one phase; ImageGen receives 30/90 minutes, and other AI work receives 15/45 minutes.
+- A watchdog stop terminates the complete Codex child-process tree and finalizes the durable job as operator waiting for signed-in browser work or review required for non-browser AI work. It is never returned to the queue automatically.
+- Sequential EC jobs retain completed sites, mark only the timed-out site unfinished, and continue to the next requested site. Manual retry remains explicit from the TSA screen.

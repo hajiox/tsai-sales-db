@@ -6,10 +6,11 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import monitorStateFile from "./monitor-state-file.cjs";
+import { isCodexRunGuardError, waitForCodexExitWithWatchdog } from "./codex-run-guard.mjs";
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.6";
+const VERSION = "1.9.7";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -166,13 +167,15 @@ async function main() {
       lastError = error instanceof Error ? error.message : String(error);
       log(`ERROR ${lastError}`);
       if (currentJobId) {
+        const guardedStop = isCodexRunGuardError(error);
+        const status = guardedStop ? error.jobStatus : "failed";
         await updateJob(currentJobId, {
-          status: "failed",
-          progress: 100,
-          currentStep: "処理に失敗しました",
+          status,
+          progress: guardedStop ? 95 : 100,
+          currentStep: guardedStop ? error.currentStep : "処理に失敗しました",
           message: lastError,
-          errorMessage: lastError,
-          eventType: "bridge_error",
+          errorMessage: status === "failed" ? lastError : null,
+          eventType: guardedStop ? "codex_watchdog_stopped" : "bridge_error",
         }).catch(() => undefined);
       }
       await delay(Math.max(config.pollMs, 10_000));
@@ -326,9 +329,9 @@ async function executeJob(job) {
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
 
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
 
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
@@ -599,9 +602,9 @@ async function executeDocScannerFaxSummaryJob(job) {
       stderr += chunk;
       if (stderr.length > 30_000) stderr = stderr.slice(-30_000);
     });
-    const exitCode = await new Promise((resolveExit, reject) => {
-      codex.once("error", reject);
-      codex.once("close", resolveExit);
+    const exitCode = await waitForCodexExitWithWatchdog(codex, {
+      taskKey: job.task_key,
+      terminate: terminateChildProcessTree,
     }).finally(() => clearInterval(heartbeatTimer));
     if (exitCode !== 0 || !existsSync(outputFile)) {
       throw new Error(stderr || `FAX要約に失敗しました (exit ${exitCode})`);
@@ -697,7 +700,7 @@ async function executeEcProductNameUpdateJob(job) {
       outcome = {
         planSite: blockedEcProductNamePlanSite(site, message),
         resultSite: blockedEcProductNameResultSite(site, message),
-        operatorWait: false,
+        operatorWait: isCodexRunGuardError(error),
       };
     }
     upsertEcPriceSite(aggregate.plan.sites, outcome.planSite);
@@ -1049,7 +1052,7 @@ async function executeEcCatchcopyUpdateJob(job) {
       outcome = {
         planSite: blockedEcCatchcopyPlanSite(site, message),
         resultSite: blockedEcCatchcopyResultSite(site, message),
-        operatorWait: false,
+        operatorWait: isCodexRunGuardError(error),
       };
     }
     upsertEcPriceSite(aggregate.plan.sites, outcome.planSite);
@@ -1395,7 +1398,7 @@ async function executeEcProductContentUpdateJob(job) {
       outcome = {
         planSite: blockedEcProductContentPlanSite(site, parameters.targetContents[site], message),
         resultSite: blockedEcProductContentResultSite(site, parameters.targetContents[site], message),
-        operatorWait: false,
+        operatorWait: isCodexRunGuardError(error),
       };
     }
     upsertEcPriceSite(aggregate.plan.sites, outcome.planSite);
@@ -1797,7 +1800,7 @@ async function executeEcPriceUpdateJob(job) {
         planSite: blockedEcPricePlanSite(site, message),
         resultSite: blockedEcPriceResultSite(site, message),
         referencePrice: null,
-        operatorWait: false,
+        operatorWait: isCodexRunGuardError(error),
       };
     }
     upsertEcPriceSite(aggregate.plan.sites, outcome.planSite);
@@ -1841,7 +1844,7 @@ async function executeEcPriceUpdateJob(job) {
           planLp: blockedEcPriceLpPlan(parameters, message),
           resultLp: blockedLpResult(parameters, message),
           referencePrice: null,
-          operatorWait: false,
+          operatorWait: isCodexRunGuardError(error),
         };
       }
       aggregate.plan.lp = lpOutcome.planLp;
@@ -2509,9 +2512,9 @@ async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputF
     stderr += chunk;
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
   writeFileSync(jsonlLog, `${eventLines.join("\n")}\n`, "utf8");
@@ -2548,7 +2551,7 @@ function isForbiddenEcPriceTabAction(event) {
 function terminateChildProcessTree(child) {
   if (!child?.pid) return;
   if (process.platform === "win32") {
-    spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+    spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, timeout: 15_000 });
     return;
   }
   child.kill("SIGTERM");
@@ -3219,9 +3222,9 @@ async function executeEcProductNameGenerateJob(job) {
     stderr += chunk;
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
   writeFileSync(jsonlLog, `${eventLines.join("\n")}\n`, "utf8");
@@ -3408,9 +3411,9 @@ async function executeEcCatchcopyGenerateJob(job) {
     stderr += chunk;
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
   writeFileSync(jsonlLog, `${eventLines.join("\n")}\n`, "utf8");
@@ -3570,9 +3573,9 @@ async function executeEcProductContentGenerateJob(job) {
     stderr += chunk;
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
   writeFileSync(jsonlLog, `${eventLines.join("\n")}\n`, "utf8");
@@ -3759,9 +3762,9 @@ async function executeIngredientLabelGenerateJob(job) {
     stderr += chunk;
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
   writeFileSync(jsonlLog, `${eventLines.join("\n")}\n`, "utf8");
@@ -4125,9 +4128,9 @@ async function executeRecipeSnsGenerateJob(job) {
     stderr += chunk;
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => {
     clearInterval(heartbeatTimer);
     clearInterval(progressTimer);
@@ -4349,9 +4352,9 @@ async function executeAnalysisJob(job) {
     stderr += chunk;
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
   writeFileSync(jsonlLog, `${eventLines.join("\n")}\n`, "utf8");
@@ -4509,9 +4512,9 @@ async function executeAdCostJob(job) {
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
 
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
 
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
@@ -4660,9 +4663,9 @@ async function executeEcProfitJob(job) {
     if (stderr.length > 80_000) stderr = stderr.slice(-80_000);
   });
 
-  const exitCode = await new Promise((resolveExit, reject) => {
-    codex.once("error", reject);
-    codex.once("close", resolveExit);
+  const exitCode = await waitForCodexExitWithWatchdog(codex, {
+    taskKey: job.task_key,
+    terminate: terminateChildProcessTree,
   }).finally(() => clearInterval(heartbeatTimer));
 
   if (stdoutBuffer.trim()) appendEventLine(eventLines, stdoutBuffer.trim());
@@ -5040,6 +5043,7 @@ function prepareSkillControlledPrompt(taskKey, prompt) {
     "- Start and finish this job as a new non-resumed codex exec session.",
     "- Never read, search, summarize, or resume any app Chat, prior Codex task/thread, conversation history, transcript, rollout, or saved session.",
     "- Use only the compact job input below and the dedicated Skill resources it explicitly requires.",
+    "- Authentication stop rule: after observing login, MFA, CAPTCHA, account selection, or permission UI once, do not refresh, retry authentication, or explore alternate routes in a loop. Return waiting_for_user immediately.",
     "",
     promptText,
   ].join("\n");

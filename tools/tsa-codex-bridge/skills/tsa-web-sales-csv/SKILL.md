@@ -47,6 +47,7 @@ node "$env:USERPROFILE\.codex\skills\tsa-web-sales-csv\scripts\validate-csv.mjs"
 - `needs_review`: do not confirm the TSA import. Return the exact reason.
 - `invalid`: do not import. Acquire the correct report.
 - `waiting_for_user`: use for login, MFA, CAPTCHA, account selection, browser-origin permission, or another decision that requires a person.
+- After observing any authentication or permission screen once, stop immediately. Never refresh it, retry sign-in, or search alternate routes in a loop; return `waiting_for_user`.
 
 ## Prohibited Actions
 

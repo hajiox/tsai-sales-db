@@ -45,6 +45,7 @@ YYYY.MM <媒体名>広告費（DD日～DD日）.original.<csv|zip|xlsx|xls>
 
 - `completed`: exact report, account, and period are confirmed and one unchanged original file is archived.
 - `waiting_for_user`: login, MFA, CAPTCHA, account selection, download permission, or Chrome-origin approval needs a person.
+- After observing any authentication or permission screen once, stop immediately. Never refresh it, retry sign-in, or search alternate routes in a loop; return `waiting_for_user`.
 - `needs_review`: the report type, period, account, or required fields cannot be confirmed.
 - `failed`: a retryable technical error prevents acquisition or archiving.
 
