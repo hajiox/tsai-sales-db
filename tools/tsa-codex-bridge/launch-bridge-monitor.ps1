@@ -1,13 +1,21 @@
 param(
   [Parameter(Mandatory = $true)][string]$StateDirectory,
   [Parameter(Mandatory = $true)][string]$AckPath,
+  [string]$WindowConfigPath,
   [switch]$BringForward
 )
 
 $ErrorActionPreference = "Stop"
 $monitorScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "bridge-monitor.ps1"
+$placementScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "monitor-window-placement.ps1"
 if (-not (Test-Path -LiteralPath $monitorScript)) {
   throw "Bridge monitor script not found: $monitorScript"
+}
+if (-not $WindowConfigPath) {
+  $WindowConfigPath = Join-Path $env:LOCALAPPDATA "Codex Bridge Monitor\monitor.config.json"
+}
+if (Test-Path -LiteralPath $placementScript -PathType Leaf) {
+  . $placementScript
 }
 
 function Read-Utf8Json([string]$Path) {
@@ -28,6 +36,12 @@ function Test-ProcessId($Value) {
 
 $acknowledgement = Read-Utf8Json $AckPath
 if ($acknowledgement -and $acknowledgement.monitorId -eq "codex-bridge-unified" -and (Test-ProcessId $acknowledgement.monitorPid)) {
+  if ((Get-Command Get-CodexBridgeMonitorPlacement -ErrorAction SilentlyContinue) -and [int64]$acknowledgement.windowHandle -ne 0) {
+    $placement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
+    if ($placement) {
+      [void](Move-CodexBridgeMonitorWindow ([IntPtr]([int64]$acknowledgement.windowHandle)) $placement)
+    }
+  }
   if ($BringForward -and [int64]$acknowledgement.windowHandle -ne 0) {
     Add-Type -TypeDefinition @"
 using System;
@@ -60,6 +74,8 @@ $arguments = @(
   "-File", "`"$monitorScript`""
   "-StateDirectory", "`"$StateDirectory`""
   "-AckPath", "`"$AckPath`""
+  "-WindowPlacementScript", "`"$placementScript`""
+  "-WindowConfigPath", "`"$WindowConfigPath`""
 )
 
 $monitor = Start-Process -FilePath $consoleHost -ArgumentList $arguments -WindowStyle Normal -PassThru

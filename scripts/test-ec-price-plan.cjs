@@ -214,6 +214,7 @@ const installerSource = fs.readFileSync(
 );
 assert.match(installerSource, /"bridge-monitor\.ps1"/);
 assert.match(installerSource, /"launch-bridge-monitor\.ps1"/);
+assert.match(installerSource, /"monitor-window-placement\.ps1"/);
 assert.match(installerSource, /"bridge-monitor-state\.schema\.json"/);
 assert.match(installerSource, /Codex Bridge Monitor/);
 assert.match(installerSource, /Stop-VerifiedMonitor/);
@@ -228,6 +229,8 @@ assert.match(monitorLauncherSource, /AckPath/);
 assert.match(monitorLauncherSource, /conhost\.exe/);
 assert.match(monitorLauncherSource, /BringForward/);
 assert.match(monitorLauncherSource, /codex-bridge-unified/);
+assert.match(monitorLauncherSource, /Get-CodexBridgeMonitorPlacement/);
+assert.match(monitorLauncherSource, /Move-CodexBridgeMonitorWindow/);
 assert.match(bridgeSource, /unified desktop monitor visible/);
 assert.match(bridgeSource, /Codex Bridge Monitor/);
 assert.match(bridgeSource, /UNIFIED_MONITOR_STATE_DIR/);

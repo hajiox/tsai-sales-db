@@ -38,6 +38,7 @@ $requiredSourceFiles = @(
   "render-recipe-sns-image.ps1",
   "bridge-monitor.ps1",
   "launch-bridge-monitor.ps1",
+  "monitor-window-placement.ps1",
   "bridge-monitor-state.schema.json",
   "start-bridge.ps1",
   "start-bridge-prelogin.ps1",
@@ -291,9 +292,11 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destinat
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
 Copy-WindowsPowerShellScript "bridge-monitor.ps1" (Join-Path $installDir "bridge-monitor.ps1")
 Copy-WindowsPowerShellScript "launch-bridge-monitor.ps1" (Join-Path $installDir "launch-bridge-monitor.ps1")
+Copy-WindowsPowerShellScript "monitor-window-placement.ps1" (Join-Path $installDir "monitor-window-placement.ps1")
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor-state.schema.json") -Destination (Join-Path $installDir "bridge-monitor-state.schema.json") -Force
 Copy-WindowsPowerShellScript "bridge-monitor.ps1" $unifiedMonitorPath
 Copy-WindowsPowerShellScript "launch-bridge-monitor.ps1" $unifiedMonitorLauncherPath
+Copy-WindowsPowerShellScript "monitor-window-placement.ps1" (Join-Path $unifiedMonitorDir "monitor-window-placement.ps1")
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge-monitor-state.schema.json") -Destination (Join-Path $unifiedMonitorDir "bridge-monitor-state.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "result.schema.json") -Destination (Join-Path $installDir "result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "analysis-result.schema.json") -Destination (Join-Path $installDir "analysis-result.schema.json") -Force

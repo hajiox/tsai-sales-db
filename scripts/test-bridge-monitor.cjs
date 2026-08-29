@@ -14,6 +14,8 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-bridge-unified-moni
 const stateDirectory = path.join(tempDir, "states");
 const monitorPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor.ps1");
 const monitorSource = fs.readFileSync(monitorPath, "utf8");
+const placementScriptPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "monitor-window-placement.ps1");
+const placementConfigPath = path.join(tempDir, "monitor.config.json");
 const schemaPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor-state.schema.json");
 const mutexName = `Local\\CodexBridgeUnifiedMonitorTest_${process.pid}`;
 const worker = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
@@ -23,6 +25,7 @@ const worker = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
 let persistent = null;
 
 fs.mkdirSync(stateDirectory, { recursive: true });
+fs.writeFileSync(placementConfigPath, `${JSON.stringify({ preferredDisplayNumber: 1, offsetX: 12, offsetY: 18 })}\n`, "utf8");
 const now = new Date();
 const iso = now.toISOString();
 const baseState = ({ system, systemLabel, workerId, workerName, executionMode = "interactive", status, taskLabel, currentStep, progress = 0 }) => ({
@@ -65,6 +68,8 @@ function runMonitor(ackName) {
     "-File", monitorPath,
     "-StateDirectory", stateDirectory,
     "-AckPath", path.join(tempDir, ackName),
+    "-WindowPlacementScript", placementScriptPath,
+    "-WindowConfigPath", placementConfigPath,
     "-MutexName", mutexName,
     "-PlainOutput",
     "-ExitAfterIterations", "1",
@@ -177,6 +182,10 @@ try {
   assert.doesNotMatch(first.output, /繝|縺|蜿/);
   assert.equal(first.ack.monitorId, "codex-bridge-unified");
   assert.equal(first.ack.monitorVersion, 2);
+  assert.equal(first.ack.windowPlacement.requested, true);
+  assert.equal(first.ack.windowPlacement.displayNumber, 1);
+  assert.match(first.ack.windowPlacement.deviceName, /^\\\\\.\\DISPLAY\d+$/i);
+  assert.equal(first.ack.windowPlacement.applied, false, "PlainOutputテストでは実ウィンドウを移動しない");
   assert.doesNotThrow(() => process.kill(worker.pid, 0), "モニター終了でBridge相当プロセスを停止してはいけない");
 
   const staleTsg = baseState({

@@ -3,6 +3,8 @@
   [string]$StateDirectory,
   [Parameter(Mandatory = $true)]
   [string]$AckPath,
+  [string]$WindowPlacementScript,
+  [string]$WindowConfigPath,
   [string]$MutexName = "Local\CodexBridgeUnifiedMonitor",
   [ValidateRange(100, 10000)]
   [int]$RefreshMilliseconds = 1000,
@@ -17,6 +19,17 @@
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $Host.UI.RawUI.WindowTitle = "Codex Bridge 統合モニター"
+$windowPlacement = $null
+$windowPlacementError = $null
+$windowPlacementApplied = $false
+if ($WindowPlacementScript -and (Test-Path -LiteralPath $WindowPlacementScript -PathType Leaf)) {
+  try {
+    . $WindowPlacementScript
+    $windowPlacement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
+  } catch {
+    $windowPlacementError = $_.Exception.Message
+  }
+}
 $finalStatuses = @("completed", "waiting_for_user", "needs_review", "failed", "cancelled")
 $knownSystems = @(
   @{ id = "tsa"; label = "TSA" },
@@ -163,6 +176,13 @@ public static class CodexBridgeUnifiedMonitorWindow {
   }
   if (-not $SkipForeground -and $windowHandle -ne [IntPtr]::Zero) {
     [void][CodexBridgeUnifiedMonitorWindow]::ShowWindowAsync($windowHandle, 9)
+    if ($windowPlacement) {
+      try {
+        $windowPlacementApplied = Move-CodexBridgeMonitorWindow $windowHandle $windowPlacement
+      } catch {
+        $windowPlacementError = $_.Exception.Message
+      }
+    }
     $topmostShown = [CodexBridgeUnifiedMonitorWindow]::SetWindowPos($windowHandle, [IntPtr](-1), 0, 0, 0, 0, 0x0043)
     Start-Sleep -Milliseconds 150
     $topmostReleased = [CodexBridgeUnifiedMonitorWindow]::SetWindowPos($windowHandle, [IntPtr](-2), 0, 0, 0, 0, 0x0043)
@@ -186,6 +206,21 @@ $acknowledgement = @{
   stateDirectory = $StateDirectory
   foregroundActivated = $foregroundActivated
   broughtForward = $broughtForward
+  windowPlacement = if ($windowPlacement) {
+    @{
+      requested = $true
+      applied = $windowPlacementApplied
+      displayNumber = $windowPlacement.displayNumber
+      deviceName = $windowPlacement.deviceName
+      x = $windowPlacement.x
+      y = $windowPlacement.y
+      width = $windowPlacement.width
+      height = $windowPlacement.height
+      error = $windowPlacementError
+    }
+  } else {
+    @{ requested = $false; applied = $false; error = $windowPlacementError }
+  }
   startedAt = [DateTimeOffset]::UtcNow.ToString("o")
 }
 Write-Utf8Json $AckPath $acknowledgement
