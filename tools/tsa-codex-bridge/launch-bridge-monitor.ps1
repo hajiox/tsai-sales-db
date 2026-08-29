@@ -95,7 +95,6 @@ if (-not $monitor) {
 
 $placementDeadline = (Get-Date).AddSeconds(8)
 while ((Get-Date) -lt $placementDeadline) {
-  Start-Sleep -Milliseconds 100
   $startedAcknowledgement = Read-Utf8Json $AckPath
   if (
     $startedAcknowledgement -and
@@ -103,6 +102,8 @@ while ((Get-Date) -lt $placementDeadline) {
     (Test-ProcessId $startedAcknowledgement.monitorPid)
   ) {
     [void](Move-AcknowledgedMonitor $startedAcknowledgement)
-    break
+    Start-Sleep -Milliseconds 250
+  } else {
+    Start-Sleep -Milliseconds 100
   }
 }

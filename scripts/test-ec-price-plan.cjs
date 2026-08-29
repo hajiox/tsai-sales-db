@@ -234,6 +234,11 @@ assert.match(monitorLauncherSource, /Move-CodexBridgeMonitorWindow/);
 assert.match(monitorLauncherSource, /function Move-AcknowledgedMonitor/);
 assert.match(monitorLauncherSource, /\$placementDeadline = \(Get-Date\)\.AddSeconds\(8\)/);
 assert.match(monitorLauncherSource, /\[void\]\(Move-AcknowledgedMonitor \$startedAcknowledgement\)/);
+const placementStabilizationSource = monitorLauncherSource.slice(
+  monitorLauncherSource.indexOf("$placementDeadline ="),
+);
+assert.doesNotMatch(placementStabilizationSource, /Move-AcknowledgedMonitor \$startedAcknowledgement\)[\s\S]{0,80}\bbreak\b/);
+assert.match(placementStabilizationSource, /Start-Sleep -Milliseconds 250/);
 assert.match(bridgeSource, /unified desktop monitor visible/);
 assert.match(bridgeSource, /Codex Bridge Monitor/);
 assert.match(bridgeSource, /UNIFIED_MONITOR_STATE_DIR/);
