@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.14";
+const VERSION = "1.9.15";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -121,6 +121,7 @@ let currentCodexPid = null;
 let desktopMonitorState = null;
 let lastDesktopTerminalState = readPreviousDesktopTerminalState();
 let desktopMonitorLaunchRequestedAt = 0;
+let desktopMonitorUnverifiedCount = 0;
 
 process.on("SIGINT", () => { stopping = true; });
 process.on("SIGTERM", () => { stopping = true; });
@@ -6065,17 +6066,11 @@ function acquireLock() {
 
 function isProcessRunning(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
-  if (process.platform === "win32") {
-    const checked = spawnSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
-    return checked.status === 0 && new RegExp(`,\"${pid}\",`).test(String(checked.stdout || ""));
-  }
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
+  } catch (error) {
+    if (error?.code === "EPERM") return true;
     return false;
   }
 }
@@ -6276,11 +6271,20 @@ function ensureUnifiedDesktopMonitor(bringForward) {
     const monitorAlive = existing
       && existing.monitorId === "codex-bridge-unified"
       && isProcessRunning(Number(existing.monitorPid));
-    if (monitorAlive && !bringForward) {
-      return;
+    if (monitorAlive) {
+      desktopMonitorUnverifiedCount = 0;
+      if (!bringForward) return;
+    } else if (existing?.monitorId === "codex-bridge-unified") {
+      desktopMonitorUnverifiedCount += 1;
+      if (desktopMonitorUnverifiedCount < 3) return;
+    } else {
+      desktopMonitorUnverifiedCount = 0;
     }
     if (!monitorAlive && Date.now() - desktopMonitorLaunchRequestedAt < 10_000) return;
-    if (!monitorAlive) rmSync(MONITOR_ACK_PATH, { force: true });
+    if (!monitorAlive) {
+      rmSync(MONITOR_ACK_PATH, { force: true });
+      desktopMonitorUnverifiedCount = 0;
+    }
     const launcherArguments = [
       "-NoProfile",
       "-ExecutionPolicy", "Bypass",
@@ -6317,6 +6321,7 @@ function verifyDesktopMonitorLaunch(attempt) {
           && isProcessRunning(monitorPid)
         ) {
           desktopMonitorLaunchRequestedAt = 0;
+          desktopMonitorUnverifiedCount = 0;
           log(
             `unified desktop monitor visible (pid ${monitorPid}, foreground ${acknowledgement?.foregroundActivated === true ? "confirmed" : "requested"})`,
           );

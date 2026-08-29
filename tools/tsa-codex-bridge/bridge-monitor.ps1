@@ -409,6 +409,10 @@ try {
     $ageBucket = [Math]::Floor($now.ToUnixTimeSeconds() / 5)
     $renderKey = (($snapshot.states | ConvertTo-Json -Depth 8 -Compress) + "|" + ($snapshot.errors -join "|") + "|" + $ageBucket)
     Render-Dashboard $lines $renderKey
+    if (-not (Test-Path -LiteralPath $AckPath -PathType Leaf) -or ($iteration % 30) -eq 0) {
+      $acknowledgement.lastConfirmedAt = [DateTimeOffset]::UtcNow.ToString("o")
+      Write-Utf8Json $AckPath $acknowledgement
+    }
     $iteration += 1
     if ($ExitAfterIterations -gt 0 -and $iteration -ge $ExitAfterIterations) { break }
     Start-Sleep -Milliseconds $RefreshMilliseconds

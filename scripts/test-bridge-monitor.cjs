@@ -14,6 +14,8 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-bridge-unified-moni
 const stateDirectory = path.join(tempDir, "states");
 const monitorPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor.ps1");
 const monitorSource = fs.readFileSync(monitorPath, "utf8");
+const bridgePath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge.mjs");
+const bridgeSource = fs.readFileSync(bridgePath, "utf8");
 const placementScriptPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "monitor-window-placement.ps1");
 const placementConfigPath = path.join(tempDir, "monitor.config.json");
 const schemaPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor-state.schema.json");
@@ -93,6 +95,15 @@ try {
   assert.match(monitorSource, /\[Console\]::Write\(\$entry\.text\)/);
   assert.match(monitorSource, /ConvertTo-StableConsoleLine/);
   assert.doesNotMatch(monitorSource, /Write-Host \$text\.PadRight/);
+  assert.match(monitorSource, /Test-Path -LiteralPath \$AckPath -PathType Leaf/);
+  assert.match(monitorSource, /\$acknowledgement\.lastConfirmedAt/);
+  const processProbeSource = bridgeSource.slice(
+    bridgeSource.indexOf("function isProcessRunning"),
+    bridgeSource.indexOf("function releaseLock"),
+  );
+  assert.match(processProbeSource, /process\.kill\(pid, 0\)/);
+  assert.doesNotMatch(processProbeSource, /tasklist|checked\.stdout/);
+  assert.match(bridgeSource, /desktopMonitorUnverifiedCount < 3/);
 
   writeState("tsa-interactive", baseState({
     system: "tsa",
@@ -229,6 +240,15 @@ try {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   }
   assert.ok(fs.existsSync(persistentAckPath), "常駐モニターが起動確認を書き込む");
+  const initialPersistentAck = JSON.parse(fs.readFileSync(persistentAckPath, "utf8"));
+  fs.rmSync(persistentAckPath, { force: true });
+  const ackRecoveryDeadline = Date.now() + 5_000;
+  while (!fs.existsSync(persistentAckPath) && Date.now() < ackRecoveryDeadline) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  assert.ok(fs.existsSync(persistentAckPath), "常駐モニターが消失した起動確認を自己復元する");
+  const recoveredPersistentAck = JSON.parse(fs.readFileSync(persistentAckPath, "utf8"));
+  assert.equal(recoveredPersistentAck.monitorPid, initialPersistentAck.monitorPid, "ACK復元でモニターを重複起動しない");
 
   const statePath = path.join(stateDirectory, "tsa-interactive.json");
   const replaceDeadline = Date.now() + 2_500;
