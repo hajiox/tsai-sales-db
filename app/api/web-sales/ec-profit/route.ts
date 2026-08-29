@@ -393,7 +393,7 @@ function settlementRetryPolicy(channel: Channel, status: string, attemptedAt?: s
     label: channel === "qoo10"
       ? "毎週木曜9:15に自動再照合"
       : channel === "rakuten"
-        ? "毎月10営業日ごろ9:15に自動再照合"
+        ? "毎月5日・20日／10営業日ごろ9:15に自動再照合"
         : attemptedAt
           ? "毎朝9:15に自動再実行"
           : "次回9:15に自動実行",

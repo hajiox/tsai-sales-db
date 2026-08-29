@@ -7,7 +7,7 @@ export type EcProfitRetryChannel =
   | "qoo10"
   | "tiktok";
 
-const RAKUTEN_BILLPAY_CHECK_DAYS = new Set([12, 14, 15, 17, 18, 20]);
+const RAKUTEN_BILLPAY_CHECK_DAYS = new Set([5, 12, 14, 15, 17, 18, 20]);
 
 export function settlementPeriodMonthsAgo(year: number, monthIndex: number, monthsAgo: number) {
   if (!Number.isInteger(monthsAgo) || monthsAgo < 1) {
@@ -38,8 +38,9 @@ export function isAutomaticSettlementRetryDue(input: {
     return input.weekday === 4;
   }
   if (input.channel === "rakuten") {
-    // BillPay announces provisional statements around the 10th business day.
-    // The bounded window covers weekends and Japanese holidays without a daily Codex run.
+    // BillPay publishes final statements on the 5th and 20th, and provisional
+    // statements around the 10th business day. The bounded mid-month window
+    // covers weekends and Japanese holidays without a daily Codex run.
     return RAKUTEN_BILLPAY_CHECK_DAYS.has(input.day);
   }
   return input.monthsAgo === 1;

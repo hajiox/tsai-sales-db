@@ -67,9 +67,11 @@ assert.deepEqual(settlementPeriodMonthsAgo(2026, 8, 2), {
 });
 assert.equal(isAutomaticSettlementRetryDue({ channel: "qoo10", day: 3, weekday: 4, monthsAgo: 2 }), true);
 assert.equal(isAutomaticSettlementRetryDue({ channel: "qoo10", day: 4, weekday: 5, monthsAgo: 2 }), false);
+assert.equal(isAutomaticSettlementRetryDue({ channel: "rakuten", day: 5, weekday: 6, monthsAgo: 2 }), true);
 assert.equal(isAutomaticSettlementRetryDue({ channel: "rakuten", day: 12, weekday: 6, monthsAgo: 2 }), true);
 assert.equal(isAutomaticSettlementRetryDue({ channel: "rakuten", day: 15, weekday: 2, monthsAgo: 2 }), true);
 assert.equal(isAutomaticSettlementRetryDue({ channel: "rakuten", day: 13, weekday: 0, monthsAgo: 2 }), false);
+assert.equal(isAutomaticSettlementRetryDue({ channel: "rakuten", day: 20, weekday: 0, monthsAgo: 2 }), true);
 assert.equal(isAutomaticSettlementRetryDue({ channel: "amazon", day: 13, weekday: 0, monthsAgo: 2 }), false);
 assert.equal(isQoo10SettledDetailUnavailable({
   summary: "Qoo10の2026年7月精算は完了済みですが、詳細内訳を照合できませんでした。",
