@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory = $true)][string]$StateDirectory,
   [Parameter(Mandatory = $true)][string]$AckPath,
   [string]$WindowConfigPath,
+  [string]$WindowPlacementBase64,
   [switch]$BringForward
 )
 
@@ -32,6 +33,11 @@ if (-not $WindowConfigPath) {
 if (Test-Path -LiteralPath $placementScript -PathType Leaf) {
   . $placementScript
 }
+$inlineWindowPlacement = if ($WindowPlacementBase64) {
+  ConvertFrom-CodexBridgeMonitorPlacementBase64 $WindowPlacementBase64
+} else {
+  $null
+}
 
 function Read-Utf8Json([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) { return $null }
@@ -61,7 +67,11 @@ function Move-AcknowledgedMonitor($Acknowledgement) {
   ) {
     return $false
   }
-  $placement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
+  $placement = if ($inlineWindowPlacement) {
+    $inlineWindowPlacement
+  } else {
+    Get-CodexBridgeMonitorPlacement $WindowConfigPath
+  }
   if (-not $placement) { return $false }
   $script:lastPlacementAvailable = $true
   $script:lastMoveResult = Move-CodexBridgeMonitorWindow ([IntPtr]([int64]$Acknowledgement.windowHandle)) $placement
@@ -111,6 +121,9 @@ $arguments = @(
   "-WindowPlacementScript", "`"$placementScript`""
   "-WindowConfigPath", "`"$WindowConfigPath`""
 )
+if ($WindowPlacementBase64) {
+  $arguments += @("-WindowPlacementBase64", "`"$WindowPlacementBase64`"")
+}
 
 $monitor = Start-Process -FilePath $consoleHost -ArgumentList $arguments -WindowStyle Normal -PassThru
 if (-not $monitor) {

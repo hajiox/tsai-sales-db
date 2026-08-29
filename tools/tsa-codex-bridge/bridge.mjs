@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.22";
+const VERSION = "1.9.23";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -30,6 +30,7 @@ const DEFAULT_UNIFIED_MONITOR_DIR = process.env.LOCALAPPDATA
 const UNIFIED_MONITOR_DIR = resolve(process.env.CODEX_BRIDGE_MONITOR_DIR || DEFAULT_UNIFIED_MONITOR_DIR);
 const UNIFIED_MONITOR_STATE_DIR = join(UNIFIED_MONITOR_DIR, "states");
 const UNIFIED_MONITOR_ACK_PATH = join(UNIFIED_MONITOR_DIR, "monitor-ack.json");
+const UNIFIED_MONITOR_CONFIG_PATH = join(UNIFIED_MONITOR_DIR, "monitor.config.json");
 const COMMON_MONITOR_SCRIPT_PATH = join(UNIFIED_MONITOR_DIR, "bridge-monitor.ps1");
 const COMMON_MONITOR_LAUNCHER_PATH = join(UNIFIED_MONITOR_DIR, "launch-bridge-monitor.ps1");
 const RECIPE_SNS_RENDERER_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "render-recipe-sns-image.ps1");
@@ -6285,14 +6286,7 @@ function ensureUnifiedDesktopMonitor(bringForward) {
       rmSync(MONITOR_ACK_PATH, { force: true });
       desktopMonitorUnverifiedCount = 0;
     }
-    const launcherArguments = [
-      "-NoProfile",
-      "-ExecutionPolicy", "Bypass",
-      "-File", MONITOR_LAUNCHER_PATH,
-      "-StateDirectory", UNIFIED_MONITOR_STATE_DIR,
-      "-AckPath", MONITOR_ACK_PATH,
-    ];
-    if (bringForward) launcherArguments.push("-BringForward");
+    const launcherArguments = unifiedMonitorLauncherArguments(bringForward);
     const monitor = spawn("powershell.exe", launcherArguments, {
       stdio: "ignore",
       windowsHide: true,
@@ -6335,13 +6329,7 @@ function verifyDesktopMonitorLaunch(attempt) {
     if (attempt === 9) {
       log("WARN unified desktop monitor did not acknowledge; retrying launcher");
       try {
-        spawn("powershell.exe", [
-          "-NoProfile",
-          "-ExecutionPolicy", "Bypass",
-          "-File", MONITOR_LAUNCHER_PATH,
-          "-StateDirectory", UNIFIED_MONITOR_STATE_DIR,
-          "-AckPath", MONITOR_ACK_PATH,
-        ], {
+        spawn("powershell.exe", unifiedMonitorLauncherArguments(false), {
           stdio: "ignore",
           windowsHide: true,
         });
@@ -6356,6 +6344,56 @@ function verifyDesktopMonitorLaunch(attempt) {
       log("WARN unified desktop monitor visibility could not be confirmed");
     }
   }, 500);
+}
+
+function unifiedMonitorLauncherArguments(bringForward) {
+  const launcherArguments = [
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", MONITOR_LAUNCHER_PATH,
+    "-StateDirectory", UNIFIED_MONITOR_STATE_DIR,
+    "-AckPath", MONITOR_ACK_PATH,
+    "-WindowConfigPath", UNIFIED_MONITOR_CONFIG_PATH,
+  ];
+  const inlinePlacement = readUnifiedMonitorPlacementBase64();
+  if (inlinePlacement) launcherArguments.push("-WindowPlacementBase64", inlinePlacement);
+  if (bringForward) launcherArguments.push("-BringForward");
+  return launcherArguments;
+}
+
+function readUnifiedMonitorPlacementBase64() {
+  try {
+    const candidate = JSON.parse(readFileSync(UNIFIED_MONITOR_CONFIG_PATH, "utf8"));
+    const placement = {
+      displayNumber: Number(candidate.preferredDisplayNumber),
+      deviceName: typeof candidate.preferredDeviceName === "string" ? candidate.preferredDeviceName : "",
+      x: Number(candidate.absoluteX),
+      y: Number(candidate.absoluteY),
+      width: Number(candidate.width),
+      height: Number(candidate.height),
+      workingLeft: Number(candidate.workingLeft),
+      workingTop: Number(candidate.workingTop),
+      workingWidth: Number(candidate.workingWidth),
+      workingHeight: Number(candidate.workingHeight),
+    };
+    const integerInRange = (value, minimum, maximum) => (
+      Number.isInteger(value) && value >= minimum && value <= maximum
+    );
+    if (
+      !integerInRange(placement.displayNumber, 1, 32)
+      || !integerInRange(placement.x, -50_000, 50_000)
+      || !integerInRange(placement.y, -50_000, 50_000)
+      || !integerInRange(placement.width, 0, 10_000)
+      || !integerInRange(placement.height, 0, 10_000)
+      || !integerInRange(placement.workingLeft, -50_000, 50_000)
+      || !integerInRange(placement.workingTop, -50_000, 50_000)
+      || !integerInRange(placement.workingWidth, 320, 20_000)
+      || !integerInRange(placement.workingHeight, 240, 20_000)
+    ) return null;
+    return Buffer.from(JSON.stringify(placement), "utf8").toString("base64");
+  } catch {
+    return null;
+  }
 }
 
 function readDesktopMonitorAcknowledgement() {

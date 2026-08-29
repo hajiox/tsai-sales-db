@@ -29,7 +29,7 @@ let persistent = null;
 let placementProbe = null;
 
 fs.mkdirSync(stateDirectory, { recursive: true });
-fs.writeFileSync(placementConfigPath, `${JSON.stringify({
+const placementConfig = {
   preferredDisplayNumber: 3,
   preferredDeviceName: "\\\\.\\DISPLAY8",
   absoluteX: 1164,
@@ -40,7 +40,20 @@ fs.writeFileSync(placementConfigPath, `${JSON.stringify({
   workingTop: -1080,
   workingWidth: 1920,
   workingHeight: 1032,
-})}\n`, "utf8");
+};
+fs.writeFileSync(placementConfigPath, `${JSON.stringify(placementConfig)}\n`, "utf8");
+const inlinePlacementBase64 = Buffer.from(JSON.stringify({
+  displayNumber: placementConfig.preferredDisplayNumber,
+  deviceName: placementConfig.preferredDeviceName,
+  x: placementConfig.absoluteX,
+  y: placementConfig.absoluteY,
+  width: placementConfig.width,
+  height: placementConfig.height,
+  workingLeft: placementConfig.workingLeft,
+  workingTop: placementConfig.workingTop,
+  workingWidth: placementConfig.workingWidth,
+  workingHeight: placementConfig.workingHeight,
+}), "utf8").toString("base64");
 const now = new Date();
 const iso = now.toISOString();
 const baseState = ({ system, systemLabel, workerId, workerName, executionMode = "interactive", status, taskLabel, currentStep, progress = 0 }) => ({
@@ -76,19 +89,21 @@ function writeState(name, state) {
   fs.writeFileSync(path.join(stateDirectory, `${name}.json`), `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-function runMonitor(ackName) {
-  const result = spawnSync("powershell.exe", [
+function runMonitor(ackName, { configPath = placementConfigPath, inlinePlacement = null } = {}) {
+  const args = [
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
     "-File", monitorPath,
     "-StateDirectory", stateDirectory,
     "-AckPath", path.join(tempDir, ackName),
     "-WindowPlacementScript", placementScriptPath,
-    "-WindowConfigPath", placementConfigPath,
+    "-WindowConfigPath", configPath,
     "-MutexName", mutexName,
     "-PlainOutput",
     "-ExitAfterIterations", "1",
-  ], {
+  ];
+  if (inlinePlacement) args.push("-WindowPlacementBase64", inlinePlacement);
+  const result = spawnSync("powershell.exe", args, {
     encoding: "utf8",
     timeout: 30_000,
     windowsHide: true,
@@ -120,6 +135,8 @@ try {
   assert.match(processProbeSource, /process\.kill\(pid, 0\)/);
   assert.doesNotMatch(processProbeSource, /tasklist|checked\.stdout/);
   assert.match(bridgeSource, /desktopMonitorUnverifiedCount < 3/);
+  assert.match(bridgeSource, /-WindowPlacementBase64/);
+  assert.match(placementScriptSource, /ConvertFrom-CodexBridgeMonitorPlacementBase64/);
 
   writeState("tsa-interactive", baseState({
     system: "tsa",
@@ -190,7 +207,10 @@ try {
   });
   fs.writeFileSync(path.join(stateDirectory, "broken.json"), "{ invalid json", "utf8");
 
-  const first = runMonitor("ack-first.json");
+  const first = runMonitor("ack-first.json", {
+    configPath: path.join(tempDir, "missing-monitor.config.json"),
+    inlinePlacement: inlinePlacementBase64,
+  });
   assert.match(first.output, /Codex Bridge 統合モニター/);
   assert.match(first.output, /TSA/);
   assert.match(first.output, /事務所PC \[実行中 62%\] レシピSNS素材AI生成/);

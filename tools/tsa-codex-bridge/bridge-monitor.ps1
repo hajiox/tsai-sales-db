@@ -5,6 +5,7 @@
   [string]$AckPath,
   [string]$WindowPlacementScript,
   [string]$WindowConfigPath,
+  [string]$WindowPlacementBase64,
   [string]$MutexName = "Local\CodexBridgeUnifiedMonitor",
   [ValidateRange(100, 10000)]
   [int]$RefreshMilliseconds = 1000,
@@ -36,7 +37,12 @@ $windowPlacementApplied = $false
 if ($WindowPlacementScript -and (Test-Path -LiteralPath $WindowPlacementScript -PathType Leaf)) {
   try {
     . $WindowPlacementScript
-    $windowPlacement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
+    if ($WindowPlacementBase64) {
+      $windowPlacement = ConvertFrom-CodexBridgeMonitorPlacementBase64 $WindowPlacementBase64
+    }
+    if (-not $windowPlacement) {
+      $windowPlacement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
+    }
   } catch {
     $windowPlacementError = $_.Exception.Message
   }

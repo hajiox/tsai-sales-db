@@ -263,9 +263,10 @@ assert.doesNotMatch(
   "非表示ランチャーをdetached起動すると可視PowerShellの生成が失敗するため禁止する",
 );
 assert.ok(
-  (desktopMonitorLaunchSource.match(/"-File", MONITOR_LAUNCHER_PATH/g) || []).length >= 2,
+  (desktopMonitorLaunchSource.match(/unifiedMonitorLauncherArguments\((?:bringForward|false)\)/g) || []).length >= 2,
   "初回と再試行の両方を共通モニターランチャー経由にする",
 );
+assert.match(desktopMonitorLaunchSource, /"-File", MONITOR_LAUNCHER_PATH/);
 assert.doesNotMatch(desktopMonitorLaunchSource, /taskkill/i, "モニターからBridgeまたはCodexを停止してはいけない");
 assert.doesNotMatch(bridgeSource, /terminateAcknowledgedDesktopMonitor/);
 const alreadyCurrentCheck = bridgeSource.indexOf('planSite.observed_price) === Number(planSite.target_price');

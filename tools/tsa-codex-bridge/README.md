@@ -47,6 +47,7 @@ The TSA automation screen shows both versions and warns when the installed Bridg
 
 ## Operation note
 
+- 2026-08-29: Bridge 1.9.23 validates the saved absolute monitor placement in Node and passes it directly to both the hidden launcher and visible monitor as compact Base64 JSON. Scheduled-task startup no longer depends on PowerShell discovering the local display configuration file during console initialization; the file remains the persistent source of truth.
 - 2026-08-29: Bridge 1.9.22 makes the monitor verify its own configured position for three consecutive refreshes after startup and reapply it when Windows overwrites the first console placement. The launcher records bounded startup diagnostics, while the existing single monitor PID is reused instead of flashing replacement PowerShell windows.
 - 2026-08-29: Bridge 1.9.21 stabilizes the configured monitor position for eight seconds after acknowledgement. Windows may apply its default cascading console position after the first successful move; the launcher now reapplies placement to the same acknowledged window until console initialization is complete.
 - 2026-08-29: Bridge 1.9.20 closes an installer race with the interactive Scheduled Task watchdog. Updates now stop the task itself before replacing runtime files and start it only after every Bridge and monitor file is installed, preventing a new worker from loading a mixed old/new monitor bundle.

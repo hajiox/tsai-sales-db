@@ -8,6 +8,56 @@ function Read-CodexBridgeMonitorWindowConfig([string]$Path) {
   }
 }
 
+function ConvertFrom-CodexBridgeMonitorPlacementBase64([string]$Value) {
+  if (-not $Value) { return $null }
+  try {
+    $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+    $candidate = $strictUtf8.GetString([Convert]::FromBase64String($Value)) | ConvertFrom-Json -ErrorAction Stop
+    [int]$x = 0
+    [int]$y = 0
+    [int]$width = 0
+    [int]$height = 0
+    [int]$displayNumber = 1
+    [int]$workingLeft = 0
+    [int]$workingTop = 0
+    [int]$workingWidth = 0
+    [int]$workingHeight = 0
+    if (
+      -not [int]::TryParse([string]$candidate.x, [ref]$x) -or
+      -not [int]::TryParse([string]$candidate.y, [ref]$y) -or
+      -not [int]::TryParse([string]$candidate.width, [ref]$width) -or
+      -not [int]::TryParse([string]$candidate.height, [ref]$height) -or
+      -not [int]::TryParse([string]$candidate.workingLeft, [ref]$workingLeft) -or
+      -not [int]::TryParse([string]$candidate.workingTop, [ref]$workingTop) -or
+      -not [int]::TryParse([string]$candidate.workingWidth, [ref]$workingWidth) -or
+      -not [int]::TryParse([string]$candidate.workingHeight, [ref]$workingHeight)
+    ) { return $null }
+    [void][int]::TryParse([string]$candidate.displayNumber, [ref]$displayNumber)
+    if (
+      $x -lt -50000 -or $x -gt 50000 -or
+      $y -lt -50000 -or $y -gt 50000 -or
+      $width -lt 0 -or $width -gt 10000 -or
+      $height -lt 0 -or $height -gt 10000 -or
+      $workingWidth -lt 320 -or $workingWidth -gt 20000 -or
+      $workingHeight -lt 240 -or $workingHeight -gt 20000
+    ) { return $null }
+    return [pscustomobject]@{
+      displayNumber = [Math]::Max(1, $displayNumber)
+      deviceName = [string]$candidate.deviceName
+      x = $x
+      y = $y
+      width = $width
+      height = $height
+      workingLeft = $workingLeft
+      workingTop = $workingTop
+      workingWidth = $workingWidth
+      workingHeight = $workingHeight
+    }
+  } catch {
+    return $null
+  }
+}
+
 function Get-CodexBridgeMonitorPlacement([string]$ConfigPath) {
   $config = Read-CodexBridgeMonitorWindowConfig $ConfigPath
   if (-not $config) { return $null }
