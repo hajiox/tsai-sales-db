@@ -635,7 +635,7 @@ function SettlementActivityStatus({
         <strong className="text-sm">現在、実行中の処理はありません</strong>
         <p className="mt-0.5 text-xs">
           {incompleteCount > 0
-            ? `${incompleteCount}媒体は処理完了済みで、公式明細の公開待ちです。次回予定時刻に自動確認します。`
+            ? `${incompleteCount}媒体は公式明細の確定または照合待ちです。次回予定時刻に自動確認します。`
             : "すべての精算取得が完了しています。"}
         </p>
       </div>
@@ -1029,7 +1029,7 @@ function settlementStatusLabel(status: string) {
     queued: "順番待ち",
     running: "実行中",
     completed: "完了",
-    needs_review: "処理完了・公式公開待ち",
+    needs_review: "処理完了・照合待ち",
     waiting_for_user: "操作待ち",
     failed: "処理停止・エラー",
     not_started: "未実行",

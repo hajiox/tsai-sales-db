@@ -5,6 +5,11 @@ import { WEB_SALES_CHANNELS } from "@/lib/web-sales-automation/types";
 import { enqueueCodexJobs } from "@/lib/web-sales-codex/server";
 import { AD_COST_CODEX_TASKS, EC_PROFIT_CODEX_TASKS } from "@/lib/web-sales-codex/tasks";
 import { upsertEcProfitEstimate, type EcProfitChannel } from "@/lib/web-sales-codex/ec-profit-estimate";
+import {
+  isAutomaticSettlementRetryDue,
+  settlementPeriodMonthsAgo,
+  type EcProfitRetryChannel,
+} from "@/lib/web-sales-codex/ec-profit-retry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,23 +22,28 @@ function isAuthorized(request: Request) {
 }
 
 function previousMonthPeriod(year: number, monthIndex: number) {
-  const end = new Date(Date.UTC(year, monthIndex, 0));
-  const previousYear = end.getUTCFullYear();
-  const previousMonth = String(end.getUTCMonth() + 1).padStart(2, "0");
-  return {
-    startDate: `${previousYear}-${previousMonth}-01`,
-    endDate: end.toISOString().slice(0, 10),
-    reportMonth: `${previousYear}-${previousMonth}`,
-  };
+  return settlementPeriodMonthsAgo(year, monthIndex, 1);
 }
 
-async function enqueueIncompleteSettlementRetries(input: {
+async function enqueueIncompleteSettlementRetryPeriod(input: {
   year: number;
   monthIndex: number;
   day: number;
+  weekday: number;
   dateKey: string;
+  monthsAgo: number;
 }) {
-  const period = previousMonthPeriod(input.year, input.monthIndex);
+  const period = settlementPeriodMonthsAgo(input.year, input.monthIndex, input.monthsAgo);
+  const dueChannels = EC_PROFIT_CODEX_TASKS
+    .map((task) => task.channel as EcProfitRetryChannel)
+    .filter((channel) => isAutomaticSettlementRetryDue({
+      channel,
+      day: input.day,
+      weekday: input.weekday,
+      monthsAgo: input.monthsAgo,
+    }));
+  if (dueChannels.length === 0) return [];
+
   const supabase = getWebSalesAutomationServiceClient();
   const { data, error } = await supabase
     .from("ec_profit_monthly")
@@ -59,11 +69,9 @@ async function enqueueIncompleteSettlementRetries(input: {
       latestStatusByChannel.set(channel, String(job.status || ""));
     }
   }
-  const retryChannels = EC_PROFIT_CODEX_TASKS
-    .map((task) => task.channel)
+  const retryChannels = dueChannels
     .filter((channel) => !completed.has(channel))
-    .filter((channel) => latestStatusByChannel.get(channel) !== "waiting_for_user")
-    .filter((channel) => channel !== "qoo10" || input.day >= 5);
+    .filter((channel) => latestStatusByChannel.get(channel) !== "waiting_for_user");
   if (retryChannels.length === 0) return [];
 
   for (const channel of retryChannels) {
@@ -87,6 +95,20 @@ async function enqueueIncompleteSettlementRetries(input: {
   });
 }
 
+async function enqueueIncompleteSettlementRetries(input: {
+  year: number;
+  monthIndex: number;
+  day: number;
+  weekday: number;
+  dateKey: string;
+}) {
+  const jobs = [];
+  for (const monthsAgo of [1, 2]) {
+    jobs.push(...await enqueueIncompleteSettlementRetryPeriod({ ...input, monthsAgo }));
+  }
+  return jobs;
+}
+
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -100,6 +122,7 @@ export async function GET(request: Request) {
     const year = jst.getUTCFullYear();
     const monthIndex = jst.getUTCMonth();
     const day = jst.getUTCDate();
+    const weekday = jst.getUTCDay();
     const dateKey = jst.toISOString().slice(0, 10);
 
     let triggerType: "scheduled_half_month" | "scheduled_previous_month" | null = null;
@@ -124,7 +147,7 @@ export async function GET(request: Request) {
     // The 16th is reserved for the 1st-15th quantity snapshot. Do not mix
     // previous-month settlement recovery into that operator-facing run.
     const retryJobs = !forced && day !== 1 && day !== 16
-      ? await enqueueIncompleteSettlementRetries({ year, monthIndex, day, dateKey })
+      ? await enqueueIncompleteSettlementRetries({ year, monthIndex, day, weekday, dateKey })
       : [];
 
     if (!triggerType || !periodStart || !periodEnd) {

@@ -224,7 +224,7 @@ export async function GET(request: Request) {
         settlementHeartbeatAt: settlementJob?.heartbeat_at || null,
         settlementAttemptedAt,
         settlementReason: displayedReason,
-        retryPolicy: settlementRetryPolicy(channel, settlementStatus, month, settlementAttemptedAt, displayedReason),
+        retryPolicy: settlementRetryPolicy(channel, settlementStatus, settlementAttemptedAt, displayedReason),
         hasSettlement: Boolean(settlement),
         settlementComplete,
       };
@@ -352,7 +352,7 @@ function settlementReason(
   if (job?.error_message) return job.error_message;
   if (job?.current_step) return job.current_step;
   return channel === "qoo10"
-    ? "Qoo10の月次精算明細は翌月5日の発行後に取得します。"
+    ? "Qoo10は配送完了後の水曜に注文単位で精算されます。毎週木曜に精算履歴を照合します。"
     : "精算明細がまだ取り込まれていません。";
 }
 
@@ -364,11 +364,15 @@ function automaticRetryWording(value: string) {
     )
     .replace(
       "QSM記載の毎月5日発行後に再取得が必要です。",
-      "QSM記載の毎月5日発行後、毎朝9:15に自動再取得します。",
+      "Qoo10は注文単位の水曜精算です。毎週木曜9:15に精算履歴を自動再照合します。",
+    )
+    .replace(
+      "Qoo10の月次精算明細は翌月5日の発行後に取得します。",
+      "Qoo10は注文単位の水曜精算です。毎週木曜9:15に精算履歴を自動再照合します。",
     );
 }
 
-function settlementRetryPolicy(channel: Channel, status: string, month: string, attemptedAt?: string | null, reason = "") {
+function settlementRetryPolicy(channel: Channel, status: string, attemptedAt?: string | null, reason = "") {
   const requiresOperator = status === "waiting_for_user"
     && /(ログイン|MFA|CAPTCHA|アカウント選択|browser security policy|declined permission|Chrome.*(?:アクセス|許可|セキュリティ))/i.test(reason);
   if (requiresOperator) {
@@ -377,28 +381,16 @@ function settlementRetryPolicy(channel: Channel, status: string, month: string, 
       label: "ログイン・認証・許可後に手動再取得",
     };
   }
-  const fifth = fifthOfFollowingMonth(month);
-  const todayInJapan = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
   return {
     mode: "automatic",
     label: channel === "qoo10"
-      ? todayInJapan < fifth
-        ? `${fifth.slice(5).replace("-", "/")} 9:15に自動実行`
+      ? "毎週木曜9:15に自動再照合"
+      : channel === "rakuten"
+        ? "毎月10営業日ごろ9:15に自動再照合"
         : attemptedAt
           ? "毎朝9:15に自動再実行"
-          : "次回9:15に自動実行"
-      : "毎朝9:15に自動再実行",
+          : "次回9:15に自動実行",
   };
-}
-
-function fifthOfFollowingMonth(month: string) {
-  const [year, monthNumber] = month.split("-").map(Number);
-  return new Date(Date.UTC(year, monthNumber, 5)).toISOString().slice(0, 10);
 }
 
 function number(value: unknown) {

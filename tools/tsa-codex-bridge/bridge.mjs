@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.9";
+const VERSION = "1.9.10";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4815,6 +4815,7 @@ WORKFLOW
    Follow the skill for the exact period and preserve all required original reports unchanged in the job work folder.
    Reuse a period-matched staged original when it contains required transaction data. If the settlement data is incomplete, acquire or freshly verify the missing official report.
    If the official settlement page confirms zero rows, cross-check the official order/delivery report for the same period. Never interpret zero settlement rows as zero sales when orders exist.
+   ${job.channel === "qoo10" ? "Qoo10 has no monthly publication date. Derive settlement dates from delivery completion, inspect settlement-date detail and Q account '販売代金 精算' history, and never report a monthly publication wait." : ""}
    Save screenshots and downloaded originals under the job work folder. The local Bridge, not this isolated Codex session, copies them to the final network archive.
 2. Create ${join(workDir, `${job.channel}-${job.period_start}_${job.period_end}.ec-profit.json`)} using the fixed schema.
 3. Confirm advertising charges are excluded and marketplace-funded benefits are not counted as seller costs.
@@ -4829,7 +4830,7 @@ FINAL RESPONSE
 - Return only data conforming to the supplied result JSON schema.
 - source_files must include every staged original in the job work folder and the normalized EC profit JSON when one is created.
 - Use completed only when the reports, period, classification, staged originals, and normalized JSON are confirmed.
-- Use needs_review when the order/delivery report proves sales but the settlement detail is not published or returns no rows. State the exact missing official amount; do not return waiting_for_user for that condition.
+- Use needs_review when the order/delivery report proves sales but the required settlement detail cannot be reconciled. For Qoo10, distinguish an unelapsed order settlement cycle from an already completed Q-account credit whose itemized detail is unavailable. State the exact missing official amount; do not return waiting_for_user for that condition.
 - Use needs_review instead of guessing when funding source or a combined charge is unclear.`;
 }
 

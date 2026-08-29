@@ -135,7 +135,7 @@ export const EC_PROFIT_CODEX_TASKS: CodexTaskDefinition[] = [
     shortLabel: "楽天市場",
     description: "RMSの精算・受注明細から手数料、店舗負担クーポン、ポイントなどを取得します。",
     archiveFolder: `${EC_PROFIT_ARCHIVE_ROOT}\\楽天`,
-    schedule: "毎月1日・未完了は毎朝自動再実行",
+    schedule: "毎月1日・概算行は翌月10営業日ごろ自動再照合",
   },
   {
     key: "ec_profit_import",
@@ -171,7 +171,7 @@ export const EC_PROFIT_CODEX_TASKS: CodexTaskDefinition[] = [
     shortLabel: "Qoo10",
     description: "精算明細から販売手数料、割引負担、ポイント、返金などを取得します。",
     archiveFolder: `${EC_PROFIT_ARCHIVE_ROOT}\\Qoo10`,
-    schedule: "毎月1日・翌月5日以降は毎朝自動再実行",
+    schedule: "毎月1日・未確定分は毎週木曜9:15に自動再照合",
   },
   {
     key: "ec_profit_import",
