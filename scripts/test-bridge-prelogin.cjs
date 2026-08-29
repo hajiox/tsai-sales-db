@@ -62,6 +62,13 @@ assert.match(installer, /\$lockPid -ne \$statePid/);
 assert.match(installer, /\$headlessState\.executionMode -ne "headless-prelogin"/);
 assert.match(installer, /Stop-ScheduledTask -TaskName \$preloginTaskName/);
 assert.match(installer, /ログイン前Bridgeの監視タスクを安全に停止できませんでした/);
+assert.match(installer, /Stop-ScheduledTask -TaskName \$interactiveTaskName/);
+assert.match(installer, /対話Bridgeの監視タスクを安全に停止できませんでした/);
+assert.ok(
+  installer.indexOf("Stop-ScheduledTask -TaskName $interactiveTaskName")
+    < installer.indexOf('Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs")'),
+  "対話Bridgeの自動再起動を止めてからランタイムを置換する",
+);
 assert.match(installer, /function Resolve-WindowsAccountSid/);
 assert.match(installer, /\$registeredTaskUserSid -eq \$windowsUserSid/);
 assert.match(installer, /function Copy-WindowsPowerShellScript/);

@@ -47,6 +47,7 @@ The TSA automation screen shows both versions and warns when the installed Bridg
 
 ## Operation note
 
+- 2026-08-29: Bridge 1.9.20 closes an installer race with the interactive Scheduled Task watchdog. Updates now stop the task itself before replacing runtime files and start it only after every Bridge and monitor file is installed, preventing a new worker from loading a mixed old/new monitor bundle.
 - 2026-08-29: Bridge 1.9.19 supports validated absolute monitor coordinates in the local machine configuration. The office PC stores both display identity and the resolved display-3 work-area coordinates, so a background Scheduled Task can place the visible monitor even when Windows returns no screens to that background process.
 - 2026-08-29: Bridge 1.9.18 makes the visible-console launcher wait for the new monitor acknowledgement and then place that exact existing window. This covers the scheduled-task/conhost startup path where placement inside the monitor process is unavailable, without creating a second monitor.
 - 2026-08-29: Bridge 1.9.17 makes the monitor resolve its bundled placement helper and persisted machine configuration even when the visible-console launcher does not bind the optional placement arguments. The fallback is runtime-tested without either argument and keeps the configured display after worker or Windows restarts.

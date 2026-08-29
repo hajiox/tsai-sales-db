@@ -93,6 +93,7 @@ $maintenancePath = Join-Path $installDir "bridge-maintenance.lock"
 $statePath = Join-Path $installDir "bridge-state.json"
 $headlessStatePath = Join-Path $installDir "headless\bridge-state.json"
 $headlessLockPath = Join-Path $installDir "headless\bridge.lock"
+$interactiveTaskName = "TSA Codex Bridge (Interactive)"
 $preloginTaskName = "TSA Codex Bridge (Pre-login)"
 $statePaths = @($statePath, $headlessStatePath)
 function Get-TrustedHeadlessBridgeProcess {
@@ -250,6 +251,20 @@ try {
     }
   }
 
+  $interactiveTask = Get-ScheduledTask -TaskName $interactiveTaskName -ErrorAction SilentlyContinue
+  if ($interactiveTask -and $interactiveTask.State -eq "Running") {
+    Stop-ScheduledTask -TaskName $interactiveTaskName -ErrorAction Stop
+    $interactiveTaskStopDeadline = (Get-Date).AddSeconds(10)
+    while ((Get-Date) -lt $interactiveTaskStopDeadline) {
+      $interactiveTask = Get-ScheduledTask -TaskName $interactiveTaskName -ErrorAction SilentlyContinue
+      if (-not $interactiveTask -or $interactiveTask.State -ne "Running") { break }
+      Start-Sleep -Milliseconds 250
+    }
+    if ($interactiveTask -and $interactiveTask.State -eq "Running") {
+      throw "対話Bridgeの監視タスクを安全に停止できませんでした。"
+    }
+  }
+
   $preloginTask = Get-ScheduledTask -TaskName $preloginTaskName -ErrorAction SilentlyContinue
   if ($preloginTask -and $preloginTask.State -eq "Running") {
     Stop-ScheduledTask -TaskName $preloginTaskName -ErrorAction Stop
@@ -388,7 +403,6 @@ $headlessConfig = @{
 
 $startScript = Join-Path $installDir "start-bridge.ps1"
 $startArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
-$interactiveTaskName = "TSA Codex Bridge (Interactive)"
 $interactiveTaskRegistered = $false
 $interactiveTaskRegistrationError = ""
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
