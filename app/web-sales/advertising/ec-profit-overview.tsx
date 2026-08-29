@@ -359,7 +359,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
           <AlertTriangle size={18} className="mt-0.5 shrink-0" />
           <div>
               <strong>EC精算が{data.completeness.completedSettlements}/7の理由</strong>
-              <p className="mt-0.5 text-xs text-amber-800">概算計上中の媒体は過去の公式精算比率で利益へ反映済みです。公式明細を取得でき次第、自動で確定値へ置き換えます。</p>
+              <p className="mt-0.5 text-xs text-amber-800">概算計上中の媒体は利益へ反映済みです。更新見込みのある公式明細は自動で置き換え、取得方法のない内訳は精算済み金額と費目概算を分けて表示します。</p>
             </div>
           </div>
           <div className="mt-3 divide-y divide-amber-200 border-y border-amber-200">
@@ -367,7 +367,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
               <div key={issue.channel} className="grid gap-1 py-2.5 sm:grid-cols-[140px_minmax(0,1fr)_auto] sm:items-center sm:gap-3">
                 <div className="flex items-center gap-2">
                   <strong className="text-xs">{issue.label}</strong>
-                  {issue.isEstimate && <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">概算計上中</span>}
+                  {issue.isEstimate && <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">{issue.channel === "qoo10" && issue.retryPolicy.mode === "after_action" ? "入金確定・費目概算" : "概算計上中"}</span>}
                 </div>
                 <div className="min-w-0">
                   <span className="block text-xs leading-5 text-amber-900">{issue.reason}</span>
@@ -385,7 +385,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
                   <SettlementStatusBadge issue={issue} />
                   {issue.status !== "queued" && issue.status !== "running" && (
                     <span className={`inline-flex w-fit items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold ${issue.retryPolicy.mode === "automatic" ? "bg-blue-100 text-blue-800" : "bg-white text-amber-900"}`}>
-                      <CalendarClock size={13} /> 次回: {issue.retryPolicy.label}
+                      <CalendarClock size={13} /> {issue.retryPolicy.mode === "automatic" ? "次回" : "対応"}: {issue.retryPolicy.label}
                     </span>
                   )}
                 </div>
@@ -663,7 +663,9 @@ function SettlementStatusBadge({ issue }: { issue: SettlementIssue }) {
   };
   return (
     <span className={`inline-flex w-fit items-center gap-1 rounded px-2 py-1 text-[11px] font-bold ${styles[issue.status] || styles.not_started}`}>
-      {settlementStatusLabel(issue.status)}
+      {issue.channel === "qoo10" && issue.status === "needs_review" && issue.retryPolicy.mode === "after_action"
+        ? "精算済み・内訳要確認"
+        : settlementStatusLabel(issue.status)}
     </span>
   );
 }

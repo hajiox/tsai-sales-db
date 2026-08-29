@@ -44,3 +44,13 @@ export function isAutomaticSettlementRetryDue(input: {
   }
   return input.monthsAgo === 1;
 }
+
+export function isQoo10SettledDetailUnavailable(result: unknown) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return false;
+  const record = result as Record<string, unknown>;
+  const text = `${String(record.summary || "")} ${String(record.details || "")}`;
+  const settlementCompleted = /(?:精算(?:は|が)?完了済み|official settlement completed)/i.test(text);
+  const fullFallbackCompleted = /全注文[\s\S]*(?:購入者決済日|purchaser[ -]?payment)[\s\S]*(?:発送日|shipping)[\s\S]*(?:詳細行|detail)[\s\S]*(?:0件|zero)/i.test(text);
+  const detailUnavailable = /(?:詳細(?:内訳|行)?[\s\S]*(?:照合でき|取得でき|0件)|detailed reconciliation unavailable)/i.test(text);
+  return detailUnavailable && (settlementCompleted || fullFallbackCompleted);
+}

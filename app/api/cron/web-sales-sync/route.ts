@@ -7,6 +7,7 @@ import { AD_COST_CODEX_TASKS, EC_PROFIT_CODEX_TASKS } from "@/lib/web-sales-code
 import { upsertEcProfitEstimate, type EcProfitChannel } from "@/lib/web-sales-codex/ec-profit-estimate";
 import {
   isAutomaticSettlementRetryDue,
+  isQoo10SettledDetailUnavailable,
   settlementPeriodMonthsAgo,
   type EcProfitRetryChannel,
 } from "@/lib/web-sales-codex/ec-profit-retry";
@@ -55,23 +56,28 @@ async function enqueueIncompleteSettlementRetryPeriod(input: {
   const completed = new Set((data || []).map((row) => String(row.channel)));
   const { data: recentJobs, error: recentJobsError } = await supabase
     .from("web_sales_codex_jobs")
-    .select("channel,status,created_at")
+    .select("channel,status,result,created_at")
     .eq("task_key", "ec_profit_import")
     .eq("period_start", period.startDate)
     .eq("period_end", period.endDate)
     .order("created_at", { ascending: false })
     .limit(100);
   if (recentJobsError) throw new Error(`EC精算の実行状態を確認できません: ${recentJobsError.message}`);
-  const latestStatusByChannel = new Map<string, string>();
+  const latestJobByChannel = new Map<string, { status: string; result: unknown }>();
   for (const job of recentJobs || []) {
     const channel = String(job.channel || "");
-    if (channel && !latestStatusByChannel.has(channel)) {
-      latestStatusByChannel.set(channel, String(job.status || ""));
+    if (channel && !latestJobByChannel.has(channel)) {
+      latestJobByChannel.set(channel, {
+        status: String(job.status || ""),
+        result: job.result,
+      });
     }
   }
   const retryChannels = dueChannels
     .filter((channel) => !completed.has(channel))
-    .filter((channel) => latestStatusByChannel.get(channel) !== "waiting_for_user");
+    .filter((channel) => latestJobByChannel.get(channel)?.status !== "waiting_for_user")
+    .filter((channel) => channel !== "qoo10"
+      || !isQoo10SettledDetailUnavailable(latestJobByChannel.get(channel)?.result));
   if (retryChannels.length === 0) return [];
 
   for (const channel of retryChannels) {

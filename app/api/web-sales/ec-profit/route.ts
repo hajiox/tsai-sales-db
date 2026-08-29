@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
+import { isQoo10SettledDetailUnavailable } from "@/lib/web-sales-codex/ec-profit-retry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -373,6 +374,12 @@ function automaticRetryWording(value: string) {
 }
 
 function settlementRetryPolicy(channel: Channel, status: string, attemptedAt?: string | null, reason = "") {
+  if (channel === "qoo10" && isQoo10SettledDetailUnavailable({ summary: reason })) {
+    return {
+      mode: "after_action" as const,
+      label: "精算済み・費目別内訳は必要時のみ確認",
+    };
+  }
   const requiresOperator = status === "waiting_for_user"
     && /(ログイン|MFA|CAPTCHA|アカウント選択|browser security policy|declined permission|Chrome.*(?:アクセス|許可|セキュリティ))/i.test(reason);
   if (requiresOperator) {

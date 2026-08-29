@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { isReusableEcProfitOriginalName } from "../tools/tsa-codex-bridge/ec-profit-artifact-policy.mjs";
 import {
   isAutomaticSettlementRetryDue,
+  isQoo10SettledDetailUnavailable,
   settlementPeriodMonthsAgo,
 } from "../lib/web-sales-codex/ec-profit-retry.ts";
 
@@ -51,6 +52,8 @@ assert.match(api, /Qoo10は配送完了後の水曜に注文単位で精算さ�
 assert.match(api, /Qoo10の月次精算明細は翌月5日の発行後に取得します。[\s\S]*Qoo10は注文単位の水曜精算です/);
 assert.match(api, /毎週木曜9:15に自動再照合/);
 assert.match(cron, /for \(const monthsAgo of \[1, 2\]\)/);
+assert.match(cron, /isQoo10SettledDetailUnavailable/);
+assert.match(api, /精算済み・費目別内訳は必要時のみ確認/);
 
 assert.deepEqual(settlementPeriodMonthsAgo(2026, 8, 1), {
   startDate: "2026-08-01",
@@ -68,5 +71,12 @@ assert.equal(isAutomaticSettlementRetryDue({ channel: "rakuten", day: 12, weekda
 assert.equal(isAutomaticSettlementRetryDue({ channel: "rakuten", day: 15, weekday: 2, monthsAgo: 2 }), true);
 assert.equal(isAutomaticSettlementRetryDue({ channel: "rakuten", day: 13, weekday: 0, monthsAgo: 2 }), false);
 assert.equal(isAutomaticSettlementRetryDue({ channel: "amazon", day: 13, weekday: 0, monthsAgo: 2 }), false);
+assert.equal(isQoo10SettledDetailUnavailable({
+  summary: "Qoo10の2026年7月精算は完了済みですが、詳細内訳を照合できませんでした。",
+  details: "全注文を購入者決済日・発送日で個別検索しましたが詳細行は0件でした。",
+}), true);
+assert.equal(isQoo10SettledDetailUnavailable({
+  summary: "精算日検索で詳細行は0件でした。",
+}), false);
 
 console.log("EC profit retry artifact checks passed.");
