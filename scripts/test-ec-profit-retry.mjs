@@ -12,6 +12,8 @@ const skill = readFileSync(new URL("../tools/tsa-codex-bridge/skills/tsa-ec-prof
 const channels = readFileSync(new URL("../tools/tsa-codex-bridge/skills/tsa-ec-profit-report/references/channels.md", import.meta.url), "utf8");
 const api = readFileSync(new URL("../app/api/web-sales/ec-profit/route.ts", import.meta.url), "utf8");
 const cron = readFileSync(new URL("../app/api/cron/web-sales-sync/route.ts", import.meta.url), "utf8");
+const estimate = readFileSync(new URL("../lib/web-sales-codex/ec-profit-estimate.ts", import.meta.url), "utf8");
+const estimateApi = readFileSync(new URL("../app/api/web-sales/codex-bridge/jobs/[id]/ec-profit-estimate/route.ts", import.meta.url), "utf8");
 
 assert.equal(isReusableEcProfitOriginalName("qoo10-2026-07-01_2026-07-31-delivery-detail.original.csv"), true);
 assert.equal(isReusableEcProfitOriginalName("rakuten-2026-07-01_2026-07-31-billpay-max-month-202606.original.png"), false);
@@ -25,8 +27,16 @@ assert.match(bridge, /isReusableEcProfitOriginalName\(name\)/);
 assert.match(installer, /"ec-profit-artifact-policy\.mjs"/);
 assert.match(skill, /prior screenshot showing an unpublished report, zero rows, or an older maximum month is expired availability evidence/);
 assert.match(channels, /Qoo10 has no calendar-month statement publication date/);
-assert.match(channels, /Qアカウント履歴/);
+assert.match(channels, /Qアカウント(?:の)?履歴/);
 assert.match(channels, /general sellers are settled after 15 days on the following Wednesday/);
+assert.match(channels, /#btn_search_sell_detail/);
+assert.match(channels, /lower block still shows its default date is invalid evidence/);
+assert.match(channels, /#btn_search_gaccount/);
+assert.match(bridge, /summary: result\.summary \|\| estimated\.summary/);
+assert.doesNotMatch(estimate, /公式明細公開前/);
+assert.doesNotMatch(estimateApi, /公式精算公開前/);
+assert.match(estimate, /公式費目別明細の照合が未完了/);
+assert.match(estimateApi, /公式費目別明細を照合できない/);
 assert.match(api, /Qoo10は配送完了後の水曜に注文単位で精算されます/);
 assert.match(api, /Qoo10の月次精算明細は翌月5日の発行後に取得します。[\s\S]*Qoo10は注文単位の水曜精算です/);
 assert.match(api, /毎週木曜9:15に自動再照合/);

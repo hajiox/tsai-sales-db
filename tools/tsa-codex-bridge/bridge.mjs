@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.11";
+const VERSION = "1.9.12";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4743,7 +4743,7 @@ async function executeEcProfitJob(job) {
       result = {
         ...result,
         status: "needs_review",
-        summary: estimated.summary || result.summary,
+        summary: result.summary || estimated.summary,
         details: [result.details, estimated.details].filter(Boolean).join(" / "),
         estimated: Boolean(estimated.estimated),
         imported_count: estimated.importedCount ?? 0,

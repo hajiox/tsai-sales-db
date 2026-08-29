@@ -39,7 +39,7 @@ export async function POST(
     return NextResponse.json({
       status: "needs_review",
       summary: result.status === "estimated"
-        ? `${label(job.channel)}の公式精算公開前の概算を反映しました`
+        ? `${label(job.channel)}の公式費目別明細を照合できないため概算を反映しました`
         : result.message,
       details: result.message,
       estimated: result.status === "estimated",

@@ -157,7 +157,7 @@ export async function upsertEcProfitEstimate(input: {
   const basisLabel = history.length > 0
     ? `過去${history.length}か月の公式精算実績（${basisMonths.join("・")}）`
     : `${baseline!.source}`;
-  const note = `${input.reportMonth}は公式明細公開前のため概算。${basisLabel}の費目別売上比率を当月売上${yen(sales)}へ適用。公式取得後に自動で確定値へ更新します。`;
+  const note = `${input.reportMonth}は公式費目別明細の照合が未完了のため概算。${basisLabel}の費目別売上比率を当月売上${yen(sales)}へ適用。照合完了後に自動で確定値へ更新します。`;
 
   const row = {
     channel,
