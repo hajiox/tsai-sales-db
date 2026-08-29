@@ -70,7 +70,7 @@ export default function MainDashboard({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div className="min-h-[100dvh] min-w-0 bg-gray-100 lg:flex lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden print:h-auto print:block print:overflow-visible">
+    <div className="min-h-[100dvh] min-w-0 bg-gray-100 lg:flex lg:h-screen lg:min-h-0 lg:overflow-hidden print:h-auto print:block print:overflow-visible">
 
       <MobileNavigation />
 
