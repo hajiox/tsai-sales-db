@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.23";
+const VERSION = "1.9.24";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -5841,6 +5841,11 @@ function loadConfig() {
     executionMode,
     allowedTaskKeys,
     desktopMonitor: executionMode === "interactive" && stored.desktopMonitor !== false,
+    monitorPlacementBase64: (
+      typeof stored.monitorPlacementBase64 === "string"
+      && stored.monitorPlacementBase64.length <= 4096
+      && /^[A-Za-z0-9+/]*={0,2}$/.test(stored.monitorPlacementBase64)
+    ) ? stored.monitorPlacementBase64 : "",
   };
   if (!/^https:\/\//.test(value.baseUrl)) throw new Error("baseUrlはhttpsで指定してください");
   if (value.token.length < 32) throw new Error("Bridge tokenが設定されていません");
@@ -6362,6 +6367,7 @@ function unifiedMonitorLauncherArguments(bringForward) {
 }
 
 function readUnifiedMonitorPlacementBase64() {
+  if (config.monitorPlacementBase64) return config.monitorPlacementBase64;
   try {
     const candidate = JSON.parse(readFileSync(UNIFIED_MONITOR_CONFIG_PATH, "utf8"));
     const placement = {

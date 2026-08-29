@@ -215,6 +215,8 @@ const installerSource = fs.readFileSync(
 assert.match(installerSource, /"bridge-monitor\.ps1"/);
 assert.match(installerSource, /"launch-bridge-monitor\.ps1"/);
 assert.match(installerSource, /"monitor-window-placement\.ps1"/);
+assert.match(installerSource, /monitorPlacementBase64/);
+assert.match(installerSource, /Get-CodexBridgeMonitorPlacement \$monitorConfigPath/);
 assert.match(installerSource, /"bridge-monitor-state\.schema\.json"/);
 assert.match(installerSource, /Codex Bridge Monitor/);
 assert.match(installerSource, /Stop-VerifiedMonitor/);

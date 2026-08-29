@@ -136,6 +136,7 @@ try {
   assert.doesNotMatch(processProbeSource, /tasklist|checked\.stdout/);
   assert.match(bridgeSource, /desktopMonitorUnverifiedCount < 3/);
   assert.match(bridgeSource, /-WindowPlacementBase64/);
+  assert.match(bridgeSource, /config\.monitorPlacementBase64/);
   assert.match(placementScriptSource, /ConvertFrom-CodexBridgeMonitorPlacementBase64/);
 
   writeState("tsa-interactive", baseState({

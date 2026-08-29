@@ -362,6 +362,20 @@ $headlessWorkerId = "$WorkerId-headless"
 if ($headlessWorkerId.Length -gt 80) {
   $headlessWorkerId = "$($WorkerId.Substring(0, 71))-headless"
 }
+$monitorPlacementBase64 = ""
+$monitorConfigPath = Join-Path $unifiedMonitorDir "monitor.config.json"
+if (Test-Path -LiteralPath $monitorConfigPath -PathType Leaf) {
+  try {
+    . (Join-Path $sourceDir "monitor-window-placement.ps1")
+    $resolvedMonitorPlacement = Get-CodexBridgeMonitorPlacement $monitorConfigPath
+    if ($resolvedMonitorPlacement) {
+      $placementJson = $resolvedMonitorPlacement | ConvertTo-Json -Depth 3 -Compress
+      $monitorPlacementBase64 = [Convert]::ToBase64String([System.Text.UTF8Encoding]::new($false).GetBytes($placementJson))
+    }
+  } catch {
+    $monitorPlacementBase64 = ""
+  }
+}
 $config = @{
   baseUrl = $BaseUrl
   token = $Token
@@ -376,6 +390,7 @@ $config = @{
   pollMs = 5000
   executionMode = "interactive"
   desktopMonitor = $true
+  monitorPlacementBase64 = $monitorPlacementBase64
   allowedTaskKeys = $allTaskKeys
 } | ConvertTo-Json -Depth 4
 [System.IO.File]::WriteAllText((Join-Path $installDir "bridge.config.json"), $config, [System.Text.UTF8Encoding]::new($false))
