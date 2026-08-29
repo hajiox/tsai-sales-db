@@ -34,14 +34,24 @@ function Test-ProcessId($Value) {
   return $null -ne (Get-Process -Id $processId -ErrorAction SilentlyContinue)
 }
 
+function Move-AcknowledgedMonitor($Acknowledgement) {
+  if (
+    -not $Acknowledgement -or
+    $Acknowledgement.monitorId -ne "codex-bridge-unified" -or
+    -not (Test-ProcessId $Acknowledgement.monitorPid) -or
+    [int64]$Acknowledgement.windowHandle -eq 0 -or
+    -not (Get-Command Get-CodexBridgeMonitorPlacement -ErrorAction SilentlyContinue)
+  ) {
+    return $false
+  }
+  $placement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
+  if (-not $placement) { return $false }
+  return Move-CodexBridgeMonitorWindow ([IntPtr]([int64]$Acknowledgement.windowHandle)) $placement
+}
+
 $acknowledgement = Read-Utf8Json $AckPath
 if ($acknowledgement -and $acknowledgement.monitorId -eq "codex-bridge-unified" -and (Test-ProcessId $acknowledgement.monitorPid)) {
-  if ((Get-Command Get-CodexBridgeMonitorPlacement -ErrorAction SilentlyContinue) -and [int64]$acknowledgement.windowHandle -ne 0) {
-    $placement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
-    if ($placement) {
-      [void](Move-CodexBridgeMonitorWindow ([IntPtr]([int64]$acknowledgement.windowHandle)) $placement)
-    }
-  }
+  [void](Move-AcknowledgedMonitor $acknowledgement)
   if ($BringForward -and [int64]$acknowledgement.windowHandle -ne 0) {
     Add-Type -TypeDefinition @"
 using System;
@@ -81,4 +91,18 @@ $arguments = @(
 $monitor = Start-Process -FilePath $consoleHost -ArgumentList $arguments -WindowStyle Normal -PassThru
 if (-not $monitor) {
   throw "Bridge unified monitor console host did not start"
+}
+
+$placementDeadline = (Get-Date).AddSeconds(8)
+while ((Get-Date) -lt $placementDeadline) {
+  Start-Sleep -Milliseconds 100
+  $startedAcknowledgement = Read-Utf8Json $AckPath
+  if (
+    $startedAcknowledgement -and
+    $startedAcknowledgement.monitorId -eq "codex-bridge-unified" -and
+    (Test-ProcessId $startedAcknowledgement.monitorPid)
+  ) {
+    [void](Move-AcknowledgedMonitor $startedAcknowledgement)
+    break
+  }
 }
