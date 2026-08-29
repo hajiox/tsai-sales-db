@@ -28,7 +28,18 @@ let persistent = null;
 let placementProbe = null;
 
 fs.mkdirSync(stateDirectory, { recursive: true });
-fs.writeFileSync(placementConfigPath, `${JSON.stringify({ preferredDisplayNumber: 1, offsetX: 12, offsetY: 18 })}\n`, "utf8");
+fs.writeFileSync(placementConfigPath, `${JSON.stringify({
+  preferredDisplayNumber: 3,
+  preferredDeviceName: "\\\\.\\DISPLAY8",
+  absoluteX: 1164,
+  absoluteY: -859,
+  width: 993,
+  height: 519,
+  workingLeft: 952,
+  workingTop: -1080,
+  workingWidth: 1920,
+  workingHeight: 1032,
+})}\n`, "utf8");
 const now = new Date();
 const iso = now.toISOString();
 const baseState = ({ system, systemLabel, workerId, workerName, executionMode = "interactive", status, taskLabel, currentStep, progress = 0 }) => ({
@@ -198,8 +209,10 @@ try {
   assert.equal(first.ack.monitorId, "codex-bridge-unified");
   assert.equal(first.ack.monitorVersion, 2);
   assert.equal(first.ack.windowPlacement.requested, true);
-  assert.equal(first.ack.windowPlacement.displayNumber, 1);
-  assert.match(first.ack.windowPlacement.deviceName, /^\\\\\.\\DISPLAY\d+$/i);
+  assert.equal(first.ack.windowPlacement.displayNumber, 3);
+  assert.equal(first.ack.windowPlacement.deviceName, "\\\\.\\DISPLAY8");
+  assert.equal(first.ack.windowPlacement.x, 1164);
+  assert.equal(first.ack.windowPlacement.y, -859);
   assert.equal(first.ack.windowPlacement.applied, false, "PlainOutputテストでは実ウィンドウを移動しない");
   assert.doesNotThrow(() => process.kill(worker.pid, 0), "モニター終了でBridge相当プロセスを停止してはいけない");
 

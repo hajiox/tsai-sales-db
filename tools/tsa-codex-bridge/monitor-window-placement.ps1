@@ -12,6 +12,48 @@ function Get-CodexBridgeMonitorPlacement([string]$ConfigPath) {
   $config = Read-CodexBridgeMonitorWindowConfig $ConfigPath
   if (-not $config) { return $null }
 
+  [int]$absoluteX = 0
+  [int]$absoluteY = 0
+  $hasAbsoluteX = [int]::TryParse([string]$config.absoluteX, [ref]$absoluteX)
+  $hasAbsoluteY = [int]::TryParse([string]$config.absoluteY, [ref]$absoluteY)
+  if (
+    $hasAbsoluteX -and $hasAbsoluteY -and
+    $absoluteX -ge -50000 -and $absoluteX -le 50000 -and
+    $absoluteY -ge -50000 -and $absoluteY -le 50000
+  ) {
+    [int]$directDisplayNumber = 1
+    [int]$directWidth = 0
+    [int]$directHeight = 0
+    [int]$directWorkingLeft = $absoluteX
+    [int]$directWorkingTop = $absoluteY
+    [int]$directWorkingWidth = 0
+    [int]$directWorkingHeight = 0
+    [void][int]::TryParse([string]$config.preferredDisplayNumber, [ref]$directDisplayNumber)
+    [void][int]::TryParse([string]$config.width, [ref]$directWidth)
+    [void][int]::TryParse([string]$config.height, [ref]$directHeight)
+    [void][int]::TryParse([string]$config.workingLeft, [ref]$directWorkingLeft)
+    [void][int]::TryParse([string]$config.workingTop, [ref]$directWorkingTop)
+    [void][int]::TryParse([string]$config.workingWidth, [ref]$directWorkingWidth)
+    [void][int]::TryParse([string]$config.workingHeight, [ref]$directWorkingHeight)
+    $directDisplayNumber = [Math]::Max(1, $directDisplayNumber)
+    $directWidth = [Math]::Max(0, [Math]::Min(10000, $directWidth))
+    $directHeight = [Math]::Max(0, [Math]::Min(10000, $directHeight))
+    if ($directWorkingWidth -le 0) { $directWorkingWidth = [Math]::Max(640, $directWidth) }
+    if ($directWorkingHeight -le 0) { $directWorkingHeight = [Math]::Max(360, $directHeight) }
+    return [pscustomobject]@{
+      displayNumber = $directDisplayNumber
+      deviceName = [string]$config.preferredDeviceName
+      x = $absoluteX
+      y = $absoluteY
+      width = $directWidth
+      height = $directHeight
+      workingLeft = $directWorkingLeft
+      workingTop = $directWorkingTop
+      workingWidth = $directWorkingWidth
+      workingHeight = $directWorkingHeight
+    }
+  }
+
   Add-Type -AssemblyName System.Windows.Forms
   $screens = @([System.Windows.Forms.Screen]::AllScreens)
   if ($screens.Count -eq 0) { return $null }
