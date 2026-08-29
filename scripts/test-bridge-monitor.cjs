@@ -25,6 +25,7 @@ const worker = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
   windowsHide: true,
 });
 let persistent = null;
+let placementProbe = null;
 
 fs.mkdirSync(stateDirectory, { recursive: true });
 fs.writeFileSync(placementConfigPath, `${JSON.stringify({ preferredDisplayNumber: 1, offsetX: 12, offsetY: 18 })}\n`, "utf8");
@@ -97,6 +98,7 @@ try {
   assert.doesNotMatch(monitorSource, /Write-Host \$text\.PadRight/);
   assert.match(monitorSource, /Test-Path -LiteralPath \$AckPath -PathType Leaf/);
   assert.match(monitorSource, /\$acknowledgement\.lastConfirmedAt/);
+  assert.match(monitorSource, /\$recoveredPlacement = Get-CodexBridgeMonitorPlacement \$WindowConfigPath/);
   const processProbeSource = bridgeSource.slice(
     bridgeSource.indexOf("function isProcessRunning"),
     bridgeSource.indexOf("function releaseLock"),
@@ -219,6 +221,53 @@ try {
   assert.notEqual(second.ack.monitorPid, first.ack.monitorPid, "再起動時は状態ファイルから新しいモニターへ再接続する");
   assert.doesNotThrow(() => process.kill(worker.pid, 0), "再接続後もBridge相当プロセスを停止してはいけない");
 
+  const placementStateDirectory = path.join(tempDir, "placement-states");
+  const placementAckPath = path.join(tempDir, "ack-placement.json");
+  fs.mkdirSync(placementStateDirectory, { recursive: true });
+  fs.rmSync(placementConfigPath, { force: true });
+  placementProbe = spawn("powershell.exe", [
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", monitorPath,
+    "-StateDirectory", placementStateDirectory,
+    "-AckPath", placementAckPath,
+    "-WindowPlacementScript", placementScriptPath,
+    "-WindowConfigPath", placementConfigPath,
+    "-MutexName", `${mutexName}_Placement`,
+    "-PlainOutput",
+    "-SkipForeground",
+    "-RefreshMilliseconds", "100",
+  ], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  const ackDeadline = Date.now() + 10_000;
+  while (!fs.existsSync(placementAckPath) && Date.now() < ackDeadline) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  assert.ok(fs.existsSync(placementAckPath), "配置確認用モニターが起動確認を書き込む");
+  const ackBeforePlacementRecovery = JSON.parse(fs.readFileSync(placementAckPath, "utf8"));
+  assert.equal(ackBeforePlacementRecovery.windowPlacement.requested, false, "設定未到着時は配置を推測しない");
+  fs.writeFileSync(placementConfigPath, `${JSON.stringify({ preferredDisplayNumber: 1, offsetX: 12, offsetY: 18 })}\n`, "utf8");
+  const placementRecoveryDeadline = Date.now() + 10_000;
+  let placementRecovered = false;
+  let placementRecoveryAck = null;
+  while (!placementRecovered && Date.now() < placementRecoveryDeadline) {
+    try {
+      const candidateAck = JSON.parse(fs.readFileSync(placementAckPath, "utf8"));
+      placementRecoveryAck = candidateAck;
+      placementRecovered = candidateAck.windowPlacement?.requested === true;
+    } catch { }
+    if (!placementRecovered) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  assert.equal(
+    placementRecovered,
+    true,
+    `起動後に到着した画面配置設定を自己適用する: ${JSON.stringify(placementRecoveryAck)}`,
+  );
+  placementProbe.kill();
+  placementProbe = null;
+
   const persistentAckPath = path.join(tempDir, "ack-persistent.json");
   persistent = spawn("powershell.exe", [
     "-NoProfile",
@@ -226,6 +275,8 @@ try {
     "-File", monitorPath,
     "-StateDirectory", stateDirectory,
     "-AckPath", persistentAckPath,
+    "-WindowPlacementScript", placementScriptPath,
+    "-WindowConfigPath", placementConfigPath,
     "-MutexName", mutexName,
     "-PlainOutput",
     "-SkipForeground",
@@ -235,8 +286,8 @@ try {
     stdio: "ignore",
     windowsHide: true,
   });
-  const ackDeadline = Date.now() + 10_000;
-  while (!fs.existsSync(persistentAckPath) && Date.now() < ackDeadline) {
+  const persistentAckDeadline = Date.now() + 10_000;
+  while (!fs.existsSync(persistentAckPath) && Date.now() < persistentAckDeadline) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   }
   assert.ok(fs.existsSync(persistentAckPath), "常駐モニターが起動確認を書き込む");
@@ -305,6 +356,7 @@ try {
 
   console.log("unified Bridge monitor runtime tests passed");
 } finally {
+  try { placementProbe?.kill(); } catch { }
   try { persistent?.kill(); } catch { }
   try { worker.kill(); } catch { }
   fs.rmSync(tempDir, { recursive: true, force: true });

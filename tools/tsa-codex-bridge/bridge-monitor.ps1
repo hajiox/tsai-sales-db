@@ -229,6 +229,7 @@ $previousRenderedLines = @()
 $previousRenderWidth = 0
 $lastCursorKey = ""
 $lastFallbackKey = ""
+$nextWindowPlacementRetryAt = [DateTimeOffset]::UtcNow
 function Get-ConsoleCodePointWidth([int]$CodePoint) {
   if ($CodePoint -gt 0xFFFF) { return 2 }
   if (
@@ -342,6 +343,41 @@ try {
   $iteration = 0
   while ($true) {
     $now = [DateTimeOffset]::Now
+    if (
+      -not $windowPlacement -and
+      $WindowPlacementScript -and
+      $now -ge $nextWindowPlacementRetryAt
+    ) {
+      $nextWindowPlacementRetryAt = $now.AddSeconds(5)
+      try {
+        if (-not (Get-Command Get-CodexBridgeMonitorPlacement -ErrorAction SilentlyContinue)) {
+          . $WindowPlacementScript
+        }
+        $recoveredPlacement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
+        if ($recoveredPlacement) {
+          $windowPlacement = $recoveredPlacement
+          $windowPlacementError = $null
+          if (-not $PlainOutput -and $windowHandle -ne [IntPtr]::Zero) {
+            $windowPlacementApplied = Move-CodexBridgeMonitorWindow $windowHandle $windowPlacement
+          }
+          $acknowledgement.windowPlacement = @{
+            requested = $true
+            applied = $windowPlacementApplied
+            displayNumber = $windowPlacement.displayNumber
+            deviceName = $windowPlacement.deviceName
+            x = $windowPlacement.x
+            y = $windowPlacement.y
+            width = $windowPlacement.width
+            height = $windowPlacement.height
+            error = $null
+          }
+          Write-Utf8Json $AckPath $acknowledgement
+        }
+      } catch {
+        $windowPlacementError = $_.Exception.Message
+        $acknowledgement.windowPlacement.error = $windowPlacementError
+      }
+    }
     $snapshot = Get-StateSnapshot $StateDirectory
     $lines = New-Object System.Collections.Generic.List[object]
     Add-Line $lines "Codex Bridge 統合モニター" "Cyan"
