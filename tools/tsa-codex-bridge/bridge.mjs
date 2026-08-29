@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.12";
+const VERSION = "1.9.13";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4815,7 +4815,7 @@ WORKFLOW
    Follow the skill for the exact period and preserve all required original reports unchanged in the job work folder.
    Reuse a period-matched staged original when it contains required transaction data. If the settlement data is incomplete, acquire or freshly verify the missing official report.
    If the official settlement page confirms zero rows, cross-check the official order/delivery report for the same period. Never interpret zero settlement rows as zero sales when orders exist.
-   ${job.channel === "qoo10" ? "Qoo10 has no monthly publication date. Derive settlement dates from delivery completion, inspect settlement-date detail and Q account '販売代金 精算' history, and never report a monthly publication wait." : ""}
+   ${job.channel === "qoo10" ? "Qoo10 has no monthly publication date. Search the lower detail block first by purchaser-payment date for the requested order period, then by the computed settlement-date range. If those are empty while orders or Q-account credits exist, search every official order number individually with purchaser-payment date and then shipping date before concluding that itemized detail is unavailable. Inspect Q account '販売代金 精算' history and never report a monthly publication wait." : ""}
    Save screenshots and downloaded originals under the job work folder. The local Bridge, not this isolated Codex session, copies them to the final network archive.
 2. Create ${join(workDir, `${job.channel}-${job.period_start}_${job.period_end}.ec-profit.json`)} using the fixed schema.
 3. Confirm advertising charges are excluded and marketplace-funded benefits are not counted as seller costs.
