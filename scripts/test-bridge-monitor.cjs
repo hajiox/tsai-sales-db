@@ -17,6 +17,7 @@ const monitorSource = fs.readFileSync(monitorPath, "utf8");
 const bridgePath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge.mjs");
 const bridgeSource = fs.readFileSync(bridgePath, "utf8");
 const placementScriptPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "monitor-window-placement.ps1");
+const placementScriptSource = fs.readFileSync(placementScriptPath, "utf8");
 const placementConfigPath = path.join(tempDir, "monitor.config.json");
 const schemaPath = path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge-monitor-state.schema.json");
 const mutexName = `Local\\CodexBridgeUnifiedMonitorTest_${process.pid}`;
@@ -214,6 +215,9 @@ try {
   assert.equal(first.ack.windowPlacement.x, 1164);
   assert.equal(first.ack.windowPlacement.y, -859);
   assert.equal(first.ack.windowPlacement.applied, false, "PlainOutputテストでは実ウィンドウを移動しない");
+  assert.equal(first.ack.windowPlacement.verified, false, "実ウィンドウ未使用時は配置済みと誤認しない");
+  assert.match(monitorSource, /windowPlacementStableChecks -ge 3/, "起動後に位置を連続確認する");
+  assert.match(placementScriptSource, /function Test-CodexBridgeMonitorWindowPlacement/, "実ウィンドウ位置を検証できる");
   assert.doesNotThrow(() => process.kill(worker.pid, 0), "モニター終了でBridge相当プロセスを停止してはいけない");
 
   const staleTsg = baseState({

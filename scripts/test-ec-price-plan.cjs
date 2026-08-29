@@ -233,7 +233,7 @@ assert.match(monitorLauncherSource, /Get-CodexBridgeMonitorPlacement/);
 assert.match(monitorLauncherSource, /Move-CodexBridgeMonitorWindow/);
 assert.match(monitorLauncherSource, /function Move-AcknowledgedMonitor/);
 assert.match(monitorLauncherSource, /\$placementDeadline = \(Get-Date\)\.AddSeconds\(8\)/);
-assert.match(monitorLauncherSource, /\[void\]\(Move-AcknowledgedMonitor \$startedAcknowledgement\)/);
+assert.match(monitorLauncherSource, /if \(Move-AcknowledgedMonitor \$startedAcknowledgement\) \{ \$moveSuccesses \+= 1 \}/);
 const placementStabilizationSource = monitorLauncherSource.slice(
   monitorLauncherSource.indexOf("$placementDeadline ="),
 );

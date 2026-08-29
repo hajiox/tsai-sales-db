@@ -227,6 +227,7 @@ $acknowledgement = @{
       y = $windowPlacement.y
       width = $windowPlacement.width
       height = $windowPlacement.height
+      verified = $false
       error = $windowPlacementError
     }
   } else {
@@ -241,6 +242,9 @@ $previousRenderWidth = 0
 $lastCursorKey = ""
 $lastFallbackKey = ""
 $nextWindowPlacementRetryAt = [DateTimeOffset]::UtcNow
+$nextWindowPlacementApplyAt = [DateTimeOffset]::UtcNow
+$windowPlacementStabilizeUntil = [DateTimeOffset]::UtcNow.AddSeconds(15)
+$windowPlacementStableChecks = 0
 function Get-ConsoleCodePointWidth([int]$CodePoint) {
   if ($CodePoint -gt 0xFFFF) { return 2 }
   if (
@@ -380,10 +384,47 @@ try {
             y = $windowPlacement.y
             width = $windowPlacement.width
             height = $windowPlacement.height
+            verified = $false
             error = $null
           }
+          $windowPlacementStabilizeUntil = $now.AddSeconds(15)
+          $nextWindowPlacementApplyAt = $now
+          $windowPlacementStableChecks = 0
           Write-Utf8Json $AckPath $acknowledgement
         }
+      } catch {
+        $windowPlacementError = $_.Exception.Message
+        $acknowledgement.windowPlacement.error = $windowPlacementError
+      }
+    }
+    if (
+      $windowPlacement -and
+      -not $PlainOutput -and
+      $windowHandle -ne [IntPtr]::Zero -and
+      $now -le $windowPlacementStabilizeUntil -and
+      $now -ge $nextWindowPlacementApplyAt
+    ) {
+      $nextWindowPlacementApplyAt = $now.AddMilliseconds(500)
+      try {
+        $placementVerified = (
+          (Get-Command Test-CodexBridgeMonitorWindowPlacement -ErrorAction SilentlyContinue) -and
+          (Test-CodexBridgeMonitorWindowPlacement $windowHandle $windowPlacement)
+        )
+        if (-not $placementVerified) {
+          $windowPlacementApplied = Move-CodexBridgeMonitorWindow $windowHandle $windowPlacement
+          $placementVerified = Test-CodexBridgeMonitorWindowPlacement $windowHandle $windowPlacement
+        }
+        if ($placementVerified) {
+          $windowPlacementStableChecks += 1
+        } else {
+          $windowPlacementStableChecks = 0
+        }
+        $acknowledgement.windowPlacement.applied = $windowPlacementApplied
+        $acknowledgement.windowPlacement.verified = ($windowPlacementStableChecks -ge 3)
+        if ($windowPlacementStableChecks -ge 3) {
+          $windowPlacementStabilizeUntil = [DateTimeOffset]::MinValue
+        }
+        Write-Utf8Json $AckPath $acknowledgement
       } catch {
         $windowPlacementError = $_.Exception.Message
         $acknowledgement.windowPlacement.error = $windowPlacementError

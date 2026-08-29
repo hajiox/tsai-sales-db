@@ -149,3 +149,18 @@ function Move-CodexBridgeMonitorWindow([IntPtr]$Handle, $Placement) {
     0x0054
   )
 }
+
+function Test-CodexBridgeMonitorWindowPlacement([IntPtr]$Handle, $Placement, [int]$Tolerance = 8) {
+  if ($Handle -eq [IntPtr]::Zero -or -not $Placement) { return $false }
+  Initialize-CodexBridgeMonitorPlacementNative
+
+  $rect = New-Object CodexBridgeMonitorWindowPlacementNative+RECT
+  if (-not [CodexBridgeMonitorWindowPlacementNative]::GetWindowRect($Handle, [ref]$rect)) {
+    return $false
+  }
+
+  return (
+    [Math]::Abs($rect.Left - [int]$Placement.x) -le $Tolerance -and
+    [Math]::Abs($rect.Top - [int]$Placement.y) -le $Tolerance
+  )
+}

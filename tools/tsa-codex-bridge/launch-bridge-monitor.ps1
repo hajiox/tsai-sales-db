@@ -8,6 +8,21 @@ param(
 $ErrorActionPreference = "Stop"
 $monitorScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "bridge-monitor.ps1"
 $placementScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "monitor-window-placement.ps1"
+$diagnosticPath = Join-Path (Split-Path -Parent $AckPath) "monitor-launch-diagnostic.jsonl"
+function Write-LaunchDiagnostic([string]$EventName, $Detail) {
+  try {
+    $entry = [ordered]@{
+      at = [DateTimeOffset]::Now.ToString("o")
+      launcherPid = $PID
+      event = $EventName
+      detail = $Detail
+    } | ConvertTo-Json -Depth 4 -Compress
+    [System.IO.File]::AppendAllText($diagnosticPath, $entry + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+  } catch {
+    # Diagnostics must never block monitor startup.
+  }
+}
+Write-LaunchDiagnostic "launcher_started" @{}
 if (-not (Test-Path -LiteralPath $monitorScript)) {
   throw "Bridge monitor script not found: $monitorScript"
 }
@@ -35,6 +50,8 @@ function Test-ProcessId($Value) {
 }
 
 function Move-AcknowledgedMonitor($Acknowledgement) {
+  $script:lastPlacementAvailable = $false
+  $script:lastMoveResult = $false
   if (
     -not $Acknowledgement -or
     $Acknowledgement.monitorId -ne "codex-bridge-unified" -or
@@ -46,12 +63,19 @@ function Move-AcknowledgedMonitor($Acknowledgement) {
   }
   $placement = Get-CodexBridgeMonitorPlacement $WindowConfigPath
   if (-not $placement) { return $false }
-  return Move-CodexBridgeMonitorWindow ([IntPtr]([int64]$Acknowledgement.windowHandle)) $placement
+  $script:lastPlacementAvailable = $true
+  $script:lastMoveResult = Move-CodexBridgeMonitorWindow ([IntPtr]([int64]$Acknowledgement.windowHandle)) $placement
+  return $script:lastMoveResult
 }
 
 $acknowledgement = Read-Utf8Json $AckPath
 if ($acknowledgement -and $acknowledgement.monitorId -eq "codex-bridge-unified" -and (Test-ProcessId $acknowledgement.monitorPid)) {
-  [void](Move-AcknowledgedMonitor $acknowledgement)
+  $existingMoveResult = Move-AcknowledgedMonitor $acknowledgement
+  Write-LaunchDiagnostic "existing_monitor_reused" @{
+    monitorPid = [int]$acknowledgement.monitorPid
+    placementAvailable = $script:lastPlacementAvailable
+    moveResult = $existingMoveResult
+  }
   if ($BringForward -and [int64]$acknowledgement.windowHandle -ne 0) {
     Add-Type -TypeDefinition @"
 using System;
@@ -92,8 +116,12 @@ $monitor = Start-Process -FilePath $consoleHost -ArgumentList $arguments -Window
 if (-not $monitor) {
   throw "Bridge unified monitor console host did not start"
 }
+Write-LaunchDiagnostic "console_host_started" @{ consoleHostPid = $monitor.Id }
 
 $placementDeadline = (Get-Date).AddSeconds(8)
+$moveAttempts = 0
+$moveSuccesses = 0
+$acknowledgedMonitorPid = $null
 while ((Get-Date) -lt $placementDeadline) {
   $startedAcknowledgement = Read-Utf8Json $AckPath
   if (
@@ -101,9 +129,18 @@ while ((Get-Date) -lt $placementDeadline) {
     $startedAcknowledgement.monitorId -eq "codex-bridge-unified" -and
     (Test-ProcessId $startedAcknowledgement.monitorPid)
   ) {
-    [void](Move-AcknowledgedMonitor $startedAcknowledgement)
+    $acknowledgedMonitorPid = [int]$startedAcknowledgement.monitorPid
+    $moveAttempts += 1
+    if (Move-AcknowledgedMonitor $startedAcknowledgement) { $moveSuccesses += 1 }
     Start-Sleep -Milliseconds 250
   } else {
     Start-Sleep -Milliseconds 100
   }
+}
+Write-LaunchDiagnostic "placement_finished" @{
+  monitorPid = $acknowledgedMonitorPid
+  attempts = $moveAttempts
+  successes = $moveSuccesses
+  placementAvailable = $script:lastPlacementAvailable
+  lastMoveResult = $script:lastMoveResult
 }
