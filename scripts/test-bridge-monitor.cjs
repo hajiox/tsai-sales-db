@@ -99,6 +99,8 @@ try {
   assert.match(monitorSource, /Test-Path -LiteralPath \$AckPath -PathType Leaf/);
   assert.match(monitorSource, /\$acknowledgement\.lastConfirmedAt/);
   assert.match(monitorSource, /\$recoveredPlacement = Get-CodexBridgeMonitorPlacement \$WindowConfigPath/);
+  assert.match(monitorSource, /if \(-not \$WindowPlacementScript\)/);
+  assert.match(monitorSource, /if \(-not \$WindowConfigPath\)/);
   const processProbeSource = bridgeSource.slice(
     bridgeSource.indexOf("function isProcessRunning"),
     bridgeSource.indexOf("function releaseLock"),
@@ -231,8 +233,6 @@ try {
     "-File", monitorPath,
     "-StateDirectory", placementStateDirectory,
     "-AckPath", placementAckPath,
-    "-WindowPlacementScript", placementScriptPath,
-    "-WindowConfigPath", placementConfigPath,
     "-MutexName", `${mutexName}_Placement`,
     "-PlainOutput",
     "-SkipForeground",
@@ -240,6 +240,7 @@ try {
   ], {
     stdio: "ignore",
     windowsHide: true,
+    env: { ...process.env, CODEX_BRIDGE_MONITOR_DIR: tempDir },
   });
   const ackDeadline = Date.now() + 10_000;
   while (!fs.existsSync(placementAckPath) && Date.now() < ackDeadline) {

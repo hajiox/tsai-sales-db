@@ -19,6 +19,17 @@
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $Host.UI.RawUI.WindowTitle = "Codex Bridge 統合モニター"
+if (-not $WindowPlacementScript) {
+  $WindowPlacementScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "monitor-window-placement.ps1"
+}
+if (-not $WindowConfigPath) {
+  $monitorConfigRoot = if ($env:CODEX_BRIDGE_MONITOR_DIR) {
+    $env:CODEX_BRIDGE_MONITOR_DIR
+  } else {
+    Join-Path $env:LOCALAPPDATA "Codex Bridge Monitor"
+  }
+  $WindowConfigPath = Join-Path $monitorConfigRoot "monitor.config.json"
+}
 $windowPlacement = $null
 $windowPlacementError = $null
 $windowPlacementApplied = $false
