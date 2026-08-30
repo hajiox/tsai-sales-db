@@ -27,6 +27,7 @@ import {
   type RecipeSnsPlatform,
   type RecipeSnsPost,
 } from "@/lib/recipe-sns";
+import RecipeSnsPublishPanel from "@/app/recipe/_components/RecipeSnsPublishPanel";
 
 type RecipeSnsJob = {
   id: string;
@@ -355,6 +356,13 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
             </div>
             <span>GPT-5.6 Sol / {selectedGeneration.reasoningEffort}</span>
           </div>
+
+          <RecipeSnsPublishPanel
+            recipeId={recipeId}
+            generation={selectedGeneration}
+            posts={editedPosts}
+            disabled={generating || hasUnsavedChanges || selectedGeneration.status !== "completed"}
+          />
 
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {RECIPE_SNS_PLATFORMS.map((platform) => {

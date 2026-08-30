@@ -3,6 +3,11 @@ import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/s
 import { dispatchRecipePriceTsgNotifications } from "@/lib/recipe-price-tsg-notification";
 import { dispatchRecipeProductNameTsgNotifications } from "@/lib/recipe-product-name-tsg-notification";
 import {
+  normalizeRecipeSnsPublishTargets,
+  serializeRecipeSnsPublishResult,
+  validateRecipeSnsPublishResult,
+} from "@/lib/recipe-sns-publish";
+import {
   isCodexBridgeAuthorized,
   normalizeWorkerId,
 } from "@/lib/web-sales-codex/server";
@@ -1032,6 +1037,41 @@ export async function POST(
         submittedResult = { ...submittedResult, plan, validated_plan_checkpoint: true };
       }
     }
+    if (claimedJob.task_key === "recipe_sns_publish") {
+      if (!isFinal && submittedResult) {
+        return NextResponse.json({ error: "SNS投稿は途中結果を保存できません" }, { status: 400 });
+      }
+      if (isFinal) {
+        const parameters = asObject(claimedJob.parameters);
+        const publicationId = String(parameters.publicationId || "").trim();
+        const targets = normalizeRecipeSnsPublishTargets(parameters.targets);
+        if (!submittedResult && ["waiting_for_user", "needs_review", "failed"].includes(status)) {
+          const blocked = status === "waiting_for_user";
+          submittedResult = {
+            status,
+            publication_id: publicationId,
+            platforms: targets.map((platform) => ({
+              platform,
+              status: blocked ? "blocked" : "failed",
+              account_observed: null,
+              published_url: null,
+              published_at: null,
+              evidence: message || "BridgeがSNS操作結果を返す前に停止しました",
+              message: message || "公開状態を確認してから手動で再実行してください",
+            })),
+            summary: message || "SNS投稿処理が結果確定前に停止しました",
+          };
+        }
+        if (!submittedResult) return NextResponse.json({ error: "SNS投稿の最終結果がありません" }, { status: 400 });
+        submittedResult = serializeRecipeSnsPublishResult(validateRecipeSnsPublishResult(submittedResult, {
+          publicationId,
+          targets,
+        }));
+        if (submittedResult.status !== status) {
+          return NextResponse.json({ error: "SNS投稿結果とジョブ状態が一致しません" }, { status: 400 });
+        }
+      }
+    }
 
     let successfulSites: Record<string, any>[] = [];
     let tsgNotification: {
@@ -1069,7 +1109,20 @@ export async function POST(
     if (submittedResult) {
       updates.result = submittedResult;
     }
-    if (claimedJob.task_key === "ec_price_update" && isFinal) {
+    if (claimedJob.task_key === "recipe_sns_publish" && isFinal) {
+      const { data: completed, error: completeError } = await supabase.rpc("complete_recipe_sns_publish_job", {
+        p_job_id: id,
+        p_worker_id: workerId,
+        p_status: status,
+        p_progress: updates.progress,
+        p_current_step: updates.current_step,
+        p_error_message: updates.error_message,
+        p_result: submittedResult,
+        p_completed_at: now,
+      });
+      if (completeError) throw completeError;
+      if (!completed) return NextResponse.json({ error: "Job is no longer running" }, { status: 409 });
+    } else if (claimedJob.task_key === "ec_price_update" && isFinal) {
       const { data: completed, error: completeError } = await supabase.rpc("complete_ec_price_codex_job", {
         p_job_id: id,
         p_worker_id: workerId,

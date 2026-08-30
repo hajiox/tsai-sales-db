@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-29.5",
+  "version": "2026-08-30.1",
   "tasks": {
     "connection_test": {
       "mode": "deterministic",
@@ -52,6 +52,10 @@
     "recipe_sns_generate": {
       "mode": "codex",
       "skill": "generate-aizu-sns-assets"
+    },
+    "recipe_sns_publish": {
+      "mode": "codex",
+      "skill": "publish-aizu-sns-posts"
     },
     "docscanner_fax_summary": {
       "mode": "codex",

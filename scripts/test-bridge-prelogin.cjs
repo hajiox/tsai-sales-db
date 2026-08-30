@@ -34,6 +34,7 @@ for (const browserTaskKey of [
   "ec_price_update",
   "ec_product_name_update",
   "ec_catchcopy_update",
+  "recipe_sns_publish",
 ]) {
   assert.doesNotMatch(headlessSafeBlock, new RegExp(`"${browserTaskKey}"`));
 }

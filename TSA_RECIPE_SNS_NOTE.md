@@ -2,6 +2,29 @@
 
 ## 2026-08-30
 
+### SNS自動投稿・予約
+
+- SNS素材の確認画面へ、X、Instagram、IGストーリー、Threadsの個別投稿ボタンと、黒い「全SNSへ投稿」ボタンを追加した。即時投稿と日時予約を切り替え、予約取消、進捗、媒体別結果、公開URLを同じ画面で確認できる。
+- 投稿先はX `@Aizu_Brand_Kan`、Instagram・IGストーリー・Threads `aizubrandhall` に固定し、投稿直前に画面上のアカウントを再確認する。本文、画像、リンク、投稿先、予約日時はボタン押下時の不変スナップショットとして保存する。
+- `recipe_sns_publications` と3つの原子的RPCを追加し、二重クリックの直列化、実行中の同一SNS再登録防止、同一依頼の再利用、実行開始後の取消防止、Bridge結果と投稿履歴の同時確定を実装した。外部投稿は自動再試行せず、1媒体で停止しても残りを続行する。
+- Bridge 1.9.27 / `recipe_sns_publish` / protocol 1を追加した。対話型事務所PCだけが取得でき、ログイン前Bridgeは取得しない。予約時刻にPC・Chromeを利用できない場合はキューで待機し、利用可能になってから実行する。
+- 専用`publish-aizu-sns-posts` Skillだけを新規・非再開の`codex exec`で使う。巨大な過去Chat、過去タスク、保存済みsession、Web検索、開発リポジトリを参照しない。固定クリック手順ではなく、確定値・禁止事項・最終証跡を固定し、現在の公式UIから正規経路を選ぶ。
+- IGストーリーのLP URLは投稿文ではなくリンクスタンプへ設定する。通常Instagram Webに作成経路がない場合だけ、既にログイン済みの公式Meta Business Suiteを利用し、使えない場合はIGストーリーだけを操作待ちとして他媒体を続行する。
+
+#### Verification
+
+- `npm run test:recipe-sns-publication`: success
+- `npm run test:bridge-skill-contract`: 16 tasks / 15 dedicated Skills verified
+- `npm run test:bridge-prelogin`: success; `recipe_sns_publish` is interactive-only
+- `npm run test:bridge-run-guard`: success; bounded 75-minute multi-platform window
+- SNS投稿マイグレーション: 20 checks passed in dry-run and post-apply verification
+- 新規Skill `quick_validate.py`: valid
+- Changed-file ESLint: success
+- 本番環境変数をプロセス注入した `next build`: success
+- Secret scan / Supabase RLS audit: success
+
+### LP遷移先
+
 - レシピに商品LP URLが設定されている場合、X・Instagram・Threadsの投稿文へ同じ遷移先URLを必ず1回入れるようにした。
 - 専用SkillとBridgeの生成指示へURL必須条件を追加し、TSA側でも生成結果の保存時・履歴表示時・コピー時に欠落・重複・媒体別配置を補正する。個別再生成で他媒体の文面を引き継ぐ場合も同じ保証を適用する。
 - 本文URLを使う3媒体ではURLを優先し、文字数上限を超える場合は本文側を短縮する。設定URLが不正な場合は外部処理を開始せず、EC情報の修正を案内する。
@@ -57,7 +80,3 @@
 - 再生成時は、過去に選択していた版ではなく実行中ジョブの新しい版へ自動で切り替わることを回帰テストで固定。
 - 本番`v0-tsa-19.vercel.app`で「酒塩アウトドアMIX」を生成し、4媒体の投稿文、文字数・ハッシュタグ制限、1600x900 / 1080x1080 / 1080x1920 / 1200x900画像、履歴保存を確認。
 - Bridge 1.8.39を事務所PCへ再インストールし、専用Skill配置とheartbeatを確認。
-
-### Remaining
-
-- 本機能は投稿素材の生成・編集・コピーまで。各SNSへの自動投稿や予約投稿は行わない。

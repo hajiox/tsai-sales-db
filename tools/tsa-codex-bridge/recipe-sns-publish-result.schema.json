@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "publication_id", "platforms", "summary"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["completed", "waiting_for_user", "needs_review", "failed"]
+    },
+    "publication_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F-]{36}$"
+    },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["platform", "status", "account_observed", "published_url", "published_at", "evidence", "message"],
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": ["x", "instagram", "instagram_story", "threads"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["published", "already_published", "blocked", "failed"]
+          },
+          "account_observed": {
+            "type": ["string", "null"],
+            "maxLength": 120
+          },
+          "published_url": {
+            "type": ["string", "null"],
+            "maxLength": 2000
+          },
+          "published_at": {
+            "type": ["string", "null"],
+            "maxLength": 80
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    }
+  }
+}

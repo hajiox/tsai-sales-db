@@ -6,10 +6,14 @@ const OPERATOR_SESSION_TASKS = new Set([
   "ec_product_name_update",
   "ec_catchcopy_update",
   "ec_product_content_update",
+  "recipe_sns_publish",
 ]);
+
+const SOCIAL_PUBLISH_TASKS = new Set(["recipe_sns_publish"]);
 
 const TASK_LIMITS = Object.freeze({
   browser: Object.freeze({ silenceTimeoutMs: 12 * 60_000, absoluteTimeoutMs: 45 * 60_000 }),
+  social: Object.freeze({ silenceTimeoutMs: 12 * 60_000, absoluteTimeoutMs: 75 * 60_000 }),
   image: Object.freeze({ silenceTimeoutMs: 30 * 60_000, absoluteTimeoutMs: 90 * 60_000 }),
   default: Object.freeze({ silenceTimeoutMs: 15 * 60_000, absoluteTimeoutMs: 45 * 60_000 }),
 });
@@ -44,6 +48,8 @@ export function codexRunLimitsForTask(taskKey, env = process.env) {
   const key = String(taskKey || "");
   const profile = key === "recipe_sns_generate"
     ? TASK_LIMITS.image
+    : SOCIAL_PUBLISH_TASKS.has(key)
+      ? TASK_LIMITS.social
     : OPERATOR_SESSION_TASKS.has(key)
       ? TASK_LIMITS.browser
       : TASK_LIMITS.default;

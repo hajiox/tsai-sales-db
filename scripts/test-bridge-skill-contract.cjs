@@ -28,6 +28,7 @@ const expectedTasks = {
   ec_product_content_generate: "optimize-aizu-ec-product-content",
   ingredient_label_generate: "generate-aizu-ingredient-label",
   recipe_sns_generate: "generate-aizu-sns-assets",
+  recipe_sns_publish: "publish-aizu-sns-posts",
   docscanner_fax_summary: "summarize-docscanner-fax",
   web_sales_analysis: "tsa-web-sales-analysis",
 };
@@ -65,8 +66,8 @@ assert.match(bridge, /chatHistoryLoaded: false/);
 assert.match(bridge, /freshNonResumedSession: true/);
 assert.match(bridge, /skillContractVersion: SKILL_CONTRACT\.version/);
 assert.match(bridge, /Authentication stop rule:[\s\S]*Return waiting_for_user immediately/);
-assert.equal((bridge.match(/spawnSkillCodex\(job\.task_key, prompt, args/g) || []).length, 11);
-assert.equal((bridge.match(/waitForCodexExitWithWatchdog\(codex/g) || []).length, 11);
+assert.equal((bridge.match(/spawnSkillCodex\(job\.task_key, prompt, args/g) || []).length, 12);
+assert.equal((bridge.match(/waitForCodexExitWithWatchdog\(codex/g) || []).length, 12);
 assert.doesNotMatch(bridge, /const exitCode = await new Promise\(\(resolveExit/);
 assert.equal((bridge.match(/spawnCodexProcess\(args, options\)/g) || []).length, 2);
 assert.doesNotMatch(bridge, /spawnCodex\(/);

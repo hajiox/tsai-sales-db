@@ -65,10 +65,13 @@ function fakeChild() {
 {
   const browser = codexRunLimitsForTask("ec_price_update", {});
   const image = codexRunLimitsForTask("recipe_sns_generate", {});
+  const social = codexRunLimitsForTask("recipe_sns_publish", {});
   assert.ok(browser.silenceTimeoutMs > 2 * 60_000, "normal multi-minute browser work must not be stopped at two minutes");
   assert.ok(browser.absoluteTimeoutMs > browser.silenceTimeoutMs);
   assert.ok(image.silenceTimeoutMs > browser.silenceTimeoutMs, "ImageGen receives a longer silence window");
   assert.ok(Number.isFinite(image.absoluteTimeoutMs), "every Codex run must have a finite absolute limit");
+  assert.ok(social.absoluteTimeoutMs > browser.absoluteTimeoutMs, "multi-platform publishing receives a longer bounded window");
+  assert.equal(social.silenceTimeoutMs, browser.silenceTimeoutMs, "normal multi-minute browser silence remains supported");
 }
 
 console.log("Codex Bridge run watchdog checks passed.");

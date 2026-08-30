@@ -276,7 +276,7 @@ function normalizeCreativeOverlay(value: unknown, imageMode: RecipeSnsImageMode)
   };
 }
 
-function validateRecipeSnsPost(value: unknown, platformId: RecipeSnsPlatform): RecipeSnsPost {
+export function validateRecipeSnsPost(value: unknown, platformId: RecipeSnsPlatform): RecipeSnsPost {
   const platform = RECIPE_SNS_PLATFORMS.find((candidate) => candidate.id === platformId);
   if (!platform) throw new Error("SNS媒体が正しくありません");
   const candidate = asObject(value);

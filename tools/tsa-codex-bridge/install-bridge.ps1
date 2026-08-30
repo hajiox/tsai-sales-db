@@ -35,6 +35,7 @@ $requiredSourceFiles = @(
   "fax-summary-result.schema.json",
   "recipe-sns-result.schema.json",
   "recipe-sns-target-result.schema.json",
+  "recipe-sns-publish-result.schema.json",
   "render-recipe-sns-image.ps1",
   "bridge-monitor.ps1",
   "launch-bridge-monitor.ps1",
@@ -330,6 +331,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "ingredient-label-ai.schema.json") 
 Copy-Item -LiteralPath (Join-Path $sourceDir "fax-summary-result.schema.json") -Destination (Join-Path $installDir "fax-summary-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-target-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-target-result.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-publish-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-publish-result.schema.json") -Force
 Copy-WindowsPowerShellScript "render-recipe-sns-image.ps1" (Join-Path $installDir "render-recipe-sns-image.ps1")
 Copy-WindowsPowerShellScript "start-bridge.ps1" (Join-Path $installDir "start-bridge.ps1")
 Copy-WindowsPowerShellScript "start-bridge-prelogin.ps1" (Join-Path $installDir "start-bridge-prelogin.ps1")
