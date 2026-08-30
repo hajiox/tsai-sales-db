@@ -1,5 +1,19 @@
 # TSA Recipe SNS Note
 
+## 2026-08-30
+
+- レシピに商品LP URLが設定されている場合、X、Instagram、IGストーリー、Threadsの投稿文へ同じ遷移先URLを必ず1回入れるようにした。
+- 専用SkillとBridgeの生成指示へURL必須条件を追加し、TSA側でも生成結果の保存時・履歴表示時・投稿文コピー時に欠落と重複を補正する。個別再生成で他媒体の文面を引き継ぐ場合も同じ保証を適用する。
+- URLを優先し、各媒体の文字数上限を超える場合は本文側を短縮する。設定URLが不正な場合は外部処理を開始せず、EC情報の修正を案内する。
+
+### Verification
+
+- `npm run test:recipe-sns-target-merge`: URL必須・重複除去・文字数上限を確認
+- `npm run test:recipe-sns-feature`: success
+- `npm run test:recipe-sns-bridge`: success
+- Changed-file ESLint: success
+- `NEXTAUTH_URL=https://v0-tsa-19.vercel.app npm run build`: compile success; page-data収集はローカルにSupabase環境変数がないため既存APIで停止
+
 ## 2026-08-26
 
 - SNS画像生成をBridge 1.8.44 / protocol 2へ更新し、`通常リサイズ`、`クリエイティブ`、`アレンジ`の3モードを実装した。旧「画像だけ切り直す」は画面から廃止した。

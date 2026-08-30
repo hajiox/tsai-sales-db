@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  RECIPE_SNS_PLATFORMS,
+  countRecipeSnsCharacters,
+  ensureRecipeSnsAiResultDestinationUrl,
+  ensureRecipeSnsPostDestinationUrl,
+  formatRecipeSnsPost,
   mergeRecipeSnsTargetResult,
   validateRecipeSnsAiResult,
   validateRecipeSnsTargetBridgeResult,
@@ -50,5 +55,34 @@ for (const platform of ["instagram", "instagram_story", "threads"]) {
 assert.equal(base.posts.x.text, "old x", "base history must remain immutable");
 assert.equal(merged.image_mode, "creative");
 assert.equal(merged.variation_key, "new-angle");
+
+const destinationUrl = "https://buta.aizubrandhall-lp2.com/";
+const postsWithUrl = ensureRecipeSnsAiResultDestinationUrl(merged, destinationUrl);
+for (const platform of RECIPE_SNS_PLATFORMS) {
+  const post = postsWithUrl.posts[platform.id];
+  assert.equal(post.text.split(destinationUrl).length - 1, 1, `${platform.label} must contain the LP URL exactly once`);
+  assert.ok(
+    countRecipeSnsCharacters(formatRecipeSnsPost(post)) <= platform.maxLength,
+    `${platform.label} must remain within its character limit`,
+  );
+}
+assert.equal(merged.posts.x.text, "new x", "URL normalization must not mutate the source result");
+
+const duplicateAndLong = ensureRecipeSnsPostDestinationUrl({
+  text: `${"説明".repeat(300)}\n${destinationUrl}\n${destinationUrl}`,
+  hashtags: ["#one", "#two", "#three"],
+  rationale: "test",
+}, "x", destinationUrl);
+assert.equal(duplicateAndLong.text.split(destinationUrl).length - 1, 1);
+assert.ok(countRecipeSnsCharacters(formatRecipeSnsPost(duplicateAndLong)) <= 400);
+assert.deepEqual(duplicateAndLong.hashtags, ["#one", "#two", "#three"]);
+
+const story = ensureRecipeSnsPostDestinationUrl({
+  text: "ストーリー向けの長い説明文".repeat(10),
+  hashtags: [],
+  rationale: "test",
+}, "instagram_story", destinationUrl);
+assert.equal(story.text.split(destinationUrl).length - 1, 1);
+assert.ok(countRecipeSnsCharacters(formatRecipeSnsPost(story)) <= 50);
 
 console.log("recipe SNS targeted regeneration merge verified");

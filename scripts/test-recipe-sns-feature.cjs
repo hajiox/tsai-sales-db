@@ -45,6 +45,8 @@ for (const [platform, values] of Object.entries(expectedPlatforms)) {
 }
 assert.match(snsRules, /Array\.from\(value\)\.length/);
 assert.match(snsRules, /formatRecipeSnsPost/);
+assert.match(snsRules, /ensureRecipeSnsPostDestinationUrl/);
+assert.match(snsRules, /ensureRecipeSnsAiResultDestinationUrl/);
 
 assert.match(snsServer, /images\.filter\(\(image\) => image\.image_role === "portrait"\)/);
 assert.match(snsServer, /return gallery\[0\] \|\| null/);
@@ -67,6 +69,8 @@ assert.match(snsRoute, /sourceImageUrl: sourceImage\.image_url/);
 assert.match(snsRoute, /image_variants: baseImageVariants/);
 assert.match(snsRoute, /targetPlatforms: targetPlatform/);
 assert.match(snsRoute, /baseGenerationId: targetPlatform/);
+assert.match(snsRoute, /productLpUrl,/);
+assert.match(snsRoute, /ensureRecipeSnsAiResultDestinationUrl/);
 assert.match(snsRoute, /one_image_compact_packet_then_fresh_skill_session/);
 assert.doesNotMatch(snsRoute, /action === "recrop"|deterministic_image_recrop_without_codex/);
 assert.match(snsRoute, /sourceImage\.id/);
@@ -85,10 +89,13 @@ assert.match(importRoute, /storedImageVariants/);
 assert.match(importRoute, /publishRecipeSnsImageVariants/);
 assert.match(importRoute, /image_variants: storedImageVariants/);
 assert.match(importRoute, /posts: storedResult/);
+assert.match(importRoute, /ensureRecipeSnsAiResultDestinationUrl/);
 
 for (const prohibition of ["Web検索", "ブラウザ操作", "過去チャット参照", "SNS投稿"]) {
   assert.match(skill, new RegExp(prohibition));
 }
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
+assert.match(skill, /productLpUrl/);
+assert.match(skill, /必ず1回だけ/);
 
 console.log("Recipe SNS feature checks passed.");

@@ -4,9 +4,11 @@ import {
   RECIPE_SNS_PLATFORMS,
   RECIPE_SNS_REASONING_EFFORT,
   RECIPE_SNS_RULES_VERSION,
+  ensureRecipeSnsAiResultDestinationUrl,
   isRecipeSnsImageMode,
   isRecipeSnsPlatform,
   mergeRecipeSnsTargetResult,
+  recipeSnsDestinationUrlFromSnapshot,
   validateRecipeSnsAiResult,
   validateRecipeSnsBridgeResult,
   validateRecipeSnsTargetBridgeResult,
@@ -107,6 +109,10 @@ export async function POST(
       return NextResponse.json({ error: "SNS生成履歴が見つかりません" }, { status: 404 });
     }
     if (generation.status === "completed" && generation.posts) {
+      const storedPosts = ensureRecipeSnsAiResultDestinationUrl(
+        validateRecipeSnsAiResult(generation.posts),
+        recipeSnsDestinationUrlFromSnapshot(sourceSnapshot),
+      );
       return NextResponse.json({
         ok: true,
         reused: true,
@@ -114,7 +120,7 @@ export async function POST(
         createdAt: generation.created_at,
         completedAt: generation.completed_at,
         imageVariants: generation.image_variants,
-        ...validateRecipeSnsAiResult(generation.posts),
+        ...storedPosts,
       });
     }
     if (generation.status !== "pending") {
@@ -226,6 +232,10 @@ export async function POST(
       void _localGeneratedImages;
       storedResult = fullResult;
     }
+    storedResult = ensureRecipeSnsAiResultDestinationUrl(
+      storedResult,
+      recipeSnsDestinationUrlFromSnapshot(sourceSnapshot),
+    );
     const now = new Date().toISOString();
     const { error: updateError } = await supabase
       .from("recipe_sns_generations")

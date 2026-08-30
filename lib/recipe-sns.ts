@@ -1,6 +1,6 @@
 export const RECIPE_SNS_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
-export const RECIPE_SNS_RULES_VERSION = "2026-08-26.3";
+export const RECIPE_SNS_RULES_VERSION = "2026-08-30.1";
 
 export const RECIPE_SNS_IMAGE_MODES = [
   { id: "normal", label: "通常リサイズ" },
@@ -128,6 +128,7 @@ export type RecipeSnsGenerationView = {
   sourceImageRole: "portrait" | "gallery";
   imageMode: RecipeSnsImageMode;
   targetPlatform: RecipeSnsPlatform | null;
+  destinationUrl: string | null;
   variationKey: string;
   imageVariants: Record<RecipeSnsPlatform, RecipeSnsImageVariant>;
   posts: RecipeSnsAiResult | null;
@@ -176,6 +177,80 @@ export function normalizeRecipeSnsHashtag(value: unknown) {
 export function formatRecipeSnsPost(post: Pick<RecipeSnsPost, "text" | "hashtags">) {
   const hashtags = post.hashtags.map(normalizeRecipeSnsHashtag).filter(Boolean).join(" ");
   return hashtags ? `${post.text.trim()}\n\n${hashtags}` : post.text.trim();
+}
+
+export function normalizeRecipeSnsDestinationUrl(value: unknown) {
+  const url = String(value ?? "").trim();
+  if (!url || /\s/.test(url)) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+export function recipeSnsDestinationUrlFromSnapshot(value: unknown) {
+  const snapshot = asObject(value);
+  return normalizeRecipeSnsDestinationUrl(snapshot.productLpUrl)
+    || normalizeRecipeSnsDestinationUrl(asObject(snapshot.productLp).url);
+}
+
+function clipRecipeSnsTextToLength(value: string, maxLength: number) {
+  if (maxLength <= 0) return "";
+  return Array.from(value).slice(0, maxLength).join("").trimEnd();
+}
+
+export function ensureRecipeSnsPostDestinationUrl(
+  post: RecipeSnsPost,
+  platformId: RecipeSnsPlatform,
+  value: unknown,
+): RecipeSnsPost {
+  const destinationUrl = normalizeRecipeSnsDestinationUrl(value);
+  if (!destinationUrl) return post;
+
+  const platform = RECIPE_SNS_PLATFORMS.find((candidate) => candidate.id === platformId);
+  if (!platform) throw new Error("SNS媒体が正しくありません");
+  const hashtags = post.hashtags.map(normalizeRecipeSnsHashtag).filter(Boolean);
+  const hashtagText = hashtags.join(" ");
+  const textLimit = platform.maxLength
+    - countRecipeSnsCharacters(hashtagText)
+    - (hashtagText ? 2 : 0);
+  if (countRecipeSnsCharacters(destinationUrl) > textLimit) {
+    throw new Error(`${platform.label}の文字数上限内に商品LP URLを収められません`);
+  }
+
+  const prose = post.text
+    .replace(/https?:\/\/[^\s]+/giu, "")
+    .replace(/[ \t]+\n/gu, "\n")
+    .replace(/\n[ \t]+/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+  const separator = prose ? "\n\n" : "";
+  const proseLimit = textLimit
+    - countRecipeSnsCharacters(destinationUrl)
+    - countRecipeSnsCharacters(separator);
+  const clippedProse = clipRecipeSnsTextToLength(prose, proseLimit);
+  const text = clippedProse ? `${clippedProse}\n\n${destinationUrl}` : destinationUrl;
+
+  return { ...post, text, hashtags };
+}
+
+export function ensureRecipeSnsAiResultDestinationUrl(
+  result: RecipeSnsAiResult,
+  value: unknown,
+): RecipeSnsAiResult {
+  const destinationUrl = normalizeRecipeSnsDestinationUrl(value);
+  if (!destinationUrl) return result;
+  const posts = { ...result.posts };
+  for (const platform of RECIPE_SNS_PLATFORMS) {
+    posts[platform.id] = ensureRecipeSnsPostDestinationUrl(
+      result.posts[platform.id],
+      platform.id,
+      destinationUrl,
+    );
+  }
+  return { ...result, posts };
 }
 
 function normalizeCreativeOverlay(value: unknown, imageMode: RecipeSnsImageMode): RecipeSnsCreativeOverlay {

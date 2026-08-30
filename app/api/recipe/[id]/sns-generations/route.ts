@@ -7,8 +7,11 @@ import {
   RECIPE_SNS_REASONING_EFFORT,
   RECIPE_SNS_RULES_VERSION,
   RECIPE_SNS_PLATFORMS,
+  ensureRecipeSnsAiResultDestinationUrl,
   isRecipeSnsImageMode,
   isRecipeSnsPlatform,
+  normalizeRecipeSnsDestinationUrl,
+  recipeSnsDestinationUrlFromSnapshot,
   recipeSnsPlatformRules,
   validateRecipeSnsAiResult,
   type RecipeSnsGenerationView,
@@ -108,9 +111,15 @@ function toGenerationView(
     sourceImageRole: String(row.source_image_role || "gallery") as "portrait" | "gallery",
     imageMode: isRecipeSnsImageMode(sourceSnapshot.imageMode) ? sourceSnapshot.imageMode : "normal",
     targetPlatform: isRecipeSnsPlatform(sourceSnapshot.targetPlatform) ? sourceSnapshot.targetPlatform : null,
+    destinationUrl: recipeSnsDestinationUrlFromSnapshot(sourceSnapshot),
     variationKey: String(row.variation_key || ""),
     imageVariants: parseImageVariants(row.image_variants),
-    posts: rawPosts && typeof rawPosts === "object" ? validateRecipeSnsAiResult(rawPosts) : null,
+    posts: rawPosts && typeof rawPosts === "object"
+      ? ensureRecipeSnsAiResultDestinationUrl(
+        validateRecipeSnsAiResult(rawPosts),
+        recipeSnsDestinationUrlFromSnapshot(sourceSnapshot),
+      )
+      : null,
     model: String(row.model || RECIPE_SNS_MODEL),
     reasoningEffort: String(row.reasoning_effort || RECIPE_SNS_REASONING_EFFORT),
     rulesVersion: String(row.rules_version || RECIPE_SNS_RULES_VERSION),
@@ -259,8 +268,15 @@ export async function POST(
     if (targetPlatform && (!baseGeneration?.posts || !isRecipeSnsImageMode(baseSnapshot.imageMode) || baseSnapshot.imageMode !== imageMode)) {
       return NextResponse.json({ error: "選択中の生成履歴と画像モードが一致しません" }, { status: 409 });
     }
-    const basePosts = targetPlatform ? validateRecipeSnsAiResult(baseGeneration?.posts) : null;
-    const baseImageVariants = targetPlatform ? parseImageVariants(baseGeneration?.image_variants) : {};
+    const basePosts = targetPlatform
+      ? ensureRecipeSnsAiResultDestinationUrl(
+        validateRecipeSnsAiResult(baseGeneration?.posts),
+        recipeSnsDestinationUrlFromSnapshot(baseSnapshot),
+      )
+      : null;
+    const baseImageVariants: Partial<Record<RecipeSnsPlatform, RecipeSnsImageVariant>> = targetPlatform
+      ? parseImageVariants(baseGeneration?.image_variants)
+      : {};
     if (targetPlatform && RECIPE_SNS_PLATFORMS.some((platform) => !baseImageVariants[platform.id])) {
       return NextResponse.json({ error: "個別再生成の基準履歴に4媒体の画像が揃っていません" }, { status: 409 });
     }
@@ -276,7 +292,12 @@ export async function POST(
       String(baseGeneration?.variation_key || latestGenerationResult.data?.variation_key || "") || null,
     );
     const recipe = recipeResult.data;
-    const lpSummary = await fetchCompanyLpSummary(recipe.product_lp_url);
+    const configuredLpUrl = clip(recipe.product_lp_url, 2_000);
+    const productLpUrl = normalizeRecipeSnsDestinationUrl(configuredLpUrl);
+    if (configuredLpUrl && !productLpUrl) {
+      return NextResponse.json({ error: "商品LP URLが正しくありません。EC情報で修正してから再実行してください" }, { status: 400 });
+    }
+    const lpSummary = await fetchCompanyLpSummary(productLpUrl);
     const generationId = randomUUID();
     const sourceSnapshot = {
       recipeId: recipe.id,
@@ -296,6 +317,7 @@ export async function POST(
       shelfLife: clip(recipe.shelf_life, 100),
       janCode: clip(recipe.jan_code, 32),
       productCode: clip(recipe.product_code, 100),
+      productLpUrl,
       productLp: lpSummary,
       sourceImage: { id: sourceImage.id, role: sourceImage.image_role },
       imageMode,

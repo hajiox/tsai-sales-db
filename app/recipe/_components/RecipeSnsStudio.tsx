@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import {
   RECIPE_SNS_PLATFORMS,
   countRecipeSnsCharacters,
+  ensureRecipeSnsPostDestinationUrl,
   formatRecipeSnsPost,
   normalizeRecipeSnsHashtag,
   recipeSnsImageModeLabel,
@@ -213,7 +214,12 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
   async function copyPost(platform: RecipeSnsPlatform) {
     const post = editedPosts?.[platform];
     if (!post) return;
-    await navigator.clipboard.writeText(formatRecipeSnsPost(post));
+    const normalizedPost = ensureRecipeSnsPostDestinationUrl(
+      post,
+      platform,
+      selectedGeneration?.destinationUrl,
+    );
+    await navigator.clipboard.writeText(formatRecipeSnsPost(normalizedPost));
     toast.success(`${RECIPE_SNS_PLATFORMS.find((item) => item.id === platform)?.label}の投稿文をコピーしました`);
   }
 
@@ -348,7 +354,10 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
             {RECIPE_SNS_PLATFORMS.map((platform) => {
               const variant = selectedGeneration.imageVariants[platform.id];
               const post = editedPosts?.[platform.id] || null;
-              const combined = post ? formatRecipeSnsPost(post) : "";
+              const normalizedPost = post
+                ? ensureRecipeSnsPostDestinationUrl(post, platform.id, selectedGeneration.destinationUrl)
+                : null;
+              const combined = normalizedPost ? formatRecipeSnsPost(normalizedPost) : "";
               const length = countRecipeSnsCharacters(combined);
               const over = length > platform.maxLength;
               return (

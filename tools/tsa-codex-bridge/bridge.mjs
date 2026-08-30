@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.24";
+const VERSION = "1.9.25";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -3861,8 +3861,16 @@ function validateRecipeSnsGenerateJobParameters(input) {
   }
   if (String(parameters.model || "") !== "gpt-5.6-sol"
     || String(parameters.reasoningEffort || "") !== "medium"
-    || !/^2026-08-26\..+$/.test(String(parameters.rulesVersion || ""))) {
-    throw new Error("SNS素材生成はGPT-5.6 Sol / medium / 2026-08-26.*ルール専用です");
+    || !/^2026-08-30\..+$/.test(String(parameters.rulesVersion || ""))) {
+    throw new Error("SNS素材生成はGPT-5.6 Sol / medium / 2026-08-30.*ルール専用です");
+  }
+  const productLpUrl = String(sourceSnapshot.productLpUrl || "").trim();
+  if (productLpUrl) {
+    let parsedProductLpUrl;
+    try { parsedProductLpUrl = new URL(productLpUrl); } catch { throw new Error("SNS投稿の遷移先URLが正しくありません"); }
+    if (!new Set(["http:", "https:"]).has(parsedProductLpUrl.protocol) || /\s/.test(productLpUrl)) {
+      throw new Error("SNS投稿の遷移先URLが正しくありません");
+    }
   }
   const platformIds = Object.keys(RECIPE_SNS_PLATFORM_RULES);
   if (!platformRules || Object.keys(platformRules).sort().join("|") !== [...platformIds].sort().join("|")) {
@@ -4047,6 +4055,7 @@ async function executeRecipeSnsGenerateJob(job) {
     "Never read or search app Chats, prior tasks, threads, transcripts, rollouts, saved sessions, repositories, or unrelated files.",
     "Do not browse the web, control a browser, post externally, or modify external data. Commands are limited to reading the built-in imagegen SKILL.md and one Copy-Item per generated image when the image tool requires copying from CODEX_HOME/generated_images into the current job directory.",
     "Use only TASK_JSON.sourceSnapshot as factual evidence and follow TASK_JSON.platformRules as absolute limits.",
+    "When TASK_JSON.sourceSnapshot.productLpUrl is set, include that exact URL once in every requested post.text. Never shorten or alter it; shorten the prose first to stay within each platform limit.",
     parameters.targetPlatform
       ? `Regenerate only ${parameters.targetPlatform}. Do not create output for any other platform.`
       : "Create one distinct Japanese post for each platform and follow TASK_JSON.imageMode exactly.",

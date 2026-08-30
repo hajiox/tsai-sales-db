@@ -30,7 +30,7 @@ const validator = bridge.slice(
 );
 assert.match(validator, /parameters\.model \|\| ""\) !== "gpt-5\.6-sol"/);
 assert.match(validator, /parameters\.reasoningEffort \|\| ""\) !== "medium"/);
-assert.match(validator, /\^2026-08-26\\\.\.\+\$/);
+assert.match(validator, /\^2026-08-30\\\.\.\+\$/);
 assert.match(validator, /sourceSnapshot\.recipeId/);
 assert.match(validator, /sourceSnapshot\.variationKey/);
 assert.match(validator, /generationId/);
@@ -46,6 +46,7 @@ const handler = bridge.slice(
 assert.match(handler, /Use \$generate-aizu-sns-assets/);
 assert.match(handler, /Never read or search app Chats/);
 assert.match(handler, /Do not browse the web, control a browser/);
+assert.match(handler, /include that exact URL once in every requested post\.text/);
 assert.match(handler, /isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /function isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /skills", "\.system", "imagegen", "SKILL\.md"/);
@@ -96,6 +97,8 @@ for (const expected of ["recipe-sns-result.schema.json", "recipe-sns-target-resu
 assert.equal(skillContract.tasks.recipe_sns_generate.skill, "generate-aizu-sns-assets");
 assert.match(skill, /外部サイト閲覧/);
 assert.match(skill, /過去チャット参照/);
+assert.match(skill, /productLpUrl/);
+assert.match(skill, /必ず1回だけ/);
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
 
 function assertStrictObjectSchemas(value, location = "$") {
