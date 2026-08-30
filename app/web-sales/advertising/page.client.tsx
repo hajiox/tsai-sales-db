@@ -83,7 +83,7 @@ interface AdCostRow {
     other_cost: number
 }
 
-type TabType = 'overview' | 'google' | 'meta' | 'rakuten' | 'rakuten-search' | 'yahoo' | 'amazon' | 'lp-tracking'
+type TabType = 'overview' | 'ad-overview' | 'google' | 'meta' | 'rakuten' | 'rakuten-search' | 'yahoo' | 'amazon' | 'lp-tracking'
 type SyncResultType = 'success' | 'warning' | 'error'
 type AdPlatformKey = 'google' | 'meta' | 'rakuten' | 'yahoo' | 'amazon'
 
@@ -583,6 +583,7 @@ export default function AdvertisingDashboard() {
     // ===== タブ定義 =====
     const primaryTabs: { id: TabType; label: string; icon: React.ReactNode; imported?: boolean; platformKey?: TabType }[] = [
         { id: 'overview', label: '経費サマリー', icon: <LayoutDashboard size={16} /> },
+        { id: 'ad-overview', label: '広告総合', icon: <BarChart3 size={16} /> },
         { id: 'google', label: 'Google広告', icon: <span className="text-xs font-bold">G</span>, imported: importedPlatforms.google },
         { id: 'meta', label: 'Meta広告', icon: <span className="text-xs font-bold">M</span>, imported: importedPlatforms.meta },
         { id: 'rakuten', label: '楽天広告', icon: <span className="text-xs font-bold text-red-600">R</span>, imported: importedPlatforms.rakuten },
@@ -740,7 +741,7 @@ export default function AdvertisingDashboard() {
                     </section>}
                 </>
             )}
-            {false && activeTab === 'overview' && (
+            {activeTab === 'ad-overview' && (
                 <>
                     {/* プラットフォーム別広告費カード */}
                     <div className="rounded-lg border bg-white p-3 lg:rounded-xl lg:p-5">
