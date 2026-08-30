@@ -50,41 +50,45 @@
     "xPost": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "hashtags", "rationale"],
+      "required": ["text", "hashtags", "rationale", "link_url"],
       "properties": {
         "text": { "type": "string", "minLength": 1, "maxLength": 400 },
         "hashtags": { "type": "array", "minItems": 0, "maxItems": 3, "items": { "type": "string", "maxLength": 40 } },
-        "rationale": { "type": "string", "maxLength": 500 }
+        "rationale": { "type": "string", "maxLength": 500 },
+        "link_url": { "type": "string", "maxLength": 0 }
       }
     },
     "instagramPost": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "hashtags", "rationale"],
+      "required": ["text", "hashtags", "rationale", "link_url"],
       "properties": {
         "text": { "type": "string", "minLength": 1, "maxLength": 2200 },
         "hashtags": { "type": "array", "minItems": 10, "maxItems": 15, "items": { "type": "string", "maxLength": 40 } },
-        "rationale": { "type": "string", "maxLength": 500 }
+        "rationale": { "type": "string", "maxLength": 500 },
+        "link_url": { "type": "string", "maxLength": 0 }
       }
     },
     "storyPost": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "hashtags", "rationale"],
+      "required": ["text", "hashtags", "rationale", "link_url"],
       "properties": {
         "text": { "type": "string", "minLength": 1, "maxLength": 50 },
         "hashtags": { "type": "array", "minItems": 0, "maxItems": 0, "items": { "type": "string" } },
-        "rationale": { "type": "string", "maxLength": 500 }
+        "rationale": { "type": "string", "maxLength": 500 },
+        "link_url": { "type": "string", "maxLength": 2000 }
       }
     },
     "threadsPost": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "hashtags", "rationale"],
+      "required": ["text", "hashtags", "rationale", "link_url"],
       "properties": {
         "text": { "type": "string", "minLength": 1, "maxLength": 500 },
         "hashtags": { "type": "array", "minItems": 0, "maxItems": 5, "items": { "type": "string", "maxLength": 40 } },
-        "rationale": { "type": "string", "maxLength": 500 }
+        "rationale": { "type": "string", "maxLength": 500 },
+        "link_url": { "type": "string", "maxLength": 0 }
       }
     },
     "overlay": {

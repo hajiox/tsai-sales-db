@@ -8,6 +8,7 @@ import {
   Download,
   History,
   ImageIcon,
+  Link2,
   Loader2,
   Megaphone,
   RefreshCw,
@@ -223,6 +224,11 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
     toast.success(`${RECIPE_SNS_PLATFORMS.find((item) => item.id === platform)?.label}の投稿文をコピーしました`);
   }
 
+  async function copyStoryLink(value: string) {
+    await navigator.clipboard.writeText(value);
+    toast.success("IGストーリーのリンクURLをコピーしました");
+  }
+
   return (
     <section className="mx-auto max-w-[1400px] px-3 py-5 sm:px-4 lg:px-8" aria-labelledby="recipe-sns-heading">
       <div className="flex flex-col gap-4 border-b border-gray-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
@@ -436,6 +442,26 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                                 className="w-full rounded-md border border-gray-300 px-2.5 py-2 text-sm outline-none focus:border-gray-700 focus:ring-1 focus:ring-gray-700"
                               />
                               <p className="mt-1 text-[10px] text-gray-400">{post.hashtags.length}件{platform.minHashtags > 0 ? ` / 推奨${platform.minHashtags}〜${platform.maxHashtags}件` : ""}</p>
+                            </div>
+                          )}
+                          {platform.id === "instagram_story" && normalizedPost?.linkUrl && (
+                            <div>
+                              <label className="mb-1 block text-xs font-bold text-gray-700">リンクスタンプ用URL</label>
+                              <div className="flex min-w-0 items-center gap-2">
+                                <input
+                                  readOnly
+                                  value={normalizedPost.linkUrl}
+                                  className="min-w-0 flex-1 rounded-md border border-gray-300 bg-gray-50 px-2.5 py-2 text-xs text-gray-700 outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void copyStoryLink(normalizedPost.linkUrl!)}
+                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                                  title="リンクスタンプ用URLをコピー"
+                                >
+                                  <Link2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </div>
                           )}
                           <button

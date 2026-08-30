@@ -40,7 +40,7 @@ const target = validateRecipeSnsTargetBridgeResult({
   source_gaps: ["none"],
   image_mode: "creative",
   platform: "x",
-  post: { text: "new x", hashtags: ["#new"], rationale: "regenerated" },
+  post: { text: "new x", hashtags: ["#new"], rationale: "regenerated", link_url: "" },
   creative_overlay: { headline: "new headline", subline: "new subline", placement: "bottom-right" },
   generated_image: { source: "generated", file_path: "C:\\jobs\\x.png", prompt_summary: "new x image" },
 }, "creative", "x");
@@ -60,7 +60,13 @@ const destinationUrl = "https://buta.aizubrandhall-lp2.com/";
 const postsWithUrl = ensureRecipeSnsAiResultDestinationUrl(merged, destinationUrl);
 for (const platform of RECIPE_SNS_PLATFORMS) {
   const post = postsWithUrl.posts[platform.id];
-  assert.equal(post.text.split(destinationUrl).length - 1, 1, `${platform.label} must contain the LP URL exactly once`);
+  if (platform.id === "instagram_story") {
+    assert.equal(post.text.includes(destinationUrl), false, "IG Story text must not contain the LP URL");
+    assert.equal(post.linkUrl, destinationUrl, "IG Story must carry the link-sticker URL separately");
+  } else {
+    assert.equal(post.text.split(destinationUrl).length - 1, 1, `${platform.label} must contain the LP URL exactly once`);
+    assert.equal(post.linkUrl, null, `${platform.label} must not carry a link-sticker URL`);
+  }
   assert.ok(
     countRecipeSnsCharacters(formatRecipeSnsPost(post)) <= platform.maxLength,
     `${platform.label} must remain within its character limit`,
@@ -81,8 +87,10 @@ const story = ensureRecipeSnsPostDestinationUrl({
   text: "ストーリー向けの長い説明文".repeat(10),
   hashtags: [],
   rationale: "test",
+  linkUrl: null,
 }, "instagram_story", destinationUrl);
-assert.equal(story.text.split(destinationUrl).length - 1, 1);
+assert.equal(story.text.includes(destinationUrl), false);
+assert.equal(story.linkUrl, destinationUrl);
 assert.ok(countRecipeSnsCharacters(formatRecipeSnsPost(story)) <= 50);
 
 console.log("recipe SNS targeted regeneration merge verified");

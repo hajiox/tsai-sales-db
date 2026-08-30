@@ -1,6 +1,6 @@
 export const RECIPE_SNS_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
-export const RECIPE_SNS_RULES_VERSION = "2026-08-30.1";
+export const RECIPE_SNS_RULES_VERSION = "2026-08-30.2";
 
 export const RECIPE_SNS_IMAGE_MODES = [
   { id: "normal", label: "通常リサイズ" },
@@ -73,6 +73,7 @@ export type RecipeSnsPost = {
   text: string;
   hashtags: string[];
   rationale: string;
+  linkUrl: string | null;
 };
 
 export type RecipeSnsCreativeOverlay = {
@@ -207,11 +208,27 @@ export function ensureRecipeSnsPostDestinationUrl(
   value: unknown,
 ): RecipeSnsPost {
   const destinationUrl = normalizeRecipeSnsDestinationUrl(value);
-  if (!destinationUrl) return post;
+  if (!destinationUrl) return { ...post, linkUrl: null };
 
   const platform = RECIPE_SNS_PLATFORMS.find((candidate) => candidate.id === platformId);
   if (!platform) throw new Error("SNS媒体が正しくありません");
   const hashtags = post.hashtags.map(normalizeRecipeSnsHashtag).filter(Boolean);
+  const prose = post.text
+    .replace(/https?:\/\/[^\s]+/giu, "")
+    .replace(/[ \t]+\n/gu, "\n")
+    .replace(/\n[ \t]+/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+
+  if (platformId === "instagram_story") {
+    return {
+      ...post,
+      text: clipRecipeSnsTextToLength(prose || "商品ページはこちら", platform.maxLength),
+      hashtags,
+      linkUrl: destinationUrl,
+    };
+  }
+
   const hashtagText = hashtags.join(" ");
   const textLimit = platform.maxLength
     - countRecipeSnsCharacters(hashtagText)
@@ -220,12 +237,6 @@ export function ensureRecipeSnsPostDestinationUrl(
     throw new Error(`${platform.label}の文字数上限内に商品LP URLを収められません`);
   }
 
-  const prose = post.text
-    .replace(/https?:\/\/[^\s]+/giu, "")
-    .replace(/[ \t]+\n/gu, "\n")
-    .replace(/\n[ \t]+/gu, "\n")
-    .replace(/\n{3,}/gu, "\n\n")
-    .trim();
   const separator = prose ? "\n\n" : "";
   const proseLimit = textLimit
     - countRecipeSnsCharacters(destinationUrl)
@@ -233,7 +244,7 @@ export function ensureRecipeSnsPostDestinationUrl(
   const clippedProse = clipRecipeSnsTextToLength(prose, proseLimit);
   const text = clippedProse ? `${clippedProse}\n\n${destinationUrl}` : destinationUrl;
 
-  return { ...post, text, hashtags };
+  return { ...post, text, hashtags, linkUrl: null };
 }
 
 export function ensureRecipeSnsAiResultDestinationUrl(
@@ -273,6 +284,12 @@ function validateRecipeSnsPost(value: unknown, platformId: RecipeSnsPlatform): R
   const hashtags = Array.isArray(candidate.hashtags)
     ? [...new Set(candidate.hashtags.map(normalizeRecipeSnsHashtag).filter(Boolean))]
     : [];
+  const rawLinkUrl = clippedText(candidate.link_url ?? candidate.linkUrl, 2_000);
+  const linkUrl = normalizeRecipeSnsDestinationUrl(rawLinkUrl);
+  if (rawLinkUrl && !linkUrl) throw new Error(`${platform.label}のリンク先URLが正しくありません`);
+  if (platformId !== "instagram_story" && rawLinkUrl) {
+    throw new Error(`${platform.label}にはリンクスタンプ用URLを設定できません`);
+  }
   if (!text) throw new Error(`${platform.label}の投稿文が空欄です`);
   if (hashtags.length < platform.minHashtags || hashtags.length > platform.maxHashtags) {
     throw new Error(`${platform.label}のハッシュタグ数が${platform.minHashtags}〜${platform.maxHashtags}件の範囲外です`);
@@ -284,6 +301,7 @@ function validateRecipeSnsPost(value: unknown, platformId: RecipeSnsPlatform): R
     text,
     hashtags,
     rationale: clippedText(candidate.rationale, 500),
+    linkUrl,
   };
 }
 

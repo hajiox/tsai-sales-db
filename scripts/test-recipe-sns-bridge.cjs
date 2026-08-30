@@ -46,7 +46,8 @@ const handler = bridge.slice(
 assert.match(handler, /Use \$generate-aizu-sns-assets/);
 assert.match(handler, /Never read or search app Chats/);
 assert.match(handler, /Do not browse the web, control a browser/);
-assert.match(handler, /include that exact URL once in every requested post\.text/);
+assert.match(handler, /Instagram Story must not include any URL in post\.text/);
+assert.match(handler, /exact URL in link_url for the link sticker/);
 assert.match(handler, /isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /function isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /skills", "\.system", "imagegen", "SKILL\.md"/);
@@ -98,7 +99,7 @@ assert.equal(skillContract.tasks.recipe_sns_generate.skill, "generate-aizu-sns-a
 assert.match(skill, /外部サイト閲覧/);
 assert.match(skill, /過去チャット参照/);
 assert.match(skill, /productLpUrl/);
-assert.match(skill, /必ず1回だけ/);
+assert.match(skill, /リンクスタンプ用/);
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
 
 function assertStrictObjectSchemas(value, location = "$") {
@@ -117,6 +118,14 @@ function assertStrictObjectSchemas(value, location = "$") {
 }
 assertStrictObjectSchemas(schema);
 assertStrictObjectSchemas(targetSchema);
+for (const definitionName of ["xPost", "instagramPost", "storyPost", "threadsPost"]) {
+  assert.ok(schema.$defs[definitionName].required.includes("link_url"));
+}
+assert.ok(targetSchema.properties.post.required.includes("link_url"));
+assert.equal(schema.$defs.xPost.properties.link_url.maxLength, 0);
+assert.equal(schema.$defs.instagramPost.properties.link_url.maxLength, 0);
+assert.equal(schema.$defs.threadsPost.properties.link_url.maxLength, 0);
+assert.equal(schema.$defs.storyPost.properties.link_url.maxLength, 2000);
 
 function assertCodexOutputSchemaCompatibility(value, location = "$") {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;

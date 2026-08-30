@@ -1,6 +1,6 @@
 ---
 name: generate-aizu-sns-assets
-description: TSAが渡す保存済み商品情報と1枚の参照画像だけを使い、SNS投稿文と通常・広告クリエイティブ・生活シーン画像の媒体別素材を生成するCodex Bridge専用Skill。外部閲覧や投稿は行わない。
+description: TSAが渡す保存済み商品情報と1枚の参照画像だけを使い、SNS投稿文、IGストーリーのリンク先、通常・広告クリエイティブ・生活シーン画像を生成するCodex Bridge専用Skill。外部閲覧や投稿は行わない。
 ---
 
 # 会津ブランド館 SNS素材生成
@@ -62,9 +62,10 @@ description: TSAが渡す保存済み商品情報と1枚の参照画像だけを
 
 ## 投稿文
 
-- `TASK_JSON.sourceSnapshot.productLpUrl` が設定されている場合は、そのURLを一字一句変えず、対象となる全媒体の `post.text` に必ず1回だけ入れる。個別再生成でも同じ規則を適用する。
-- URLは短縮・改変せず、文字数上限へ収める時は説明文を先に削る。IGストーリーもURLを最優先し、URLだけで上限へ収まらない場合は推測せず処理を止める。
-- 商品LP本文に `warning` がある場合や本文を取得できない場合でも、固定済み `productLpUrl` 自体は投稿文へ入れる。
+- `TASK_JSON.sourceSnapshot.productLpUrl` が設定されている場合、X・Instagram・ThreadsはURLを一字一句変えず `post.text` に必ず1回だけ入れ、`link_url` は空文字にする。文字数上限へ収める時は説明文を先に削る。
+- IGストーリーはURLを `post.text` に入れない。リンクスタンプ用として、固定済みURLを一字一句変えず `link_url` に入れる。
+- `productLpUrl` が未設定なら全媒体の `link_url` を空文字にする。商品LP本文に `warning` がある場合や本文を取得できない場合でも、固定済みURLの振り分け規則は変えない。
+- 通常生成と個別再生成の両方で同じ規則を適用する。
 - X: 投稿文とハッシュタグを合わせて400文字以内、ハッシュタグ0〜3件。
 - Instagram: 投稿文とハッシュタグを合わせて2,200文字以内、ハッシュタグ10〜15件。
 - IGストーリー: 50文字以内、ハッシュタグなし。

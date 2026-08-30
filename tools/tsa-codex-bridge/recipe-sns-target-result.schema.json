@@ -16,7 +16,7 @@
     "post": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "hashtags", "rationale"],
+      "required": ["text", "hashtags", "rationale", "link_url"],
       "properties": {
         "text": { "type": "string", "minLength": 1, "maxLength": 2200 },
         "hashtags": {
@@ -25,7 +25,8 @@
           "maxItems": 15,
           "items": { "type": "string", "maxLength": 40 }
         },
-        "rationale": { "type": "string", "maxLength": 500 }
+        "rationale": { "type": "string", "maxLength": 500 },
+        "link_url": { "type": "string", "maxLength": 2000 }
       }
     },
     "creative_overlay": {

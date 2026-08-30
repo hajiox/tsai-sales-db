@@ -25,6 +25,8 @@ assert.match(studio, /generatingPlatform/);
 assert.match(studio, /baseGenerationId/);
 assert.match(studio, /RefreshCw/);
 assert.match(studio, /だけを同じモードで再生成/);
+assert.match(studio, /リンクスタンプ用URL/);
+assert.match(studio, /copyStoryLink/);
 assert.doesNotMatch(studio, /画像だけ切り直す/);
 assert.ok(
   studio.indexOf("if (currentJobGeneration) return currentJobGeneration.id")
@@ -47,6 +49,7 @@ assert.match(snsRules, /Array\.from\(value\)\.length/);
 assert.match(snsRules, /formatRecipeSnsPost/);
 assert.match(snsRules, /ensureRecipeSnsPostDestinationUrl/);
 assert.match(snsRules, /ensureRecipeSnsAiResultDestinationUrl/);
+assert.match(snsRules, /platformId === "instagram_story"/);
 
 assert.match(snsServer, /images\.filter\(\(image\) => image\.image_role === "portrait"\)/);
 assert.match(snsServer, /return gallery\[0\] \|\| null/);
@@ -96,6 +99,7 @@ for (const prohibition of ["Web検索", "ブラウザ操作", "過去チャッ�
 }
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
 assert.match(skill, /productLpUrl/);
-assert.match(skill, /必ず1回だけ/);
+assert.match(skill, /リンクスタンプ用/);
+assert.match(skill, /IGストーリーはURLを `post\.text` に入れない/);
 
 console.log("Recipe SNS feature checks passed.");

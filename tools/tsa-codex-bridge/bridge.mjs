@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.25";
+const VERSION = "1.9.26";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4055,7 +4055,7 @@ async function executeRecipeSnsGenerateJob(job) {
     "Never read or search app Chats, prior tasks, threads, transcripts, rollouts, saved sessions, repositories, or unrelated files.",
     "Do not browse the web, control a browser, post externally, or modify external data. Commands are limited to reading the built-in imagegen SKILL.md and one Copy-Item per generated image when the image tool requires copying from CODEX_HOME/generated_images into the current job directory.",
     "Use only TASK_JSON.sourceSnapshot as factual evidence and follow TASK_JSON.platformRules as absolute limits.",
-    "When TASK_JSON.sourceSnapshot.productLpUrl is set, include that exact URL once in every requested post.text. Never shorten or alter it; shorten the prose first to stay within each platform limit.",
+    "When TASK_JSON.sourceSnapshot.productLpUrl is set: X, Instagram, and Threads must include that exact URL once in post.text and return link_url as an empty string. Instagram Story must not include any URL in post.text and must return the exact URL in link_url for the link sticker. When no productLpUrl is set, return link_url as an empty string for every requested platform.",
     parameters.targetPlatform
       ? `Regenerate only ${parameters.targetPlatform}. Do not create output for any other platform.`
       : "Create one distinct Japanese post for each platform and follow TASK_JSON.imageMode exactly.",
