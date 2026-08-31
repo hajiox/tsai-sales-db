@@ -1,5 +1,26 @@
 # TSA Recipe SNS Note
 
+## 2026-08-31
+
+### SNS素材生成Bridgeの復旧
+
+- SNS素材生成がキューのままモニターへ出ない障害を調査した。`recipe_sns_generate`の要求はprotocol 3だが、後続マイグレーションが`claim_web_sales_codex_job`の古いprotocol 1定義を復元しており、protocol 3を通知するBridgeが取得不能になっていた。
+- protocol 1または2だけをprotocol 3へ修復する冪等マイグレーションを追加した。SNS投稿、EC商品情報など他タスクの取得ガードが残ることも同時検証し、SNS投稿マイグレーション側のテストをprotocol 3の完全一致確認へ強化した。
+- 対話BridgeのPowerShell監督プロセスが外部終了コード`0xC000013A`で消え、ログオン時トリガーだけでは復帰しなかった。ログオン時起動に加え、1分間隔の存在確認トリガーを登録し、`MultipleInstances IgnoreNew`で正常稼働中の重複起動を防ぐ構成へ変更した。
+- 再開後、ImageGenが作った画像パスの読み取り専用列挙を一般コマンドと誤判定したため、`CODEX_HOME/generated_images`配下だけの限定`Get-ChildItem`を許可した。最終画像は同じ新規Codexセッションの生成フォルダまたは当該ジョブフォルダにあるものだけを受理し、外部閲覧、一般コマンド、画像内容のコマンド読取は禁止したままとした。
+- Bridgeを1.9.28へ更新した。
+
+#### Verification
+
+- SNS claim修復: 本番相当トランザクションdry-run、適用、再dry-runが全項目成功
+- `npm run test:recipe-sns-publication-migration`: protocol 3を含む全20項目成功
+- `npm run test:recipe-sns-bridge`: 限定パス列挙、別フォルダ混在拒否、同一セッション画像制約を確認
+- `npm run test:bridge-prelogin`: PowerShell構文と1分間隔の回復トリガー契約を確認
+- `npm run test:bridge-skill-contract`: 16 tasks / 15 dedicated Skills verified
+- `npm run lint`: 0 errors（既存warningsのみ）
+- 本番環境変数をプロセス注入した`next build`: success
+- Secret scan / Supabase RLS audit: success
+
 ## 2026-08-30
 
 ### SNS自動投稿・予約

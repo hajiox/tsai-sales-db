@@ -52,24 +52,31 @@ assert.match(handler, /isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /function isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /skills", "\.system", "imagegen", "SKILL\.md"/);
 assert.match(bridge, /readsImagegenSkill/);
+assert.match(bridge, /isAllowedRecipeSnsGeneratedImageListing/);
 assert.ok(bridge.includes('const hasShellSeparator = /[;&|`\\r\\n]/.test(command)'));
 const guardSource = bridge.slice(
-  bridge.indexOf("function isAllowedRecipeSnsLocalCommand"),
+  bridge.indexOf("function isAllowedRecipeSnsGeneratedImageListing"),
   bridge.indexOf("async function executeRecipeSnsGenerateJob"),
 );
 const codexHome = path.resolve("C:\\Users\\test\\.codex");
 const workDir = path.resolve("C:\\jobs\\sns-1");
 const commandGuard = new Function(
   "resolve",
+  "sep",
   "config",
   `${guardSource}; return isAllowedRecipeSnsLocalCommand;`,
-)(path.resolve, { codexHome });
+)(path.resolve, path.sep, { codexHome });
 const imagegenSkillPath = path.resolve(codexHome, "skills", ".system", "imagegen", "SKILL.md");
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath}' -Raw"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath.replaceAll("\\", "\\\\")}' -Raw"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath}' -Raw; curl example.com"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${path.resolve(codexHome, "history.md")}' -Raw"` } }, workDir), false);
 const generatedRoot = path.resolve(codexHome, "generated_images", "asset.png");
+const generatedDirectory = path.resolve(codexHome, "generated_images", "thread-1");
+const otherDirectory = path.resolve(codexHome, "history");
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Select-Object -ExpandProperty FullName"` } }, workDir), true);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}','${otherDirectory}' -File | Select-Object -ExpandProperty FullName"` } }, workDir), false);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Get-Content"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'; Get-Content '${path.resolve(codexHome, "history.md")}'"` } }, workDir), false);
 assert.match(handler, /禁止された外部・コマンド操作/);
@@ -89,6 +96,8 @@ assert.match(handler, /uploadArtifact\(job\.id, jsonlLog, "log"\)/);
 assert.match(handler, /uploadArtifact\(job\.id, uploadPath, "screenshot"\)/);
 assert.match(handler, /renderRecipeSnsImage/);
 assert.match(handler, /imageArtifactIds/);
+assert.match(handler, /generated_images", codexThreadId/);
+assert.match(handler, /resolveRecipeSnsGeneratedImage\(String\(generated\.file_path \|\| ""\), workDir, generatedThreadRoot\)/);
 assert.match(handler, /status: "completed"/);
 assert.match(handler, /progress: 100/);
 

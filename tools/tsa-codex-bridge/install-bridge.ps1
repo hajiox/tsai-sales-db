@@ -426,6 +426,11 @@ $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 try {
   $interactiveAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $startArguments
   $interactiveTrigger = New-ScheduledTaskTrigger -AtLogOn -User $windowsUserId
+  $interactiveRecoveryTrigger = New-ScheduledTaskTrigger `
+    -Once `
+    -At (Get-Date).AddMinutes(1) `
+    -RepetitionInterval (New-TimeSpan -Minutes 1) `
+    -RepetitionDuration (New-TimeSpan -Days 3650)
   $interactivePrincipal = New-ScheduledTaskPrincipal -UserId $windowsUserId -LogonType Interactive -RunLevel Limited
   $interactiveSettings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
@@ -435,7 +440,7 @@ try {
     -MultipleInstances IgnoreNew
   $interactiveTask = New-ScheduledTask `
     -Action $interactiveAction `
-    -Trigger $interactiveTrigger `
+    -Trigger @($interactiveTrigger, $interactiveRecoveryTrigger) `
     -Principal $interactivePrincipal `
     -Settings $interactiveSettings `
     -Description "Keeps the signed-in TSA Codex Bridge worker running and restarts its supervisor after an unexpected exit."
@@ -444,11 +449,17 @@ try {
   $hasInteractiveLogonTrigger = @($registeredInteractiveTask.Triggers | Where-Object {
     $_.CimClass.CimClassName -eq "MSFT_TaskLogonTrigger"
   }).Count -gt 0
+  $hasInteractiveRecoveryTrigger = @($registeredInteractiveTask.Triggers | Where-Object {
+    $_.CimClass.CimClassName -eq "MSFT_TaskTimeTrigger" -and
+    $_.Repetition -and
+    [string]$_.Repetition.Interval -eq "PT1M"
+  }).Count -gt 0
   $interactiveTaskRegistered =
     $registeredInteractiveTask.Principal.LogonType -eq "Interactive" -and
     $registeredInteractiveTask.Actions.Count -eq 1 -and
     ([string]$registeredInteractiveTask.Actions[0].Arguments).IndexOf($startScript, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-    $hasInteractiveLogonTrigger
+    $hasInteractiveLogonTrigger -and
+    $hasInteractiveRecoveryTrigger
   if (-not $interactiveTaskRegistered) {
     throw "登録した対話Bridgeタスクの構成を検証できませんでした。"
   }

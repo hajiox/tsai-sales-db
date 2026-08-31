@@ -46,7 +46,10 @@ const verificationSql = `
       OR position($$capabilities->>'recipeSnsPublishProtocolVersion' = '1'$$ in (SELECT definition FROM claim_function)) > 0 AS publish_protocol_guarded,
     position($$capabilities ->> 'executionMode'::text) = 'interactive'::text$$ in (SELECT definition FROM claim_function)) > 0
       OR position($$capabilities->>'executionMode' = 'interactive'$$ in (SELECT definition FROM claim_function)) > 0 AS interactive_worker_guarded,
-    position('recipeSnsProtocolVersion' in (SELECT definition FROM claim_function)) > 0 AS generation_guard_preserved,
+    (
+      position($$capabilities->>'recipeSnsProtocolVersion' = '3'$$ in (SELECT definition FROM claim_function)) > 0
+      OR position($$capabilities ->> 'recipeSnsProtocolVersion'::text) = '3'::text$$ in (SELECT definition FROM claim_function)) > 0
+    ) AS generation_guard_preserved,
     position('ecPriceProtocolVersion' in (SELECT definition FROM claim_function)) > 0 AS ec_price_guard_preserved,
     position('ingredientLabelAiProtocolVersion' in (SELECT definition FROM claim_function)) > 0 AS ingredient_guard_preserved,
     position('pg_advisory_xact_lock' in pg_get_functiondef(

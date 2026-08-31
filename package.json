@@ -45,6 +45,8 @@
     "test:recipe-sns-publication": "node scripts/test-recipe-sns-publication-feature.cjs",
     "test:recipe-sns-publication-migration": "node scripts/dry-run-recipe-sns-publication-migration.cjs",
     "apply:recipe-sns-publication-migration": "node scripts/apply-recipe-sns-publication-migration.cjs",
+    "test:recipe-sns-claim-repair": "node scripts/dry-run-recipe-sns-claim-repair.cjs",
+    "apply:recipe-sns-claim-repair": "node scripts/apply-recipe-sns-claim-repair.cjs",
     "test:desktop-shell-layout": "node scripts/test-desktop-shell-layout.cjs",
     "test:recipe-sns-migration": "node scripts/dry-run-recipe-sns-migration.cjs",
     "apply:recipe-sns-migration": "node scripts/apply-recipe-sns-migration.cjs",
