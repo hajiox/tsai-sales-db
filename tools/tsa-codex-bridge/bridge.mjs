@@ -15,7 +15,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.33";
+const VERSION = "1.9.34";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4380,9 +4380,9 @@ function validateRecipeSnsPublishJobParameters(input) {
   }
   if (String(parameters.model || "") !== "gpt-5.6-sol"
     || String(parameters.reasoningEffort || "") !== "medium"
-    || String(parameters.rulesVersion || "") !== "2026-08-31.2"
-    || String(snapshot.rulesVersion || "") !== "2026-08-31.2") {
-    throw new Error("SNS投稿はGPT-5.6 Sol / medium / 2026-08-31.2ルール専用です");
+    || String(parameters.rulesVersion || "") !== "2026-08-31.3"
+    || String(snapshot.rulesVersion || "") !== "2026-08-31.3") {
+    throw new Error("SNS投稿はGPT-5.6 Sol / medium / 2026-08-31.3ルール専用です");
   }
   if (String(parameters.executionPolicy || "") !== "one_fresh_skill_session_adaptive_official_ui_one_platform_at_a_time"
     || String(parameters.mutationScope || "") !== "authorized_social_posts_only") {
@@ -4555,6 +4555,10 @@ function recipeSnsPublishFallbackResult(parameters, status, message) {
   };
 }
 
+function isRecipeSnsPublishCapacityError(message) {
+  return /selected model is at capacity/i.test(String(message || ""));
+}
+
 function resolveChromeControlSkillBundle(codexHome) {
   const chromeCacheRoot = join(codexHome, "plugins", "cache", "openai-bundled", "chrome");
   if (!existsSync(chromeCacheRoot)) {
@@ -4581,7 +4585,8 @@ function resolveChromeControlSkillBundle(codexHome) {
 function buildRecipeSnsPublishTargetPrompt({ publishSkillText, platformReferenceText, chromeControl, packet }) {
   return [
     "Use $publish-aizu-sns-posts.",
-    "This fresh session handles exactly one SNS platform. TASK_JSON.targets contains one target; do not inspect or post any other platform.",
+    "This fresh session handles exactly one SNS target. TASK_JSON.targets contains one target; do not inspect or post any unrelated platform.",
+    "IMPORTANT FOR instagram_story: Instagram Web and the logged-in official Meta Business Suite at business.facebook.com are two authorized official routes for the same single Instagram Story target. Accessing Meta Business Suite only to create that Story is explicitly approved, is not another platform, and must not be rejected as cross-platform work.",
     "The exact publish Skill, platform reference, and official Chrome control Skill are embedded below. They are authoritative. Do not run shell commands to read Skills, references, images, repositories, or documentation.",
     "Before inspecting any tab, initialize the official Chrome control runtime exactly through browser-client.mjs. Do not import playwright or playwright-core directly, inspect globalThis, or probe CDP ports.",
     `Use this exact browser client module: ${chromeControl.browserClientImportPath}`,
@@ -4631,6 +4636,7 @@ async function executeRecipeSnsPublishTarget({
   const packetFile = join(workDir, `recipe-sns-publish-${platform}-packet.json`);
   const outputFile = join(workDir, `recipe-sns-publish-${platform}-result.json`);
   const jsonlLog = join(workDir, `recipe-sns-publish-${platform}-events.jsonl`);
+  rmSync(outputFile, { force: true });
   writeFileSync(packetFile, `${JSON.stringify(packet, null, 2)}\n`, "utf8");
   const prompt = buildRecipeSnsPublishTargetPrompt({
     publishSkillText,
@@ -4739,6 +4745,7 @@ async function executeRecipeSnsPublishTarget({
         ? `${label}: 禁止された操作 ${prohibitedActivity} を検出しました。実際の公開結果は保持しています。`
         : result.summary,
       safetyIssue: Boolean(prohibitedActivity),
+      transientCapacity: false,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -4749,6 +4756,7 @@ async function executeRecipeSnsPublishTarget({
       row: fallback.platforms[0],
       summary: fallback.summary,
       safetyIssue: guarded || Boolean(prohibitedActivity),
+      transientCapacity: isRecipeSnsPublishCapacityError(message),
     };
   } finally {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -4810,7 +4818,7 @@ async function executeRecipeSnsPublishJob(job) {
       packetPlatforms[platform] = packetPlatform;
       const packet = {
         protocolVersion: 1,
-        rulesVersion: "2026-08-30.1",
+        rulesVersion: "2026-08-31.3",
         publicationId: parameters.publicationId,
         recipeId: parameters.recipeId,
         generationId: parameters.generationId,
@@ -4821,22 +4829,35 @@ async function executeRecipeSnsPublishJob(job) {
         operatorAuthorization: parameters.snapshot.operatorAuthorization,
         executionPolicy: "one_fresh_skill_session_per_platform",
       };
-      outcome = await executeRecipeSnsPublishTarget({
-        job,
-        parameters,
-        platform,
-        packet,
-        workDir: targetDir,
-        publishSkillText,
-        platformReferenceText,
-        chromeControl,
-        index,
-        total: parameters.targets.length,
-      });
+      for (let capacityAttempt = 0; capacityAttempt < 3; capacityAttempt += 1) {
+        outcome = await executeRecipeSnsPublishTarget({
+          job,
+          parameters,
+          platform,
+          packet,
+          workDir: targetDir,
+          publishSkillText,
+          platformReferenceText,
+          chromeControl,
+          index,
+          total: parameters.targets.length,
+        });
+        if (!outcome.transientCapacity || capacityAttempt === 2) break;
+        const waitSeconds = 15 * (capacityAttempt + 1);
+        await updateJob(job.id, {
+          status: "running",
+          progress: 10 + Math.floor((index / parameters.targets.length) * 80),
+          currentStep: `${RECIPE_SNS_PLATFORM_RULES[platform].label}用Solが混雑中です`,
+          message: `${waitSeconds}秒後に、この媒体だけを新規セッションで再試行します`,
+          eventType: "recipe_sns_publish_capacity_retry",
+          payload: { platform, attempt: capacityAttempt + 2, maxAttempts: 3, waitSeconds },
+        });
+        await delay(waitSeconds * 1_000);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const fallback = recipeSnsPublishFallbackResult({ ...parameters, targets: [platform] }, "failed", message);
-      outcome = { row: fallback.platforms[0], summary: fallback.summary, safetyIssue: false };
+      outcome = { row: fallback.platforms[0], summary: fallback.summary, safetyIssue: false, transientCapacity: false };
     }
     outcomes.push(outcome);
     await updateJob(job.id, {
@@ -4851,7 +4872,7 @@ async function executeRecipeSnsPublishJob(job) {
 
   const packet = {
     protocolVersion: 1,
-    rulesVersion: "2026-08-30.1",
+    rulesVersion: "2026-08-31.3",
     publicationId: parameters.publicationId,
     recipeId: parameters.recipeId,
     generationId: parameters.generationId,
