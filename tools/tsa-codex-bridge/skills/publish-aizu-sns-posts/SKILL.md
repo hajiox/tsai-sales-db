@@ -13,11 +13,12 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 - Freshかつ非再開の `codex exec` でのみ実行する。
 - 巨大な過去Chat、アプリ内Chat、過去タスク、スレッド、会話履歴、transcript、rollout、保存済みsessionを開かない、検索しない、再利用しない。
 - Bridgeが渡す小さな `TASK_JSON` と、その中で指定されたローカル画像だけを完全な入力として扱う。
+- 1媒体＝1つの新規Codexセッションである。`TASK_JSON.targets` は必ず1媒体だけで、他媒体を同じセッションから確認・投稿しない。
 - TSAリポジトリ、開発メモ、他ジョブ、Web検索を参照しない。画面の最新状態はログイン済みChromeの公式SNSタブだけで確認する。
 
 ## 目的
 
-`TASK_JSON.targets` の媒体を記載順に1件ずつ処理し、固定済み本文、画像、リンクを指定アカウントへ投稿する。1媒体で問題が起きても結果を記録して次へ進み、最後に全媒体の結果を返す。
+`TASK_JSON.targets` にある唯一の媒体へ、固定済み本文、画像、リンクを指定アカウントで投稿する。媒体間の継続、再試行、集約はBridgeが担当し、このセッションは1媒体の結果を返して終了する。
 
 ## 確定値
 
@@ -29,7 +30,8 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 
 ## Chrome
 
-- BridgeはこのSkillと媒体別資料をUTF-8でプロンプトへ埋め込む。Skill、資料、画像、リポジトリを読むためにShellやコマンドを起動しない。Chrome操作で不明点がある場合だけChrome制御ツールのdocumentation APIを使う。
+- BridgeはこのSkill、媒体別資料、公式Chrome制御Skill、正しい`browser-client.mjs`の場所をUTF-8でプロンプトへ埋め込む。Skill、資料、画像、リポジトリを読むためにShellやコマンドを起動しない。
+- ブラウザ操作前に、Bridgeが指定した`browser-client.mjs`から公式Chrome制御を初期化する。`playwright`や`playwright-core`の直接import、`globalThis`探索、CDPポート推測を行わない。
 - ユーザーが現在ログインしているChromeだけを、Chrome制御ツールで使う。
 - 最初に既存タブを一覧し、対象公式ホストのログイン済みタブを再利用する。別プロファイル、シークレット、別ブラウザ、アプリ内ブラウザを使わない。
 - ユーザー所有タブを閉じない。対象公式ホストの既存タブがない場合だけ、同じChromeプロファイルへ公式URLの一時タブを媒体ごとに最大1枚開いてよい。処理後は自分が開いた一時タブだけ閉じる。
@@ -71,7 +73,7 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 ## 結果
 
 - 指定JSON Schemaだけを返す。`publication_id` は `TASK_JSON.publicationId` と完全一致させる。
-- `platforms` は `TASK_JSON.targets` と同じ件数・同じ媒体だけを1回ずつ返す。
+- `platforms` は `TASK_JSON.targets` の唯一の媒体だけを1回返す。別媒体の結果を混在させない。
 - `published` / `already_published` には確認したアカウントと公開時刻を必須とし、IGストーリー以外は公開URLも必須とする。
-- 1件でも成功し残りに問題がある場合は全体 `needs_review`。全件成功は `completed`。成功がなく認証等で止まった媒体がある場合は `waiting_for_user`。成功も認証停止もなく技術的に全件失敗した場合だけ `failed`。
+- 投稿成功は `completed`、認証等で止まった場合は `waiting_for_user`、技術的失敗は `failed` とする。複数媒体の最終状態はBridgeが各セッションの結果から集約する。
 - `evidence` には画面で確認した成功表示・投稿詳細・停止理由を短く記録し、機密情報や長い画面本文を含めない。

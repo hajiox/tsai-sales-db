@@ -11,6 +11,7 @@
 - 公式ImageGen Skillの読取は、`Get-Content`の`-Raw`と`-LiteralPath`の順序や省略形が変わっても、固定された同一`SKILL.md`だけを厳密に許可する。別ファイルの混在は拒否する。
 - 生成画像の列挙は、許可ルート配下の`Get-ChildItem`、`File/Directory/Recurse`、更新時刻順、最大16件、`FullName/LastWriteTime`だけを許可する。拒否時は総称だけでなくコマンド名もモニター要約へ残す。
 - Bridgeを1.9.30へ更新した。
+- 2026-08-31: SNS投稿の初回再実行で、1つのCodexセッションが4媒体を担当していたためChrome初期化失敗が全媒体へ波及した。Bridge 1.9.32で1媒体＝1新規Codexセッションの逐次処理へ分離し、成功媒体を確定したまま失敗媒体を飛ばして次へ進む構成へ変更した。各セッションには現在インストール済みの公式Chrome制御Skillと`browser-client.mjs`の正しいパスを直接埋め込み、Playwright直接import、`globalThis`探索、CDPポート推測を禁止した。
 
 #### Verification
 
