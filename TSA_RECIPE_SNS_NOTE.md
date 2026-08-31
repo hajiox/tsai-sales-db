@@ -22,6 +22,8 @@
 - `npm run lint`: 0 errors（既存warningsのみ）
 - 本番環境変数をプロセス注入した`next build`: success
 - Secret scan / Supabase RLS audit: success
+- 本番`v0-tsa-19.vercel.app`で、停止していた「チャーシュー訳あり800g」のアレンジ素材を第14版として再実行。ジョブ`9f5207e6-b6ef-481b-adbe-3bc45cc6a31b`が完了し、X 1600x900、Instagram 1080x1080、IGストーリー 1080x1920、Threads 1200x900の4画像と投稿文をVercel Blobへ保存した。
+- LP URLはX・Instagram・Threads本文へ各1回、IGストーリーは本文外のリンクスタンプ用URLへ保存された。Bridgeモニターは取得直後から進捗、工程、見込み時間、Codex PIDを表示し、完了後は同ジョブの完了要約を保持した。
 
 ## 2026-08-30
 
