@@ -18,12 +18,17 @@
 
 ## IGストーリー
 
-- Instagram公式画面にストーリー作成があればそれを優先する。
-- Web版に作成経路が見つからない場合だけ、既に開いている公式Meta Business Suiteを使用する。Meta Business SuiteはIGストーリー投稿の明示承認済み公式経路であり、別媒体として扱わない。
+- 2026-08-31実機確認: Instagram Webの「新しい投稿」には `投稿`、`ライブ動画`、`広告`だけが表示され、ストーリー作成経路はなかった。この状態では公式Meta Business Suiteのストーリー作成画面を使用する。
+- Web版に作成経路が見つからない場合、ログイン済みの公式Meta Business Suiteを使用する。Meta Business SuiteはIGストーリー投稿の明示承認済み公式経路であり、別媒体として扱わない。
 - 既存Meta Business Suiteタブを別のChrome制御セッションが使用中なら、そのタブは触らず、同じログイン済みChromeプロファイルで公式Meta Business Suiteの一時タブを1枚だけ開く。
-- `link_url` はリンクスタンプ/ステッカーへ設定する。テキスト欄へURLを貼らない。
+- 「シェア先」の初期状態ではFacebookページとInstagramが同時選択される場合がある。Facebookページを外し、選択済み表示がInstagram `aizubrandhall` だけであることを確認する。
+- 2026-08-31実機確認: 「写真・動画を追加」は公式Chrome制御のfile chooserを返し、1080x1920のJPEGを設定できた。file chooserを返さずOSファイル選択だけを要求する場合に限り、非対話Bridgeでは迂回せず `blocked` とする。
+- 画面上部の「リンクを追加」はFacebook専用であり、「リンクはFacebookストーリーズにのみ表示されます」と案内される。Instagram `aizubrandhall` だけを選ぶと無効になるため、IGリンクには使わない。
+- `link_url` は「編集」→「スタンプ」→「リンク」または accessible name `Create link sticker` から開くリンクスタンプへ設定する。テキスト欄へURLを貼らない。
+- `story_text` は「編集」→「テキスト」→「テキストを追加」から設定する。追加直後の選択中に安全領域へドラッグし、欠けや画像外へのはみ出しがないことをスクリーンショットで確認する。
+- リンクスタンプも選択中に安全領域へ移動し、本文と重ならず、商品を過度に隠さない位置へ置く。
+- 写真編集全体の「適用」後、作成画面の右側プレビューで装飾が見えない場合がある。「編集」を1回だけ開き直し、本文とリンクスタンプが保持されていれば編集済みとして扱う。
 - Meta Business Suiteが開いていない、未ログイン、対象Instagramとの紐付けを確認できない場合は停止する。
-- 2026-08-31実機確認: Meta Business Suiteの「写真・動画を追加」はページ内の`input[type="file"]`を公開せず、公式Chrome制御のfile chooserも返さずOSファイル選択を要求する場合がある。非対話BridgeではOS操作へ迂回せず `blocked` とし、対話中のCodexへ引き継ぐ。
 
 ## Threads
 

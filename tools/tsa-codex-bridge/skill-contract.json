@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-31.2",
+  "version": "2026-08-31.3",
   "tasks": {
     "connection_test": {
       "mode": "deterministic",

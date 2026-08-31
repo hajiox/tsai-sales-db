@@ -20,7 +20,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.36";
+const VERSION = "1.9.37";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4603,6 +4603,7 @@ function buildRecipeSnsPublishTargetPrompt({ publishSkillText, platformReference
     "Use $publish-aizu-sns-posts.",
     "This fresh session handles exactly one SNS target. TASK_JSON.targets contains one target; do not inspect or post any unrelated platform.",
     "IMPORTANT FOR instagram_story: Instagram Web and the logged-in official Meta Business Suite at business.facebook.com are two authorized official routes for the same single Instagram Story target. Accessing Meta Business Suite only to create that Story is explicitly approved, is not another platform, and must not be rejected as cross-platform work.",
+    "META BUSINESS SUITE STORY SAFETY: remove the Facebook Page from Share destinations and visibly verify that only Instagram aizubrandhall remains. The top-level Add link control is Facebook-only and must never be used for the Instagram link. Use Edit > Stickers > Link (accessible name Create link sticker), fill the exact link_url, apply the inner link dialog, place the sticker within the image safe area, and then apply the outer photo editor. Add story_text through Edit > Text and move it fully inside the image before applying. If the composer preview hides overlays, reopen Edit once and verify the text and link sticker are retained before final submit.",
     "The exact publish Skill, platform reference, and official Chrome control Skill are embedded below. They are authoritative. Do not run shell commands to read Skills, references, images, repositories, or documentation.",
     "Before inspecting any tab, initialize the official Chrome control runtime exactly through browser-client.mjs. Do not import playwright or playwright-core directly, inspect globalThis, or probe CDP ports.",
     `Use this exact browser client module: ${chromeControl.browserClientImportPath}`,
