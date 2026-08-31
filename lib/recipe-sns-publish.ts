@@ -9,7 +9,7 @@ import {
 } from "./recipe-sns";
 
 export const RECIPE_SNS_PUBLISH_PROTOCOL_VERSION = 1;
-export const RECIPE_SNS_PUBLISH_RULES_VERSION = "2026-08-30.1";
+export const RECIPE_SNS_PUBLISH_RULES_VERSION = "2026-08-31.2";
 export const RECIPE_SNS_PUBLISH_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_PUBLISH_REASONING_EFFORT = "medium";
 
@@ -95,6 +95,7 @@ export type RecipeSnsPublishSnapshot = {
     authorized: true;
     requestedBy: string;
     authorizedAt: string;
+    cleanupMalformedOwnAttemptAuthorized: true;
   };
 };
 
@@ -188,6 +189,7 @@ export function buildRecipeSnsPublishSnapshot(input: {
   scheduledAt: string;
   requestedBy: string;
   authorizedAt: string;
+  cleanupMalformedOwnAttemptAuthorized: true;
   imageUrls: Partial<Record<RecipeSnsPlatform, string>>;
   posts: Partial<Record<RecipeSnsPlatform, RecipeSnsPost>>;
 }): RecipeSnsPublishSnapshot {
@@ -223,6 +225,7 @@ export function buildRecipeSnsPublishSnapshot(input: {
       authorized: true,
       requestedBy: input.requestedBy,
       authorizedAt: input.authorizedAt,
+      cleanupMalformedOwnAttemptAuthorized: input.cleanupMalformedOwnAttemptAuthorized,
     },
   };
 }

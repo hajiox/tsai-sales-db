@@ -150,7 +150,10 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
     }
     const targetLabels = targets.map((target) => RECIPE_SNS_PLATFORMS.find((platform) => platform.id === target)?.label).join("・");
     const action = mode === "schedule" ? `${formatDate(scheduledAt!)}に予約` : "今すぐ公開";
-    if (!window.confirm(`${targetLabels}へ${action}します。投稿文・画像・投稿先アカウントを確定してよろしいですか？`)) return;
+    if (!window.confirm([
+      `${targetLabels}へ${action}します。投稿文・画像・投稿先アカウントを確定してよろしいですか？`,
+      "この実行で公開直後に本文・画像・リンクの不一致が確認された場合は、その不完全投稿だけを自動削除します。",
+    ].join("\n\n"))) return;
     setSubmitting(targets.length === RECIPE_SNS_PLATFORMS.length ? "all" : targets[0]);
     try {
       const response = await fetch(`/api/recipe/${recipeId}/sns-publications`, {
@@ -161,6 +164,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
           targets,
           posts,
           scheduledAt,
+          cleanupMalformedOwnAttemptAuthorized: true,
         }),
       });
       const payload = await response.json();

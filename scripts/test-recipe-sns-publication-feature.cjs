@@ -27,6 +27,7 @@ assert.match(api, /MAX_SCHEDULE_DAYS = 180/);
 assert.match(api, /const generationId =/);
 assert.match(api, /normalizeRecipeSnsPublishPosts\(body\.posts/);
 assert.match(api, /p_scheduled_at: scheduledAt/);
+assert.match(api, /cleanupMalformedOwnAttemptAuthorized !== true/);
 assert.match(completionApi, /complete_recipe_sns_publish_job/);
 assert.match(completionApi, /validateRecipeSnsPublishResult/);
 
@@ -35,6 +36,8 @@ for (const text of ["今すぐ投稿", "日時予約", "全SNSへ投稿", "全SN
 }
 assert.match(panel, /RECIPE_SNS_PLATFORMS\.map/);
 assert.match(panel, /1媒体で止まっても残りは続行/);
+assert.match(panel, /不完全投稿だけを自動削除/);
+assert.match(panel, /cleanupMalformedOwnAttemptAuthorized: true/);
 assert.match(studio, /<RecipeSnsPublishPanel/);
 
 assert.match(policy, /RECIPE_SNS_EXPECTED_ACCOUNTS/);
@@ -54,6 +57,8 @@ assert.match(bridge, /browser-client\.mjs/);
 assert.match(bridge, /for \(const \[index, platform\] of parameters\.targets\.entries\(\)\)/);
 assert.match(bridge, /targets: \[platform\]/);
 assert.match(bridge, /one_fresh_skill_session_per_platform/);
+assert.match(bridge, /OPERATOR AUTHORIZATION: the authenticated TSA administrator explicitly confirmed/);
+assert.match(bridge, /cleanupMalformedOwnAttemptAuthorized !== true/);
 assert.doesNotMatch(prelogin, /recipe_sns_publish/);
 assert.match(installer, /"recipe-sns-publish-result\.schema\.json"/);
 assert.match(installer, /Copy-Item[^\n]*recipe-sns-publish-result\.schema\.json/);
@@ -70,8 +75,12 @@ assert.match(skill, /投稿ボタンは媒体ごとに最大1回/);
 assert.match(skill, /waitForEvent\("filechooser", \{ timeoutMs: 10000 \}\)/);
 assert.match(skill, /input\[type="file"\]/);
 assert.match(skill, /待機失敗を未処理のままにしてブラウザー接続を失わない/);
+assert.match(skill, /別のChrome制御セッションが使用中でclaimできない/);
+assert.match(skill, /固定本文と完全一致する下書き/);
+assert.match(skill, /この実行が作成したと証明できる不完全投稿/);
 assert.match(platformReference, /表示ボタンのクリックだけではfile chooserが開かない場合がある/);
 assert.match(platformReference, /タイムアウトを必ず捕捉する/);
+assert.match(platformReference, /公式Meta Business Suiteの一時タブを1枚だけ開く/);
 
 const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.equal(version.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);

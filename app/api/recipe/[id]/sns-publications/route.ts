@@ -173,6 +173,9 @@ export async function POST(
       throw new Error("投稿先SNSの指定が正しくありません");
     }
     const scheduledAt = parseSchedule(body.scheduledAt);
+    if (body.cleanupMalformedOwnAttemptAuthorized !== true) {
+      throw new Error("不完全投稿の自動削除を含む実行確認が必要です");
+    }
     const requestedBy = session.user?.email || ADMIN_EMAIL;
     const authorizedAt = new Date().toISOString();
     const supabase = getWebSalesAutomationServiceClient();
@@ -207,6 +210,7 @@ export async function POST(
       scheduledAt,
       requestedBy,
       authorizedAt,
+      cleanupMalformedOwnAttemptAuthorized: true,
       imageUrls,
       posts,
     });
