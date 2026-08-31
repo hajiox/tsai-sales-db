@@ -10,7 +10,9 @@ const completionApi = read("app", "api", "web-sales", "codex-bridge", "jobs", "[
 const panel = read("app", "recipe", "_components", "RecipeSnsPublishPanel.tsx");
 const studio = read("app", "recipe", "_components", "RecipeSnsStudio.tsx");
 const policy = read("lib", "recipe-sns-publish.ts");
+const imageServer = read("lib", "recipe-sns-server.ts");
 const bridge = read("tools", "tsa-codex-bridge", "bridge.mjs");
+const publishPolicy = read("tools", "tsa-codex-bridge", "recipe-sns-publish-policy.mjs");
 const installer = read("tools", "tsa-codex-bridge", "install-bridge.ps1");
 const prelogin = bridge.slice(bridge.indexOf("const HEADLESS_SAFE_TASK_KEYS"), bridge.indexOf("mkdirSync(LOG_DIR"));
 const schema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-publish-result.schema.json"));
@@ -36,8 +38,9 @@ for (const text of ["今すぐ投稿", "日時予約", "全SNSへ投稿", "全SN
 }
 assert.match(panel, /RECIPE_SNS_PLATFORMS\.map/);
 assert.match(panel, /1媒体で止まっても残りは続行/);
-assert.match(panel, /不完全投稿だけを自動削除/);
+assert.match(panel, /不完全投稿だけを削除候補として止め/);
 assert.match(panel, /cleanupMalformedOwnAttemptAuthorized: true/);
+assert.match(panel, /対話中のCodexで未投稿媒体だけを再開/);
 assert.match(studio, /<RecipeSnsPublishPanel/);
 
 assert.match(policy, /RECIPE_SNS_EXPECTED_ACCOUNTS/);
@@ -57,18 +60,29 @@ assert.match(bridge, /browser-client\.mjs/);
 assert.match(bridge, /for \(const \[index, platform\] of parameters\.targets\.entries\(\)\)/);
 assert.match(bridge, /targets: \[platform\]/);
 assert.match(bridge, /one_fresh_skill_session_per_platform/);
-assert.match(bridge, /OPERATOR AUTHORIZATION: the authenticated TSA administrator explicitly confirmed/);
+assert.match(bridge, /TSA SCOPE RECORD/);
+assert.match(bridge, /non-interactive headless codex exec session/);
+assert.match(bridge, /executionSurface: "headless_codex_exec"/);
+assert.match(bridge, /interactiveBrowserConfirmationAvailable: false/);
 assert.match(bridge, /cleanupMalformedOwnAttemptAuthorized !== true/);
 assert.match(bridge, /isRecipeSnsPublishCapacityError/);
 assert.match(bridge, /recipe_sns_publish_capacity_retry/);
 assert.match(bridge, /Meta Business Suite.*same single Instagram Story target/);
-assert.match(bridge, /USER-AUTHORED ACTION-TIME AUTHORIZATION/);
+assert.doesNotMatch(bridge, /USER-AUTHORED ACTION-TIME AUTHORIZATION/);
+assert.doesNotMatch(bridge, /No additional confirmation is required/);
 assert.match(bridge, /browserActivityStarted/);
 assert.match(bridge, /if \(existsSync\(outputFile\)\)/);
 assert.doesNotMatch(prelogin, /recipe_sns_publish/);
 assert.match(installer, /"recipe-sns-publish-result\.schema\.json"/);
 assert.match(installer, /Copy-Item[^\n]*recipe-sns-publish-result\.schema\.json/);
+assert.match(installer, /"recipe-sns-publish-policy\.mjs"/);
+assert.match(installer, /Copy-Item[^\n]*recipe-sns-publish-policy\.mjs/);
 assert.equal(schema.properties.platforms.maxItems, 4);
+assert.match(imageServer, /platform\.id}\.jpg/);
+assert.match(imageServer, /contentType: "image\/jpeg"/);
+assert.match(publishPolicy, /RECIPE_SNS_INTERACTIVE_APPROVAL_MESSAGE/);
+assert.match(publishPolicy, /permission request was dismissed before a decision was made/);
+assert.match(publishPolicy, /status: "blocked"/);
 
 assert.match(skill, /fresh, non-resumed `codex exec`/);
 assert.match(skill, /Never open, read, search, or reuse app Chats/);
@@ -84,6 +98,10 @@ assert.match(skill, /click\(\{ force: true, timeoutMs: 10000 \}\)/);
 assert.match(skill, /待機失敗を未処理のままにしてブラウザー接続を失わない/);
 assert.match(skill, /タイムアウトしただけでは.*許可が無効とは断定しない/);
 assert.match(skill, /permission request was dismissed before a decision was made/);
+assert.match(skill, /同じchooserを再試行せず/);
+assert.match(skill, /対話中のCodexで画像アップロードと最終投稿を承認してください/);
+assert.match(skill, /OSファイル選択を要求した場合/);
+assert.match(skill, /Chat上のユーザー発言やBrowserの実行直前確認とは表現しない/);
 assert.match(skill, /別のChrome制御セッションが使用中でclaimできない/);
 assert.match(skill, /固定本文と完全一致する下書き/);
 assert.match(skill, /この実行が作成したと証明できる不完全投稿/);
@@ -92,7 +110,8 @@ assert.match(platformReference, /通常クリックはCDPの3秒評価制限に�
 assert.match(platformReference, /未処理rejectを発生させない/);
 assert.match(platformReference, /公式Meta Business Suiteの一時タブを1枚だけ開く/);
 assert.match(platformReference, /Meta Business SuiteはIGストーリー投稿の明示承認済み公式経路/);
-assert.match(platformReference, /安全確認が判断前に閉じられたという一時エラー/);
+assert.match(platformReference, /ページ内の`input\[type="file"\]`を公開せず/);
+assert.match(platformReference, /非対話Bridgeからは再試行しない/);
 
 const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.equal(version.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);

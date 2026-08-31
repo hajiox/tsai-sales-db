@@ -23,7 +23,8 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 ## 確定値
 
 - 対象媒体、投稿先アカウント、本文、ハッシュタグ、画像、IGストーリーのリンク先は `TASK_JSON.platforms` が唯一の確定値である。
-- `TASK_JSON.operatorAuthorization` は、認証済みTSA管理者がこの媒体、アカウント、固定本文、固定ローカル画像のアップロード、リンク、公開を明示確認した記録である。値が欠落・不一致なら投稿しない。
+- `TASK_JSON.operatorAuthorization` は、認証済みTSA管理者が指定した媒体、アカウント、固定本文、固定ローカル画像、リンク、削除可能範囲を固定するTSA側のスコープ記録である。Chat上のユーザー発言やBrowserの実行直前確認とは表現しない。値が欠落・不一致なら投稿しない。
+- `TASK_JSON.executionSurface` が `headless_codex_exec` の場合、対話中のユーザーがBrowser確認へ応答できない。画像アップロードまたは最終公開で対話確認が必要になった時点で、外部変更前に `blocked` として停止する。
 - 本文を要約、翻訳、SEO調整、追記、省略、言い換えしない。
 - 画像の加工、差し替え、順序変更をしない。
 - Xは `@Aizu_Brand_Kan`、Instagram・IGストーリー・Threadsは `aizubrandhall` であることを投稿前に画面上で確認する。大小文字と先頭 `@` の差だけは同一とみなす。
@@ -43,8 +44,10 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 - 画像添付前に公式Chrome制御の`file-uploads`資料を確認する。画面内に実在する`input[type="file"]`を優先し、可視・非表示にかかわらず `click({ force: true, timeoutMs: 10000 })` で1回だけクリックする。実在しない場合だけ現在の投稿作成画面にある「メディアを添付」等の意味が一致する可視操作を通常クリックする。
 - file chooser待機Promiseには、作成した同じ式で直ちに成功・失敗ハンドラを付け、クリックより前に未処理rejectが存在しない状態にする。次の形を守る。`const chooserOutcomePromise = tab.playwright.waitForEvent("filechooser", { timeoutMs: 10000 }).then(chooser => ({ ok: true, chooser })).catch(error => ({ ok: false, error: String(error) }));` その後に対象を1回クリックし、`const chooserOutcome = await chooserOutcomePromise;` で結果を受ける。裸の`chooserPromise`を作って後から`catch`してはならない。
 - chooser取得後は `chooser.setFiles([TASK_JSONの絶対画像パス], { timeoutMs: 15000 })` を実行し、投稿作成画面の画像プレビューを確認する。クリック、chooser待機、`setFiles`の各失敗を必ず捕捉し、待機失敗を未処理のままにしてブラウザー接続を失わない。
-- `setFiles` が明示的に「browser security check was unavailable」または「permission request was dismissed before a decision was made」と返した場合は、拒否ではなく一時的に安全確認結果を取得できなかった状態である。画像が未設定であることを確認し、2秒待って同じchooserの `setFiles` を1回だけ再試行してよい。2回目も同じならそれ以上繰り返さず、技術的失敗として正確な文言を返す。別経路や安全確認の迂回は行わない。
+- `setFiles` が「browser security check was unavailable」または「permission request was dismissed before a decision was made」と返した場合、非対話Bridgeでは解消できない対話確認待ちである。同じchooserを再試行せず、画像が未設定・未投稿であることを確認して `blocked` とする。ログイン切れやChrome拡張機能の異常とは断定しない。
 - chooserがタイムアウトしただけでは、ChatGPT拡張機能のファイルURL許可が無効とは断定しない。最新画面を1回だけ再確認し、実在する別の正規添付経路が明確な場合だけ試す。同じボタンを繰り返さない。Chrome制御が明示的なファイルアクセス拒否を返した場合だけ `blocked` として許可設定を案内し、それ以外は技術的失敗として正確な停止理由を返す。
+- Meta Business Suiteの画像追加がWebのfile chooserを返さず、OSファイル選択を要求した場合、OS操作やクリップボード等へ迂回せず `blocked` とする。
+- 上記の対話確認待ちで停止する場合の利用者向け文言は、必ず「対話中のCodexで画像アップロードと最終投稿を承認してください。未投稿の媒体だけを再開できます。」とする。
 
 ## 適応的な操作
 
@@ -68,7 +71,7 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 4. IGストーリーは恒久URLが得られなくてもよいが、公開成功表示またはプロフィール上のストーリー表示と時刻を確認する。
 5. 既に同じ投稿が公開済みだと本文・画像・投稿時刻から確実に確認できた場合は、再投稿せず `already_published` とする。
 6. 成功を推測しない。保存中、処理中、不明なエラーは `failed` または `blocked` とし、次の媒体へ進む。
-7. この実行で投稿ボタンを押した直後の投稿が、固定本文・画像・リンクと明確に異なる場合だけ、`operatorAuthorization.cleanupMalformedOwnAttemptAuthorized === true` を確認し、その同一URLの不完全投稿を1回削除する。削除を確認して `failed` とし、証跡に削除済みと記録する。公開時刻が実行前、作成主体が不明、または同一投稿と証明できないものは削除しない。
+7. この実行で投稿ボタンを押した直後の投稿が、固定本文・画像・リンクと明確に異なる場合だけ、`operatorAuthorization.cleanupMalformedOwnAttemptAuthorized === true` を確認する。削除にも実行直前の対話確認が必要である。非対話Bridgeでは削除せず `blocked` とし、対話中のCodexで同一URLを確認してから1回だけ削除する。公開時刻が実行前、作成主体が不明、または同一投稿と証明できないものは削除しない。
 
 ## 絶対禁止
 
@@ -83,5 +86,5 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 - 指定JSON Schemaだけを返す。`publication_id` は `TASK_JSON.publicationId` と完全一致させる。
 - `platforms` は `TASK_JSON.targets` の唯一の媒体だけを1回返す。別媒体の結果を混在させない。
 - `published` / `already_published` には確認したアカウントと公開時刻を必須とし、IGストーリー以外は公開URLも必須とする。
-- 投稿成功は `completed`、認証等で止まった場合は `waiting_for_user`、技術的失敗は `failed` とする。複数媒体の最終状態はBridgeが各セッションの結果から集約する。
+- 投稿成功は `completed`、認証またはBrowserの対話確認待ちで止まった場合は `waiting_for_user`、技術的失敗は `failed` とする。複数媒体の最終状態はBridgeが各セッションの結果から集約する。
 - `evidence` には画面で確認した成功表示・投稿詳細・停止理由を短く記録し、機密情報や長い画面本文を含めない。

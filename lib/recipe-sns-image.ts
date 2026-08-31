@@ -19,7 +19,7 @@ export async function renderRecipeSnsImageVariant(
       position: "centre",
       withoutEnlargement: false,
     })
-    .webp({ quality: 90, effort: 5 })
+    .jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
     .toBuffer();
 
   return {

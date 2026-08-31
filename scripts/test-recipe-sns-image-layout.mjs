@@ -24,7 +24,7 @@ for (const [mode, expectedLayout, width, height] of cases) {
   assert.equal(rendered.layoutMode, expectedLayout);
   assert.equal(metadata.width, width);
   assert.equal(metadata.height, height);
-  assert.equal(metadata.format, "webp");
+  assert.equal(metadata.format, "jpeg");
   checks += 4;
 }
 

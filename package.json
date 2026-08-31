@@ -43,6 +43,7 @@
     "test:recipe-sns-creative-renderer": "node scripts/test-recipe-sns-creative-renderer.cjs",
     "test:recipe-sns-target-merge": "node --experimental-strip-types scripts/test-recipe-sns-target-merge.mjs",
     "test:recipe-sns-publication": "node scripts/test-recipe-sns-publication-feature.cjs",
+    "test:recipe-sns-publish-policy": "node scripts/test-recipe-sns-publish-policy.mjs",
     "test:recipe-sns-publication-migration": "node scripts/dry-run-recipe-sns-publication-migration.cjs",
     "apply:recipe-sns-publication-migration": "node scripts/apply-recipe-sns-publication-migration.cjs",
     "test:recipe-sns-claim-repair": "node scripts/dry-run-recipe-sns-claim-repair.cjs",

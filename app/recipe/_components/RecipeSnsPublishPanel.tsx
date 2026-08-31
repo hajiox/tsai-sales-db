@@ -152,7 +152,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
     const action = mode === "schedule" ? `${formatDate(scheduledAt!)}に予約` : "今すぐ公開";
     if (!window.confirm([
       `${targetLabels}へ${action}します。投稿文・画像・投稿先アカウントを確定してよろしいですか？`,
-      "この実行で公開直後に本文・画像・リンクの不一致が確認された場合は、その不完全投稿だけを自動削除します。",
+      "この実行で公開直後に本文・画像・リンクの不一致が確認された場合は、その不完全投稿だけを削除候補として止め、対話中のCodexで確認後に削除します。",
     ].join("\n\n"))) return;
     setSubmitting(targets.length === RECIPE_SNS_PLATFORMS.length ? "all" : targets[0]);
     try {
@@ -268,7 +268,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
         {mode === "schedule" ? "全SNSを予約" : "全SNSへ投稿"}
       </button>
       <p className="mt-2 text-[11px] text-gray-500">
-        予約時刻に事務所PCとログイン済みChromeが利用できない場合は待機し、利用可能になってから実行します。1媒体で止まっても残りは続行します。
+        予約時刻に事務所PCとログイン済みChromeが利用できない場合は待機します。画像アップロードまたは最終公開で確認が必要な媒体は「操作待ち」になり、対話中のCodexで未投稿媒体だけを再開します。1媒体で止まっても残りは続行します。
       </p>
 
       <div className="mt-4 border-t border-gray-200 pt-3">

@@ -151,9 +151,9 @@ export async function publishRecipeSnsImageVariants(
         imageMode,
       );
       const blob = await put(
-        `recipe-sns/${recipeId}/${generationId}/${platform.id}.webp`,
+        `recipe-sns/${recipeId}/${generationId}/${platform.id}.jpg`,
         rendered.buffer,
-        { access: "public", addRandomSuffix: true, contentType: "image/webp" },
+        { access: "public", addRandomSuffix: true, contentType: "image/jpeg" },
       );
       uploadedUrls.push(blob.url);
       variants[platform.id] = {
