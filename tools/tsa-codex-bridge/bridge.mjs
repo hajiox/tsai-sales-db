@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.29";
+const VERSION = "1.9.30";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4000,7 +4000,14 @@ function isAllowedRecipeSnsGeneratedImageListing(command, generatedRoot) {
   if (!command.includes("get-childitem") || !command.includes("-literalpath")) return false;
   if (/[;&`\r\n]/.test(command)) return false;
 
-  const pathArgument = command.match(/get-childitem\s+-literalpath\s+(.+?)\s+-(?:directory|file)\b/i)?.[1] || "";
+  const firstPipelineSegment = command.split("|")[0];
+  const invocation = firstPipelineSegment.match(
+    /get-childitem\s+-literalpath\s+(.+?)(\s+-(?:recurse|directory|file)\b.*)$/i,
+  );
+  const pathArgument = invocation?.[1] || "";
+  const optionArgument = String(invocation?.[2] || "").trim().replace(/["']$/, "").trim();
+  if (!/^(?:-(?:recurse|directory|file)\s*)+$/i.test(optionArgument)) return false;
+  if (!/-(?:directory|file)\b/i.test(optionArgument)) return false;
   const quotedPaths = [];
   const quotedPathPattern = /'([^']+)'|"([^"]+)"/g;
   let match;
@@ -4020,7 +4027,9 @@ function isAllowedRecipeSnsGeneratedImageListing(command, generatedRoot) {
   if (pipeline.length > 2) return false;
   return pipeline.every((segment) => {
     if (/^sort-object\s+lastwritetime\s+-descending$/i.test(segment)) return true;
-    const selection = segment.match(/^select-object\s+(?:-first\s+(\d+)\s+)?-expandproperty\s+fullname$/i);
+    const selection = segment.match(
+      /^select-object\s+(?:-first\s+(\d+)\s+)?(?:-expandproperty\s+fullname|fullname\s*,\s*lastwritetime)$/i,
+    );
     if (!selection) return false;
     return !selection[1] || (Number(selection[1]) >= 1 && Number(selection[1]) <= 16);
   });
@@ -4166,7 +4175,10 @@ async function executeRecipeSnsGenerateJob(job) {
         if (/^[0-9a-f-]{20,80}$/i.test(candidate)) codexThreadId = candidate;
       }
       const itemType = String(event?.item?.type || "");
-      if (itemType === "command_execution" && !isAllowedRecipeSnsLocalCommand(event, workDir)) prohibitedActivity = itemType;
+      if (itemType === "command_execution" && !isAllowedRecipeSnsLocalCommand(event, workDir)) {
+        const commandType = String(event?.item?.command || "").match(/\b(get-[a-z]+|copy-item)\b/i)?.[1] || "other";
+        prohibitedActivity = `${itemType}:${commandType}`;
+      }
       if (/web_search|browser|computer/i.test(itemType)) prohibitedActivity = itemType;
       const mapped = mapCodexEvent(event, progress);
       if (!mapped) continue;

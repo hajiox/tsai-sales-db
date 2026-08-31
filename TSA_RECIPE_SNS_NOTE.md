@@ -9,7 +9,8 @@
 - 対話BridgeのPowerShell監督プロセスが外部終了コード`0xC000013A`で消え、ログオン時トリガーだけでは復帰しなかった。ログオン時起動に加え、1分間隔の存在確認トリガーを登録し、`MultipleInstances IgnoreNew`で正常稼働中の重複起動を防ぐ構成へ変更した。
 - 再開後、ImageGenが作った画像パスの読み取り専用列挙を一般コマンドと誤判定したため、`CODEX_HOME/generated_images`配下だけの限定`Get-ChildItem`を許可した。最終画像は同じ新規Codexセッションの生成フォルダまたは当該ジョブフォルダにあるものだけを受理し、外部閲覧、一般コマンド、画像内容のコマンド読取は禁止したままとした。
 - 公式ImageGen Skillの読取は、`Get-Content`の`-Raw`と`-LiteralPath`の順序や省略形が変わっても、固定された同一`SKILL.md`だけを厳密に許可する。別ファイルの混在は拒否する。
-- Bridgeを1.9.29へ更新した。
+- 生成画像の列挙は、許可ルート配下の`Get-ChildItem`、`File/Directory/Recurse`、更新時刻順、最大16件、`FullName/LastWriteTime`だけを許可する。拒否時は総称だけでなくコマンド名もモニター要約へ残す。
+- Bridgeを1.9.30へ更新した。
 
 #### Verification
 
