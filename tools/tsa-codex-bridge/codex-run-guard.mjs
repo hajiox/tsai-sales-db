@@ -1,3 +1,5 @@
+import { win32 } from "node:path";
+
 const OPERATOR_SESSION_TASKS = new Set([
   "web_sales_import",
   "ad_cost_import",
@@ -71,6 +73,39 @@ export function codexRunLimitsForTask(taskKey, env = process.env) {
   };
 }
 
+export function isAllowedRecipeSnsPublishCommand(eventOrCommand, options = {}) {
+  const rawCommand = typeof eventOrCommand === "string"
+    ? eventOrCommand
+    : String(eventOrCommand?.item?.command || "");
+  const body = extractReadOnlyPowerShellBody(rawCommand);
+  if (!body || /[&|`\r\n<>]|\$\(|\$\{/u.test(body)) return false;
+
+  const commands = body.split(";").map((part) => part.trim()).filter(Boolean);
+  if (commands.length === 0 || commands.length > 4) return false;
+
+  const codexHome = normalizeWindowsPath(options.codexHome || "");
+  if (!codexHome) return false;
+  const exactPaths = new Set([
+    win32.join(codexHome, "skills", "publish-aizu-sns-posts", "SKILL.md"),
+    win32.join(codexHome, "skills", "publish-aizu-sns-posts", "references", "platforms.md"),
+  ].map(normalizeWindowsPath));
+  const chromeSkillRoot = normalizeWindowsPath(
+    win32.join(codexHome, "plugins", "cache", "openai-bundled", "chrome"),
+  );
+
+  return commands.every((command) => {
+    const match = command.match(
+      /^get-content\s+(?:-raw\s+)?-literalpath\s+(?:'([^']+)'|"([^"]+)")(?:\s+-raw)?(?:\s+-encoding\s+utf8)?$/iu,
+    );
+    if (!match) return false;
+    const requestedPath = normalizeWindowsPath(match[1] || match[2] || "");
+    if (exactPaths.has(requestedPath)) return true;
+    if (!requestedPath.startsWith(`${chromeSkillRoot}\\`)) return false;
+    const relative = requestedPath.slice(chromeSkillRoot.length + 1);
+    return /^[^\\]+\\skills\\control-chrome\\skill\.md$/iu.test(relative);
+  });
+}
+
 export function waitForCodexExitWithWatchdog(child, options = {}) {
   const taskKey = String(options.taskKey || "");
   const limits = options.limits || codexRunLimitsForTask(taskKey, options.env || process.env);
@@ -132,6 +167,20 @@ function boundedOverride(rawValue, fallback, minimum, maximum) {
   const numeric = Number(rawValue);
   if (!Number.isFinite(numeric)) return fallback;
   return Math.max(minimum, Math.min(maximum, Math.round(numeric)));
+}
+
+function extractReadOnlyPowerShellBody(command) {
+  const value = String(command || "").trim();
+  if (/^get-content\b/iu.test(value)) return value;
+  const match = value.match(
+    /^(?:"[^"]*\\(?:powershell|pwsh)(?:\.exe)?"|(?:powershell|pwsh)(?:\.exe)?)\s+-(?:command|c)\s+"([\s\S]*)"$/iu,
+  );
+  return match?.[1]?.trim() || null;
+}
+
+function normalizeWindowsPath(value) {
+  const normalized = win32.normalize(String(value || "").trim().replaceAll("/", "\\"));
+  return normalized === "." ? "" : normalized.replace(/\\+$/u, "").toLowerCase();
 }
 
 function defaultTerminate(child) {
