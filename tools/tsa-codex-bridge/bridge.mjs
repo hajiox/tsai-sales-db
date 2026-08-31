@@ -11,7 +11,7 @@ import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs"
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.28";
+const VERSION = "1.9.29";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4031,9 +4031,11 @@ function isAllowedRecipeSnsLocalCommand(event, workDir) {
   const prohibited = /remove-item|move-item|invoke-|start-process|curl|wget|git\s|npm\s|node\s|python\s|\brm\b|\bdel\b|set-content|add-content|out-file|new-item/i;
   const hasShellSeparator = /[;&|`\r\n]/.test(command);
   const imagegenSkill = resolve(config.codexHome, "skills", ".system", "imagegen", "SKILL.md").toLowerCase();
-  const readsImagegenSkill = command.includes("get-content")
-    && command.includes("-literalpath")
-    && command.includes(imagegenSkill)
+  const escapedImagegenSkill = imagegenSkill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const readsImagegenSkill = new RegExp(
+    `get-content\\s+(?:(?:-raw|-literalpath)\\s+)*['"]${escapedImagegenSkill}['"](?:\\s+(?:-raw|-literalpath))*\\s*["']?$`,
+    "i",
+  ).test(command)
     && !hasShellSeparator
     && !prohibited.test(command);
   if (readsImagegenSkill) return true;

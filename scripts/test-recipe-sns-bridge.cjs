@@ -68,8 +68,10 @@ const commandGuard = new Function(
 )(path.resolve, path.sep, { codexHome });
 const imagegenSkillPath = path.resolve(codexHome, "skills", ".system", "imagegen", "SKILL.md");
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath}' -Raw"` } }, workDir), true);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -Raw '${imagegenSkillPath}'"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath.replaceAll("\\", "\\\\")}' -Raw"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath}' -Raw; curl example.com"` } }, workDir), false);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -Raw '${imagegenSkillPath}','${path.resolve(codexHome, "history.md")}'"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${path.resolve(codexHome, "history.md")}' -Raw"` } }, workDir), false);
 const generatedRoot = path.resolve(codexHome, "generated_images", "asset.png");
 const generatedDirectory = path.resolve(codexHome, "generated_images", "thread-1");
