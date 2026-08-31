@@ -178,6 +178,7 @@ function Resolve-WindowsAccountSid([string]$AccountName) {
 }
 $maintenanceNonce = [guid]::NewGuid().ToString("N")
 [System.IO.File]::WriteAllText($maintenancePath, $maintenanceNonce, [System.Text.UTF8Encoding]::new($false))
+$interactiveTaskDisabledForMaintenance = $false
 
 try {
   $allProcesses = @(Get-CimInstance Win32_Process)
@@ -253,7 +254,13 @@ try {
   }
 
   $interactiveTask = Get-ScheduledTask -TaskName $interactiveTaskName -ErrorAction SilentlyContinue
-  if ($interactiveTask -and $interactiveTask.State -eq "Running") {
+  $interactiveTaskWasRunning = $interactiveTask -and $interactiveTask.State -eq "Running"
+  if ($interactiveTask) {
+    Disable-ScheduledTask -TaskName $interactiveTaskName -ErrorAction Stop | Out-Null
+    $interactiveTaskDisabledForMaintenance = $true
+    $interactiveTask = Get-ScheduledTask -TaskName $interactiveTaskName -ErrorAction SilentlyContinue
+  }
+  if ($interactiveTaskWasRunning) {
     Stop-ScheduledTask -TaskName $interactiveTaskName -ErrorAction Stop
     $interactiveTaskStopDeadline = (Get-Date).AddSeconds(10)
     while ((Get-Date) -lt $interactiveTaskStopDeadline) {
@@ -595,5 +602,11 @@ if ($taskRegistered) {
 } finally {
   if (Test-Path -LiteralPath $maintenancePath) {
     Remove-Item -LiteralPath $maintenancePath -Force
+  }
+  if ($interactiveTaskDisabledForMaintenance) {
+    $installedInteractiveTask = Get-ScheduledTask -TaskName $interactiveTaskName -ErrorAction SilentlyContinue
+    if ($installedInteractiveTask -and $installedInteractiveTask.State -eq "Disabled") {
+      Enable-ScheduledTask -TaskName $interactiveTaskName -ErrorAction SilentlyContinue | Out-Null
+    }
   }
 }

@@ -68,6 +68,14 @@ assert.match(installer, /Stop-ScheduledTask -TaskName \$preloginTaskName/);
 assert.match(installer, /ログイン前Bridgeの監視タスクを安全に停止できませんでした/);
 assert.match(installer, /Stop-ScheduledTask -TaskName \$interactiveTaskName/);
 assert.match(installer, /対話Bridgeの監視タスクを安全に停止できませんでした/);
+assert.match(installer, /Disable-ScheduledTask -TaskName \$interactiveTaskName/);
+assert.match(installer, /Enable-ScheduledTask -TaskName \$interactiveTaskName/);
+assert.match(installer, /\$interactiveTaskWasRunning = \$interactiveTask -and \$interactiveTask\.State -eq "Running"/);
+assert.ok(
+  installer.indexOf("Disable-ScheduledTask -TaskName $interactiveTaskName")
+    < installer.indexOf("Stop-ScheduledTask -TaskName $interactiveTaskName"),
+  "対話Bridgeの復旧トリガーを無効化してから監視タスクを停止する",
+);
 assert.ok(
   installer.indexOf("Stop-ScheduledTask -TaskName $interactiveTaskName")
     < installer.indexOf('Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs")'),
