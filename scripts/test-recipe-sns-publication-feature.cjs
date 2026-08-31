@@ -15,6 +15,7 @@ const installer = read("tools", "tsa-codex-bridge", "install-bridge.ps1");
 const prelogin = bridge.slice(bridge.indexOf("const HEADLESS_SAFE_TASK_KEYS"), bridge.indexOf("mkdirSync(LOG_DIR"));
 const schema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-publish-result.schema.json"));
 const skill = read("tools", "tsa-codex-bridge", "skills", "publish-aizu-sns-posts", "SKILL.md");
+const platformReference = read("tools", "tsa-codex-bridge", "skills", "publish-aizu-sns-posts", "references", "platforms.md");
 const version = read("lib", "web-sales-codex", "bridge-version.ts");
 
 assert.match(api, /ADMIN_EMAIL = "aizubrandhall@gmail\.com"/);
@@ -66,6 +67,11 @@ assert.match(skill, /playwright.*直接import/);
 assert.match(skill, /リンク.*スタンプ|リンク.*ステッカー/);
 assert.match(skill, /同じ失敗経路を反復しない/);
 assert.match(skill, /投稿ボタンは媒体ごとに最大1回/);
+assert.match(skill, /waitForEvent\("filechooser", \{ timeoutMs: 10000 \}\)/);
+assert.match(skill, /input\[type="file"\]/);
+assert.match(skill, /待機失敗を未処理のままにしてブラウザー接続を失わない/);
+assert.match(platformReference, /表示ボタンのクリックだけではfile chooserが開かない場合がある/);
+assert.match(platformReference, /タイムアウトを必ず捕捉する/);
 
 const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.equal(version.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);
