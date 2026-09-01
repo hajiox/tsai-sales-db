@@ -28,7 +28,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.49";
+const VERSION = "1.9.50";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -450,7 +450,8 @@ async function executeJob(job) {
     try {
       const preparedFile = findPreparedFile(workDir, job.channel, job.period_start, job.period_end);
       const originalFile = findOriginalFile(workDir, job.channel, job.period_start, job.period_end);
-      const validation = validatePreparedCsv(job, preparedFile);
+      const zeroEvidenceFile = findQoo10ZeroEvidence(workDir, job);
+      const validation = validatePreparedCsv(job, preparedFile, zeroEvidenceFile);
       if (validation.status !== "valid") {
         result = {
           ...result,
@@ -462,6 +463,10 @@ async function executeJob(job) {
         };
       } else {
         const archivedFiles = archiveSalesFiles(job, originalFile, preparedFile, archiveDir);
+        const verifiedZero = validation.total_quantity === 0 && validation.zero_evidence_valid === true;
+        const archivedEvidenceFiles = verifiedZero
+          ? archiveQoo10ZeroEvidence(zeroEvidenceFile, archiveDir)
+          : [];
         await updateJob(job.id, {
           status: "running",
           progress: 88,
@@ -472,13 +477,18 @@ async function executeJob(job) {
         const imported = await directImportCsv(job, preparedFile, validation.total_quantity);
         result = {
           status: imported.status,
-          summary: imported.summary,
+          summary: verifiedZero
+            ? "Qoo10は公式画面で対象期間0件を確認済みです"
+            : imported.summary,
           details: imported.status === "completed"
-            ? `CSV数量${imported.quantityTotal}個、TSA登録数量${imported.importedCount}個。ブラウザ取込画面は使用していません。`
+            ? verifiedZero
+              ? "注文日・対象期間・会津ブランド館を確認し、入金待ち・配送要請・配送中・配送完了の全4状態が0件である公式画面証跡を保存しました。TSA登録数量は0個です。"
+              : `CSV数量${imported.quantityTotal}個、TSA登録数量${imported.importedCount}個。ブラウザ取込画面は使用していません。`
             : `${imported.unmatchedCount || 0}商品が未マッチです。TSAの未紐付け一覧で確認してください。`,
-          source_files: uniquePaths([...(result.source_files || []), archivedFiles.original, archivedFiles.prepared, preparedFile]),
+          source_files: uniquePaths([...(result.source_files || []), archivedFiles.original, archivedFiles.prepared, ...archivedEvidenceFiles, preparedFile]),
           imported_count: imported.importedCount,
           report_month: job.report_month,
+          zero_result_verified: verifiedZero,
         };
         if (Number(imported.importedCount) > 0) {
           try {
@@ -5961,8 +5971,9 @@ async function tryReuseSalesArtifacts(job, archiveDir) {
 
   for (const preparedFile of candidates) {
     let validation;
+    const zeroEvidenceFile = findQoo10ZeroEvidence(archiveDir, job);
     try {
-      validation = validatePreparedCsv(job, preparedFile);
+      validation = validatePreparedCsv(job, preparedFile, zeroEvidenceFile);
     } catch {
       continue;
     }
@@ -5972,16 +5983,23 @@ async function tryReuseSalesArtifacts(job, archiveDir) {
 
     const imported = await directImportCsv(job, preparedFile, validation.total_quantity);
     const status = normalizeResultStatus(imported.status, 0);
+    const verifiedZero = validation.total_quantity === 0 && validation.zero_evidence_valid === true;
+    const evidenceFiles = verifiedZero ? qoo10ZeroEvidenceFiles(zeroEvidenceFile) : [];
     const result = {
       status,
-      summary: imported.summary || "保存済みCSVをTSAへ反映しました",
+      summary: verifiedZero
+        ? "Qoo10は公式画面で対象期間0件を確認済みです"
+        : imported.summary || "保存済みCSVをTSAへ反映しました",
       details: status === "completed"
-        ? `保存済みCSVを再利用しました。CSV数量${validation.total_quantity}個、TSA登録数量${imported.importedCount}個。`
+        ? verifiedZero
+          ? "保存済みのCSVと全4配送状態の公式画面証跡を再検証し、0個をTSAへ反映しました。"
+          : `保存済みCSVを再利用しました。CSV数量${validation.total_quantity}個、TSA登録数量${imported.importedCount}個。`
         : `${imported.unmatchedCount || 0}商品が未マッチです。`,
-      source_files: [originalFile, preparedFile],
+      source_files: [originalFile, preparedFile, ...evidenceFiles],
       imported_count: imported.importedCount ?? null,
       report_month: job.report_month,
       execution_route: "archived_file",
+      zero_result_verified: verifiedZero,
     };
     if (Number(imported.importedCount) > 0) {
       try {
@@ -5991,8 +6009,9 @@ async function tryReuseSalesArtifacts(job, archiveDir) {
         result.details = [result.details, `EC精算概算の更新失敗: ${error instanceof Error ? error.message : String(error)}`].join(" / ");
       }
     }
-    await uploadArtifact(job.id, originalFile, "source").catch(() => undefined);
-    await uploadArtifact(job.id, preparedFile, "source").catch(() => undefined);
+    for (const sourceFile of result.source_files) {
+      await uploadArtifact(job.id, sourceFile, "source").catch(() => undefined);
+    }
     await updateJob(job.id, {
       status,
       progress: status === "completed" ? 100 : 92,
@@ -6289,6 +6308,7 @@ SAFETY AND SCOPE
 WORKFLOW
 1. Follow the skill's exact ${channel.label} acquisition procedure and set ${job.period_start} through ${job.period_end}, inclusive.
 2. Preserve the downloaded original inside the job work folder as ${job.channel}-${job.period_start}_${job.period_end}.original.csv, then run the skill validator with --channel ${job.channel}, --start ${job.period_start}, --end ${job.period_end}, and --out ${join(workDir, `${job.channel}-${job.period_start}_${job.period_end}.prepared.csv`)}.
+${job.channel === "qoo10" ? `2a. If the Qoo10 export has no detail rows, do not validate or complete it yet. Query all four official delivery states (入金待ち, 配送要請, 配送中, 配送完了) with 注文日 ${job.period_start} through ${job.period_end}. Before saving each screenshot, verify the visible account is 会津ブランド館, the selected date basis and exact dates, the selected state, and zero result count. Save four PNG files and ${join(workDir, `qoo10-${job.period_start}_${job.period_end}.zero-evidence.original.json`)} exactly as specified by the Skill, then pass that JSON with --zero-evidence to the validator. A header-only CSV without valid evidence must return needs_review.` : ""}
 3. Continue only when the validator returns valid. Treat invalid as a wrong report and needs_review as requiring human review.
 4. Stop after local validation. Do not write to the final source archive folder, open TSA, select a file in TSA, or perform any TSA browser import. The local Bridge archives both staged files and performs the authenticated direct import after this turn finishes.
 
@@ -6305,6 +6325,7 @@ TOKEN EFFICIENCY
 FINAL RESPONSE
 - Return only data conforming to the supplied JSON schema.
 - source_files must contain absolute paths for the staged .original.csv and .prepared.csv inside the job work folder.
+- For a verified Qoo10 zero result, source_files must also contain the zero-evidence JSON and all four PNG files.
 - Use completed when the exact report was downloaded and validator status is valid. The Bridge owns final archiving.
 - Use waiting_for_user for login/MFA/CAPTCHA/account selection or a Chrome origin-access permission block.
 - Use needs_review for uncertain mappings or count discrepancies.
@@ -6709,6 +6730,44 @@ function findOriginalFile(workDir, channel, startDate, endDate) {
   return candidates[0];
 }
 
+function findQoo10ZeroEvidence(directory, job) {
+  if (job.channel !== "qoo10" || !existsSync(directory)) return null;
+  const exact = join(directory, `qoo10-${job.period_start}_${job.period_end}.zero-evidence.original.json`);
+  return existsSync(exact) && statSync(exact).isFile() ? exact : null;
+}
+
+function qoo10ZeroEvidenceFiles(evidenceFile) {
+  if (!evidenceFile || !existsSync(evidenceFile) || !statSync(evidenceFile).isFile()) return [];
+  let evidence;
+  try { evidence = JSON.parse(readFileSync(evidenceFile, "utf8")); } catch { return []; }
+  const root = resolve(dirname(evidenceFile));
+  const rootPrefix = `${root.toLowerCase().replace(/[\\/]+$/, "")}${sep}`;
+  const screenshots = (Array.isArray(evidence.status_results) ? evidence.status_results : [])
+    .map((entry) => String(entry?.screenshot_file || ""))
+    .filter((name) => basename(name) === name && /\.png$/i.test(name))
+    .map((name) => resolve(root, name))
+    .filter((filePath) => filePath.toLowerCase().startsWith(rootPrefix)
+      && existsSync(filePath)
+      && statSync(filePath).isFile());
+  return uniquePaths([resolve(evidenceFile), ...screenshots]);
+}
+
+function archiveQoo10ZeroEvidence(evidenceFile, archiveDir) {
+  const sources = qoo10ZeroEvidenceFiles(evidenceFile);
+  if (sources.length !== 5) throw new Error("Qoo10の0件証跡一式を特定できません");
+  mkdirSync(archiveDir, { recursive: true });
+  return sources.map((source) => {
+    const target = join(archiveDir, basename(source));
+    if (existsSync(target) && !readFileSync(target).equals(readFileSync(source))) {
+      const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+      const extension = extname(target);
+      copyFileSync(target, target.slice(0, -extension.length) + `.superseded-${timestamp}${extension}`);
+    }
+    copyFileSync(source, target);
+    return resolve(target);
+  });
+}
+
 function archiveSalesFiles(job, originalFile, preparedFile, archiveDir) {
   mkdirSync(archiveDir, { recursive: true });
   const prefix = `${job.channel}-${job.period_start}_${job.period_end}`;
@@ -6749,16 +6808,18 @@ function requireArchivedFiles(sourceFiles, archiveDir) {
   return { original, prepared };
 }
 
-function validatePreparedCsv(job, preparedFile) {
+function validatePreparedCsv(job, preparedFile, zeroEvidenceFile = null) {
   const validator = join(config.codexHome, "skills", "tsa-web-sales-csv", "scripts", "validate-csv.mjs");
   if (!existsSync(validator)) throw new Error(`CSV validator not found: ${validator}`);
-  const checked = spawnSync(process.execPath, [
+  const args = [
     validator,
     "--channel", job.channel,
     "--file", preparedFile,
     "--start", job.period_start,
     "--end", job.period_end,
-  ], { encoding: "utf8", windowsHide: true });
+  ];
+  if (zeroEvidenceFile) args.push("--zero-evidence", zeroEvidenceFile);
+  const checked = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true });
   if (checked.status !== 0) {
     throw new Error(checked.stderr?.trim() || "CSV validator failed");
   }

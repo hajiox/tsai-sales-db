@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { basename, dirname, resolve, sep } from "node:path";
 
 const DEFINITIONS = {
   amazon: {
@@ -51,7 +52,7 @@ const DEFINITIONS = {
 const args = parseArgs(process.argv.slice(2));
 const definition = DEFINITIONS[args.channel];
 if (!definition || !args.file || !args.start || !args.end) {
-  fail("usage: validate-csv.mjs --channel <channel> --file <csv> --start YYYY-MM-DD --end YYYY-MM-DD [--out <csv>]");
+  fail("usage: validate-csv.mjs --channel <channel> --file <csv> --start YYYY-MM-DD --end YYYY-MM-DD [--out <csv>] [--zero-evidence <json>]");
 }
 
 const sourcePath = resolve(args.file);
@@ -101,6 +102,10 @@ if (definition.metadataPeriod) {
 }
 
 const selectedRows = definition.date ? inPeriod : objects;
+const zeroEvidence = args.channel === "qoo10" && selectedRows.length === 0
+  ? validateQoo10ZeroEvidence(args["zero-evidence"], args)
+  : { required: false, valid: false, file: null, screenshots: [], issue: null };
+if (zeroEvidence.issue) issues.add(zeroEvidence.issue);
 const importPath = args.out ? resolve(args.out) : sourcePath;
 if (args.out) {
   const prefix = parsed.slice(0, definition.headerRow);
@@ -124,9 +129,81 @@ print({
   outside_period_rows: outsidePeriodRows,
   total_quantity: totalQuantity,
   period: { start: args.start, end: args.end, file_date_column: definition.date || null },
-  date_validated_from_file: Boolean(definition.date || definition.metadataPeriod),
+  date_validated_from_file: Boolean((definition.date && objects.length > 0) || definition.metadataPeriod),
+  date_validated_from_evidence: zeroEvidence.valid,
+  zero_evidence_required: zeroEvidence.required,
+  zero_evidence_valid: zeroEvidence.valid,
+  zero_evidence_file: zeroEvidence.file,
+  zero_evidence_screenshots: zeroEvidence.screenshots,
   issues: [...issues],
 });
+
+function validateQoo10ZeroEvidence(value, options) {
+  const invalid = (issue) => ({ required: true, valid: false, file: null, screenshots: [], issue });
+  if (!value) return invalid("Qoo10の0件を証明する公式画面証跡がありません");
+
+  const evidencePath = resolve(value);
+  if (!existsSync(evidencePath)) return invalid("Qoo10の0件証跡ファイルが見つかりません");
+
+  let evidence;
+  try {
+    evidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+  } catch {
+    return invalid("Qoo10の0件証跡JSONを解析できません");
+  }
+
+  if (evidence?.schema_version !== 1
+    || evidence?.channel !== "qoo10"
+    || evidence?.account_label !== "会津ブランド館"
+    || evidence?.official_url !== "https://qsm.qoo10.jp/GMKT.INC.Gsm.Web/Delivery/DeliveryManagementPrime.aspx"
+    || evidence?.date_basis !== "注文日"
+    || evidence?.period_start !== options.start
+    || evidence?.period_end !== options.end) {
+    return invalid("Qoo10の0件証跡が店舗・期間・日付基準と一致しません");
+  }
+
+  const expectedStatuses = ["入金待ち", "配送要請", "配送中", "配送完了"];
+  const results = Array.isArray(evidence.status_results) ? evidence.status_results : [];
+  if (results.length !== expectedStatuses.length
+    || new Set(results.map((entry) => entry?.status)).size !== expectedStatuses.length
+    || expectedStatuses.some((status) => !results.some((entry) => entry?.status === status))) {
+    return invalid("Qoo10の0件証跡に全配送状態の確認結果がありません");
+  }
+
+  const evidenceRoot = resolve(dirname(evidencePath));
+  const evidenceRootPrefix = `${evidenceRoot.toLowerCase().replace(/[\\/]+$/, "")}${sep}`;
+  const screenshots = [];
+  for (const entry of results) {
+    if (entry.result_count !== 0
+      || entry.period_start !== options.start
+      || entry.period_end !== options.end
+      || typeof entry.screenshot_file !== "string"
+      || basename(entry.screenshot_file) !== entry.screenshot_file
+      || !/\.png$/i.test(entry.screenshot_file)
+      || !/^[0-9a-f]{64}$/i.test(String(entry.screenshot_sha256 || ""))) {
+      return invalid(`Qoo10の${entry?.status || "不明"}証跡が不完全です`);
+    }
+    const screenshotPath = resolve(evidenceRoot, entry.screenshot_file);
+    if (!screenshotPath.toLowerCase().startsWith(evidenceRootPrefix)
+      || !existsSync(screenshotPath)
+      || readFileSync(screenshotPath).length < 5_000) {
+      return invalid(`Qoo10の${entry.status}画面証跡が見つかりません`);
+    }
+    const actualHash = createHash("sha256").update(readFileSync(screenshotPath)).digest("hex");
+    if (actualHash !== String(entry.screenshot_sha256).toLowerCase()) {
+      return invalid(`Qoo10の${entry.status}画面証跡が作成後に変わっています`);
+    }
+    screenshots.push(screenshotPath);
+  }
+
+  return {
+    required: true,
+    valid: true,
+    file: evidencePath,
+    screenshots,
+    issue: null,
+  };
+}
 
 function parseArgs(values) {
   const result = {};

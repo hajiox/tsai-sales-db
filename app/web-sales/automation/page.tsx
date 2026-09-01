@@ -628,8 +628,14 @@ export default function WebSalesAutomationPage() {
                   {workflowTasks.map((task) => {
                     const latest = latestPeriodJobByChannel.get(task.channel);
                     const unmatchedCount = unmatchedCountByChannel.get(task.channel) || 0;
-                    const reason = latest && latest.status !== "completed"
-                      ? latest.error_message || resultDetails(latest.result) || resultSummary(latest.result) || latest.current_step
+                    const verifiedZero = latest?.status === "completed"
+                      && latest.result?.zero_result_verified === true;
+                    const reason = latest
+                      ? latest.status !== "completed"
+                        ? latest.error_message || resultDetails(latest.result) || resultSummary(latest.result) || latest.current_step
+                        : verifiedZero
+                          ? resultSummary(latest.result) || "公式画面で対象期間0件を確認済みです"
+                          : null
                       : null;
                     return (
                       <div
