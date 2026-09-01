@@ -4,6 +4,7 @@
 
 - Confirmed the advertising batch was not a five-channel failure: Meta, Rakuten RPP, and Yahoo completed; Google stopped on unmapped daily rows and Amazon entered the public Ads sign-in route.
 - Bridge 1.9.46 now opens Amazon Ads through signed-in Seller Central > Marketing > Ads Console. The public Amazon Ads sign-in page is no longer treated as the primary route.
+- Bridge 1.9.47 continues through all matching signed-in Amazon tabs when an earlier candidate is owned by another browser-operation session.
 - Google's retry previously counted 32 daily database rows although only three unique groups were unclassified. Recognized BASE-wide Shopping spend is now allocated by BASE sales composition, physical 食ブラ visit/search spend is excluded from WEB sales advertising, and only genuinely unknown group names stop for review.
 - Google API synchronization no longer writes a partial monthly allocation before validation. The final import resets that month's Google allocation before writing the verified complete result, preventing stale series costs from surviving a rerun.
 

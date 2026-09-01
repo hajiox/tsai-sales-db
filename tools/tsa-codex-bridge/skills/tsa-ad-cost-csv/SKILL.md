@@ -15,7 +15,7 @@ description: Download, verify, and archive TSA advertising-cost reports for Meta
 - Select the browser using the requested official URL with `agent.browsers.getForUrl(targetUrl)`. Do not select a generic Chrome instance first; more than one Chrome profile or extension instance can be connected.
 - After connecting to Chrome, list its existing tabs before opening anything.
 - Reuse a tab whose URL is already on the requested advertising platform's official host. A new tab can lose tab-scoped authentication even in the same Chrome profile.
-- If several tabs match, prefer a signed-in non-login page for the requested account. Create a new tab only when no matching official-host tab exists.
+- If several tabs match, prefer a signed-in non-login page for the requested account. Try matching operator tabs one by one; when one candidate is already owned by another browser-operation session, leave it untouched and continue to the next matching candidate. Do not treat one locked candidate as proof that every signed-in tab is unavailable. Create a new tab only after every matching official-host candidate has been tried or when no matching tab exists.
 - Keep operator-owned claimed tabs and Bridge-created temporary tabs in separate lists. On every completion, error, and operator-wait path, do not call `markHandoff()`, `markDeliverable()`, or `close()` on an operator-owned tab. Close only Bridge-created temporary tabs, then return immediately so normal turn cleanup releases every unmarked claimed tab for the next fresh Bridge session.
 - For Amazon advertising, use Seller Central as the target URL for browser selection and enter Ads Console from Seller Central. A public Amazon Ads sign-in page is not evidence that the signed-in Seller Central session is invalid.
 
