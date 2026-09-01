@@ -20,7 +20,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.37";
+const VERSION = "1.9.38";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -469,17 +469,36 @@ async function executeJob(job) {
   if (existsSync(outputFile)) await uploadArtifact(job.id, outputFile, "output").catch(() => undefined);
 
   const summary = String(result.summary || stderr || "処理が終了しました").slice(0, 4000);
-  const status = browserPermissionRequired(result)
+  const waitReason = webSalesBrowserWaitReason(result);
+  if (waitReason) {
+    result = {
+      ...result,
+      status: "waiting_for_user",
+      wait_reason: waitReason,
+      summary: waitReason === "codex_browser_download_approval"
+        ? "Codexのダウンロード承認が完了しなかったため停止しました。"
+        : "別のCodex操作とChromeが競合したため停止しました。",
+      details: waitReason === "codex_browser_download_approval"
+        ? "対象ECへのログインやChromeのサイト設定は正常です。再実行時に表示されるCodex Browserのダウンロード承認を許可してください。CSVは未取得です。"
+        : "同じChromeを別のCodexセッションが操作しています。先行するChrome操作の完了後に再実行してください。CSVは未取得です。",
+    };
+  }
+  const finalSummary = String(result.summary || summary).slice(0, 4000);
+  const status = waitReason || browserPermissionRequired(result)
     ? "waiting_for_user"
     : normalizeResultStatus(result.status, exitCode);
   await updateJob(job.id, {
     status,
     progress: status === "completed" ? 100 : Math.max(progress, 90),
-    currentStep: statusLabel(status),
-    message: summary,
+    currentStep: waitReason === "codex_browser_download_approval"
+      ? "Codexのダウンロード承認待ち"
+      : waitReason === "chrome_control_conflict"
+        ? "Chrome操作の競合を解消して再実行してください"
+        : statusLabel(status),
+    message: finalSummary,
     eventType: `codex_${status}`,
     result,
-    errorMessage: status === "failed" ? summary : null,
+    errorMessage: status === "failed" ? finalSummary : null,
   });
 }
 
@@ -6087,7 +6106,9 @@ TOKEN EFFICIENCY
 - Do not inspect the TSA repository, reopen TSA manuals, browse the public web, or search unrelated files.
 - Prefer the confirmed report URL in the channel reference. Do not explore menus when a confirmed URL is provided.
 - Do not emit full-page DOM snapshots. Use visible DOM, targeted locators, or snippets bounded to 4,000 characters.
-- If a download permission request is dismissed without an explicit denial, wait three seconds and retry that same download once. Never loop.
+- Select the Chrome binding exactly once with getForUrl(targetUrl). If the selected binding or claimed tab detaches, list or reclaim tabs only through that same binding. Never call getForUrl/getDefault/get again to switch to another Chrome or extension instance during this job; stop as waiting_for_user with a Chrome-control conflict instead.
+- Before clicking the download button, attach both success and failure handlers to the exact download wait promise: const downloadOutcomePromise = tab.playwright.waitForEvent("download", { timeoutMs: 30000 }).then(download => ({ ok: true, download })).catch(error => ({ ok: false, error: String(error) })); click once, then await downloadOutcomePromise. Never leave a rejected download promise unhandled.
+- If the result says the browser security check was unavailable or the permission request was dismissed before a decision, do not click again, do not switch browser bindings, and do not call another download route. Return waiting_for_user immediately. This is a Codex Browser download approval wait, not an Amazon login failure or a Chrome site-setting failure.
 - Use the fewest necessary screenshots and stop immediately after the CSVs are validated locally.
 
 FINAL RESPONSE
@@ -6117,15 +6138,29 @@ function mapCodexEvent(event, currentProgress) {
 
 function browserSecurityBlock(item) {
   const text = JSON.stringify(item?.result || item?.error || "");
+  if (/browser security check was unavailable|permission request was dismissed before a decision/i.test(text)) {
+    return "Codexのダウンロード承認が完了していません";
+  }
   if (/declined permission|rejected this action due to browser security policy/i.test(text)) {
-    return "Chromeのアクセス許可が必要です。処理結果を確認してください";
+    return "Codex Browserのアクセス許可が必要です";
   }
   return null;
 }
 
 function browserPermissionRequired(result) {
   const text = `${result?.summary || ""}\n${result?.details || ""}`;
-  return /Chrome.*(アクセス許可|セキュリティ許可).*(拒否|必要)|browser security policy|declined permission/i.test(text);
+  return /Codex.*ダウンロード承認|Chrome.*(アクセス許可|セキュリティ許可|ダウンロード権限).*(拒否|必要|停止)|browser security policy|browser security check was unavailable|permission request was dismissed|declined permission/i.test(text);
+}
+
+function webSalesBrowserWaitReason(result) {
+  const text = `${result?.summary || ""}\n${result?.details || ""}`;
+  if (/browser security check was unavailable|permission request was dismissed before a decision|Chromeのダウンロード権限|Codex.*ダウンロード承認/i.test(text)) {
+    return "codex_browser_download_approval";
+  }
+  if (/Detached while handling command|別のブラウザ.*セッション|another browser session|browser.*(?:binding|session).*(?:detached|conflict)/i.test(text)) {
+    return "chrome_control_conflict";
+  }
+  return null;
 }
 
 function commandLabel(command) {

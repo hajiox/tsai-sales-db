@@ -618,7 +618,7 @@ export default function WebSalesAutomationPage() {
                     const latest = latestPeriodJobByChannel.get(task.channel);
                     const unmatchedCount = unmatchedCountByChannel.get(task.channel) || 0;
                     const reason = latest && latest.status !== "completed"
-                      ? latest.error_message || resultSummary(latest.result) || latest.current_step
+                      ? latest.error_message || resultDetails(latest.result) || resultSummary(latest.result) || latest.current_step
                       : null;
                     return (
                       <div
@@ -635,15 +635,15 @@ export default function WebSalesAutomationPage() {
                               <JobStatusBadge
                                 status={latest.status}
                                 compact
-                                labelOverride={latest.status === "needs_review"
-                                  ? unmatchedCount > 0 ? "商品紐付け待ち" : "自動再実行待ち"
-                                  : undefined}
+                                labelOverride={jobStatusOverride(latest, unmatchedCount)}
                               />
                             ) : <span className="text-[11px] font-semibold text-slate-400">未実行</span>}
                           </div>
                           <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-200/70 pt-2 text-[11px] text-slate-500">
                             <span>{latest ? formatDateTime(latest.created_at) : "未実行"}</span>
-                            {latest?.status === "waiting_for_user" && <span className="font-semibold text-amber-700">操作後に手動再開</span>}
+                            {latest?.status === "waiting_for_user" && (
+                              <span className="font-semibold text-amber-700">{jobWaitAction(latest)}</span>
+                            )}
                             {latest && ["failed", "cancelled"].includes(latest.status) && <span className="font-semibold text-blue-700">毎朝自動再実行</span>}
                           </div>
                           {reason && <p className="mt-2 text-[11px] leading-5 text-slate-600">{reason}</p>}
@@ -1003,6 +1003,28 @@ function jobLabel(job: CodexJob, tasks: TaskDefinition[]) {
 
 function resultSummary(result: Record<string, unknown>) {
   return typeof result?.summary === "string" ? result.summary : "";
+}
+
+function resultDetails(result: Record<string, unknown>) {
+  return typeof result?.details === "string" ? result.details : "";
+}
+
+function jobWaitReason(job: CodexJob) {
+  return typeof job.result?.wait_reason === "string" ? job.result.wait_reason : "";
+}
+
+function jobStatusOverride(job: CodexJob, unmatchedCount: number) {
+  if (job.status === "needs_review") return unmatchedCount > 0 ? "商品紐付け待ち" : "自動再実行待ち";
+  if (job.status !== "waiting_for_user") return undefined;
+  if (jobWaitReason(job) === "codex_browser_download_approval") return "Codex承認待ち";
+  if (jobWaitReason(job) === "chrome_control_conflict") return "Chrome競合";
+  return undefined;
+}
+
+function jobWaitAction(job: CodexJob) {
+  if (jobWaitReason(job) === "codex_browser_download_approval") return "再実行時にCodexで許可";
+  if (jobWaitReason(job) === "chrome_control_conflict") return "先行操作終了後に再実行";
+  return "操作後に手動再開";
 }
 
 function jobProgressLabel(job: CodexJob) {
