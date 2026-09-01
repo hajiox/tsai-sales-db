@@ -10,6 +10,7 @@ const screen = read("app", "web-sales", "automation", "page.tsx");
 
 for (const source of [bridge, skill]) {
   assert.match(source, /downloadOutcomePromise/);
+  assert.match(source, /timeoutMs:\s*300000/);
   assert.match(source, /permission request was dismissed before a decision/);
   assert.match(source, /Never leave a rejected download promise unhandled|Never leave a rejected download promise unhandled\./i);
 }
@@ -20,6 +21,7 @@ assert.match(bridge, /codex_browser_download_approval/);
 assert.match(bridge, /chrome_control_conflict/);
 assert.match(bridge, /Never call getForUrl\/getDefault\/get again/);
 assert.match(skill, /Never call `getForUrl`, `getDefault`, or `get` again/);
+assert.match(skill, /最大5分待ち/);
 
 assert.match(screen, /Codex承認待ち/);
 assert.match(screen, /再実行時にCodexで許可/);

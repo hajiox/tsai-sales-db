@@ -26,7 +26,7 @@ description: Download, validate, archive, and import TSA product-sales CSV files
 
 ```js
 const downloadOutcomePromise = tab.playwright
-  .waitForEvent("download", { timeoutMs: 30000 })
+  .waitForEvent("download", { timeoutMs: 300000 })
   .then((download) => ({ ok: true, download }))
   .catch((error) => ({ ok: false, error: String(error) }));
 await downloadButton.click();
@@ -34,8 +34,9 @@ const downloadOutcome = await downloadOutcomePromise;
 ```
 
 - Click the download control at most once per job. If `downloadOutcome.ok` is false, inspect its exact error once.
+- Amazonの帳票生成は2分を超える場合がある。ダウンロードイベントは最大5分待ち、経過時間だけを停止・異常の根拠にしない。
 - `browser security check was unavailable` or `permission request was dismissed before a decision was made` means the Codex Browser download approval did not complete. Return `waiting_for_user` immediately. Do not retry, switch browser bindings, use another download route, or call it an Amazon login or Chrome site-setting failure.
-- A plain timeout without a permission message is a technical `failed` result. Never leave a rejected download promise unhandled.
+- A plain five-minute timeout without a permission message is a technical `failed` result. Never leave a rejected download promise unhandled.
 
 ## Encoding
 

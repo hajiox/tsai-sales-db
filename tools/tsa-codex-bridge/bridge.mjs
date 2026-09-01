@@ -20,7 +20,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.38";
+const VERSION = "1.9.39";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -6107,7 +6107,7 @@ TOKEN EFFICIENCY
 - Prefer the confirmed report URL in the channel reference. Do not explore menus when a confirmed URL is provided.
 - Do not emit full-page DOM snapshots. Use visible DOM, targeted locators, or snippets bounded to 4,000 characters.
 - Select the Chrome binding exactly once with getForUrl(targetUrl). If the selected binding or claimed tab detaches, list or reclaim tabs only through that same binding. Never call getForUrl/getDefault/get again to switch to another Chrome or extension instance during this job; stop as waiting_for_user with a Chrome-control conflict instead.
-- Before clicking the download button, attach both success and failure handlers to the exact download wait promise: const downloadOutcomePromise = tab.playwright.waitForEvent("download", { timeoutMs: 30000 }).then(download => ({ ok: true, download })).catch(error => ({ ok: false, error: String(error) })); click once, then await downloadOutcomePromise. Never leave a rejected download promise unhandled.
+- Before clicking the download button, attach both success and failure handlers to the exact download wait promise: const downloadOutcomePromise = tab.playwright.waitForEvent("download", { timeoutMs: 300000 }).then(download => ({ ok: true, download })).catch(error => ({ ok: false, error: String(error) })); click once, then await downloadOutcomePromise. Never leave a rejected download promise unhandled. Amazon report generation may legitimately take more than two minutes, so do not shorten this five-minute wait or classify elapsed time alone as a stall.
 - If the result says the browser security check was unavailable or the permission request was dismissed before a decision, do not click again, do not switch browser bindings, and do not call another download route. Return waiting_for_user immediately. This is a Codex Browser download approval wait, not an Amazon login failure or a Chrome site-setting failure.
 - Use the fewest necessary screenshots and stop immediately after the CSVs are validated locally.
 
