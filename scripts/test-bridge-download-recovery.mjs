@@ -83,6 +83,17 @@ try {
     includeExisting: true,
   })[0].path, rakuten);
 
+  const amazonAds = join(downloads, "スポンサープロダクト広告_広告対象商品_レポート (1).xlsx");
+  writeFileSync(amazonAds, "PK fake workbook");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ad_cost_import",
+    channel: "amazon",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  })[0].path, amazonAds, "Amazon's standard Japanese report name must reach server-side month validation");
+
   const mercari = join(downloads, "202608-202608_report.csv");
   writeFileSync(mercari, "販売利益,販売手数料（税込）,売上移転日\n100,10,2026/8/1\n", "utf8");
   assert.equal(findReportArtifactCandidates({

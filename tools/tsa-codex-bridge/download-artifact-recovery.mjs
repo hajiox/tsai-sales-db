@@ -150,6 +150,7 @@ function reportArtifactScore({ taskKey, channel, filePath, startDate, endDate })
     if (channel === "yahoo" && ((/広告詳細レポート/.test(name) && /アイテムリーチ/.test(name))
       || (/商品コード/.test(text) && /利用金額/.test(text) && /roas/i.test(text)))) score += 100;
     if (channel === "amazon" && (/(?:sponsored|advertised|amazon).*(?:product|広告|report)/i.test(name)
+      || /スポンサープロダクト広告.*広告対象商品.*レポート/i.test(name)
       || (/(?:開始日|Start Date)/i.test(text) && /(?:広告費|Spend|Cost)/i.test(text)))) score += 100;
     return score;
   }
