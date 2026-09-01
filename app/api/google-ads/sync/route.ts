@@ -260,9 +260,6 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 6. advertising_costs の google_cost を自動更新
-        await updateAdvertisingCosts(start, end)
-
         return NextResponse.json({
             success: true,
             message: `Synced ${insertedCount} rows (${errorCount} errors)`,
@@ -289,50 +286,6 @@ export async function POST(request: NextRequest) {
             { success: false, error: error.message },
             { status: 500 }
         )
-    }
-}
-
-// advertising_costs の google_cost を月次集計で更新
-async function updateAdvertisingCosts(startDate: string, endDate: string) {
-    // 月次集計データを取得
-    const { data: monthlySummary, error: summaryError } = await supabase
-        .from('google_ads_performance')
-        .select('series_code, report_date, cost_micros')
-        .gte('report_date', startDate)
-        .lte('report_date', endDate)
-        .not('series_code', 'is', null)
-
-    if (summaryError) {
-        console.error('Monthly summary error:', summaryError)
-        return
-    }
-
-    // 月・シリーズ別に集計
-    const monthlyMap = new Map<string, number>()
-    monthlySummary?.forEach(row => {
-        const month = row.report_date.substring(0, 7) // YYYY-MM
-        const key = `${row.series_code}_${month}`
-        const current = monthlyMap.get(key) || 0
-        monthlyMap.set(key, current + Number(row.cost_micros))
-    })
-
-    // advertising_costs テーブルを更新
-    for (const [key, totalCostMicros] of monthlyMap.entries()) {
-        const [seriesCodeStr, month] = key.split('_')
-        const seriesCode = parseInt(seriesCodeStr)
-        const googleCost = Math.round(totalCostMicros / 1000000)
-
-        const { error } = await supabase
-            .from('advertising_costs')
-            .update({ google_cost: googleCost })
-            .eq('series_code', seriesCode)
-            .eq('report_month', `${month}-01`)
-
-        if (error) {
-            console.error(`Failed to update advertising_costs for series ${seriesCode}, ${month}:`, error)
-        } else {
-            console.log(`Updated google_cost for series ${seriesCode}, ${month}: ¥${googleCost.toLocaleString()}`)
-        }
     }
 }
 

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import JSZip from "jszip";
 import iconv from "iconv-lite";
 import * as XLSX from "xlsx";
@@ -17,6 +16,11 @@ import { POST as importYahooCosts } from "@/app/api/yahoo-ads/import-costs/route
 import { POST as uploadAmazonAds } from "@/app/api/amazon-ads/upload-csv/route";
 import { POST as matchAmazonAds } from "@/app/api/amazon-ads/auto-match/route";
 import { POST as importAmazonCosts } from "@/app/api/amazon-ads/import-costs/route";
+import {
+  allocateIntegerTotal,
+  classifyGoogleAdsCostRows,
+  microsToRoundedYen,
+} from "@/lib/google-ads-import-policy";
 import { isCodexBridgeAuthorized, normalizeWorkerId } from "@/lib/web-sales-codex/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 
@@ -153,50 +157,115 @@ export async function POST(
 
 async function runGoogleImport(origin: string, month: string, startDate: string, endDate: string) {
   const synced = await invoke(syncGoogleAds, origin, { startDate, endDate });
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-    process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-    { auth: { persistSession: false } },
-  );
+  const supabase = getWebSalesAutomationServiceClient();
   const { data, error } = await supabase
     .from("google_ads_performance")
-    .select("series_code,cost_micros")
+    .select("campaign_name,asset_group_name,series_code,cost_micros")
     .gte("report_date", startDate)
     .lte("report_date", endDate)
     .gt("cost_micros", 0);
   if (error) throw error;
 
-  const unmappedCount = (data || []).filter((row) => !row.series_code).length;
-  if (unmappedCount > 0) {
+  const classified = classifyGoogleAdsCostRows(data || []);
+  if (classified.unknownGroupNames.length > 0) {
     return {
       status: "needs_review",
-      summary: `Google広告は${unmappedCount}件の広告グループが未紐付けです`,
-      details: "Google広告タブの商品マッチングでシリーズを確認してください。",
+      summary: `Google広告は${classified.unknownGroupNames.length}件の広告グループが未紐付けです`,
+      details: `Google広告タブの商品マッチングでシリーズを確認してください。対象: ${classified.unknownGroupNames.slice(0, 8).join(" / ")}`,
       reportMonth: month,
       importedCount: Number(synced.inserted || 0),
-      unmatchedCount: unmappedCount,
+      unmatchedCount: classified.unknownGroupNames.length,
     };
   }
 
-  const costs = new Map<number, number>();
-  for (const row of data || []) {
-    const seriesCode = Number(row.series_code);
-    if (!seriesCode) continue;
-    costs.set(seriesCode, (costs.get(seriesCode) || 0) + Number(row.cost_micros || 0) / 1_000_000);
+  const mappedYen = new Map<number, number>();
+  for (const [seriesCode, costMicros] of classified.mappedMicrosBySeries) {
+    mappedYen.set(seriesCode, microsToRoundedYen(costMicros));
   }
-  const mappings = [...costs].map(([series_code, cost]) => ({ series_code, cost }));
+
+  let allocationBasis = "";
+  if (classified.sharedShoppingMicros > 0) {
+    let weights = await getBaseSalesWeights(supabase, month);
+    allocationBasis = "BASE売上構成比";
+    if (weights.size === 0) {
+      weights = new Map(classified.mappedMicrosBySeries);
+      allocationBasis = "商品別Google広告費構成比";
+    }
+    if (weights.size === 0) {
+      return {
+        status: "needs_review",
+        summary: "Google広告のEC共通ショッピング費を配賦できません",
+        details: "BASE売上または商品別Google広告費を確認してください。",
+        reportMonth: month,
+        importedCount: Number(synced.inserted || 0),
+        unmatchedCount: 1,
+      };
+    }
+
+    const mappedTotalYen = [...mappedYen.values()].reduce((sum, value) => sum + value, 0);
+    const ecTotalYen = microsToRoundedYen(
+      [...classified.mappedMicrosBySeries.values()].reduce((sum, value) => sum + value, 0)
+      + classified.sharedShoppingMicros,
+    );
+    const sharedAllocation = allocateIntegerTotal(ecTotalYen - mappedTotalYen, weights);
+    for (const [seriesCode, cost] of sharedAllocation) {
+      mappedYen.set(seriesCode, (mappedYen.get(seriesCode) || 0) + cost);
+    }
+  }
+
+  const mappings = [...mappedYen].map(([series_code, cost]) => ({ series_code, cost }));
   if (mappings.length === 0) throw new Error("Google広告費の対象データがありません");
   const imported = await invoke(importGoogleCosts, origin, { month, mappings });
+  const details = [`${Number(synced.inserted || 0)}件の広告実績を同期しました。`];
+  if (classified.sharedShoppingMicros > 0) {
+    details.push(`EC共通ショッピング広告 ${microsToRoundedYen(classified.sharedShoppingMicros).toLocaleString("ja-JP")}円は${allocationBasis}で配賦しました。`);
+  }
+  if (classified.excludedStoreMicros > 0) {
+    details.push(`食ブラ来店広告 ${microsToRoundedYen(classified.excludedStoreMicros).toLocaleString("ja-JP")}円はWEB販売広告費から除外しました。`);
+  }
   return {
     status: "completed",
     summary: `Google広告 ${month} 広告費 ¥${Math.round(Number(imported.totalCost || 0)).toLocaleString("ja-JP")} を反映しました`,
-    details: `${Number(synced.inserted || 0)}件の広告実績を同期しました。`,
+    details: details.join(" "),
     reportMonth: month,
     importedCount: Number(synced.inserted || 0),
     unmatchedCount: 0,
     totalCost: Number(imported.totalCost || 0),
     seriesCount: Number(imported.seriesCount || 0),
   };
+}
+
+async function getBaseSalesWeights(
+  supabase: ReturnType<typeof getWebSalesAutomationServiceClient>,
+  month: string,
+): Promise<Map<number, number>> {
+  const { data: salesRows, error: salesError } = await supabase
+    .from("web_sales_summary")
+    .select("product_id,base_count,unit_price")
+    .eq("report_month", `${month}-01`)
+    .gt("base_count", 0);
+  if (salesError) throw salesError;
+
+  const productIds = [...new Set((salesRows || []).map((row) => String(row.product_id || "")).filter(Boolean))];
+  if (productIds.length === 0) return new Map();
+  const { data: products, error: productError } = await supabase
+    .from("products")
+    .select("id,series_code")
+    .in("id", productIds)
+    .not("series_code", "is", null);
+  if (productError) throw productError;
+
+  const seriesByProduct = new Map(
+    (products || []).map((product) => [String(product.id), Number(product.series_code || 0)]),
+  );
+  const weights = new Map<number, number>();
+  for (const row of salesRows || []) {
+    const seriesCode = seriesByProduct.get(String(row.product_id || "")) || 0;
+    const revenue = Math.max(0, Number(row.base_count || 0)) * Math.max(0, Number(row.unit_price || 0));
+    if (seriesCode <= 0 || revenue <= 0) continue;
+    weights.set(seriesCode, (weights.get(seriesCode) || 0) + revenue);
+  }
+  return weights;
 }
 
 async function invoke(handler: RouteHandler, origin: string, body: FormData | Record<string, unknown>) {

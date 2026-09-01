@@ -93,6 +93,12 @@ for (const skillName of ["tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-
   assert.match(skill, /normal turn cleanup releases every unmarked claimed tab/);
   assert.doesNotMatch(skill, /Finalize a claimed existing tab with `keep:/);
 }
+const adCostSkill = read("tools", "tsa-codex-bridge", "skills", "tsa-ad-cost-csv", "SKILL.md");
+const adCostChannels = read("tools", "tsa-codex-bridge", "skills", "tsa-ad-cost-csv", "references", "channels.md");
+assert.match(adCostSkill, /For Amazon advertising, use Seller Central as the target URL/);
+assert.match(adCostChannels, /Seller Central `https:\/\/sellercentral\.amazon\.co\.jp\/`/);
+assert.match(adCostChannels, /公開Amazon Adsトップやそのサインイン画面へ直接入らない/);
+assert.match(adCostChannels, /Seller Central導線自体が認証を求めた場合だけ `waiting_for_user`/);
 assert.match(bridge, /Never mark, keep, hand off, deliver, or close a claimed operator tab/);
 
 const argBuilder = bridge.slice(

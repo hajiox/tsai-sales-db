@@ -37,6 +37,12 @@ export async function POST(request: NextRequest) {
             }
         })
 
+        const { error: resetError } = await supabase
+            .from('advertising_costs')
+            .update({ google_cost: 0 })
+            .eq('report_month', reportMonth)
+        if (resetError) throw resetError
+
         let updated = 0
         let created = 0
 
