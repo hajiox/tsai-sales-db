@@ -152,21 +152,28 @@ function validateQoo10ZeroEvidence(value, options) {
     return invalid("Qoo10の0件証跡JSONを解析できません");
   }
 
-  if (evidence?.schema_version !== 1
+  if (evidence?.schema_version !== 2
     || evidence?.channel !== "qoo10"
     || evidence?.account_label !== "会津ブランド館"
     || evidence?.official_url !== "https://qsm.qoo10.jp/GMKT.INC.Gsm.Web/Delivery/DeliveryManagementPrime.aspx"
     || evidence?.date_basis !== "注文日"
+    || evidence?.start_time !== "00:00"
+    || evidence?.end_time !== "23:50"
     || evidence?.period_start !== options.start
     || evidence?.period_end !== options.end) {
     return invalid("Qoo10の0件証跡が店舗・期間・日付基準と一致しません");
   }
 
-  const expectedStatuses = ["入金待ち", "配送要請", "配送中", "配送完了"];
+  const expectedStatuses = new Map([
+    ["入金待ち", "D1"],
+    ["配送要請", "D2"],
+    ["配送中", "D3"],
+    ["配送完了", "D4"],
+  ]);
   const results = Array.isArray(evidence.status_results) ? evidence.status_results : [];
-  if (results.length !== expectedStatuses.length
-    || new Set(results.map((entry) => entry?.status)).size !== expectedStatuses.length
-    || expectedStatuses.some((status) => !results.some((entry) => entry?.status === status))) {
+  if (results.length !== expectedStatuses.size
+    || new Set(results.map((entry) => entry?.status)).size !== expectedStatuses.size
+    || [...expectedStatuses.keys()].some((status) => !results.some((entry) => entry?.status === status))) {
     return invalid("Qoo10の0件証跡に全配送状態の確認結果がありません");
   }
 
@@ -175,8 +182,14 @@ function validateQoo10ZeroEvidence(value, options) {
   const screenshots = [];
   for (const entry of results) {
     if (entry.result_count !== 0
+      || entry.status_code !== expectedStatuses.get(entry.status)
+      || entry.result_grid_id !== "GoodsGrid"
+      || entry.empty_marker !== "表示する行がありません"
+      || entry.page_total !== 0
       || entry.period_start !== options.start
       || entry.period_end !== options.end
+      || entry.start_time !== "00:00"
+      || entry.end_time !== "23:50"
       || typeof entry.screenshot_file !== "string"
       || basename(entry.screenshot_file) !== entry.screenshot_file
       || !/\.png$/i.test(entry.screenshot_file)

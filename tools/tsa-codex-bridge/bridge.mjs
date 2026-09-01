@@ -28,7 +28,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.50";
+const VERSION = "1.9.51";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -6308,7 +6308,7 @@ SAFETY AND SCOPE
 WORKFLOW
 1. Follow the skill's exact ${channel.label} acquisition procedure and set ${job.period_start} through ${job.period_end}, inclusive.
 2. Preserve the downloaded original inside the job work folder as ${job.channel}-${job.period_start}_${job.period_end}.original.csv, then run the skill validator with --channel ${job.channel}, --start ${job.period_start}, --end ${job.period_end}, and --out ${join(workDir, `${job.channel}-${job.period_start}_${job.period_end}.prepared.csv`)}.
-${job.channel === "qoo10" ? `2a. If the Qoo10 export has no detail rows, do not validate or complete it yet. Query all four official delivery states (入金待ち, 配送要請, 配送中, 配送完了) with 注文日 ${job.period_start} through ${job.period_end}. Before saving each screenshot, verify the visible account is 会津ブランド館, the selected date basis and exact dates, the selected state, and zero result count. Save four PNG files and ${join(workDir, `qoo10-${job.period_start}_${job.period_end}.zero-evidence.original.json`)} exactly as specified by the Skill, then pass that JSON with --zero-evidence to the validator. A header-only CSV without valid evidence must return needs_review.` : ""}
+${job.channel === "qoo10" ? `2a. If the Qoo10 export has no detail rows, do not validate or complete it yet. Open the lower 配送中/配送完了 detail panel, set 注文日 ${job.period_start} 00:00 through ${job.period_end} 23:50, and query D1-D4 separately with #btn_search. Judge rows only from the lower #GoodsGrid. Never use the upper 配送商品Summary, #TinyGoodsGrid, or document.body text because they can contain current orders outside the requested period. For each state require #GoodsGrid's empty marker and zero page total, save the filter plus that grid in a PNG, and record the strict schema-version-2 fields specified by the Skill in ${join(workDir, `qoo10-${job.period_start}_${job.period_end}.zero-evidence.original.json`)}. Then pass that JSON with --zero-evidence to the validator. A header-only CSV without valid evidence must return needs_review.` : ""}
 3. Continue only when the validator returns valid. Treat invalid as a wrong report and needs_review as requiring human review.
 4. Stop after local validation. Do not write to the final source archive folder, open TSA, select a file in TSA, or perform any TSA browser import. The local Bridge archives both staged files and performs the authenticated direct import after this turn finishes.
 

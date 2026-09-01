@@ -32,21 +32,29 @@ try {
     writeFileSync(join(workDir, screenshotFile), bytes);
     return {
       status,
+      status_code: `D${index + 1}`,
       result_count: 0,
+      result_grid_id: "GoodsGrid",
+      empty_marker: "表示する行がありません",
+      page_total: 0,
       period_start: "2026-08-01",
       period_end: "2026-08-31",
+      start_time: "00:00",
+      end_time: "23:50",
       screenshot_file: screenshotFile,
       screenshot_sha256: createHash("sha256").update(bytes).digest("hex"),
     };
   });
   writeFileSync(evidenceFile, `${JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     channel: "qoo10",
     account_label: "会津ブランド館",
     official_url: "https://qsm.qoo10.jp/GMKT.INC.Gsm.Web/Delivery/DeliveryManagementPrime.aspx",
     date_basis: "注文日",
     period_start: "2026-08-01",
     period_end: "2026-08-31",
+    start_time: "00:00",
+    end_time: "23:50",
     status_results: statusResults,
   }, null, 2)}\n`, "utf8");
 
@@ -57,6 +65,15 @@ try {
   assert.equal(verifiedZero.date_validated_from_evidence, true);
   assert.equal(verifiedZero.zero_evidence_valid, true);
   assert.equal(verifiedZero.zero_evidence_screenshots.length, 4);
+
+  const wrongGridEvidence = JSON.parse(readFileSync(evidenceFile, "utf8"));
+  wrongGridEvidence.status_results[0].result_grid_id = "TinyGoodsGrid";
+  writeFileSync(evidenceFile, `${JSON.stringify(wrongGridEvidence, null, 2)}\n`, "utf8");
+  const wrongGrid = validate(["--zero-evidence", evidenceFile]);
+  assert.equal(wrongGrid.status, "needs_review");
+  assert.match(wrongGrid.issues.join(" "), /証跡が不完全/);
+  wrongGridEvidence.status_results[0].result_grid_id = "GoodsGrid";
+  writeFileSync(evidenceFile, `${JSON.stringify(wrongGridEvidence, null, 2)}\n`, "utf8");
 
   writeFileSync(join(workDir, statusResults[0].screenshot_file), Buffer.alloc(6_000, 9));
   const tamperedEvidence = validate(["--zero-evidence", evidenceFile]);

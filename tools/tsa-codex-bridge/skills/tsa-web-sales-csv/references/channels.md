@@ -63,14 +63,15 @@
 - 導線: `配送/キャンセル/未受取` > `配送管理`
 - 確認済み画面: https://qsm.qoo10.jp/GMKT.INC.Gsm.Web/Delivery/DeliveryManagementPrime.aspx
 - 状態: `配送中/配送完了` を選択する。
-- 期間: `注文日` をタスク期間へ設定して照会する。
+- 期間: 下段の詳細内訳で`注文日`をタスク期間、開始時刻を`00:00`、終了時刻を`23:50`へ設定して照会する。
 - 出力: `全体をダウンロード`
 - 必須列: `配送状態`、`注文番号`、`注文日`、`商品番号`、`商品名`、`数量`、`販売者商品コード`
 - 日付基準: `注文日`
 - 注意: 商品SummaryのCSV、選択件のみ、販売内訳は使わない。基本照会設定は既存運用どおりCSV形式を使用する。
-- 明細0件の場合: ヘッダーだけのCSVでは対象期間を証明できない。`入金待ち`、`配送要請`、`配送中`、`配送完了`を1状態ずつ検索し、各検索の直前と直後に、アカウントが`会津ブランド館`、日付基準が`注文日`、期間がタスク期間、選択状態が該当状態、結果件数が0であることを確認する。
-- 0件証跡: 各状態の検索結果を、作業フォルダ内へ`qoo10-<開始日>_<終了日>.zero-D1.original.png`から`zero-D4.original.png`として保存する。顧客詳細は開かず、検索条件と0件表示だけを保存する。
-- 0件証跡JSON: 同じ作業フォルダへ`qoo10-<開始日>_<終了日>.zero-evidence.original.json`を作る。`schema_version=1`、`channel=qoo10`、`account_label=会津ブランド館`、上記公式URL、`date_basis=注文日`、対象開始日・終了日、全4状態の`status`、`result_count=0`、各状態の開始日・終了日、PNGのファイル名とSHA-256を記録する。絶対パス、顧客情報、Cookie、トークンは入れない。
+- 明細0件の場合: ヘッダーだけのCSVでは対象期間を証明できない。まず表示中の`配送中/配送完了`ボタンを押して下段の詳細内訳を開く。`#sel_period_type=DT1`、`#srch_sday`と`#srch_eday`をタスク期間、開始を`00:00`、終了を`23:50`に固定する。`#sel_delivery_status`を`D1`から`D4`へ1状態ずつ切り替え、毎回`#btn_search`で検索する。
+- 0件判定範囲: 結果判定は必ず下段`#GoodsGrid`だけで行う。`#GoodsGrid`に`表示する行がありません`があり、ページ総数が0の場合だけ0件とする。上段の`配送商品Summary`、`#TinyGoodsGrid`、ページ全体の本文は現在注文を含み得るため、対象期間の件数判定には使わない。
+- 0件証跡: 各状態の検索条件と`#GoodsGrid`の0件表示が同時に分かる位置を、作業フォルダ内へ`qoo10-<開始日>_<終了日>.zero-D1.original.png`から`zero-D4.original.png`として保存する。顧客詳細は開かない。
+- 0件証跡JSON: 同じ作業フォルダへ`qoo10-<開始日>_<終了日>.zero-evidence.original.json`を作る。`schema_version=2`、`channel=qoo10`、`account_label=会津ブランド館`、上記公式URL、`date_basis=注文日`、対象開始日・終了日、`start_time=00:00`、`end_time=23:50`を記録する。全4状態には`status`、`status_code`（D1-D4）、`result_count=0`、`result_grid_id=GoodsGrid`、`empty_marker=表示する行がありません`、`page_total=0`、各状態の期間・時刻、PNGのファイル名とSHA-256を記録する。絶対パス、顧客情報、Cookie、トークンは入れない。
 - 0件完了条件: 4状態のうち1つでも0件でない、期間や店舗を画面で確認できない、PNGを保存できない、証跡JSONがvalidatorを通らない場合は`completed`にしない。`needs_review`または該当する`waiting_for_user`で停止する。
 
 ## TikTok Shop (`tiktok`)
