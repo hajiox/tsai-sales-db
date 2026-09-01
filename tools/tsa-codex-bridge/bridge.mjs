@@ -20,7 +20,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.41";
+const VERSION = "1.9.42";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -43,6 +43,7 @@ const UNIFIED_MONITOR_CONFIG_PATH = join(UNIFIED_MONITOR_DIR, "monitor.config.js
 const COMMON_MONITOR_SCRIPT_PATH = join(UNIFIED_MONITOR_DIR, "bridge-monitor.ps1");
 const COMMON_MONITOR_LAUNCHER_PATH = join(UNIFIED_MONITOR_DIR, "launch-bridge-monitor.ps1");
 const RECIPE_SNS_RENDERER_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "render-recipe-sns-image.ps1");
+const AMAZON_BUSINESS_REPORT_DOWNLOAD_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "amazon-business-report-download.ps1");
 const MAINTENANCE_PATH = resolve(process.env.TSA_CODEX_BRIDGE_MAINTENANCE_PATH || join(APP_DIR, "bridge-maintenance.lock"));
 const RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "result.schema.json");
 const ANALYSIS_RESULT_SCHEMA = resolve(dirname(fileURLToPath(import.meta.url)), "analysis-result.schema.json");
@@ -380,8 +381,39 @@ async function executeJob(job) {
   }
 
   if (result.status !== "completed") {
+    const initialWaitReason = webSalesBrowserWaitReason(result);
     if (result.status === "waiting_for_user") await delay(2_000);
-    const recovered = recoverDownloadedSalesCsv(job, downloadsDir, workDir, downloadSnapshot);
+    if (job.channel === "amazon" && !initialWaitReason && webSalesBrowserDownloadTimedOut(result)) {
+      await updateJob(job.id, {
+        status: "running",
+        progress: 84,
+        currentStep: "Amazon帳票の生成完了を待っています",
+        message: "画面操作を繰り返さず、ダウンロードフォルダを最長3分確認します",
+        eventType: "download_generation_waiting",
+      });
+      await waitForCsvChange(downloadsDir, downloadSnapshot, 180_000);
+    }
+
+    let recovered = recoverDownloadedSalesCsv(job, downloadsDir, workDir, downloadSnapshot);
+    if (!recovered && initialWaitReason === "codex_browser_download_approval" && job.channel === "amazon") {
+      await updateJob(job.id, {
+        status: "running",
+        progress: 84,
+        currentStep: "Amazon CSVを確認して取得しています",
+        message: "確認済みの帳票・アカウント・期間に限り、WindowsからCSVボタンを1回実行します",
+        eventType: "amazon_download_fallback_started",
+      });
+      const fallback = await runAmazonBusinessReportDownloadFallback(job, downloadsDir);
+      if (fallback.status === "completed") {
+        recovered = recoverDownloadedSalesCsv(job, downloadsDir, workDir, downloadSnapshot);
+      }
+      if (!recovered) {
+        result = {
+          ...result,
+          details: [result.details, `Amazon限定ダウンロード補助: ${fallback.summary}`].filter(Boolean).join(" / "),
+        };
+      }
+    }
     if (recovered) {
       result = {
         status: "completed",
@@ -471,15 +503,20 @@ async function executeJob(job) {
   const summary = String(result.summary || stderr || "処理が終了しました").slice(0, 4000);
   const waitReason = webSalesBrowserWaitReason(result);
   if (waitReason) {
+    const amazonDownloadFallbackFailed = waitReason === "codex_browser_download_approval" && job.channel === "amazon";
     result = {
       ...result,
       status: "waiting_for_user",
       wait_reason: waitReason,
       summary: waitReason === "codex_browser_download_approval"
-        ? "Codexのダウンロード承認が完了しなかったため停止しました。"
+        ? amazonDownloadFallbackFailed
+          ? "Amazon CSVの限定自動取得を完了できず停止しました。"
+          : "Codexのダウンロード承認が完了しなかったため停止しました。"
         : "別のCodex操作とChromeが競合したため停止しました。",
       details: waitReason === "codex_browser_download_approval"
-        ? "対象ECへのログインやChromeのサイト設定は正常です。再実行時に表示されるCodex Browserのダウンロード承認を許可してください。CSVは未取得です。"
+        ? amazonDownloadFallbackFailed
+          ? [result.details, "Amazon Business Reportsの会津ブランド館・対象期間・子ASIN別帳票が画面に表示されていることを確認して再実行してください。CSVは未取得です。"].filter(Boolean).join(" / ")
+          : "対象ECへのログインやChromeのサイト設定は正常です。再実行時に表示されるCodex Browserのダウンロード承認を許可してください。CSVは未取得です。"
         : "同じChromeを別のCodexセッションが操作しています。先行するChrome操作の完了後に再実行してください。CSVは未取得です。",
     };
   }
@@ -491,7 +528,7 @@ async function executeJob(job) {
     status,
     progress: status === "completed" ? 100 : Math.max(progress, 90),
     currentStep: waitReason === "codex_browser_download_approval"
-      ? "Codexのダウンロード承認待ち"
+      ? job.channel === "amazon" ? "Amazon CSV取得確認待ち" : "Codexのダウンロード承認待ち"
       : waitReason === "chrome_control_conflict"
         ? "Chrome操作の競合を解消して再実行してください"
         : statusLabel(status),
@@ -6107,7 +6144,7 @@ TOKEN EFFICIENCY
 - Prefer the confirmed report URL in the channel reference. Do not explore menus when a confirmed URL is provided.
 - Do not emit full-page DOM snapshots. Use visible DOM, targeted locators, or snippets bounded to 4,000 characters.
 - Select the Chrome binding exactly once with getForUrl(targetUrl). If an existing matching seller tab is owned by another browser-operation session, leave that operator tab untouched and open at most one temporary tab through the same binding. Navigate the temporary tab directly to the confirmed report URL from the channel reference, never to a generic seller root or the occupied tab's marketing redirect URL, and verify the expected signed-in account there before continuing. If the selected binding itself detaches or the temporary tab cannot be used, stop as waiting_for_user with a Chrome-control conflict. Never call getForUrl/getDefault/get again to switch to another Chrome or extension instance during this job.
-- Before clicking the download button, attach both success and failure handlers to the exact download wait promise: const downloadOutcomePromise = tab.playwright.waitForEvent("download", { timeoutMs: 300000 }).then(download => ({ ok: true, download })).catch(error => ({ ok: false, error: String(error) })); click once, then await downloadOutcomePromise. Never leave a rejected download promise unhandled. Amazon report generation may legitimately take more than two minutes, so do not shorten this five-minute wait or classify elapsed time alone as a stall.
+- Before clicking the download button, attach both success and failure handlers to the exact download wait promise: const downloadOutcomePromise = tab.playwright.waitForEvent("download", { timeoutMs: 120000 }).then(download => ({ ok: true, download })).catch(error => ({ ok: false, error: String(error) })); click once, then await downloadOutcomePromise. Never leave a rejected download promise unhandled. The local Bridge owns the remaining bounded filesystem wait when Amazon report generation exceeds the browser runtime limit, so do not click again or classify elapsed time alone as a stall.
 - If the result says the browser security check was unavailable or the permission request was dismissed before a decision, do not click again, do not switch browser bindings, and do not call another download route. Return waiting_for_user immediately. This is a Codex Browser download approval wait, not an Amazon login failure or a Chrome site-setting failure.
 - Use the fewest necessary screenshots and stop immediately after the CSVs are validated locally.
 
@@ -6149,18 +6186,23 @@ function browserSecurityBlock(item) {
 
 function browserPermissionRequired(result) {
   const text = `${result?.summary || ""}\n${result?.details || ""}`;
-  return /Codex.*ダウンロード承認|Chrome.*(アクセス許可|セキュリティ許可|ダウンロード権限).*(拒否|必要|停止)|browser security policy|browser security check was unavailable|permission request was dismissed|declined permission/i.test(text);
+  return /Codex.*ダウンロード承認|Amazon CSVのダウンロード承認待ち|ブラウザのセキュリティ確認|許可要求が閉じられ|Chrome.*(アクセス許可|セキュリティ許可|ダウンロード権限).*(拒否|必要|停止)|browser security policy|browser security check was unavailable|permission request was dismissed|declined permission/i.test(text);
 }
 
 function webSalesBrowserWaitReason(result) {
   const text = `${result?.summary || ""}\n${result?.details || ""}`;
-  if (/browser security check was unavailable|permission request was dismissed before a decision|Chromeのダウンロード権限|Codex.*ダウンロード承認/i.test(text)) {
+  if (/browser security check was unavailable|permission request was dismissed before a decision|Chromeのダウンロード権限|Codex.*ダウンロード承認|Amazon CSVのダウンロード承認待ち|ブラウザのセキュリティ確認|許可要求が閉じられ/i.test(text)) {
     return "codex_browser_download_approval";
   }
   if (/Detached while handling command|別のブラウザ.*セッション|another browser session|browser.*(?:binding|session).*(?:detached|conflict)/i.test(text)) {
     return "chrome_control_conflict";
   }
   return null;
+}
+
+function webSalesBrowserDownloadTimedOut(result) {
+  const text = `${result?.summary || ""}\n${result?.details || ""}`;
+  return /timed out after 120000ms waiting for download|download.*timed out|ダウンロード.*タイムアウト/i.test(text);
 }
 
 function commandLabel(command) {
@@ -6341,6 +6383,111 @@ function snapshotCsvFiles(directory) {
     } catch { /* file may disappear while scanning */ }
   }
   return snapshot;
+}
+
+function csvChangedSinceSnapshot(directory, beforeSnapshot) {
+  if (!existsSync(directory)) return false;
+  return readdirSync(directory)
+    .filter((name) => name.toLowerCase().endsWith(".csv"))
+    .some((name) => {
+      const filePath = join(directory, name);
+      try {
+        const stat = statSync(filePath);
+        return stat.isFile() && beforeSnapshot.get(resolve(filePath)) !== `${stat.size}:${stat.mtimeMs}`;
+      } catch {
+        return false;
+      }
+    });
+}
+
+async function waitForCsvChange(directory, beforeSnapshot, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastHeartbeatAt = 0;
+  while (Date.now() < deadline) {
+    if (csvChangedSinceSnapshot(directory, beforeSnapshot)) return true;
+    if (Date.now() - lastHeartbeatAt >= 20_000) {
+      lastHeartbeatAt = Date.now();
+      await heartbeat().catch(() => undefined);
+    }
+    await delay(2_000);
+  }
+  return csvChangedSinceSnapshot(directory, beforeSnapshot);
+}
+
+async function runAmazonBusinessReportDownloadFallback(job, downloadsDir) {
+  if (!existsSync(AMAZON_BUSINESS_REPORT_DOWNLOAD_PATH)) {
+    return { status: "failed", summary: "Amazonダウンロード補助スクリプトがありません" };
+  }
+
+  const systemRoot = process.env.SystemRoot || "C:\\Windows";
+  const bundledPowerShell = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const powershell = existsSync(bundledPowerShell) ? bundledPowerShell : "powershell.exe";
+  const child = spawn(powershell, [
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy", "Bypass",
+    "-File", AMAZON_BUSINESS_REPORT_DOWNLOAD_PATH,
+    "-StartDate", job.period_start,
+    "-EndDate", job.period_end,
+    "-DownloadDirectory", downloadsDir,
+    "-ExpectedAccount", "会津ブランド館",
+    "-TimeoutSeconds", "300",
+  ], {
+    cwd: downloadsDir,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => { stdout = `${stdout}${chunk}`.slice(-20_000); });
+  child.stderr.on("data", (chunk) => { stderr = `${stderr}${chunk}`.slice(-20_000); });
+
+  const heartbeatTimer = setInterval(() => heartbeat().catch(() => undefined), 20_000);
+  const outcome = await new Promise((resolvePromise) => {
+    let settled = false;
+    let timeoutTimer;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      resolvePromise(value);
+    };
+    timeoutTimer = setTimeout(() => {
+      terminateChildProcessTree(child);
+      finish({ timedOut: true, exitCode: null });
+    }, 330_000);
+    child.once("error", (error) => finish({ timedOut: false, exitCode: null, error }));
+    child.once("close", (exitCode) => finish({ timedOut: false, exitCode }));
+  }).finally(() => clearInterval(heartbeatTimer));
+
+  if (outcome.timedOut) {
+    return { status: "timed_out", summary: "Amazon CSVのWindows取得が上限時間を超えました" };
+  }
+  const jsonLine = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).reverse()
+    .find((line) => line.startsWith("{") && line.endsWith("}"));
+  let payload = null;
+  try { payload = jsonLine ? JSON.parse(jsonLine) : null; } catch { payload = null; }
+  if (!payload || typeof payload !== "object") {
+    return {
+      status: "failed",
+      summary: String(outcome.error?.message || stderr || `Amazonダウンロード補助が終了コード${outcome.exitCode}で停止しました`).slice(0, 800),
+    };
+  }
+  if (payload.status === "completed") {
+    const downloadedFile = resolve(String(payload.downloadedFile || ""));
+    if (!pathIsInside(downloadedFile, downloadsDir) || !existsSync(downloadedFile) || !statSync(downloadedFile).isFile()) {
+      return { status: "failed", summary: "Amazonダウンロード補助の取得ファイルを検証できません" };
+    }
+  }
+  return {
+    status: String(payload.status || "failed"),
+    summary: String(payload.summary || "Amazonダウンロード補助が終了しました").slice(0, 800),
+    downloadedFile: String(payload.downloadedFile || ""),
+  };
 }
 
 function recoverDownloadedSalesCsv(job, downloadsDir, workDir, beforeSnapshot) {

@@ -1016,13 +1016,13 @@ function jobWaitReason(job: CodexJob) {
 function jobStatusOverride(job: CodexJob, unmatchedCount: number) {
   if (job.status === "needs_review") return unmatchedCount > 0 ? "商品紐付け待ち" : "自動再実行待ち";
   if (job.status !== "waiting_for_user") return undefined;
-  if (jobWaitReason(job) === "codex_browser_download_approval") return "Codex承認待ち";
+  if (jobWaitReason(job) === "codex_browser_download_approval") return job.channel === "amazon" ? "CSV取得確認待ち" : "Codex承認待ち";
   if (jobWaitReason(job) === "chrome_control_conflict") return "Chrome競合";
   return undefined;
 }
 
 function jobWaitAction(job: CodexJob) {
-  if (jobWaitReason(job) === "codex_browser_download_approval") return "再実行時にCodexで許可";
+  if (jobWaitReason(job) === "codex_browser_download_approval") return job.channel === "amazon" ? "帳票画面を確認して再実行" : "再実行時にCodexで許可";
   if (jobWaitReason(job) === "chrome_control_conflict") return "先行操作終了後に再実行";
   return "操作後に手動再開";
 }

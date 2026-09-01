@@ -38,6 +38,7 @@ $requiredSourceFiles = @(
   "recipe-sns-target-result.schema.json",
   "recipe-sns-publish-result.schema.json",
   "render-recipe-sns-image.ps1",
+  "amazon-business-report-download.ps1",
   "bridge-monitor.ps1",
   "launch-bridge-monitor.ps1",
   "monitor-window-placement.ps1",
@@ -342,6 +343,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-result.schema.json") -D
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-target-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-target-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-publish-result.schema.json") -Destination (Join-Path $installDir "recipe-sns-publish-result.schema.json") -Force
 Copy-WindowsPowerShellScript "render-recipe-sns-image.ps1" (Join-Path $installDir "render-recipe-sns-image.ps1")
+Copy-WindowsPowerShellScript "amazon-business-report-download.ps1" (Join-Path $installDir "amazon-business-report-download.ps1")
 Copy-WindowsPowerShellScript "start-bridge.ps1" (Join-Path $installDir "start-bridge.ps1")
 Copy-WindowsPowerShellScript "start-bridge-prelogin.ps1" (Join-Path $installDir "start-bridge-prelogin.ps1")
 Copy-WindowsPowerShellScript "register-prelogin-task.ps1" (Join-Path $installDir "register-prelogin-task.ps1")
