@@ -16,9 +16,10 @@ description: Download, validate, archive, and import TSA product-sales CSV files
 - Select that browser binding exactly once. If a tab detaches, use the same binding to list or reclaim a matching tab. Never call `getForUrl`, `getDefault`, or `get` again to switch to another Chrome or extension instance during the job.
 - After connecting to Chrome, list its existing tabs before opening anything.
 - Reuse a tab whose URL is already on the requested EC seller site's official host. A new tab can lose tab-scoped authentication even in the same Chrome profile.
-- If several tabs match, prefer a signed-in non-login page for the requested store. Create a new tab only when no matching official-host tab exists.
+- If several tabs match, prefer a signed-in non-login page for the requested store.
+- If a matching operator-owned tab is already controlled by another browser-operation session, leave it open and unchanged. Open at most one temporary tab through the already-selected browser binding, navigate it to the requested official URL, and continue only after verifying that it inherited the expected signed-in account. Close only that temporary tab when finished.
 - Keep an operator-owned existing tab open when finalizing the browser task. Finalize a claimed existing tab with `keep: [{ tab, status: "handoff" }]` or its documented equivalent; never use `keep: []` for that tab.
-- If the selected binding is no longer usable or a tab remains owned by another browser session, stop with `waiting_for_user` and identify a Chrome-control conflict. Do not recover by silently selecting another browser binding.
+- If the selected binding is no longer usable, the temporary tab cannot be created, or the expected signed-in account is unavailable in that temporary tab, stop with `waiting_for_user` and identify the exact Chrome-control or authentication reason. Do not recover by silently selecting another browser binding.
 
 ## Download Safety
 

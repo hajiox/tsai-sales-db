@@ -21,6 +21,8 @@ assert.match(bridge, /codex_browser_download_approval/);
 assert.match(bridge, /chrome_control_conflict/);
 assert.match(bridge, /Never call getForUrl\/getDefault\/get again/);
 assert.match(skill, /Never call `getForUrl`, `getDefault`, or `get` again/);
+assert.match(bridge, /open at most one temporary tab through the same binding/);
+assert.match(skill, /Open at most one temporary tab through the already-selected browser binding/);
 assert.match(skill, /最大5分待ち/);
 
 assert.match(screen, /Codex承認待ち/);
