@@ -900,7 +900,7 @@ function ChannelDetails({ row }: { row: ChannelRow }) {
 }
 
 function StatusText({ row }: { row: ChannelRow }) {
-  const text = row.settlementComplete ? "精算取得済み" : row.isEstimate ? "概算値" : !row.hasSettlement ? "精算未取得" : row.coverageLevel === "partial" ? "期間途中" : "要確認";
+  const text = row.settlementComplete ? "精算取得済み" : row.isEstimate ? "概算値" : !row.hasSettlement ? "精算未取得" : row.coverageLevel === "partial" ? "一部確定" : "要確認";
   const color = row.settlementComplete ? "text-emerald-700" : row.isEstimate ? "text-amber-700" : row.coverageLevel === "partial" ? "text-blue-700" : "text-amber-700";
   return <div className={`mt-0.5 text-[11px] font-medium ${color}`} title={row.settlementReason}>{text} / {formatNumber(row.quantity)}個</div>;
 }

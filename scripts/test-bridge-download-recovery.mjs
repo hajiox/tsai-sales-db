@@ -129,6 +129,29 @@ try {
     explicitPaths: [staleYahoo],
   }).length, 0, "an old Yahoo billing CSV must not be staged for a newer month");
 
+  const yahooHtml = join(downloads, "Yahoo請求明細_202608.csv");
+  writeFileSync(yahooHtml, "<!DOCTYPE HTML><html><body>2026-08 請求明細</body></html>", "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ec_profit_import",
+    channel: "yahoo",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+    explicitPaths: [yahooHtml],
+  }).some((candidate) => candidate.path === yahooHtml), false, "HTML saved with a CSV extension is not settlement evidence");
+
+  const yahooDailySales = join(downloads, "aizubrandhall-store_overall.csv");
+  writeFileSync(yahooDailySales, "日付,売上合計値\n2026-08-01,1000\n2026-08-31,2000\n", "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ec_profit_import",
+    channel: "yahoo",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  }).some((candidate) => candidate.path === yahooDailySales), true, "Yahoo daily official sales must be staged for reconciliation");
+
   const wrongTikTok = join(downloads, "aizubrand-official-ec-20260901.csv");
   writeFileSync(wrongTikTok, "注文ID,注文日時,支払い方法\nbase-order,2026-08-12,credit_card\n", "utf8");
   assert.equal(findReportArtifactCandidates({

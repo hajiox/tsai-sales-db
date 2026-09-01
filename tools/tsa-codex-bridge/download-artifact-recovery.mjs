@@ -130,6 +130,7 @@ function reportArtifactScore({ taskKey, channel, filePath, startDate, endDate })
   const text = extension === ".csv" || extension === ".txt" || extension === ".json"
     ? readTextSample(filePath)
     : "";
+  if ((extension === ".csv" || extension === ".txt") && looksLikeHtml(text)) return 0;
   const generatedAtName = (taskKey === "ad_cost_import" && channel === "rakuten" && /^rpp_item_reports_/i.test(name))
     || (taskKey === "ec_profit_import" && channel === "qoo10" && /^deliverymanagement_detail_/i.test(name))
     || (taskKey === "ec_profit_import" && channel === "base" && /aizubrand.*official.*ec/i.test(name))
@@ -168,13 +169,18 @@ function reportArtifactScore({ taskKey, channel, filePath, startDate, endDate })
   if (channel === "amazon" && (/(?:date.?range|transaction|settlement).*(?:report)?/i.test(name)
     || (/(?:transaction.?type|トランザクション)/i.test(text) && /(?:amazon fees|Amazon手数料|合計)/i.test(text)))) channelMatched = true;
   if (channel === "yahoo" && (/(?:利用詳細|受取明細|請求明細|billing|receipt)/i.test(name)
-    || (/注文ID/.test(text) && /(?:モールクーポン|決済手数料|利用料)/.test(text)))) channelMatched = true;
+    || (/注文ID/.test(text) && /(?:モールクーポン|決済手数料|利用料)/.test(text))
+    || (/store_overall/i.test(name) && /日付/.test(text) && /売上合計値/.test(text)))) channelMatched = true;
   if (channel === "tiktok" && (/(?:^|[-_])(tiktok|statement|settlement|payout)(?:[-_.]|$)/i.test(name)
     || /^income[_-]\d+/i.test(name))) channelMatched = true;
 
   // Existing Downloads files are reusable only when both the channel and requested
   // period are evidenced by the file itself. An explicit Codex path is not proof.
   return channelMatched && periodScore > 0 ? score + 100 : 0;
+}
+
+function looksLikeHtml(text) {
+  return /^\s*(?:<!doctype\s+html|<html\b)/i.test(String(text || ""));
 }
 
 function amazonMonthlyTransactionMonth(name) {

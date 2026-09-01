@@ -54,9 +54,10 @@ Use the most detailed official export available. UI wording can change; match by
 - Store Creator Pro: obtain product sales, billing detail, and receipt detail for the requested period. Use `mixed` because more than one official report is required.
 - In `利用明細 > 受取明細`, include every payment cycle covering the requested order month. Read the tax-inclusive `モールクーポン利用料` from the receipt summary and sum it into `excluded_marketplace_funded_discounts`.
 - Download and archive each `利用詳細CSV`. It contains order IDs for `モールクーポン利用料` and is the evidence used when product-level allocation is required.
-- `特典の一部利用料` is a separate benefit/payment category. Do not merge it into Yahoo-funded coupon reimbursement without explicit order-level evidence.
+- `特典の一部利用料` in the receipt detail is a payment/benefit receipt, not a seller deduction. Do not merge it into Yahoo-funded coupon reimbursement. Classify only the separately billed `販促企画原資（特典の一部利用料）` as `seller_discounts`, and classify `特典の一部利用手数料` as `payment_fees`.
 - Never derive Yahoo-funded coupon reimbursement from the difference between product sales, receipt totals, billing totals, or payout. Those totals mix payment timing and unrelated categories.
 - Confirm merchandise sales, cancellations/refunds, payment and system fees, store-funded coupon or points, and shipping-related charges. Yahoo-funded coupons remain outside EC deductions but are preserved for adjusted sales reconciliation.
+- When every billing and receipt detail row is period-confirmed and seller deductions are fully classified, an official daily `store_overall` sales total may be used for `gross_sales`. If that total is net of cancellations and the separate pre-cancellation sales/refund split is unavailable, keep the exact official EC deductions, set `refunds` to `0`, explain the net-sales basis, and use `coverage_level: partial`. Do not downgrade to `needs_review` solely because the receipt-side `特典の一部利用料` is not allocated or because a separate item-sales CSV is unavailable.
 
 ## Mercari Shops
 

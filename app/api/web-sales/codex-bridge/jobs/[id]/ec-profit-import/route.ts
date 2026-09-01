@@ -92,7 +92,7 @@ export async function POST(
 
     const { data: existing, error: existingError } = await supabase
       .from("ec_profit_monthly")
-      .select("coverage_level,refunds,platform_fees,payment_fees,seller_discounts,seller_coupons,seller_points,shipping_costs,other_costs,other_credits")
+      .select("coverage_level,source_job_id,refunds,platform_fees,payment_fees,seller_discounts,seller_coupons,seller_points,shipping_costs,other_costs,other_credits")
       .eq("channel", data.channel)
       .eq("report_month", `${data.report_month}-01`)
       .maybeSingle();
@@ -101,6 +101,7 @@ export async function POST(
     if (existing && shouldPreserveExistingEcProfit(
       existing.coverage_level as EcProfitCoverageLevel,
       coverageLevel,
+      { existingHasOfficialSource: Boolean(existing.source_job_id) },
     )) {
       const existingDeductions = Number(existing.refunds || 0)
         + Number(existing.platform_fees || 0)
