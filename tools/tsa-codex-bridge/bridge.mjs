@@ -13,6 +13,13 @@ import {
 } from "./codex-run-guard.mjs";
 import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs";
 import {
+  archiveStagedReport,
+  extractReportArtifactPaths,
+  findReportArtifactCandidates,
+  snapshotReportArtifacts,
+  stageReportArtifact,
+} from "./download-artifact-recovery.mjs";
+import {
   RECIPE_SNS_INTERACTIVE_APPROVAL_MESSAGE,
   isRecipeSnsInteractiveApprovalWait,
   normalizeRecipeSnsPublishStop,
@@ -20,7 +27,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.42";
+const VERSION = "1.9.43";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -5192,7 +5199,9 @@ async function executeAdCostJob(job) {
 
   const downloadsDir = config.downloadsDir;
   mkdirSync(downloadsDir, { recursive: true });
+  const downloadSnapshot = snapshotReportArtifacts(downloadsDir);
   if (await tryReuseAdArtifact(job, channel, archiveDir)) return;
+  if (await tryReuseAdDownloadArtifact(job, channel, downloadsDir, archiveDir, workDir)) return;
   const outputFile = join(workDir, "final-result.json");
   const jsonlLog = join(workDir, "codex-events.jsonl");
   const prompt = buildAdPrompt(job, channel, downloadsDir, archiveDir, workDir);
@@ -5205,7 +5214,7 @@ async function executeAdCostJob(job) {
     eventType: "ad_codex_starting",
   });
 
-  const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, archiveDir, workDir]);
+  const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir]);
   const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: config.workspace,
     env: { ...process.env, CODEX_HOME: config.codexHome },
@@ -5279,25 +5288,30 @@ async function executeAdCostJob(job) {
     };
   }
 
-  if (result.status === "completed") {
+  const explicitAdPaths = extractReportArtifactPaths(result, [downloadsDir, workDir, archiveDir]);
+  const recoveredAdCandidates = findReportArtifactCandidates({
+    downloadsDir,
+    snapshot: downloadSnapshot,
+    taskKey: job.task_key,
+    channel: job.channel,
+    startDate: job.period_start,
+    endDate: job.period_end,
+    explicitPaths: explicitAdPaths,
+  });
+  const recoverableAdPath = explicitAdPaths.find((filePath) => existsSync(filePath))
+    || recoveredAdCandidates[0]?.path
+    || null;
+
+  if (recoverableAdPath) {
     try {
-      const archivedFile = requireArchivedAdFile(result.source_files, archiveDir);
-      await updateJob(job.id, {
-        status: "running",
-        progress: 88,
-        currentStep: "広告レポートを検証してTSAへ登録しています",
-        message: "対象月・形式を確認してから広告費へ反映します",
-        eventType: "ad_direct_import_started",
+      result = await importAndArchiveAdArtifact({
+        job,
+        channel,
+        sourcePath: recoverableAdPath,
+        archiveDir,
+        workDir,
+        executionRoute: result.status === "completed" ? "codex_download" : "bridge_download_recovery",
       });
-      const imported = await directImportAd(job, archivedFile);
-      result = {
-        status: imported.status,
-        summary: imported.summary || `${channel.label}の処理が完了しました`,
-        details: imported.details || "",
-        source_files: uniquePaths([...(result.source_files || []), archivedFile]),
-        imported_count: Number.isFinite(Number(imported.importedCount)) ? Number(imported.importedCount) : null,
-        report_month: job.report_month,
-      };
     } catch (error) {
       result = {
         ...result,
@@ -5307,6 +5321,14 @@ async function executeAdCostJob(job) {
         imported_count: null,
       };
     }
+  } else if (result.status === "completed") {
+    result = {
+      ...result,
+      status: "failed",
+      summary: `${channel.label}の広告レポート原本を回収できませんでした`,
+      details: "ダウンロード結果に原本パスがなく、Downloadsにも今回取得した正式レポートが見つかりません。",
+      imported_count: null,
+    };
   }
 
   const artifactPaths = collectArtifacts(result.source_files, [downloadsDir, archiveDir, workDir], startedAt);
@@ -5342,8 +5364,12 @@ async function executeEcProfitJob(job) {
   mkdirSync(downloadsDir, { recursive: true });
   mkdirSync(workDir, { recursive: true });
   mkdirSync(archiveDir, { recursive: true });
+  const downloadSnapshot = snapshotReportArtifacts(downloadsDir);
   if (await tryReuseEcProfitJson(job, archiveDir, workDir)) return;
-  const stagedOriginals = stageExistingEcProfitOriginals(job, archiveDir, workDir);
+  const stagedOriginals = uniquePaths([
+    ...stageExistingEcProfitOriginals(job, archiveDir, workDir),
+    ...stageReusableEcProfitDownloads(job, downloadsDir, workDir),
+  ]);
   const outputFile = join(workDir, "final-result.json");
   const jsonlLog = join(workDir, "codex-events.jsonl");
   const prompt = buildEcProfitPrompt(job, channel, downloadsDir, archiveDir, workDir, stagedOriginals);
@@ -5426,6 +5452,18 @@ async function executeEcProfitJob(job) {
       details: stderr || `exit code ${exitCode}`,
       source_files: [],
     };
+  }
+
+  const explicitEcProfitPaths = extractReportArtifactPaths(result, [downloadsDir, workDir]);
+  const recoveredEcProfitOriginals = stageEcProfitDownloadCandidates({
+    job,
+    downloadsDir,
+    workDir,
+    snapshot: downloadSnapshot,
+    explicitPaths: explicitEcProfitPaths,
+  });
+  if (recoveredEcProfitOriginals.length > 0) {
+    result.source_files = uniquePaths([...(result.source_files || []), ...recoveredEcProfitOriginals]);
   }
 
   try {
@@ -5584,6 +5622,56 @@ function stageExistingEcProfitOriginals(job, archiveDir, workDir) {
     const target = join(workDir, name);
     copyFileSync(source, target);
     staged.push(target);
+  }
+  return staged;
+}
+
+function stageReusableEcProfitDownloads(job, downloadsDir, workDir) {
+  return stageEcProfitDownloadCandidates({
+    job,
+    downloadsDir,
+    workDir,
+    snapshot: {},
+    includeExisting: true,
+  });
+}
+
+function stageEcProfitDownloadCandidates({
+  job,
+  downloadsDir,
+  workDir,
+  snapshot,
+  explicitPaths = [],
+  includeExisting = false,
+}) {
+  const candidates = findReportArtifactCandidates({
+    downloadsDir,
+    snapshot,
+    taskKey: job.task_key,
+    channel: job.channel,
+    startDate: job.period_start,
+    endDate: job.period_end,
+    includeExisting,
+    explicitPaths,
+  });
+  const digests = new Set();
+  const staged = [];
+  for (const candidate of candidates.slice(0, 8)) {
+    try {
+      const digest = createHash("sha256").update(readFileSync(candidate.path)).digest("hex");
+      if (digests.has(digest)) continue;
+      digests.add(digest);
+      staged.push(stageReportArtifact({
+        sourcePath: candidate.path,
+        targetDir: workDir,
+        channel: job.channel,
+        startDate: job.period_start,
+        endDate: job.period_end,
+        taskKey: job.task_key,
+      }));
+    } catch (error) {
+      log(`EC控除レポート候補を回収できません: ${candidate.path} (${error instanceof Error ? error.message : String(error)})`);
+    }
   }
   return staged;
 }
@@ -5948,6 +6036,76 @@ async function tryReuseAdArtifact(job, channel, archiveDir) {
   return true;
 }
 
+async function tryReuseAdDownloadArtifact(job, channel, downloadsDir, archiveDir, workDir) {
+  const candidates = findReportArtifactCandidates({
+    downloadsDir,
+    taskKey: job.task_key,
+    channel: job.channel,
+    startDate: job.period_start,
+    endDate: job.period_end,
+    includeExisting: true,
+  });
+  for (const candidate of candidates.slice(0, 5)) {
+    try {
+      const result = await importAndArchiveAdArtifact({
+        job,
+        channel,
+        sourcePath: candidate.path,
+        archiveDir,
+        workDir,
+        executionRoute: "recovered_download",
+      });
+      for (const filePath of result.source_files) {
+        await uploadArtifact(job.id, filePath, "source").catch(() => undefined);
+      }
+      await updateJob(job.id, {
+        status: result.status,
+        progress: result.status === "completed" ? 100 : 92,
+        currentStep: statusLabel(result.status),
+        message: result.summary,
+        eventType: "token_preflight_download_reused",
+        result,
+        errorMessage: result.status === "failed" ? result.summary : null,
+      });
+      return true;
+    } catch (error) {
+      log(`広告レポート候補を再利用できません: ${candidate.path} (${error instanceof Error ? error.message : String(error)})`);
+    }
+  }
+  return false;
+}
+
+async function importAndArchiveAdArtifact({ job, channel, sourcePath, archiveDir, workDir, executionRoute }) {
+  await updateJob(job.id, {
+    status: "running",
+    progress: 88,
+    currentStep: "広告レポートを検証してTSAへ登録しています",
+    message: "対象月・形式を確認してから広告費へ反映します",
+    eventType: "ad_direct_import_started",
+  });
+  const imported = await directImportAd(job, sourcePath);
+  const stagedFile = stageReportArtifact({
+    sourcePath,
+    targetDir: workDir,
+    channel: job.channel,
+    startDate: job.period_start,
+    endDate: job.period_end,
+    taskKey: job.task_key,
+  });
+  const archivedFile = archiveStagedReport(stagedFile, archiveDir);
+  return {
+    status: normalizeResultStatus(imported.status, 0),
+    summary: imported.summary || `${channel.label}の処理が完了しました`,
+    details: imported.details || "",
+    source_files: uniquePaths([stagedFile, archivedFile]),
+    imported_count: Number.isFinite(Number(imported.importedCount)) ? Number(imported.importedCount) : null,
+    unmatched_count: Number.isFinite(Number(imported.unmatchedCount)) ? Number(imported.unmatchedCount) : null,
+    total_cost: Number.isFinite(Number(imported.totalCost)) ? Number(imported.totalCost) : null,
+    report_month: job.report_month,
+    execution_route: executionRoute,
+  };
+}
+
 function archivedNameMatchesPeriod(name, job) {
   const canonicalPrefix = `${job.channel}-${job.period_start}_${job.period_end}`.toLowerCase();
   if (String(name).toLowerCase().startsWith(canonicalPrefix)) return true;
@@ -6051,9 +6209,9 @@ SAFETY AND SCOPE
 
 WORKFLOW
 1. Follow the skill's exact ${channel.label} acquisition procedure for ${job.period_start} through ${job.period_end}.
-2. Confirm the downloaded report contains the requested period before archiving it.
-3. Preserve the original file unchanged in the source archive folder using the skill naming rule ending in .original.csv, .original.zip, .original.xlsx, or .original.xls.
-4. Stop after local validation and archive. Do not open TSA and do not use a TSA browser upload. The Bridge performs the protected direct import.
+2. Confirm the downloaded report contains the requested period before staging it.
+3. Preserve the original file unchanged in the job work folder using the skill naming rule ending in .original.csv, .original.zip, .original.xlsx, or .original.xls. Do not write to the final source archive folder.
+4. Stop after local validation and staging. Do not open TSA and do not use a TSA browser upload. The Bridge performs the protected shared archive copy and direct import.
 
 TOKEN EFFICIENCY
 - The Bridge already checked saved artifacts before starting this isolated session.
@@ -6062,28 +6220,11 @@ TOKEN EFFICIENCY
 
 FINAL RESPONSE
 - Return only data conforming to the supplied JSON schema.
-- source_files must contain the absolute path of the archived original report under the source archive folder.
-- Use completed only when the exact report was downloaded, period-confirmed, and archived.
+- source_files must contain the absolute path of the staged original report under the job work folder.
+- Use completed only when the exact report was downloaded, period-confirmed, and staged.
 - Use waiting_for_user for login/MFA/CAPTCHA/account selection or Chrome origin permission.
 - Use needs_review for an unclear report type or period.
 - Use failed for retryable technical failures.`;
-}
-
-function requireArchivedAdFile(sourceFiles, archiveDir) {
-  const root = resolve(archiveDir).replace(/[\\/]+$/, "").toLowerCase();
-  const files = uniquePaths(Array.isArray(sourceFiles) ? sourceFiles : [])
-    .filter((filePath) => {
-      try {
-        const absolute = resolve(filePath);
-        return statSync(absolute).isFile()
-          && absolute.toLowerCase().startsWith(`${root}\\`)
-          && /\.original\.(csv|zip|xlsx|xls)$/i.test(absolute);
-      } catch {
-        return false;
-      }
-    });
-  if (files.length !== 1) throw new Error(`共有保存先の広告レポート原本を一意に特定できません: ${files.length}件`);
-  return files[0];
 }
 
 async function directImportAd(job, filePath = null) {

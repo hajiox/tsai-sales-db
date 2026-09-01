@@ -1,0 +1,147 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import {
+  archiveStagedReport,
+  extractReportArtifactPaths,
+  findReportArtifactCandidates,
+  snapshotReportArtifacts,
+  stageReportArtifact,
+} from "../tools/tsa-codex-bridge/download-artifact-recovery.mjs";
+
+const root = mkdtempSync(join(tmpdir(), "tsa-bridge-download-recovery-"));
+const downloads = join(root, "Downloads");
+const work = join(root, "work");
+const archive = join(root, "archive");
+mkdirSync(downloads);
+
+try {
+  const meta = join(downloads, "247604225296764_-_-_2026_08_01-_-2026_08_31.csv");
+  writeFileSync(meta, "レポート開始日,レポート終了日,広告セット名,消化金額 (JPY)\n2026-08-01,2026-08-31,商品,100\n", "utf8");
+  const snapshot = snapshotReportArtifacts(downloads);
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    snapshot,
+    taskKey: "ad_cost_import",
+    channel: "meta",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+  }).length, 0, "unchanged files must not look newly downloaded");
+
+  const existingMeta = findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ad_cost_import",
+    channel: "meta",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  });
+  assert.equal(existingMeta[0].path, meta);
+
+  writeFileSync(meta, `${readFileSync(meta, "utf8")}2026-08-01,2026-08-31,商品2,200\n`, "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    snapshot,
+    taskKey: "ad_cost_import",
+    channel: "meta",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+  })[0].changed, true);
+
+  const unrelated = join(downloads, "personal-budget.csv");
+  writeFileSync(unrelated, "date,cost\n2026-08-01,500\n", "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ad_cost_import",
+    channel: "yahoo",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  }).length, 0);
+
+  const yahoo = join(downloads, "広告詳細レポート_アイテムリーチ（商品）_商品別_月別.csv");
+  writeFileSync(yahoo, "日付,商品コード,利用金額,ROAS\n2026/08,100,200,300\n", "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ad_cost_import",
+    channel: "yahoo",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  })[0].path, yahoo);
+
+  const rakuten = join(downloads, "rpp_item_reports_aizubrandhall_20260901131227759.zip");
+  writeFileSync(rakuten, "PK dummy");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ad_cost_import",
+    channel: "rakuten",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  })[0].path, rakuten);
+
+  const mercari = join(downloads, "202608-202608_report.csv");
+  writeFileSync(mercari, "販売利益,販売手数料（税込）,売上移転日\n100,10,2026/8/1\n", "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ec_profit_import",
+    channel: "mercari",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  })[0].path, mercari);
+
+  const staleQoo10 = join(downloads, "DeliveryManagement_detail_20260901_1153.csv");
+  writeFileSync(staleQoo10, '"配送状態","注文日","カート番号","購入者決済金額"\n"配送完了","2026-07-31 10:00:00","1","1000"\n', "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ec_profit_import",
+    channel: "qoo10",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  }).length, 0, "Qoo10 export generated in September must not be mistaken for August data");
+  writeFileSync(staleQoo10, '"配送状態","注文日","カート番号","購入者決済金額"\n"配送完了","2026-08-02 10:00:00","1","1000"\n', "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ec_profit_import",
+    channel: "qoo10",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+  })[0].path, staleQoo10);
+
+  const staged = stageReportArtifact({
+    sourcePath: yahoo,
+    targetDir: work,
+    channel: "yahoo",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    taskKey: "ad_cost_import",
+  });
+  assert.match(staged, /yahoo-2026-08-01_2026-08-31\.original\.csv$/i);
+  assert.equal(readFileSync(staged, "utf8"), readFileSync(yahoo, "utf8"));
+  assert.equal(stageReportArtifact({
+    sourcePath: yahoo,
+    targetDir: work,
+    channel: "yahoo",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    taskKey: "ad_cost_import",
+  }), staged, "identical retry must reuse the staged file");
+  const archived = archiveStagedReport(staged, archive);
+  assert.equal(readFileSync(archived, "utf8"), readFileSync(yahoo, "utf8"));
+
+  const explicit = extractReportArtifactPaths({
+    details: `検証済みダウンロード: ${yahoo}`,
+    source_files: [],
+  }, [downloads]);
+  assert.deepEqual(explicit, [yahoo]);
+  assert.deepEqual(extractReportArtifactPaths({ details: `対象外: ${unrelated}` }, [work]), []);
+} finally {
+  rmSync(root, { recursive: true, force: true });
+}
+
+console.log("Bridge download recovery checks passed.");

@@ -25,29 +25,29 @@ description: Download, verify, and archive TSA advertising-cost reports for Meta
 
 ## Procedure
 
-1. Confirm the channel, inclusive start/end dates, report month, download folder, and archive folder supplied by the Bridge.
+1. Confirm the channel, inclusive start/end dates, report month, download folder, and job work folder supplied by the Bridge.
 2. Read only the target channel section in [references/channels.md](references/channels.md).
 3. Use the existing signed-in Chrome session and only the official advertising administration site named in the reference.
 4. Confirm the shop/account and requested dates on screen immediately before report creation or download.
 5. Download the exact report type and granularity from the reference. Do not substitute a similar campaign, search-term, billing, or order report.
 6. Preserve the downloaded bytes unchanged. Do not open and resave the report in Excel.
 7. Confirm the requested month or dates from report metadata or report rows, not from the filename alone.
-8. Archive one original file under the supplied archive folder using:
+8. Stage one original file under the supplied job work folder using:
 
 ```text
-YYYY.MM <媒体名>広告費（DD日～DD日）.original.<csv|zip|xlsx|xls>
+<channel>-YYYY-MM-DD_YYYY-MM-DD.original.<csv|zip|xlsx|xls>
 ```
 
-9. Never overwrite an existing file with different bytes. Add the execution time before `.original` when a same-name file already exists.
-10. Stop after the original report is archived. TSA upload, auto-matching, and cost import are performed by the protected local Bridge endpoint.
+9. Never write to the final network archive. Never overwrite an existing file with different bytes.
+10. Stop after the original report is staged. The local Bridge owns the final network archive copy, TSA upload, auto-matching, and cost import.
 
 ## Status Rules
 
-- `completed`: exact report, account, and period are confirmed and one unchanged original file is archived.
+- `completed`: exact report, account, and period are confirmed and one unchanged original file is staged in the job work folder.
 - `waiting_for_user`: login, MFA, CAPTCHA, account selection, download permission, or Chrome-origin approval needs a person.
 - After observing any authentication or permission screen once, stop immediately. Never refresh it, retry sign-in, or search alternate routes in a loop; return `waiting_for_user`.
 - `needs_review`: the report type, period, account, or required fields cannot be confirmed.
-- `failed`: a retryable technical error prevents acquisition or archiving.
+- `failed`: a retryable technical error prevents acquisition or local staging.
 
 ## Prohibited Actions
 
