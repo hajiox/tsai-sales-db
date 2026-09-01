@@ -93,6 +93,42 @@ try {
     includeExisting: true,
   })[0].path, mercari);
 
+  const staleAmazon = join(downloads, "2026JulMonthlyTransaction.csv");
+  writeFileSync(staleAmazon, "トランザクション,Amazon手数料,日付\n注文,100,2026-07-31\n", "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ec_profit_import",
+    channel: "amazon",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+    explicitPaths: [staleAmazon],
+  }).length, 0, "explicit paths must not bypass the requested EC settlement period");
+
+  const staleYahoo = join(downloads, "billing_202508-1.csv");
+  writeFileSync(staleYahoo, "注文ID,決済手数料,利用日\nold,100,2025-08-15\n", "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ec_profit_import",
+    channel: "yahoo",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+    explicitPaths: [staleYahoo],
+  }).length, 0, "an old Yahoo billing CSV must not be staged for a newer month");
+
+  const wrongTikTok = join(downloads, "aizubrand-official-ec-20260901.csv");
+  writeFileSync(wrongTikTok, "注文ID,注文日時,支払い方法\nbase-order,2026-08-12,credit_card\n", "utf8");
+  assert.equal(findReportArtifactCandidates({
+    downloadsDir: downloads,
+    taskKey: "ec_profit_import",
+    channel: "tiktok",
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+    includeExisting: true,
+    explicitPaths: [wrongTikTok],
+  }).length, 0, "a BASE order CSV must not be staged as TikTok settlement data");
+
   const staleQoo10 = join(downloads, "DeliveryManagement_detail_20260901_1153.csv");
   writeFileSync(staleQoo10, '"配送状態","注文日","カート番号","購入者決済金額"\n"配送完了","2026-07-31 10:00:00","1","1000"\n', "utf8");
   assert.equal(findReportArtifactCandidates({

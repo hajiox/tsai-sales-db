@@ -16,7 +16,7 @@ description: Download, verify, and archive TSA advertising-cost reports for Meta
 - After connecting to Chrome, list its existing tabs before opening anything.
 - Reuse a tab whose URL is already on the requested advertising platform's official host. A new tab can lose tab-scoped authentication even in the same Chrome profile.
 - If several tabs match, prefer a signed-in non-login page for the requested account. Create a new tab only when no matching official-host tab exists.
-- Keep an operator-owned existing tab open when finalizing the browser task. Finalize a claimed existing tab with `keep: [{ tab, status: "handoff" }]` or its documented equivalent; never use `keep: []` for that tab.
+- Keep operator-owned claimed tabs and Bridge-created temporary tabs in separate lists. On every completion, error, and operator-wait path, do not call `markHandoff()`, `markDeliverable()`, or `close()` on an operator-owned tab. Close only Bridge-created temporary tabs, then return immediately so normal turn cleanup releases every unmarked claimed tab for the next fresh Bridge session.
 
 ## Encoding
 

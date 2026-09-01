@@ -77,7 +77,7 @@ export function findReportArtifactCandidates({
     const isExplicit = explicit.has(pathKey(filePath));
     if (!includeExisting && !changed && !isExplicit) continue;
     const score = reportArtifactScore({ taskKey, channel, filePath, startDate, endDate });
-    if (!isExplicit && score < 80) continue;
+    if (score < 80) continue;
     candidates.push({
       path: filePath,
       score: score + (isExplicit ? 1000 : 0) + (changed ? 100 : 0),
@@ -120,7 +120,8 @@ function reportArtifactScore({ taskKey, channel, filePath, startDate, endDate })
   const generatedAtName = (taskKey === "ad_cost_import" && channel === "rakuten" && /^rpp_item_reports_/i.test(name))
     || (taskKey === "ec_profit_import" && channel === "qoo10" && /^deliverymanagement_detail_/i.test(name))
     || (taskKey === "ec_profit_import" && channel === "base" && /aizubrand.*official.*ec/i.test(name));
-  let score = periodEvidenceScore(generatedAtName ? text : `${name}\n${text}`, startDate, endDate);
+  const periodScore = periodEvidenceScore(generatedAtName ? text : `${name}\n${text}`, startDate, endDate);
+  let score = periodScore;
 
   if (taskKey === "ad_cost_import") {
     if (channel === "meta" && (/^\d+_-_-_\d{4}_\d{2}_\d{2}-_-\d{4}_\d{2}_\d{2}.*\.csv$/i.test(name)
@@ -134,22 +135,26 @@ function reportArtifactScore({ taskKey, channel, filePath, startDate, endDate })
     return score;
   }
 
+  let channelMatched = false;
   if (channel === "mercari" && (/^\d{6}-\d{6}_report/i.test(name)
-    || (/販売利益/.test(text) && /販売手数料/.test(text) && /売上移転日/.test(text)))) score += 100;
+    || (/販売利益/.test(text) && /販売手数料/.test(text) && /売上移転日/.test(text)))) channelMatched = true;
   if (channel === "base" && (/aizubrand.*official.*ec/i.test(name)
-    || (/注文ID/.test(text) && /注文日時/.test(text) && /支払い方法/.test(text)))) score += 100;
+    || (/注文ID/.test(text) && /注文日時/.test(text) && /支払い方法/.test(text)))) channelMatched = true;
   if (channel === "qoo10" && (/deliverymanagement_detail/i.test(name)
     || (/配送状態/.test(text) && /カート番号/.test(text) && /購入者決済金額/.test(text)))
-    && csvColumnHasDateInPeriod(text, "注文日", startDate, endDate)) score += 100;
+    && csvColumnHasDateInPeriod(text, "注文日", startDate, endDate)) channelMatched = true;
   if (channel === "rakuten" && (/item_saleslist/i.test(name)
-    || (/商品別売上/.test(text) && /表示期間/.test(text)))) score += 100;
+    || (/商品別売上/.test(text) && /表示期間/.test(text)))) channelMatched = true;
   if (channel === "amazon" && (/(?:date.?range|transaction|settlement).*(?:report)?/i.test(name)
-    || (/(?:transaction.?type|トランザクション)/i.test(text) && /(?:amazon fees|Amazon手数料|合計)/i.test(text)))) score += 100;
+    || (/(?:transaction.?type|トランザクション)/i.test(text) && /(?:amazon fees|Amazon手数料|合計)/i.test(text)))) channelMatched = true;
   if (channel === "yahoo" && (/(?:利用詳細|受取明細|請求明細|billing|receipt)/i.test(name)
-    || (/注文ID/.test(text) && /(?:モールクーポン|決済手数料|利用料)/.test(text)))) score += 100;
+    || (/注文ID/.test(text) && /(?:モールクーポン|決済手数料|利用料)/.test(text)))) channelMatched = true;
   if (channel === "tiktok" && (/(?:tiktok|statement|settlement|transaction|payout)/i.test(name)
-    || (/(?:注文ID|Order ID)/i.test(text) && /(?:支払金額|手数料|fee|payout)/i.test(text)))) score += 100;
-  return score;
+    || (/(?:注文ID|Order ID)/i.test(text) && /(?:支払金額|手数料|fee|payout)/i.test(text)))) channelMatched = true;
+
+  // Existing Downloads files are reusable only when both the channel and requested
+  // period are evidenced by the file itself. An explicit Codex path is not proof.
+  return channelMatched && periodScore > 0 ? score + 100 : 0;
 }
 
 function periodEvidenceScore(text, startDate, endDate) {

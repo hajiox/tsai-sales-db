@@ -18,7 +18,7 @@ description: Download, validate, archive, and import TSA product-sales CSV files
 - Reuse a tab whose URL is already on the requested EC seller site's official host. A new tab can lose tab-scoped authentication even in the same Chrome profile.
 - If several tabs match, prefer a signed-in non-login page for the requested store.
 - If a matching operator-owned tab is already controlled by another browser-operation session, leave it open and unchanged. Open at most one temporary tab through the already-selected browser binding, navigate it directly to the confirmed report URL in the channel reference, and continue only after verifying the expected signed-in account on that report route. Do not use a generic seller root or copy an occupied tab's marketing redirect URL. Close only that temporary tab when finished.
-- Keep an operator-owned existing tab open when finalizing the browser task. Finalize a claimed existing tab with `keep: [{ tab, status: "handoff" }]` or its documented equivalent; never use `keep: []` for that tab.
+- Keep operator-owned claimed tabs and Bridge-created temporary tabs in separate lists. On every completion, error, and operator-wait path, do not call `markHandoff()`, `markDeliverable()`, or `close()` on an operator-owned tab. Close only Bridge-created temporary tabs, then return immediately so normal turn cleanup releases every unmarked claimed tab for the next fresh Bridge session.
 - If the selected binding is no longer usable, the temporary tab cannot be created, or the expected signed-in account is unavailable in that temporary tab, stop with `waiting_for_user` and identify the exact Chrome-control or authentication reason. Do not recover by silently selecting another browser binding.
 
 ## Download Safety

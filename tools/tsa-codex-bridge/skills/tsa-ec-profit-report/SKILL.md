@@ -19,7 +19,7 @@ Use the signed-in Chrome session and official seller/admin pages only. Read the 
 - Reuse a tab whose URL is already on the requested channel's official host. Some seller sites keep authentication in the original tab, so a newly opened tab can appear logged out even in the same Chrome profile.
 - If several tabs match, prefer a non-login page whose visible account/store matches the requested channel. Navigate that same tab only when necessary.
 - Create a new tab only when no tab for the official host exists.
-- Keep an operator-owned existing tab open when finalizing the browser task. Finalize a claimed existing tab with `keep: [{ tab, status: "handoff" }]` or its documented equivalent; never use `keep: []` for that tab.
+- Keep operator-owned claimed tabs and Bridge-created temporary tabs in separate lists. On every completion, error, and operator-wait path, do not call `markHandoff()`, `markDeliverable()`, or `close()` on an operator-owned tab. Close only Bridge-created temporary tabs, then return immediately so normal turn cleanup releases every unmarked claimed tab for the next fresh Bridge session.
 
 ## Workflow
 

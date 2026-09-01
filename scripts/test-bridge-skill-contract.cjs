@@ -88,6 +88,13 @@ for (const skillName of [
   assert.match(skill, /waiting_for_user/);
 }
 
+for (const skillName of ["tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report"]) {
+  const skill = read("tools", "tsa-codex-bridge", "skills", skillName, "SKILL.md");
+  assert.match(skill, /normal turn cleanup releases every unmarked claimed tab/);
+  assert.doesNotMatch(skill, /Finalize a claimed existing tab with `keep:/);
+}
+assert.match(bridge, /Never mark, keep, hand off, deliver, or close a claimed operator tab/);
+
 const argBuilder = bridge.slice(
   bridge.indexOf("function buildIsolatedCodexArgs"),
   bridge.indexOf("function appendEventLine"),
