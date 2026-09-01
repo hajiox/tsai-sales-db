@@ -5,7 +5,9 @@
 ## Amazon (`amazon`)
 
 - 管理画面: Seller Central
+- 確定直リンク: `https://sellercentral.amazon.co.jp/business-reports`
 - 導線: `レポート` > `ビジネスレポート` > `ASIN別` > `（子）商品別詳細ページ 売上・トラフィック`
+- 一時タブ復旧時: Seller Centralのルートや既存タブの`/amazonsell/business`へは移動せず、上記の確定直リンクを直接開く。直リンク上で会津ブランド館・日本・Business Reportsが確認できた場合はサインイン済みとして続行する。
 - 期間: 画面右上の開始日・終了日にタスク期間を入力する。
 - 出力: `CSVダウンロード`
 - 必須列: `（親）ASIN`、`（子）ASIN`、`タイトル`、`注文された商品点数`、`注文商品の売上額`

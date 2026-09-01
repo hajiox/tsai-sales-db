@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const bridge = read("tools", "tsa-codex-bridge", "bridge.mjs");
 const skill = read("tools", "tsa-codex-bridge", "skills", "tsa-web-sales-csv", "SKILL.md");
+const channels = read("tools", "tsa-codex-bridge", "skills", "tsa-web-sales-csv", "references", "channels.md");
 const screen = read("app", "web-sales", "automation", "page.tsx");
 
 for (const source of [bridge, skill]) {
@@ -24,6 +25,8 @@ assert.match(skill, /Never call `getForUrl`, `getDefault`, or `get` again/);
 assert.match(bridge, /open at most one temporary tab through the same binding/);
 assert.match(skill, /Open at most one temporary tab through the already-selected browser binding/);
 assert.match(skill, /最大5分待ち/);
+assert.match(channels, /https:\/\/sellercentral\.amazon\.co\.jp\/business-reports/);
+assert.match(channels, /\/amazonsell\/business.*移動せず/);
 
 assert.match(screen, /Codex承認待ち/);
 assert.match(screen, /再実行時にCodexで許可/);
