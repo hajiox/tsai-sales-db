@@ -8,6 +8,7 @@ Use the most detailed official export available. UI wording can change; match by
 - Prefer a transaction report for the requested custom date range; use Settlement Report V2 only when transaction rows are unavailable.
 - Confirm transaction type, order ID, product sales, promotional rebates/discounts, Amazon fees, fulfilment or shipping fees, refunds, credits, and total.
 - Seller-funded points belong in `seller_points`. Advertising charges must be excluded even if they appear in payments.
+- If the prepared report's official download routes to `/payments/reports/api/download-report?reportId=...` but Chrome shows `ERR_BLOCKED_BY_CLIENT` or emits no download event, return to the same signed-in report repository tab and use the Skill's single same-origin CDP fetch. Fetch only that verified report response with existing tab credentials, write the bytes to the job work folder, and verify the CSV dates and transaction columns. Do not inspect cookies or retain any redirect or signed URL.
 
 ## Rakuten
 
@@ -92,5 +93,6 @@ Use the most detailed official export available. UI wording can change; match by
 ## TikTok Shop
 
 - Seller Center: Finance > Statements or Transactions, with the requested period selected.
+- When the official export history download request to `/api/v1/pay/settlement/file/download` succeeds but Chrome does not save the file, inspect only that request's official JSON response in the same tab. Use its relative `data.url` once through the Skill's same-origin CDP fetch, without logging or persisting the URL, and write the XLSX bytes to the job work folder. Name it `tiktok-YYYY-MM-DD_YYYY-MM-DD-income-YYYY-MM.original.xlsx` so a later run can revalidate the period without trusting the archive prefix. Verify the workbook type, period, and statement columns before use.
 - Confirm customer payment, refunds, referral or commission fees, transaction fees, fulfilment/shipping fees, seller-funded discounts, affiliate charges, and adjustments.
 - Advertising charges and platform-funded discounts are excluded.

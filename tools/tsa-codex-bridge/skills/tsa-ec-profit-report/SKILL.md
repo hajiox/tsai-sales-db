@@ -32,6 +32,14 @@ Use the signed-in Chrome session and official seller/admin pages only. Read the 
 7. Reconcile the categories and set the coverage level. Never invent an amount or silently force a mismatch.
 8. Return the staged originals and normalized JSON in `source_files`. The Bridge replaces staged source paths with final archived paths before TSA import.
 
+## Bounded Official Download Recovery
+
+- A visible login, MFA, CAPTCHA, account-selection, browser-consent, or OS-permission prompt still requires `waiting_for_user` immediately.
+- `ERR_BLOCKED_BY_CLIENT`, or no download event after one verified click on the official report button, is a local Chrome transport failure. It is not by itself an authentication or operator-permission failure.
+- In that transport-only case, use exactly one same-origin recovery from the already claimed official tab. Through the tab's CDP runtime, fetch only the official response or relative download path produced by that verified click with the tab's existing credentials, and write the returned bytes directly into the supplied job work folder.
+- Never read or export cookies, authorization headers, local storage, passwords, or tokens. Never print, persist, or return a signed URL. Never follow a download to an unapproved host. Do not retry the export action or generate a second report.
+- Accept the recovered file only after confirming a successful response, the expected CSV/XLSX file type, the requested period, and the channel-specific columns. Otherwise stop with the exact failure.
+
 ## Classification Rules
 
 - Store every cost or deduction as a positive number.
@@ -48,6 +56,6 @@ Use the signed-in Chrome session and official seller/admin pages only. Read the 
 
 ## Stop Conditions
 
-Return `waiting_for_user` for login, MFA, CAPTCHA, account selection, download permission, or changed UI requiring a person. Return `needs_review` when an official monthly report is not published, the settlement result is empty while period-matched orders exist, or the report type, funding source, or arithmetic cannot be confirmed. Network archive writes are owned by the Bridge and are never a user-action condition. Do not change orders, listings, prices, promotions, advertising, billing settings, or account settings.
+Return `waiting_for_user` for login, MFA, CAPTCHA, account selection, an actual permission prompt, or changed UI requiring a person. A verified official download blocked only by local Chrome transport must first use the bounded same-origin recovery above. Return `needs_review` when an official monthly report is not published, the settlement result is empty while period-matched orders exist, or the report type, funding source, or arithmetic cannot be confirmed. Network archive writes are owned by the Bridge and are never a user-action condition. Do not change orders, listings, prices, promotions, advertising, billing settings, or account settings.
 
 After observing any authentication or permission screen once, stop immediately. Never refresh it, retry sign-in, or search alternate routes in a loop; return `waiting_for_user`.

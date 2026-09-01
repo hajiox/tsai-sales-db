@@ -6,6 +6,7 @@ import {
   archiveStagedReport,
   extractReportArtifactPaths,
   findReportArtifactCandidates,
+  isReportArtifactForPeriod,
   snapshotReportArtifacts,
   stageReportArtifact,
 } from "../tools/tsa-codex-bridge/download-artifact-recovery.mjs";
@@ -94,7 +95,7 @@ try {
   })[0].path, mercari);
 
   const staleAmazon = join(downloads, "2026JulMonthlyTransaction.csv");
-  writeFileSync(staleAmazon, "トランザクション,Amazon手数料,日付\n注文,100,2026-07-31\n", "utf8");
+  writeFileSync(staleAmazon, "トランザクション,Amazon手数料,日付\n注文,100,2026-07-31\n調整,0,2026-08-01\n", "utf8");
   assert.equal(findReportArtifactCandidates({
     downloadsDir: downloads,
     taskKey: "ec_profit_import",
@@ -128,6 +129,46 @@ try {
     includeExisting: true,
     explicitPaths: [wrongTikTok],
   }).length, 0, "a BASE order CSV must not be staged as TikTok settlement data");
+
+  const pollutedAmazonArchive = join(downloads, "amazon-2026-08-01_2026-08-31-2026JulMonthlyTransaction.original.csv");
+  writeFileSync(pollutedAmazonArchive, "トランザクション,Amazon手数料,日付\n注文,100,2026-07-31\n調整,0,2026-08-01\n", "utf8");
+  assert.equal(isReportArtifactForPeriod({
+    taskKey: "ec_profit_import",
+    channel: "amazon",
+    filePath: pollutedAmazonArchive,
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+  }), false, "a synthetic archive prefix must not turn a July Amazon report into August evidence");
+
+  const validAmazonArchive = join(downloads, "amazon-2026-08-01_2026-08-31-2026AugMonthlyTransaction.original.csv");
+  writeFileSync(validAmazonArchive, "トランザクション,Amazon手数料,日付\n注文,100,2026-08-15\n", "utf8");
+  assert.equal(isReportArtifactForPeriod({
+    taskKey: "ec_profit_import",
+    channel: "amazon",
+    filePath: validAmazonArchive,
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+  }), true, "an archived Amazon report with August rows remains reusable");
+
+  const pollutedTikTokArchive = join(downloads, "tiktok-2026-08-01_2026-08-31-aizubrand-official-ec-20260901.original.csv");
+  writeFileSync(pollutedTikTokArchive, "注文ID,注文日時,支払い方法\nbase-order,2026-08-12,credit_card\n", "utf8");
+  assert.equal(isReportArtifactForPeriod({
+    taskKey: "ec_profit_import",
+    channel: "tiktok",
+    filePath: pollutedTikTokArchive,
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+  }), false, "a synthetic archive prefix must not turn a BASE export into TikTok evidence");
+
+  const timestampOnlyTikTok = join(downloads, "income_20260806115059(UTC+9).xlsx");
+  writeFileSync(timestampOnlyTikTok, "PK fake workbook", "utf8");
+  assert.equal(isReportArtifactForPeriod({
+    taskKey: "ec_profit_import",
+    channel: "tiktok",
+    filePath: timestampOnlyTikTok,
+    startDate: "2026-08-01",
+    endDate: "2026-08-31",
+  }), false, "TikTok export creation time must not be treated as its statement period");
 
   const staleQoo10 = join(downloads, "DeliveryManagement_detail_20260901_1153.csv");
   writeFileSync(staleQoo10, '"配送状態","注文日","カート番号","購入者決済金額"\n"配送完了","2026-07-31 10:00:00","1","1000"\n', "utf8");

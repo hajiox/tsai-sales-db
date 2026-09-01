@@ -90,6 +90,11 @@ export function findReportArtifactCandidates({
   return candidates.sort((left, right) => right.score - left.score || right.mtimeMs - left.mtimeMs);
 }
 
+export function isReportArtifactForPeriod({ taskKey, channel, filePath, startDate, endDate }) {
+  if (!existsFile(filePath) || !isSupportedReport(filePath)) return false;
+  return reportArtifactScore({ taskKey, channel, filePath, startDate, endDate }) >= 80;
+}
+
 export function stageReportArtifact({ sourcePath, targetDir, channel, startDate, endDate, taskKey }) {
   const source = resolve(sourcePath);
   if (!existsFile(source) || !isSupportedReport(source)) throw new Error(`回収対象レポートが見つかりません: ${source}`);
@@ -112,15 +117,29 @@ export function archiveStagedReport(sourcePath, archiveDir) {
 }
 
 function reportArtifactScore({ taskKey, channel, filePath, startDate, endDate }) {
-  const name = basename(filePath).toLowerCase();
+  const storedName = basename(filePath).toLowerCase();
+  const archivePrefix = `${channel}-${startDate}_${endDate}-`.toLowerCase();
+  // The archive prefix describes where Bridge stored the file, not what the
+  // original report contains. Ignore one such prefix when validating evidence.
+  const name = taskKey === "ec_profit_import"
+    && /\.original\.(csv|zip|xlsx|xls|txt|json|pdf)$/i.test(storedName)
+    && storedName.startsWith(archivePrefix)
+    ? storedName.slice(archivePrefix.length)
+    : storedName;
   const extension = extname(name);
   const text = extension === ".csv" || extension === ".txt" || extension === ".json"
     ? readTextSample(filePath)
     : "";
   const generatedAtName = (taskKey === "ad_cost_import" && channel === "rakuten" && /^rpp_item_reports_/i.test(name))
     || (taskKey === "ec_profit_import" && channel === "qoo10" && /^deliverymanagement_detail_/i.test(name))
-    || (taskKey === "ec_profit_import" && channel === "base" && /aizubrand.*official.*ec/i.test(name));
-  const periodScore = periodEvidenceScore(generatedAtName ? text : `${name}\n${text}`, startDate, endDate);
+    || (taskKey === "ec_profit_import" && channel === "base" && /aizubrand.*official.*ec/i.test(name))
+    || (taskKey === "ec_profit_import" && channel === "tiktok" && /^income_\d{14}/i.test(name));
+  const namedAmazonMonth = taskKey === "ec_profit_import" && channel === "amazon"
+    ? amazonMonthlyTransactionMonth(name)
+    : null;
+  const periodScore = namedAmazonMonth
+    ? (namedAmazonMonth === String(startDate).slice(0, 7) ? 30 : 0)
+    : periodEvidenceScore(generatedAtName ? text : `${name}\n${text}`, startDate, endDate);
   let score = periodScore;
 
   if (taskKey === "ad_cost_import") {
@@ -149,12 +168,20 @@ function reportArtifactScore({ taskKey, channel, filePath, startDate, endDate })
     || (/(?:transaction.?type|トランザクション)/i.test(text) && /(?:amazon fees|Amazon手数料|合計)/i.test(text)))) channelMatched = true;
   if (channel === "yahoo" && (/(?:利用詳細|受取明細|請求明細|billing|receipt)/i.test(name)
     || (/注文ID/.test(text) && /(?:モールクーポン|決済手数料|利用料)/.test(text)))) channelMatched = true;
-  if (channel === "tiktok" && (/(?:tiktok|statement|settlement|transaction|payout)/i.test(name)
-    || (/(?:注文ID|Order ID)/i.test(text) && /(?:支払金額|手数料|fee|payout)/i.test(text)))) channelMatched = true;
+  if (channel === "tiktok" && (/(?:^|[-_])(tiktok|statement|settlement|payout)(?:[-_.]|$)/i.test(name)
+    || /^income[_-]\d+/i.test(name))) channelMatched = true;
 
   // Existing Downloads files are reusable only when both the channel and requested
   // period are evidenced by the file itself. An explicit Codex path is not proof.
   return channelMatched && periodScore > 0 ? score + 100 : 0;
+}
+
+function amazonMonthlyTransactionMonth(name) {
+  const match = String(name || "").match(/(20\d{2})(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)monthlytransaction/i);
+  if (!match) return null;
+  const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    .indexOf(match[2].toLowerCase()) + 1;
+  return `${match[1]}-${String(month).padStart(2, "0")}`;
 }
 
 function periodEvidenceScore(text, startDate, endDate) {
