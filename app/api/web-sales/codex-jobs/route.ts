@@ -11,6 +11,10 @@ import {
   enqueueConnectionTest,
 } from "@/lib/web-sales-codex/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
+import {
+  hasPersistedFinanceImport,
+  selectEffectiveFinanceJob,
+} from "@/lib/web-sales-codex/finance-job-state";
 
 const AD_COST_CHANNELS = new Set(["google", "meta", "rakuten", "yahoo", "amazon"]);
 
@@ -58,21 +62,29 @@ export async function POST(request: Request) {
         .eq("period_end", period.endDate)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const latestJob = new Map<string, { status: string; result: Record<string, unknown> }>();
+      const jobsByChannel = new Map<string, Array<{
+        task_key: string;
+        status: string;
+        result: Record<string, unknown>;
+        created_at: string;
+      }>>();
       for (const job of periodJobs || []) {
-        if (job.channel && !latestJob.has(job.channel)) {
-          latestJob.set(job.channel, {
+        if (job.channel) {
+          jobsByChannel.set(job.channel, [...(jobsByChannel.get(job.channel) || []), {
+            task_key: taskKey,
             status: job.status,
             result: job.result && typeof job.result === "object"
               ? job.result as Record<string, unknown>
               : {},
-          });
+            created_at: job.created_at,
+          }]);
         }
       }
       const alreadyHandled = new Set(["completed", "queued", "running"]);
       channels = channels.filter((channel) => {
-        const latest = latestJob.get(channel);
+        const latest = selectEffectiveFinanceJob(jobsByChannel.get(channel) || []);
         if (!latest) return true;
+        if (hasPersistedFinanceImport(latest)) return false;
         if (alreadyHandled.has(latest.status)) return false;
         if (latest.status !== "needs_review") return true;
         return !(Number(latest.result.unmatchedCount) > 0);

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { isQoo10SettledDetailUnavailable } from "@/lib/web-sales-codex/ec-profit-retry";
+import { selectEffectiveFinanceJob } from "@/lib/web-sales-codex/finance-job-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,10 +111,15 @@ export async function GET(request: Request) {
     const settlements = new Map(currentSettlements.map((row) => [String(row.channel), row]));
     const adTotals = sumAdTotals(currentAds);
 
-    const latestJobs = new Map<string, JobState>();
+    const jobsByKey = new Map<string, JobState[]>();
     for (const job of jobsResult.data || []) {
       const key = `${job.task_key}:${job.channel}`;
-      if (!latestJobs.has(key)) latestJobs.set(key, job);
+      jobsByKey.set(key, [...(jobsByKey.get(key) || []), job]);
+    }
+    const latestJobs = new Map<string, JobState>();
+    for (const [key, jobs] of jobsByKey) {
+      const effective = selectEffectiveFinanceJob(jobs);
+      if (effective) latestJobs.set(key, effective);
     }
 
     const channels = CHANNELS.map((channel) => {

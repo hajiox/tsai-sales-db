@@ -26,6 +26,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  hasPersistedFinanceImport,
+  selectEffectiveFinanceJob,
+} from "@/lib/web-sales-codex/finance-job-state";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -260,14 +264,17 @@ export default function WebSalesAutomationPage() {
   }, [data?.events]);
   const latestPeriodJobByChannel = useMemo(() => {
     const map = new Map<string, CodexJob>();
+    const jobsByChannel = new Map<string, CodexJob[]>();
     for (const job of data?.jobs || []) {
       if (job.channel
         && job.task_key === taskKey
         && job.period_start === startDate
-        && job.period_end === endDate
-        && !map.has(job.channel)) {
-        map.set(job.channel, job);
+        && job.period_end === endDate) {
+        jobsByChannel.set(job.channel, [...(jobsByChannel.get(job.channel) || []), job]);
       }
+    }
+    for (const [channel, jobs] of jobsByChannel) {
+      map.set(channel, selectEffectiveFinanceJob(jobs) || jobs[0]);
     }
     return map;
   }, [data?.jobs, endDate, startDate, taskKey]);
@@ -301,12 +308,16 @@ export default function WebSalesAutomationPage() {
     () => workflowChannels.filter((channel) => {
       const latest = latestPeriodJobByChannel.get(channel);
       if (!latest) return true;
+      if (hasPersistedFinanceImport(latest)) return false;
       if (["failed", "waiting_for_user", "cancelled"].includes(latest.status)) return true;
       return latest.status === "needs_review" && (unmatchedCountByChannel.get(channel) || 0) === 0;
     }),
     [latestPeriodJobByChannel, workflowChannels, unmatchedCountByChannel],
   );
-  const completedChannelCount = workflowChannels.filter((channel) => latestPeriodJobByChannel.get(channel)?.status === "completed").length;
+  const completedChannelCount = workflowChannels.filter((channel) => {
+    const job = latestPeriodJobByChannel.get(channel);
+    return job?.status === "completed" || hasPersistedFinanceImport(job);
+  }).length;
   const operationWaitingCount = workflowChannels.filter((channel) => latestPeriodJobByChannel.get(channel)?.status === "waiting_for_user").length;
   const automaticWaitingCount = Math.max(0, incompleteChannels.length - operationWaitingCount);
   const selectedPeriodKind = getPeriodKind(startDate, endDate);
@@ -1014,7 +1025,10 @@ function jobWaitReason(job: CodexJob) {
 }
 
 function jobStatusOverride(job: CodexJob, unmatchedCount: number) {
-  if (job.status === "needs_review") return unmatchedCount > 0 ? "商品紐付け待ち" : "自動再実行待ち";
+  if (job.status === "needs_review") {
+    if (hasPersistedFinanceImport(job)) return "一部確定";
+    return unmatchedCount > 0 ? "商品紐付け待ち" : "自動再実行待ち";
+  }
   if (job.status !== "waiting_for_user") return undefined;
   if (jobWaitReason(job) === "codex_browser_download_approval") return job.channel === "amazon" ? "CSV取得確認待ち" : "Codex承認待ち";
   if (jobWaitReason(job) === "chrome_control_conflict") return "Chrome競合";

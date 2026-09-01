@@ -40,6 +40,7 @@
     "test:google-ads-import-policy": "node --experimental-strip-types scripts/test-google-ads-import-policy.mjs",
     "test:ec-profit-retry": "node --experimental-strip-types scripts/test-ec-profit-retry.mjs",
     "test:ec-profit-import-policy": "node --experimental-strip-types scripts/test-ec-profit-import-policy.mjs",
+    "test:finance-job-state": "node --experimental-strip-types scripts/test-finance-job-state.mjs",
     "test:docscanner-fax-summary-bridge": "node --experimental-strip-types scripts/test-docscanner-fax-summary-bridge.mjs",
     "test:bridge-prelogin": "node scripts/test-bridge-prelogin.cjs",
     "test:recipe-sns-feature": "node scripts/test-recipe-sns-feature.cjs",
