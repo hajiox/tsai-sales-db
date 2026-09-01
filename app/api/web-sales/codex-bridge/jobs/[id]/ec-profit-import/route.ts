@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import {
+  shouldPreserveExistingEcProfit,
+  type EcProfitCoverageLevel,
+} from "@/lib/ec-profit-import-policy";
 import { isCodexBridgeAuthorized, normalizeWorkerId } from "@/lib/web-sales-codex/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 
@@ -86,6 +90,40 @@ export async function POST(
       && Math.abs(payoutDifference || 0) > tolerance;
     const coverageLevel = payoutNeedsReview ? "needs_review" : data.coverage_level;
 
+    const { data: existing, error: existingError } = await supabase
+      .from("ec_profit_monthly")
+      .select("coverage_level,refunds,platform_fees,payment_fees,seller_discounts,seller_coupons,seller_points,shipping_costs,other_costs,other_credits")
+      .eq("channel", data.channel)
+      .eq("report_month", `${data.report_month}-01`)
+      .maybeSingle();
+    if (existingError) throw existingError;
+
+    if (existing && shouldPreserveExistingEcProfit(
+      existing.coverage_level as EcProfitCoverageLevel,
+      coverageLevel,
+    )) {
+      const existingDeductions = Number(existing.refunds || 0)
+        + Number(existing.platform_fees || 0)
+        + Number(existing.payment_fees || 0)
+        + Number(existing.seller_discounts || 0)
+        + Number(existing.seller_coupons || 0)
+        + Number(existing.seller_points || 0)
+        + Number(existing.shipping_costs || 0)
+        + Number(existing.other_costs || 0)
+        - Number(existing.other_credits || 0);
+      return NextResponse.json({
+        status: existing.coverage_level === "complete" ? "completed" : "needs_review",
+        summary: `${label(data.channel)} ${data.report_month}の既存EC控除 ¥${Math.round(existingDeductions).toLocaleString("ja-JP")} を保持しました`,
+        details: `今回の${coverageLabel(coverageLevel)}結果は既存の${coverageLabel(existing.coverage_level)}結果より確度が低いため、月次データを上書きしていません。`,
+        importedCount: 0,
+        reportMonth: data.report_month,
+        totalDeductions: round(existingDeductions),
+        coverageLevel: existing.coverage_level,
+        payoutDifference: null,
+        preservedExisting: true,
+      });
+    }
+
     const row = {
       channel: data.channel,
       report_month: `${data.report_month}-01`,
@@ -146,6 +184,10 @@ export async function POST(
 
 function label(channel: string) {
   return ({ amazon: "Amazon", rakuten: "楽天", yahoo: "Yahoo!", mercari: "メルカリShops", base: "BASE", qoo10: "Qoo10", tiktok: "TikTok Shop" } as Record<string, string>)[channel] || channel;
+}
+
+function coverageLabel(value: string) {
+  return ({ complete: "確定", partial: "一部確定", needs_review: "要確認" } as Record<string, string>)[value] || value;
 }
 
 function round(value: number) {
