@@ -2,6 +2,12 @@
 
 ## 2026-09-02
 
+### ImageGen保存先確認の誤検知修正
+
+- SNSアレンジ生成で文章と4画像が完成していたにもかかわらず、ImageGen保存先を回収する読み取り専用`Get-ChildItem ... | ConvertTo-Json -Compress`をBridge安全検査が拒否し、結果全体を失敗扱いにしていた。
+- Bridge 1.9.54では`CODEX_HOME/generated_images`配下、許可済み項目、最大16件、固定パイプライン順、`ConvertTo-Json -Compress`だけを許可する。別パス・別項目・別JSONオプション・書込み・外部操作は従来どおり拒否する。
+- 実障害と同一コマンド、および拒否すべき変形コマンドを回帰テストへ追加した。
+
 ### 投稿文の3口調と履歴折りたたみ
 
 - SNS素材生成へ`オフィシャル`、`スタッフ`、`開発者`の3口調を追加した。選択値は生成履歴の不変`source_snapshot`、Bridgeジョブ、最小入力packet、構造化出力へ同じ`writingTone`として固定し、TSA側で不一致を拒否する。

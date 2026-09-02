@@ -82,10 +82,13 @@ const generatedDirectory = path.resolve(codexHome, "generated_images", "thread-1
 const otherDirectory = path.resolve(codexHome, "history");
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Select-Object -ExpandProperty FullName"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${path.resolve(codexHome, "generated_images")}' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 4 FullName,LastWriteTime"` } }, workDir), true);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${path.resolve(codexHome, "generated_images")}' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 8 FullName,LastWriteTime | ConvertTo-Json -Compress"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}','${otherDirectory}' -File | Select-Object -ExpandProperty FullName"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Get-Content"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -Force -File | Select-Object -ExpandProperty FullName"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -Recurse -File | Select-Object -First 4 Length"` } }, workDir), false);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Select-Object -ExpandProperty FullName | ConvertTo-Json -Depth 4"` } }, workDir), false);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | ConvertTo-Json -Compress | Select-Object -ExpandProperty FullName"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'; Get-Content '${path.resolve(codexHome, "history.md")}'"` } }, workDir), false);
 assert.match(handler, /禁止された外部・コマンド操作/);

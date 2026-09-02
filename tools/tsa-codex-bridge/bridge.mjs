@@ -33,7 +33,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.53";
+const VERSION = "1.9.54";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4125,15 +4125,19 @@ function isAllowedRecipeSnsGeneratedImageListing(command, generatedRoot) {
   })) return false;
 
   const pipeline = command.split("|").slice(1).map((segment) => segment.trim().replace(/["']$/, "").trim());
-  if (pipeline.length > 2) return false;
-  return pipeline.every((segment) => {
-    if (/^sort-object\s+lastwritetime\s+-descending$/i.test(segment)) return true;
-    const selection = segment.match(
-      /^select-object\s+(?:-first\s+(\d+)\s+)?(?:-expandproperty\s+fullname|fullname\s*,\s*lastwritetime)$/i,
-    );
-    if (!selection) return false;
-    return !selection[1] || (Number(selection[1]) >= 1 && Number(selection[1]) <= 16);
-  });
+  let cursor = 0;
+  if (/^sort-object\s+lastwritetime\s+-descending$/i.test(pipeline[cursor] || "")) cursor += 1;
+
+  const selection = String(pipeline[cursor] || "").match(
+    /^select-object\s+(?:-first\s+(\d+)\s+)?(?:-expandproperty\s+fullname|fullname\s*,\s*lastwritetime)$/i,
+  );
+  if (!selection || (selection[1] && (Number(selection[1]) < 1 || Number(selection[1]) > 16))) return false;
+  cursor += 1;
+
+  // Codex serializes the bounded path listing before reading the tool result.
+  // Only the exact read-only JSON conversion used by that flow is allowed.
+  if (/^convertto-json\s+-compress$/i.test(pipeline[cursor] || "")) cursor += 1;
+  return cursor === pipeline.length;
 }
 
 function isAllowedRecipeSnsLocalCommand(event, workDir) {
