@@ -13,6 +13,7 @@
     "test:shipping-label-address": "node scripts/test-shipping-label-address.cjs",
     "test:recipe-selling-price": "node scripts/test-recipe-selling-price.cjs",
     "test:recipe-ingredient-source-detail": "node scripts/test-recipe-ingredient-source-detail.cjs",
+    "test:recipe-database-usages": "node --experimental-strip-types scripts/test-recipe-database-usages.mjs",
     "test:recipe-ec-images": "node --experimental-strip-types scripts/test-recipe-ec-images.mjs",
     "test:recipe-web-image-copy-migration": "node scripts/dry-run-recipe-web-image-copy-migration.cjs",
     "apply:recipe-web-image-copy-migration": "node scripts/apply-recipe-web-image-copy-migration.cjs",
