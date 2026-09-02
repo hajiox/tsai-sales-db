@@ -24,6 +24,8 @@
 - `test:bridge-skill-contract`、`test:bridge-run-guard`: success
 - 変更対象ESLint、Bridge構文確認、2つのSkill `quick_validate.py`: success
 - Secret scan、Supabase RLS audit、本番環境変数を使った`next build`: success
+- 本番`v0-tsa-19.vercel.app`で失敗ジョブ`d098acee-d8e4-43a0-8178-2ed409795c1f`の生成済み4画像artifactを再取込し、履歴`7d480de9-7158-4d37-8e73-61373ed1bb33`が完了した。X 1600x900、Instagram 1080x1080、IGストーリー 1080x1920、Threads 1200x900を実URLから再取得して確認した。
+- X・Instagram・Threads本文の商品LP URL各1回、IGストーリーのリンク機能用URL、媒体別文字数・ハッシュタグ上限、`developer`口調、`arrange`モードを保存結果で再検証した。
 - 全体`tsc --noEmit`は既存の未解消エラーで失敗したが、今回変更ファイルのエラーは0件。
 
 ## 2026-08-31
