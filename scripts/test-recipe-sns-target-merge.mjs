@@ -59,6 +59,25 @@ assert.equal(
   "Bridge-owned artifacts do not require an AI-supplied local path",
 );
 
+const politeDeveloperTarget = validateRecipeSnsTargetBridgeResult({
+  ...target,
+  post: {
+    ...target.post,
+    text: "私は、使いやすさまで含めて商品づくりを大切にしています。お好みに合わせてお楽しみください。",
+  },
+}, "creative", "x", "developer");
+assert.match(politeDeveloperTarget.post.text, /^私は/);
+
+assert.throws(() => validateRecipeSnsTargetBridgeResult({
+  ...target,
+  post: { ...target.post, text: "俺が作った商品です。" },
+}, "creative", "x", "developer"), /一人称は「私」/);
+
+assert.throws(() => validateRecipeSnsTargetBridgeResult({
+  ...target,
+  post: { ...target.post, text: "私はこれが正解だと考えます。絶対に試してください。" },
+}, "creative", "x", "developer"), /高圧的または押し付ける表現/);
+
 const allPlatforms = validateRecipeSnsBridgeResult({
   ...base,
   generated_images: Object.fromEntries(RECIPE_SNS_PLATFORMS.map((platform) => [platform.id, {
@@ -70,6 +89,15 @@ const allPlatforms = validateRecipeSnsBridgeResult({
 for (const platform of RECIPE_SNS_PLATFORMS) {
   assert.equal(allPlatforms.generated_images[platform.id].file_path, "");
 }
+
+const readableLegacyHistory = validateRecipeSnsAiResult({
+  ...base,
+  posts: {
+    ...base.posts,
+    x: { ...base.posts.x, text: "俺が大切にした商品です。" },
+  },
+});
+assert.match(readableLegacyHistory.posts.x.text, /^俺/, "existing immutable histories must remain readable");
 
 assert.equal(merged.posts.x.text, "new x");
 assert.equal(merged.creative_overlays.x.headline, "new headline");

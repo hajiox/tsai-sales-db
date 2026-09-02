@@ -1,6 +1,6 @@
 export const RECIPE_SNS_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
-export const RECIPE_SNS_RULES_VERSION = "2026-09-02.2";
+export const RECIPE_SNS_RULES_VERSION = "2026-09-02.3";
 
 export const RECIPE_SNS_WRITING_TONES = [
   {
@@ -16,7 +16,7 @@ export const RECIPE_SNS_WRITING_TONES = [
   {
     id: "developer",
     label: "開発者",
-    description: "開発者本人の率直な口調で、商品の強みとこだわりを深掘り",
+    description: "開発者本人が「私」で丁寧に、商品の強みとこだわりを深掘り",
   },
 ] as const;
 
@@ -359,6 +359,23 @@ function validateGeneratedImage(
   };
 }
 
+const DEVELOPER_FIRST_PERSON_BLOCKLIST = /(?:俺|オレ|おれ|僕|ボク|ぼく)/u;
+const DEVELOPER_PRESSURE_BLOCKLIST = /(?:これが正解|絶対(?:に)?|すべき|してほしい|譲れない|分かる人には分かる|黙って|買え|食べろ|試せ|選べ)/u;
+
+function assertRecipeSnsDeveloperVoice(
+  post: RecipeSnsPost,
+  platformId: RecipeSnsPlatform,
+) {
+  const platform = RECIPE_SNS_PLATFORMS.find((candidate) => candidate.id === platformId);
+  const rendered = formatRecipeSnsPost(post);
+  if (DEVELOPER_FIRST_PERSON_BLOCKLIST.test(rendered)) {
+    throw new Error(`${platform?.label || platformId}の開発者口調の一人称は「私」にしてください`);
+  }
+  if (DEVELOPER_PRESSURE_BLOCKLIST.test(rendered)) {
+    throw new Error(`${platform?.label || platformId}の開発者口調に高圧的または押し付ける表現があります`);
+  }
+}
+
 export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
   const source = asObject(value);
   const sourcePosts = asObject(source.posts);
@@ -408,6 +425,11 @@ export function validateRecipeSnsBridgeResult(
   if (normalized.writing_tone !== expectedWritingTone) {
     throw new Error("SNS投稿文の口調が依頼内容と一致しません");
   }
+  if (expectedWritingTone === "developer") {
+    for (const platform of RECIPE_SNS_PLATFORMS) {
+      assertRecipeSnsDeveloperVoice(normalized.posts[platform.id], platform.id);
+    }
+  }
   const sourceImages = asObject(source.generated_images);
   const generatedImages = {} as Record<RecipeSnsPlatform, RecipeSnsGeneratedImageResult>;
   for (const platform of RECIPE_SNS_PLATFORMS) {
@@ -435,6 +457,10 @@ export function validateRecipeSnsTargetBridgeResult(
     const label = RECIPE_SNS_PLATFORMS.find((platform) => platform.id === expectedPlatform)?.label || expectedPlatform;
     throw new Error(`${label}の広告クリエイティブ用テキスト配置が不足しています`);
   }
+  const post = validateRecipeSnsPost(source.post, expectedPlatform);
+  if (expectedWritingTone === "developer") {
+    assertRecipeSnsDeveloperVoice(post, expectedPlatform);
+  }
   return {
     overall_angle: clippedText(source.overall_angle, 600),
     variation_key: clippedText(source.variation_key, 120),
@@ -444,7 +470,7 @@ export function validateRecipeSnsTargetBridgeResult(
     writing_tone: writingTone,
     image_mode: imageMode,
     platform: expectedPlatform,
-    post: validateRecipeSnsPost(source.post, expectedPlatform),
+    post,
     creative_overlay: creativeOverlay,
     generated_image: validateGeneratedImage(source.generated_image, expectedMode, expectedPlatform),
   };

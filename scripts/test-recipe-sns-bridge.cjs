@@ -10,6 +10,7 @@ const installer = read("tools", "tsa-codex-bridge", "install-bridge.ps1");
 const requiredVersion = read("lib", "web-sales-codex", "bridge-version.ts");
 const types = read("lib", "web-sales-codex", "types.ts");
 const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-assets", "SKILL.md");
+const postSkill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-posts", "SKILL.md");
 const schema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-result.schema.json"));
 const targetSchema = JSON.parse(read("tools", "tsa-codex-bridge", "recipe-sns-target-result.schema.json"));
 const skillContract = JSON.parse(read("tools", "tsa-codex-bridge", "skill-contract.json"));
@@ -154,9 +155,14 @@ assert.match(skill, /外部サイト閲覧/);
 assert.match(skill, /過去チャット参照/);
 assert.match(skill, /productLpUrl/);
 assert.match(skill, /リンクスタンプ用/);
-for (const tone of ["### official", "### staff", "### developer", "一人称に「俺」"]) {
+for (const tone of ["### official", "### staff", "### developer", "必ず「私」", "落ち着いて丁寧", "押し付ける表現を避け"]) {
   assert.match(skill, new RegExp(tone));
 }
+assert.doesNotMatch(skill, /一人称に「俺」/);
+for (const tone of ["一人称を使う場合は必ず「私」", "です・ます", "選択を読み手へ委ねる"]) {
+  assert.match(postSkill, new RegExp(tone));
+}
+assert.doesNotMatch(postSkill, /一人称は「俺」/);
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
 assert.match(skill, /`file_path`は空文字/);
 assert.match(skill, /`Get-ChildItem`、`Copy-Item`を含むファイル操作を行わない/);

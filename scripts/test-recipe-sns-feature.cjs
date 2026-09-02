@@ -109,9 +109,10 @@ assert.match(importRoute, /ensureRecipeSnsAiResultDestinationUrl/);
 for (const prohibition of ["Web検索", "ブラウザ操作", "過去チャット参照", "SNS投稿"]) {
   assert.match(skill, new RegExp(prohibition));
 }
-for (const tone of ["### official", "### staff", "### developer", "一人称に「俺」"]) {
+for (const tone of ["### official", "### staff", "### developer", "必ず「私」", "落ち着いて丁寧", "押し付ける表現を避け"]) {
   assert.match(skill, new RegExp(tone));
 }
+assert.doesNotMatch(skill, /一人称に「俺」/);
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
 assert.match(skill, /productLpUrl/);
 assert.match(skill, /リンクスタンプ用/);
