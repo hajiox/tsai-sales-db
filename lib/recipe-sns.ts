@@ -1,6 +1,26 @@
 export const RECIPE_SNS_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
-export const RECIPE_SNS_RULES_VERSION = "2026-08-30.2";
+export const RECIPE_SNS_RULES_VERSION = "2026-09-02.1";
+
+export const RECIPE_SNS_WRITING_TONES = [
+  {
+    id: "official",
+    label: "オフィシャル",
+    description: "マーケッター視点で、商品を端的かつ落ち着いて紹介",
+  },
+  {
+    id: "staff",
+    label: "スタッフ",
+    description: "明るい世間話と軽いユーモアを交え、やや長めに紹介",
+  },
+  {
+    id: "developer",
+    label: "開発者",
+    description: "開発者本人の率直な口調で、商品の強みとこだわりを深掘り",
+  },
+] as const;
+
+export type RecipeSnsWritingTone = typeof RECIPE_SNS_WRITING_TONES[number]["id"];
 
 export const RECIPE_SNS_IMAGE_MODES = [
   { id: "normal", label: "通常リサイズ" },
@@ -92,6 +112,7 @@ export type RecipeSnsAiResult = {
   overall_angle: string;
   variation_key: string;
   source_gaps: string[];
+  writing_tone: RecipeSnsWritingTone;
   posts: Record<RecipeSnsPlatform, RecipeSnsPost>;
   image_mode: RecipeSnsImageMode;
   creative_overlays: Record<RecipeSnsPlatform, RecipeSnsCreativeOverlay>;
@@ -105,6 +126,7 @@ export type RecipeSnsTargetBridgeResult = {
   overall_angle: string;
   variation_key: string;
   source_gaps: string[];
+  writing_tone: RecipeSnsWritingTone;
   image_mode: RecipeSnsImageMode;
   platform: RecipeSnsPlatform;
   post: RecipeSnsPost;
@@ -128,6 +150,7 @@ export type RecipeSnsGenerationView = {
   sourceImageUrl: string;
   sourceImageRole: "portrait" | "gallery";
   imageMode: RecipeSnsImageMode;
+  writingTone: RecipeSnsWritingTone;
   targetPlatform: RecipeSnsPlatform | null;
   destinationUrl: string | null;
   variationKey: string;
@@ -154,12 +177,20 @@ export function isRecipeSnsImageMode(value: unknown): value is RecipeSnsImageMod
   return RECIPE_SNS_IMAGE_MODES.some((mode) => mode.id === value);
 }
 
+export function isRecipeSnsWritingTone(value: unknown): value is RecipeSnsWritingTone {
+  return RECIPE_SNS_WRITING_TONES.some((tone) => tone.id === value);
+}
+
 export function isRecipeSnsPlatform(value: unknown): value is RecipeSnsPlatform {
   return RECIPE_SNS_PLATFORMS.some((platform) => platform.id === value);
 }
 
 export function recipeSnsImageModeLabel(value: RecipeSnsImageMode) {
   return RECIPE_SNS_IMAGE_MODES.find((mode) => mode.id === value)?.label || "通常リサイズ";
+}
+
+export function recipeSnsWritingToneLabel(value: RecipeSnsWritingTone) {
+  return RECIPE_SNS_WRITING_TONES.find((tone) => tone.id === value)?.label || "オフィシャル";
 }
 
 export function countRecipeSnsCharacters(value: string) {
@@ -332,6 +363,7 @@ export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
   const source = asObject(value);
   const sourcePosts = asObject(source.posts);
   const imageMode = isRecipeSnsImageMode(source.image_mode) ? source.image_mode : "normal";
+  const writingTone = isRecipeSnsWritingTone(source.writing_tone) ? source.writing_tone : "official";
   const sourceOverlays = asObject(source.creative_overlays);
   const posts = {} as Record<RecipeSnsPlatform, RecipeSnsPost>;
   const creativeOverlays = {} as Record<RecipeSnsPlatform, RecipeSnsCreativeOverlay>;
@@ -356,6 +388,7 @@ export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
     source_gaps: Array.isArray(source.source_gaps)
       ? source.source_gaps.map((item) => clippedText(item, 240)).filter(Boolean).slice(0, 12)
       : [],
+    writing_tone: writingTone,
     posts,
     image_mode: imageMode,
     creative_overlays: creativeOverlays,
@@ -365,11 +398,15 @@ export function validateRecipeSnsAiResult(value: unknown): RecipeSnsAiResult {
 export function validateRecipeSnsBridgeResult(
   value: unknown,
   expectedMode: RecipeSnsImageMode,
+  expectedWritingTone: RecipeSnsWritingTone,
 ): RecipeSnsBridgeResult {
   const source = asObject(value);
   const normalized = validateRecipeSnsAiResult(source);
   if (normalized.image_mode !== expectedMode) {
     throw new Error("SNS画像生成モードが依頼内容と一致しません");
+  }
+  if (normalized.writing_tone !== expectedWritingTone) {
+    throw new Error("SNS投稿文の口調が依頼内容と一致しません");
   }
   const sourceImages = asObject(source.generated_images);
   const generatedImages = {} as Record<RecipeSnsPlatform, RecipeSnsGeneratedImageResult>;
@@ -383,6 +420,7 @@ export function validateRecipeSnsTargetBridgeResult(
   value: unknown,
   expectedMode: RecipeSnsImageMode,
   expectedPlatform: RecipeSnsPlatform,
+  expectedWritingTone: RecipeSnsWritingTone,
 ): RecipeSnsTargetBridgeResult {
   const source = asObject(value);
   if (source.platform !== expectedPlatform) {
@@ -390,6 +428,8 @@ export function validateRecipeSnsTargetBridgeResult(
   }
   const imageMode = isRecipeSnsImageMode(source.image_mode) ? source.image_mode : "normal";
   if (imageMode !== expectedMode) throw new Error("SNS画像生成モードが依頼内容と一致しません");
+  const writingTone = isRecipeSnsWritingTone(source.writing_tone) ? source.writing_tone : "official";
+  if (writingTone !== expectedWritingTone) throw new Error("SNS投稿文の口調が依頼内容と一致しません");
   const creativeOverlay = normalizeCreativeOverlay(source.creative_overlay, imageMode);
   if (imageMode === "creative" && (!creativeOverlay.headline || creativeOverlay.placement === "none")) {
     const label = RECIPE_SNS_PLATFORMS.find((platform) => platform.id === expectedPlatform)?.label || expectedPlatform;
@@ -401,6 +441,7 @@ export function validateRecipeSnsTargetBridgeResult(
     source_gaps: Array.isArray(source.source_gaps)
       ? source.source_gaps.map((item) => clippedText(item, 240)).filter(Boolean).slice(0, 12)
       : [],
+    writing_tone: writingTone,
     image_mode: imageMode,
     platform: expectedPlatform,
     post: validateRecipeSnsPost(source.post, expectedPlatform),
@@ -416,10 +457,14 @@ export function mergeRecipeSnsTargetResult(
   if (target.image_mode !== base.image_mode) {
     throw new Error("個別再生成結果を基準履歴へ合成できません");
   }
+  if (target.writing_tone !== base.writing_tone) {
+    throw new Error("個別再生成結果の口調を基準履歴へ合成できません");
+  }
   return {
     overall_angle: target.overall_angle,
     variation_key: target.variation_key,
     source_gaps: [...target.source_gaps],
+    writing_tone: target.writing_tone,
     posts: { ...base.posts, [target.platform]: target.post },
     image_mode: target.image_mode,
     creative_overlays: {

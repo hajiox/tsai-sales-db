@@ -17,15 +17,18 @@ import {
 import { toast } from "sonner";
 import {
   RECIPE_SNS_PLATFORMS,
+  RECIPE_SNS_WRITING_TONES,
   countRecipeSnsCharacters,
   ensureRecipeSnsPostDestinationUrl,
   formatRecipeSnsPost,
   normalizeRecipeSnsHashtag,
   recipeSnsImageModeLabel,
+  recipeSnsWritingToneLabel,
   type RecipeSnsGenerationView,
   type RecipeSnsImageMode,
   type RecipeSnsPlatform,
   type RecipeSnsPost,
+  type RecipeSnsWritingTone,
 } from "@/lib/recipe-sns";
 import RecipeSnsPublishPanel from "@/app/recipe/_components/RecipeSnsPublishPanel";
 
@@ -37,6 +40,7 @@ type RecipeSnsJob = {
   errorMessage: string | null;
   generationId: string;
   imageMode: RecipeSnsImageMode;
+  writingTone: RecipeSnsWritingTone;
   targetPlatform: RecipeSnsPlatform | null;
 };
 
@@ -83,6 +87,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
   const [generating, setGenerating] = useState(false);
   const [generatingMode, setGeneratingMode] = useState<RecipeSnsImageMode | null>(null);
   const [generatingPlatform, setGeneratingPlatform] = useState<RecipeSnsPlatform | null>(null);
+  const [writingTone, setWritingTone] = useState<RecipeSnsWritingTone>("official");
   const [editedPosts, setEditedPosts] = useState<Record<RecipeSnsPlatform, RecipeSnsPost> | null>(null);
   const mountedRef = useRef(true);
   const pollingRef = useRef<string | null>(null);
@@ -100,6 +105,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
     if (loadedDraftSignatureRef.current === signature) return;
     loadedDraftSignatureRef.current = signature;
     setEditedPosts(clonePosts(selectedGeneration));
+    setWritingTone(selectedGeneration?.writingTone || "official");
   }, [selectedGeneration]);
 
   const loadState = useCallback(async (jobId?: string) => {
@@ -192,7 +198,12 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
       const response = await fetch(`/api/recipe/${recipeId}/sns-generations`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ imageMode, targetPlatform, baseGenerationId }),
+        body: JSON.stringify({
+          imageMode,
+          writingTone: targetPlatform ? selectedGeneration?.writingTone || writingTone : writingTone,
+          targetPlatform,
+          baseGenerationId,
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "SNS生成を開始できませんでした");
@@ -255,6 +266,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                 {generations.map((generation, index) => (
                     <option key={generation.id} value={generation.id}>
                       第{generations.length - index}版 {recipeSnsImageModeLabel(generation.imageMode)}
+                      ・{recipeSnsWritingToneLabel(generation.writingTone)}
                       {generation.targetPlatform
                         ? `・${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === generation.targetPlatform)?.label}再生成`
                         : ""} {formatGenerationDate(generation.createdAt)}
@@ -263,6 +275,25 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
               </select>
             </label>
           )}
+          <div className="flex min-h-10 items-center gap-2">
+            <span className="shrink-0 text-xs font-bold text-gray-600">口調</span>
+            <div className="grid flex-1 grid-cols-3 rounded-md border border-gray-300 bg-gray-100 p-1" role="radiogroup" aria-label="SNS投稿文の口調">
+              {RECIPE_SNS_WRITING_TONES.map((tone) => (
+                <button
+                  key={tone.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={writingTone === tone.id}
+                  onClick={() => setWritingTone(tone.id)}
+                  disabled={generating || hasUnsavedChanges}
+                  title={tone.description}
+                  className={`min-h-8 rounded px-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${writingTone === tone.id ? "bg-white text-gray-950 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+                >
+                  {tone.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <button
               type="button"
@@ -347,6 +378,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                     : "素材生成中"}
               </span>
               <span>生成: {recipeSnsImageModeLabel(selectedGeneration.imageMode)}</span>
+              <span>口調: {recipeSnsWritingToneLabel(selectedGeneration.writingTone)}</span>
               <span>
                 {selectedGeneration.targetPlatform
                   ? `${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === selectedGeneration.targetPlatform)?.label}だけ再生成（他媒体は前版を保持）`
@@ -388,9 +420,11 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                       <button
                         type="button"
                         onClick={() => void generate(selectedGeneration.imageMode, platform.id, selectedGeneration.id)}
-                        disabled={generating || hasUnsavedChanges || selectedGeneration.status !== "completed"}
+                        disabled={generating || hasUnsavedChanges || selectedGeneration.status !== "completed" || writingTone !== selectedGeneration.writingTone}
                         className="inline-flex min-h-9 items-center justify-center rounded-md border border-gray-200 px-2.5 text-xs font-bold text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={`${platform.label}だけを同じモードで再生成`}
+                        title={writingTone !== selectedGeneration.writingTone
+                          ? "口調を変更する場合は上の生成ボタンで全媒体を作り直してください"
+                          : `${platform.label}だけを同じモード・同じ口調で再生成`}
                       >
                         {generatingPlatform === platform.id
                           ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

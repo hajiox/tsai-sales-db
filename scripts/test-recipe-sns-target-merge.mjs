@@ -14,6 +14,7 @@ const base = validateRecipeSnsAiResult({
   overall_angle: "base",
   variation_key: "base-angle",
   source_gaps: [],
+  writing_tone: "developer",
   image_mode: "creative",
   posts: {
     x: { text: "old x", hashtags: [], rationale: "base" },
@@ -38,12 +39,13 @@ const target = validateRecipeSnsTargetBridgeResult({
   overall_angle: "new x only",
   variation_key: "new-angle",
   source_gaps: ["none"],
+  writing_tone: "developer",
   image_mode: "creative",
   platform: "x",
   post: { text: "new x", hashtags: ["#new"], rationale: "regenerated", link_url: "" },
   creative_overlay: { headline: "new headline", subline: "new subline", placement: "bottom-right" },
   generated_image: { source: "generated", file_path: "C:\\jobs\\x.png", prompt_summary: "new x image" },
-}, "creative", "x");
+}, "creative", "x", "developer");
 
 const merged = mergeRecipeSnsTargetResult(base, target);
 assert.equal(merged.posts.x.text, "new x");
@@ -54,7 +56,13 @@ for (const platform of ["instagram", "instagram_story", "threads"]) {
 }
 assert.equal(base.posts.x.text, "old x", "base history must remain immutable");
 assert.equal(merged.image_mode, "creative");
+assert.equal(merged.writing_tone, "developer");
 assert.equal(merged.variation_key, "new-angle");
+
+assert.throws(() => validateRecipeSnsTargetBridgeResult({
+  ...target,
+  writing_tone: "staff",
+}, "creative", "x", "developer"), /口調が依頼内容と一致しません/);
 
 const destinationUrl = "https://buta.aizubrandhall-lp2.com/";
 const postsWithUrl = ensureRecipeSnsAiResultDestinationUrl(merged, destinationUrl);

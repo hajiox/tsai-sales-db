@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["overall_angle", "variation_key", "source_gaps", "image_mode", "platform", "post", "creative_overlay", "generated_image"],
+  "required": ["overall_angle", "variation_key", "source_gaps", "writing_tone", "image_mode", "platform", "post", "creative_overlay", "generated_image"],
   "properties": {
     "overall_angle": { "type": "string", "maxLength": 600 },
     "variation_key": { "type": "string", "minLength": 1, "maxLength": 120 },
@@ -11,6 +11,7 @@
       "maxItems": 12,
       "items": { "type": "string", "maxLength": 240 }
     },
+    "writing_tone": { "type": "string", "enum": ["official", "staff", "developer"] },
     "image_mode": { "type": "string", "enum": ["normal", "creative", "arrange"] },
     "platform": { "type": "string", "enum": ["x", "instagram", "instagram_story", "threads"] },
     "post": {

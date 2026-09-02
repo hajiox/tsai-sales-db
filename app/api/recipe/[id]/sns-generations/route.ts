@@ -10,6 +10,7 @@ import {
   ensureRecipeSnsAiResultDestinationUrl,
   isRecipeSnsImageMode,
   isRecipeSnsPlatform,
+  isRecipeSnsWritingTone,
   normalizeRecipeSnsDestinationUrl,
   recipeSnsDestinationUrlFromSnapshot,
   recipeSnsPlatformRules,
@@ -17,6 +18,7 @@ import {
   type RecipeSnsGenerationView,
   type RecipeSnsImageVariant,
   type RecipeSnsPlatform,
+  type RecipeSnsWritingTone,
 } from "@/lib/recipe-sns";
 import {
   chooseRecipeSnsSourceImage,
@@ -59,6 +61,7 @@ function toJobView(job: Record<string, unknown>) {
     result: job.result && typeof job.result === "object" ? job.result : null,
     generationId: String(parameters.generationId || ""),
     imageMode: isRecipeSnsImageMode(parameters.imageMode) ? parameters.imageMode : "normal",
+    writingTone: isRecipeSnsWritingTone(parameters.writingTone) ? parameters.writingTone : "official",
     targetPlatform: isRecipeSnsPlatform(parameters.targetPlatform) ? parameters.targetPlatform : null,
     model: String(parameters.model || RECIPE_SNS_MODEL),
     reasoningEffort: String(parameters.reasoningEffort || RECIPE_SNS_REASONING_EFFORT),
@@ -110,6 +113,7 @@ function toGenerationView(
     sourceImageUrl: String(row.source_image_url || ""),
     sourceImageRole: String(row.source_image_role || "gallery") as "portrait" | "gallery",
     imageMode: isRecipeSnsImageMode(sourceSnapshot.imageMode) ? sourceSnapshot.imageMode : "normal",
+    writingTone: isRecipeSnsWritingTone(sourceSnapshot.writingTone) ? sourceSnapshot.writingTone : "official",
     targetPlatform: isRecipeSnsPlatform(sourceSnapshot.targetPlatform) ? sourceSnapshot.targetPlatform : null,
     destinationUrl: recipeSnsDestinationUrlFromSnapshot(sourceSnapshot),
     variationKey: String(row.variation_key || ""),
@@ -193,6 +197,11 @@ export async function POST(
   if (!isRecipeSnsImageMode(imageMode)) {
     return NextResponse.json({ error: "SNS画像生成モードを選択してください" }, { status: 400 });
   }
+  const rawWritingTone = String(requestBody.writingTone || "official").trim();
+  if (!isRecipeSnsWritingTone(rawWritingTone)) {
+    return NextResponse.json({ error: "SNS投稿文の口調を選択してください" }, { status: 400 });
+  }
+  const requestedWritingTone: RecipeSnsWritingTone = rawWritingTone;
   const rawTargetPlatform = String(requestBody.targetPlatform || "").trim();
   const targetPlatform = rawTargetPlatform && isRecipeSnsPlatform(rawTargetPlatform) ? rawTargetPlatform : null;
   if (rawTargetPlatform && !targetPlatform) {
@@ -268,6 +277,13 @@ export async function POST(
     if (targetPlatform && (!baseGeneration?.posts || !isRecipeSnsImageMode(baseSnapshot.imageMode) || baseSnapshot.imageMode !== imageMode)) {
       return NextResponse.json({ error: "選択中の生成履歴と画像モードが一致しません" }, { status: 409 });
     }
+    const baseWritingTone: RecipeSnsWritingTone = isRecipeSnsWritingTone(baseSnapshot.writingTone)
+      ? baseSnapshot.writingTone
+      : "official";
+    if (targetPlatform && requestedWritingTone !== baseWritingTone) {
+      return NextResponse.json({ error: "個別再生成は選択中の生成履歴と同じ口調で実行してください" }, { status: 409 });
+    }
+    const writingTone = targetPlatform ? baseWritingTone : requestedWritingTone;
     const basePosts = targetPlatform
       ? ensureRecipeSnsAiResultDestinationUrl(
         validateRecipeSnsAiResult(baseGeneration?.posts),
@@ -321,6 +337,7 @@ export async function POST(
       productLp: lpSummary,
       sourceImage: { id: sourceImage.id, role: sourceImage.image_role },
       imageMode,
+      writingTone,
       variationKey,
       targetPlatform,
       targetPlatforms: targetPlatform ? [targetPlatform] : RECIPE_SNS_PLATFORMS.map((platform) => platform.id),
@@ -333,6 +350,7 @@ export async function POST(
       recipeName: clip(recipe.name, 300),
       generationId,
       imageMode,
+      writingTone,
       targetPlatform,
       baseGenerationId: targetPlatform ? baseGenerationId : null,
       sourceImageUrl: sourceImage.image_url,
@@ -397,6 +415,7 @@ export async function POST(
         recipeId,
         generationId,
         imageMode,
+        writingTone,
         targetPlatform,
         baseGenerationId: targetPlatform ? baseGenerationId : null,
         sourceImageRole: sourceImage.image_role,

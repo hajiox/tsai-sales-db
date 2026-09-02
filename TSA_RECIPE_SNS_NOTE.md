@@ -1,5 +1,23 @@
 # TSA Recipe SNS Note
 
+## 2026-09-02
+
+### 投稿文の3口調と履歴折りたたみ
+
+- SNS素材生成へ`オフィシャル`、`スタッフ`、`開発者`の3口調を追加した。選択値は生成履歴の不変`source_snapshot`、Bridgeジョブ、最小入力packet、構造化出力へ同じ`writingTone`として固定し、TSA側で不一致を拒否する。
+- `オフィシャル`は落ち着いたマーケッター視点、`スタッフ`は世間話と控えめなユーモアを含む明るく長めの文章、`開発者`は一人称「俺」で商品ポイントとこだわりを掘り下げる。入力にない実体験、試作回数、客の反応、比較優位を創作しない境界を専用Skillへ追加した。
+- 口調を変更した状態では1媒体だけの再生成を無効にし、1つの生成版へ複数人格が混ざらないようにした。同じ口調なら従来どおり個別再生成できる。旧履歴は後方互換として`オフィシャル`表示になる。
+- 投稿・予約履歴は件数を表示したまま初期状態を閉じ、必要な時だけ展開する。
+- Bridgeを1.9.53、Skill contractを`2026-09-02.1`へ更新した。巨大な過去Chat、過去task、Web検索、外部投稿を素材生成へ渡さない既存境界は維持する。
+
+#### Verification
+
+- `test:recipe-sns-feature`、`test:recipe-sns-bridge`、`test:recipe-sns-target-merge`、`test:recipe-sns-publication`: success
+- `test:bridge-skill-contract`、`test:bridge-run-guard`: success
+- 変更対象ESLint、Bridge構文確認、2つのSkill `quick_validate.py`: success
+- Secret scan、Supabase RLS audit、本番環境変数を使った`next build`: success
+- 全体`tsc --noEmit`は既存の未解消エラーで失敗したが、今回変更ファイルのエラーは0件。
+
 ## 2026-08-31
 
 ### SNS素材生成Bridgeの復旧

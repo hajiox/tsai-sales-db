@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   ExternalLink,
   Loader2,
@@ -85,6 +86,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [history, setHistory] = useState<RecipeSnsPublicationView[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [pollRevision, setPollRevision] = useState(0);
 
   const loadHistory = useCallback(async () => {
@@ -272,14 +274,27 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
       </p>
 
       <div className="mt-4 border-t border-gray-200 pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <h4 className="inline-flex items-center text-xs font-bold text-gray-700"><Clock3 className="mr-1.5 h-4 w-4" />投稿・予約履歴</h4>
-          {loadingHistory && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-        </div>
-        {history.length === 0 && !loadingHistory ? (
-          <p className="mt-2 text-xs text-gray-400">投稿履歴はまだありません。</p>
+        <button
+          type="button"
+          onClick={() => setHistoryOpen((current) => !current)}
+          aria-expanded={historyOpen}
+          aria-controls="recipe-sns-publication-history"
+          className="flex min-h-9 w-full items-center justify-between gap-3 text-left text-xs font-bold text-gray-700 hover:text-gray-950"
+        >
+          <span className="inline-flex items-center">
+            <Clock3 className="mr-1.5 h-4 w-4" />
+            投稿・予約履歴
+            {!loadingHistory && <span className="ml-2 font-normal text-gray-400">{history.length}件</span>}
+          </span>
+          <span className="inline-flex items-center gap-2">
+            {loadingHistory && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
+          </span>
+        </button>
+        {historyOpen && (history.length === 0 && !loadingHistory ? (
+          <p id="recipe-sns-publication-history" className="mt-2 text-xs text-gray-400">投稿履歴はまだありません。</p>
         ) : (
-          <div className="mt-2 divide-y divide-gray-200 border-y border-gray-200 bg-white">
+          <div id="recipe-sns-publication-history" className="mt-2 divide-y divide-gray-200 border-y border-gray-200 bg-white">
             {history.slice(0, 12).map((publication) => (
               <div key={publication.id} className="px-3 py-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -348,7 +363,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
               </div>
             ))}
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

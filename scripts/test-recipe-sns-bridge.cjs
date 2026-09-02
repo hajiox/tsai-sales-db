@@ -30,9 +30,11 @@ const validator = bridge.slice(
 );
 assert.match(validator, /parameters\.model \|\| ""\) !== "gpt-5\.6-sol"/);
 assert.match(validator, /parameters\.reasoningEffort \|\| ""\) !== "medium"/);
-assert.match(validator, /\^2026-08-30\\\.\.\+\$/);
+assert.match(validator, /\^2026-09-02\\\.\.\+\$/);
 assert.match(validator, /sourceSnapshot\.recipeId/);
 assert.match(validator, /sourceSnapshot\.variationKey/);
+assert.match(validator, /sourceSnapshot\.writingTone/);
+assert.match(validator, /RECIPE_SNS_WRITING_TONES/);
 assert.match(validator, /generationId/);
 assert.match(validator, /RECIPE_SNS_PLATFORM_RULES/);
 for (const platform of ["x", "instagram", "instagram_story", "threads"]) {
@@ -48,6 +50,8 @@ assert.match(handler, /Never read or search app Chats/);
 assert.match(handler, /Do not browse the web, control a browser/);
 assert.match(handler, /Instagram Story must not include any URL in post\.text/);
 assert.match(handler, /exact URL in link_url for the link sticker/);
+assert.match(handler, /Apply TASK_JSON\.writingTone exactly/);
+assert.match(handler, /result\.writing_tone/);
 assert.match(handler, /isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /function isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /skills", "\.system", "imagegen", "SKILL\.md"/);
@@ -115,6 +119,9 @@ assert.match(skill, /外部サイト閲覧/);
 assert.match(skill, /過去チャット参照/);
 assert.match(skill, /productLpUrl/);
 assert.match(skill, /リンクスタンプ用/);
+for (const tone of ["### official", "### staff", "### developer", "一人称に「俺」"]) {
+  assert.match(skill, new RegExp(tone));
+}
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
 
 function assertStrictObjectSchemas(value, location = "$") {
@@ -137,6 +144,10 @@ for (const definitionName of ["xPost", "instagramPost", "storyPost", "threadsPos
   assert.ok(schema.$defs[definitionName].required.includes("link_url"));
 }
 assert.ok(targetSchema.properties.post.required.includes("link_url"));
+assert.ok(schema.required.includes("writing_tone"));
+assert.ok(targetSchema.required.includes("writing_tone"));
+assert.deepEqual(schema.properties.writing_tone.enum, ["official", "staff", "developer"]);
+assert.deepEqual(targetSchema.properties.writing_tone.enum, ["official", "staff", "developer"]);
 assert.equal(schema.$defs.xPost.properties.link_url.maxLength, 0);
 assert.equal(schema.$defs.instagramPost.properties.link_url.maxLength, 0);
 assert.equal(schema.$defs.threadsPost.properties.link_url.maxLength, 0);

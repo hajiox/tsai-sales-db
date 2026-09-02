@@ -33,7 +33,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.52";
+const VERSION = "1.9.53";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -95,6 +95,7 @@ const RECIPE_SNS_PLATFORM_RULES = {
   threads: { label: "Threads", aspectLabel: "4:3", width: 1200, height: 900, maxLength: 500, minHashtags: 0, maxHashtags: 5 },
 };
 const RECIPE_SNS_IMAGE_MODES = new Set(["normal", "creative", "arrange"]);
+const RECIPE_SNS_WRITING_TONES = new Set(["official", "staff", "developer"]);
 const RECIPE_SNS_PUBLISH_EXPECTED_ACCOUNTS = Object.freeze({
   x: "@Aizu_Brand_Kan",
   instagram: "aizubrandhall",
@@ -3927,6 +3928,7 @@ function validateRecipeSnsGenerateJobParameters(input) {
   const recipeId = String(parameters.recipeId || "").trim();
   const generationId = String(parameters.generationId || "").trim();
   const imageMode = String(parameters.imageMode || "").trim();
+  const writingTone = String(parameters.writingTone || "").trim();
   const sourceImageUrl = String(parameters.sourceImageUrl || "").trim();
   const sourceSnapshot = parameters.sourceSnapshot && typeof parameters.sourceSnapshot === "object" && !Array.isArray(parameters.sourceSnapshot)
     ? parameters.sourceSnapshot : null;
@@ -3942,7 +3944,9 @@ function validateRecipeSnsGenerateJobParameters(input) {
     || !String(sourceSnapshot.recipeName || "").trim()
     || !String(sourceSnapshot.variationKey || "").trim()
     || String(sourceSnapshot.imageMode || "") !== imageMode
+    || String(sourceSnapshot.writingTone || "") !== writingTone
     || !RECIPE_SNS_IMAGE_MODES.has(imageMode)
+    || !RECIPE_SNS_WRITING_TONES.has(writingTone)
     || !sourceImageUrl) {
     throw new Error("SNS投稿生成の対象商品情報が正しくありません");
   }
@@ -3965,8 +3969,8 @@ function validateRecipeSnsGenerateJobParameters(input) {
   }
   if (String(parameters.model || "") !== "gpt-5.6-sol"
     || String(parameters.reasoningEffort || "") !== "medium"
-    || !/^2026-08-30\..+$/.test(String(parameters.rulesVersion || ""))) {
-    throw new Error("SNS素材生成はGPT-5.6 Sol / medium / 2026-08-30.*ルール専用です");
+    || !/^2026-09-02\..+$/.test(String(parameters.rulesVersion || ""))) {
+    throw new Error("SNS素材生成はGPT-5.6 Sol / medium / 2026-09-02.*ルール専用です");
   }
   const productLpUrl = String(sourceSnapshot.productLpUrl || "").trim();
   if (productLpUrl) {
@@ -4000,6 +4004,7 @@ function validateRecipeSnsGenerateJobParameters(input) {
     recipeId,
     generationId,
     imageMode,
+    writingTone,
     sourceImageUrl,
     sourceSnapshot,
     platformRules,
@@ -4012,6 +4017,10 @@ function validateRecipeSnsGenerateJobParameters(input) {
 
 function recipeSnsImageModeLabel(mode) {
   return mode === "creative" ? "クリエイティブ" : mode === "arrange" ? "アレンジ" : "通常リサイズ";
+}
+
+function recipeSnsWritingToneLabel(tone) {
+  return tone === "staff" ? "スタッフ" : tone === "developer" ? "開発者" : "オフィシャル";
 }
 
 async function downloadRecipeSnsSourceImage(sourceUrl, workDir) {
@@ -4168,6 +4177,7 @@ async function executeRecipeSnsGenerateJob(job) {
   const packet = {
     generationId: parameters.generationId,
     imageMode: parameters.imageMode,
+    writingTone: parameters.writingTone,
     sourceSnapshot: parameters.sourceSnapshot,
     platformRules: parameters.platformRules,
     model: parameters.model,
@@ -4190,6 +4200,7 @@ async function executeRecipeSnsGenerateJob(job) {
       reasoningEffort: parameters.reasoningEffort,
       rulesVersion: parameters.rulesVersion,
       imageMode: parameters.imageMode,
+      writingTone: parameters.writingTone,
       targetPlatform: parameters.targetPlatform,
       chatHistoryLoaded: false,
       freshNonResumedSession: true,
@@ -4203,6 +4214,7 @@ async function executeRecipeSnsGenerateJob(job) {
     "Never read or search app Chats, prior tasks, threads, transcripts, rollouts, saved sessions, repositories, or unrelated files.",
     "Do not browse the web, control a browser, post externally, or modify external data. Commands are limited to reading the built-in imagegen SKILL.md, read-only Get-ChildItem path listing strictly under CODEX_HOME/generated_images when an image tool path must be recovered, and one Copy-Item per generated image into the current job directory. Never read generated image contents with a command.",
     "Use only TASK_JSON.sourceSnapshot as factual evidence and follow TASK_JSON.platformRules as absolute limits.",
+    "Apply TASK_JSON.writingTone exactly as defined by the dedicated Skill and return the same value in writing_tone. Do not blend personas.",
     "When TASK_JSON.sourceSnapshot.productLpUrl is set: X, Instagram, and Threads must include that exact URL once in post.text and return link_url as an empty string. Instagram Story must not include any URL in post.text and must return the exact URL in link_url for the link sticker. When no productLpUrl is set, return link_url as an empty string for every requested platform.",
     parameters.targetPlatform
       ? `Regenerate only ${parameters.targetPlatform}. Do not create output for any other platform.`
@@ -4324,6 +4336,9 @@ async function executeRecipeSnsGenerateJob(job) {
   if (String(result.image_mode || "") !== parameters.imageMode) {
     throw new Error("SNS画像生成モードが依頼内容と一致しません");
   }
+  if (String(result.writing_tone || "") !== parameters.writingTone) {
+    throw new Error("SNS投稿文の口調が依頼内容と一致しません");
+  }
   if (parameters.targetPlatform && String(result.platform || "") !== parameters.targetPlatform) {
     throw new Error("個別再生成のSNS媒体が依頼内容と一致しません");
   }
@@ -4405,6 +4420,7 @@ async function executeRecipeSnsGenerateJob(job) {
       rulesVersion: parameters.rulesVersion,
       data: result,
       imageMode: parameters.imageMode,
+      writingTone: parameters.writingTone,
       targetPlatform: parameters.targetPlatform,
       imageArtifactIds,
       sourceSnapshot: parameters.sourceSnapshot,
@@ -4417,7 +4433,7 @@ async function executeRecipeSnsGenerateJob(job) {
   await updateJob(job.id, {
     status: "completed",
     progress: 100,
-    currentStep: `${recipeSnsImageModeLabel(parameters.imageMode)}のSNS素材を作成しました`,
+    currentStep: `${recipeSnsWritingToneLabel(parameters.writingTone)}口調・${recipeSnsImageModeLabel(parameters.imageMode)}のSNS素材を作成しました`,
     message: parameters.targetPlatform
       ? `${RECIPE_SNS_PLATFORM_RULES[parameters.targetPlatform].label}だけを更新し、他媒体は前版を保持しました`
       : "生成した4媒体の投稿文と画像を確認できます",
@@ -4425,8 +4441,8 @@ async function executeRecipeSnsGenerateJob(job) {
     result: {
       status: "completed",
       summary: parameters.targetPlatform
-        ? `GPT-5.6 Solで${RECIPE_SNS_PLATFORM_RULES[parameters.targetPlatform].label}の${recipeSnsImageModeLabel(parameters.imageMode)}素材だけを再生成しました`
-        : `GPT-5.6 Solで4媒体の${recipeSnsImageModeLabel(parameters.imageMode)}素材を作成しました`,
+        ? `GPT-5.6 Solで${RECIPE_SNS_PLATFORM_RULES[parameters.targetPlatform].label}の${recipeSnsWritingToneLabel(parameters.writingTone)}口調・${recipeSnsImageModeLabel(parameters.imageMode)}素材だけを再生成しました`
+        : `GPT-5.6 Solで4媒体の${recipeSnsWritingToneLabel(parameters.writingTone)}口調・${recipeSnsImageModeLabel(parameters.imageMode)}素材を作成しました`,
       ...imported,
     },
     errorMessage: null,

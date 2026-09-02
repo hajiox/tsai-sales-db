@@ -7,6 +7,7 @@ import {
   ensureRecipeSnsAiResultDestinationUrl,
   isRecipeSnsImageMode,
   isRecipeSnsPlatform,
+  isRecipeSnsWritingTone,
   mergeRecipeSnsTargetResult,
   recipeSnsDestinationUrlFromSnapshot,
   validateRecipeSnsAiResult,
@@ -57,11 +58,13 @@ export async function POST(
     const reasoningEffort = String(body.reasoningEffort || "").trim();
     const rulesVersion = String(body.rulesVersion || "").trim();
     const requestedMode = String(body.imageMode || "").trim();
+    const requestedWritingTone = String(body.writingTone || "").trim();
     if (model !== RECIPE_SNS_MODEL
       || reasoningEffort !== RECIPE_SNS_REASONING_EFFORT
       || rulesVersion !== RECIPE_SNS_RULES_VERSION
-      || !isRecipeSnsImageMode(requestedMode)) {
-      return NextResponse.json({ error: "SNS生成モデル、画像モード、またはルール版が依頼内容と一致しません" }, { status: 409 });
+      || !isRecipeSnsImageMode(requestedMode)
+      || !isRecipeSnsWritingTone(requestedWritingTone)) {
+      return NextResponse.json({ error: "SNS生成モデル、画像モード、口調、またはルール版が依頼内容と一致しません" }, { status: 409 });
     }
 
     const supabase = getWebSalesAutomationServiceClient();
@@ -86,13 +89,14 @@ export async function POST(
       || String(parameters.reasoningEffort || "") !== reasoningEffort
       || String(parameters.rulesVersion || "") !== rulesVersion
       || String(parameters.imageMode || "") !== requestedMode
+      || String(parameters.writingTone || "") !== requestedWritingTone
       || targetPlatform !== bodyTargetPlatform
       || JSON.stringify(parameters.sourceSnapshot) !== JSON.stringify(body.sourceSnapshot)) {
       return NextResponse.json({ error: "SNS生成元の商品情報が依頼時点と一致しません" }, { status: 409 });
     }
     const result = targetPlatform
-      ? validateRecipeSnsTargetBridgeResult(body.data, requestedMode, targetPlatform)
-      : validateRecipeSnsBridgeResult(body.data, requestedMode);
+      ? validateRecipeSnsTargetBridgeResult(body.data, requestedMode, targetPlatform, requestedWritingTone)
+      : validateRecipeSnsBridgeResult(body.data, requestedMode, requestedWritingTone);
     if (result.variation_key !== String(sourceSnapshot.variationKey || "")) {
       return NextResponse.json({ error: "SNS投稿の訴求軸が依頼内容と一致しません" }, { status: 409 });
     }
