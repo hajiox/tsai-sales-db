@@ -7,6 +7,7 @@
 - Legacy schema-2 QSM zero evidence is no longer valid or reusable. Schema 3 accepts zero only after a successful official API sync with zero counted quantity.
 - Added regression coverage for the five-order fixture, zero, API/save count mismatch, API failure, validator evidence versioning, installer packaging, and the QAPI v3 connector.
 - Production Bridge `1.9.52` reimported 2026-08 as five matched products and five items with no unmatched rows. Qoo10 SKU `KY-5TZN-SL0M` was manually verified and mapped to `【ネット】切り落としレトルトチャーシュー600g`; the production dashboard now displays Qoo10 as five items. The official order amount remains JPY 13,330.
+- Simplified the EC settlement warning for operators: it now leads with the number of unresolved channels and separates immediate action, automatic review, and manual review. Each channel shows one short operational conclusion; raw reconciliation evidence, timestamps, and Chrome permission steps remain available only under collapsed detail controls.
 
 ## 2026-08-07
 

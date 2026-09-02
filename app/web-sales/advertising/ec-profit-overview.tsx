@@ -285,6 +285,15 @@ export default function EcProfitOverview({ month }: { month: string }) {
   const failedSettlementIssues = data.completeness.settlementIssues.filter(
     (issue) => issue.status === "failed",
   );
+  const operatorActionIssues = data.completeness.settlementIssues.filter(
+    (issue) => issue.status === "waiting_for_user" || issue.status === "failed" || issue.status === "not_started",
+  );
+  const automaticReviewIssues = data.completeness.settlementIssues.filter(
+    (issue) => !operatorActionIssues.includes(issue) && issue.retryPolicy.mode === "automatic",
+  );
+  const manualReviewIssues = data.completeness.settlementIssues.filter(
+    (issue) => !operatorActionIssues.includes(issue) && !automaticReviewIssues.includes(issue),
+  );
   const feeTotal = data.totals.platformFees + data.totals.paymentFees;
   const promotionTotal = data.totals.sellerDiscounts + data.totals.sellerCoupons + data.totals.sellerPoints;
   const refundEtcTotal = data.totals.refunds + data.totals.shippingCosts + data.totals.otherCosts - data.totals.otherCredits;
@@ -356,30 +365,47 @@ export default function EcProfitOverview({ month }: { month: string }) {
       {!data.completeness.isFinal && (
         <div className="border-l-4 border-amber-500 bg-amber-50 px-4 py-4 text-sm text-amber-950">
           <div className="flex items-start gap-3">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-          <div>
-              <strong>EC精算が{data.completeness.completedSettlements}/7の理由</strong>
-              <p className="mt-0.5 text-xs text-amber-800">概算計上中の媒体は利益へ反映済みです。更新見込みのある公式明細は自動で置き換え、取得方法のない内訳は精算済み金額と費目概算を分けて表示します。</p>
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <strong>未確定のEC精算：{data.completeness.settlementIssues.length}社</strong>
+              <p className="mt-0.5 text-xs text-amber-800">概算を含む現在の利益には反映済みです。必要な対応だけ確認してください。</p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                {operatorActionIssues.length > 0 && (
+                  <span><b className="text-red-700">要対応：</b>{formatIssueLabels(operatorActionIssues)}</span>
+                )}
+                {automaticReviewIssues.length > 0 && (
+                  <span><b className="text-blue-700">自動確認中：</b>{formatIssueLabels(automaticReviewIssues)}</span>
+                )}
+                {manualReviewIssues.length > 0 && (
+                  <span><b>確認待ち：</b>{formatIssueLabels(manualReviewIssues)}</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="mt-3 divide-y divide-amber-200 border-y border-amber-200">
             {data.completeness.settlementIssues.map((issue) => (
-              <div key={issue.channel} className="grid gap-1 py-2.5 sm:grid-cols-[140px_minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+              <div key={issue.channel} className="grid gap-2 py-3 sm:grid-cols-[140px_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
                 <div className="flex items-center gap-2">
                   <strong className="text-xs">{issue.label}</strong>
                   {issue.isEstimate && <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">{issue.channel === "qoo10" && issue.retryPolicy.mode === "after_action" ? "入金確定・費目概算" : "概算計上中"}</span>}
                 </div>
                 <div className="min-w-0">
-                  <span className="block text-xs leading-5 text-amber-900">{issue.reason}</span>
-                  <span className="mt-0.5 block text-[11px] font-medium text-amber-700">
-                    最終実行: {issue.attemptedAt ? formatDateTime(issue.attemptedAt) : "未実行"}・{settlementStatusLabel(issue.status)}
-                  </span>
+                  <span className="block text-xs font-semibold leading-5 text-amber-950">{settlementIssueSummary(issue)}</span>
                   {(issue.status === "queued" || issue.status === "running") && (
                     <span className="mt-1 block text-[11px] font-bold text-blue-800">
                       {issue.status === "queued" ? "順番待ち" : `${issue.currentStep || "処理中"}（${Math.round(issue.progress || 0)}%）`}
                       {issue.heartbeatAt ? `・最終応答 ${formatTime(issue.heartbeatAt)}` : ""}
                     </span>
                   )}
+                  <details className="mt-1 text-[11px] text-amber-800">
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-semibold hover:text-amber-950">
+                      <ChevronDown size={13} /> 詳細
+                    </summary>
+                    <div className="mt-2 border-l-2 border-amber-300 pl-3 leading-5">
+                      <p>{issue.reason}</p>
+                      <p className="mt-1">最終実行：{issue.attemptedAt ? formatDateTime(issue.attemptedAt) : "未実行"}・{settlementStatusLabel(issue.status)}</p>
+                    </div>
+                  </details>
                 </div>
                 <div className="flex flex-col items-start gap-1 sm:items-end">
                   <SettlementStatusBadge issue={issue} />
@@ -404,13 +430,13 @@ export default function EcProfitOverview({ month }: { month: string }) {
             {actionMessage && <span className="text-xs font-medium text-amber-900">{actionMessage}</span>}
           </div>
           {waitingForChromeHosts.length > 0 && (
-            <div className="mt-2 border-l-2 border-amber-400 pl-3 text-[11px] leading-5 text-amber-800">
-              <p>
-                Chrome操作許可は全EC共通で、ログインとは別にサイトのホスト単位で管理されます。
-                今回未許可: <span className="font-semibold">{waitingForChromeHosts.join(" / ")}</span>
-              </p>
-              <p>他媒体はすでに許可済み、または保存済みの原本を再利用できたため確認が出ていません。</p>
-              <div className="mt-2 text-amber-950">
+            <details className="mt-2 border-l-2 border-amber-400 pl-3 text-[11px] leading-5 text-amber-800">
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-semibold text-amber-950">
+                <ChevronDown size={13} /> Chrome権限の設定手順
+              </summary>
+              <div className="mt-2">
+                <p>今回未許可：<span className="font-semibold">{waitingForChromeHosts.join(" / ")}</span></p>
+                <p>Chrome操作許可は、ログインとは別にサイトごとに管理されます。</p>
                 <strong>日本語版Codexでの設定手順</strong>
                 <ol className="mt-1 list-decimal space-y-0.5 pl-4">
                   <li>Codexアプリで「設定」を開きます。</li>
@@ -422,7 +448,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
                 </ol>
                 <p className="mt-1">すでに対象ホストが「閲覧をブロック」で登録されている場合は、その行を開いて「閲覧を許可」へ変更してください。</p>
               </div>
-            </div>
+            </details>
           )}
         </div>
       )}
@@ -1037,6 +1063,31 @@ function settlementStatusLabel(status: string) {
     not_started: "未実行",
   };
   return labels[status] || status;
+}
+
+function settlementIssueSummary(issue: SettlementIssue) {
+  switch (issue.status) {
+    case "queued":
+      return "公式データ再取得の順番待ちです";
+    case "running":
+      return issue.currentStep || "公式データを再取得しています";
+    case "waiting_for_user":
+      return "ログイン・認証後に「公式データを再取得」を押してください";
+    case "failed":
+      return "取得に失敗しました。「公式データを再取得」で再実行してください";
+    case "needs_review":
+      return issue.retryPolicy.mode === "automatic"
+        ? "金額は反映済みです。費目内訳を自動で照合します"
+        : "金額は反映済みです。費目内訳の確認待ちです";
+    case "not_started":
+      return "未取得です。「公式データを再取得」を押してください";
+    default:
+      return "公式データの確認待ちです";
+  }
+}
+
+function formatIssueLabels(issues: SettlementIssue[]) {
+  return issues.map((issue) => issue.label).join("・");
 }
 
 function formatNumber(value: number) {
