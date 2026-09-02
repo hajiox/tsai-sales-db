@@ -1,6 +1,10 @@
+param(
+  [ValidatePattern("^[a-z0-9][a-z0-9-]{0,39}$")][string]$RuntimeName = "ai-01"
+)
+
 $ErrorActionPreference = "Stop"
 $installDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$runtimeDir = Join-Path $installDir "headless"
+$runtimeDir = Join-Path (Join-Path $installDir "workers") $RuntimeName
 $configPath = Join-Path $runtimeDir "bridge.config.json"
 $bridgePath = Join-Path $installDir "bridge.mjs"
 $maintenancePath = Join-Path $installDir "bridge-maintenance.lock"
@@ -10,7 +14,7 @@ $launcherLogPath = Join-Path $runtimeDir "logs\launcher.log"
 
 function Write-LauncherLog([string]$Message) {
   New-Item -ItemType Directory -Path (Split-Path -Parent $launcherLogPath) -Force | Out-Null
-  $line = "{0} {1}" -f (Get-Date).ToUniversalTime().ToString("o"), $Message
+  $line = "{0} [{1}] {2}" -f (Get-Date).ToUniversalTime().ToString("o"), $RuntimeName, $Message
   Add-Content -LiteralPath $launcherLogPath -Value $line -Encoding UTF8
 }
 
@@ -30,7 +34,7 @@ function Prepare-HeadlessWorkerStart {
     return "start"
   }
   if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
-    Write-LauncherLog "PRELOGIN START BLOCKED state is missing while a lock remains; no process was stopped"
+    Write-LauncherLog "START BLOCKED state is missing while a lock remains; no process was stopped"
     return "blocked"
   }
 
@@ -49,11 +53,11 @@ function Prepare-HeadlessWorkerStart {
       $state.executionMode -ne "headless-prelogin" -or
       [string]$state.workerId -ne [string]$config.workerId
     ) {
-      Write-LauncherLog "PRELOGIN START BLOCKED state/lock identity mismatch; no process was stopped"
+      Write-LauncherLog "START BLOCKED state/lock identity mismatch; no process was stopped"
       return "blocked"
     }
     if ($state.currentJobId) {
-      Write-LauncherLog "PRELOGIN START BLOCKED worker $statePid still owns job $($state.currentJobId)"
+      Write-LauncherLog "START BLOCKED worker $statePid still owns job $($state.currentJobId)"
       return "blocked"
     }
 
@@ -61,30 +65,30 @@ function Prepare-HeadlessWorkerStart {
     if (-not $existing) {
       Remove-VerifiedRuntimeFile $lockPath
       Remove-VerifiedRuntimeFile $statePath
-      Write-LauncherLog "PRELOGIN START removed stale state for missing process $statePid"
+      Write-LauncherLog "removed stale state for missing process $statePid"
       return "start"
     }
     $stateUpdatedAt = [DateTimeOffset]::Parse([string]$state.updatedAt).UtcDateTime
     if ($existing.StartTime.ToUniversalTime() -gt $stateUpdatedAt.AddSeconds(5)) {
       Remove-VerifiedRuntimeFile $lockPath
       Remove-VerifiedRuntimeFile $statePath
-      Write-LauncherLog "PRELOGIN START removed stale state for reused PID $statePid without stopping that process"
+      Write-LauncherLog "removed stale state for reused PID $statePid without stopping that process"
       return "start"
     }
     if ($existing.ProcessName -ne "node") {
-      Write-LauncherLog "PRELOGIN START BLOCKED PID $statePid is not node; no process was stopped"
+      Write-LauncherLog "START BLOCKED PID $statePid is not node; no process was stopped"
       return "blocked"
     }
 
     $bridgeSource = Get-Content -LiteralPath $bridgePath -Raw
     $versionMatch = [regex]::Match($bridgeSource, 'const VERSION = "([^"]+)";')
     if (-not $versionMatch.Success) {
-      Write-LauncherLog "PRELOGIN START BLOCKED installed Bridge version is unreadable"
+      Write-LauncherLog "START BLOCKED installed Bridge version is unreadable"
       return "blocked"
     }
     $expectedVersion = $versionMatch.Groups[1].Value
     if ([string]$state.version -eq $expectedVersion) {
-      Write-LauncherLog "PRELOGIN START skipped because Bridge $expectedVersion is already running as PID $statePid"
+      Write-LauncherLog "skipped because Bridge $expectedVersion is already running as PID $statePid"
       return "already-running"
     }
 
@@ -94,15 +98,15 @@ function Prepare-HeadlessWorkerStart {
       Start-Sleep -Milliseconds 250
     }
     if (Get-Process -Id $statePid -ErrorAction SilentlyContinue) {
-      Write-LauncherLog "PRELOGIN START BLOCKED stale Bridge $($state.version) PID $statePid did not stop"
+      Write-LauncherLog "START BLOCKED stale Bridge $($state.version) PID $statePid did not stop"
       return "blocked"
     }
     Remove-VerifiedRuntimeFile $lockPath
     Remove-VerifiedRuntimeFile $statePath
-    Write-LauncherLog "PRELOGIN START retired stale Bridge $($state.version) PID $statePid for $expectedVersion"
+    Write-LauncherLog "retired stale Bridge $($state.version) PID $statePid for $expectedVersion"
     return "start"
   } catch {
-    Write-LauncherLog "PRELOGIN START BLOCKED $($_.Exception.Message)"
+    Write-LauncherLog "START BLOCKED $($_.Exception.Message)"
     return "blocked"
   }
 }
@@ -128,7 +132,6 @@ while ($true) {
       throw "Node.jsがありません: $nodePath"
     }
 
-    # S4U起動では対話ログオン時の環境変数を引き継がないため明示する。
     $env:USERPROFILE = $userProfile
     $env:HOME = $userProfile
     $env:LOCALAPPDATA = $localAppData
@@ -141,7 +144,7 @@ while ($true) {
 
     & $nodePath $bridgePath
   } catch {
-    Write-LauncherLog "PRELOGIN LAUNCH ERROR $($_.Exception.Message)"
+    Write-LauncherLog "LAUNCH ERROR $($_.Exception.Message)"
   }
   Start-Sleep -Seconds 15
 }

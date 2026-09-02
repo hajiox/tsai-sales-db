@@ -33,7 +33,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.56";
+const VERSION = "1.9.57";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -135,7 +135,7 @@ acquireLock();
 
 const config = loadConfig();
 mkdirSync(UNIFIED_MONITOR_STATE_DIR, { recursive: true });
-const MONITOR_WORKER_KEY = config.executionMode === "headless-prelogin" ? "tsa-prelogin" : "tsa-interactive";
+const MONITOR_WORKER_KEY = config.monitorWorkerKey;
 const MONITOR_STATE_PATH = join(UNIFIED_MONITOR_STATE_DIR, `${MONITOR_WORKER_KEY}.json`);
 const MONITOR_ACK_PATH = UNIFIED_MONITOR_ACK_PATH;
 const MONITOR_SCRIPT_PATH = existsSync(COMMON_MONITOR_SCRIPT_PATH) ? COMMON_MONITOR_SCRIPT_PATH : BUNDLED_MONITOR_SCRIPT_PATH;
@@ -6556,6 +6556,8 @@ function workerPayload() {
       codex: true,
       chrome: config.executionMode === "interactive",
       executionMode: config.executionMode,
+      workerRole: config.workerRole,
+      monitorWorkerKey: config.monitorWorkerKey,
       preLogin: config.executionMode === "headless-prelogin",
       desktopMonitor: config.desktopMonitor,
       unifiedDesktopMonitor: true,
@@ -7059,6 +7061,8 @@ function loadConfig() {
     token: String(process.env.TSA_CODEX_BRIDGE_TOKEN || stored.token || ""),
     workerId: String(process.env.TSA_CODEX_WORKER_ID || stored.workerId || "tsa-office-01"),
     workerName: String(process.env.TSA_CODEX_WORKER_NAME || stored.workerName || "事務所PC"),
+    workerRole: String(process.env.TSA_CODEX_WORKER_ROLE || stored.workerRole || (executionMode === "interactive" ? "interactive" : "ai-generation")).trim().toLowerCase(),
+    monitorWorkerKey: String(process.env.TSA_CODEX_MONITOR_WORKER_KEY || stored.monitorWorkerKey || (executionMode === "interactive" ? "tsa-interactive" : "tsa-headless")).trim().toLowerCase(),
     workspace: String(process.env.TSA_CODEX_WORKSPACE || stored.workspace || String.raw`C:\作業用`),
     jobRoot: String(process.env.TSA_CODEX_JOB_ROOT || stored.jobRoot || join(APP_DIR, "jobs")),
     downloadsDir: String(process.env.TSA_CODEX_DOWNLOADS || stored.downloadsDir || join(homedir(), "Downloads")),
@@ -7093,6 +7097,15 @@ function loadConfig() {
   }
   if (!["interactive", "headless-prelogin"].includes(value.executionMode)) {
     throw new Error("executionModeが正しくありません");
+  }
+  if (!["interactive", "ai-generation", "analysis"].includes(value.workerRole)) {
+    throw new Error("workerRoleが正しくありません");
+  }
+  if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(value.monitorWorkerKey)) {
+    throw new Error("monitorWorkerKeyが正しくありません");
+  }
+  if ((value.executionMode === "interactive") !== (value.workerRole === "interactive")) {
+    throw new Error("executionModeとworkerRoleの組み合わせが正しくありません");
   }
   if (value.allowedTaskKeys.length === 0) {
     throw new Error("実行可能なBridgeタスクが設定されていません");
@@ -7169,6 +7182,7 @@ function inspectCodexRuntime(candidate) {
 function runtimeSnapshot() {
   return {
     workerId: config.workerId,
+    workerRole: config.workerRole,
     executionMode: config.executionMode,
     bridgeVersion: VERSION,
     codexVersion: codexRuntime.version,
@@ -7332,6 +7346,9 @@ function writeBridgeState() {
       pid: process.pid,
       version: VERSION,
       workerId: config.workerId,
+      workerName: config.workerName,
+      workerRole: config.workerRole,
+      monitorWorkerKey: config.monitorWorkerKey,
       executionMode: config.executionMode,
       allowedTaskKeys: config.allowedTaskKeys,
       currentJobId,
@@ -7385,6 +7402,7 @@ function monitorBaseState(overrides = {}) {
     systemLabel: "TSA",
     workerId: config.workerId,
     workerName: config.workerName,
+    workerRole: config.workerRole,
     executionMode: config.executionMode,
     bridgeVersion: VERSION,
     status: "idle",

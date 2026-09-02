@@ -232,10 +232,21 @@ export default function WebSalesAutomationPage() {
   const interactiveWorker = data?.workers.find((worker) => worker.online && worker.capabilities?.chrome === true)
     || data?.workers.find((worker) => worker.capabilities?.chrome === true)
     || null;
-  const preLoginWorker = data?.workers.find((worker) => worker.online && worker.capabilities?.preLogin === true)
-    || data?.workers.find((worker) => worker.capabilities?.preLogin === true)
+  const aiWorkers = (data?.workers || [])
+    .filter((worker) => worker.capabilities?.workerRole === "ai-generation")
+    .sort((left, right) => Number(right.online) - Number(left.online) || left.id.localeCompare(right.id));
+  const analysisWorker = data?.workers.find((worker) => worker.online && worker.capabilities?.workerRole === "analysis")
+    || data?.workers.find((worker) => worker.capabilities?.workerRole === "analysis")
     || null;
-  const primaryWorker = interactiveWorker || preLoginWorker || data?.workers.find((worker) => worker.online) || data?.workers[0] || null;
+  const bridgeWorkers = [
+    { label: "Chrome", worker: interactiveWorker },
+    { label: "AI生成1", worker: aiWorkers[0] || null },
+    { label: "AI生成2", worker: aiWorkers[1] || null },
+    { label: "分析", worker: analysisWorker },
+  ];
+  const primaryWorker = interactiveWorker || aiWorkers[0] || analysisWorker || data?.workers.find((worker) => worker.online) || data?.workers[0] || null;
+  const allBridgeWorkersOnline = bridgeWorkers.every(({ worker }) => worker?.online);
+  const anyBridgeWorkerBusy = bridgeWorkers.some(({ worker }) => worker?.online && worker.status === "busy");
   const codexVersion = typeof primaryWorker?.capabilities?.codexVersion === "string"
     ? primaryWorker.capabilities.codexVersion
     : null;
@@ -243,11 +254,9 @@ export default function WebSalesAutomationPage() {
   const codexRuntimeCheckedAt = typeof primaryWorker?.capabilities?.codexRuntimeCheckedAt === "string"
     ? primaryWorker.capabilities.codexRuntimeCheckedAt
     : null;
-  const bridgeUpdateRequired = Boolean(
-    primaryWorker?.version
-      && data?.bridge?.requiredVersion
-      && primaryWorker.version !== data.bridge.requiredVersion,
-  );
+  const bridgeUpdateRequired = Boolean(data?.bridge?.requiredVersion && bridgeWorkers.some(
+    ({ worker }) => worker?.version && worker.version !== data.bridge.requiredVersion,
+  ));
   const artifactsByJob = useMemo(() => {
     const map = new Map<string, Artifact[]>();
     for (const artifact of data?.artifacts || []) {
@@ -528,29 +537,28 @@ export default function WebSalesAutomationPage() {
             </section>
 
             <section className={`flex flex-col gap-4 border-l-4 px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
-              primaryWorker?.online
-                ? primaryWorker.status === "busy" ? "border-blue-500 bg-blue-50" : "border-emerald-500 bg-emerald-50"
+              allBridgeWorkersOnline
+                ? anyBridgeWorkerBusy ? "border-blue-500 bg-blue-50" : "border-emerald-500 bg-emerald-50"
                 : "border-amber-500 bg-amber-50"
             }`}>
               <div className="flex min-w-0 items-center gap-3">
-                <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${primaryWorker?.online ? "bg-white text-emerald-700" : "bg-white text-amber-700"}`}>
-                  {primaryWorker?.online ? <Wifi size={20} /> : <WifiOff size={20} />}
+                <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${allBridgeWorkersOnline ? "bg-white text-emerald-700" : "bg-white text-amber-700"}`}>
+                  {allBridgeWorkersOnline ? <Wifi size={20} /> : <WifiOff size={20} />}
                 </span>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <h2 className="font-bold">{primaryWorker?.name || "事務所PC"}</h2>
-                    <span className={`text-xs font-semibold ${primaryWorker?.online ? "text-emerald-700" : "text-amber-700"}`}>
-                      {primaryWorker?.online ? (primaryWorker.status === "busy" ? "実行中" : "オンライン") : "オフライン"}
+                    <h2 className="font-bold">事務所PC Bridge 4体</h2>
+                    <span className={`text-xs font-semibold ${allBridgeWorkersOnline ? "text-emerald-700" : "text-amber-700"}`}>
+                      {allBridgeWorkersOnline ? (anyBridgeWorkerBusy ? "実行中" : "全体オンライン") : "一部オフライン"}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-slate-600">
-                    ブラウザ操作 {interactiveWorker?.online ? "オンライン" : "オフライン"}
-                    {interactiveWorker ? ` / 最終接続 ${formatDateTime(interactiveWorker.last_seen_at)}` : ""}
-                  </p>
-                  <p className={`mt-0.5 text-xs ${preLoginWorker?.online ? "text-emerald-700" : "text-slate-500"}`}>
-                    ログイン前処理 {preLoginWorker?.online ? "オンライン" : "オフライン"}
-                    {preLoginWorker ? ` / 最終接続 ${formatDateTime(preLoginWorker.last_seen_at)}` : ""}
-                  </p>
+                  <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs sm:grid-cols-4">
+                    {bridgeWorkers.map(({ label, worker }) => (
+                      <span key={label} className={worker?.online ? "text-emerald-700" : "text-slate-500"}>
+                        {label} {worker?.online ? (worker.status === "busy" ? "実行中" : "待機") : "オフライン"}
+                      </span>
+                    ))}
+                  </div>
                   {primaryWorker && (
                     <p className={`mt-1 text-xs ${codexRuntimeReady && !bridgeUpdateRequired ? "text-slate-600" : "font-semibold text-red-700"}`}>
                       Codex {codexVersion || "確認中"}

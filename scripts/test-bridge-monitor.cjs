@@ -149,12 +149,12 @@ try {
     taskLabel: "レシピSNS素材AI生成",
     currentStep: "Instagram画像を生成しています",
   }));
-  writeState("tsa-prelogin", {
+  writeState("tsa-ai-01", {
     ...baseState({
       system: "tsa",
       systemLabel: "TSA",
-      workerId: "tsa-office-01-headless",
-      workerName: "事務所PC（ログイン前）",
+      workerId: "tsa-office-01-ai-01",
+      workerName: "事務所PC AI生成1",
       executionMode: "headless-prelogin",
       status: "idle",
       taskLabel: null,
@@ -163,6 +163,32 @@ try {
     jobId: null,
     taskKey: null,
     productName: null,
+  });
+  writeState("tsa-ai-02", {
+    ...baseState({
+      system: "tsa",
+      systemLabel: "TSA",
+      workerId: "tsa-office-01-ai-02",
+      workerName: "事務所PC AI生成2",
+      executionMode: "headless-prelogin",
+      status: "running",
+      progress: 24,
+      taskLabel: "EC商品名AI生成",
+      currentStep: "商品情報を分析しています",
+    }),
+  });
+  writeState("tsa-analysis-01", {
+    ...baseState({
+      system: "tsa",
+      systemLabel: "TSA",
+      workerId: "tsa-office-01-analysis-01",
+      workerName: "事務所PC 分析",
+      executionMode: "headless-prelogin",
+      status: "running",
+      progress: 41,
+      taskLabel: "WEB売上分析",
+      currentStep: "月次データを分析しています",
+    }),
   });
   writeState("tsg-interactive", baseState({
     system: "tsg",
@@ -215,7 +241,9 @@ try {
   assert.match(first.output, /Codex Bridge 統合モニター/);
   assert.match(first.output, /TSA/);
   assert.match(first.output, /事務所PC \[実行中 62%\] レシピSNS素材AI生成/);
-  assert.match(first.output, /事務所PC（ログイン前） \[待機中 0%\]/);
+  assert.match(first.output, /事務所PC AI生成1 \[待機中 0%\]/);
+  assert.match(first.output, /事務所PC AI生成2 \[実行中 24%\] EC商品名AI生成/);
+  assert.match(first.output, /事務所PC 分析 \[実行中 41%\] WEB売上分析/);
   assert.match(first.output, /TSG/);
   assert.match(first.output, /TSG事務所PC \[実行中 35%\] 掲示板投稿連携/);
   assert.match(first.output, /token=\[REDACTED\] \[URL\]/);

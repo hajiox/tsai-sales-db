@@ -1,25 +1,26 @@
 # TSA Codex Bridge
 
-The bridge runs on the office Windows PC and claims allow-listed TSA jobs over outbound HTTPS. An interactive worker uses the signed-in Chrome session, while a separate S4U worker can run browserless Codex jobs before Windows login. Both stream progress back to TSA and upload execution artifacts.
+The bridge runs on the office Windows PC and claims allow-listed TSA jobs over outbound HTTPS. Four role-specific workers share the durable queue: one interactive Chrome worker, two browserless AI-generation workers, and one browserless analysis worker. All stream progress back to TSA and upload execution artifacts.
 
 ## Runtime
 
-- Browserless jobs continue before Windows login through the `TSA Codex Bridge (Pre-login)` scheduled task.
+- Browserless jobs continue before Windows login through three S4U tasks: `TSA Codex Bridge (AI 1)`, `TSA Codex Bridge (AI 2)`, and `TSA Codex Bridge (Analysis)`.
 - Chrome-dependent sales, advertising, settlement, price, product-name, catchcopy, and product-content jobs wait in the durable queue until the Windows user is signed in and the interactive worker is online.
+- The two AI workers share only generation and summarization jobs. The analysis worker claims only WEB sales analysis. Atomic database claims prevent duplicate execution when both AI workers are idle.
 - Codex desktop and the signed-in EC Chrome session are required only for Chrome control.
 - The shared archive path must be reachable.
 
 ## Unified monitor
 
-Bridge `1.9.2` uses one persistent `Codex Bridge 統合モニター` window per signed-in Windows session. It reads strict UTF-8 state files from `%LOCALAPPDATA%\Codex Bridge Monitor\states` and displays TSA, TSG, and DocScanner together. Closing the monitor never stops a worker or Codex process; the next interactive Bridge event reopens the same monitor. The pre-login worker publishes state but never opens a desktop window.
+Bridge `1.9.2` and later use one persistent `Codex Bridge 統合モニター` window per signed-in Windows session. It reads strict UTF-8 state files from `%LOCALAPPDATA%\Codex Bridge Monitor\states` and displays TSA, TSG, and DocScanner together. Closing the monitor never stops a worker or Codex process; the next interactive Bridge event reopens the same monitor. The three pre-login workers publish separate state rows but never open desktop windows.
 
 Each future TSG or DocScanner Bridge must publish one atomic `*.json` file that conforms to `bridge-monitor-state.schema.json`, using `system` values `tsg` or `docscanner`. Until such a Bridge exists, the monitor reports that system as `未導入` instead of inventing activity. A stale heartbeat is shown as `応答停止` when the worker PID still exists and `オフライン` when it does not.
 
 ## Install
 
-Run `install-bridge.ps1` with the same secret stored in Vercel as `TSA_CODEX_BRIDGE_TOKEN`. The installer copies runtime files to `%LOCALAPPDATA%\TSA Codex Bridge`, keeps the current-user startup entry for the interactive worker, and registers `TSA Codex Bridge (Pre-login)` as an `AtStartup` S4U task. The first registration requires one Windows administrator confirmation, but stores no Windows password. Later Bridge updates reuse the same task.
+Run `install-bridge.ps1` with the same secret stored in Vercel as `TSA_CODEX_BRIDGE_TOKEN`. The installer copies runtime files to `%LOCALAPPDATA%\TSA Codex Bridge`, keeps the current-user startup entry for the interactive worker, and registers the three browserless workers as `AtStartup` S4U tasks. The first registration uses one Windows administrator confirmation for all three tasks, but stores no Windows password. Later Bridge updates reuse the same tasks.
 
-The pre-login worker has a different worker ID and runtime directory. It advertises only `connection_test`, EC product-name generation, EC catchcopy generation, recipe SNS generation, and WEB sales analysis. The database claim function filters on that exact capability list, so it cannot claim a Chrome or shared-folder collection job. Both workers share a maintenance lock, and the installer waits until every active worker is idle before replacing files.
+Every worker has a different worker ID, runtime directory, lock, state file, job directory, log, and monitor key. The database claim function filters on each exact capability list, so browserless workers cannot claim Chrome or shared-folder collection jobs. All four workers share one maintenance lock, and the installer waits until every active worker is idle before replacing files.
 
 Each production job starts with a fresh `codex exec` session and never resumes the TSA development chat or another long-lived task. The rollout is retained only so the Chrome plugin can observe turn completion and release claimed tabs; it is not reused as operational context. Signed-in EC jobs first list and claim the user's already-open matching Chrome tab. If every matching tab is owned by another Codex browser session, the job creates at most one temporary tab per target EC in the same selected Chrome profile and reuses that profile's login state. It never opens another browser, window, incognito session, or temporary profile, and never closes an operator-owned tab. Login, MFA, CAPTCHA, account selection, or a real permission denial stops only after the actual official authentication screen or prompt is visible.
 
@@ -47,6 +48,7 @@ The TSA automation screen shows both versions and warns when the installed Bridg
 
 ## Operation note
 
+- 2026-09-02: Bridge 1.9.57 expands TSA from two workers to four bounded role workers: one signed-in Chrome worker, two pre-login AI-generation workers, and one pre-login WEB-analysis worker. Each has an isolated runtime, lock, state, job root, worker ID, and unified-monitor row while sharing the atomic durable queue. The installer migrates and unregisters the former single pre-login task only after every active worker acknowledges maintenance and is idle. The TSA automation screen reports all four workers separately.
 - 2026-09-02: Bridge 1.9.56 corrects the SNS `developer` voice to the owner's actual public voice. First-person references use `私`, sentences are polite `です・ます` Japanese, and the Skills avoid commands, lecturing, confrontation, superiority, strong assertions, and pressuring phrases. TSA rejects newly generated developer posts containing `俺`/`僕` or representative coercive wording while retaining read compatibility for immutable older histories.
 - 2026-09-02: Bridge 1.9.55 removes SNS ImageGen path discovery from Codex commands. Each fresh session generates exactly one image per requested platform in order; the deterministic worker enumerates only that session's image directory, requires the exact image count, maps files by creation order, validates any supplied path, and uploads them. The Skill now forbids `Get-ChildItem` and `Copy-Item`, eliminating command-shape drift while tightening the safety boundary. TSA validates those authenticated image artifacts instead of requiring an AI-supplied local absolute path.
 - 2026-09-02: Bridge 1.9.54 attempted to admit one exact read-only ImageGen listing pipeline, but a legitimate alternative PowerShell shape still failed closed. It was superseded by the deterministic 1.9.55 path resolver.

@@ -1,13 +1,15 @@
 param(
   [string]$InstallDir = "",
   [string]$UserId = "",
-  [string]$TaskName = "TSA Codex Bridge (Pre-login)"
+  [ValidatePattern("^[a-z0-9][a-z0-9-]{0,39}$")][string]$RuntimeName = "ai-01",
+  [string]$TaskName = "TSA Codex Bridge (AI 1)"
 )
 
 $ErrorActionPreference = "Stop"
 if (-not $InstallDir) { $InstallDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 $startScript = Join-Path $InstallDir "start-bridge-prelogin.ps1"
-$configPath = Join-Path (Join-Path $InstallDir "headless") "bridge.config.json"
+$runtimeDir = Join-Path (Join-Path $InstallDir "workers") $RuntimeName
+$configPath = Join-Path $runtimeDir "bridge.config.json"
 if (-not $UserId -and (Test-Path -LiteralPath $configPath -PathType Leaf)) {
   try {
     $storedConfig = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
@@ -17,12 +19,13 @@ if (-not $UserId -and (Test-Path -LiteralPath $configPath -PathType Leaf)) {
   }
 }
 if (-not $UserId) { $UserId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name }
-$statusPath = Join-Path (Join-Path $InstallDir "headless") "task-registration.json"
+$statusPath = Join-Path $runtimeDir "task-registration.json"
 function Write-RegistrationStatus([string]$Status, [string]$Message) {
   $payload = @{
     status = $Status
     message = $Message
     taskName = $TaskName
+    runtimeName = $RuntimeName
     userId = $UserId
     updatedAt = (Get-Date).ToUniversalTime().ToString("o")
   } | ConvertTo-Json
@@ -38,7 +41,7 @@ try {
   }
 
   $powershellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
-  $arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
+  $arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`" -RuntimeName $RuntimeName"
   $action = New-ScheduledTaskAction -Execute $powershellPath -Argument $arguments -WorkingDirectory $InstallDir
   $trigger = New-ScheduledTaskTrigger -AtStartup
   $principal = New-ScheduledTaskPrincipal -UserId $UserId -LogonType S4U -RunLevel Limited
@@ -51,8 +54,9 @@ try {
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -MultipleInstances IgnoreNew
 
-  $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
-    -Description "Windowsログイン前からTSAのブラウザ不要Codexジョブだけを処理します。Chrome必須ジョブは取得しません。"
+  $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+  $description = "TSA Codex Bridge worker: $([string]$config.workerName). Browserless allow-listed jobs only."
+  $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $description
   Register-ScheduledTask -TaskName $TaskName -InputObject $task -Force | Out-Null
 
   $registered = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
@@ -61,7 +65,7 @@ try {
   }
   Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
   Write-RegistrationStatus -Status "registered" -Message "S4U / AtStartupで登録し、起動要求を送信しました。"
-  Write-Output "Registered: $TaskName ($UserId / S4U / AtStartup)"
+  Write-Output "Registered: $TaskName ($RuntimeName / $UserId / S4U / AtStartup)"
 } catch {
   $detail = "{0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace
   Write-RegistrationStatus -Status "failed" -Message $detail

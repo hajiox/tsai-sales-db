@@ -246,7 +246,7 @@ assert.match(bridgeSource, /Codex Bridge Monitor/);
 assert.match(bridgeSource, /UNIFIED_MONITOR_STATE_DIR/);
 assert.match(bridgeSource, /schemaVersion: 1/);
 assert.match(bridgeSource, /system: "tsa"/);
-assert.match(bridgeSource, /tsa-prelogin/);
+assert.match(bridgeSource, /const MONITOR_WORKER_KEY = config\.monitorWorkerKey/);
 assert.match(bridgeSource, /writeMonitorStateJson\(MONITOR_STATE_PATH, desktopMonitorState\)/);
 assert.match(monitorStateFileSource, /REPLACE_RETRY_DELAYS_MS/);
 assert.match(monitorStateFileSource, /renameSync\(temporaryPath, path\)/);

@@ -25,6 +25,7 @@
     "systemLabel": { "type": "string", "minLength": 1, "maxLength": 40 },
     "workerId": { "type": "string", "minLength": 1, "maxLength": 100 },
     "workerName": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "workerRole": { "enum": ["interactive", "ai-generation", "analysis", "service"] },
     "executionMode": { "enum": ["interactive", "headless-prelogin", "service"] },
     "bridgeVersion": { "type": "string", "minLength": 1, "maxLength": 40 },
     "status": { "enum": ["idle", "running", "completed", "waiting_for_user", "needs_review", "failed", "cancelled", "offline"] },
