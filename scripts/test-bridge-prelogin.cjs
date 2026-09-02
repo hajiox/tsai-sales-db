@@ -72,7 +72,8 @@ for (const [runtimeName, taskName, role, monitorKey] of [
 assert.match(installer, /allowedTaskKeys = \$interactiveTaskKeys/);
 assert.match(installer, /allowedTaskKeys = \$workerSpec\.TaskKeys/);
 assert.match(installer, /four worker heartbeats confirmed/);
-assert.match(installer, /Unregister-ScheduledTask -TaskName \$legacyPreloginTaskName/);
+assert.match(installer, /\$legacyPreloginTaskExists[\s\S]*Unregister-ScheduledTask -TaskName '\$escapedLegacyTaskName'/);
+assert.match(installer, /legacyUnifiedMonitorStatePath[\s\S]*Remove-Item -LiteralPath \$legacyUnifiedMonitorStatePath/);
 assert.match(installer, /maintenanceObserved -eq \$maintenanceNonce/);
 assert.match(installer, /function Get-TrustedHeadlessBridgeProcesses/);
 assert.match(installer, /Stop-ScheduledTask -TaskName \$headlessTaskName/);

@@ -154,6 +154,7 @@ $monitorLauncherPath = Join-Path $installDir "launch-bridge-monitor.ps1"
 $unifiedMonitorPath = Join-Path $unifiedMonitorDir "bridge-monitor.ps1"
 $unifiedMonitorLauncherPath = Join-Path $unifiedMonitorDir "launch-bridge-monitor.ps1"
 $unifiedMonitorAckPath = Join-Path $unifiedMonitorDir "monitor-ack.json"
+$legacyUnifiedMonitorStatePath = Join-Path $unifiedMonitorStateDir "tsa-prelogin.json"
 $legacyMonitorAckPath = Join-Path $installDir "monitor-ack.json"
 $maintenancePath = Join-Path $installDir "bridge-maintenance.lock"
 $statePath = Join-Path $installDir "bridge-state.json"
@@ -385,6 +386,9 @@ try {
   foreach ($candidateStatePath in $statePaths) {
     if (Test-Path -LiteralPath $candidateStatePath) { Remove-Item -LiteralPath $candidateStatePath -Force }
   }
+  if (Test-Path -LiteralPath $legacyUnifiedMonitorStatePath -PathType Leaf) {
+    Remove-Item -LiteralPath $legacyUnifiedMonitorStatePath -Force
+  }
 
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "codex-run-guard.mjs") -Destination (Join-Path $installDir "codex-run-guard.mjs") -Force
@@ -425,11 +429,6 @@ Copy-WindowsPowerShellScript "amazon-business-report-download.ps1" (Join-Path $i
 Copy-WindowsPowerShellScript "start-bridge.ps1" (Join-Path $installDir "start-bridge.ps1")
 Copy-WindowsPowerShellScript "start-bridge-prelogin.ps1" (Join-Path $installDir "start-bridge-prelogin.ps1")
 Copy-WindowsPowerShellScript "register-prelogin-task.ps1" (Join-Path $installDir "register-prelogin-task.ps1")
-
-$legacyPreloginTask = Get-ScheduledTask -TaskName $legacyPreloginTaskName -ErrorAction SilentlyContinue
-if ($legacyPreloginTask) {
-  Unregister-ScheduledTask -TaskName $legacyPreloginTaskName -Confirm:$false -ErrorAction Stop
-}
 
 foreach ($skillName in $bridgeSkillNames) {
   $skillSource = Join-Path $sourceDir "skills\$skillName"
@@ -601,12 +600,18 @@ if (-not $SkipPreloginTaskRegistration) {
     if (-not $taskRegistered) { $workersNeedingRegistration += $workerSpec }
   }
 
-  if ($workersNeedingRegistration.Count -gt 0) {
+  $legacyPreloginTaskExists = $null -ne (Get-ScheduledTask -TaskName $legacyPreloginTaskName -ErrorAction SilentlyContinue)
+  if ($workersNeedingRegistration.Count -gt 0 -or $legacyPreloginTaskExists) {
     $registrationScript = Join-Path $installDir "register-prelogin-task.ps1"
     $escapedRegistrationScript = $registrationScript.Replace("'", "''")
     $escapedInstallDir = $installDir.Replace("'", "''")
     $escapedUserId = $windowsUserId.Replace("'", "''")
-    $registrationCommands = @($workersNeedingRegistration | ForEach-Object {
+    $registrationCommands = @()
+    if ($legacyPreloginTaskExists) {
+      $escapedLegacyTaskName = $legacyPreloginTaskName.Replace("'", "''")
+      $registrationCommands += "if (Get-ScheduledTask -TaskName '$escapedLegacyTaskName' -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName '$escapedLegacyTaskName' -Confirm:`$false -ErrorAction Stop }"
+    }
+    $registrationCommands += @($workersNeedingRegistration | ForEach-Object {
       $escapedRuntimeName = ([string]$_.RuntimeName).Replace("'", "''")
       $escapedTaskName = ([string]$_.TaskName).Replace("'", "''")
       "& '$escapedRegistrationScript' -InstallDir '$escapedInstallDir' -UserId '$escapedUserId' -RuntimeName '$escapedRuntimeName' -TaskName '$escapedTaskName'"
