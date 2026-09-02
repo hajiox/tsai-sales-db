@@ -5,6 +5,7 @@
   [string]$WorkerName = "事務所PC",
   [string]$Workspace = "C:\作業用",
   [string]$DocScannerFaxSummaryRoot = "C:\作業用\doc-scanner\data\codex-bridge\fax-summary",
+  [string]$DocScannerBaseUrl = "http://127.0.0.1:3004",
   [ValidateSet("low", "medium", "high", "xhigh")][string]$ReasoningEffort = "low",
   [switch]$SkipPreloginTaskRegistration
 )
@@ -17,6 +18,7 @@ $requiredSourceFiles = @(
   "codex-run-guard.mjs",
   "download-artifact-recovery.mjs",
   "ec-profit-artifact-policy.mjs",
+  "qoo10-official-sales.mjs",
   "recipe-sns-publish-policy.mjs",
   "monitor-state-file.cjs",
   "skill-contract.json",
@@ -315,6 +317,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Pa
 Copy-Item -LiteralPath (Join-Path $sourceDir "codex-run-guard.mjs") -Destination (Join-Path $installDir "codex-run-guard.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "download-artifact-recovery.mjs") -Destination (Join-Path $installDir "download-artifact-recovery.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-profit-artifact-policy.mjs") -Destination (Join-Path $installDir "ec-profit-artifact-policy.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "qoo10-official-sales.mjs") -Destination (Join-Path $installDir "qoo10-official-sales.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-publish-policy.mjs") -Destination (Join-Path $installDir "recipe-sns-publish-policy.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destination (Join-Path $installDir "monitor-state-file.cjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
@@ -401,6 +404,7 @@ $config = @{
   downloadsDir = (Join-Path $env:USERPROFILE "Downloads")
   codexHome = (Join-Path $env:USERPROFILE ".codex")
   docScannerFaxSummaryRoot = $DocScannerFaxSummaryRoot
+  docScannerBaseUrl = $DocScannerBaseUrl
   reasoningEffort = $ReasoningEffort
   pollMs = 5000
   executionMode = "interactive"
@@ -419,6 +423,7 @@ $headlessConfig = @{
   downloadsDir = (Join-Path $userProfile "Downloads")
   codexHome = (Join-Path $userProfile ".codex")
   docScannerFaxSummaryRoot = $DocScannerFaxSummaryRoot
+  docScannerBaseUrl = $DocScannerBaseUrl
   reasoningEffort = $ReasoningEffort
   pollMs = 5000
   executionMode = "headless-prelogin"

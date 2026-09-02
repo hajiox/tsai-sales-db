@@ -25,10 +25,15 @@ import {
   isRecipeSnsInteractiveApprovalWait,
   normalizeRecipeSnsPublishStop,
 } from "./recipe-sns-publish-policy.mjs";
+import {
+  acquireQoo10OfficialSales,
+  buildQoo10OfficialCsv,
+  buildQoo10OfficialEvidence,
+} from "./qoo10-official-sales.mjs";
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.51";
+const VERSION = "1.9.52";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -300,6 +305,10 @@ async function executeJob(job) {
   const workDir = join(config.jobRoot, job.id);
   mkdirSync(workDir, { recursive: true });
   mkdirSync(downloadsDir, { recursive: true });
+  if (job.channel === "qoo10") {
+    await executeQoo10OfficialSalesJob(job, archiveDir, workDir);
+    return;
+  }
   if (await tryReuseSalesArtifacts(job, archiveDir)) return;
   const downloadSnapshot = snapshotCsvFiles(downloadsDir);
   const outputFile = join(workDir, "final-result.json");
@@ -478,7 +487,7 @@ async function executeJob(job) {
         result = {
           status: imported.status,
           summary: verifiedZero
-            ? "Qoo10は公式画面で対象期間0件を確認済みです"
+            ? "Qoo10は公式APIで対象期間0件を確認済みです"
             : imported.summary,
           details: imported.status === "completed"
             ? verifiedZero
@@ -5952,6 +5961,132 @@ function appendEventLine(lines, line) {
   if (lines.length > 500) lines.splice(0, lines.length - 500);
 }
 
+async function executeQoo10OfficialSalesJob(job, archiveDir, workDir) {
+  const originalFile = join(workDir, `qoo10-${job.period_start}_${job.period_end}.original.csv`);
+  const preparedFile = join(workDir, `qoo10-${job.period_start}_${job.period_end}.prepared.csv`);
+  const evidenceFile = join(workDir, `qoo10-${job.period_start}_${job.period_end}.official-api-evidence.original.json`);
+
+  try {
+    await updateJob(job.id, {
+      status: "running",
+      progress: 3,
+      currentStep: "Qoo10公式APIを同期しています",
+      message: "DocScannerの公式API経路で配送状態1〜5を確認します",
+      eventType: "qoo10_official_api_sync_started",
+      payload: { route: "qoo10_official_api_via_docscanner" },
+    });
+    const official = await acquireQoo10OfficialSales({
+      baseUrl: config.docScannerBaseUrl,
+      startDate: job.period_start,
+      endDate: job.period_end,
+    });
+    writeFileSync(originalFile, buildQoo10OfficialCsv(official), "utf8");
+    writeFileSync(evidenceFile, `${JSON.stringify(buildQoo10OfficialEvidence(official), null, 2)}\n`, "utf8");
+
+    await updateJob(job.id, {
+      status: "running",
+      progress: 54,
+      currentStep: "Qoo10公式API結果を検証しています",
+      message: `${official.apiOrderCount}注文・${official.totalQuantity}個・${formatYen(official.totalAmount)}を取得しました`,
+      eventType: "qoo10_official_api_synced",
+      payload: {
+        orderCount: official.apiOrderCount,
+        countedOrderCount: official.countedOrderCount,
+        totalQuantity: official.totalQuantity,
+        totalAmount: official.totalAmount,
+      },
+    });
+    const validation = prepareSalesCsv(
+      job,
+      originalFile,
+      preparedFile,
+      official.totalQuantity === 0 ? evidenceFile : null,
+    );
+    if (validation.status !== "valid") {
+      throw new Error(Array.isArray(validation.issues) && validation.issues.length > 0
+        ? validation.issues.join(" / ")
+        : "Qoo10公式API CSVの検証に失敗しました");
+    }
+    if (Number(validation.total_quantity) !== Number(official.totalQuantity)) {
+      throw new Error(`Qoo10公式API数量と検証CSV数量が一致しません（API ${official.totalQuantity} / CSV ${validation.total_quantity}）`);
+    }
+
+    const archivedFiles = archiveSalesFiles(job, originalFile, preparedFile, archiveDir);
+    const archivedEvidence = archiveQoo10OfficialEvidence(evidenceFile, archiveDir);
+    await updateJob(job.id, {
+      status: "running",
+      progress: 82,
+      currentStep: "Qoo10公式API結果をTSAへ登録しています",
+      message: "検証済みデータだけを対象月へ反映します",
+      eventType: "qoo10_official_api_import_started",
+    });
+    const imported = await directImportCsv(job, preparedFile, validation.total_quantity);
+    const status = normalizeResultStatus(imported.status, 0);
+    const result = {
+      status,
+      summary: status === "completed"
+        ? `Qoo10公式APIの${official.countedOrderCount}注文・${official.totalQuantity}個を反映しました`
+        : imported.summary || "Qoo10公式API結果の確認が必要です",
+      details: status === "completed"
+        ? `公式API配送状態1〜5を同期し、${official.countedOrderCount}注文・${official.totalQuantity}個・${formatYen(official.totalAmount)}を検証してTSAへ登録しました。`
+        : `${imported.unmatchedCount || 0}商品が未マッチです。公式API結果は保存済みで、月次集計は未更新です。`,
+      source_files: uniquePaths([originalFile, preparedFile, evidenceFile, archivedFiles.original, archivedFiles.prepared, archivedEvidence]),
+      imported_count: imported.importedCount ?? null,
+      report_month: job.report_month,
+      execution_route: "qoo10_official_api_via_docscanner",
+      zero_result_verified: official.totalQuantity === 0,
+      official_order_count: official.apiOrderCount,
+      official_counted_order_count: official.countedOrderCount,
+      official_total_amount: official.totalAmount,
+    };
+    if (status === "completed" && Number(imported.importedCount) > 0) {
+      try {
+        const estimated = await directEstimateEcProfit(job);
+        result.details = [result.details, estimated.details].filter(Boolean).join(" / ");
+        result.estimate_updated = Boolean(estimated.estimated);
+      } catch (error) {
+        result.details = [result.details, `EC精算概算の更新失敗: ${error instanceof Error ? error.message : String(error)}`].join(" / ");
+      }
+    }
+    for (const sourceFile of result.source_files) {
+      await uploadArtifact(job.id, sourceFile, "source").catch((error) => log(`artifact upload failed: ${error.message}`));
+    }
+    await updateJob(job.id, {
+      status,
+      progress: status === "completed" ? 100 : 92,
+      currentStep: statusLabel(status),
+      message: result.summary,
+      eventType: "qoo10_official_api_import_finished",
+      result,
+      errorMessage: status === "failed" ? result.summary : null,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const result = {
+      status: "failed",
+      summary: "Qoo10公式API取込を完了できませんでした",
+      details: `${message}。0件としては扱っていません。`,
+      source_files: uniquePaths([originalFile, preparedFile, evidenceFile].filter((path) => existsSync(path))),
+      imported_count: null,
+      report_month: job.report_month,
+      execution_route: "qoo10_official_api_via_docscanner",
+      zero_result_verified: false,
+    };
+    for (const sourceFile of result.source_files) {
+      await uploadArtifact(job.id, sourceFile, "source").catch(() => undefined);
+    }
+    await updateJob(job.id, {
+      status: "failed",
+      progress: 100,
+      currentStep: "失敗",
+      message: result.summary,
+      eventType: "qoo10_official_api_import_failed",
+      result,
+      errorMessage: message,
+    });
+  }
+}
+
 async function tryReuseSalesArtifacts(job, archiveDir) {
   await updateJob(job.id, {
     status: "running",
@@ -5988,11 +6123,11 @@ async function tryReuseSalesArtifacts(job, archiveDir) {
     const result = {
       status,
       summary: verifiedZero
-        ? "Qoo10は公式画面で対象期間0件を確認済みです"
+        ? "Qoo10は公式APIで対象期間0件を確認済みです"
         : imported.summary || "保存済みCSVをTSAへ反映しました",
       details: status === "completed"
         ? verifiedZero
-          ? "保存済みのCSVと全4配送状態の公式画面証跡を再検証し、0個をTSAへ反映しました。"
+          ? "保存済みのCSVと公式API証跡を再検証し、0個をTSAへ反映しました。"
           : `保存済みCSVを再利用しました。CSV数量${validation.total_quantity}個、TSA登録数量${imported.importedCount}個。`
         : `${imported.unmatchedCount || 0}商品が未マッチです。`,
       source_files: [originalFile, preparedFile, ...evidenceFiles],
@@ -6308,7 +6443,7 @@ SAFETY AND SCOPE
 WORKFLOW
 1. Follow the skill's exact ${channel.label} acquisition procedure and set ${job.period_start} through ${job.period_end}, inclusive.
 2. Preserve the downloaded original inside the job work folder as ${job.channel}-${job.period_start}_${job.period_end}.original.csv, then run the skill validator with --channel ${job.channel}, --start ${job.period_start}, --end ${job.period_end}, and --out ${join(workDir, `${job.channel}-${job.period_start}_${job.period_end}.prepared.csv`)}.
-${job.channel === "qoo10" ? `2a. If the Qoo10 export has no detail rows, do not validate or complete it yet. Open the lower 配送中/配送完了 detail panel, set 注文日 ${job.period_start} 00:00 through ${job.period_end} 23:50, and query D1-D4 separately with #btn_search. Judge rows only from the lower #GoodsGrid. Never use the upper 配送商品Summary, #TinyGoodsGrid, or document.body text because they can contain current orders outside the requested period. For each state require #GoodsGrid's empty marker and zero page total, save the filter plus that grid in a PNG, and record the strict schema-version-2 fields specified by the Skill in ${join(workDir, `qoo10-${job.period_start}_${job.period_end}.zero-evidence.original.json`)}. Then pass that JSON with --zero-evidence to the validator. A header-only CSV without valid evidence must return needs_review.` : ""}
+${job.channel === "qoo10" ? "2a. Stop without browser work. Qoo10 product sales must be handled by the deterministic official-API preflight before this Codex prompt is built." : ""}
 3. Continue only when the validator returns valid. Treat invalid as a wrong report and needs_review as requiring human review.
 4. Stop after local validation. Do not write to the final source archive folder, open TSA, select a file in TSA, or perform any TSA browser import. The local Bridge archives both staged files and performs the authenticated direct import after this turn finishes.
 
@@ -6695,17 +6830,19 @@ function recoverDownloadedSalesCsv(job, downloadsDir, workDir, beforeSnapshot) {
   return null;
 }
 
-function prepareSalesCsv(job, sourceFile, preparedFile) {
+function prepareSalesCsv(job, sourceFile, preparedFile, zeroEvidenceFile = null) {
   const validator = join(config.codexHome, "skills", "tsa-web-sales-csv", "scripts", "validate-csv.mjs");
   if (!existsSync(validator)) throw new Error(`CSV validator not found: ${validator}`);
-  const checked = spawnSync(process.execPath, [
+  const args = [
     validator,
     "--channel", job.channel,
     "--file", sourceFile,
     "--start", job.period_start,
     "--end", job.period_end,
     "--out", preparedFile,
-  ], { encoding: "utf8", windowsHide: true });
+  ];
+  if (zeroEvidenceFile) args.push("--zero-evidence", zeroEvidenceFile);
+  const checked = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true });
   if (checked.status !== 0) {
     throw new Error(checked.stderr?.trim() || "CSV validator failed");
   }
@@ -6766,6 +6903,20 @@ function archiveQoo10ZeroEvidence(evidenceFile, archiveDir) {
     copyFileSync(source, target);
     return resolve(target);
   });
+}
+
+function archiveQoo10OfficialEvidence(evidenceFile, archiveDir) {
+  if (!evidenceFile || !existsSync(evidenceFile) || !statSync(evidenceFile).isFile()) {
+    throw new Error("Qoo10公式API証跡を特定できません");
+  }
+  mkdirSync(archiveDir, { recursive: true });
+  const target = join(archiveDir, basename(evidenceFile));
+  if (existsSync(target) && !readFileSync(target).equals(readFileSync(evidenceFile))) {
+    const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+    copyFileSync(target, target.replace(/\.json$/i, `.superseded-${timestamp}.json`));
+  }
+  copyFileSync(evidenceFile, target);
+  return resolve(target);
 }
 
 function archiveSalesFiles(job, originalFile, preparedFile, archiveDir) {
@@ -6855,6 +7006,10 @@ function uniquePaths(paths) {
   return [...new Set(paths.map((path) => String(path || "")).filter(Boolean))];
 }
 
+function formatYen(value) {
+  return `${Math.round(Number(value) || 0).toLocaleString("ja-JP")}円`;
+}
+
 function collectArtifacts(sourceFiles, directories, startedAt) {
   const found = new Set();
   for (const path of Array.isArray(sourceFiles) ? sourceFiles : []) {
@@ -6918,6 +7073,11 @@ function loadConfig() {
       || stored.docScannerFaxSummaryRoot
       || String.raw`C:\作業用\doc-scanner\data\codex-bridge\fax-summary`,
     )),
+    docScannerBaseUrl: String(
+      process.env.DOCSCANNER_BASE_URL
+      || stored.docScannerBaseUrl
+      || "http://127.0.0.1:3004",
+    ).replace(/\/$/, ""),
     reasoningEffort: String(process.env.TSA_CODEX_REASONING_EFFORT || stored.reasoningEffort || "low").trim().toLowerCase(),
     pollMs: Math.max(3000, Number(process.env.TSA_CODEX_POLL_MS || stored.pollMs || 5000)),
     executionMode,
@@ -6930,6 +7090,7 @@ function loadConfig() {
     ) ? stored.monitorPlacementBase64 : "",
   };
   if (!/^https:\/\//.test(value.baseUrl)) throw new Error("baseUrlはhttpsで指定してください");
+  if (!/^https?:\/\//.test(value.docScannerBaseUrl)) throw new Error("docScannerBaseUrlが正しくありません");
   if (value.token.length < 32) throw new Error("Bridge tokenが設定されていません");
   if (!["low", "medium", "high", "xhigh"].includes(value.reasoningEffort)) {
     throw new Error("reasoningEffortが正しくありません");

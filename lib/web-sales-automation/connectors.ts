@@ -427,49 +427,76 @@ async function fetchBaseSales(period: SyncPeriod): Promise<ChannelFetchResult> {
 }
 
 async function fetchQoo10Sales(period: SyncPeriod): Promise<ChannelFetchResult> {
-  const endpoint = process.env.QOO10_API_URL?.trim()
-    || "https://api.qoo10.jp/GMKT.INC.Front.QAPIService/ebayjapan.qapi";
-  const items: NormalizedSalesItem[] = [];
-  let page = 1;
-  while (true) {
-    const url = new URL(endpoint);
-    url.searchParams.set("key", requireEnv("QOO10_API_KEY"));
-    url.searchParams.set("v", "1.0");
-    url.searchParams.set("returnType", "json");
-    url.searchParams.set("method", "ShippingBasic.GetShippingInfo");
-    url.searchParams.set("ShippingStat", "4");
-    url.searchParams.set("search_Sdate", period.startDate.replaceAll("-", ""));
-    url.searchParams.set("search_Edate", period.endDate.replaceAll("-", ""));
-    url.searchParams.set("Page", String(page));
-    const result = await fetchJson<UnknownRecord>(url);
+  const configuredEndpoint = process.env.QOO10_API_URL?.trim();
+  const endpoint = qoo10ShippingEndpoint(configuredEndpoint);
+  const rowsByOrder = new Map<string, UnknownRecord>();
+  for (const shippingStatus of ["1", "2", "3", "4", "5"]) {
+    const body = new URLSearchParams({
+      returnType: "application/json",
+      ShippingStatus: shippingStatus,
+      SearchStartDate: period.startDate.replaceAll("-", ""),
+      SearchEndDate: period.endDate.replaceAll("-", ""),
+      SearchCondition: "1",
+    });
+    const result = await fetchJson<UnknownRecord>(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        GiosisCertificationKey: requireEnv("QOO10_API_KEY"),
+        QAPIVersion: "1.0",
+      },
+      body,
+    });
     if (numberValue(result.ResultCode) !== 0) {
       throw new Error(`Qoo10 API: ${compactText(result.ResultMsg || result.ResultMessage)}`);
     }
-    const rows = asArray(result.ResultObject || result.resultObject || result.data);
-    rows.forEach((row, index) => {
-      const quantity = numberValue(row.OrderQty || row.orderQty || row.Quantity);
-      if (quantity <= 0) return;
+    for (const row of asArray(result.ResultObject || result.resultObject || result.data)) {
       const orderId = compactText(row.OrderNo || row.orderNo);
-      const key = compactText(
-        row.SellerItemCode || row.sellerItemCode || row.ItemCode || row.ItemNo,
-      );
-      items.push({
-        externalOrderId: orderId,
-        externalLineId: compactText(row.CartNo || row.PackNo) || `${key}:${index}`,
-        externalProductKey: key || compactText(row.ItemNo),
-        externalProductName: compactText(row.ItemTitle || row.itemTitle),
-        occurredAt: compactText(row.OrderDate || row.orderDate) || null,
-        quantity,
-        amount: numberValue(row.OrderPrice || row.Total) || numberValue(row.SellPrice) * quantity,
-        sourceStatus: compactText(row.ShippingStatus || row.ShippingStat) || null,
-        rawData: row,
-      });
-    });
-    const totalPages = numberValue(result.TotalPages || result.totalPages) || 1;
-    if (page >= totalPages || rows.length === 0) break;
-    page += 1;
+      if (orderId) rowsByOrder.set(orderId, row);
+    }
   }
-  return { items };
+
+  const items: NormalizedSalesItem[] = [];
+  for (const [orderId, row] of rowsByOrder) {
+    const quantity = numberValue(row.OrderQty || row.orderQty || row.Quantity) || 1;
+    const claimStatus = compactText(row.ClaimStatus || row.claimStatus);
+    if (quantity <= 0 || (claimStatus && claimStatus !== "0")) continue;
+    const key = compactText(
+      row.SellerItemCode || row.sellerItemCode || row.OptionCode || row.ItemCode || row.ItemNo,
+    );
+    const amount = numberValue(row.Total || row.total || row.OrderPrice || row.orderPrice)
+      || numberValue(row.SellPrice || row.sellPrice) * quantity;
+    if (amount <= 0) continue;
+    items.push({
+      externalOrderId: orderId,
+      externalLineId: compactText(row.CartNo || row.cartNo || row.PackNo) || orderId,
+      externalProductKey: key || compactText(row.ItemNo || row.itemNo),
+      externalProductName: compactText(row.ItemTitle || row.itemTitle),
+      occurredAt: compactText(row.OrderDate || row.orderDate || row.PaymentDate) || null,
+      quantity,
+      amount,
+      sourceStatus: compactText(row.ShippingStatus || row.shippingStatus) || "official_api",
+      rawData: row,
+    });
+  }
+  return {
+    items,
+    metadata: {
+      source: "qoo10_official_shipping_api_v3",
+      statuses_checked: ["1", "2", "3", "4", "5"],
+      order_count: rowsByOrder.size,
+    },
+  };
+}
+
+function qoo10ShippingEndpoint(configured?: string) {
+  const fallback = "https://api.qoo10.jp/GMKT.INC.Front.QAPIService/ebayjapan.qapi/ShippingBasic.GetShippingInfo_v3";
+  if (!configured) return fallback;
+  const value = configured.replace(/\/+$/, "");
+  if (/ShippingBasic\.GetShippingInfo_v3$/i.test(value)) return value;
+  if (/\/ebayjapan\.qapi$/i.test(value)) return `${value}/ShippingBasic.GetShippingInfo_v3`;
+  if (/Front\.QAPIService$/i.test(value)) return `${value}/ebayjapan.qapi/ShippingBasic.GetShippingInfo_v3`;
+  throw new Error("QOO10_API_URL must point to the official QAPI service or GetShippingInfo_v3 endpoint");
 }
 
 function signTiktokRequest(path: string, params: URLSearchParams, body: string) {

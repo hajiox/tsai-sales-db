@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { basename, dirname, resolve, sep } from "node:path";
+import { resolve } from "node:path";
 
 const DEFINITIONS = {
   amazon: {
@@ -140,7 +139,7 @@ print({
 
 function validateQoo10ZeroEvidence(value, options) {
   const invalid = (issue) => ({ required: true, valid: false, file: null, screenshots: [], issue });
-  if (!value) return invalid("Qoo10の0件を証明する公式画面証跡がありません");
+  if (!value) return invalid("Qoo10の0件を証明する公式API証跡がありません");
 
   const evidencePath = resolve(value);
   if (!existsSync(evidencePath)) return invalid("Qoo10の0件証跡ファイルが見つかりません");
@@ -152,68 +151,39 @@ function validateQoo10ZeroEvidence(value, options) {
     return invalid("Qoo10の0件証跡JSONを解析できません");
   }
 
-  if (evidence?.schema_version !== 2
+  if (evidence?.schema_version !== 3
     || evidence?.channel !== "qoo10"
-    || evidence?.account_label !== "会津ブランド館"
-    || evidence?.official_url !== "https://qsm.qoo10.jp/GMKT.INC.Gsm.Web/Delivery/DeliveryManagementPrime.aspx"
+    || evidence?.source !== "qoo10_official_api_via_docscanner"
+    || evidence?.source_system !== "DocScanner"
     || evidence?.date_basis !== "注文日"
-    || evidence?.start_time !== "00:00"
-    || evidence?.end_time !== "23:50"
     || evidence?.period_start !== options.start
     || evidence?.period_end !== options.end) {
-    return invalid("Qoo10の0件証跡が店舗・期間・日付基準と一致しません");
+    return invalid("Qoo10の0件証跡が公式API・期間・日付基準と一致しません");
   }
 
-  const expectedStatuses = new Map([
-    ["入金待ち", "D1"],
-    ["配送要請", "D2"],
-    ["配送中", "D3"],
-    ["配送完了", "D4"],
-  ]);
-  const results = Array.isArray(evidence.status_results) ? evidence.status_results : [];
-  if (results.length !== expectedStatuses.size
-    || new Set(results.map((entry) => entry?.status)).size !== expectedStatuses.size
-    || [...expectedStatuses.keys()].some((status) => !results.some((entry) => entry?.status === status))) {
-    return invalid("Qoo10の0件証跡に全配送状態の確認結果がありません");
+  const statuses = Array.isArray(evidence.statuses_checked)
+    ? evidence.statuses_checked.map(String)
+    : [];
+  if (statuses.length !== 5 || ["1", "2", "3", "4", "5"].some((status) => !statuses.includes(status))) {
+    return invalid("Qoo10の公式API証跡に配送状態1〜5の確認結果がありません");
   }
-
-  const evidenceRoot = resolve(dirname(evidencePath));
-  const evidenceRootPrefix = `${evidenceRoot.toLowerCase().replace(/[\\/]+$/, "")}${sep}`;
-  const screenshots = [];
-  for (const entry of results) {
-    if (entry.result_count !== 0
-      || entry.status_code !== expectedStatuses.get(entry.status)
-      || entry.result_grid_id !== "GoodsGrid"
-      || entry.empty_marker !== "表示する行がありません"
-      || entry.page_total !== 0
-      || entry.period_start !== options.start
-      || entry.period_end !== options.end
-      || entry.start_time !== "00:00"
-      || entry.end_time !== "23:50"
-      || typeof entry.screenshot_file !== "string"
-      || basename(entry.screenshot_file) !== entry.screenshot_file
-      || !/\.png$/i.test(entry.screenshot_file)
-      || !/^[0-9a-f]{64}$/i.test(String(entry.screenshot_sha256 || ""))) {
-      return invalid(`Qoo10の${entry?.status || "不明"}証跡が不完全です`);
-    }
-    const screenshotPath = resolve(evidenceRoot, entry.screenshot_file);
-    if (!screenshotPath.toLowerCase().startsWith(evidenceRootPrefix)
-      || !existsSync(screenshotPath)
-      || readFileSync(screenshotPath).length < 5_000) {
-      return invalid(`Qoo10の${entry.status}画面証跡が見つかりません`);
-    }
-    const actualHash = createHash("sha256").update(readFileSync(screenshotPath)).digest("hex");
-    if (actualHash !== String(entry.screenshot_sha256).toLowerCase()) {
-      return invalid(`Qoo10の${entry.status}画面証跡が作成後に変わっています`);
-    }
-    screenshots.push(screenshotPath);
+  if (evidence.sync_enabled !== true
+    || evidence.sync_configured !== true
+    || Number(evidence.sync_errors) !== 0
+    || !Number.isInteger(Number(evidence.api_order_count))
+    || Number(evidence.api_order_count) < 0
+    || Number(evidence.counted_order_count) !== 0
+    || Number(evidence.item_count) !== 0
+    || Number(evidence.total_quantity) !== 0
+    || Number(evidence.total_amount) !== 0) {
+    return invalid("Qoo10の公式API 0件証跡が不完全です");
   }
 
   return {
     required: true,
     valid: true,
     file: evidencePath,
-    screenshots,
+    screenshots: [],
     issue: null,
   };
 }

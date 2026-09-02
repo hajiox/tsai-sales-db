@@ -37,6 +37,7 @@
     "test:bridge-skill-contract": "node scripts/test-bridge-skill-contract.cjs",
     "test:web-sales-download-guard": "node scripts/test-web-sales-download-guard.cjs",
     "test:web-sales-csv-validator": "node scripts/test-web-sales-csv-validator.mjs",
+    "test:qoo10-official-sales": "node scripts/test-qoo10-official-sales.mjs",
     "test:bridge-download-recovery": "node scripts/test-bridge-download-recovery.mjs",
     "test:google-ads-import-policy": "node --experimental-strip-types scripts/test-google-ads-import-policy.mjs",
     "test:ec-profit-retry": "node --experimental-strip-types scripts/test-ec-profit-retry.mjs",

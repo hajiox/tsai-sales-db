@@ -1,5 +1,12 @@
 # TSA WEB Sales Codex Analysis Note
 
+## 2026-09-02
+
+- Corrected the August Qoo10 product-sales source after EC速報 and the official Qoo10 Shipping API proved 5 orders, 5 items, and JPY 13,330 while the QSM four-screen rule had imported zero.
+- Qoo10 sales now synchronize official API statuses 1 through 5 through DocScanner before every TSA Bridge import. The Bridge reconciles the API count with sanitized local official rows, creates its own CSV and evidence, and fails closed on service or count errors.
+- Legacy schema-2 QSM zero evidence is no longer valid or reusable. Schema 3 accepts zero only after a successful official API sync with zero counted quantity.
+- Added regression coverage for the five-order fixture, zero, API/save count mismatch, API failure, validator evidence versioning, installer packaging, and the QAPI v3 connector.
+
 ## 2026-08-07
 
 - Replaced the WEB sales and expense monthly summary AI with an office-PC Codex Bridge job using `gpt-5.6-sol` and the dedicated `tsa-web-sales-analysis` Skill.
