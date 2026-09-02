@@ -7,6 +7,7 @@ import {
   formatRecipeSnsPost,
   mergeRecipeSnsTargetResult,
   validateRecipeSnsAiResult,
+  validateRecipeSnsBridgeResult,
   validateRecipeSnsTargetBridgeResult,
 } from "../lib/recipe-sns.ts";
 
@@ -48,6 +49,28 @@ const target = validateRecipeSnsTargetBridgeResult({
 }, "creative", "x", "developer");
 
 const merged = mergeRecipeSnsTargetResult(base, target);
+const targetWithoutLocalPath = validateRecipeSnsTargetBridgeResult({
+  ...target,
+  generated_image: { ...target.generated_image, file_path: "" },
+}, "creative", "x", "developer");
+assert.equal(
+  targetWithoutLocalPath.generated_image.file_path,
+  "",
+  "Bridge-owned artifacts do not require an AI-supplied local path",
+);
+
+const allPlatforms = validateRecipeSnsBridgeResult({
+  ...base,
+  generated_images: Object.fromEntries(RECIPE_SNS_PLATFORMS.map((platform) => [platform.id, {
+    source: "generated",
+    file_path: "",
+    prompt_summary: `${platform.label} image`,
+  }])),
+}, "creative", "developer");
+for (const platform of RECIPE_SNS_PLATFORMS) {
+  assert.equal(allPlatforms.generated_images[platform.id].file_path, "");
+}
+
 assert.equal(merged.posts.x.text, "new x");
 assert.equal(merged.creative_overlays.x.headline, "new headline");
 for (const platform of ["instagram", "instagram_story", "threads"]) {

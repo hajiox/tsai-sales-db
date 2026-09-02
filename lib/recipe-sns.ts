@@ -349,8 +349,8 @@ function validateGeneratedImage(
   if (expectedMode === "normal" && (imageSource !== "original" || filePath)) {
     throw new Error(`${platform?.label || platformId}の通常リサイズ結果に生成画像が混在しています`);
   }
-  if (expectedMode !== "normal" && (imageSource !== "generated" || !filePath)) {
-    throw new Error(`${platform?.label || platformId}のAI生成画像ファイルがありません`);
+  if (expectedMode !== "normal" && imageSource !== "generated") {
+    throw new Error(`${platform?.label || platformId}のAI生成画像結果が不正です`);
   }
   return {
     source: imageSource,
