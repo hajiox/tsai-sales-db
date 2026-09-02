@@ -5,8 +5,9 @@
 ### ImageGen保存先確認の誤検知修正
 
 - SNSアレンジ生成で文章と4画像が完成していたにもかかわらず、ImageGen保存先を回収する読み取り専用`Get-ChildItem ... | ConvertTo-Json -Compress`をBridge安全検査が拒否し、結果全体を失敗扱いにしていた。
-- Bridge 1.9.54では`CODEX_HOME/generated_images`配下、許可済み項目、最大16件、固定パイプライン順、`ConvertTo-Json -Compress`だけを許可する。別パス・別項目・別JSONオプション・書込み・外部操作は従来どおり拒否する。
-- 実障害と同一コマンド、および拒否すべき変形コマンドを回帰テストへ追加した。
+- Bridge 1.9.54で固定パイプラインだけを許可したが、再実行時にSolが別の読み取り専用PowerShell形を選び、同じ誤検知が再発した。
+- Bridge 1.9.55ではCodexによる保存先列挙を廃止した。新規セッション専用ImageGenフォルダをBridge自身が列挙し、要求媒体数との完全一致、画像形式・サイズ、生成順を検証して`targetPlatforms`順に対応付ける。Solは画像生成だけを行い、`file_path`は空文字で返す。
+- 専用Skillは`Get-ChildItem`と`Copy-Item`を禁止し、Bridgeのコマンド許可も組み込みimagegen Skillの読取だけへ縮小した。異なるコマンド表現を追加許可する再発対応を不要にした。
 
 ### 投稿文の3口調と履歴折りたたみ
 

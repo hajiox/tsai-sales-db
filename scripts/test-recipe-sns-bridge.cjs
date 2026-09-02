@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const root = path.join(__dirname, "..");
@@ -56,10 +57,10 @@ assert.match(handler, /isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /function isAllowedRecipeSnsLocalCommand/);
 assert.match(bridge, /skills", "\.system", "imagegen", "SKILL\.md"/);
 assert.match(bridge, /readsImagegenSkill/);
-assert.match(bridge, /isAllowedRecipeSnsGeneratedImageListing/);
+assert.doesNotMatch(bridge, /isAllowedRecipeSnsGeneratedImageListing/);
 assert.ok(bridge.includes('const hasShellSeparator = /[;&|`\\r\\n]/.test(command)'));
 const guardSource = bridge.slice(
-  bridge.indexOf("function isAllowedRecipeSnsGeneratedImageListing"),
+  bridge.indexOf("function isAllowedRecipeSnsLocalCommand"),
   bridge.indexOf("async function executeRecipeSnsGenerateJob"),
 );
 const codexHome = path.resolve("C:\\Users\\test\\.codex");
@@ -80,17 +81,46 @@ assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -Li
 const generatedRoot = path.resolve(codexHome, "generated_images", "asset.png");
 const generatedDirectory = path.resolve(codexHome, "generated_images", "thread-1");
 const otherDirectory = path.resolve(codexHome, "history");
-assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Select-Object -ExpandProperty FullName"` } }, workDir), true);
-assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${path.resolve(codexHome, "generated_images")}' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 4 FullName,LastWriteTime"` } }, workDir), true);
-assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${path.resolve(codexHome, "generated_images")}' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 8 FullName,LastWriteTime | ConvertTo-Json -Compress"` } }, workDir), true);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Select-Object -ExpandProperty FullName"` } }, workDir), false);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${path.resolve(codexHome, "generated_images")}' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 4 FullName,LastWriteTime"` } }, workDir), false);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${path.resolve(codexHome, "generated_images")}' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 8 FullName,LastWriteTime | ConvertTo-Json -Compress"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}','${otherDirectory}' -File | Select-Object -ExpandProperty FullName"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Get-Content"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -Force -File | Select-Object -ExpandProperty FullName"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -Recurse -File | Select-Object -First 4 Length"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | Select-Object -ExpandProperty FullName | ConvertTo-Json -Depth 4"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-ChildItem -LiteralPath '${generatedDirectory}' -File | ConvertTo-Json -Compress | Select-Object -ExpandProperty FullName"` } }, workDir), false);
-assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'"` } }, workDir), true);
+assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'"` } }, workDir), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Copy-Item -LiteralPath '${generatedRoot}' -Destination '${path.resolve(workDir, "asset.png")}'; Get-Content '${path.resolve(codexHome, "history.md")}'"` } }, workDir), false);
+
+const imageResolverSource = bridge.slice(
+  bridge.indexOf("function resolveRecipeSnsGeneratedImage"),
+  bridge.indexOf("function renderRecipeSnsImage"),
+);
+const listGeneratedImages = new Function(
+  "isAbsolute",
+  "resolve",
+  "sep",
+  "existsSync",
+  "statSync",
+  "extname",
+  "readdirSync",
+  `${imageResolverSource}; return listRecipeSnsGeneratedImages;`,
+)(path.isAbsolute, path.resolve, path.sep, fs.existsSync, fs.statSync, path.extname, fs.readdirSync);
+const generatedTestRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-sns-images-"));
+try {
+  const firstImage = path.join(generatedTestRoot, "first.png");
+  const secondImage = path.join(generatedTestRoot, "second.webp");
+  fs.writeFileSync(firstImage, "first");
+  fs.writeFileSync(secondImage, "second");
+  fs.writeFileSync(path.join(generatedTestRoot, "ignored.txt"), "ignored");
+  fs.utimesSync(firstImage, new Date("2026-09-02T00:00:01Z"), new Date("2026-09-02T00:00:01Z"));
+  fs.utimesSync(secondImage, new Date("2026-09-02T00:00:02Z"), new Date("2026-09-02T00:00:02Z"));
+  assert.deepEqual(listGeneratedImages(generatedTestRoot, 2), [firstImage, secondImage]);
+  assert.throws(() => listGeneratedImages(generatedTestRoot, 3), /期待3枚・実際2枚/);
+} finally {
+  fs.rmSync(generatedTestRoot, { recursive: true, force: true });
+}
 assert.match(handler, /禁止された外部・コマンド操作/);
 assert.match(handler, /prohibitedActivity = `\$\{itemType\}:\$\{commandType\}`/);
 assert.match(handler, /JSON\.stringify\(packet\)/);
@@ -110,7 +140,9 @@ assert.match(handler, /uploadArtifact\(job\.id, uploadPath, "screenshot"\)/);
 assert.match(handler, /renderRecipeSnsImage/);
 assert.match(handler, /imageArtifactIds/);
 assert.match(handler, /generated_images", codexThreadId/);
-assert.match(handler, /resolveRecipeSnsGeneratedImage\(String\(generated\.file_path \|\| ""\), workDir, generatedThreadRoot\)/);
+assert.match(handler, /listRecipeSnsGeneratedImages\(generatedThreadRoot, requestedPlatformIds\.length\)/);
+assert.match(handler, /generatedImagePaths\[platformIndex\]/);
+assert.match(handler, /ImageGen生成順と結果パスが一致しません/);
 assert.match(handler, /status: "completed"/);
 assert.match(handler, /progress: 100/);
 
@@ -126,6 +158,8 @@ for (const tone of ["### official", "### staff", "### developer", "一人称に�
   assert.match(skill, new RegExp(tone));
 }
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
+assert.match(skill, /`file_path`は空文字/);
+assert.match(skill, /`Get-ChildItem`、`Copy-Item`を含むファイル操作を行わない/);
 
 function assertStrictObjectSchemas(value, location = "$") {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
