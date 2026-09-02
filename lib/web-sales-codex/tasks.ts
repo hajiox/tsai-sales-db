@@ -55,7 +55,7 @@ export const WEB_SALES_CODEX_TASKS: CodexTaskDefinition[] = [
     channel: "qoo10",
     label: "Qoo10 商品売上集計",
     shortLabel: "Qoo10",
-    description: "QSMから商品別CSVを取得し、TSAへ取り込みます。",
+    description: "DocScanner経由でQoo10公式APIの商品別注文を同期し、TSAへ取り込みます。",
     archiveFolder: `${ARCHIVE_ROOT}\\Qoo10商品売上`,
     schedule: "中間：毎月16日 / 月次：毎月1日",
   },
