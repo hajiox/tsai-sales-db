@@ -53,6 +53,7 @@ $knownSystems = @(
   @{ id = "tsg"; label = "TSG" },
   @{ id = "docscanner"; label = "DocScanner" }
 )
+$retiredWorkerIds = @("tsa-office-01-headless")
 $createdNew = $false
 $monitorMutex = New-Object System.Threading.Mutex($true, $MutexName, [ref]$createdNew)
 if (-not $createdNew) {
@@ -444,7 +445,10 @@ try {
 
     foreach ($definition in $knownSystems) {
       Add-Line $lines $definition.label "White"
-      $records = @($snapshot.states | Where-Object { [string]$_.system -eq $definition.id } | Sort-Object @{ Expression = { if ($_.executionMode -eq "interactive") { 0 } else { 1 } } }, workerName)
+      $records = @($snapshot.states | Where-Object {
+        [string]$_.system -eq $definition.id -and
+        $retiredWorkerIds -notcontains [string]$_.workerId
+      } | Sort-Object @{ Expression = { if ($_.executionMode -eq "interactive") { 0 } else { 1 } } }, workerName)
       if ($records.Count -eq 0) {
         Add-Line $lines "  [専用Workerなし] このシステム自身のBridge状態は未登録です" "DarkYellow"
         Add-Line $lines "    他システム経由の連携処理は、実際に処理したWorker側へ表示されます" "DarkGray"

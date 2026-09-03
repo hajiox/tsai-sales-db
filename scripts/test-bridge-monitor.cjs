@@ -164,6 +164,21 @@ try {
     taskKey: null,
     productName: null,
   });
+  writeState("tsa-prelogin", {
+    ...baseState({
+      system: "tsa",
+      systemLabel: "TSA",
+      workerId: "tsa-office-01-headless",
+      workerName: "旧ログイン前Bridge",
+      executionMode: "headless-prelogin",
+      status: "idle",
+      taskLabel: null,
+      currentStep: "退役済み",
+    }),
+    jobId: null,
+    taskKey: null,
+    productName: null,
+  });
   writeState("tsa-ai-02", {
     ...baseState({
       system: "tsa",
@@ -242,6 +257,7 @@ try {
   assert.match(first.output, /TSA/);
   assert.match(first.output, /事務所PC \[実行中 62%\] レシピSNS素材AI生成/);
   assert.match(first.output, /事務所PC AI生成1 \[待機中 0%\] 現在のジョブなし/);
+  assert.doesNotMatch(first.output, /旧ログイン前Bridge/);
   assert.match(first.output, /事務所PC AI生成2 \[実行中 24%\] EC商品名AI生成/);
   assert.match(first.output, /事務所PC 分析 \[実行中 41%\] WEB売上分析/);
   assert.match(first.output, /TSG/);
