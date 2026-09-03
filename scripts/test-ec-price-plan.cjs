@@ -26,6 +26,23 @@ const ecPriceJobRouteSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "api", "recipe", "[id]", "ec-price-jobs", "route.ts"),
   "utf8",
 );
+const ecPriceSkillSource = fs.readFileSync(
+  path.join(__dirname, "..", "tools", "tsa-codex-bridge", "skills", "update-aizu-ec-prices", "SKILL.md"),
+  "utf8",
+);
+const ecPriceSitePlaybooksSource = fs.readFileSync(
+  path.join(
+    __dirname,
+    "..",
+    "tools",
+    "tsa-codex-bridge",
+    "skills",
+    "update-aizu-ec-prices",
+    "references",
+    "site-playbooks.md",
+  ),
+  "utf8",
+);
 const verifiedRegistry = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "lib", "ec-price-verified-registry.json"),
   "utf8",
@@ -134,6 +151,10 @@ assert.match(pricePromptSource, /Do not change any other catalog attribute/);
 assert.doesNotMatch(pricePromptSource, /do not fill or alter that unrelated catalog attribute/);
 assert.doesNotMatch(pricePromptSource, /Close temporary tabs/);
 assert.doesNotMatch(pricePromptSource, /Never inspect, edit, deploy, or update any company LP/);
+assert.match(ecPriceSkillSource, /browser\.history\(\).*chrome\.history\(\).*全面禁止/);
+assert.match(ecPriceSitePlaybooksSource, /https:\/\/mercari-shops\.com\/seller\/shops\//);
+assert.match(ecPriceSitePlaybooksSource, /\/signin\/seller.*ログイン切れ/);
+assert.doesNotMatch(ecPriceSitePlaybooksSource, /`https:\/\/mercari-shops\.com\/seller\/` を直接開く/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: false/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: true/);
 assert.match(bridgeSource, /executeSingleEcPriceSite/);
