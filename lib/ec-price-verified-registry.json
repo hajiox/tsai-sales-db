@@ -62,6 +62,11 @@
       "host": "buta.aizubrandhall-lp2.com",
       "githubRepository": "hajiox/BUTA",
       "productionBranch": "main"
+    },
+    {
+      "host": "tsukemen.aizubrandhall-lp2.com",
+      "githubRepository": "hajiox/tsukemen",
+      "productionBranch": "main"
     }
   ]
 }
