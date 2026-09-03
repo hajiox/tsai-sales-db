@@ -18,6 +18,14 @@ const ecPriceJobServerSource = fs.readFileSync(
   path.join(__dirname, "..", "lib", "ec-price-job-server.ts"),
   "utf8",
 );
+const ecPriceCodexSource = fs.readFileSync(
+  path.join(__dirname, "..", "lib", "ec-price-codex.ts"),
+  "utf8",
+);
+const ecPriceJobRouteSource = fs.readFileSync(
+  path.join(__dirname, "..", "app", "api", "recipe", "[id]", "ec-price-jobs", "route.ts"),
+  "utf8",
+);
 const verifiedRegistry = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "lib", "ec-price-verified-registry.json"),
   "utf8",
@@ -28,6 +36,8 @@ const requiredBridgeVersion = requiredBridgeVersionSource.match(
 )?.[1];
 assert.ok(bridgeVersion, "Bridge runtime version not found");
 assert.equal(requiredBridgeVersion, bridgeVersion, "TSA required Bridge version must match the bundled runtime");
+assert.match(ecPriceCodexSource, /if \(!planValidated\) return targets;/);
+assert.match(ecPriceJobRouteSource, /retryResult\.validated_plan_checkpoint === true/);
 assert.match(bridgeSource, /ecPriceProtocolVersion: 3/);
 const verifiedFourPack = verifiedRegistry.products.find((product) => product.janCode === "4571318633625");
 assert.ok(verifiedFourPack, "オーション麺4食の確定識別子が必要です");

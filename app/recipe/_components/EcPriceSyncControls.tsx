@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import {
   EC_PRICE_TARGETS,
+  getEcPriceRetryTargets,
   getEcPriceTargetLabel,
   type EcPriceHistoryEntry,
   type EcPriceJobView,
@@ -92,10 +93,9 @@ export default function EcPriceSyncControls({
   const hasProductLp = Boolean(productLpUrl?.trim());
   const jobIsActive = Boolean(job && ACTIVE_STATUSES.has(job.status));
   const blockedByAnotherJob = dispatchMode === "immediate" && Boolean(blockingJob);
-  const unfinishedTargets = job?.targets.filter((target) => {
-    const site = job.sites.find((candidate) => candidate.site === target);
-    return !site || site.status === "blocked" || site.status === "submitted_pending";
-  }) || [];
+  const unfinishedTargets = job
+    ? getEcPriceRetryTargets(job.targets, job.sites, job.planValidated)
+    : [];
   const unfinishedLp = Boolean(job?.lp?.required && job.lp.status !== "updated");
   const jobCanRetry = Boolean(job && !jobIsActive && (unfinishedTargets.length > 0 || unfinishedLp));
   const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || blockedByAnotherJob || !hasPrice;

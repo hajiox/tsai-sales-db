@@ -57,6 +57,7 @@ export type EcPriceJobView = {
   targets: EcPriceTarget[];
   newPriceInclTax: number;
   summary: string | null;
+  planValidated: boolean;
   sites: EcPriceJobSiteResult[];
   lp: EcPriceJobLpResult | null;
   createdAt: string;
@@ -65,6 +66,20 @@ export type EcPriceJobView = {
   updatedAt: string | null;
   completedAt: string | null;
 };
+
+export function getEcPriceRetryTargets(
+  targetsInput: unknown,
+  sitesInput: unknown,
+  planValidated: boolean,
+) {
+  const targets = normalizeEcPriceTargets(targetsInput);
+  if (!planValidated) return targets;
+  const sites = Array.isArray(sitesInput) ? sitesInput.map(asObject) : [];
+  return targets.filter((target) => {
+    const site = sites.find((candidate) => candidate.site === target);
+    return !site || site.status === "blocked" || site.status === "submitted_pending";
+  });
+}
 
 export type EcPriceHistorySite = {
   site: EcPriceTarget;

@@ -5,6 +5,7 @@ import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/s
 import {
   ecPriceLpResultFromUnknown,
   ecPriceHistoryFromJobs,
+  getEcPriceRetryTargets,
   normalizeEcPriceTargets,
   type EcPriceJobView,
 } from "@/lib/ec-price-codex";
@@ -115,6 +116,7 @@ function toJobView(job: Record<string, unknown>): EcPriceJobView {
       : duplicateConfirmation
         ? EC_PRICE_DUPLICATE_CONFIRMATION_MESSAGE
       : compactOperationalMessage(result.summary),
+    planValidated: result.validated_plan_checkpoint === true,
     sites: sites.map((site) => {
       const siteObject = asObject(site);
       return isEcPriceBrowserSessionContention(siteObject.message)
@@ -370,10 +372,11 @@ export async function POST(
         : null;
       const sourceTargets = normalizeEcPriceTargets(retryParameters.targets);
       const sourceSites = Array.isArray(retryResult.sites) ? retryResult.sites.map(asObject) : [];
-      targets = sourceTargets.filter((target) => {
-        const site = sourceSites.find((entry) => entry.site === target);
-        return !site || site.status === "blocked" || site.status === "submitted_pending";
-      });
+      targets = getEcPriceRetryTargets(
+        sourceTargets,
+        sourceSites,
+        retryResult.validated_plan_checkpoint === true,
+      );
       requestedTargets = [...targets];
       const sourceLp = ecPriceLpResultFromUnknown(retryResult.lp);
       lpUpdate = Boolean(recipeSnapshot.productLpUrl) && sourceLp?.status !== "updated";
