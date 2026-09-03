@@ -33,7 +33,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.57";
+const VERSION = "1.9.58";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -156,6 +156,22 @@ let lastDesktopTerminalState = readPreviousDesktopTerminalState();
 let desktopMonitorLaunchRequestedAt = 0;
 let desktopMonitorUnverifiedCount = 0;
 
+class BridgeApiError extends Error {
+  constructor(path, status, payload, responseText) {
+    super(`${path} ${status}: ${payload?.error || String(responseText || "").slice(0, 500)}`);
+    this.name = "BridgeApiError";
+    this.path = path;
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+function isBridgeUpgradeRequiredError(error) {
+  return error instanceof BridgeApiError
+    && error.status === 409
+    && Boolean(String(error.payload?.requiredVersion || "").trim());
+}
+
 process.on("SIGINT", () => { stopping = true; });
 process.on("SIGTERM", () => { stopping = true; });
 process.on("exit", () => {
@@ -200,25 +216,30 @@ async function main() {
       await executeJob(claimed.job);
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
-      log(`ERROR ${lastError}`);
+      const upgradeRequired = isBridgeUpgradeRequiredError(error);
+      log(`${upgradeRequired ? "STOP" : "ERROR"} ${lastError}`);
       if (currentJobId) {
         const guardedStop = isCodexRunGuardError(error);
-        const status = guardedStop ? error.jobStatus : "failed";
+        const status = upgradeRequired ? "needs_review" : guardedStop ? error.jobStatus : "failed";
         await updateJob(currentJobId, {
           status,
-          progress: guardedStop ? 95 : 100,
-          currentStep: guardedStop ? error.currentStep : "処理に失敗しました",
+          progress: upgradeRequired || guardedStop ? 95 : 100,
+          currentStep: upgradeRequired ? "Bridge更新のため安全停止しました" : guardedStop ? error.currentStep : "処理に失敗しました",
           message: lastError,
           errorMessage: status === "failed" ? lastError : null,
-          eventType: guardedStop ? "codex_watchdog_stopped" : "bridge_error",
+          eventType: upgradeRequired ? "bridge_upgrade_required" : guardedStop ? "codex_watchdog_stopped" : "bridge_error",
         }).catch(() => undefined);
       }
-      await delay(Math.max(config.pollMs, 10_000));
+      if (upgradeRequired) {
+        stopping = true;
+      } else {
+        await delay(Math.max(config.pollMs, 10_000));
+      }
     } finally {
       currentJobId = null;
       currentCodexPid = null;
       writeBridgeState();
-      await heartbeat().catch(() => undefined);
+      if (!stopping) await heartbeat().catch(() => undefined);
     }
   }
   releaseLock();
@@ -1901,7 +1922,16 @@ async function executeEcPriceUpdateJob(job) {
     const range = ecPriceStepRange(index, totalSteps);
     let outcome;
     try {
-      outcome = await executeSingleEcPriceSite({ job, workDir, parameters, site, index, totalSteps, range });
+      outcome = await executeSingleEcPriceSite({
+        job,
+        workDir,
+        parameters,
+        site,
+        index,
+        totalSteps,
+        range,
+        referenceStandardPrice: positiveEcPriceInteger(aggregate.plan.reference_standard_price),
+      });
     } catch (error) {
       const message = `予期しない処理エラー: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1200);
       outcome = {
@@ -1913,7 +1943,11 @@ async function executeEcPriceUpdateJob(job) {
     }
     upsertEcPriceSite(aggregate.plan.sites, outcome.planSite);
     upsertEcPriceSite(aggregate.sites, outcome.resultSite);
-    if (!aggregate.plan.reference_standard_price && outcome.referencePrice) {
+    if (
+      !aggregate.plan.reference_standard_price
+      && outcome.referencePrice
+      && outcome.planSite.status !== "blocked"
+    ) {
       aggregate.plan.reference_standard_price = outcome.referencePrice;
     }
     operatorWaitDetected ||= outcome.operatorWait;
@@ -2016,8 +2050,8 @@ function createSequentialEcPriceResult(parameters) {
   };
 }
 
-async function executeSingleEcPriceSite({ job, workDir, parameters, site, index, totalSteps, range }) {
-  const scoped = scopeEcPriceSiteParameters(parameters, site);
+async function executeSingleEcPriceSite({ job, workDir, parameters, site, index, totalSteps, range, referenceStandardPrice }) {
+  const scoped = scopeEcPriceSiteParameters(parameters, site, referenceStandardPrice);
   const label = ecPriceTargetLabel(site);
   const prefix = `工程 ${index + 1}/${totalSteps} ${label}: `;
   const planOutput = join(workDir, `ec-price-${site}-plan.json`);
@@ -2315,13 +2349,17 @@ async function executeSingleEcPriceLp({ job, workDir, parameters, index, totalSt
   };
 }
 
-function scopeEcPriceSiteParameters(parameters, site) {
+function scopeEcPriceSiteParameters(parameters, site, referenceStandardPrice = null) {
+  const suppliedBaseline = parameters.siteBaselines?.[site] ?? null;
+  const lockedBaseline = Number.isInteger(Number(referenceStandardPrice)) && Number(referenceStandardPrice) > 0
+    ? Number(referenceStandardPrice)
+    : null;
   return {
     ...parameters,
     targets: [site],
     productLpUrl: null,
     recipeSnapshot: { ...parameters.recipeSnapshot, productLpUrl: null },
-    siteBaselines: { [site]: parameters.siteBaselines[site] ?? null },
+    siteBaselines: { [site]: suppliedBaseline ?? lockedBaseline },
     recoveryPlanSites: parameters.recoveryPlanSites.filter((entry) => entry.site === site),
     productMappings: { [site]: parameters.productMappings[site] || [] },
     verifiedProductIdentifiers: { [site]: parameters.verifiedProductIdentifiers[site] || [] },
@@ -2901,6 +2939,7 @@ function buildEcPricePlanPrompt(parameters) {
     "Use pricing_rule=delta_from_reference whenever the EC listing has a different price basis, including multi-item sets or shipping-excluded BASE items. Calculate target_price = basis_price + (new standard price - standard_baseline_price) * unit_multiplier.",
     "For BASE and BASE-managed TikTok, inspect and record shipping_mode=included or excluded. For other sites use the verified mode when visible, otherwise not_checked. A shipping-excluded BASE listing must use delta_from_reference. A free-shipping TikTok 2-item listing still uses delta_from_reference with unit_multiplier=2, not the single-unit standard price.",
     "Always set reference_standard_price to a verified standard-marketplace price or supplied site baseline representing the campaign's old standard price. Do this even when only a standard-price site is requested, so later BASE work can reuse the same campaign baseline.",
+    "When TASK_JSON.siteBaselines[site] is supplied, it is the job-locked pre-change standard baseline from server history or the first verified site in this job. Use it exactly and never replace it by rereading another marketplace that an earlier job phase may already have updated.",
     "If no supplied baseline exists and verified standard marketplaces for the exact product disagree, use needs_review and do not plan any writes.",
     "For delta_from_reference, standard_baseline_price must be TASK_JSON.siteBaselines[site] when supplied. If it is null, read the exact same recipe product on a standard same-unit marketplace before any writes and use that current price as reference_standard_price and baseline.",
     "RECOVERY_PLAN_SITES are previously persisted absolute plans. For those sites preserve product_identifier, pricing_rule, shipping_mode, unit_multiplier, unit_evidence, basis_price, standard_baseline_price and target_price exactly; only re-read observed_price. Mark planned only when both the exact product_identifier still matches and observed_price equals either basis_price or target_price, otherwise blocked.",
@@ -7040,7 +7079,7 @@ async function api(path, options = {}) {
   const text = await response.text();
   let payload = {};
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = { error: text }; }
-  if (!response.ok) throw new Error(`${path} ${response.status}: ${payload.error || text.slice(0, 500)}`);
+  if (!response.ok) throw new BridgeApiError(path, response.status, payload, text);
   return payload;
 }
 

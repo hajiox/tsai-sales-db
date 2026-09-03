@@ -10,6 +10,9 @@ const bridge = read("tools", "tsa-codex-bridge", "bridge.mjs");
 const installer = read("tools", "tsa-codex-bridge", "install-bridge.ps1");
 const launcher = read("tools", "tsa-codex-bridge", "start-bridge-prelogin.ps1");
 const registration = read("tools", "tsa-codex-bridge", "register-prelogin-task.ps1");
+const heartbeatRoute = read("app", "api", "web-sales", "codex-bridge", "heartbeat", "route.ts");
+const claimRoute = read("app", "api", "web-sales", "codex-bridge", "claim", "route.ts");
+const bridgeVersion = read("lib", "web-sales-codex", "bridge-version.ts");
 const claimMigration = read("supabase", "migrations", "20260825190000_recipe_sns_generation.sql");
 const automationPage = read("app", "web-sales", "automation", "page.tsx");
 const skillContract = JSON.parse(read("tools", "tsa-codex-bridge", "skill-contract.json"));
@@ -58,6 +61,13 @@ assert.match(bridge, /executionMode === "headless-prelogin"[\s\S]*HEADLESS_SAFE_
 assert.match(bridge, /codexTaskKeys: config\.allowedTaskKeys/);
 assert.match(bridge, /isolatedEphemeralSession: true/);
 assert.match(bridge, /chatHistoryLoaded: false/);
+assert.match(bridge, /class BridgeApiError extends Error/);
+assert.match(bridge, /isBridgeUpgradeRequiredError/);
+assert.match(bridge, /upgradeRequired[\s\S]*stopping = true/);
+assert.match(bridge, /if \(!stopping\) await heartbeat\(\)\.catch/);
+assert.match(bridgeVersion, /tsa-office-01-headless/);
+assert.match(heartbeatRoute, /isRetiredLegacyTsaCodexBridge[\s\S]*retired: true/);
+assert.match(claimRoute, /isRetiredLegacyTsaCodexBridge[\s\S]*job: null[\s\S]*retired: true/);
 
 for (const [runtimeName, taskName, role, monitorKey] of [
   ["ai-01", "TSA Codex Bridge (AI 1)", "ai-generation", "tsa-ai-01"],

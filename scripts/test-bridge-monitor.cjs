@@ -241,7 +241,7 @@ try {
   assert.match(first.output, /Codex Bridge 統合モニター/);
   assert.match(first.output, /TSA/);
   assert.match(first.output, /事務所PC \[実行中 62%\] レシピSNS素材AI生成/);
-  assert.match(first.output, /事務所PC AI生成1 \[待機中 0%\]/);
+  assert.match(first.output, /事務所PC AI生成1 \[待機中 0%\] 現在のジョブなし/);
   assert.match(first.output, /事務所PC AI生成2 \[実行中 24%\] EC商品名AI生成/);
   assert.match(first.output, /事務所PC 分析 \[実行中 41%\] WEB売上分析/);
   assert.match(first.output, /TSG/);
@@ -251,7 +251,8 @@ try {
   assert.match(first.output, /DocScanner/);
   assert.match(first.output, /DocScannerサービス \[確認待ち 80%\] 書類分類/);
   assert.match(first.output, /DocScanner旧Worker \[オフライン 100%\] 過去のOCR処理/);
-  assert.match(first.output, /直近: 過去のOCR処理 \/ 完了 \/ OCR処理を完了しました/);
+  assert.match(first.output, /直近の終了結果（現在実行中ではありません）/);
+  assert.match(first.output, /過去のOCR処理 \/ 完了 \/ OCR処理を完了しました/);
   assert.match(first.output, /操作待ち: 担当者の確認を待っています/);
   assert.match(first.output, /状態読込エラー（Bridge本体の処理は継続）/);
   assert.match(first.output, /モニターを閉じてもBridgeジョブは停止しません/);

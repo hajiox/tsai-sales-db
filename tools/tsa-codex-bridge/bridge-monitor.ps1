@@ -446,7 +446,8 @@ try {
       Add-Line $lines $definition.label "White"
       $records = @($snapshot.states | Where-Object { [string]$_.system -eq $definition.id } | Sort-Object @{ Expression = { if ($_.executionMode -eq "interactive") { 0 } else { 1 } } }, workerName)
       if ($records.Count -eq 0) {
-        Add-Line $lines "  [未導入] Bridge状態ファイルがありません" "DarkYellow"
+        Add-Line $lines "  [専用Workerなし] このシステム自身のBridge状態は未登録です" "DarkYellow"
+        Add-Line $lines "    他システム経由の連携処理は、実際に処理したWorker側へ表示されます" "DarkGray"
         Add-Line $lines "" "Gray"
         continue
       }
@@ -466,7 +467,7 @@ try {
         $display = Status-Display $status
         $mode = if ($state.executionMode -eq "headless-prelogin") { "ログイン前" } else { "通常" }
         $progress = [Math]::Max(0, [Math]::Min(100, [int]$state.progress))
-        $task = if ($state.taskLabel) { Clean-Text $state.taskLabel 55 } else { "ジョブなし" }
+        $task = if ($state.taskLabel) { Clean-Text $state.taskLabel 55 } else { "現在のジョブなし" }
         $target = if ($state.productName) { " / " + (Clean-Text $state.productName 45) } else { "" }
         Add-Line $lines ("  {0} [{1} {2}%] {3}{4}" -f (Clean-Text $state.workerName 30), $display.label, $progress, $task, $target) $display.color
 
@@ -488,7 +489,8 @@ try {
         $jobId = if ($state.jobId) { Clean-Text $state.jobId 44 } else { "-" }
         Add-Line $lines ("    Bridge PID {0} / Codex PID {1} / Job {2}" -f [string]$state.bridgePid, $codexPid, $jobId) "DarkGray"
         if ($state.lastTerminal -and $status -in @("idle", "offline")) {
-          Add-Line $lines ("    直近: {0} / {1} / {2}" -f (Clean-Text $state.lastTerminal.taskLabel 40), (Status-Display ([string]$state.lastTerminal.status)).label, (Clean-Text $state.lastTerminal.summary 70)) "DarkCyan"
+          Add-Line $lines "    直近の終了結果（現在実行中ではありません）" "DarkCyan"
+          Add-Line $lines ("      {0} / {1} / {2}" -f (Clean-Text $state.lastTerminal.taskLabel 40), (Status-Display ([string]$state.lastTerminal.status)).label, (Clean-Text $state.lastTerminal.summary 70)) "DarkCyan"
         }
       }
       Add-Line $lines "" "Gray"

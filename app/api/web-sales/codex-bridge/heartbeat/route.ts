@@ -4,7 +4,10 @@ import {
   isCodexBridgeAuthorized,
   normalizeWorkerId,
 } from "@/lib/web-sales-codex/server";
-import { REQUIRED_TSA_CODEX_BRIDGE_VERSION } from "@/lib/web-sales-codex/bridge-version";
+import {
+  isRetiredLegacyTsaCodexBridge,
+  REQUIRED_TSA_CODEX_BRIDGE_VERSION,
+} from "@/lib/web-sales-codex/bridge-version";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +20,13 @@ export async function POST(request: Request) {
     const body = await request.json();
     const workerId = normalizeWorkerId(body.workerId);
     const bridgeVersion = String(body.version || "").trim();
+    if (isRetiredLegacyTsaCodexBridge(workerId, bridgeVersion)) {
+      return NextResponse.json({
+        ok: true,
+        retired: true,
+        requiredVersion: REQUIRED_TSA_CODEX_BRIDGE_VERSION,
+      });
+    }
     if (bridgeVersion !== REQUIRED_TSA_CODEX_BRIDGE_VERSION) {
       return NextResponse.json({
         error: `Bridge ${REQUIRED_TSA_CODEX_BRIDGE_VERSION} への更新が必要です`,

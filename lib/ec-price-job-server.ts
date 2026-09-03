@@ -54,6 +54,6 @@ export function ecPriceRecipeIdentitiesMatch(left: unknown, right: EcPriceRecipe
   if (!left || typeof left !== "object" || Array.isArray(left)) return false;
   const candidate = left as Record<string, unknown>;
   return (Object.keys(right) as Array<keyof EcPriceRecipeSnapshot>)
-    .filter((key) => key !== "newPriceExTax" && key !== "newPriceInclTax")
+    .filter((key) => !["newPriceExTax", "newPriceInclTax", "productLpUrl"].includes(key))
     .every((key) => candidate[key] === right[key]);
 }

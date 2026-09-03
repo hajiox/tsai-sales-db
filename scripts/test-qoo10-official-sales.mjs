@@ -88,11 +88,15 @@ const root = resolve(import.meta.dirname, "..");
 const bridge = readFileSync(resolve(root, "tools/tsa-codex-bridge/bridge.mjs"), "utf8");
 const installer = readFileSync(resolve(root, "tools/tsa-codex-bridge/install-bridge.ps1"), "utf8");
 const connector = readFileSync(resolve(root, "lib/web-sales-automation/connectors.ts"), "utf8");
+const mappingRoute = readFileSync(resolve(root, "app/api/web-sales/automation/mapping/route.ts"), "utf8");
 assert.match(bridge, /executeQoo10OfficialSalesJob/);
 assert.match(bridge, /job\.channel === "qoo10"/);
 assert.match(installer, /qoo10-official-sales\.mjs/);
 assert.match(connector, /ShippingBasic\.GetShippingInfo_v3/);
 assert.match(connector, /\["1", "2", "3", "4", "5"\]/);
+assert.match(mappingRoute, /status: completed \? "completed" : "needs_review"/);
+assert.match(mappingRoute, /summary,\s*details,/);
+assert.match(mappingRoute, /imported_count: completed \? result\.quantityTotal : null/);
 
 console.log("Qoo10 official sales tests passed");
 

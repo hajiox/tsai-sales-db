@@ -78,6 +78,9 @@ export async function POST(request: Request) {
       const summary = completed
         ? `${result.quantityTotal}個をTSAへ登録しました`
         : `${result.unmatchedCount}商品が未マッチのため、月次集計は更新していません`;
+      const details = completed
+        ? `${result.matchedCount}商品をすべて照合し、数量${result.quantityTotal}個の月次集計を更新しました。`
+        : `${result.unmatchedCount}商品の紐付けが残っています。未紐付けを解消後に再確定してください。`;
       await supabase
         .from("web_sales_codex_jobs")
         .update({
@@ -86,12 +89,16 @@ export async function POST(request: Request) {
           current_step: summary,
           result: {
             ...previousResult,
+            status: completed ? "completed" : "needs_review",
+            summary,
+            details,
             runId: unmatched.run_id,
             itemCount: result.itemCount,
             quantityTotal: result.quantityTotal,
             matchedCount: result.matchedCount,
             unmatchedCount: result.unmatchedCount,
             importedCount: completed ? result.quantityTotal : null,
+            imported_count: completed ? result.quantityTotal : null,
           },
           error_message: null,
           completed_at: new Date().toISOString(),

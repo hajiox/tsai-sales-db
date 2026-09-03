@@ -14,6 +14,10 @@ const requiredBridgeVersionSource = fs.readFileSync(
   path.join(__dirname, "..", "lib", "web-sales-codex", "bridge-version.ts"),
   "utf8",
 );
+const ecPriceJobServerSource = fs.readFileSync(
+  path.join(__dirname, "..", "lib", "ec-price-job-server.ts"),
+  "utf8",
+);
 const verifiedRegistry = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "lib", "ec-price-verified-registry.json"),
   "utf8",
@@ -66,6 +70,7 @@ const detectsBrowserSessionContention = loadFunction("isEcPriceBrowserSessionCon
 const detectsDuplicateConfirmation = loadFunction("isEcPriceDuplicateConfirmation", "normalizeEcPriceContentionSummary");
 const validateJobParameters = loadFunction("validateEcPriceJobParametersV2", "buildEcPricePlanPrompt");
 const currentLpTargetPrices = loadFunction("ecPriceLpCurrentTargetPrices", "positiveEcPriceInteger");
+const scopeSiteParameters = loadFunction("scopeEcPriceSiteParameters", "scopeEcPriceLpParameters");
 
 const pricePromptSource = bridgeSource.slice(
   bridgeSource.indexOf("function buildEcPricePlanPrompt("),
@@ -86,6 +91,7 @@ assert.match(pricePromptSource, /Do not ask the operator to reply, confirm again
 assert.match(pricePromptSource, /save\/submit confirmation.*never waiting_for_user/i);
 assert.match(pricePromptSource, /unsaved staged input left by a previously stopped job/);
 assert.match(pricePromptSource, /BOUNDED RECOVERY POLICY FOR ALL EC SITES/);
+assert.match(pricePromptSource, /job-locked pre-change standard baseline/);
 assert.match(pricePromptSource, /Amazon, Rakuten, Yahoo, Mercari Shops, BASE, Qoo10, or TikTok/);
 assert.match(pricePromptSource, /newly mandatory field may be changed only when its exact value is explicitly proven/);
 assert.match(pricePromptSource, /ABSOLUTE PROHIBITIONS DURING RECOVERY FOR ALL EC SITES/);
@@ -196,7 +202,8 @@ assert.match(monitorSource, /目安超過（処理継続中）/);
 assert.match(monitorSource, /foregroundActivated/);
 assert.match(monitorSource, /monitorPid/);
 assert.match(monitorSource, /Local\\CodexBridgeUnifiedMonitor/);
-assert.match(monitorSource, /Bridge状態ファイルがありません/);
+assert.match(monitorSource, /専用Workerなし/);
+assert.match(monitorSource, /直近の終了結果（現在実行中ではありません）/);
 assert.match(monitorSource, /応答停止/);
 assert.match(monitorSource, /モニターを閉じてもBridgeジョブは停止しません/);
 assert.doesNotMatch(monitorSource, /Clear-Host/);
@@ -385,6 +392,30 @@ assert.deepEqual(validateJobParameters(authorizedJobParameters).verifiedProductI
   { kind: "asin", value: "B0BYV7DRDS" },
   { kind: "sku", value: "YG-XN24-7D2K" },
 ]);
+const sequentialParameters = {
+  ...authorizedJobParameters,
+  targets: ["base"],
+  siteBaselines: { base: null },
+  recoveryPlanSites: [],
+  productMappings: { base: ["対象商品"] },
+  verifiedProductIdentifiers: { base: [] },
+  operatorAuthorization: { ...authorizedJobParameters.operatorAuthorization, targets: ["base"] },
+};
+assert.equal(
+  scopeSiteParameters(sequentialParameters, "base", 1350).siteBaselines.base,
+  1350,
+  "同じジョブで最初に検証した標準価格を後続ECへ固定して渡す",
+);
+assert.equal(
+  scopeSiteParameters({ ...sequentialParameters, siteBaselines: { base: 1290 } }, "base", 1350).siteBaselines.base,
+  1290,
+  "サーバー保存済みのサイト基準価格をジョブ内基準より優先する",
+);
+assert.match(
+  ecPriceJobServerSource,
+  /"newPriceExTax", "newPriceInclTax", "productLpUrl"/,
+  "商品LP URLは価格改定履歴の商品同一性を左右しない",
+);
 assert.equal(validateJobParameters({
   ...authorizedJobParameters,
   targets: [],
