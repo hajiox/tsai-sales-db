@@ -119,6 +119,7 @@ assert.match(pricePromptSource, /verified-products\.md/);
 assert.match(pricePromptSource, /TASK_JSON\.productMappings/);
 assert.match(pricePromptSource, /manufacturing fill target/);
 assert.match(pricePromptSource, /Do not block solely for that numeric difference/);
+assert.match(pricePromptSource, /treat ecProductName as untrusted/);
 assert.match(pricePromptSource, /search every supplied mapped title before reporting not_found/);
 assert.match(pricePromptSource, /TASK_JSON\.verifiedProductIdentifiers/);
 assert.match(pricePromptSource, /optional seller-side storage\/delivery field that is blank/);
