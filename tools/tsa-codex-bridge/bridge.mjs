@@ -33,7 +33,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.60";
+const VERSION = "1.9.61";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -2945,7 +2945,7 @@ function buildEcPricePlanPrompt(parameters) {
     "RECOVERY_PLAN_SITES are previously persisted absolute plans. For those sites preserve product_identifier, pricing_rule, shipping_mode, unit_multiplier, unit_evidence, basis_price, standard_baseline_price and target_price exactly; only re-read observed_price. Mark planned only when both the exact product_identifier still matches and observed_price equals either basis_price or target_price, otherwise blocked.",
     "For a new plan set basis_price equal to observed_price. Never guess a product, shipping condition, old standard price, or target price.",
     "For a required LP, return lp.status=planned only after proving the public URL, exact product, fresh-clone project root, github_repository, Vercel production_branch, source_commit matching origin/production_branch, source files, current prices, and target prices. Each LP target_price must equal TASK_JSON.newPriceInclTax or the target_price of the corresponding pricing_basis site in this same plan. A price string shared by other products must not be planned as a broad replacement.",
-    "Return one sites entry for every requested target and no others. A site may be not_found only after every TASK_JSON.productMappings title for that site and the recipe identity have been searched on the official seller screen. A verified not_found site is not an error and must not block other planned sites. Use status=ready when every site is either planned or evidence-backed not_found and every required LP occurrence is planned. blocked remains a stop condition. If the required LP cannot be mapped safely, stop before all external writes with needs_review/not_found/blocked. Output only JSON matching the schema.",
+    "Return one sites entry for every requested target and no others. A site may be not_found only after every TASK_JSON.productMappings title for that site and the recipe identity have been searched on the official seller screen. For not_found set observed_price, basis_price, standard_baseline_price, target_price, and product_identifier to null; retain only the required sale-unit evidence and message. A verified not_found site is not an error and must not block other planned sites. Use status=ready when every site is either planned or evidence-backed not_found and every required LP occurrence is planned. blocked remains a stop condition. If the required LP cannot be mapped safely, stop before all external writes with needs_review/not_found/blocked. Output only JSON matching the schema.",
     "TASK_JSON:",
     JSON.stringify(parameters),
   ].join("\n");
@@ -2976,7 +2976,7 @@ function buildEcPriceWritePrompt(parameters, plan) {
     "Use only the requested sites and the exact absolute target_price persisted in PLAN_JSON. Never recompute or add a price difference during this phase.",
     "Before each write, identify the exact product again and read its current saved price.",
     "If current price equals target_price, do not save again; verify it and report updated with target_price.",
-    "If current price equals basis_price, set the exact target_price, save/submit using the Skill procedure, reload/list-verify it, and report updated or submitted_pending.",
+    "If current price equals basis_price, set the exact target_price, save/submit using the Skill procedure, reload/list-verify it, and report updated or submitted_pending. submitted_pending means the official site accepted the target submission but still displays the prior saved price; in that case final_price must be the price actually visible after reload (basis_price or target_price), never a guessed target value, and the message must state the submitted target and the site's stated reflection window.",
     "If current price is neither basis_price nor target_price, do not change it and report blocked. Never overwrite an unexpected concurrent price.",
     "AMAZON PRICE-ONLY RULE: after identifying the exact SKU/ASIN, keep the claimed existing Amazon tab and navigate that same tab to the offer-only editor path /interactive/listing/workflow/edit/offer for that SKU/ASIN. Confirm the URL still contains /offer and edit only the field labeled 商品の販売価格. Do not submit the full product_details editor for a price-only change.",
     "If Amazon redirects to product_details or shows error 90220 that Amazon.co.jp限定商品 is missing, read the exact product entry in the Skill's verified-products.md. When that entry explicitly proves the same product is sold on other marketplaces and records Amazon exclusive as false, set only 'この商品はAmazon.co.jp限定商品ですか？' to 'いいえ', save that attribute, return to the offer-only editor, submit the planned price once, and reload to verify the saved price. Do not change any other catalog attribute. If the Skill has no explicit multi-market proof for the exact ASIN/SKU, do not guess; report the missing attribute as blocked and leave the saved price unchanged.",
@@ -3018,12 +3018,17 @@ function validateEcPricePlan(plan, parameters) {
       ? parameters.verifiedProductIdentifiers[site.site]
       : [];
     if (site.status === "not_found") {
+      const echoedBaseline = site.standard_baseline_price == null ? null : Number(site.standard_baseline_price);
+      const allowedBaselines = [
+        Number(parameters.siteBaselines?.[site.site]),
+        Number(plan.reference_standard_price),
+      ].filter((value) => Number.isInteger(value) && value > 0);
       if (
         site.observed_price != null
         || site.basis_price != null
-        || site.standard_baseline_price != null
         || site.target_price != null
         || site.product_identifier != null
+        || (echoedBaseline != null && !allowedBaselines.includes(echoedBaseline))
         || !String(site.unit_evidence || "").trim()
         || !String(site.message || "").trim()
       ) return `${site.site}の対象商品なし計画が不正です`;
@@ -3142,8 +3147,12 @@ function validateEcPriceResultV2(result, parameters, plan) {
     }
     if (site.status === "not_found") return `${site.site}で計画済み商品を確認できませんでした`;
     if (site.status === "updated" || site.status === "submitted_pending") {
-      if (Number(site.final_price) !== Number(planned.target_price)) {
-        return `${site.site}の最終価格が保存済み目標価格と一致しません`;
+      const finalPrice = Number(site.final_price);
+      const validFinalPrices = site.status === "updated"
+        ? [Number(planned.target_price)]
+        : [Number(planned.basis_price), Number(planned.target_price)];
+      if (!Number.isInteger(finalPrice) || !validFinalPrices.includes(finalPrice)) {
+        return `${site.site}の最終価格が保存済み計画と一致しません`;
       }
       if (String(site.product_identifier || "").trim() !== String(planned.product_identifier || "").trim()) {
         return `${site.site}の商品識別子が保存済み計画と一致しません`;

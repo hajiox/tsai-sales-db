@@ -77,7 +77,7 @@ export function getEcPriceRetryTargets(
   const sites = Array.isArray(sitesInput) ? sitesInput.map(asObject) : [];
   return targets.filter((target) => {
     const site = sites.find((candidate) => candidate.site === target);
-    return !site || site.status === "blocked" || site.status === "submitted_pending";
+    return !site || site.status === "blocked";
   });
 }
 

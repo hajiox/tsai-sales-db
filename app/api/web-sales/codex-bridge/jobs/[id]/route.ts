@@ -117,8 +117,11 @@ function priceSyncRows(
       throw new Error(`${target}の目標価格が依頼価格と一致しません`);
     }
     const finalPrice = Number(entry.final_price);
-    if (!Number.isInteger(finalPrice) || finalPrice !== targetPrice) {
-      throw new Error(`${target}の最終価格が保存済み目標価格と一致しません`);
+    const validFinalPrices = entry.status === "submitted_pending"
+      ? [basisPrice, targetPrice]
+      : [targetPrice];
+    if (!Number.isInteger(finalPrice) || !validFinalPrices.includes(finalPrice)) {
+      throw new Error(`${target}の最終価格が保存済み計画と一致しません`);
     }
     if (
       !String(entry.product_identifier || "").trim()
@@ -711,12 +714,15 @@ function validatedPricePlan(parametersInput: unknown, planInput: unknown) {
   for (const site of sites) {
     const target = String(site.site || "");
     if (site.status === "not_found") {
+      const echoedBaseline = site.standard_baseline_price == null ? null : Number(site.standard_baseline_price);
+      const allowedBaselines = [Number(siteBaselines[target]), referencePrice]
+        .filter((value) => Number.isInteger(value) && value > 0);
       if (
         site.observed_price != null
         || site.basis_price != null
-        || site.standard_baseline_price != null
         || site.target_price != null
         || site.product_identifier != null
+        || (echoedBaseline != null && !allowedBaselines.includes(echoedBaseline))
         || !String(site.unit_evidence || "").trim()
         || !String(site.message || "").trim()
       ) throw new Error(`${target}の対象商品なし計画が不正です`);

@@ -54,6 +54,12 @@ const requiredBridgeVersion = requiredBridgeVersionSource.match(
 assert.ok(bridgeVersion, "Bridge runtime version not found");
 assert.equal(requiredBridgeVersion, bridgeVersion, "TSA required Bridge version must match the bundled runtime");
 assert.match(ecPriceCodexSource, /if \(!planValidated\) return targets;/);
+const retryTargetsSource = ecPriceCodexSource.slice(
+  ecPriceCodexSource.indexOf("export function getEcPriceRetryTargets("),
+  ecPriceCodexSource.indexOf("export type EcPriceHistorySite"),
+);
+assert.match(retryTargetsSource, /return !site \|\| site\.status === "blocked";/);
+assert.doesNotMatch(retryTargetsSource, /submitted_pending/);
 assert.match(ecPriceJobRouteSource, /retryResult\.validated_plan_checkpoint === true/);
 assert.match(bridgeSource, /ecPriceProtocolVersion: 3/);
 const verifiedFourPack = verifiedRegistry.products.find((product) => product.janCode === "4571318633625");
@@ -155,6 +161,8 @@ assert.match(ecPriceSkillSource, /browser\.history\(\).*chrome\.history\(\).*全
 assert.match(ecPriceSitePlaybooksSource, /https:\/\/mercari-shops\.com\/seller\/shops\//);
 assert.match(ecPriceSitePlaybooksSource, /\/signin\/seller.*ログイン切れ/);
 assert.doesNotMatch(ecPriceSitePlaybooksSource, /`https:\/\/mercari-shops\.com\/seller\/` を直接開く/);
+assert.match(ecPriceSitePlaybooksSource, /https:\/\/pro\.store\.yahoo\.co\.jp\/pro\.aizubrandhall\//);
+assert.match(ecPriceSitePlaybooksSource, /https:\/\/pro\.store\.yahoo\.co\.jp\/.*指定されたページは存在しません/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: false/);
 assert.match(bridgeSource, /abortOnTabPolicyViolation: true/);
 assert.match(bridgeSource, /executeSingleEcPriceSite/);
@@ -614,6 +622,26 @@ const mixedPlan = {
 };
 assert.equal(validatePlan(mixedPlan, mixedParameters), null);
 assert.equal(validateServerPlan(mixedParameters, mixedPlan).status, "ready");
+const notFoundWithLockedBaseline = {
+  ...mixedPlan,
+  sites: [basePlan.sites[0], { ...notFoundMercari, standard_baseline_price: 4290 }],
+};
+assert.equal(validatePlan(notFoundWithLockedBaseline, mixedParameters), null);
+assert.equal(validateServerPlan(mixedParameters, notFoundWithLockedBaseline).status, "ready");
+assert.match(
+  validatePlan({
+    ...mixedPlan,
+    sites: [basePlan.sites[0], { ...notFoundMercari, standard_baseline_price: 7777 }],
+  }, mixedParameters),
+  /対象商品なし計画/,
+);
+assert.throws(
+  () => validateServerPlan(mixedParameters, {
+    ...mixedPlan,
+    sites: [basePlan.sites[0], { ...notFoundMercari, standard_baseline_price: 7777 }],
+  }),
+  /対象商品なし計画/,
+);
 assert.match(
   validatePlan({
     ...mixedPlan,
@@ -841,6 +869,16 @@ const validResult = {
 assert.equal(validateResult(validResult, baseParameters, basePlan), null);
 assert.equal(validateResult({
   ...validResult,
+  status: "needs_review",
+  sites: [{ ...validResult.sites[0], status: "submitted_pending", final_price: 3990 }],
+}, baseParameters, basePlan), null, "送信済み・反映待ちは再読込で見える旧価格を保持できる");
+assert.match(validateResult({
+  ...validResult,
+  status: "needs_review",
+  sites: [{ ...validResult.sites[0], status: "submitted_pending", final_price: 4100 }],
+}, baseParameters, basePlan), /保存済み計画/);
+assert.equal(validateResult({
+  ...validResult,
   sites: [validResult.sites[0], {
     site: "mercari",
     status: "not_found",
@@ -890,7 +928,7 @@ assert.match(
     ...validResult,
     sites: [{ ...validResult.sites[0], final_price: 4550 }],
   }, baseParameters, basePlan),
-  /保存済み目標価格/,
+  /保存済み計画/,
 );
 assert.match(
   validateResult({
@@ -919,7 +957,7 @@ assert.equal(
 assert.equal(
   buildSyncRows(claimedBaseJob, {
     ...validResult,
-    sites: [{ ...validResult.sites[0], status: "submitted_pending" }],
+    sites: [{ ...validResult.sites[0], status: "submitted_pending", final_price: 3990 }],
     plan: basePlan,
     validated_plan_checkpoint: true,
   }, "00000000-0000-0000-0000-000000000010", "2026-08-19T00:00:00.000Z").length,
