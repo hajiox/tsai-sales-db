@@ -26,6 +26,8 @@ $requiredSourceFiles = @(
   "analysis-result.schema.json",
   "ec-price-result.schema.json",
   "ec-price-plan.schema.json",
+  "ec-product-register-result.schema.json",
+  "ec-product-register-plan.schema.json",
   "ec-product-name-result.schema.json",
   "ec-product-name-plan.schema.json",
   "ec-product-name-ai.schema.json",
@@ -82,6 +84,7 @@ $interactiveTaskKeys = @(
   "ad_cost_import",
   "ec_profit_import",
   "ec_price_update",
+  "ec_product_register",
   "ec_product_name_update",
   "ec_catchcopy_update",
   "ec_product_content_update",
@@ -410,6 +413,8 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "result.schema.json") -Destination 
 Copy-Item -LiteralPath (Join-Path $sourceDir "analysis-result.schema.json") -Destination (Join-Path $installDir "analysis-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-price-result.schema.json") -Destination (Join-Path $installDir "ec-price-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-price-plan.schema.json") -Destination (Join-Path $installDir "ec-price-plan.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-register-result.schema.json") -Destination (Join-Path $installDir "ec-product-register-result.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-register-plan.schema.json") -Destination (Join-Path $installDir "ec-product-register-plan.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-name-result.schema.json") -Destination (Join-Path $installDir "ec-product-name-result.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-name-plan.schema.json") -Destination (Join-Path $installDir "ec-product-name-plan.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-product-name-ai.schema.json") -Destination (Join-Path $installDir "ec-product-name-ai.schema.json") -Force

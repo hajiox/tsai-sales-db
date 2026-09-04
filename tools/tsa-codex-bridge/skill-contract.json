@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-02.3",
+  "version": "2026-09-04.1",
   "tasks": {
     "connection_test": {
       "mode": "deterministic",
@@ -20,6 +20,10 @@
     "ec_price_update": {
       "mode": "codex",
       "skill": "update-aizu-ec-prices"
+    },
+    "ec_product_register": {
+      "mode": "codex",
+      "skill": "register-aizu-ec-products"
     },
     "ec_product_name_update": {
       "mode": "codex",

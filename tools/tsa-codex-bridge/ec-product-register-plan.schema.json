@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "site", "operation", "existing_product_identifier", "reference_product_identifier", "target_product_name", "target_price", "jan_code", "seller_code", "category", "shipping_code", "tax_setting", "inventory_setting", "dispatch_setting", "origin_setting", "sale_period_setting", "image_count", "public_url", "message", "summary"],
+  "properties": {
+    "status": { "type": "string", "enum": ["ready", "waiting_for_user", "needs_review"] },
+    "site": { "const": "qoo10" },
+    "operation": { "type": "string", "enum": ["planned", "already_exists", "blocked"] },
+    "existing_product_identifier": { "type": ["string", "null"] },
+    "reference_product_identifier": { "type": ["string", "null"] },
+    "target_product_name": { "type": ["string", "null"] },
+    "target_price": { "type": ["integer", "null"], "minimum": 1 },
+    "jan_code": { "type": ["string", "null"] },
+    "seller_code": { "type": ["string", "null"] },
+    "category": { "type": ["string", "null"] },
+    "shipping_code": { "type": ["string", "null"] },
+    "tax_setting": { "type": ["string", "null"] },
+    "inventory_setting": { "type": ["string", "null"] },
+    "dispatch_setting": { "type": ["string", "null"] },
+    "origin_setting": { "type": ["string", "null"] },
+    "sale_period_setting": { "type": ["string", "null"] },
+    "image_count": { "type": ["integer", "null"], "minimum": 0 },
+    "public_url": { "type": ["string", "null"] },
+    "message": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 }
+  }
+}

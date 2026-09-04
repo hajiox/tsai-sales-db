@@ -11,6 +11,7 @@ import {
   History,
   Link2,
   Loader2,
+  PackagePlus,
   Play,
   Trash2,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import {
   type EcPriceJobView,
   type EcPriceTarget,
 } from "@/lib/ec-price-codex";
+import type { EcProductRegisterJobView } from "@/lib/ec-product-registration-codex";
 import type { EcPriceDispatchMode } from "@/lib/ec-price-reservations";
 
 const TARGET_STYLES: Record<EcPriceTarget, string> = {
@@ -56,6 +58,17 @@ type BlockingJobView = {
   currentStep: string;
 };
 
+type RegistrationIntentView = {
+  id: string;
+  status: "authorized" | "submission_started" | "needs_review" | "completed";
+  job_id: string;
+  product_identifier: string | null;
+  public_url: string | null;
+  submit_started_at: string | null;
+  completed_at: string | null;
+  updated_at: string;
+};
+
 interface EcPriceSyncControlsProps {
   recipeId: string;
   recipeName: string;
@@ -78,6 +91,9 @@ export default function EcPriceSyncControls({
   isSaving,
 }: EcPriceSyncControlsProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [registrationSubmitting, setRegistrationSubmitting] = useState(false);
+  const [registrationJob, setRegistrationJob] = useState<EcProductRegisterJobView | null>(null);
+  const [registrationIntent, setRegistrationIntent] = useState<RegistrationIntentView | null>(null);
   const [dispatchMode, setDispatchMode] = useState<EcPriceDispatchMode>("immediate");
   const [job, setJob] = useState<EcPriceJobView | null>(null);
   const [blockingJob, setBlockingJob] = useState<BlockingJobView | null>(null);
@@ -99,6 +115,13 @@ export default function EcPriceSyncControls({
   const unfinishedLp = Boolean(job?.lp?.required && job.lp.status !== "updated");
   const jobCanRetry = Boolean(job && !jobIsActive && (unfinishedTargets.length > 0 || unfinishedLp));
   const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || blockedByAnotherJob || !hasPrice;
+  const qoo10Missing = Boolean(
+    job?.sites.some((site) => site.site === "qoo10" && site.status === "not_found")
+    || priceHistory.some((entry) => entry.sites.some((site) => site.site === "qoo10" && site.status === "not_found")),
+  );
+  const registrationIsActive = Boolean(registrationJob && ACTIVE_STATUSES.has(registrationJob.status));
+  const registrationCompleted = registrationIntent?.status === "completed" || registrationJob?.status === "completed";
+  const registrationNeedsReview = registrationIntent?.status === "needs_review" || registrationJob?.status === "needs_review";
 
   const refreshPriceHistory = useCallback(async () => {
     try {
@@ -132,9 +155,22 @@ export default function EcPriceSyncControls({
     }
   }, []);
 
+  const refreshRegistration = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/recipe/${recipeId}/ec-product-registration-jobs`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Qoo10商品登録状況を取得できません");
+      setRegistrationJob((payload.activeJob || payload.latestJob || null) as EcProductRegisterJobView | null);
+      setRegistrationIntent((payload.intent || null) as RegistrationIntentView | null);
+    } catch (error) {
+      console.error("EC product registration history fetch error:", error);
+    }
+  }, [recipeId]);
+
   useEffect(() => {
     void refreshPriceHistory();
-  }, [refreshPriceHistory]);
+    void refreshRegistration();
+  }, [refreshPriceHistory, refreshRegistration]);
 
   useEffect(() => {
     if (!jobIsActive) return;
@@ -147,9 +183,16 @@ export default function EcPriceSyncControls({
     const timer = setInterval(() => {
       void refreshReservations(true);
       void refreshPriceHistory();
+      void refreshRegistration();
     }, 15000);
     return () => clearInterval(timer);
-  }, [refreshPriceHistory, refreshReservations]);
+  }, [refreshPriceHistory, refreshRegistration, refreshReservations]);
+
+  useEffect(() => {
+    if (!registrationJob?.id || !ACTIVE_STATUSES.has(registrationJob.status)) return;
+    const timer = window.setInterval(() => void refreshRegistration(), 3000);
+    return () => window.clearInterval(timer);
+  }, [refreshRegistration, registrationJob?.id, registrationJob?.status]);
 
   const activeJobId = job?.id;
   const activeJobStatus = job?.status;
@@ -291,6 +334,44 @@ export default function EcPriceSyncControls({
       toast.error(error instanceof Error ? error.message : "未完了工程を再実行できません");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const registerMissingQoo10Product = async () => {
+    if (!qoo10Missing || registrationSubmitting || registrationIsActive || registrationCompleted || registrationNeedsReview || hasUnsavedChanges || isSaving) return;
+    const productName = ecProductName || recipeName;
+    const confirmed = window.confirm([
+      "Qoo10に未登録の商品を新規登録します。",
+      "",
+      `商品: ${productName}`,
+      `販売価格（税込）: ¥${sellingPriceInclTax.toLocaleString("ja-JP")}`,
+      "",
+      "商品名・JAN・販売者商品コード・説明・画像順を固定し、同シリーズの確認済み商品から配送等の設定だけを参照します。登録を実行しますか？",
+    ].join("\n"));
+    if (!confirmed) return;
+
+    setRegistrationSubmitting(true);
+    try {
+      const response = await fetch(`/api/recipe/${recipeId}/ec-product-registration-jobs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          target: "qoo10",
+          expectedPriceInclTax: sellingPriceInclTax,
+          expectedRecipeSnapshot,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Qoo10商品登録を開始できません");
+      setRegistrationJob(payload.job as EcProductRegisterJobView);
+      if (payload.reviewRequired) toast.warning("送信開始後の結果が未確定です。自動再送せず確認待ちにしています");
+      else if (payload.alreadyRegistered) toast.success("Qoo10登録済みの商品を確認しました");
+      else toast.success(payload.reused ? "Qoo10商品登録の既存ジョブを表示します" : "Qoo10商品登録をBridgeへ登録しました");
+      await refreshRegistration();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Qoo10商品登録を開始できません");
+    } finally {
+      setRegistrationSubmitting(false);
     }
   };
 
@@ -572,6 +653,49 @@ export default function EcPriceSyncControls({
           <p className="text-[10px] font-bold uppercase text-slate-400">直近の実行状況</p>
           <p className="mt-1 font-bold text-slate-600">実行履歴はまだありません</p>
           <p className="mt-1 text-[11px] leading-relaxed">実行すると、この場所に進捗と事務所PCからの最終応答を表示します。</p>
+        </div>
+      )}
+
+      {(qoo10Missing || registrationJob || registrationIntent) && (
+        <div className="mt-4 border-t border-slate-200 pt-4 text-xs">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h4 className="flex items-center gap-1.5 font-bold text-slate-700">
+                <PackagePlus className="h-4 w-4" />
+                Qoo10商品登録
+              </h4>
+              {registrationCompleted ? (
+                <p className="mt-1 font-bold text-emerald-700">
+                  登録確認済み
+                  {(registrationIntent?.product_identifier || registrationJob?.result?.product_identifier)
+                    ? ` ・ 商品番号 ${registrationIntent?.product_identifier || registrationJob?.result?.product_identifier}`
+                    : ""}
+                </p>
+              ) : registrationNeedsReview ? (
+                <p className="mt-1 font-bold text-amber-800">送信開始後の結果が未確定です。二重登録防止のため自動再送を停止しています。</p>
+              ) : registrationIsActive ? (
+                <p className="mt-1 font-bold text-blue-700">
+                  {registrationJob?.currentStep || "事務所PCのBridgeで登録中"} ・ {clampProgress(registrationJob?.progress)}%
+                </p>
+              ) : (
+                <p className="mt-1 text-slate-500">価格確認で対象商品なしだったため、この商品だけをQoo10へ登録できます。</p>
+              )}
+              {registrationJob?.summary && <p className="mt-1 leading-relaxed text-slate-600">{registrationJob.summary}</p>}
+            </div>
+            {qoo10Missing && !registrationCompleted && !registrationNeedsReview && (
+              <button
+                type="button"
+                onClick={registerMissingQoo10Product}
+                disabled={registrationSubmitting || registrationIsActive || jobIsActive || hasUnsavedChanges || isSaving}
+                className="inline-flex items-center gap-1.5 rounded-md bg-pink-600 px-3 py-2 font-bold text-white hover:bg-pink-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {registrationSubmitting || registrationIsActive
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <PackagePlus className="h-3.5 w-3.5" />}
+                {registrationIsActive ? "登録中" : "Qoo10へ商品登録"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

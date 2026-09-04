@@ -5,6 +5,7 @@ const OPERATOR_SESSION_TASKS = new Set([
   "ad_cost_import",
   "ec_profit_import",
   "ec_price_update",
+  "ec_product_register",
   "ec_product_name_update",
   "ec_catchcopy_update",
   "ec_product_content_update",

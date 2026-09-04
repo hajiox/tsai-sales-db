@@ -12,6 +12,11 @@ import {
   normalizeWorkerId,
 } from "@/lib/web-sales-codex/server";
 import type { CodexJobStatus } from "@/lib/web-sales-codex/types";
+import {
+  EC_PRODUCT_REGISTER_TASK_KEY,
+  EC_PRODUCT_REGISTER_TARGET,
+  normalizeEcProductRegisterTitle,
+} from "@/lib/ec-product-registration-codex";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +38,57 @@ function asObject(value: unknown): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, any>
     : {};
+}
+
+function validateFinalEcProductRegisterResult(
+  claimedJob: Record<string, any>,
+  submittedResult: unknown,
+  status: CodexJobStatus,
+) {
+  const parameters = asObject(claimedJob.parameters);
+  const authorization = asObject(parameters.operatorAuthorization);
+  const result = asObject(submittedResult);
+  if (
+    parameters.target !== EC_PRODUCT_REGISTER_TARGET
+    || authorization.executionAuthorized !== true
+    || authorization.source !== "tsa_ec_product_registration_confirmation"
+    || authorization.recipeId !== parameters.recipeId
+    || authorization.target !== EC_PRODUCT_REGISTER_TARGET
+    || authorization.productName !== parameters.productName
+    || authorization.janCode !== parameters.janCode
+    || Number(authorization.targetPrice) !== Number(parameters.targetPrice)
+    || authorization.payloadHash !== parameters.payloadHash
+    || !/^[0-9a-f]{64}$/.test(String(parameters.payloadHash || ""))
+  ) throw new Error("TSA管理者による商品登録の実行確認記録がありません");
+  if (result.status !== status || result.site !== EC_PRODUCT_REGISTER_TARGET) {
+    throw new Error("商品登録結果とジョブ状態が一致しません");
+  }
+  if (status === "completed") {
+    if (!new Set(["created", "already_exists"]).has(String(result.operation || ""))) {
+      throw new Error("商品登録完了結果の操作種別が不正です");
+    }
+    if (
+      !String(result.product_identifier || "").trim()
+      || String(result.account_label || "") !== String(parameters.expectedAccount || "")
+      || normalizeEcProductRegisterTitle(result.final_product_name) !== parameters.productName
+      || String(result.final_seller_code || "") !== String(parameters.sellerCode || "")
+      || String(result.final_jan_code || "").replace(/\D/g, "") !== String(parameters.janCode || "")
+      || Number(result.final_price) !== Number(parameters.targetPrice)
+      || Number(result.final_image_count) !== (Array.isArray(parameters.images) ? parameters.images.length : -1)
+      || JSON.stringify(result.final_image_urls) !== JSON.stringify(
+        Array.isArray(parameters.images) ? parameters.images.map((image: Record<string, unknown>) => String(image.url || "")) : [],
+      )
+      || result.description_verified !== true
+    ) throw new Error("登録後の商品番号・商品名・価格が依頼内容と一致しません");
+    for (const key of ["category", "shipping_code", "tax_setting", "inventory_setting", "dispatch_setting", "origin_setting", "sale_period_setting"]) {
+      if (!String(result[key] || "").trim()) throw new Error("登録後の商品設定の検証証跡が不足しています");
+    }
+  } else if (result.operation !== "blocked") {
+    throw new Error("未完了の商品登録結果が不正です");
+  }
+  if (!String(result.message || "").trim() || !String(result.summary || "").trim()) {
+    throw new Error("商品登録結果の証跡が不足しています");
+  }
 }
 function priceSyncRows(
   claimedJob: Record<string, any>,
@@ -1101,6 +1157,10 @@ export async function POST(
     if (claimedJob.task_key === "ec_product_content_update" && isFinal) {
       validateFinalProductContentResult(claimedJob, submittedResult, status);
     }
+    if (claimedJob.task_key === EC_PRODUCT_REGISTER_TASK_KEY && isFinal) {
+      if (!submittedResult) return NextResponse.json({ error: "商品登録の最終結果がありません" }, { status: 400 });
+      validateFinalEcProductRegisterResult(claimedJob, submittedResult, status);
+    }
 
     const updates: Record<string, any> = {
       status,
@@ -1115,7 +1175,20 @@ export async function POST(
     if (submittedResult) {
       updates.result = submittedResult;
     }
-    if (claimedJob.task_key === "recipe_sns_publish" && isFinal) {
+    if (claimedJob.task_key === EC_PRODUCT_REGISTER_TASK_KEY && isFinal) {
+      const { data: completed, error: completeError } = await supabase.rpc("complete_ec_product_register_job", {
+        p_job_id: id,
+        p_worker_id: workerId,
+        p_status: status,
+        p_progress: updates.progress,
+        p_current_step: updates.current_step,
+        p_error_message: updates.error_message,
+        p_result: submittedResult,
+        p_completed_at: now,
+      });
+      if (completeError) throw completeError;
+      if (!completed) return NextResponse.json({ error: "Job is no longer running" }, { status: 409 });
+    } else if (claimedJob.task_key === "recipe_sns_publish" && isFinal) {
       const { data: completed, error: completeError } = await supabase.rpc("complete_recipe_sns_publish_job", {
         p_job_id: id,
         p_worker_id: workerId,
