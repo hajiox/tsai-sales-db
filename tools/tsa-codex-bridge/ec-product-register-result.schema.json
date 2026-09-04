@@ -5,7 +5,7 @@
   "required": ["status", "site", "operation", "account_label", "product_identifier", "final_product_name", "final_seller_code", "final_jan_code", "final_price", "final_image_count", "final_image_urls", "description_verified", "category", "shipping_code", "tax_setting", "inventory_setting", "dispatch_setting", "origin_setting", "sale_period_setting", "public_url", "message", "summary"],
   "properties": {
     "status": { "type": "string", "enum": ["completed", "waiting_for_user", "needs_review", "failed"] },
-    "site": { "const": "qoo10" },
+    "site": { "type": "string", "const": "qoo10" },
     "operation": { "type": "string", "enum": ["created", "already_exists", "blocked"] },
     "account_label": { "type": ["string", "null"] },
     "product_identifier": { "type": ["string", "null"] },

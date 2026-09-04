@@ -19,6 +19,9 @@ const jobServer = read("lib", "ec-product-registration-job-server.ts");
 
 for (const schemaName of ["ec-product-register-plan.schema.json", "ec-product-register-result.schema.json"]) {
   const schema = JSON.parse(read("tools", "tsa-codex-bridge", schemaName));
+  for (const [propertyName, propertySchema] of Object.entries(schema.properties)) {
+    assert.ok(propertySchema.type, `${schemaName}: ${propertyName} must declare a type for Codex structured output`);
+  }
   assert.equal(schema.additionalProperties, false);
   assert.ok(schema.required.length >= 15, `${schemaName} must preserve full evidence`);
 }
