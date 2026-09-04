@@ -33,7 +33,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.64";
+const VERSION = "1.9.65";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -1993,7 +1993,7 @@ function buildEcProductRegisterWritePrompt(parameters, plan) {
     "For operation=planned, copy only PLAN_JSON.reference_product_identifier. For operation=update_existing, open only PLAN_JSON.existing_product_identifier and never copy or create another listing. In either case preserve the verified category, tax, inventory, shipping, dispatch time, origin, and sale period. Replace product title, seller code, JAN, price, main/detail images in locked order, and description using only TASK_JSON values. Do not retain stale or reference title, JAN, images, or description.",
     "ABSOLUTE PROHIBITIONS: do not alter any listing except the single proven PLAN_JSON.existing_product_identifier for update_existing; do not alter another account, shop, coupon, points, advertising, Q-inventory integration, bundle discount, or any value not required for this registration. Do not guess missing values. Login/MFA/CAPTCHA/account/permission or any new mandatory field without an evidenced value returns waiting_for_user/blocked.",
     "For PLAN_JSON.operation=planned or update_existing, submit/save exactly once. Never retry the submit action after a timeout, navigation error, or uncertain response; search by product number, seller code, and JAN and return needs_review unless the saved product is proven. For already_exists, do not edit or submit.",
-    "After submission or for already_exists, reload seller product management and verify expectedAccount, title, seller code, JAN, price, ordered image URLs/count, full description, category, shipping, tax, inventory, dispatch, origin, and sale period. These reference settings must exactly equal PLAN_JSON. Return completed only with all evidence. public_url may be null when seller registration succeeded but the public page is not yet available.",
+    "After submission or for already_exists, reload seller product management and verify expectedAccount, title, seller code, JAN, price, ordered images/count, full description, category, shipping, tax, inventory, dispatch, origin, and sale period. Qoo10 may convert each input image URL to an image-qoo10.jp CDN URL; compare every saved thumbnail/content against TASK_JSON.images in order and set image_sources_verified=true only when all correspond. These reference settings must exactly equal PLAN_JSON. Return completed only with all evidence. public_url may be null when seller registration succeeded but the public page is not yet available.",
     "Output only JSON matching the schema.",
     "TASK_JSON:", JSON.stringify(parameters),
     "PLAN_JSON:", JSON.stringify(plan),
@@ -2036,6 +2036,12 @@ function validateEcProductRegisterResult(result, parameters, plan) {
   if (!String(result.message || "").trim() || !String(result.summary || "").trim()) return "商品登録結果の証跡がありません";
   if (result.status === "completed") {
     if (!new Set(["created", "updated", "already_exists"]).has(String(result.operation || ""))) return "商品登録完了結果の操作種別が不正です";
+    const finalImageUrls = Array.isArray(result.final_image_urls) ? result.final_image_urls.map((url) => String(url || "")) : [];
+    const sourceImageUrls = parameters.images.map((image) => image.url);
+    const exactImageUrls = JSON.stringify(finalImageUrls) === JSON.stringify(sourceImageUrls);
+    const qoo10HostedImages = finalImageUrls.length === sourceImageUrls.length
+      && new Set(finalImageUrls).size === finalImageUrls.length
+      && finalImageUrls.every((url) => /^https:\/\/[a-z0-9.-]*image-qoo10\.jp\//i.test(url));
     if (
       !String(result.product_identifier || "").trim()
       || String(result.account_label || "").trim() !== parameters.expectedAccount
@@ -2044,7 +2050,8 @@ function validateEcProductRegisterResult(result, parameters, plan) {
       || String(result.final_jan_code || "").replace(/\D/g, "") !== parameters.janCode
       || Number(result.final_price) !== parameters.targetPrice
       || Number(result.final_image_count) !== parameters.images.length
-      || JSON.stringify(result.final_image_urls) !== JSON.stringify(parameters.images.map((image) => image.url))
+      || (!exactImageUrls && !(qoo10HostedImages && result.image_sources_verified === true))
+      || result.image_sources_verified !== true
       || result.description_verified !== true
     ) return "登録後の商品番号・商品名・価格が固定値と一致しません";
     for (const key of ["category", "shipping_code", "tax_setting", "inventory_setting", "dispatch_setting", "origin_setting", "sale_period_setting"]) {
@@ -2067,6 +2074,7 @@ function blockedEcProductRegisterResult(status, message) {
     final_price: null,
     final_image_count: null,
     final_image_urls: null,
+    image_sources_verified: null,
     description_verified: null,
     category: null,
     shipping_code: null,

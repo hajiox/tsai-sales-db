@@ -64,9 +64,19 @@ function validateFinalEcProductRegisterResult(
     throw new Error("商品登録結果とジョブ状態が一致しません");
   }
   if (status === "completed") {
-    if (!new Set(["created", "already_exists"]).has(String(result.operation || ""))) {
+    if (!new Set(["created", "updated", "already_exists"]).has(String(result.operation || ""))) {
       throw new Error("商品登録完了結果の操作種別が不正です");
     }
+    const sourceImageUrls = Array.isArray(parameters.images)
+      ? parameters.images.map((image: Record<string, unknown>) => String(image.url || ""))
+      : [];
+    const finalImageUrls = Array.isArray(result.final_image_urls)
+      ? result.final_image_urls.map((url: unknown) => String(url || ""))
+      : [];
+    const exactImageUrls = JSON.stringify(finalImageUrls) === JSON.stringify(sourceImageUrls);
+    const qoo10HostedImages = finalImageUrls.length === sourceImageUrls.length
+      && new Set(finalImageUrls).size === finalImageUrls.length
+      && finalImageUrls.every((url: string) => /^https:\/\/[a-z0-9.-]*image-qoo10\.jp\//i.test(url));
     if (
       !String(result.product_identifier || "").trim()
       || String(result.account_label || "") !== String(parameters.expectedAccount || "")
@@ -74,10 +84,9 @@ function validateFinalEcProductRegisterResult(
       || String(result.final_seller_code || "") !== String(parameters.sellerCode || "")
       || String(result.final_jan_code || "").replace(/\D/g, "") !== String(parameters.janCode || "")
       || Number(result.final_price) !== Number(parameters.targetPrice)
-      || Number(result.final_image_count) !== (Array.isArray(parameters.images) ? parameters.images.length : -1)
-      || JSON.stringify(result.final_image_urls) !== JSON.stringify(
-        Array.isArray(parameters.images) ? parameters.images.map((image: Record<string, unknown>) => String(image.url || "")) : [],
-      )
+      || Number(result.final_image_count) !== sourceImageUrls.length
+      || (!exactImageUrls && !(qoo10HostedImages && result.image_sources_verified === true))
+      || result.image_sources_verified !== true
       || result.description_verified !== true
     ) throw new Error("登録後の商品番号・商品名・価格が依頼内容と一致しません");
     for (const key of ["category", "shipping_code", "tax_setting", "inventory_setting", "dispatch_setting", "origin_setting", "sale_period_setting"]) {
