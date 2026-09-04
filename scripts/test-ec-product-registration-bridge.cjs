@@ -7,6 +7,7 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 const migration = read("supabase", "migrations", "20260904130000_ec_product_registration_bridge.sql");
 const reconcileMigration = read("supabase", "migrations", "20260904144000_ec_product_registration_existing_reconcile.sql");
+const mappingTypeFixMigration = read("supabase", "migrations", "20260904152500_fix_ec_product_registration_qoo10_mapping_type.sql");
 const enqueueRoute = read("app", "api", "recipe", "[id]", "ec-product-registration-jobs", "route.ts");
 const validateRoute = read("app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "ec-product-register-validate", "route.ts");
 const submitRoute = read("app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "ec-product-register-submit-start", "route.ts");
@@ -41,6 +42,8 @@ assert.match(migration, /channel = 'qoo10'/);
 assert.doesNotMatch(migration, /ON CONFLICT[\s\S]*DO UPDATE/);
 assert.match(reconcileMigration, /NOT IN \('created', 'updated', 'already_exists'\)/);
 assert.match(reconcileMigration, /complete_ec_product_register_job/);
+assert.match(mappingTypeFixMigration, /mapping\.product_id = v_linked_product_id::text/);
+assert.match(mappingTypeFixMigration, /VALUES \(v_product_name, v_linked_product_id::text\)/);
 
 assert.match(enqueueRoute, /buildEcProductRegisterPayloadHash/);
 assert.match(enqueueRoute, /payloadHash/);
