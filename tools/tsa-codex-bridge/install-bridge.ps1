@@ -192,7 +192,8 @@ function Get-TrustedHeadlessBridgeProcesses {
       $headlessState = Get-Content -LiteralPath $runtime.StatePath -Raw | ConvertFrom-Json
       $statePid = [int]$headlessState.pid
       $lockPid = if ($lockExists) { [int](Get-Content -LiteralPath $runtime.LockPath -Raw) } else { $statePid }
-      $updatedAt = [DateTimeOffset]::Parse([string]$headlessState.updatedAt).UtcDateTime
+      $heartbeatText = if ($headlessState.updatedAt) { [string]$headlessState.updatedAt } else { [string]$headlessState.lastHeartbeatAt }
+      $updatedAt = [DateTimeOffset]::Parse($heartbeatText).UtcDateTime
       if (
         $statePid -le 0 -or
         $lockPid -ne $statePid -or
@@ -375,6 +376,37 @@ try {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
   }
   if ($bridgeProcesses.Count -gt 0) { Start-Sleep -Seconds 2 }
+  $validatedBridgeIds = @($bridgeProcesses | ForEach-Object { [int]$_.ProcessId } | Sort-Object -Unique)
+  $remainingValidatedBridgeIds = @($validatedBridgeIds | Where-Object {
+    $null -ne (Get-Process -Id $_ -ErrorAction SilentlyContinue)
+  })
+  if ($remainingValidatedBridgeIds.Count -gt 0) {
+    $stopCommands = @($remainingValidatedBridgeIds | ForEach-Object {
+      "Stop-Process -Id $_ -Force -ErrorAction Stop"
+    })
+    $stopCommand = '$ErrorActionPreference = "Stop"; ' + ($stopCommands -join '; ')
+    $stopCommandBytes = [System.Text.Encoding]::Unicode.GetBytes($stopCommand)
+    $encodedStopCommand = [Convert]::ToBase64String($stopCommandBytes)
+    $stopArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand $encodedStopCommand"
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
+    $isAdministrator = $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($isAdministrator) {
+      $stopProcess = Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $stopArguments -Wait -PassThru
+    } else {
+      $stopProcess = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList $stopArguments -Wait -PassThru
+    }
+    if ($stopProcess.ExitCode -ne 0) {
+      throw "既存Bridgeを管理者権限で停止できませんでした。"
+    }
+    Start-Sleep -Seconds 1
+  }
+  $stillRunningValidatedBridgeIds = @($validatedBridgeIds | Where-Object {
+    $null -ne (Get-Process -Id $_ -ErrorAction SilentlyContinue)
+  })
+  if ($stillRunningValidatedBridgeIds.Count -gt 0) {
+    throw "検証済みの既存Bridgeプロセスが停止後も残っています: $($stillRunningValidatedBridgeIds -join ', ')"
+  }
   $remainingBridgeProcesses = @(Get-BridgeProcesses)
   if ($remainingBridgeProcesses.Count -gt 0) {
     throw "既存Bridgeを安全に停止できませんでした。"
