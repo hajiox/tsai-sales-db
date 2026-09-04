@@ -306,6 +306,8 @@ try {
   assert.equal(first.ack.windowPlacement.applied, false, "PlainOutputテストでは実ウィンドウを移動しない");
   assert.equal(first.ack.windowPlacement.verified, false, "実ウィンドウ未使用時は配置済みと誤認しない");
   assert.match(monitorSource, /windowPlacementStableChecks -ge 3/, "起動後に位置を連続確認する");
+  assert.match(monitorSource, /\$Value -is \[DateTime\]/, "PowerShell 7でISO日時がDateTimeへ変換されてもUTCを保つ");
+  assert.doesNotMatch(monitorSource, /Parse-Time \(\[string\]\$state\./, "日時をタイムゾーンなし文字列へ戻さない");
   assert.match(placementScriptSource, /function Test-CodexBridgeMonitorWindowPlacement/, "実ウィンドウ位置を検証できる");
   assert.doesNotThrow(() => process.kill(worker.pid, 0), "モニター終了でBridge相当プロセスを停止してはいけない");
 

@@ -94,8 +94,10 @@ function Read-Utf8Json([string]$Path) {
   return $json | ConvertFrom-Json -ErrorAction Stop
 }
 
-function Parse-Time([string]$Value) {
+function Parse-Time($Value) {
   if (-not $Value) { return $null }
+  if ($Value -is [DateTimeOffset]) { return $Value.ToLocalTime() }
+  if ($Value -is [DateTime]) { return ([DateTimeOffset]::new($Value)).ToLocalTime() }
   try { return ([DateTimeOffset]::Parse($Value)).ToLocalTime() } catch { return $null }
 }
 
@@ -108,7 +110,7 @@ function Format-Duration([double]$Seconds) {
   return "{0}分{1:00}秒" -f $minutes, $seconds
 }
 
-function Format-EtaWindow([string]$EarliestValue, [string]$LatestValue, [DateTimeOffset]$Now) {
+function Format-EtaWindow($EarliestValue, $LatestValue, [DateTimeOffset]$Now) {
   $earliest = Parse-Time $EarliestValue
   $latest = Parse-Time $LatestValue
   if ($null -eq $earliest -or $null -eq $latest) { return "算出中" }
@@ -493,8 +495,8 @@ try {
       }
 
       foreach ($state in $records) {
-        $heartbeat = Parse-Time ([string]$state.heartbeatAt)
-        if ($null -eq $heartbeat) { $heartbeat = Parse-Time ([string]$state.updatedAt) }
+        $heartbeat = Parse-Time $state.heartbeatAt
+        if ($null -eq $heartbeat) { $heartbeat = Parse-Time $state.updatedAt }
         $heartbeatAge = if ($null -eq $heartbeat) { [double]::PositiveInfinity } else { ($now - $heartbeat).TotalSeconds }
         $bridgeAlive = Test-LocalProcess $state.bridgePid
         $status = [string]$state.status
@@ -513,11 +515,11 @@ try {
 
         if ($status -in @("running", "waiting_for_user", "needs_review", "failed", "cancelled", "completed", "stalled")) {
           Add-Line $lines ("    工程: {0}" -f (Clean-Text $state.currentStep 100)) "Gray"
-          $started = Parse-Time ([string]$state.startedAt)
+          $started = Parse-Time $state.startedAt
           $elapsed = if ($null -eq $started) { "不明" } else { Format-Duration (($now - $started).TotalSeconds) }
-          $response = Parse-Time ([string]$state.lastResponseAt)
+          $response = Parse-Time $state.lastResponseAt
           $responseAge = if ($null -eq $response) { "不明" } else { (Format-Duration (($now - $response).TotalSeconds)) + "前" }
-          $eta = if ($finalStatuses -contains [string]$state.status) { "終了" } else { Format-EtaWindow ([string]$state.estimatedEarliestAt) ([string]$state.estimatedLatestAt) $now }
+          $eta = if ($finalStatuses -contains [string]$state.status) { "終了" } else { Format-EtaWindow $state.estimatedEarliestAt $state.estimatedLatestAt $now }
           Add-Line $lines ("    経過: {0} / 完了目安: {1} / 最終応答: {2}" -f $elapsed, $eta, $responseAge) "DarkGray"
           if ($state.operatorWaitReason) { Add-Line $lines ("    操作待ち: {0}" -f (Clean-Text $state.operatorWaitReason 100)) "Yellow" }
         } else {
