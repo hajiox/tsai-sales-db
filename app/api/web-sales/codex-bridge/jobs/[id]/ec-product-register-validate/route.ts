@@ -5,7 +5,7 @@ import { EC_PRODUCT_REGISTER_TASK_KEY } from "@/lib/ec-product-registration-code
 import {
   buildEcProductRegisterPayload,
   buildEcProductRegisterPayloadHash,
-  ecProductRegisterPayloadMatches,
+  ecProductRegisterPayloadMismatchKeys,
 } from "@/lib/ec-product-registration-job-server";
 
 export const runtime = "nodejs";
@@ -45,8 +45,10 @@ export async function POST(
     const current = await buildEcProductRegisterPayload(supabase, recipe as Record<string, unknown>);
     const parameters = job.parameters as Record<string, unknown>;
     const payloadHash = buildEcProductRegisterPayloadHash(current);
-    if (!ecProductRegisterPayloadMatches(parameters, current) || parameters.payloadHash !== payloadHash) {
-      return NextResponse.json({ error: "商品登録の確認後に商品情報・価格・画像が変更されました" }, { status: 409 });
+    const mismatches = ecProductRegisterPayloadMismatchKeys(parameters, current);
+    if (parameters.payloadHash !== payloadHash) mismatches.push("payloadHash");
+    if (mismatches.length > 0) {
+      return NextResponse.json({ error: `商品登録の確認後に固定情報が変わりました（差分: ${[...new Set(mismatches)].join(", ")}）` }, { status: 409 });
     }
     const { data: intent, error: intentError } = await supabase
       .from("recipe_ec_product_registration_intents")

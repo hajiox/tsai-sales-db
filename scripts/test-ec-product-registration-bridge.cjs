@@ -15,6 +15,7 @@ const installer = read("tools", "tsa-codex-bridge", "install-bridge.ps1");
 const guard = read("tools", "tsa-codex-bridge", "codex-run-guard.mjs");
 const skill = read("tools", "tsa-codex-bridge", "skills", "register-aizu-ec-products", "SKILL.md");
 const component = read("app", "recipe", "_components", "EcPriceSyncControls.tsx");
+const jobServer = read("lib", "ec-product-registration-job-server.ts");
 
 for (const schemaName of ["ec-product-register-plan.schema.json", "ec-product-register-result.schema.json"]) {
   const schema = JSON.parse(read("tools", "tsa-codex-bridge", schemaName));
@@ -69,5 +70,7 @@ assert.match(skill, /タイムアウト[\s\S]*再送信しない/);
 assert.match(component, /Qoo10へ商品登録/);
 assert.match(component, /expectedRecipeSnapshot/);
 assert.match(component, /二重登録防止/);
+assert.match(jobServer, /stableJson\(candidate\.reference\) !== stableJson\(right\.reference\)/);
+assert.match(jobServer, /stableJson\(candidate\.images\) !== stableJson\(right\.images\)/);
 
 console.log("EC product registration Bridge contract verified.");

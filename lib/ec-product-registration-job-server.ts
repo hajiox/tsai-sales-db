@@ -136,15 +136,21 @@ export async function buildEcProductRegisterPayload(
 }
 
 export function ecProductRegisterPayloadMatches(left: unknown, right: EcProductRegisterPayload) {
-  if (!left || typeof left !== "object" || Array.isArray(left)) return false;
+  return ecProductRegisterPayloadMismatchKeys(left, right).length === 0;
+}
+
+export function ecProductRegisterPayloadMismatchKeys(left: unknown, right: EcProductRegisterPayload) {
+  if (!left || typeof left !== "object" || Array.isArray(left)) return ["payload"];
   const candidate = left as Record<string, unknown>;
-  return ecProductRegisterSnapshotsMatch(candidate.recipeSnapshot, right.recipeSnapshot)
-    && String(candidate.expectedAccount || "") === right.expectedAccount
-    && normalizeEcProductRegisterTitle(candidate.productName) === right.productName
-    && normalizeEcProductRegisterJan(candidate.janCode) === right.janCode
-    && String(candidate.sellerCode || "") === right.sellerCode
-    && Number(candidate.targetPrice) === right.targetPrice
-    && String(candidate.description || "") === right.description
-    && JSON.stringify(candidate.images) === JSON.stringify(right.images)
-    && JSON.stringify(candidate.reference) === JSON.stringify(right.reference);
+  const mismatches: string[] = [];
+  if (!ecProductRegisterSnapshotsMatch(candidate.recipeSnapshot, right.recipeSnapshot)) mismatches.push("recipeSnapshot");
+  if (String(candidate.expectedAccount || "") !== right.expectedAccount) mismatches.push("expectedAccount");
+  if (normalizeEcProductRegisterTitle(candidate.productName) !== right.productName) mismatches.push("productName");
+  if (normalizeEcProductRegisterJan(candidate.janCode) !== right.janCode) mismatches.push("janCode");
+  if (String(candidate.sellerCode || "") !== right.sellerCode) mismatches.push("sellerCode");
+  if (Number(candidate.targetPrice) !== right.targetPrice) mismatches.push("targetPrice");
+  if (String(candidate.description || "") !== right.description) mismatches.push("description");
+  if (stableJson(candidate.images) !== stableJson(right.images)) mismatches.push("images");
+  if (stableJson(candidate.reference) !== stableJson(right.reference)) mismatches.push("reference");
+  return mismatches;
 }
