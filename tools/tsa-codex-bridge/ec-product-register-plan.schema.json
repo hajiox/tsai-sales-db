@@ -6,7 +6,7 @@
   "properties": {
     "status": { "type": "string", "enum": ["ready", "waiting_for_user", "needs_review"] },
     "site": { "type": "string", "const": "qoo10" },
-    "operation": { "type": "string", "enum": ["planned", "already_exists", "blocked"] },
+    "operation": { "type": "string", "enum": ["planned", "update_existing", "already_exists", "blocked"] },
     "existing_product_identifier": { "type": ["string", "null"] },
     "reference_product_identifier": { "type": ["string", "null"] },
     "target_product_name": { "type": ["string", "null"] },

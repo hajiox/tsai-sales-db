@@ -6,7 +6,7 @@
   "properties": {
     "status": { "type": "string", "enum": ["completed", "waiting_for_user", "needs_review", "failed"] },
     "site": { "type": "string", "const": "qoo10" },
-    "operation": { "type": "string", "enum": ["created", "already_exists", "blocked"] },
+    "operation": { "type": "string", "enum": ["created", "updated", "already_exists", "blocked"] },
     "account_label": { "type": ["string", "null"] },
     "product_identifier": { "type": ["string", "null"] },
     "final_product_name": { "type": ["string", "null"] },
