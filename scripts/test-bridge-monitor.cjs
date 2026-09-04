@@ -117,6 +117,18 @@ try {
   const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
   assert.deepEqual(schema.properties.system.enum, ["tsa", "tsg", "docscanner"]);
   assert.ok(schema.required.includes("heartbeatAt"));
+  for (const field of [
+    "codexSessionCount",
+    "inputTokens",
+    "cachedInputTokens",
+    "outputTokens",
+    "reasoningOutputTokens",
+    "browserToolCalls",
+    "commandExecutions",
+  ]) {
+    assert.deepEqual(schema.properties[field], { type: "integer", minimum: 0 });
+    assert.equal(schema.required.includes(field), false, `${field} must remain optional`);
+  }
   assert.match(monitorSource, /\$previousRenderedLines = @\(\)/);
   assert.match(monitorSource, /\$RenderKey -eq \$script:lastCursorKey/);
   assert.match(monitorSource, /\$previous\.text -ceq \$entry\.text/);
@@ -139,16 +151,25 @@ try {
   assert.match(bridgeSource, /config\.monitorPlacementBase64/);
   assert.match(placementScriptSource, /ConvertFrom-CodexBridgeMonitorPlacementBase64/);
 
-  writeState("tsa-interactive", baseState({
-    system: "tsa",
-    systemLabel: "TSA",
-    workerId: "tsa-office-01",
-    workerName: "事務所PC",
-    status: "running",
-    progress: 62,
-    taskLabel: "レシピSNS素材AI生成",
-    currentStep: "Instagram画像を生成しています",
-  }));
+  writeState("tsa-interactive", {
+    ...baseState({
+      system: "tsa",
+      systemLabel: "TSA",
+      workerId: "tsa-office-01",
+      workerName: "事務所PC",
+      status: "running",
+      progress: 62,
+      taskLabel: "レシピSNS素材AI生成",
+      currentStep: "Instagram画像を生成しています",
+    }),
+    codexSessionCount: 2,
+    inputTokens: 1234,
+    cachedInputTokens: 567,
+    outputTokens: 890,
+    reasoningOutputTokens: 123,
+    browserToolCalls: 4,
+    commandExecutions: 5,
+  });
   writeState("tsa-ai-01", {
     ...baseState({
       system: "tsa",
@@ -256,6 +277,8 @@ try {
   assert.match(first.output, /Codex Bridge 統合モニター/);
   assert.match(first.output, /TSA/);
   assert.match(first.output, /事務所PC \[実行中 62%\] レシピSNS素材AI生成/);
+  assert.match(first.output, /使用量: Codex 2回 \/ 入力 1,234 \(キャッシュ 567\) \/ 出力 890 \(推論 123\) \/ ブラウザ 4回 \/ コマンド 5回/);
+  assert.equal((first.output.match(/使用量:/g) || []).length, 1, "正の利用量があるWorkerだけ1行で表示する");
   assert.match(first.output, /事務所PC AI生成1 \[待機中 0%\] 現在のジョブなし/);
   assert.doesNotMatch(first.output, /旧ログイン前Bridge/);
   assert.match(first.output, /事務所PC AI生成2 \[実行中 24%\] EC商品名AI生成/);

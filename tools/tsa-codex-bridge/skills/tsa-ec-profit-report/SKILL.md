@@ -14,12 +14,10 @@ Use the signed-in Chrome session and official seller/admin pages only. Read the 
 
 ## Browser Session Reuse
 
-- Select the browser using the requested official URL with `agent.browsers.getForUrl(targetUrl)`. Do not select a generic Chrome instance first; more than one Chrome profile or extension instance can be connected.
-- After connecting to Chrome, list its existing tabs before opening anything.
-- Reuse a tab whose URL is already on the requested channel's official host. Some seller sites keep authentication in the original tab, so a newly opened tab can appear logged out even in the same Chrome profile.
-- If several tabs match, prefer a non-login page whose visible account/store matches the requested channel. Navigate that same tab only when necessary.
-- Create a new tab only when no tab for the official host exists.
-- Keep operator-owned claimed tabs and Bridge-created temporary tabs in separate lists. On every completion, error, and operator-wait path, do not call `markHandoff()`, `markDeliverable()`, or `close()` on an operator-owned tab. Close only Bridge-created temporary tabs, then return immediately so normal turn cleanup releases every unmarked claimed tab for the next fresh Bridge session.
+- Use only the Bridge-supplied `cua_repl` tool. Its first invocation must be exactly `await cua.getState()`; then follow the current API documentation returned by that call. Do not import `browser-client.mjs` or use the retired `agent.browsers` API.
+- Use that single state snapshot to find Chrome tabs on the requested channel's official host. Acquire candidates with `cua.getTab(tabId, { browser: browserId })` and prefer a non-login page whose visible account/store matches the requested channel.
+- If every matching tab is unavailable or none exists, create at most one temporary same-profile tab at the confirmed official URL with `cua.createBrowserTab("chrome", targetUrl, { sessionName: "TSA Profit" })`.
+- Never use the in-app browser, Edge, another browser/profile, incognito, or another window. Never close an operator-owned existing tab; close only a temporary tab created by this session.
 
 ## Workflow
 

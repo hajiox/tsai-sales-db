@@ -22,10 +22,11 @@ assert.doesNotMatch(bridge, /wait three seconds and retry that same download onc
 assert.match(bridge, /webSalesBrowserWaitReason/);
 assert.match(bridge, /codex_browser_download_approval/);
 assert.match(bridge, /chrome_control_conflict/);
-assert.match(bridge, /Never call getForUrl\/getDefault\/get again/);
-assert.match(skill, /Never call `getForUrl`, `getDefault`, or `get` again/);
-assert.match(bridge, /open at most one temporary tab through the same binding/);
-assert.match(skill, /Open at most one temporary tab through the already-selected browser binding/);
+assert.match(bridge, /first invocation must be exactly await cua\.getState\(\)/);
+assert.match(skill, /first invocation must be exactly `await cua\.getState\(\)`/);
+assert.match(bridge, /create at most one temporary Chrome tab/);
+assert.match(skill, /create at most one temporary same-profile tab/);
+assert.doesNotMatch(skill, /agent\.browsers\.getForUrl|getForUrl\(|getDefault\(/);
 assert.match(skill, /さらに最大3分監視/);
 assert.match(channels, /https:\/\/sellercentral\.amazon\.co\.jp\/business-reports/);
 assert.match(channels, /\/amazonsell\/business.*移動せず/);

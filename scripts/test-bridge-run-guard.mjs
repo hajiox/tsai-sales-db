@@ -18,8 +18,12 @@ function fakeChild() {
 
 {
   const codexHome = "C:\\Users\\tester\\.codex";
-  const allowed = `"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -LiteralPath 'C:\\Users\\tester\\.codex\\skills\\publish-aizu-sns-posts\\SKILL.md' -Raw; Get-Content -LiteralPath 'C:\\Users\\tester\\.codex\\skills\\publish-aizu-sns-posts\\references\\platforms.md' -Raw; Get-Content -LiteralPath 'C:\\Users\\tester\\.codex\\plugins\\cache\\openai-bundled\\chrome\\26.825.51511\\skills\\control-chrome\\SKILL.md' -Raw"`;
+  const allowed = `"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -LiteralPath 'C:\\Users\\tester\\.codex\\skills\\publish-aizu-sns-posts\\SKILL.md' -Raw; Get-Content -LiteralPath 'C:\\Users\\tester\\.codex\\skills\\publish-aizu-sns-posts\\references\\platforms.md' -Raw"`;
   assert.equal(isAllowedRecipeSnsPublishCommand(allowed, { codexHome }), true);
+  assert.equal(isAllowedRecipeSnsPublishCommand(
+    `Get-Content -LiteralPath 'C:\\Users\\tester\\.codex\\plugins\\cache\\openai-bundled\\chrome\\26.825.51511\\skills\\control-chrome\\SKILL.md' -Raw`,
+    { codexHome },
+  ), false, "retired browser plugin files are never loaded");
   assert.equal(isAllowedRecipeSnsPublishCommand(
     `Get-Content -LiteralPath 'C:\\Users\\tester\\.codex\\rollout.jsonl' -Raw`,
     { codexHome },

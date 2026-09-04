@@ -115,13 +115,13 @@ const pricePromptSource = bridgeSource.slice(
 );
 assert.match(pricePromptSource, /SAME-CHROME TAB POLICY/);
 assert.match(pricePromptSource, /SAME-CHROME TEMPORARY-TAB FALLBACK/);
-assert.match(pricePromptSource, /create exactly one temporary tab.*chrome\.tabs\.new\(\)/i);
-assert.match(pricePromptSource, /same logged-in Chrome profile/i);
+assert.match(pricePromptSource, /create exactly one temporary tab.*cua\.createBrowserTab/i);
+assert.match(pricePromptSource, /same Chrome profile/i);
 assert.match(pricePromptSource, /Do not ask the operator to click a Chrome-top cancellation control/i);
-assert.match(pricePromptSource, /try the remaining existing matching official tabs/);
+assert.match(pricePromptSource, /try the remaining matching official tabs/);
 assert.doesNotMatch(pricePromptSource, /EXISTING-TAB-ONLY POLICY/);
 assert.match(pricePromptSource, /TAB FINALIZATION IS MANDATORY/);
-assert.match(pricePromptSource, /only treat a visible official login\/authentication screen.*as signed out/i);
+assert.match(pricePromptSource, /Continue only when that same Chrome profile is visibly signed in/i);
 assert.match(pricePromptSource, /OPERATOR AUTHORIZATION/);
 assert.match(pricePromptSource, /has no chat reply channel/);
 assert.match(pricePromptSource, /Do not ask the operator to reply, confirm again/);
@@ -175,7 +175,28 @@ assert.match(bridgeSource, /eventType: "ec_price_progress_checkpoint"/);
 assert.match(bridgeSource, /maxTemporaryTabs: 1/);
 assert.match(bridgeSource, /maxTemporaryTabs: 0/);
 assert.match(bridgeSource, /temporaryTabCreations > maxTemporaryTabs/);
-assert.doesNotMatch(bridgeSource, /"exec", "--ephemeral"/);
+assert.match(bridgeSource, /model: "gpt-5\.6-sol"[\s\S]{0,120}reasoningEffort: "medium"/);
+assert.match(bridgeSource, /focusedContext: true,[\s\S]{0,80}ephemeral: true/);
+assert.match(bridgeSource, /maxBrowserToolCalls: 45/);
+assert.match(bridgeSource, /maxCommandExecutions: 30/);
+assert.match(pricePromptSource, /OPERATION BUDGET: complete this read-only phase in at most 45 browser tool calls/);
+assert.match(pricePromptSource, /await cua\.getState\(\)/);
+assert.match(pricePromptSource, /cua\.getTab\(tabId, \{ browser: browserId \}\)/);
+assert.match(pricePromptSource, /cua\.createBrowserTab\(\\"chrome\\"/);
+assert.match(ecPriceSkillSource, /CLIは必ず `--ephemeral`/);
+assert.doesNotMatch(ecPriceSkillSource, /chrome:control-chrome|chrome\.tabs\.new\(\)|markHandoff|markDeliverable/);
+assert.match(bridgeSource, /function buildReusableEcPriceRecoveryPlan/);
+assert.match(bridgeSource, /source: "server_validated_recovery_plan"/);
+assert.match(bridgeSource, /eventType: "ec_price_site_plan_reused"/);
+const singleSiteExecutionSource = bridgeSource.slice(
+  bridgeSource.indexOf("async function executeSingleEcPriceSite"),
+  bridgeSource.indexOf("async function executeSingleEcPriceLp"),
+);
+assert.ok(
+  singleSiteExecutionSource.indexOf("writeFileSync(planOutput")
+    < singleSiteExecutionSource.indexOf("planned = await runEcPriceCodexPhase"),
+  "サーバー検証済み計画を確認してからCodex読取工程へフォールバックする",
+);
 assert.equal(detectsBrowserSessionContention("別のブラウザ作業セッションで使用中です"), true);
 assert.equal(detectsBrowserSessionContention("公式ログイン画面が表示されています"), false);
 assert.equal(detectsDuplicateConfirmation("「保存を実行」と返信してください"), true);
@@ -185,7 +206,7 @@ assert.equal(
     type: "item.started",
     item: {
       type: "mcp_tool_call",
-      arguments: { code: "const tab = await chrome.tabs.new();" },
+      arguments: { code: "const tab = await cua.createBrowserTab('chrome', targetUrl, { sessionName: 'TSA EC' });" },
     },
   }),
   1,
@@ -196,7 +217,7 @@ assert.equal(
     type: "item.started",
     item: {
       type: "mcp_tool_call",
-      arguments: { code: "const tab = await chrome.tabs.new();" },
+      arguments: { code: "const tab = await cua.createBrowserTab('chrome', targetUrl, { sessionName: 'TSA EC' });" },
     },
   }),
   false,
@@ -207,7 +228,7 @@ assert.equal(
     type: "item.started",
     item: {
       type: "mcp_tool_call",
-      arguments: { code: "const tab = await browser.tabs.new();" },
+      arguments: { code: "const tab = await cua.createBrowserTab('iab', targetUrl, { visible: false });" },
     },
   }),
   true,

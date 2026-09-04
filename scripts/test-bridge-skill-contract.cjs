@@ -70,7 +70,9 @@ assert.match(bridge, /Authentication stop rule:[\s\S]*Return waiting_for_user im
 assert.equal((bridge.match(/spawnSkillCodex\(job\.task_key, prompt, args/g) || []).length, 12);
 assert.equal((bridge.match(/waitForCodexExitWithWatchdog\(codex/g) || []).length, 12);
 assert.doesNotMatch(bridge, /const exitCode = await new Promise\(\(resolveExit/);
-assert.equal((bridge.match(/spawnCodexProcess\(args, options\)/g) || []).length, 2);
+assert.match(bridge, /spawnCodexProcess\(args, spawnOptions\)/);
+assert.match(bridge, /async function spawnCodexProcess\(args, options\)/);
+assert.match(bridge, /attachCodexUsageObserver\(child, bridgeBudget\)/);
 assert.doesNotMatch(bridge, /spawnCodex\(/);
 assert.doesNotMatch(bridge, /stdin\.end\(prompt/);
 assert.doesNotMatch(bridge, /codexSessionId|TSA_CODEX_SESSION_ID/);
@@ -92,25 +94,41 @@ for (const skillName of [
 
 for (const skillName of ["tsa-web-sales-csv", "tsa-ad-cost-csv", "tsa-ec-profit-report"]) {
   const skill = read("tools", "tsa-codex-bridge", "skills", skillName, "SKILL.md");
-  assert.match(skill, /normal turn cleanup releases every unmarked claimed tab/);
-  assert.doesNotMatch(skill, /Finalize a claimed existing tab with `keep:/);
+  assert.match(skill, /await cua\.getState\(\)/);
+  assert.match(skill, /cua\.getTab\(tabId, \{ browser: browserId \}\)/);
+  assert.match(skill, /cua\.createBrowserTab\("chrome"/);
+  assert.doesNotMatch(skill, /agent\.browsers\.getForUrl|markHandoff|markDeliverable/);
 }
 const adCostSkill = read("tools", "tsa-codex-bridge", "skills", "tsa-ad-cost-csv", "SKILL.md");
 const adCostChannels = read("tools", "tsa-codex-bridge", "skills", "tsa-ad-cost-csv", "references", "channels.md");
 assert.match(adCostSkill, /For Amazon advertising, use Seller Central as the target URL/);
-assert.match(adCostSkill, /Try matching operator tabs one by one/);
+assert.match(adCostSkill, /Try matching operator tabs one by one/i);
 assert.match(adCostChannels, /Seller Central `https:\/\/sellercentral\.amazon\.co\.jp\/`/);
 assert.match(adCostChannels, /公開Amazon Adsトップやそのサインイン画面へ直接入らない/);
 assert.match(adCostChannels, /署名済みの候補を順に試す/);
 assert.match(adCostChannels, /全候補と一時タブのSeller Central導線が認証を求めた場合だけ `waiting_for_user`/);
-assert.match(bridge, /Never mark, keep, hand off, deliver, or close a claimed operator tab/);
+assert.match(bridge, /Never close an operator-owned existing tab/);
 
 const argBuilder = bridge.slice(
-  bridge.indexOf("function buildIsolatedCodexArgs"),
+  bridge.indexOf("function resolveUnifiedCuaMcpServer"),
   bridge.indexOf("function appendEventLine"),
 );
 assert.match(argBuilder, /"exec", "--json"/);
 assert.doesNotMatch(argBuilder, /"resume"/);
+assert.match(argBuilder, /options\.minimalContext \|\| options\.focusedContext/);
+assert.match(argBuilder, /"--ignore-user-config"/);
+assert.match(argBuilder, /"--ignore-rules"/);
+assert.match(argBuilder, /"--disable", "apps"/);
+assert.match(argBuilder, /options\.minimalContext.*"--disable", "plugins"/);
+assert.match(argBuilder, /options\.focusedContext[\s\S]*"--disable", "plugins"/);
+assert.match(argBuilder, /appendUnifiedCuaMcpArgs\(args, config\.codexHome\)/);
+assert.match(argBuilder, /mcp_servers\.cua_repl\.enabled_tools/);
+assert.match(argBuilder, /BROWSER_USE_AVAILABLE_BACKENDS: "chrome"/);
+assert.match(argBuilder, /options\.ephemeral.*"--ephemeral"/);
+assert.match(bridge, /Do not read general development notes, repository history, unrelated Skills/);
+assert.match(bridge, /event\?\.type === "turn\.completed"/);
+assert.match(bridge, /cached_input_tokens/);
+assert.match(bridge, /bridgeBudgetViolation/);
 
 assert.match(installer, /"skill-contract\.json"/);
 assert.match(installer, /\$bridgeSkillNames/);

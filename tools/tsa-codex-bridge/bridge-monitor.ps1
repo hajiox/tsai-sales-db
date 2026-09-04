@@ -125,6 +125,42 @@ function Clean-Text($Value, [int]$Maximum = 100) {
   return $text.Substring(0, [Math]::Max(1, $Maximum - 1)) + "…"
 }
 
+function Get-UsageCount($Value) {
+  [long]$count = 0
+  if (-not [long]::TryParse([string]$Value, [ref]$count) -or $count -lt 0) { return [long]0 }
+  return $count
+}
+
+function Format-UsageLine($State) {
+  $sessionCount = Get-UsageCount $State.codexSessionCount
+  $inputTokens = Get-UsageCount $State.inputTokens
+  $cachedInputTokens = Get-UsageCount $State.cachedInputTokens
+  $outputTokens = Get-UsageCount $State.outputTokens
+  $reasoningOutputTokens = Get-UsageCount $State.reasoningOutputTokens
+  $browserToolCalls = Get-UsageCount $State.browserToolCalls
+  $commandExecutions = Get-UsageCount $State.commandExecutions
+  $hasUsage = @(
+    $sessionCount,
+    $inputTokens,
+    $cachedInputTokens,
+    $outputTokens,
+    $reasoningOutputTokens,
+    $browserToolCalls,
+    $commandExecutions
+  ) | Where-Object { $_ -gt 0 } | Select-Object -First 1
+  if ($null -eq $hasUsage) { return $null }
+  return (
+    "    使用量: Codex {0:N0}回 / 入力 {1:N0} (キャッシュ {2:N0}) / 出力 {3:N0} (推論 {4:N0}) / ブラウザ {5:N0}回 / コマンド {6:N0}回" -f
+    $sessionCount,
+    $inputTokens,
+    $cachedInputTokens,
+    $outputTokens,
+    $reasoningOutputTokens,
+    $browserToolCalls,
+    $commandExecutions
+  )
+}
+
 function Test-LocalProcess($Value) {
   [int]$processId = 0
   if (-not [int]::TryParse([string]$Value, [ref]$processId) -or $processId -le 0) { return $false }
@@ -492,6 +528,8 @@ try {
         $codexPid = if ($state.codexPid) { [string]$state.codexPid } else { "-" }
         $jobId = if ($state.jobId) { Clean-Text $state.jobId 44 } else { "-" }
         Add-Line $lines ("    Bridge PID {0} / Codex PID {1} / Job {2}" -f [string]$state.bridgePid, $codexPid, $jobId) "DarkGray"
+        $usageLine = Format-UsageLine $state
+        if ($usageLine) { Add-Line $lines $usageLine "DarkGray" }
         if ($state.lastTerminal -and $status -in @("idle", "offline")) {
           Add-Line $lines "    直近の終了結果（現在実行中ではありません）" "DarkCyan"
           Add-Line $lines ("      {0} / {1} / {2}" -f (Clean-Text $state.lastTerminal.taskLabel 40), (Status-Display ([string]$state.lastTerminal.status)).label, (Clean-Text $state.lastTerminal.summary 70)) "DarkCyan"

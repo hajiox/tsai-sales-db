@@ -90,9 +90,6 @@ export function isAllowedRecipeSnsPublishCommand(eventOrCommand, options = {}) {
     win32.join(codexHome, "skills", "publish-aizu-sns-posts", "SKILL.md"),
     win32.join(codexHome, "skills", "publish-aizu-sns-posts", "references", "platforms.md"),
   ].map(normalizeWindowsPath));
-  const chromeSkillRoot = normalizeWindowsPath(
-    win32.join(codexHome, "plugins", "cache", "openai-bundled", "chrome"),
-  );
 
   return commands.every((command) => {
     const match = command.match(
@@ -100,10 +97,7 @@ export function isAllowedRecipeSnsPublishCommand(eventOrCommand, options = {}) {
     );
     if (!match) return false;
     const requestedPath = normalizeWindowsPath(match[1] || match[2] || "");
-    if (exactPaths.has(requestedPath)) return true;
-    if (!requestedPath.startsWith(`${chromeSkillRoot}\\`)) return false;
-    const relative = requestedPath.slice(chromeSkillRoot.length + 1);
-    return /^[^\\]+\\skills\\control-chrome\\skill\.md$/iu.test(relative);
+    return exactPaths.has(requestedPath);
   });
 }
 

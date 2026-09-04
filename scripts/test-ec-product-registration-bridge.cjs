@@ -92,5 +92,8 @@ assert.match(jobServer, /stableJson\(candidate\.reference\) !== stableJson\(righ
 assert.match(jobServer, /stableJson\(candidate\.images\) !== stableJson\(right\.images\)/);
 assert.match(bridge, /\["planned", "update_existing"\]\.includes\(plan\.operation\)/);
 assert.match(bridge, /\["created", "updated", "already_exists"\]/);
+assert.match(bridge, /complete this read-only phase in at most 45 browser tool calls/);
+assert.match(bridge, /never repeat submit/);
+assert.match(bridge, /model: "gpt-5\.6-sol"[\s\S]{0,120}reasoningEffort: "medium"/);
 
 console.log("EC product registration Bridge contract verified.");

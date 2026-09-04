@@ -46,6 +46,13 @@
     "estimatedLatestAt": { "type": ["string", "null"], "format": "date-time" },
     "bridgePid": { "type": "integer", "minimum": 1 },
     "codexPid": { "type": ["integer", "null"], "minimum": 1 },
+    "codexSessionCount": { "type": "integer", "minimum": 0 },
+    "inputTokens": { "type": "integer", "minimum": 0 },
+    "cachedInputTokens": { "type": "integer", "minimum": 0 },
+    "outputTokens": { "type": "integer", "minimum": 0 },
+    "reasoningOutputTokens": { "type": "integer", "minimum": 0 },
+    "browserToolCalls": { "type": "integer", "minimum": 0 },
+    "commandExecutions": { "type": "integer", "minimum": 0 },
     "lastTerminal": {
       "type": ["object", "null"],
       "properties": {

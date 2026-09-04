@@ -12,14 +12,12 @@ description: Download, validate, archive, and import TSA product-sales CSV files
 
 ## Browser Session Reuse
 
-- Select the browser using the requested official URL with `agent.browsers.getForUrl(targetUrl)`. Do not select a generic Chrome instance first; more than one Chrome profile or extension instance can be connected.
-- Select that browser binding exactly once. If a tab detaches, use the same binding to list or reclaim a matching tab. Never call `getForUrl`, `getDefault`, or `get` again to switch to another Chrome or extension instance during the job.
-- After connecting to Chrome, list its existing tabs before opening anything.
-- Reuse a tab whose URL is already on the requested EC seller site's official host. A new tab can lose tab-scoped authentication even in the same Chrome profile.
+- Use only the Bridge-supplied `cua_repl` tool. Its first invocation must be exactly `await cua.getState()`; then follow the current API documentation returned by that call. Do not import `browser-client.mjs` or use the retired `agent.browsers` API.
+- Use that single state snapshot to find Chrome tabs on the requested EC seller site's official host. Acquire a candidate with `cua.getTab(tabId, { browser: browserId })` and reuse it when possible.
 - If several tabs match, prefer a signed-in non-login page for the requested store.
-- If a matching operator-owned tab is already controlled by another browser-operation session, leave it open and unchanged. Open at most one temporary tab through the already-selected browser binding, navigate it directly to the confirmed report URL in the channel reference, and continue only after verifying the expected signed-in account on that report route. Do not use a generic seller root or copy an occupied tab's marketing redirect URL. Close only that temporary tab when finished.
-- Keep operator-owned claimed tabs and Bridge-created temporary tabs in separate lists. On every completion, error, and operator-wait path, do not call `markHandoff()`, `markDeliverable()`, or `close()` on an operator-owned tab. Close only Bridge-created temporary tabs, then return immediately so normal turn cleanup releases every unmarked claimed tab for the next fresh Bridge session.
-- If the selected binding is no longer usable, the temporary tab cannot be created, or the expected signed-in account is unavailable in that temporary tab, stop with `waiting_for_user` and identify the exact Chrome-control or authentication reason. Do not recover by silently selecting another browser binding.
+- If all matching tabs are unavailable or none exists, create at most one temporary same-profile tab directly at the confirmed report URL with `cua.createBrowserTab("chrome", targetUrl, { sessionName: "TSA Sales" })`. Continue only after verifying the expected signed-in account.
+- Never use the in-app browser, Edge, another browser/profile, incognito, or another window. Never close an operator-owned existing tab; close only a temporary tab created by this session.
+- If both existing-tab and temporary-tab paths fail, stop with `waiting_for_user` and identify the exact Chrome-control or authentication reason. Do not switch browser backends.
 
 ## Download Safety
 
