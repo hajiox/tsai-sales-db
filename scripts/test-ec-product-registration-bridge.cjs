@@ -75,6 +75,8 @@ assert.match(skill, /送信操作は1回だけ/);
 assert.match(skill, /タイムアウト[\s\S]*再送信しない/);
 assert.match(skill, /update_existing/);
 assert.match(skill, /末尾の完全一致する店舗名「会津ブランド館」/);
+assert.match(skill, /「リスト編集」で「商品識別コード」列/);
+assert.match(skill, /JavaScriptソース、非公開API、別ブラウザは使わない/);
 assert.match(component, /Qoo10へ商品登録/);
 assert.match(component, /expectedRecipeSnapshot/);
 assert.match(component, /二重登録防止/);
