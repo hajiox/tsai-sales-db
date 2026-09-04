@@ -192,8 +192,12 @@ function Get-TrustedHeadlessBridgeProcesses {
       $headlessState = Get-Content -LiteralPath $runtime.StatePath -Raw | ConvertFrom-Json
       $statePid = [int]$headlessState.pid
       $lockPid = if ($lockExists) { [int](Get-Content -LiteralPath $runtime.LockPath -Raw) } else { $statePid }
-      $heartbeatText = if ($headlessState.updatedAt) { [string]$headlessState.updatedAt } else { [string]$headlessState.lastHeartbeatAt }
-      $updatedAt = [DateTimeOffset]::Parse($heartbeatText).UtcDateTime
+      $heartbeatValue = if ($headlessState.updatedAt) { $headlessState.updatedAt } else { $headlessState.lastHeartbeatAt }
+      $updatedAt = if ($heartbeatValue -is [DateTime]) {
+        $heartbeatValue.ToUniversalTime()
+      } else {
+        [DateTimeOffset]::Parse([string]$heartbeatValue).UtcDateTime
+      }
       if (
         $statePid -le 0 -or
         $lockPid -ne $statePid -or

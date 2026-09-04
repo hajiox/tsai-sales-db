@@ -87,6 +87,9 @@ assert.match(installer, /\$legacyPreloginTaskExists[\s\S]*Unregister-ScheduledTa
 assert.match(installer, /legacyUnifiedMonitorStatePath[\s\S]*Remove-Item -LiteralPath \$legacyUnifiedMonitorStatePath/);
 assert.match(installer, /maintenanceObserved -eq \$maintenanceNonce/);
 assert.match(installer, /function Get-TrustedHeadlessBridgeProcesses/);
+assert.match(installer, /AllowMissingLock = \$true/);
+assert.match(installer, /\$heartbeatValue -is \[DateTime\]/);
+assert.match(installer, /\$remainingValidatedBridgeIds[\s\S]*-Verb RunAs[\s\S]*\$stillRunningValidatedBridgeIds/);
 assert.match(installer, /Stop-ScheduledTask -TaskName \$headlessTaskName/);
 assert.match(installer, /Disable-ScheduledTask -TaskName \$interactiveTaskName/);
 assert.match(installer, /Enable-ScheduledTask -TaskName \$interactiveTaskName/);
