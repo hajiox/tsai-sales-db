@@ -171,20 +171,27 @@ $statePaths = @($statePath, $legacyHeadlessStatePath) + @($headlessWorkerSpecs |
 function Get-TrustedHeadlessBridgeProcesses {
   $trusted = @()
   $runtimeCandidates = @(
-    [pscustomobject]@{ StatePath = $legacyHeadlessStatePath; LockPath = $legacyHeadlessLockPath }
+    [pscustomobject]@{
+      StatePath = $legacyHeadlessStatePath
+      LockPath = $legacyHeadlessLockPath
+      AllowMissingLock = $true
+    }
   ) + @($headlessWorkerSpecs | ForEach-Object {
     $runtimeDir = Join-Path (Join-Path $installDir "workers") $_.RuntimeName
     [pscustomobject]@{
       StatePath = Join-Path $runtimeDir "bridge-state.json"
       LockPath = Join-Path $runtimeDir "bridge.lock"
+      AllowMissingLock = $false
     }
   })
   foreach ($runtime in $runtimeCandidates) {
-    if (-not (Test-Path -LiteralPath $runtime.StatePath -PathType Leaf) -or -not (Test-Path -LiteralPath $runtime.LockPath -PathType Leaf)) { continue }
+    if (-not (Test-Path -LiteralPath $runtime.StatePath -PathType Leaf)) { continue }
+    $lockExists = Test-Path -LiteralPath $runtime.LockPath -PathType Leaf
+    if (-not $lockExists -and -not $runtime.AllowMissingLock) { continue }
     try {
       $headlessState = Get-Content -LiteralPath $runtime.StatePath -Raw | ConvertFrom-Json
       $statePid = [int]$headlessState.pid
-      $lockPid = [int](Get-Content -LiteralPath $runtime.LockPath -Raw)
+      $lockPid = if ($lockExists) { [int](Get-Content -LiteralPath $runtime.LockPath -Raw) } else { $statePid }
       $updatedAt = [DateTimeOffset]::Parse([string]$headlessState.updatedAt).UtcDateTime
       if (
         $statePid -le 0 -or
