@@ -28,10 +28,10 @@ function aggregate(rows) {
 const statement = { billing: aggregate(files.flatMap(read)), receipts: aggregate(read(receiptFile)) };
 const classified = classifyYahooStatement(statement);
 assert.equal(classified.net_payout, 2913665);
-assert.equal(classified.excluded_ad_costs, 473047);
+assert.equal(classified.excluded_ad_costs, 225993);
 const keys = ['refunds', 'platform_fees', 'payment_fees', 'seller_discounts', 'seller_coupons', 'seller_points', 'shipping_costs', 'other_costs'];
 const deduction = row => keys.reduce((sum, key) => sum + Number(row[key] || 0), 0) - Number(row.other_credits || 0);
-assert.equal(deduction(classified), 470764);
+assert.equal(deduction(classified), 717818);
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY);
 const { data: current, error } = await db.from('ec_profit_monthly').select('*').eq('channel', 'yahoo').eq('report_month', '2026-08-01').single();
 if (error) throw error;
@@ -41,11 +41,11 @@ assert.equal(afterTotal, beforeTotal, 'Reclassification must conserve combined c
 const { excluded_ad_costs, excluded_marketplace_funded_discounts, ...columns } = classified;
 const corrected = { ...current, ...columns };
 const calculatedPayout = current.gross_sales - deduction(corrected);
-const note = '2026-09-06公式請求・受取CSV再集計。PRオプション129,235円・プロモーションパッケージ118,052円と取消返金233円を広告費に統一。EC控除470,764円、広告費473,047円、合計943,811円。入金額2,913,665円は不変。売上と精算期間の差は残るためpartialを維持。';
+const note = '2026-09-06利用者指定の分類へ修正。PRオプション129,235円・プロモーションパッケージ118,052円はEC手数料、取消返金233円はEC控除の戻しとして計上。EC控除717,818円、広告費225,993円、合計943,811円。入金額2,913,665円は不変。売上と精算期間の差は残るためpartialを維持。';
 const patch = {
   ...columns,
   notes: note,
-  raw_summary: { ...current.raw_summary, ...classified, yahoo_statement: statement, classification_version: 'yahoo-statement-v1', notes: note, calculated_payout: calculatedPayout, payout_difference: current.net_payout - calculatedPayout },
+  raw_summary: { ...current.raw_summary, ...classified, yahoo_statement: statement, classification_version: 'yahoo-statement-v2-ec-fees', notes: note, calculated_payout: calculatedPayout, payout_difference: current.net_payout - calculatedPayout },
   updated_at: new Date().toISOString(),
 };
 console.log(JSON.stringify({ before: { ec: deduction(current), ads: current.raw_summary.excluded_ad_costs }, after: { ec: deduction(corrected), ads: excluded_ad_costs }, combined: afterTotal }));
@@ -57,7 +57,7 @@ if (process.argv.includes('--apply')) {
   assert.equal(result.data.length, 1, 'Concurrent update detected');
   const verify = await db.from('ec_profit_monthly').select('*').eq('id', current.id).single();
   if (verify.error) throw verify.error;
-  assert.equal(deduction(verify.data), 470764);
-  assert.equal(verify.data.raw_summary.excluded_ad_costs, 473047);
+  assert.equal(deduction(verify.data), 717818);
+  assert.equal(verify.data.raw_summary.excluded_ad_costs, 225993);
   console.log('Applied and read-back verified.');
 } else console.log('Dry run only.');

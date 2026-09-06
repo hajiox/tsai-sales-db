@@ -1,8 +1,10 @@
 export type YahooStatementItem = { name: string; amount: number };
 export type YahooStatement = { billing: YahooStatementItem[]; receipts: YahooStatementItem[] };
 
-const ads = new Set(['PRオプション利用料', 'プロモーションパッケージ利用料', 'クリック課金型広告利用料', 'Yahoo!広告利用料', 'Yahoo!広告手数料', 'Google 広告利用料', 'Google 広告手数料']);
+const ads = new Set(['クリック課金型広告利用料', 'Yahoo!広告利用料', 'Yahoo!広告手数料', 'Google 広告利用料', 'Google 広告手数料']);
 const categories: Record<string, string> = {
+  'PRオプション利用料': 'platform_fees',
+  'プロモーションパッケージ利用料': 'platform_fees',
   'アフィリエイトパートナー報酬': 'platform_fees',
   'アフィリエイト手数料': 'platform_fees',
   'PayPay残高等決済手数料': 'payment_fees',

@@ -51,7 +51,7 @@ Use the most detailed official export available. UI wording can change; match by
 
 ## Yahoo Shopping
 
-- Always classify PRオプション利用料 and プロモーションパッケージ利用料 as advertising, together with their キャンセル分 refunds. Never put these charges in platform_fees or their refunds in other_credits. Advertising is net of its own refunds.
+- TSA accounting policy: classify PRオプション利用料 (including bonus-store participation) and プロモーションパッケージ利用料 as platform_fees, not advertising. Their キャンセル分 refunds belong to other_credits. Only actual advertising charges such as click ads belong to excluded_ad_costs, net of their own refunds.
 - Supply `yahoo_statement` in the normalized JSON: `billing` and `receipts` arrays of `{ "name": "exact 利用項目", "amount": 0 }`. Sum 金額（税込） for every exact item name across all period-confirmed billing parts and receipt cycles; each name appears once per array. Preserve gross charges and gross receipt credits separately. The server classifies these items deterministically. Include payment receipts and cancellations so receipt total minus billing total equals net_payout. Do not reuse an older normalized JSON missing this ledger; rebuild from archived originals without another download.
 
 - Store Creator Pro: obtain product sales, billing detail, and receipt detail for the requested period. Use `mixed` because more than one official report is required.

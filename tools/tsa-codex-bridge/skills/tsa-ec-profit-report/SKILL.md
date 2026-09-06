@@ -43,7 +43,7 @@ Use the signed-in Chrome session and official seller/admin pages only. Read the 
 - Store every cost or deduction as a positive number.
 - `gross_sales` is customer merchandise and customer-paid shipping before seller-funded discounts and refunds, tax included.
 - Include only seller-funded discounts, coupons, and points in EC deductions. Record marketplace-funded benefits separately in `excluded_marketplace_funded_discounts` using the official benefit or reimbursement amount; never infer it from a sales or payout difference.
-- Exclude all advertising charges. TSA imports them separately.
+- Exclude advertising charges. TSA imports them separately. Under TSA's Yahoo accounting policy, PR option (including bonus-store participation) and promotion package charges are EC platform fees, not advertising; their cancellation refunds are other_credits.
 - Refunds are positive deductions. Recovered fees or reimbursements are `other_credits`.
 - Carrier, fulfilment, and shipping charges billed to the seller are `shipping_costs`.
 - Put a clearly identified selling commission in `platform_fees` and payment processing in `payment_fees`.
