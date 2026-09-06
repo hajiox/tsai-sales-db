@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { classifyYahooStatement } from "@/lib/yahoo-settlement-classification";
 import {
   shouldPreserveExistingEcProfit,
   type EcProfitCoverageLevel,
@@ -35,6 +36,10 @@ const payloadSchema = z.object({
     source_files: z.array(z.string().min(1).max(500)).min(1).max(20),
     excluded_marketplace_funded_discounts: money.default(0),
     excluded_ad_costs: money.default(0),
+    yahoo_statement: z.object({
+      billing: z.array(z.object({ name: z.string().min(1).max(200), amount: money })).min(1).max(200),
+      receipts: z.array(z.object({ name: z.string().min(1).max(200), amount: money })).min(1).max(200),
+    }).optional(),
   }),
 });
 
@@ -71,6 +76,21 @@ export async function POST(
       || data.period_start !== job.period_start
       || data.period_end !== job.period_end) {
       return NextResponse.json({ error: "タスクと取込データのECまたは対象期間が一致しません" }, { status: 400 });
+    }
+
+    if (data.channel === 'yahoo') {
+      if (!data.yahoo_statement) {
+        return NextResponse.json({ error: 'Yahoo請求・受取明細の項目別合計が必要です。更新済みSkillで原本を再集計してください。' }, { status: 422 });
+      }
+      try {
+        const classified = classifyYahooStatement(data.yahoo_statement);
+        if (data.net_payout != null && Math.abs(data.net_payout - classified.net_payout) > 1) {
+          throw new Error('Yahoo請求・受取明細合計と入金額が一致しません');
+        }
+        Object.assign(data, classified);
+      } catch (error) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : 'Yahoo明細を分類できません' }, { status: 422 });
+      }
     }
 
     const totalDeductions = data.refunds + data.platform_fees + data.payment_fees

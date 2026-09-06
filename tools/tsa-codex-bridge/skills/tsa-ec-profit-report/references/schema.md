@@ -30,6 +30,8 @@ Write UTF-8 JSON with exactly these keys. Amounts are tax-inclusive JPY numbers.
 
 Allowed `report_basis`: `order`, `transaction`, `settlement`, `mixed`.
 
+For Yahoo only, also include `yahoo_statement: { "billing": [{ "name": "exact 利用項目", "amount": 0 }], "receipts": [{ "name": "exact 利用項目", "amount": 0 }] }`. Aggregate each official tax-inclusive item name once per side, including payment receipts and cancellation credits. The server derives cost categories and net payout from this ledger. PR option and promotion package charges, net of their cancellation credits, belong to excluded_ad_costs. Other channels omit this field.
+
 Allowed `coverage_level`: `complete`, `partial`, `needs_review`.
 
 Before finishing, calculate:
