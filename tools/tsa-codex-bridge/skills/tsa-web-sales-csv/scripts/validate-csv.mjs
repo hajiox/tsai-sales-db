@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname, join } from "node:path";
 
 const DEFINITIONS = {
   amazon: {
@@ -113,6 +113,34 @@ if (args.out) {
 }
 
 const totalQuantity = selectedRows.reduce((sum, row) => sum + numberValue(row[definition.quantity]), 0);
+if (args.channel === "yahoo") {
+  const dailyPath = args["daily-report"] || join(dirname(sourcePath), `yahoo-${args.start}_${args.end}.daily.original.csv`);
+  if (!existsSync(dailyPath)) {
+    issues.add("Yahoo全体分析の日別CSVが必要です。対象期間の売上・数量を商品CSVと照合してください");
+  } else {
+    const matrix = parseCsv(decode(readFileSync(dailyPath)).text.replace(/^\uFEFF/, ""));
+    const dailyHeader = matrix[0].map(clean);
+    const daily = matrix.slice(1).filter((row) => row.some((value) => clean(value)))
+      .map((values) => Object.fromEntries(dailyHeader.map((key, i) => [key, clean(values[i])])));
+    const dates = daily.map((row) => parseDate(row["日付"]));
+    const expectedDays = Math.round((Date.parse(args.end) - Date.parse(args.start)) / 86400000) + 1;
+    if (daily.length !== expectedDays || new Set(dates).size !== expectedDays
+      || dates.some((date) => !date || date < args.start || date > args.end)) {
+      issues.add("Yahoo日別CSVが対象期間の全日を網羅していません");
+    }
+    const quantityHeader = "注文数 - 注文点数合計";
+    if (!dailyHeader.includes("売上合計値") || !dailyHeader.includes(quantityHeader)) {
+      issues.add("Yahoo全体分析の日別CSVの必須列がありません");
+    } else {
+      const dailyQty = daily.reduce((sum, row) => sum + numberValue(row[quantityHeader]), 0);
+      const dailyAmount = daily.reduce((sum, row) => sum + numberValue(row["売上合計値"]), 0);
+      const amount = selectedRows.reduce((sum, row) => sum + numberValue(row["売上合計値（税込）"]), 0);
+      if (Math.abs(dailyQty - totalQuantity) > 0.01 || Math.abs(dailyAmount - amount) > 1) {
+        issues.add(`Yahoo商品CSVと日別合計が不一致（商品 ${totalQuantity}点/${amount}円・日別 ${dailyQty}点/${dailyAmount}円）。月末欠落・更新時刻・親子行の重複を確認してください`);
+      }
+    }
+  }
+}
 const blankTitles = selectedRows.filter((row) => !clean(row["商品名"] ?? row["タイトル"])).length;
 if (blankTitles > 0) issues.add(`商品名またはタイトル空欄: ${blankTitles}行`);
 

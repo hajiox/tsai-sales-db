@@ -33,7 +33,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.66";
+const VERSION = "1.9.67";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -7477,6 +7477,18 @@ function archiveSalesFiles(job, originalFile, preparedFile, archiveDir) {
     }
     copyFileSync(source, target);
   }
+  if (job.channel === "yahoo") {
+    const name = `${prefix}.daily.original.csv`;
+    const source = join(dirname(originalFile), name);
+    const target = join(archiveDir, name);
+    if (!existsSync(source)) throw new Error("Yahoo日別照合CSVがありません");
+    if (resolve(source) !== resolve(target)) {
+      if (existsSync(target) && !readFileSync(target).equals(readFileSync(source))) {
+        copyFileSync(target, target.replace(/\.csv$/i, `.superseded-${Date.now()}.csv`));
+      }
+      copyFileSync(source, target);
+    }
+  }
   return { original: resolve(targets.original), prepared: resolve(targets.prepared) };
 }
 
@@ -7529,6 +7541,11 @@ async function directImportCsv(job, preparedFile, expectedQuantity) {
   form.set("workerId", config.workerId);
   form.set("expectedQuantity", String(expectedQuantity));
   form.set("file", file);
+  if (job.channel === "yahoo") {
+    const daily = join(dirname(preparedFile), `yahoo-${job.period_start}_${job.period_end}.daily.original.csv`);
+    if (!existsSync(daily)) throw new Error("Yahoo日別照合CSVがありません");
+    form.set("dailyReport", new File([readFileSync(daily)], basename(daily), { type: "text/csv" }));
+  }
   const response = await fetch(`${config.baseUrl}/api/web-sales/codex-bridge/jobs/${job.id}/import`, {
     method: "POST",
     headers: { authorization: `Bearer ${config.token}` },

@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { findBestMatchSimplified, type Product } from "@/lib/csvHelpers";
 import { getBulkProductUnitPrices } from "@/lib/unitPriceHelper";
+import { hasPackConflict } from "@/lib/sales-price-reconciliation";
 import { getChannelConfigStatus } from "./config";
 import { fetchChannelSales } from "./connectors";
 import { compactText } from "./http";
@@ -411,6 +412,10 @@ async function resolveMappings(
       }
     }
 
+    const matchedProduct = productId ? (products || []).find((p) => String(p.id) === productId) : null;
+    if (matchedProduct && hasPackConflict(item.externalProductName, String(matchedProduct.name))) {
+      productId = undefined;
+    }
     if (!productId) {
       const current = unmatchedMap.get(key);
       unmatchedMap.set(key, current

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { validatePeriod } from "@/lib/web-sales-automation/date";
 import { parsePreparedWebSalesCsv } from "@/lib/web-sales-automation/csv-import";
+import { validateYahooDailyReport } from "@/lib/web-sales-automation/yahoo-daily-check";
+import iconv from "iconv-lite";
 import {
   getWebSalesAutomationServiceClient,
   runImportedCsvSync,
@@ -58,6 +60,17 @@ export async function POST(
     }
 
     const parsed = parsePreparedWebSalesCsv(channel, await file.text(), period);
+    let dailyVerification = null;
+    if (channel === "yahoo") {
+      const daily = formData.get("dailyReport");
+      if (!(daily instanceof File) || daily.size > MAX_SIZE) {
+        return NextResponse.json({ error: "Yahoo全体分析の日別CSVによる期間・金額・数量照合が必要です" }, { status: 422 });
+      }
+      const bytes = Buffer.from(await daily.arrayBuffer());
+      const utf8 = bytes.toString("utf8");
+      dailyVerification = validateYahooDailyReport(utf8.includes("\uFFFD") ? iconv.decode(bytes, "cp932") : utf8,
+        period.startDate, period.endDate, parsed.quantityTotal, parsed.items.reduce((sum, item) => sum + item.amount, 0));
+    }
     const expectedQuantityRaw = String(formData.get("expectedQuantity") || "").trim();
     const expectedQuantity = expectedQuantityRaw ? Number(expectedQuantityRaw) : Number.NaN;
     if (Number.isFinite(expectedQuantity)
@@ -72,6 +85,7 @@ export async function POST(
       codex_job_id: id,
       source_file_name: file.name.slice(0, 180),
       parsed_row_count: parsed.rowCount,
+      daily_verification: dailyVerification,
     });
     const status = result.status === "success" ? "completed" : result.status;
     const summary = status === "completed"

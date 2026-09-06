@@ -35,6 +35,7 @@ import EcProductContentSyncControls from "../_components/EcProductContentSyncCon
 import IngredientLabelAiControls from "../_components/IngredientLabelAiControls";
 import RecipeSnsStudio from "../_components/RecipeSnsStudio";
 import ScopedEcImageSection from "../_components/ScopedEcImageSection";
+import SalesPriceCheck from "../_components/SalesPriceCheck";
 import {
   buildUnifiedEcProductNames,
   EC_COMMON_PRODUCT_NAME_MAX_LENGTH,
@@ -4718,6 +4719,7 @@ function RecipeDetailContent() {
                 🛍️ EC登録情報
               </h3>
             </div>
+            <SalesPriceCheck recipeId={recipe.id} active={activeDetailTab === "ec"} />
             <div className="space-y-4 pb-4 pt-4">
               {recipe.category === "ネット専用" && (() => {
                 const productLpUrl = (recipe.product_lp_url || '').trim();
