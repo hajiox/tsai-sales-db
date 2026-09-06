@@ -1,8 +1,10 @@
 // /app/api/ads/chat/route.ts
 // 広告AI分析チャット — DB構造・広告ノウハウを含む専門アドバイザー
 import { NextRequest, NextResponse } from 'next/server'
+import { prepareAiChatContext, aiChatUsageRecord, logAiChatUsage } from '@/lib/ai-chat-context';
 
 export const dynamic = 'force-dynamic'
+const CHAT_MODEL = 'gemini-2.5-flash';
 
 interface ChatMessage {
     role: 'user' | 'model'
@@ -294,6 +296,7 @@ const commonDbSchema = `
 `
 
 export async function POST(request: NextRequest) {
+    const startedAt = Date.now();
     try {
         const { messages, context, platform } = await request.json() as {
             messages: ChatMessage[]
@@ -301,8 +304,15 @@ export async function POST(request: NextRequest) {
             platform: string // amazon | google | meta | rakuten | yahoo
         }
 
-        if (!messages || messages.length === 0) {
+        if (!Array.isArray(messages) || messages.length === 0) {
             return NextResponse.json({ success: false, error: 'メッセージは必須です' }, { status: 400 })
+        }
+
+        let chatContext;
+        try {
+            chatContext = prepareAiChatContext(messages);
+        } catch (error) {
+            return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'メッセージの形式が正しくありません' }, { status: 400 });
         }
 
         const geminiApiKey = process.env.GEMINI_API_KEY
@@ -345,21 +355,21 @@ ${context}
         const contents = [
             {
                 role: 'user',
-                parts: [{ text: systemPrompt + '\n\n' + messages[0].text }]
+                parts: [{ text: systemPrompt + chatContext.omissionInstruction + '\n\n' + chatContext.messages[0].text }]
             }
         ]
 
         // 2つ目以降のメッセージを追加
-        for (let i = 1; i < messages.length; i++) {
+        for (let i = 1; i < chatContext.messages.length; i++) {
             contents.push({
-                role: messages[i].role === 'user' ? 'user' : 'model',
-                parts: [{ text: messages[i].text }]
+                role: chatContext.messages[i].role === 'user' ? 'user' : 'model',
+                parts: [{ text: chatContext.messages[i].text }]
             })
         }
 
         // Gemini 2.5 Flash を使用（コスト効率の良い高性能モデル）
         const geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent?key=${geminiApiKey}`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -367,7 +377,11 @@ ${context}
             }
         )
 
+        if (!geminiRes.ok) {
+            throw new Error(`Gemini API Error (${geminiRes.status})`)
+        }
         const geminiData = await geminiRes.json()
+        logAiChatUsage(aiChatUsageRecord('ads-chat', chatContext, geminiData?.usageMetadata, CHAT_MODEL, Date.now() - startedAt));
         const reply = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text
             || '回答を生成できませんでした。もう一度お試しください。'
 

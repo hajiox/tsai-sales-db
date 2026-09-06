@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import monitorStateFile from "./monitor-state-file.cjs";
+import { acquireDocScannerFaxImages, deleteDocScannerFaxImages } from "./docscanner-fax-artifact.mjs";
 import {
   isAllowedRecipeSnsPublishCommand,
   isCodexRunGuardError,
@@ -33,7 +34,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.67";
+const VERSION = "1.9.68";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -635,30 +636,6 @@ function validateDocScannerFaxSummaryJobParameters(input) {
   return { ...parameters, sourceKey, sourceImageCount, imageFiles: normalizedImages };
 }
 
-function verifyAndCopyDocScannerFaxImages(parameters, workDir) {
-  if (!existsSync(config.docScannerFaxSummaryRoot)) {
-    throw new Error("DocScanner FAX要約画像フォルダが見つかりません");
-  }
-  const allowedRoot = realpathSync(config.docScannerFaxSummaryRoot);
-  const normalizedRoot = `${allowedRoot.toLowerCase().replace(/[\\/]+$/, "")}${sep}`;
-  return parameters.imageFiles.map((image, index) => {
-    if (!existsSync(image.localPath)) throw new Error(`FAX要約画像${index + 1}が見つかりません`);
-    const sourcePath = realpathSync(image.localPath);
-    if (!sourcePath.toLowerCase().startsWith(normalizedRoot)) {
-      throw new Error(`FAX要約画像${index + 1}が許可フォルダ外です`);
-    }
-    const stat = statSync(sourcePath);
-    if (!stat.isFile() || stat.size !== image.size || !/\.(?:jpe?g|png)$/i.test(sourcePath)) {
-      throw new Error(`FAX要約画像${index + 1}の形式またはサイズが一致しません`);
-    }
-    const actualHash = createHash("sha256").update(readFileSync(sourcePath)).digest("hex");
-    if (actualHash !== image.sha256) throw new Error(`FAX要約画像${index + 1}の内容が依頼時点と一致しません`);
-    const copiedPath = join(workDir, `fax-page-${String(image.page).padStart(2, "0")}${extname(sourcePath).toLowerCase()}`);
-    copyFileSync(sourcePath, copiedPath);
-    return { sourcePath, copiedPath, page: image.page };
-  });
-}
-
 async function notifyDocScannerFaxSummaryFailure(job, sourceKey) {
   return api(`/api/web-sales/codex-bridge/jobs/${job.id}/fax-summary-import`, {
     method: "POST",
@@ -677,7 +654,12 @@ async function executeDocScannerFaxSummaryJob(job) {
   const outputFile = join(workDir, "fax-summary-result.json");
 
   try {
-    copiedImages = verifyAndCopyDocScannerFaxImages(parameters, workDir);
+    copiedImages = await acquireDocScannerFaxImages({
+      baseUrl: config.docScannerBaseUrl,
+      secret: config.docScannerIntegrationSecret,
+      parameters,
+      workDir,
+    });
     const packet = {
       receivedAt: String(parameters.receivedAt || "").slice(0, 80),
       pageCount: copiedImages.length,
@@ -795,15 +777,28 @@ async function executeDocScannerFaxSummaryJob(job) {
     });
     try {
       for (const image of copiedImages) {
-        rmSync(image.sourcePath, { force: true });
         rmSync(image.copiedPath, { force: true });
       }
       rmSync(packetFile, { force: true });
       rmSync(outputFile, { force: true });
+      await deleteDocScannerFaxImages({
+        baseUrl: config.docScannerBaseUrl,
+        secret: config.docScannerIntegrationSecret,
+        parameters,
+      });
     } catch (cleanupError) {
       log(`WARN completed FAX summary artifact cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
     }
   } catch (error) {
+    if (error?.operatorWait === true && !summarySubmitted) {
+      await updateJob(job.id, {
+        status: "waiting_for_user", progress: 0,
+        currentStep: "DocScanner画像APIの認証設定待ち",
+        message: error.message, errorMessage: error.message,
+        eventType: "docscanner_fax_summary_auth_wait",
+      });
+      return;
+    }
     if (!summarySubmitted) {
       await notifyDocScannerFaxSummaryFailure(job, parameters.sourceKey).catch((notifyError) => {
         log(`WARN FAX summary failure status could not be sent to TSG: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`);
@@ -7638,6 +7633,9 @@ function loadConfig() {
       || stored.docScannerBaseUrl
       || "http://127.0.0.1:3004",
     ).replace(/\/$/, ""),
+    docScannerIntegrationSecret: String(
+      process.env.TSG_INTEGRATION_SECRET || stored.docScannerIntegrationSecret || "",
+    ).trim(),
     reasoningEffort: String(process.env.TSA_CODEX_REASONING_EFFORT || stored.reasoningEffort || "low").trim().toLowerCase(),
     pollMs: Math.max(3000, Number(process.env.TSA_CODEX_POLL_MS || stored.pollMs || 5000)),
     executionMode,

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prepareAiChatContext, aiChatUsageRecord, logAiChatUsage } from '@/lib/ai-chat-context';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
+const CHAT_MODEL = 'gemini-2.5-pro';
 
 interface ChatMessage {
     role: 'user' | 'model';
@@ -54,14 +56,22 @@ function getMonthStatus(targetMonth: string) {
 }
 
 export async function POST(request: NextRequest) {
+    const startedAt = Date.now();
     try {
         const { messages, month } = await request.json() as {
             messages: ChatMessage[];
             month: string;
         };
 
-        if (!messages || messages.length === 0) {
+        if (!Array.isArray(messages) || messages.length === 0) {
             return NextResponse.json({ success: false, error: 'メッセージは必須です' }, { status: 400 });
+        }
+
+        let chatContext;
+        try {
+            chatContext = prepareAiChatContext(messages);
+        } catch (error) {
+            return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'メッセージの形式が正しくありません' }, { status: 400 });
         }
 
         const geminiApiKey = process.env.GEMINI_API_KEY;
@@ -129,10 +139,10 @@ ${JSON.stringify({
     対象月現時点販売数: targetMonthRow?.合計販売数 ?? null,
     対象月月末着地見込み販売数: projectedTargetTotal ?? null,
     分析上の絶対ルール: monthStatus.instruction
-}, null, 2)}
+})}
 
 ### 過去6ヶ月の月次売上推移
-${JSON.stringify(chartRows, null, 2)}
+${JSON.stringify(chartRows)}
 
 ### 急上昇・急落商品 (対象月: ${month})
 ${JSON.stringify((trendData || []).filter((d: any) => ['新規成長', '大幅成長', '成長', '急激衰退', '大幅衰退', '衰退'].includes(d.trend_type)).map((d: any) => ({
@@ -140,7 +150,7 @@ ${JSON.stringify((trendData || []).filter((d: any) => ['新規成長', '大幅�
     トレンド: d.trend_type,
     変化率: d.trend_rate,
     当月売上: d.current_sales
-})), null, 2)}
+})))}
 
 ### 過去6ヶ月の累計販売実績
 ${JSON.stringify(periodSalesData?.slice(0, 20).map((d: any) => ({ // 上位20件のみ
@@ -148,7 +158,7 @@ ${JSON.stringify(periodSalesData?.slice(0, 20).map((d: any) => ({ // 上位20件
     合計販売数: d.total_count,
     Amazon: d.amazon_count,
     楽天: d.rakuten_count
-})), null, 2)}
+})))}
 `;
 
         const systemPrompt = `あなたはWEB販売管理システムの専属AIデータアナリストです。
@@ -173,21 +183,21 @@ ${contextString}
         const contents = [
             {
                 role: 'user',
-                parts: [{ text: systemPrompt + '\n\n' + messages[0].text }]
+                parts: [{ text: systemPrompt + chatContext.omissionInstruction + '\n\n' + chatContext.messages[0].text }]
             }
         ];
 
         // 2つ目以降のメッセージを追加
-        for (let i = 1; i < messages.length; i++) {
+        for (let i = 1; i < chatContext.messages.length; i++) {
             contents.push({
-                role: messages[i].role === 'user' ? 'user' : 'model',
-                parts: [{ text: messages[i].text }]
+                role: chatContext.messages[i].role === 'user' ? 'user' : 'model',
+                parts: [{ text: chatContext.messages[i].text }]
             });
         }
 
         // TSA全体で使用している一番賢いモデル (gemini-2.5-pro) を使用
         const geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent?key=${geminiApiKey}`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -202,6 +212,7 @@ ${contextString}
         }
 
         const geminiData = await geminiRes.json();
+        logAiChatUsage(aiChatUsageRecord('web-sales-chat', chatContext, geminiData?.usageMetadata, CHAT_MODEL, Date.now() - startedAt));
         const reply = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text
             || '回答を生成できませんでした。もう一度お試しください。';
 

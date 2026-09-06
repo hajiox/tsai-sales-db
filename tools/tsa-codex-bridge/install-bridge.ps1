@@ -6,6 +6,7 @@
   [string]$Workspace = "C:\作業用",
   [string]$DocScannerFaxSummaryRoot = "C:\作業用\doc-scanner\data\codex-bridge\fax-summary",
   [string]$DocScannerBaseUrl = "http://127.0.0.1:3004",
+  [string]$DocScannerIntegrationSecret = "",
   [ValidateSet("low", "medium", "high", "xhigh")][string]$ReasoningEffort = "low",
   [switch]$SkipPreloginTaskRegistration
 )
@@ -13,12 +14,18 @@
 $ErrorActionPreference = "Stop"
 $sourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $installDir = Join-Path $env:LOCALAPPDATA "TSA Codex Bridge"
+$existingBridgeConfigPath = Join-Path $installDir "bridge.config.json"
+if (-not $DocScannerIntegrationSecret -and (Test-Path -LiteralPath $existingBridgeConfigPath)) {
+  $existingBridgeConfig = Get-Content -LiteralPath $existingBridgeConfigPath -Raw | ConvertFrom-Json
+  $DocScannerIntegrationSecret = [string]$existingBridgeConfig.docScannerIntegrationSecret
+}
 $requiredSourceFiles = @(
   "bridge.mjs",
   "codex-run-guard.mjs",
   "download-artifact-recovery.mjs",
   "ec-profit-artifact-policy.mjs",
   "qoo10-official-sales.mjs",
+  "docscanner-fax-artifact.mjs",
   "recipe-sns-publish-policy.mjs",
   "monitor-state-file.cjs",
   "skill-contract.json",
@@ -441,6 +448,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "codex-run-guard.mjs") -Destination
 Copy-Item -LiteralPath (Join-Path $sourceDir "download-artifact-recovery.mjs") -Destination (Join-Path $installDir "download-artifact-recovery.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-profit-artifact-policy.mjs") -Destination (Join-Path $installDir "ec-profit-artifact-policy.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "qoo10-official-sales.mjs") -Destination (Join-Path $installDir "qoo10-official-sales.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "docscanner-fax-artifact.mjs") -Destination (Join-Path $installDir "docscanner-fax-artifact.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-publish-policy.mjs") -Destination (Join-Path $installDir "recipe-sns-publish-policy.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destination (Join-Path $installDir "monitor-state-file.cjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
@@ -516,6 +524,7 @@ $config = @{
   codexHome = (Join-Path $env:USERPROFILE ".codex")
   docScannerFaxSummaryRoot = $DocScannerFaxSummaryRoot
   docScannerBaseUrl = $DocScannerBaseUrl
+  docScannerIntegrationSecret = $DocScannerIntegrationSecret
   reasoningEffort = $ReasoningEffort
   pollMs = 5000
   executionMode = "interactive"
@@ -545,6 +554,7 @@ foreach ($workerSpec in $headlessWorkerSpecs) {
     codexHome = (Join-Path $userProfile ".codex")
     docScannerFaxSummaryRoot = $DocScannerFaxSummaryRoot
     docScannerBaseUrl = $DocScannerBaseUrl
+    docScannerIntegrationSecret = $DocScannerIntegrationSecret
     reasoningEffort = $ReasoningEffort
     pollMs = 5000
     executionMode = "headless-prelogin"
