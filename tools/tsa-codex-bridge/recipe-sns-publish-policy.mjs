@@ -1,10 +1,10 @@
 export const RECIPE_SNS_INTERACTIVE_APPROVAL_MESSAGE =
-  "対話中のCodexで画像アップロードと最終投稿を承認してください。未投稿の媒体だけを再開できます。";
+  "Bridgeのブラウザー確認が完了しませんでした。公開状態を確認し、未投稿の媒体だけをTSAから再実行してください。";
 
 const BROWSER_APPROVAL_WAIT_PATTERN =
   /browser security check was unavailable|permission request was dismissed before a decision was made/i;
 const STORY_NATIVE_FILE_PICKER_PATTERN =
-  /timed out[^\n]*waiting for file chooser|os(?:の)?ファイル選択|native file picker/i;
+  /os(?:の)?ファイル選択|native file picker/i;
 
 export function isRecipeSnsInteractiveApprovalWait(platform, ...values) {
   const text = values.map((value) => String(value || "")).join("\n");
@@ -20,9 +20,9 @@ export function normalizeRecipeSnsPublishStop({ platform, status, evidence, mess
   }
   return {
     status: "blocked",
-    evidence: platform === "instagram_story"
-      ? "Meta Business Suiteの画像追加がOSファイル選択を要求したため、非対話Bridgeでは公開前に停止しました。"
-      : "Chromeの画像アップロード確認を非対話Bridgeから完了できないため、公開前に停止しました。",
+    evidence: platform === "instagram_story" && STORY_NATIVE_FILE_PICKER_PATTERN.test(`${evidence}\n${message}`)
+      ? "Meta Business Suiteの画像追加がOSファイル選択を要求したため、BridgeではOS操作を行わず停止しました。"
+      : "Chromeのブラウザー確認が中止または未完了となったため、投稿結果の確認が必要です。",
     message: RECIPE_SNS_INTERACTIVE_APPROVAL_MESSAGE,
     approvalWait: true,
   };

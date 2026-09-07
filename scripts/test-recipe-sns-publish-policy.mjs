@@ -20,7 +20,7 @@ for (let run = 0; run < 20; run += 1) {
       message: "画像を設定できませんでした",
     }), {
       status: "blocked",
-      evidence: "Chromeの画像アップロード確認を非対話Bridgeから完了できないため、公開前に停止しました。",
+      evidence: "Chromeのブラウザー確認が中止または未完了となったため、投稿結果の確認が必要です。",
       message: RECIPE_SNS_INTERACTIVE_APPROVAL_MESSAGE,
       approvalWait: true,
     });
@@ -28,7 +28,7 @@ for (let run = 0; run < 20; run += 1) {
   assert.equal(isRecipeSnsInteractiveApprovalWait(
     "instagram_story",
     "Timed out after 3000ms waiting for file chooser.",
-  ), true);
+  ), false);
   assert.equal(isRecipeSnsInteractiveApprovalWait(
     "instagram",
     "Timed out after 3000ms waiting for file chooser.",

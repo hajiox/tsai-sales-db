@@ -288,7 +288,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
         {mode === "schedule" ? "全SNSを予約" : "全SNSへ投稿"}
       </button>
       <p className="mt-2 text-[11px] text-gray-500">
-        予約時刻に事務所PCとログイン済みChromeが利用できない場合は待機します。画像アップロードまたは最終公開で確認が必要な媒体は「操作待ち」になり、対話中のCodexで未投稿媒体だけを再開します。1媒体で止まっても残りは続行します。
+        予約時刻に事務所PCとログイン済みChromeが利用できない場合は待機します。画像の添付から公開確認までBridgeが続行します。ブラウザーが確認を要求した場合は事務所PCのBridge確認画面で回答すると、そのまま処理が再開します。1媒体で止まっても残りは続行します。
       </p>
 
       <div className="mt-4 border-t border-gray-200 pt-3">

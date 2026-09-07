@@ -23,6 +23,7 @@
     "test:ec-product-registration-bridge": "node scripts/test-ec-product-registration-bridge.cjs",
     "test:ec-product-registration-migration": "node scripts/dry-run-ec-product-registration-migration.cjs",
     "apply:ec-product-registration-migration": "node scripts/apply-ec-product-registration-migration.cjs",
+    "test:sns-browser-confirmation": "node scripts/test-sns-browser-confirmation.mjs",
     "test:bridge-monitor": "node scripts/test-bridge-monitor.cjs",
     "test:bridge-run-guard": "node scripts/test-bridge-run-guard.mjs",
     "test:ec-product-name-bridge": "node scripts/test-ec-product-name-bridge.cjs",

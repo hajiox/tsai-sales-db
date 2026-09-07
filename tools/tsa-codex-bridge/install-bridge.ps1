@@ -27,6 +27,8 @@ $requiredSourceFiles = @(
   "qoo10-official-sales.mjs",
   "docscanner-fax-artifact.mjs",
   "recipe-sns-publish-policy.mjs",
+  "sns-browser-confirmation.mjs",
+  "sns-browser-confirmation.ps1",
   "monitor-state-file.cjs",
   "skill-contract.json",
   "result.schema.json",
@@ -450,6 +452,8 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "ec-profit-artifact-policy.mjs") -D
 Copy-Item -LiteralPath (Join-Path $sourceDir "qoo10-official-sales.mjs") -Destination (Join-Path $installDir "qoo10-official-sales.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "docscanner-fax-artifact.mjs") -Destination (Join-Path $installDir "docscanner-fax-artifact.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-publish-policy.mjs") -Destination (Join-Path $installDir "recipe-sns-publish-policy.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "sns-browser-confirmation.mjs") -Destination (Join-Path $installDir "sns-browser-confirmation.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "sns-browser-confirmation.ps1") -Destination (Join-Path $installDir "sns-browser-confirmation.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destination (Join-Path $installDir "monitor-state-file.cjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
 Copy-WindowsPowerShellScript "bridge-monitor.ps1" (Join-Path $installDir "bridge-monitor.ps1")
