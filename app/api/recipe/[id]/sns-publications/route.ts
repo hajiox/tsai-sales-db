@@ -14,6 +14,7 @@ import {
   RECIPE_SNS_PUBLISH_RULES_VERSION,
   buildRecipeSnsPublishSnapshot,
   normalizeRecipeSnsPublishPosts,
+  normalizeRecipeSnsPublishAccounts,
   normalizeRecipeSnsPublishTargets,
   validateRecipeSnsPublishResult,
   type RecipeSnsPublicationView,
@@ -25,7 +26,7 @@ export const dynamic = "force-dynamic";
 
 const ADMIN_EMAIL = "aizubrandhall@gmail.com";
 const MAX_SCHEDULE_DAYS = 180;
-const PUBLICATION_SELECT = "id,job_id,generation_id,status,targets,scheduled_at,platform_results,error_message,created_at,started_at,completed_at";
+const PUBLICATION_SELECT = "id,job_id,generation_id,status,targets,payload,scheduled_at,platform_results,error_message,created_at,started_at,completed_at";
 const JOB_SELECT = "id,status,progress,current_step,error_message,started_at,completed_at,updated_at";
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -79,6 +80,7 @@ function toPublicationView(
   job: Record<string, unknown> | undefined,
 ): RecipeSnsPublicationView {
   const targets = normalizeRecipeSnsPublishTargets(publication.targets);
+  const expectedAccounts = normalizeRecipeSnsPublishAccounts(asObject(publication.payload).expectedAccounts);
   let platformResults: RecipeSnsPublicationView["platformResults"] = [];
   const rawResults = Array.isArray(publication.platform_results) ? publication.platform_results : [];
   if (rawResults.length === targets.length && targets.length > 0) {
@@ -97,6 +99,7 @@ function toPublicationView(
       }, {
         publicationId: String(publication.id || ""),
         targets,
+        expectedAccounts,
       }).platforms;
     } catch {
       platformResults = [];
@@ -108,6 +111,7 @@ function toPublicationView(
     generationId: String(publication.generation_id || ""),
     status: publicationStatus(publication, job),
     targets,
+    expectedAccounts,
     scheduledAt: String(publication.scheduled_at || ""),
     progress: Math.max(0, Math.min(100, Number(job?.progress) || 0)),
     currentStep: String(job?.current_step || (publicationStatus(publication, job) === "scheduled" ? "予約時刻を待っています" : "投稿待ち")),
@@ -213,6 +217,7 @@ export async function POST(
       cleanupMalformedOwnAttemptAuthorized: true,
       imageUrls,
       posts,
+      accounts: body.accounts,
     });
     const immediateBucket = Math.floor(Date.now() / 120_000);
     const scheduleIdentity = Date.parse(scheduledAt) > Date.now() + 30_000 ? scheduledAt : `immediate:${immediateBucket}`;

@@ -33,7 +33,7 @@ assert.match(api, /cleanupMalformedOwnAttemptAuthorized !== true/);
 assert.match(completionApi, /complete_recipe_sns_publish_job/);
 assert.match(completionApi, /validateRecipeSnsPublishResult/);
 
-for (const text of ["今すぐ投稿", "日時予約", "全SNSへ投稿", "全SNSを予約", "取消", "@Aizu_Brand_Kan", "@aizubrandhall"]) {
+for (const text of ["今すぐ投稿", "日時予約", "全SNSへ投稿", "全SNSを予約", "取消", "RECIPE_SNS_ACCOUNT_OPTIONS", "投稿先アカウント"]) {
   assert.ok(panel.includes(text), `missing SNS publish UI: ${text}`);
 }
 assert.match(panel, /RECIPE_SNS_PLATFORMS\.map/);
@@ -122,7 +122,7 @@ assert.match(platformReference, /未処理rejectを発生させない/);
 assert.match(platformReference, /公式Meta Business Suiteの一時タブを1枚だけ開く/);
 assert.match(platformReference, /Meta Business SuiteはIGストーリー投稿の明示承認済み公式経路/);
 assert.match(platformReference, /Instagram Webの「新しい投稿」/);
-assert.match(platformReference, /選択済み表示がInstagram `aizubrandhall` だけ/);
+assert.match(platformReference, /選択済み表示がInstagramの指定アカウントだけ/);
 assert.match(platformReference, /公式Chrome制御のfile chooserを返し/);
 assert.match(platformReference, /画面上部の「リンクを追加」はFacebook専用/);
 assert.match(platformReference, /「編集」→「スタンプ」→「リンク」/);

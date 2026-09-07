@@ -22,6 +22,7 @@ import {
 } from "@/lib/recipe-sns";
 import {
   RECIPE_SNS_EXPECTED_ACCOUNTS,
+  RECIPE_SNS_ACCOUNT_OPTIONS,
   type RecipeSnsPublicationView,
 } from "@/lib/recipe-sns-publish";
 
@@ -82,6 +83,7 @@ function statusClass(status: RecipeSnsPublicationView["status"]) {
 
 export default function RecipeSnsPublishPanel({ recipeId, generation, posts, disabled }: Props) {
   const [mode, setMode] = useState<"now" | "schedule">("now");
+  const [accounts, setAccounts] = useState({ ...RECIPE_SNS_EXPECTED_ACCOUNTS });
   const [scheduleValue, setScheduleValue] = useState(defaultScheduleValue);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [history, setHistory] = useState<RecipeSnsPublicationView[]>([]);
@@ -150,7 +152,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
       }
       scheduledAt = new Date(timestamp).toISOString();
     }
-    const targetLabels = targets.map((target) => RECIPE_SNS_PLATFORMS.find((platform) => platform.id === target)?.label).join("・");
+    const targetLabels = targets.map((target) => `${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === target)?.label}: ${accounts[target]}`).join("\n");
     const action = mode === "schedule" ? `${formatDate(scheduledAt!)}に予約` : "今すぐ公開";
     if (!window.confirm([
       `${targetLabels}へ${action}します。投稿文・画像・投稿先アカウントを確定してよろしいですか？`,
@@ -164,6 +166,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
         body: JSON.stringify({
           generationId: generation.id,
           targets,
+          accounts,
           posts,
           scheduledAt,
           cleanupMalformedOwnAttemptAuthorized: true,
@@ -210,10 +213,10 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
         <div>
           <div className="flex items-center gap-2">
             <Send className="h-4 w-4 text-gray-800" />
-            <h3 className="text-sm font-bold text-gray-900">会津ブランド館 SNS投稿</h3>
+            <h3 className="text-sm font-bold text-gray-900">SNS投稿</h3>
           </div>
           <p className="mt-1 text-xs text-gray-500">
-            X: @Aizu_Brand_Kan / Instagram・IGストーリー・Threads: @aizubrandhall
+            媒体ごとに投稿先アカウントを選択してください。予約後の投稿先は履歴に保存されます。
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -247,17 +250,32 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
 
       <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
         {RECIPE_SNS_PLATFORMS.map((platform) => (
+          <div key={platform.id} className="min-w-0 space-y-2">
+            <label className="block text-xs font-medium text-gray-700">
+              {platform.label}の投稿先
+              <select
+                aria-label={`${platform.label}の投稿先アカウント`}
+                value={accounts[platform.id]}
+                onChange={(event) => setAccounts((current) => ({ ...current, [platform.id]: event.target.value }))}
+                disabled={Boolean(submitting)}
+                className="mt-1 min-h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-xs text-gray-900 focus:border-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-700 disabled:opacity-50"
+              >
+                {RECIPE_SNS_ACCOUNT_OPTIONS[platform.id].map((account) => (
+                  <option key={account} value={account}>{account.startsWith("@") ? account : `@${account}`}</option>
+                ))}
+              </select>
+            </label>
           <button
-            key={platform.id}
             type="button"
             onClick={() => void publish([platform.id])}
             disabled={!canPublish || Boolean(submitting) || activeTargets.has(platform.id)}
-            className={`inline-flex min-h-10 items-center justify-center rounded-md border px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 ${PLATFORM_BUTTONS[platform.id]}`}
-            title={`${RECIPE_SNS_EXPECTED_ACCOUNTS[platform.id]}へ${mode === "schedule" ? "予約" : "投稿"}`}
+            className={`inline-flex min-h-10 w-full items-center justify-center rounded-md border px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 ${PLATFORM_BUTTONS[platform.id]}`}
+            title={`${accounts[platform.id]}へ${mode === "schedule" ? "予約" : "投稿"}`}
           >
             {submitting === platform.id ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
             {platform.label}
           </button>
+          </div>
         ))}
       </div>
       <button
@@ -301,7 +319,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded px-2 py-1 text-[10px] font-bold ${statusClass(publication.status)}`}>{statusLabel(publication.status)}</span>
                     <span className="text-xs font-bold text-gray-800">
-                      {publication.targets.map((target) => RECIPE_SNS_PLATFORMS.find((platform) => platform.id === target)?.label).join("・")}
+                      {publication.targets.map((target) => `${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === target)?.label}: ${publication.expectedAccounts?.[target] || RECIPE_SNS_EXPECTED_ACCOUNTS[target]}`).join("・")}
                     </span>
                     <span className="text-[11px] text-gray-500">{formatDate(publication.scheduledAt)}</span>
                   </div>

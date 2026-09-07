@@ -34,7 +34,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.69";
+const VERSION = "1.9.70";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -105,6 +105,12 @@ const RECIPE_SNS_PUBLISH_EXPECTED_ACCOUNTS = Object.freeze({
   instagram_story: "aizubrandhall",
   threads: "aizubrandhall",
 });
+const RECIPE_SNS_PUBLISH_ACCOUNT_OPTIONS = {
+  x: ["@Aizu_Brand_Kan", "@karasugike1", "@hajiox"],
+  instagram: ["aizubrandhall", "satou.masahiko"],
+  instagram_story: ["aizubrandhall", "satou.masahiko"],
+  threads: ["aizubrandhall", "satou.masahiko"],
+};
 const RECIPE_SNS_PUBLISH_STATUSES = new Set(["published", "already_published", "blocked", "failed"]);
 const ALL_CODEX_TASK_KEYS = Object.freeze(Object.keys(TASK_CONTRACTS));
 const FORBIDDEN_CONVERSATION_CONTEXT_KEYS = new Set([
@@ -4893,9 +4899,9 @@ function validateRecipeSnsPublishJobParameters(input) {
   }
   if (String(parameters.model || "") !== "gpt-5.6-sol"
     || String(parameters.reasoningEffort || "") !== "medium"
-    || String(parameters.rulesVersion || "") !== "2026-08-31.5"
-    || String(snapshot.rulesVersion || "") !== "2026-08-31.5") {
-    throw new Error("SNS投稿はGPT-5.6 Sol / medium / 2026-08-31.5ルール専用です");
+    || !["2026-08-31.5", "2026-09-07.1"].includes(String(parameters.rulesVersion || ""))
+    || snapshot.rulesVersion !== parameters.rulesVersion) {
+    throw new Error("SNS投稿のモデルまたはルールバージョンが正しくありません");
   }
   if (String(parameters.executionPolicy || "") !== "one_fresh_skill_session_adaptive_official_ui_one_platform_at_a_time"
     || String(parameters.mutationScope || "") !== "authorized_social_posts_only") {
@@ -4918,7 +4924,12 @@ function validateRecipeSnsPublishJobParameters(input) {
   for (const target of targets) {
     const entry = platforms[target] && typeof platforms[target] === "object" && !Array.isArray(platforms[target])
       ? platforms[target] : {};
-    const expectedAccount = RECIPE_SNS_PUBLISH_EXPECTED_ACCOUNTS[target];
+    const expectedAccount = String(entry.expectedAccount || "");
+    const allowedAccounts = parameters.rulesVersion === "2026-08-31.5"
+      ? [RECIPE_SNS_PUBLISH_EXPECTED_ACCOUNTS[target]] : RECIPE_SNS_PUBLISH_ACCOUNT_OPTIONS[target];
+    if (!allowedAccounts.includes(expectedAccount) || snapshot.expectedAccounts?.[target] !== expectedAccount) {
+      throw new Error(`${target}の投稿先アカウントが許可リストまたは固定値と一致しません`);
+    }
     const imageUrl = String(entry.imageUrl || "").trim();
     let parsedImageUrl;
     try { parsedImageUrl = new URL(imageUrl); } catch { throw new Error(`${target}の投稿画像URLが正しくありません`); }
@@ -5018,7 +5029,7 @@ function normalizeRecipeSnsPublishResult(result, parameters) {
     message = normalizedStop.message;
     const succeeded = status === "published" || status === "already_published";
     if (succeeded
-      && normalizedRecipeSnsPublishAccount(accountObserved) !== normalizedRecipeSnsPublishAccount(RECIPE_SNS_PUBLISH_EXPECTED_ACCOUNTS[platform])) {
+      && normalizedRecipeSnsPublishAccount(accountObserved) !== normalizedRecipeSnsPublishAccount(parameters.platforms[platform].expectedAccount)) {
       throw new Error(`${platform}の投稿先アカウントが一致しません`);
     }
     if (succeeded && (!publishedAt || (platform !== "instagram_story" && !publishedUrl))) {
@@ -5088,7 +5099,7 @@ function buildRecipeSnsPublishTargetPrompt({ publishSkillText, platformReference
     "Use $publish-aizu-sns-posts.",
     "This fresh session handles exactly one SNS target. TASK_JSON.targets contains one target; do not inspect or post any unrelated platform.",
     "IMPORTANT FOR instagram_story: Instagram Web and the logged-in official Meta Business Suite at business.facebook.com are two authorized official routes for the same single Instagram Story target. Accessing Meta Business Suite only to create that Story is explicitly approved, is not another platform, and must not be rejected as cross-platform work.",
-    "META BUSINESS SUITE STORY SAFETY: remove the Facebook Page from Share destinations and visibly verify that only Instagram aizubrandhall remains. The top-level Add link control is Facebook-only and must never be used for the Instagram link. Use Edit > Stickers > Link (accessible name Create link sticker), fill the exact link_url, apply the inner link dialog, place the sticker within the image safe area, and then apply the outer photo editor. Add story_text through Edit > Text and move it fully inside the image before applying. If the composer preview hides overlays, reopen Edit once and verify the text and link sticker are retained before final submit.",
+    "META BUSINESS SUITE STORY SAFETY: remove the Facebook Page from Share destinations and visibly verify that only the Instagram account locked in TASK_JSON.platforms.instagram_story.expected_account remains. The top-level Add link control is Facebook-only and must never be used for the Instagram link. Use Edit > Stickers > Link (accessible name Create link sticker), fill the exact link_url, apply the inner link dialog, place the sticker within the image safe area, and then apply the outer photo editor. Add story_text through Edit > Text and move it fully inside the image before applying. If the composer preview hides overlays, reopen Edit once and verify the text and link sticker are retained before final submit.",
     "The exact publish Skill and platform reference are embedded below. They are authoritative. Do not run shell commands to read Skills, references, images, repositories, or documentation.",
     "Use only the supplied cua_repl browser tool. On its first invocation call exactly await cua.getState(), then follow the returned current API documentation. Do not import browser-client.mjs, playwright, or playwright-core directly, inspect globalThis, or probe CDP ports.",
     "From the returned state, locate an already-open signed-in Chrome tab on the target official host and acquire it with cua.getTab(tabId, { browser: browserId }). If no usable matching tab exists, create at most one temporary Chrome tab with cua.createBrowserTab(\"chrome\", official_url, { sessionName: \"TSA SNS\" }). Never use the in-app browser, Edge, another profile, incognito, or another browser.",
@@ -5099,7 +5110,7 @@ function buildRecipeSnsPublishTargetPrompt({ publishSkillText, platformReference
     "EXECUTION SURFACE: this is a non-interactive headless codex exec session. If Chrome requests interactive approval for file upload or final publication, if setFiles reports that the permission request was dismissed or the browser security check was unavailable, or if Meta Business Suite requires an OS file picker, stop before publication and return blocked. Do not retry that condition, claim login failure, or use another upload route. The operator-facing message must be: 対話中のCodexで画像アップロードと最終投稿を承認してください。未投稿の媒体だけを再開できます。",
     "Use exactly the target's fixed post_text, story_text, link_url, and image_path. For Instagram Story, set link_url with the Link sticker rather than placing the URL in text.",
     "Before final submit, verify the visible account, text, image, and link. Submit at most once unless the UI clearly proves the click did not submit.",
-    "For login, MFA, CAPTCHA, permission, account mismatch, or unavailable official Story route, return blocked without retrying authentication.",
+    "If the visible account differs, use the official switcher once to select only the exact already-signed-in expected_account, then visibly recheck it before composing. Never add or log into an account. For login, MFA, CAPTCHA, missing target account, failed account verification, permission, or unavailable official Story route, return blocked without retrying authentication.",
     "Never read or search app Chats, prior tasks, threads, transcripts, rollouts, saved sessions, repositories, or unrelated files. Do not browse the public web.",
     "Return only JSON matching the required schema.",
     "BEGIN_PUBLISH_SKILL",
@@ -5316,7 +5327,7 @@ async function executeRecipeSnsPublishJob(job) {
       const packetPlatform = {
         platform,
         label: String(target.label || RECIPE_SNS_PLATFORM_RULES[platform].label),
-        expected_account: RECIPE_SNS_PUBLISH_EXPECTED_ACCOUNTS[platform],
+        expected_account: target.expectedAccount,
         official_url: String(target.officialUrl || ""),
         image_path: imagePath,
         post_text: String(target.postText || ""),
@@ -5326,7 +5337,7 @@ async function executeRecipeSnsPublishJob(job) {
       packetPlatforms[platform] = packetPlatform;
       const packet = {
         protocolVersion: 1,
-        rulesVersion: "2026-08-31.5",
+        rulesVersion: parameters.rulesVersion,
         publicationId: parameters.publicationId,
         recipeId: parameters.recipeId,
         generationId: parameters.generationId,

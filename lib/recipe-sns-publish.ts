@@ -9,7 +9,7 @@ import {
 } from "./recipe-sns";
 
 export const RECIPE_SNS_PUBLISH_PROTOCOL_VERSION = 1;
-export const RECIPE_SNS_PUBLISH_RULES_VERSION = "2026-08-31.5";
+export const RECIPE_SNS_PUBLISH_RULES_VERSION = "2026-09-07.1";
 export const RECIPE_SNS_PUBLISH_MODEL = "gpt-5.6-sol";
 export const RECIPE_SNS_PUBLISH_REASONING_EFFORT = "medium";
 
@@ -19,6 +19,29 @@ export const RECIPE_SNS_EXPECTED_ACCOUNTS: Record<RecipeSnsPlatform, string> = {
   instagram_story: "aizubrandhall",
   threads: "aizubrandhall",
 };
+
+export const RECIPE_SNS_ACCOUNT_OPTIONS: Record<RecipeSnsPlatform, readonly string[]> = {
+  x: ["@Aizu_Brand_Kan", "@karasugike1", "@hajiox"],
+  instagram: ["aizubrandhall", "satou.masahiko"],
+  instagram_story: ["aizubrandhall", "satou.masahiko"],
+  threads: ["aizubrandhall", "satou.masahiko"],
+};
+
+export function normalizeRecipeSnsPublishAccounts(value: unknown): Record<RecipeSnsPlatform, string> {
+  if (value !== undefined && (!value || typeof value !== "object" || Array.isArray(value))) {
+    throw new Error("投稿先アカウントの指定が正しくありません");
+  }
+  const source = asObject(value);
+  if (Object.keys(source).some((key) => !isRecipeSnsPlatform(key))) {
+    throw new Error("投稿先アカウントの媒体が正しくありません");
+  }
+  return Object.fromEntries(RECIPE_SNS_PLATFORMS.map(({ id }) => {
+    const requested = source[id] === undefined ? RECIPE_SNS_EXPECTED_ACCOUNTS[id] : source[id];
+    const account = RECIPE_SNS_ACCOUNT_OPTIONS[id].find((option) => normalizedAccount(option) === normalizedAccount(requested));
+    if (!account) throw new Error(`${id}の投稿先アカウントが許可されていません`);
+    return [id, account];
+  })) as Record<RecipeSnsPlatform, string>;
+}
 
 export const RECIPE_SNS_PUBLISH_PLATFORM_STATUSES = [
   "published",
@@ -59,6 +82,7 @@ export type RecipeSnsPublicationView = {
   generationId: string;
   status: "scheduled" | "queued" | "running" | "completed" | "partial" | "waiting_for_user" | "needs_review" | "failed" | "cancelled";
   targets: RecipeSnsPlatform[];
+  expectedAccounts: Record<RecipeSnsPlatform, string>;
   scheduledAt: string;
   progress: number;
   currentStep: string;
@@ -192,7 +216,9 @@ export function buildRecipeSnsPublishSnapshot(input: {
   cleanupMalformedOwnAttemptAuthorized: true;
   imageUrls: Partial<Record<RecipeSnsPlatform, string>>;
   posts: Partial<Record<RecipeSnsPlatform, RecipeSnsPost>>;
+  accounts?: unknown;
 }): RecipeSnsPublishSnapshot {
+  const accounts = normalizeRecipeSnsPublishAccounts(input.accounts);
   const platforms: Partial<Record<RecipeSnsPlatform, RecipeSnsPublishTargetSnapshot>> = {};
   for (const platformId of input.targets) {
     const platform = RECIPE_SNS_PLATFORMS.find((candidate) => candidate.id === platformId);
@@ -202,7 +228,7 @@ export function buildRecipeSnsPublishSnapshot(input: {
     platforms[platformId] = {
       platform: platformId,
       label: platform.label,
-      expectedAccount: RECIPE_SNS_EXPECTED_ACCOUNTS[platformId],
+      expectedAccount: accounts[platformId],
       officialUrl: PLATFORM_OFFICIAL_URLS[platformId],
       imageUrl,
       postText: platformId === "instagram_story" ? "" : formatRecipeSnsPost(post),
@@ -219,7 +245,7 @@ export function buildRecipeSnsPublishSnapshot(input: {
     recipeName: input.recipeName.trim().slice(0, 300),
     targets: [...input.targets],
     scheduledAt: input.scheduledAt,
-    expectedAccounts: { ...RECIPE_SNS_EXPECTED_ACCOUNTS },
+    expectedAccounts: accounts,
     platforms,
     operatorAuthorization: {
       authorized: true,
@@ -232,8 +258,9 @@ export function buildRecipeSnsPublishSnapshot(input: {
 
 export function validateRecipeSnsPublishResult(
   value: unknown,
-  expected: { publicationId: string; targets: RecipeSnsPlatform[] },
+  expected: { publicationId: string; targets: RecipeSnsPlatform[]; expectedAccounts?: unknown },
 ): RecipeSnsPublishJobResult {
+  const accounts = normalizeRecipeSnsPublishAccounts(expected.expectedAccounts);
   const source = asObject(value);
   const status = String(source.status || "");
   if (!RECIPE_SNS_PUBLISH_JOB_STATUSES.has(status)) {
@@ -264,7 +291,7 @@ export function validateRecipeSnsPublishResult(
     const evidence = clipped(entry.evidence, 1_000);
     const message = clipped(entry.message, 1_000);
     const successful = platformStatus === "published" || platformStatus === "already_published";
-    if (successful && normalizedAccount(accountObserved) !== normalizedAccount(RECIPE_SNS_EXPECTED_ACCOUNTS[platform])) {
+    if (successful && normalizedAccount(accountObserved) !== normalizedAccount(accounts[platform])) {
       throw new Error(`${platform}の投稿先アカウントを確認できません`);
     }
     if (successful && !publishedAt) throw new Error(`${platform}の投稿日を確認できません`);

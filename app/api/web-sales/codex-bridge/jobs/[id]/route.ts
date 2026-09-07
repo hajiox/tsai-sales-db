@@ -1137,6 +1137,7 @@ export async function POST(
         submittedResult = serializeRecipeSnsPublishResult(validateRecipeSnsPublishResult(submittedResult, {
           publicationId,
           targets,
+          expectedAccounts: asObject(parameters.snapshot).expectedAccounts,
         }));
         if (submittedResult.status !== status) {
           return NextResponse.json({ error: "SNS投稿結果とジョブ状態が一致しません" }, { status: 400 });

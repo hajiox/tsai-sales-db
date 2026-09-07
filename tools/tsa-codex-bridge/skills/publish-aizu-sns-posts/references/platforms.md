@@ -2,6 +2,8 @@
 
 この資料は操作の候補であり、固定セレクタではない。画面上の現在の意味と対象アカウントを優先する。
 
+現在のアカウントが異なる場合、公式アカウント切替一覧から固定された `expected_account` と完全一致するログイン済みアカウントを1回だけ選ぶ。Xではサイドバー下部のプロフィールメニュー、Instagramではアカウント切替、Threadsでは公式のプロフィール切替を確認する。切替後のハンドルを再確認してから作成する。表示名やアイコンだけで対応を推定せず、候補不在・認証要求・未確認は停止する。Meta Business Suiteでも指定Instagramへの紐付けがなければ停止し、アカウント連携や設定変更は行わない。
+
 ## X
 
 - 公式ホスト: `https://x.com/`
@@ -12,7 +14,7 @@
 ## Instagram
 
 - 公式ホスト: `https://www.instagram.com/`
-- 確認済みアカウント: `aizubrandhall`
+- 対象アカウント: `TASK_JSON.platforms.*.expected_account`。`aizubrandhall` または `satou.masahiko` のうち指定されたものだけ。
 - 通常投稿は作成メニューの `投稿` を使う。
 - `リール動画`、ライブ、他アカウントへの同時シェアは選ばない。
 
@@ -21,9 +23,9 @@
 - 2026-08-31実機確認: Instagram Webの「新しい投稿」には `投稿`、`ライブ動画`、`広告`だけが表示され、ストーリー作成経路はなかった。この状態では公式Meta Business Suiteのストーリー作成画面を使用する。
 - Web版に作成経路が見つからない場合、ログイン済みの公式Meta Business Suiteを使用する。Meta Business SuiteはIGストーリー投稿の明示承認済み公式経路であり、別媒体として扱わない。
 - 既存Meta Business Suiteタブを別のChrome制御セッションが使用中なら、そのタブは触らず、同じログイン済みChromeプロファイルで公式Meta Business Suiteの一時タブを1枚だけ開く。
-- 「シェア先」の初期状態ではFacebookページとInstagramが同時選択される場合がある。Facebookページを外し、選択済み表示がInstagram `aizubrandhall` だけであることを確認する。
+- 「シェア先」の初期状態ではFacebookページとInstagramが同時選択される場合がある。Facebookページを外し、選択済み表示がInstagramの指定アカウントだけであることを確認する。
 - 2026-08-31実機確認: 「写真・動画を追加」は公式Chrome制御のfile chooserを返し、1080x1920のJPEGを設定できた。file chooserを返さずOSファイル選択だけを要求する場合に限り、非対話Bridgeでは迂回せず `blocked` とする。
-- 画面上部の「リンクを追加」はFacebook専用であり、「リンクはFacebookストーリーズにのみ表示されます」と案内される。Instagram `aizubrandhall` だけを選ぶと無効になるため、IGリンクには使わない。
+- 画面上部の「リンクを追加」はFacebook専用であり、「リンクはFacebookストーリーズにのみ表示されます」と案内される。Instagramの指定アカウントだけを選ぶと無効になるため、IGリンクには使わない。
 - `link_url` は「編集」→「スタンプ」→「リンク」または accessible name `Create link sticker` から開くリンクスタンプへ設定する。テキスト欄へURLを貼らない。
 - `story_text` は「編集」→「テキスト」→「テキストを追加」から設定する。追加直後の選択中に安全領域へドラッグし、欠けや画像外へのはみ出しがないことをスクリーンショットで確認する。
 - リンクスタンプも選択中に安全領域へ移動し、本文と重ならず、商品を過度に隠さない位置へ置く。
@@ -33,7 +35,7 @@
 ## Threads
 
 - 公式ホスト: `https://www.threads.com/`
-- 確認済みアカウント: `aizubrandhall`
+- 対象アカウント: `TASK_JSON.platforms.*.expected_account`。`aizubrandhall` または `satou.masahiko` のうち指定されたものだけ。
 - 確認済み表示: `新規スレッド`、`メディアを添付`、`投稿`
 - 2026-08-31確認: 「メディアを添付」という表示ボタンのクリックだけではfile chooserが開かない場合がある。投稿作成領域の`input[type="file"]`を確認し、存在する場合はそれを優先する。
 - 2026-08-31実機確認: Chrome制御では実在する`input[type="file"]`を `force: true` でクリックすると、可視・非表示どちらでもfile chooserを取得できる。通常クリックはCDPの3秒評価制限に達する場合がある。
