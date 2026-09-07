@@ -5,6 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, resolve, sep } from "node
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { CARRIER_TASK_KEY, CARRIER_SKILL_CONTRACT, validateCarrierJob, loadCarrierAdapter, carrierMonitorPayload, waitForCarrierChildClose } from "./carrier-local-job.mjs";
 import monitorStateFile from "./monitor-state-file.cjs";
 import { acquireDocScannerFaxImages, deleteDocScannerFaxImages } from "./docscanner-fax-artifact.mjs";
 import {
@@ -34,7 +35,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.72";
+const VERSION = "1.9.73";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -155,6 +156,7 @@ let codexRuntime = inspectCodexRuntime(codexPath);
 let lastCodexRuntimeCheckAt = Date.now();
 let codexRuntimeError = null;
 let currentJobId = null;
+let currentJobIsLocal = false;
 let maintenanceObserved = null;
 let stopping = false;
 let lastError = null;
@@ -203,6 +205,23 @@ async function main() {
   while (!stopping) {
     try {
       if (await observeMaintenance()) continue;
+      if (config.executionMode === "interactive" && config.carrierAppDir) {
+        refreshCodexRuntimeIfDue();
+        const adapter = await loadCarrierAdapter(config.carrierAppDir, config.executionMode);
+        const pending = await adapter.peekCarrierJob();
+        if (pending && codexRuntime.ready) {
+          const job = validateCarrierJob(pending);
+          currentJobIsLocal = true;
+          currentJobId = job.id;
+          currentJobCodexUsage = emptyCodexUsage();
+          lastError = null;
+          startDesktopMonitor(job);
+          writeBridgeState();
+          const finalState = await adapter.runCarrierJob(job, {runCodex: runCarrierCodex, onState: (state) => updateDesktopMonitor(job.id, carrierMonitorPayload(state))});
+          updateDesktopMonitor(job.id, carrierMonitorPayload(finalState));
+          continue;
+        }
+      }
       await heartbeat();
       if (!codexRuntime.ready) {
         await delay(config.pollMs);
@@ -227,7 +246,7 @@ async function main() {
       await heartbeat();
       await executeJob(claimed.job);
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      lastError = currentJobIsLocal ? "ローカル出荷処理が停止しました。出荷画面で状態を確認してください" : error instanceof Error ? error.message : String(error);
       const upgradeRequired = isBridgeUpgradeRequiredError(error);
       log(`${upgradeRequired ? "STOP" : "ERROR"} ${lastError}`);
       if (currentJobId) {
@@ -249,12 +268,45 @@ async function main() {
       }
     } finally {
       currentJobId = null;
+      currentJobIsLocal = false;
       currentCodexPid = null;
       writeBridgeState();
       if (!stopping) await heartbeat().catch(() => undefined);
     }
   }
   releaseLock();
+}
+
+async function runCarrierCodex({prompt, workDir, resultPath, schemaPath, addDirs = [], onPid}) {
+  const args = buildIsolatedCodexArgs(resultPath, [workDir, ...addDirs], {
+    schema: schemaPath, model: "gpt-6-astra", reasoningEffort: "medium",
+    cwd: workDir, focusedContext: true, ephemeral: true,
+  });
+  // Use $tsa-carrier-shipment-csv. Prompt, schema and paths are produced by the trusted local module.
+  const child = await spawnSkillCodex(CARRIER_TASK_KEY, prompt, args, {
+    cwd: workDir, env: {...process.env, CODEX_HOME: config.codexHome},
+    windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
+  });
+  onPid?.(child.pid);
+  // Usage is observed by spawnSkillCodex. Never save customer-bearing CLI transcripts.
+  child.stderr.resume();
+  const timer = setInterval(() => {
+    writeBridgeState();
+    publishDesktopMonitorHeartbeat();
+    ensureUnifiedDesktopMonitor(false);
+    void heartbeat().catch(() => undefined);
+  }, 20_000);
+  try {
+    return await waitForCodexExitWithWatchdog(child, {taskKey:CARRIER_TASK_KEY, terminate:terminateChildProcessTree});
+  } finally {
+    await waitForCarrierChildClose(child, () => updateDesktopMonitor(currentJobId, {
+      status: "waiting_for_user", progress: 95,
+      currentStep: "Codexプロセスの終了を待っています。別のブラウザジョブは開始しません",
+      summary: "終了待ちのためBridgeを占有しています。プロセス状態を確認してください",
+    }));
+    clearInterval(timer);
+    onPid?.(null);
+  }
 }
 
 async function executeJob(job) {
@@ -362,7 +414,7 @@ async function executeJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir], {
-    model: "gpt-5.6-sol",
+    model: "gpt-6-astra",
     reasoningEffort: "medium",
     focusedContext: true,
     ephemeral: true,
@@ -618,8 +670,8 @@ function validateDocScannerFaxSummaryJobParameters(input) {
     || !Number.isInteger(sourceImageCount) || sourceImageCount < imageFiles.length || sourceImageCount > 72) {
     throw new Error("FAX要約の受信IDまたは画像件数が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-5.6-luna"
-    || String(parameters.reasoningEffort || "") !== "low"
+  if (String(parameters.model || "") !== "gpt-6-astra"
+    || String(parameters.reasoningEffort || "") !== "medium"
     || String(parameters.rulesVersion || "") !== "2026-08-27.1"
     || String(parameters.executionPolicy || "") !== "local_images_then_fresh_ephemeral_codex_skill"
     || String(parameters.mutationScope || "") !== "tsg_fax_summary_only") {
@@ -2949,7 +3001,7 @@ async function assertEcPriceRecipeSnapshot(job, parameters, phase) {
 async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputFile, jsonlLog, schema, prompt, progressStart, progressMax, eventType, activityLabel, stepPrefix = "", abortOnTabPolicyViolation, maxTemporaryTabs = 0 }) {
   const args = buildIsolatedCodexArgs(outputFile, [workDir, workspaceDir], {
     schema,
-    model: "gpt-5.6-sol",
+    model: "gpt-6-astra",
     reasoningEffort: "medium",
     cwd: workspaceDir || workDir,
     focusedContext: true,
@@ -3631,7 +3683,7 @@ function validateEcProductNameGenerateJobParameters(input) {
   if (!recipeId || !sourceSnapshot || String(sourceSnapshot.recipeId || "") !== recipeId || !siteRules || !unifiedRule) {
     throw new Error("AI商品名生成の対象商品情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-5.6-sol"
+  if (String(parameters.model || "") !== "gpt-6-astra"
     || String(parameters.reasoningEffort || "") !== "medium"
     || String(parameters.rulesVersion || "") !== "2026-08-27.1") {
     throw new Error("AI商品名生成はGPT-5.6 Sol / medium専用です");
@@ -3662,7 +3714,7 @@ function validateEcProductNameGenerateJobParameters(input) {
     sourceSnapshot,
     siteRules,
     unifiedRule,
-    model: "gpt-5.6-sol",
+    model: "gpt-6-astra",
     reasoningEffort: "medium",
   };
 }
@@ -3823,7 +3875,7 @@ function validateEcCatchcopyGenerateJobParameters(input) {
   if (!recipeId || !sourceSnapshot || String(sourceSnapshot.recipeId || "") !== recipeId || !siteRules || !unifiedRule) {
     throw new Error("AIキャッチコピー生成の対象商品情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-5.6-sol"
+  if (String(parameters.model || "") !== "gpt-6-astra"
     || String(parameters.reasoningEffort || "") !== "medium"
     || String(parameters.rulesVersion || "") !== "2026-08-27.1") {
     throw new Error("AIキャッチコピー生成はGPT-5.6 Sol / medium専用です");
@@ -3854,7 +3906,7 @@ function validateEcCatchcopyGenerateJobParameters(input) {
     sourceSnapshot,
     siteRules,
     unifiedRule,
-    model: "gpt-5.6-sol",
+    model: "gpt-6-astra",
     reasoningEffort: "medium",
   };
 }
@@ -4019,12 +4071,12 @@ function validateEcProductContentGenerateJobParameters(input) {
     || Number(parameters.maxCharacters) !== EC_PRODUCT_CONTENT_MAX_CHARACTERS) {
     throw new Error("商品文章調整の文字数情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-5.6-sol"
+  if (String(parameters.model || "") !== "gpt-6-astra"
     || String(parameters.reasoningEffort || "") !== "medium"
     || String(parameters.rulesVersion || "") !== "2026-08-27.1") {
     throw new Error("商品文章調整はGPT-5.6 Sol / medium専用です");
   }
-  return { ...parameters, recipeId, sourceSnapshot: { ...sourceSnapshot, productPoints, webDescription, sourceCharacters }, model: "gpt-5.6-sol", reasoningEffort: "medium" };
+  return { ...parameters, recipeId, sourceSnapshot: { ...sourceSnapshot, productPoints, webDescription, sourceCharacters }, model: "gpt-6-astra", reasoningEffort: "medium" };
 }
 
 async function executeEcProductContentGenerateJob(job) {
@@ -4193,8 +4245,8 @@ function validateIngredientLabelGenerateJobParameters(input) {
     || !Array.isArray(allergenPolicy?.recommended)) {
     throw new Error("原材料表示生成の保存済みレシピ情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-5.6-sol"
-    || String(parameters.reasoningEffort || "") !== "ultra"
+  if (String(parameters.model || "") !== "gpt-6-astra"
+    || String(parameters.reasoningEffort || "") !== "medium"
     || String(parameters.rulesVersion || "") !== "2026-08-27.2"
     || String(sourceSnapshot.rulesVersion || "") !== "2026-08-27.2") {
     throw new Error("原材料表示生成はGPT-5.6 Sol / ultra / 2026-08-27.2専用です");
@@ -4203,8 +4255,8 @@ function validateIngredientLabelGenerateJobParameters(input) {
     ...parameters,
     recipeId,
     sourceSnapshot,
-    model: "gpt-5.6-sol",
-    reasoningEffort: "ultra",
+    model: "gpt-6-astra",
+    reasoningEffort: "medium",
     rulesVersion: "2026-08-27.2",
   };
 }
@@ -4402,7 +4454,7 @@ function validateRecipeSnsGenerateJobParameters(input) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(generationId)) {
     throw new Error("SNS投稿生成履歴IDが正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-5.6-sol"
+  if (String(parameters.model || "") !== "gpt-6-astra"
     || String(parameters.reasoningEffort || "") !== "medium"
     || !/^2026-09-02\..+$/.test(String(parameters.rulesVersion || ""))) {
     throw new Error("SNS素材生成はGPT-5.6 Sol / medium / 2026-09-02.*ルール専用です");
@@ -4445,7 +4497,7 @@ function validateRecipeSnsGenerateJobParameters(input) {
     platformRules,
     targetPlatform,
     baseGenerationId: targetPlatform ? baseGenerationId : null,
-    model: "gpt-5.6-sol",
+    model: "gpt-6-astra",
     reasoningEffort: "medium",
   };
 }
@@ -4897,7 +4949,7 @@ function validateRecipeSnsPublishJobParameters(input) {
   if (snapshotTargets.join("|") !== targets.join("|")) {
     throw new Error("SNS投稿先と固定スナップショットが一致しません");
   }
-  if (String(parameters.model || "") !== "gpt-5.6-sol"
+  if (String(parameters.model || "") !== "gpt-6-astra"
     || String(parameters.reasoningEffort || "") !== "medium"
     || !["2026-08-31.5", "2026-09-07.1"].includes(String(parameters.rulesVersion || ""))
     || snapshot.rulesVersion !== parameters.rulesVersion) {
@@ -4970,7 +5022,7 @@ function validateRecipeSnsPublishJobParameters(input) {
     targets,
     snapshot,
     platforms,
-    model: "gpt-5.6-sol",
+    model: "gpt-6-astra",
     reasoningEffort: "medium",
   };
 }
@@ -5480,8 +5532,8 @@ async function executeAnalysisJob(job) {
   ].join("\n");
   const args = buildIsolatedCodexArgs(outputFile, [workDir], {
     schema: ANALYSIS_RESULT_SCHEMA,
-    model: "gpt-5.6-sol",
-    reasoningEffort: "high",
+    model: "gpt-6-astra",
+    reasoningEffort: "medium",
     minimalContext: true,
     ephemeral: true,
     sandbox: "read-only",
@@ -5558,7 +5610,7 @@ async function executeAnalysisJob(job) {
     method: "POST",
     body: {
       workerId: config.workerId,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       data: result,
       inputSnapshot: packet,
     },
@@ -5580,7 +5632,7 @@ async function executeAnalysisJob(job) {
       analysisId: imported.analysisId,
       version: imported.version,
       reportMonth: job.report_month,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
     },
     errorMessage: null,
   });
@@ -5646,7 +5698,7 @@ async function executeAdCostJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir], {
-    model: "gpt-5.6-sol",
+    model: "gpt-6-astra",
     reasoningEffort: "medium",
     focusedContext: true,
     ephemeral: true,
@@ -5819,7 +5871,7 @@ async function executeEcProfitJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir], {
-    model: "gpt-5.6-sol",
+    model: "gpt-6-astra",
     reasoningEffort: "medium",
     focusedContext: true,
     ephemeral: true,
@@ -6308,7 +6360,7 @@ function assertNoConversationContext(job) {
 }
 
 function prepareSkillControlledPrompt(taskKey, prompt) {
-  const contract = TASK_CONTRACTS[String(taskKey || "")];
+  const contract = taskKey === CARRIER_TASK_KEY ? CARRIER_SKILL_CONTRACT : TASK_CONTRACTS[String(taskKey || "")];
   if (!contract || !contract.skill) {
     throw new Error(`Codex起動用の専用Skill契約がありません: ${taskKey || "unknown"}`);
   }
@@ -6385,7 +6437,7 @@ function appendUnifiedCuaMcpArgs(args, codexHome, confirmation = null) {
 
 function buildIsolatedCodexArgs(outputFile, writableDirectories, options = {}) {
   const schema = options.schema || RESULT_SCHEMA;
-  const reasoningEffort = options.reasoningEffort || config.reasoningEffort;
+  const reasoningEffort = "medium";
   const workingDirectory = options.cwd || config.workspace;
   const args = [
     "exec", "--json", "--color", "never",
@@ -6410,7 +6462,7 @@ function buildIsolatedCodexArgs(outputFile, writableDirectories, options = {}) {
   }
   if (options.ephemeral) args.push("--ephemeral");
   if (options.sandbox) args.push("--sandbox", options.sandbox);
-  if (options.model) args.push("--model", options.model);
+  args.push("--model", "gpt-6-astra");
   for (const imagePath of uniquePaths(options.images || [])) {
     args.push("--image", imagePath);
   }
@@ -7098,7 +7150,7 @@ async function heartbeat() {
     method: "POST",
     body: workerPayload(),
   });
-  reconcileDesktopTerminal(response?.lastTerminal);
+  if (lastDesktopTerminalState?.taskKey !== CARRIER_TASK_KEY) reconcileDesktopTerminal(response?.lastTerminal);
   lastHeartbeatAt = new Date().toISOString();
   writeBridgeState();
   publishDesktopMonitorHeartbeat();
@@ -7111,9 +7163,9 @@ function workerPayload() {
     workerId: config.workerId,
     name: config.workerName,
     version: VERSION,
-    currentJobId,
-    lastTerminalJobId: currentJobId ? null : lastDesktopTerminalState?.jobId || null,
-    lastError,
+    currentJobId: currentJobIsLocal ? null : currentJobId,
+    lastTerminalJobId: currentJobId || lastDesktopTerminalState?.taskKey === CARRIER_TASK_KEY ? null : lastDesktopTerminalState?.jobId || null,
+    lastError: currentJobIsLocal ? null : lastError,
     capabilities: {
       codex: true,
       chrome: config.executionMode === "interactive",
@@ -7135,7 +7187,7 @@ function workerPayload() {
       tokenSavingPreflight: true,
       archivedArtifactReuse: true,
       monthlyAnalysis: supports("web_sales_analysis"),
-      analysisModel: "gpt-5.6-sol",
+      analysisModel: "gpt-6-astra",
       archiveRoot: true,
       platform: process.platform,
       hostname: process.env.COMPUTERNAME || "unknown",
@@ -7153,36 +7205,36 @@ function workerPayload() {
       ecPriceProtocolVersion: 3,
       ecProductRegister: supports("ec_product_register"),
       ecProductRegisterProtocolVersion: 1,
-      ecProductRegisterModel: "gpt-5.6-sol",
+      ecProductRegisterModel: "gpt-6-astra",
       ecProductNameUpdate: supports("ec_product_name_update"),
       ecProductNameProtocolVersion: 2,
       ecProductNameAi: supports("ec_product_name_generate"),
       ecProductNameAiProtocolVersion: 1,
-      ecProductNameAiModel: "gpt-5.6-sol",
+      ecProductNameAiModel: "gpt-6-astra",
       ecCatchcopyUpdate: supports("ec_catchcopy_update"),
       ecCatchcopyProtocolVersion: 1,
       ecCatchcopyAi: supports("ec_catchcopy_generate"),
       ecCatchcopyAiProtocolVersion: 1,
-      ecCatchcopyAiModel: "gpt-5.6-sol",
+      ecCatchcopyAiModel: "gpt-6-astra",
       ecProductContentUpdate: supports("ec_product_content_update"),
       ecProductContentProtocolVersion: 1,
       ecProductContentAi: supports("ec_product_content_generate"),
       ecProductContentAiProtocolVersion: 1,
-      ecProductContentAiModel: "gpt-5.6-sol",
+      ecProductContentAiModel: "gpt-6-astra",
       ingredientLabelAi: supports("ingredient_label_generate"),
       ingredientLabelAiProtocolVersion: 1,
-      ingredientLabelAiModel: "gpt-5.6-sol",
-      ingredientLabelAiReasoningEffort: "ultra",
+      ingredientLabelAiModel: "gpt-6-astra",
+      ingredientLabelAiReasoningEffort: "medium",
       docScannerFaxSummary: supports("docscanner_fax_summary"),
       docScannerFaxSummaryProtocolVersion: 1,
-      docScannerFaxSummaryModel: "gpt-5.6-luna",
-      docScannerFaxSummaryReasoningEffort: "low",
+      docScannerFaxSummaryModel: "gpt-6-astra",
+      docScannerFaxSummaryReasoningEffort: "medium",
       recipeSns: supports("recipe_sns_generate"),
       recipeSnsProtocolVersion: 3,
-      recipeSnsModel: "gpt-5.6-sol",
+      recipeSnsModel: "gpt-6-astra",
       recipeSnsPublish: supports("recipe_sns_publish"),
       recipeSnsPublishProtocolVersion: 1,
-      recipeSnsPublishModel: "gpt-5.6-sol",
+      recipeSnsPublishModel: "gpt-6-astra",
       codexTaskKeys: config.allowedTaskKeys,
     },
   };
@@ -7199,6 +7251,7 @@ async function updateJob(jobId, payload) {
       }
     : payload;
   updateDesktopMonitor(jobId, enrichedPayload);
+  if (currentJobIsLocal) return {ok:true};
   return api(`/api/web-sales/codex-bridge/jobs/${jobId}`, {
     method: "POST",
     body: { workerId: config.workerId, ...enrichedPayload },
@@ -7663,7 +7716,8 @@ function loadConfig() {
     docScannerIntegrationSecret: String(
       process.env.TSG_INTEGRATION_SECRET || stored.docScannerIntegrationSecret || "",
     ).trim(),
-    reasoningEffort: String(process.env.TSA_CODEX_REASONING_EFFORT || stored.reasoningEffort || "low").trim().toLowerCase(),
+    carrierAppDir: String(stored.carrierAppDir || "").trim(),
+    reasoningEffort: String(process.env.TSA_CODEX_REASONING_EFFORT || stored.reasoningEffort || "medium").trim().toLowerCase(),
     pollMs: Math.max(3000, Number(process.env.TSA_CODEX_POLL_MS || stored.pollMs || 5000)),
     executionMode,
     allowedTaskKeys,
@@ -7674,6 +7728,7 @@ function loadConfig() {
       && /^[A-Za-z0-9+/]*={0,2}$/.test(stored.monitorPlacementBase64)
     ) ? stored.monitorPlacementBase64 : "",
   };
+  if (value.carrierAppDir && !isAbsolute(value.carrierAppDir)) throw new Error("carrierAppDirは絶対パスで指定してください");
   if (!/^https:\/\//.test(value.baseUrl)) throw new Error("baseUrlはhttpsで指定してください");
   if (!/^https?:\/\//.test(value.docScannerBaseUrl)) throw new Error("docScannerBaseUrlが正しくありません");
   if (value.token.length < 32) throw new Error("Bridge tokenが設定されていません");
@@ -8351,6 +8406,7 @@ function estimateDesktopCompletion(state, progress, nowIso) {
 
 function bridgeTaskLabel(taskKey) {
   return {
+    carrier_monthly_import: "ヤマト・佐川出荷CSV",
     connection_test: "Bridge接続テスト",
     web_sales_import: "WEB商品売上集計",
     ad_cost_import: "広告費取り込み",

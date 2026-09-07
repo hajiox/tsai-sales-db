@@ -12,7 +12,7 @@ const version = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.equal(required.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], version);
 assert.match(bridge, /ecCatchcopyProtocolVersion: 1/);
 assert.match(bridge, /ecCatchcopyAiProtocolVersion: 1/);
-assert.match(bridge, /ecCatchcopyAiModel: "gpt-5\.6-sol"/);
+assert.match(bridge, /ecCatchcopyAiModel: "gpt-6-astra"/);
 assert.match(bridge, /const EC_CATCHCOPY_TARGETS = new Set\(\["rakuten", "yahoo"\]\)/);
 assert.match(bridge, /EC_COMMON_CATCHCOPY_MAX_LENGTH = 30/);
 assert.match(bridge, /共通キャッチコピーと一致しません/);

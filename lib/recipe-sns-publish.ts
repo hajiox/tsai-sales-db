@@ -10,7 +10,7 @@ import {
 
 export const RECIPE_SNS_PUBLISH_PROTOCOL_VERSION = 1;
 export const RECIPE_SNS_PUBLISH_RULES_VERSION = "2026-09-07.1";
-export const RECIPE_SNS_PUBLISH_MODEL = "gpt-5.6-sol";
+export const RECIPE_SNS_PUBLISH_MODEL = "gpt-6-astra";
 export const RECIPE_SNS_PUBLISH_REASONING_EFFORT = "medium";
 
 export const RECIPE_SNS_EXPECTED_ACCOUNTS: Record<RecipeSnsPlatform, string> = {

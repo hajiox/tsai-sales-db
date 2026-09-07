@@ -1,6 +1,7 @@
 import { win32 } from "node:path";
 
 const OPERATOR_SESSION_TASKS = new Set([
+  "carrier_monthly_import",
   "web_sales_import",
   "ad_cost_import",
   "ec_profit_import",

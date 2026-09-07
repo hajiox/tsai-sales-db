@@ -9,7 +9,7 @@ const version = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.equal(required.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], version);
 assert.match(bridge, /ecProductNameProtocolVersion: 2/);
 assert.match(bridge, /ecProductNameAiProtocolVersion: 1/);
-assert.match(bridge, /ecProductNameAiModel: "gpt-5\.6-sol"/);
+assert.match(bridge, /ecProductNameAiModel: "gpt-6-astra"/);
 assert.match(bridge, /newProductNames/);
 assert.match(bridge, /EC_PRODUCT_NAME_MAX_LENGTHS/);
 assert.match(bridge, /EC_COMMON_PRODUCT_NAME_MAX_LENGTH = 75/);

@@ -1,5 +1,5 @@
-export const INGREDIENT_LABEL_AI_MODEL = "gpt-5.6-sol";
-export const INGREDIENT_LABEL_AI_REASONING_EFFORT = "ultra";
+export const INGREDIENT_LABEL_AI_MODEL = "gpt-6-astra";
+export const INGREDIENT_LABEL_AI_REASONING_EFFORT = "medium";
 export const INGREDIENT_LABEL_RULES_VERSION = "2026-08-27.2";
 
 export const MANDATORY_ALLERGENS_2026 = [

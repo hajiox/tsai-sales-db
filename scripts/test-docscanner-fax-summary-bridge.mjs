@@ -18,8 +18,8 @@ const contract = JSON.parse(read('tools', 'tsa-codex-bridge', 'skill-contract.js
 const enqueueRoute = read('app', 'api', 'integrations', 'doc-scanner', 'fax-summary', 'route.ts')
 const importRoute = read('app', 'api', 'web-sales', 'codex-bridge', 'jobs', '[id]', 'fax-summary-import', 'route.ts')
 
-assert.equal(DOCSCANNER_FAX_SUMMARY_MODEL, 'gpt-5.6-luna')
-assert.equal(DOCSCANNER_FAX_SUMMARY_REASONING_EFFORT, 'low')
+assert.equal(DOCSCANNER_FAX_SUMMARY_MODEL, 'gpt-6-astra')
+assert.equal(DOCSCANNER_FAX_SUMMARY_REASONING_EFFORT, 'medium')
 assert.equal(DOCSCANNER_FAX_SUMMARY_RULES_VERSION, '2026-08-27.1')
 assert.equal(contract.tasks.docscanner_fax_summary.skill, 'summarize-docscanner-fax')
 assert.match(bridge, /minimalContext: true/)

@@ -13,7 +13,7 @@ export type EcCatchcopyRule = {
   guidance: string;
 };
 
-export const EC_CATCHCOPY_AI_MODEL = "gpt-5.6-sol";
+export const EC_CATCHCOPY_AI_MODEL = "gpt-6-astra";
 export const EC_CATCHCOPY_AI_REASONING_EFFORT = "medium";
 export const EC_CATCHCOPY_AI_RULES_VERSION = "2026-08-27.1";
 export const EC_COMMON_CATCHCOPY_MAX_LENGTH = 30;

@@ -18,7 +18,7 @@ export type EcProductNameRule = {
   guidance: string;
 };
 
-export const EC_PRODUCT_NAME_AI_MODEL = "gpt-5.6-sol";
+export const EC_PRODUCT_NAME_AI_MODEL = "gpt-6-astra";
 export const EC_PRODUCT_NAME_AI_REASONING_EFFORT = "medium";
 export const EC_PRODUCT_NAME_AI_RULES_VERSION = "2026-08-27.1";
 export const EC_COMMON_PRODUCT_NAME_MAX_LENGTH = 75;

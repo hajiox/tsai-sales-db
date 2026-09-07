@@ -62,7 +62,7 @@ const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.equal(requiredVersion.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);
 assert.match(bridge, /ecProductContentProtocolVersion: 1/);
 assert.match(bridge, /ecProductContentAiProtocolVersion: 1/);
-assert.match(bridge, /ecProductContentAiModel: "gpt-5\.6-sol"/);
+assert.match(bridge, /ecProductContentAiModel: "gpt-6-astra"/);
 assert.match(bridge, /executeEcProductContentUpdateJob/);
 assert.match(bridge, /executeEcProductContentGenerateJob/);
 assert.match(bridge, /ec_product_content_progress_checkpoint/);

@@ -62,7 +62,7 @@ export default function EcProductContentAiAdjuster({
     setGeneration({
       ...validated,
       generationId,
-      model: String(object.model || "gpt-5.6-sol"),
+      model: String(object.model || "gpt-6-astra"),
       reasoningEffort: String(object.reasoningEffort || "medium"),
     });
     setOpen(true);

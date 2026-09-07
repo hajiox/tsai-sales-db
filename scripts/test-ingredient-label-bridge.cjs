@@ -16,7 +16,7 @@ const controls = read("app", "recipe", "_components", "IngredientLabelAiControls
 
 assert.equal(contract.tasks.ingredient_label_generate.skill, "generate-aizu-ingredient-label");
 assert.equal(contract.tasks.ingredient_label_generate.mode, "codex");
-assert.match(bridge, /reasoningEffort:\s*"ultra"/);
+assert.match(bridge, /reasoningEffort:\s*"medium"/);
 assert.match(bridge, /ephemeral:\s*true/);
 assert.match(bridge, /minimalContext:\s*true/);
 assert.match(bridge, /sandbox:\s*"read-only"/);

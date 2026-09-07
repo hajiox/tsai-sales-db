@@ -57,7 +57,7 @@ export default function EcProductNameAiEditor({ recipeId, onChange }: Props) {
     setGeneration({
       ...validated,
       generationId,
-      model: String(resultObject.model || "gpt-5.6-sol"),
+      model: String(resultObject.model || "gpt-6-astra"),
       reasoningEffort: String(resultObject.reasoningEffort || "medium"),
       createdAt: String(resultObject.createdAt || ""),
     });

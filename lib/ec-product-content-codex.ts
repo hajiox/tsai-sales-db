@@ -13,7 +13,7 @@ export type EcProductContentFieldLayout = "separate" | "combined";
 export type EcProductContentMarkerStyle = "check" | "square";
 
 export const EC_PRODUCT_CONTENT_MAX_CHARACTERS = 500;
-export const EC_PRODUCT_CONTENT_AI_MODEL = "gpt-5.6-sol";
+export const EC_PRODUCT_CONTENT_AI_MODEL = "gpt-6-astra";
 export const EC_PRODUCT_CONTENT_AI_REASONING_EFFORT = "medium";
 export const EC_PRODUCT_CONTENT_RULES_VERSION = "2026-08-27.1";
 

@@ -121,7 +121,7 @@ assert.match(argBuilder, /"--ignore-rules"/);
 assert.match(argBuilder, /"--disable", "apps"/);
 assert.match(argBuilder, /options\.minimalContext.*"--disable", "plugins"/);
 assert.match(argBuilder, /options\.focusedContext[\s\S]*"--disable", "plugins"/);
-assert.match(argBuilder, /appendUnifiedCuaMcpArgs\(args, config\.codexHome\)/);
+assert.match(argBuilder, /appendUnifiedCuaMcpArgs\(args, config\.codexHome, options\.snsConfirmation\)/);
 assert.match(argBuilder, /mcp_servers\.cua_repl\.enabled_tools/);
 assert.match(argBuilder, /BROWSER_USE_AVAILABLE_BACKENDS: "chrome"/);
 assert.match(argBuilder, /options\.ephemeral.*"--ephemeral"/);

@@ -1,0 +1,4 @@
+interface:
+  display_name: "ヤマト・佐川 出荷CSV"
+  short_description: "毎月のヤマト・佐川出荷履歴CSVを安全に取得・検証・取込"
+  default_prompt: "Use $tsa-carrier-shipment-csv to collect, validate, archive, and import last month's Yamato and Sagawa shipment CSV files."

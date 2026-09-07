@@ -4,10 +4,11 @@
   [string]$WorkerId = "tsa-office-01",
   [string]$WorkerName = "事務所PC",
   [string]$Workspace = "C:\作業用",
+  [string]$CarrierAppDir = "",
   [string]$DocScannerFaxSummaryRoot = "C:\作業用\doc-scanner\data\codex-bridge\fax-summary",
   [string]$DocScannerBaseUrl = "http://127.0.0.1:3004",
   [string]$DocScannerIntegrationSecret = "",
-  [ValidateSet("low", "medium", "high", "xhigh")][string]$ReasoningEffort = "low",
+  [ValidateSet("low", "medium", "high", "xhigh")][string]$ReasoningEffort = "medium",
   [switch]$SkipPreloginTaskRegistration
 )
 
@@ -19,8 +20,16 @@ if (-not $DocScannerIntegrationSecret -and (Test-Path -LiteralPath $existingBrid
   $existingBridgeConfig = Get-Content -LiteralPath $existingBridgeConfigPath -Raw | ConvertFrom-Json
   $DocScannerIntegrationSecret = [string]$existingBridgeConfig.docScannerIntegrationSecret
 }
+if (-not $CarrierAppDir -and (Test-Path -LiteralPath $existingBridgeConfigPath)) {
+  $existingCarrierConfig = Get-Content -LiteralPath $existingBridgeConfigPath -Raw | ConvertFrom-Json
+  $CarrierAppDir = [string]$existingCarrierConfig.carrierAppDir
+}
+if ($CarrierAppDir -and (-not [System.IO.Path]::IsPathRooted($CarrierAppDir) -or -not (Test-Path -LiteralPath (Join-Path $CarrierAppDir "scripts\carrier-bridge-job.mjs")))) {
+  throw "CarrierAppDirは出荷Bridgeモジュールを含む絶対パスで指定してください"
+}
 $requiredSourceFiles = @(
   "bridge.mjs",
+  "carrier-local-job.mjs",
   "codex-run-guard.mjs",
   "download-artifact-recovery.mjs",
   "ec-profit-artifact-policy.mjs",
@@ -75,7 +84,7 @@ if (-not $bridgeVersionMatch.Success) {
 $expectedBridgeVersion = $bridgeVersionMatch.Groups[1].Value
 $skillContractPath = Join-Path $sourceDir "skill-contract.json"
 $skillContract = Get-Content -LiteralPath $skillContractPath -Raw | ConvertFrom-Json
-$bridgeSkillNames = @($skillContract.tasks.PSObject.Properties.Value | ForEach-Object { $_.skill } | Where-Object { $_ } | Select-Object -Unique)
+$bridgeSkillNames = @(@($skillContract.tasks.PSObject.Properties.Value | ForEach-Object { $_.skill } | Where-Object { $_ }) + @("tsa-carrier-shipment-csv") | Select-Object -Unique)
 $allTaskKeys = @($skillContract.tasks.PSObject.Properties.Name)
 if (-not $skillContract.version -or $bridgeSkillNames.Count -eq 0 -or $allTaskKeys.Count -eq 0) {
   throw "Bridge Skill契約が正しくありません: $skillContractPath"
@@ -445,6 +454,7 @@ try {
     Remove-Item -LiteralPath $legacyUnifiedMonitorStatePath -Force
   }
 
+Copy-Item -LiteralPath (Join-Path $sourceDir "carrier-local-job.mjs") -Destination (Join-Path $installDir "carrier-local-job.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "codex-run-guard.mjs") -Destination (Join-Path $installDir "codex-run-guard.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "download-artifact-recovery.mjs") -Destination (Join-Path $installDir "download-artifact-recovery.mjs") -Force
@@ -529,6 +539,7 @@ $config = @{
   docScannerFaxSummaryRoot = $DocScannerFaxSummaryRoot
   docScannerBaseUrl = $DocScannerBaseUrl
   docScannerIntegrationSecret = $DocScannerIntegrationSecret
+  carrierAppDir = $CarrierAppDir
   reasoningEffort = $ReasoningEffort
   pollMs = 5000
   executionMode = "interactive"

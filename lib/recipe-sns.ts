@@ -1,4 +1,4 @@
-export const RECIPE_SNS_MODEL = "gpt-5.6-sol";
+export const RECIPE_SNS_MODEL = "gpt-6-astra";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
 export const RECIPE_SNS_RULES_VERSION = "2026-09-02.3";
 

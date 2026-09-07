@@ -37,7 +37,7 @@ for (const [platform, options] of Object.entries(policy.RECIPE_SNS_ACCOUNT_OPTIO
       posts: { [platform]: { text: "テスト", hashtags: [], linkUrl: null } },
     });
     assert.equal(snapshot.platforms[platform].expectedAccount, account);
-    const parameters = { ...snapshot, snapshot, model: "gpt-5.6-sol", reasoningEffort: "medium", executionPolicy: "one_fresh_skill_session_adaptive_official_ui_one_platform_at_a_time", mutationScope: "authorized_social_posts_only" };
+    const parameters = { ...snapshot, snapshot, model: "gpt-6-astra", reasoningEffort: "medium", executionPolicy: "one_fresh_skill_session_adaptive_official_ui_one_platform_at_a_time", mutationScope: "authorized_social_posts_only" };
     const verified = worker.validateRecipeSnsPublishJobParameters(parameters);
     const result = { status: "completed", publication_id: id, summary: "完了", platforms: [{
       platform, status: "published", account_observed: account, published_at: timestamp,
