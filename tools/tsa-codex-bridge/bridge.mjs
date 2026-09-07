@@ -34,7 +34,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.68";
+const VERSION = "1.9.69";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -185,6 +185,7 @@ process.on("exit", () => {
 });
 
 log(`TSA Codex Bridge ${VERSION} started`);
+log(`Monitor state output: ${MONITOR_STATE_PATH}`);
 writeBridgeState();
 publishDesktopMonitorIdle();
 ensureUnifiedDesktopMonitor(false);
@@ -7910,6 +7911,7 @@ function writeBridgeState() {
       workerName: config.workerName,
       workerRole: config.workerRole,
       monitorWorkerKey: config.monitorWorkerKey,
+      monitorStatePath: MONITOR_STATE_PATH,
       executionMode: config.executionMode,
       allowedTaskKeys: config.allowedTaskKeys,
       currentJobId,

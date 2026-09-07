@@ -99,6 +99,11 @@ assert.match(installer, /UTF8Encoding\]::new\(\$true\)/);
 assert.match(launcher, /ValidatePattern\("\^\[a-z0-9\]/);
 assert.match(launcher, /Join-Path \(Join-Path \$installDir "workers"\) \$RuntimeName/);
 assert.match(launcher, /TSA_CODEX_BRIDGE_EXECUTION_MODE = "headless-prelogin"/);
+assert.match(launcher, /CODEX_BRIDGE_MONITOR_DIR = Join-Path \$localAppData "Codex Bridge Monitor"/);
+assert.match(bridge.slice(bridge.indexOf("function writeBridgeState()")), /monitorStatePath: MONITOR_STATE_PATH/);
+assert.match(bridge, /Monitor state output: \$\{MONITOR_STATE_PATH\}/);
+assert.match(installer, /Test-StartupMonitorState \$candidateState "tsa-interactive"/);
+assert.match(installer, /Test-StartupMonitorState \$candidateHeadlessState \$workerSpec.MonitorWorkerKey/);
 assert.match(launcher, /TSA_CODEX_BRIDGE_MAINTENANCE_PATH/);
 assert.match(launcher, /Prepare-HeadlessWorkerStart/);
 assert.match(launcher, /\$state\.currentJobId/);
@@ -135,6 +140,43 @@ if (process.platform === "win32") {
       );
       assert.equal(parsed.status, 0, `${name}: ${parsed.stderr || parsed.stdout}`);
     }
+    const monitorCheck = installer.slice(installer.indexOf("function Test-StartupMonitorState("), installer.indexOf("$startedState = $null"));
+    const testPath = path.join(tempDir, "monitor-readiness.ps1");
+    fs.writeFileSync(testPath, `\uFEFF${monitorCheck}
+$ErrorActionPreference = 'Stop'
+$unifiedMonitorStateDir = '${tempDir.replaceAll("'", "''")}'
+$expectedBridgeVersion = 'test-new'
+$monitorPath = Join-Path $unifiedMonitorStateDir 'tsa-ai-01.json'
+$workerState = [pscustomobject]@{ pid = 321; workerId = 'test-worker'; monitorStatePath = $monitorPath }
+$monitor = @{ bridgePid = 321; workerId = 'test-worker'; bridgeVersion = 'test-new'; updatedAt = (Get-Date).ToUniversalTime().ToString('o') }
+function Save-Monitor { $monitor | ConvertTo-Json | Set-Content -LiteralPath $monitorPath -Encoding UTF8 }
+function Expect-Ready([bool]$Expected, [string]$Label) {
+  if ((Test-StartupMonitorState $workerState 'tsa-ai-01') -ne $Expected) { throw $Label }
+}
+Expect-Ready $false 'missing state'
+Save-Monitor
+Expect-Ready $true 'current state'
+$monitor.bridgePid = 999; Save-Monitor
+Expect-Ready $false 'wrong PID'
+$monitor.bridgePid = 321; $monitor.bridgeVersion = 'old'; Save-Monitor
+Expect-Ready $false 'old version'
+$monitor.bridgeVersion = 'test-new'; $monitor.updatedAt = (Get-Date).ToUniversalTime().AddMinutes(-3).ToString('o'); Save-Monitor
+Expect-Ready $false 'stale state'
+$monitor.updatedAt = (Get-Date).ToUniversalTime().AddMinutes(3).ToString('o'); Save-Monitor
+Expect-Ready $false 'future state'
+$monitor.updatedAt = (Get-Date).ToUniversalTime().ToString('o'); Save-Monitor
+$workerState.monitorStatePath = Join-Path $unifiedMonitorStateDir 'wrong.json'
+Expect-Ready $false 'wrong destination'
+$workerState.monitorStatePath = $monitorPath
+'{' | Set-Content -LiteralPath $monitorPath -Encoding UTF8
+Expect-Ready $false 'partial write'
+[System.IO.File]::WriteAllBytes($monitorPath, [byte[]]@(0xff, 0xff))
+Expect-Ready $false 'invalid UTF8'
+Save-Monitor
+Expect-Ready $true 'recovered state'
+`, "utf8");
+    const checked = childProcess.spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", testPath], { encoding: "utf8", windowsHide: true });
+    assert.equal(checked.status, 0, checked.stderr || checked.stdout);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

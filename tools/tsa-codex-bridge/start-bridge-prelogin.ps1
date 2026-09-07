@@ -135,6 +135,7 @@ while ($true) {
     $env:USERPROFILE = $userProfile
     $env:HOME = $userProfile
     $env:LOCALAPPDATA = $localAppData
+    $env:CODEX_BRIDGE_MONITOR_DIR = Join-Path $localAppData "Codex Bridge Monitor"
     $env:APPDATA = Join-Path $userProfile "AppData\Roaming"
     $env:CODEX_HOME = [string]$config.codexHome
     $env:TSA_CODEX_BRIDGE_APP_DIR = $runtimeDir
@@ -142,6 +143,7 @@ while ($true) {
     $env:TSA_CODEX_BRIDGE_MAINTENANCE_PATH = $maintenancePath
     $env:TSA_CODEX_BRIDGE_EXECUTION_MODE = "headless-prelogin"
 
+    Write-LauncherLog "monitor output directory: $env:CODEX_BRIDGE_MONITOR_DIR"
     & $nodePath $bridgePath
   } catch {
     Write-LauncherLog "LAUNCH ERROR $($_.Exception.Message)"

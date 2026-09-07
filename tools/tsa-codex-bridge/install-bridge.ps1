@@ -701,10 +701,33 @@ if (-not $SkipPreloginTaskRegistration) {
   }
 }
 
+function Test-StartupMonitorState($WorkerState, [string]$MonitorKey) {
+  try {
+    $expectedMonitorPath = Join-Path $unifiedMonitorStateDir "$MonitorKey.json"
+    if (-not $WorkerState.monitorStatePath -or
+      [System.IO.Path]::GetFullPath([string]$WorkerState.monitorStatePath) -ne [System.IO.Path]::GetFullPath($expectedMonitorPath) -or
+      -not (Test-Path -LiteralPath $expectedMonitorPath -PathType Leaf)) { return $false }
+    $monitorState = [System.IO.File]::ReadAllText($expectedMonitorPath, [System.Text.UTF8Encoding]::new($false, $true)) | ConvertFrom-Json
+    $monitorUpdatedAt = if ($monitorState.updatedAt -is [DateTime]) {
+      $monitorState.updatedAt.ToUniversalTime()
+    } else { [DateTimeOffset]::Parse([string]$monitorState.updatedAt).UtcDateTime }
+    $now = (Get-Date).ToUniversalTime()
+    return (
+      [int]$monitorState.bridgePid -eq [int]$WorkerState.pid -and
+      [string]$monitorState.bridgeVersion -eq $expectedBridgeVersion -and
+      [string]$monitorState.workerId -eq [string]$WorkerState.workerId -and
+      $monitorUpdatedAt -ge $now.AddMinutes(-2) -and
+      $monitorUpdatedAt -le $now.AddSeconds(5)
+    )
+  } catch { return $false }
+}
+
 $startedState = $null
 $headlessStartedStates = @{}
 $startupDeadline = (Get-Date).AddSeconds(75)
 while ((Get-Date) -lt $startupDeadline) {
+  $startedState = $null
+  $headlessStartedStates = @{}
   if (Test-Path -LiteralPath $statePath) {
     try {
       $candidateState = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
@@ -712,7 +735,8 @@ while ((Get-Date) -lt $startupDeadline) {
       if (
         $candidateProcess -and
         $candidateState.version -eq $expectedBridgeVersion -and
-        $candidateState.lastHeartbeatAt
+        $candidateState.lastHeartbeatAt -and
+        (Test-StartupMonitorState $candidateState "tsa-interactive")
       ) {
         $startedState = $candidateState
       }
@@ -732,7 +756,8 @@ while ((Get-Date) -lt $startupDeadline) {
           $candidateHeadlessState.executionMode -eq "headless-prelogin" -and
           $candidateHeadlessState.workerRole -eq $workerSpec.WorkerRole -and
           $candidateHeadlessState.monitorWorkerKey -eq $workerSpec.MonitorWorkerKey -and
-          $candidateHeadlessState.lastHeartbeatAt
+          $candidateHeadlessState.lastHeartbeatAt -and
+          (Test-StartupMonitorState $candidateHeadlessState $workerSpec.MonitorWorkerKey)
         ) {
           $headlessStartedStates[$workerSpec.RuntimeName] = $candidateHeadlessState
         }
@@ -745,11 +770,11 @@ while ((Get-Date) -lt $startupDeadline) {
   Start-Sleep -Milliseconds 500
 }
 if (-not $startedState) {
-  throw "Bridge $expectedBridgeVersion の起動・heartbeatを確認できませんでした。logsを確認してください。"
+  throw "Bridge $expectedBridgeVersion の起動・heartbeat・同PIDの統合monitor更新を確認できませんでした。logsを確認してください。"
 }
 if ($headlessStartedStates.Count -ne $registeredHeadlessSpecs.Count) {
   $missingRuntimeNames = @($registeredHeadlessSpecs | Where-Object { -not $headlessStartedStates.ContainsKey($_.RuntimeName) } | ForEach-Object { $_.RuntimeName })
-  throw "ログイン前Bridge $expectedBridgeVersion のS4U起動・heartbeatを確認できませんでした: $($missingRuntimeNames -join ', ')"
+  throw "ログイン前Bridge $expectedBridgeVersion のS4U起動・heartbeat・同PIDの統合monitor更新を確認できませんでした: $($missingRuntimeNames -join ', ')"
 }
 
 if ($registeredHeadlessSpecs.Count -eq 3) {
