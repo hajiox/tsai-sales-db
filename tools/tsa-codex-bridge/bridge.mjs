@@ -34,7 +34,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.71";
+const VERSION = "1.9.72";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -7094,10 +7094,11 @@ function redactSensitiveEventText(text) {
 
 async function heartbeat() {
   refreshCodexRuntimeIfDue();
-  await api("/api/web-sales/codex-bridge/heartbeat", {
+  const response = await api("/api/web-sales/codex-bridge/heartbeat", {
     method: "POST",
     body: workerPayload(),
   });
+  reconcileDesktopTerminal(response?.lastTerminal);
   lastHeartbeatAt = new Date().toISOString();
   writeBridgeState();
   publishDesktopMonitorHeartbeat();
@@ -7111,6 +7112,7 @@ function workerPayload() {
     name: config.workerName,
     version: VERSION,
     currentJobId,
+    lastTerminalJobId: currentJobId ? null : lastDesktopTerminalState?.jobId || null,
     lastError,
     capabilities: {
       codex: true,
@@ -8066,6 +8068,23 @@ function writeDesktopMonitorState() {
   } catch (error) {
     log(`WARN unified monitor state write failed: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function reconcileDesktopTerminal(remote) {
+  if (currentJobId || !lastDesktopTerminalState || !remote
+    || remote.jobId !== lastDesktopTerminalState.jobId
+    || !FINAL_DESKTOP_MONITOR_STATUSES.has(remote.status)) return;
+  const finishedAt = Date.parse(remote.finishedAt);
+  if (!Number.isFinite(finishedAt) || finishedAt < Date.parse(lastDesktopTerminalState.finishedAt)) return;
+  lastDesktopTerminalState = {
+    ...lastDesktopTerminalState,
+    status: remote.status,
+    summary: sanitizeMonitorText(remote.summary || "処理終了", 300),
+    finishedAt: new Date(finishedAt).toISOString(),
+  };
+  // Reset the idle envelope too, otherwise publishDesktopMonitorIdle can restore
+  // the old terminal status from the previous job's in-memory envelope.
+  desktopMonitorState = monitorBaseState();
 }
 
 function publishDesktopMonitorIdle() {

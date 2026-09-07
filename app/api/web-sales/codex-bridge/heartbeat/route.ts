@@ -61,7 +61,25 @@ export async function POST(request: Request) {
         .eq("worker_id", workerId)
         .eq("status", "running");
     }
-    return NextResponse.json({ ok: true, serverTime: now });
+    // Reconcile the cached monitor result without reading another worker's jobs
+    // or returning the job packet, content, or artifacts.
+    let lastTerminal = null;
+    const terminalJobId = String(body.lastTerminalJobId || "");
+    if (!currentJobId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(terminalJobId)) {
+      const { data: terminal } = await supabase.from("web_sales_codex_jobs")
+        .select("id,status,current_step,completed_at,updated_at")
+        .eq("id", terminalJobId)
+        .eq("worker_id", workerId)
+        .in("status", ["completed", "waiting_for_user", "needs_review", "failed", "cancelled"])
+        .maybeSingle();
+      if (terminal) lastTerminal = {
+        jobId: terminal.id,
+        status: terminal.status,
+        summary: String(terminal.current_step || "処理終了").slice(0, 300),
+        finishedAt: terminal.completed_at || terminal.updated_at,
+      };
+    }
+    return NextResponse.json({ ok: true, serverTime: now, lastTerminal });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Heartbeat failed" },
