@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { selectAnalysisVersion } from "@/lib/web-sales-analysis/selection";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -97,45 +98,62 @@ type AnalysisResponse = {
 export default function WebSalesCodexAnalysis({ month, focus }: { month: string; focus: Focus }) {
   const [data, setData] = useState<AnalysisResponse>({ analyses: [], jobs: [], worker: null, displayPeriod: null });
   const [selectedId, setSelectedId] = useState<string>("");
+  const latestId = useRef("");
+  const requestSequence = useRef(0);
+  const activeMonth = useRef(month);
+  activeMonth.current = month;
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (quiet = false) => {
+    if (activeMonth.current !== month) return;
+    const sequence = ++requestSequence.current;
     if (!quiet) setLoading(true);
     try {
       const response = await fetch(`/api/web-sales/analysis?month=${encodeURIComponent(month)}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "分析履歴を取得できません");
+      if (sequence !== requestSequence.current) return;
       setData(payload);
-      setSelectedId((current) => {
-        if (current && payload.analyses.some((item: AnalysisReport) => item.id === current)) return current;
-        const periodType = payload.displayPeriod?.type;
-        return payload.analyses.find((item: AnalysisReport) => item.analysis_type === periodType)?.id
-          || payload.analyses[0]?.id
-          || "";
-      });
+      const previousLatestId = latestId.current;
+      latestId.current = selectAnalysisVersion(payload.analyses, payload.displayPeriod?.type, previousLatestId, "").latestId;
+      setSelectedId(current => selectAnalysisVersion(
+        payload.analyses, payload.displayPeriod?.type, previousLatestId, current,
+      ).selectedId);
       setError(null);
     } catch (caught) {
+      if (sequence !== requestSequence.current) return;
       setError(caught instanceof Error ? caught.message : "分析履歴を取得できません");
     } finally {
-      if (!quiet) setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }, [month]);
 
   useEffect(() => {
     setSelectedId("");
+    latestId.current = "";
     void load();
+    return () => { requestSequence.current += 1; };
   }, [load]);
 
   const activeJob = data.jobs.find((job) => ["queued", "running"].includes(job.status)
     && (!data.displayPeriod
       || (job.period_start === data.displayPeriod.startDate && job.period_end === data.displayPeriod.endDate)));
+  const analyzing = Boolean(activeJob);
   useEffect(() => {
-    if (!activeJob) return;
-    const timer = window.setInterval(() => void load(true), 3500);
-    return () => window.clearInterval(timer);
-  }, [activeJob, load]);
+    const refresh = () => {
+      if (document.visibilityState !== "hidden") void load(true);
+    };
+    const timer = window.setInterval(refresh, analyzing ? 3500 : 15000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [analyzing, load]);
 
   const report = data.analyses.find((item) => item.id === selectedId) || data.analyses[0] || null;
   const workerOnline = Boolean(data.worker && data.worker.status !== "offline"
@@ -207,7 +225,7 @@ export default function WebSalesCodexAnalysis({ month, focus }: { month: string;
                 >
                   {data.analyses.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.analysis_type === "half_month" ? "1〜15日" : "月次"} 第{item.version}版 {formatDateTime(item.created_at)}
+                      {item.analysis_type === "half_month" ? "1〜15日" : "月次"} 第{item.version}版 {formatDateTime(item.created_at)}{item.id === latestId.current ? "（最新版）" : ""}
                     </option>
                   ))}
                 </select>
