@@ -5,7 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, resolve, sep } from "node
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { CARRIER_TASK_KEY, CARRIER_SKILL_CONTRACT, validateCarrierJob, loadCarrierAdapter, carrierMonitorPayload, waitForCarrierChildClose } from "./carrier-local-job.mjs";
+import { CARRIER_TASK_KEY, CARRIER_SKILL_CONTRACT, validateCarrierJob, loadCarrierAdapter, carrierMonitorPayload, carrierConfirmationDetails, waitForCarrierChildClose } from "./carrier-local-job.mjs";
 import monitorStateFile from "./monitor-state-file.cjs";
 import { acquireDocScannerFaxImages, deleteDocScannerFaxImages } from "./docscanner-fax-artifact.mjs";
 import {
@@ -35,7 +35,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.74";
+const VERSION = "1.9.75";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -282,12 +282,15 @@ async function runCarrierCodex({prompt, workDir, resultPath, schemaPath, addDirs
   rmSync(confirmationStatePath, {force:true});
   let lastConfirmationStatus = null;
   const pollConfirmation = () => {
-    let status;
-    try {status = JSON.parse(readFileSync(confirmationStatePath, "utf8")).status;} catch {return;}
-    if (!["waiting", "accepted", "cancelled", "unavailable"].includes(status) || status === lastConfirmationStatus) return;
-    lastConfirmationStatus = status;
-    onBrowserConfirmation?.(status);
-    updateDesktopMonitor(currentJobId, carrierMonitorPayload({status:"running", browserConfirmation:status}));
+    let value;
+    try {value = JSON.parse(readFileSync(confirmationStatePath, "utf8"));} catch {return;}
+    const status = value.status;
+    const details = carrierConfirmationDetails(value);
+    const fingerprint = JSON.stringify({status,...details});
+    if (!["waiting", "accepted", "cancelled", "unavailable"].includes(status) || fingerprint === lastConfirmationStatus) return;
+    lastConfirmationStatus = fingerprint;
+    onBrowserConfirmation?.(status, details);
+    updateDesktopMonitor(currentJobId, carrierMonitorPayload({status:"running", browserConfirmation:status, browserConfirmationDetails:details}));
   };
   const args = buildIsolatedCodexArgs(resultPath, [workDir, ...addDirs], {
     schema: schemaPath, model: "gpt-6-astra", reasoningEffort: "medium",

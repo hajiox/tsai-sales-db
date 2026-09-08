@@ -18,12 +18,23 @@ export async function loadCarrierAdapter(appDir, executionMode) {
   return adapter;
 }
 
+export function carrierConfirmationDetails(value = {}) {
+  return {
+    presentation: ['requested','shown','failed'].includes(value?.presentation) ? value.presentation : null,
+    reason: ['confirmation_timeout','dialog_start_failed','dialog_closed','user_cancelled','unsupported_schema','transport_cancelled','mutex_busy','noninteractive_session'].includes(value?.reason) ? value.reason : null,
+  };
+}
+
 export function carrierMonitorPayload(state = {}) {
   const statuses = {queued:'running', running:'running', completed:'completed', needs_operator:'waiting_for_user', failed:'failed', cancelled:'cancelled'};
   const status = statuses[state.status] || 'running';
-  if (status === 'running' && state.browserConfirmation === 'waiting') return {
+  const confirmation = carrierConfirmationDetails(state.browserConfirmationDetails);
+  if (status === 'running' && state.browserConfirmation === 'waiting') return confirmation.presentation === 'shown' ? {
     status:'running', progress:10, currentStep:'Bridgeのブラウザー確認画面で回答してください',
     operatorWaitReason:'ブラウザー確認への回答待ち。回答後に同じ処理を続行します', summary:'',
+  } : {
+    status:'running', progress:10, currentStep:'ブラウザー確認処理中（確認画面の表示は未確認）',
+    operatorWaitReason:null, summary:'',
   };
   // Fixed labels prevent source data or raw AI/browser errors reaching the shared monitor.
   const labels = {running:'出荷CSVを確認・取得・取り込み中', completed:'出荷CSV取り込み完了', waiting_for_user:'出荷画面で停止理由を確認して実行してください', failed:'出荷CSV処理に失敗しました。出荷画面で確認してください', cancelled:'出荷CSV処理を中止しました'};

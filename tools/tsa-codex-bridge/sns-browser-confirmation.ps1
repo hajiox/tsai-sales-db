@@ -1,8 +1,22 @@
+param([switch]$DiagnosticOnly)
 ﻿$ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
-$request = [Console]::In.ReadToEnd() | ConvertFrom-Json
-$response = @{ action = 'cancel'; content = $null }
+function Write-DialogEvent([string]$Phase, [string]$Reason = "") {
+  [Console]::Error.WriteLine('TSA_BROWSER_CONFIRMATION_EVENT ' + (@{ presentation=$Phase; reason=$Reason } | ConvertTo-Json -Compress))
+}
+if ($DiagnosticOnly) {
+  # Explicitly synthetic, always cancelled; this path never consumes a real browser form.
+  $request = @{ target='表示診断テスト（自動終了・業務操作なし）'; message='この画面は表示診断用です。2秒で閉じます。ブラウザー操作や許可の回答は行いません。'; fields=@() }
+} else {
+  $request = [Console]::In.ReadToEnd() | ConvertFrom-Json
+}
+if (-not [Environment]::UserInteractive -or [System.Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0) {
+  Write-DialogEvent 'failed' 'noninteractive_session'
+  [Console]::Write('{"action":"cancel","content":null,"reason":"noninteractive_session"}')
+  exit 0
+}
+$response = @{ action = 'cancel'; content = $null; reason = 'dialog_closed' }
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TSA-SNS-Browser-Confirmation')
@@ -62,8 +76,9 @@ try {
     $cancel = New-Object System.Windows.Forms.Button
     $cancel.Text = '中止'
     $cancel.Width = 100
-    $cancel.Add_Click({ $form.Close() })
+    $cancel.Add_Click({ $form.Tag = @{ action='cancel'; content=$null; reason='user_cancelled' }; $form.Close() })
     $submit.Add_Click({
+      if ($DiagnosticOnly) { $form.Close(); return }
       $values = @{}
       foreach ($field in $request.fields) {
         $control = $controls[[string]$field.name]
@@ -79,11 +94,20 @@ try {
     $layout.Controls.Add($buttons)
     # No default affirmative button. Close, Escape, and timeout are cancellation.
     $form.CancelButton = $cancel
-    $expires = [DateTime]::UtcNow.AddMinutes(5)
+    $expires = if ($DiagnosticOnly) { [DateTime]::UtcNow.AddSeconds(2) } else { [DateTime]::UtcNow.AddMinutes(5) }
+    $form.Add_Shown({
+      $form.Activate()
+      $form.BringToFront()
+      if ($form.Visible) { Write-DialogEvent 'shown' }
+    })
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = 1000
     $timer.Add_Tick({
-      if ([DateTime]::UtcNow -gt $expires -or -not (Get-Process -Id ([int]$env:TSA_SNS_RELAY_PID) -ErrorAction SilentlyContinue)) { $form.Close() }
+      if ([DateTime]::UtcNow -gt $expires) {
+        $form.Tag = @{ action='cancel'; content=$null; reason='confirmation_timeout' }; $form.Close()
+      } elseif (-not $DiagnosticOnly -and -not (Get-Process -Id ([int]$env:TSA_SNS_RELAY_PID) -ErrorAction SilentlyContinue)) {
+        $form.Tag = @{ action='cancel'; content=$null; reason='transport_cancelled' }; $form.Close()
+      }
     })
     $timer.Start()
     [void]$form.ShowDialog()
@@ -91,7 +115,13 @@ try {
     $timer.Dispose()
     if ($null -ne $form.Tag) { $response = $form.Tag }
     $form.Dispose()
+  } else {
+    Write-DialogEvent 'failed' 'mutex_busy'
+    $response = @{ action='cancel'; content=$null; reason='mutex_busy' }
   }
+} catch {
+  Write-DialogEvent 'failed' 'dialog_start_failed'
+  $response = @{ action='cancel'; content=$null; reason='dialog_start_failed' }
 } finally {
   if ($locked) { $mutex.ReleaseMutex() }
   $mutex.Dispose()

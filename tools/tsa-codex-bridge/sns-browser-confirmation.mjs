@@ -4,6 +4,36 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const CONFIRMATION_REASONS = new Set(["confirmation_timeout", "dialog_start_failed", "dialog_closed", "user_cancelled", "unsupported_schema", "transport_cancelled", "mutex_busy", "noninteractive_session"]);
+export function parseDialogEvent(line) {
+  const prefix = "TSA_BROWSER_CONFIRMATION_EVENT ";
+  if (!String(line).startsWith(prefix)) return null;
+  try {
+    const value = JSON.parse(line.slice(prefix.length));
+    if (!["shown", "failed"].includes(value.presentation)) return null;
+    return {presentation:value.presentation, reason:CONFIRMATION_REASONS.has(value.reason) ? value.reason : null};
+  } catch {return null;}
+}
+
+export function isSecurityReview(params) {
+  return [params?._meta, params?.meta].some(meta => meta && (meta.codex_request_type === "approval_request" || meta.codex_strict_auto_review === true));
+}
+export function reviewResponseSummary(message) {
+  return {
+    reviewOutcome: ({accept:"accepted", decline:"declined", cancel:"cancelled"})[message?.result?.action] || "error",
+    reviewer: ["auto_review", "guardian_subagent"].includes(message?.result?._meta?.approvals_reviewer) ? message.result._meta.approvals_reviewer : "unknown",
+  };
+}
+
+export function shouldHostConfirmation(params) {
+  const metadata = [params?._meta, params?.meta].filter(value => value && typeof value === "object");
+  // Security reviews belong to the CLI's existing reviewer. Authentication brokers
+  // require their native host; neither is a generic human form we may replace.
+  if (metadata.some(meta => meta.codex_request_type === "approval_request" || meta.codex_strict_auto_review === true || meta.codex_approval_kind === "browser_auth")) return false;
+  return metadata.some(meta => meta.codex_requires_user_input === true);
+}
 
 export function confirmationFields(schema) {
   if (!schema || schema.type !== "object" || !schema.properties || typeof schema.properties !== "object"
@@ -34,15 +64,16 @@ export function validateConfirmationResponse(response, fields) {
   return { action: "accept", content };
 }
 
-export async function requestBrowserConfirmation(params, showDialog, signal, timeoutMs = 5 * 60_000) {
+export async function requestBrowserConfirmation(params, showDialog, signal, timeoutMs = 5 * 60_000, onOutcome = () => {}) {
   const cancelled = { action: "cancel", content: null };
-  if (!["form", "openai/form"].includes(params?.mode || "form")) return cancelled;
+  if (!["form", "openai/form"].includes(params?.mode || "form")) {onOutcome("unsupported_schema"); return cancelled;}
   const fields = confirmationFields(params?.requestedSchema);
-  if (!fields || signal?.aborted) return cancelled;
+  if (!fields || signal?.aborted) {onOutcome(signal?.aborted ? "transport_cancelled" : "unsupported_schema"); return cancelled;}
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, {once:true});
-  const timer = setTimeout(abort, timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {timedOut = true; abort();}, timeoutMs);
   let resolveCancelled;
   const aborted = new Promise(resolve => {resolveCancelled = resolve;});
   const onAbort = () => resolveCancelled(cancelled);
@@ -51,19 +82,25 @@ export async function requestBrowserConfirmation(params, showDialog, signal, tim
     const response = await Promise.race([
       Promise.resolve().then(() => showDialog({ message:String(params.message || ""), fields }, controller.signal)), aborted,
     ]);
-    return controller.signal.aborted ? cancelled : validateConfirmationResponse(response, fields);
-  } catch {return cancelled;}
+    if (controller.signal.aborted) {onOutcome(timedOut ? "confirmation_timeout" : "transport_cancelled"); return cancelled;}
+    const validated = validateConfirmationResponse(response, fields);
+    onOutcome(validated.action === "accept" ? null : CONFIRMATION_REASONS.has(response?.reason) ? response.reason : "user_cancelled");
+    return validated;
+  } catch {onOutcome("dialog_start_failed"); return cancelled;}
   finally {
     clearTimeout(timer); signal?.removeEventListener("abort", abort);
     controller.signal.removeEventListener("abort", onAbort);
   }
 }
 
-export function startConfirmationRelay({ command, args, env, input = process.stdin, output = process.stdout, showDialog, state = () => {} }) {
+export function startConfirmationRelay({ command, args, env, input = process.stdin, output = process.stdout, showDialog, state = () => {}, reviewAudit = () => {} }) {
   const server = spawn(command, args, { env, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
   const send = value => { if (!server.stdin.destroyed) server.stdin.write(`${JSON.stringify(value)}\n`); };
   const clientLines = createInterface({ input });
   const serverLines = createInterface({ input: server.stdout });
+  const reviewIds = new Set();
+  const review = {reviewRequests:0, reviewResponses:0, reviewOutcome:null, reviewer:"unknown"};
+  const emitReviewAudit = () => {try {reviewAudit({...review});} catch { /* Advisory observation must not alter the security protocol. */ }};
   const activeToolCalls = new Set();
   let active = false;
   let activeRequest = null;
@@ -71,6 +108,12 @@ export function startConfirmationRelay({ command, args, env, input = process.std
   clientLines.on("line", line => {
     try {
       const message = JSON.parse(line);
+      if (!message.method && reviewIds.has(message.id)) {
+        reviewIds.delete(message.id);
+        review.reviewResponses++;
+        Object.assign(review, reviewResponseSummary(message));
+        emitReviewAudit();
+      }
       if (message.method === "tools/call" && message.id !== undefined) activeToolCalls.add(message.id);
       if (message.method === "notifications/cancelled" && activeRequest && (
         message.params?.requestId === activeRequest.id || activeToolCalls.has(message.params?.requestId)
@@ -79,29 +122,34 @@ export function startConfirmationRelay({ command, args, env, input = process.std
         message.params ||= {};
         message.params.capabilities ||= {};
         // This host actually provides the interactive form capability missing in codex exec.
-        message.params.capabilities.elicitation = { form: {} };
+        message.params.capabilities.elicitation = { ...(message.params.capabilities.elicitation || {}), form: message.params.capabilities.elicitation?.form || {} };
       }
-      send(message);
+      if (message.method === "initialize") send(message);
+      else if (!server.stdin.destroyed) server.stdin.write(`${line}\n`);
     } catch { server.kill(); }
   });
   serverLines.on("line", async line => {
     let message;
     try { message = JSON.parse(line); } catch { return; }
+    if (message.method === "elicitation/create" && message.id !== undefined && isSecurityReview(message.params) && !reviewIds.has(message.id)) {
+      reviewIds.add(message.id); review.reviewRequests++; emitReviewAudit();
+    }
     if (message.id !== undefined && !message.method) activeToolCalls.delete(message.id);
     if (message.method === "notifications/cancelled" && message.params?.requestId === activeRequest?.id) activeRequest.controller.abort();
-    if (message.method !== "elicitation/create" || message.id === undefined) {
+    if (message.method !== "elicitation/create" || message.id === undefined || !shouldHostConfirmation(message.params)) {
       output.write(`${line}\n`);
       return;
     }
     if (active || ended) { send({ jsonrpc: "2.0", id: message.id, result: { action: "cancel", content: null } }); return; }
     active = true;
     activeRequest = { id: message.id, controller: new AbortController() };
-    state("waiting");
+    state("waiting", {presentation:"requested", reason:null});
     let result = { action: "cancel", content: null };
-    try { result = await requestBrowserConfirmation(message.params, showDialog, activeRequest.controller.signal); } catch { /* fail closed */ }
+    let outcomeReason = null;
+    try { result = await requestBrowserConfirmation(message.params, showDialog, activeRequest.controller.signal, 5 * 60_000, reason => {outcomeReason = reason;}); } catch {outcomeReason = "dialog_start_failed";}
     if (activeRequest.controller.signal.aborted) result = { action: "cancel", content: null };
     if (!ended) send({ jsonrpc: "2.0", id: message.id, result });
-    state(result.action === "accept" ? "accepted" : "cancelled");
+    state(result.action === "accept" ? "accepted" : "cancelled", {reason:outcomeReason});
     active = false;
     activeRequest = null;
   });
@@ -117,33 +165,57 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!config.command || !Array.isArray(config.args)) throw new Error("SNS browser server configuration is missing");
   const statePath = process.env.TSA_SNS_CONFIRMATION_STATE;
   let lastState = null;
-  const state = status => {
+  let presentation = null;
+  let reason = null;
+  const state = (status, detail = {}) => {
     if (status === "closed") {
       if (!lastState || ["accepted", "cancelled", "unavailable"].includes(lastState)) return;
       status = "unavailable";
     }
     lastState = status;
-    if (statePath) writeFileSync(statePath, JSON.stringify({ status, updatedAt: new Date().toISOString() }), "utf8");
+    if (detail.presentation) presentation = detail.presentation;
+    if (Object.hasOwn(detail, "reason")) reason = detail.reason;
+    if (statePath) writeFileSync(statePath, JSON.stringify({ status, presentation, reason, updatedAt: new Date().toISOString() }), "utf8");
   };
   const showDialog = (form, signal) => new Promise(resolve => {
     const dialog = spawn("powershell.exe", ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", fileURLToPath(new URL("./sns-browser-confirmation.ps1", import.meta.url))], { windowsHide: true, env: { ...process.env, TSA_SNS_RELAY_PID: String(process.pid) }, stdio: ["pipe", "pipe", "pipe"] });
     let result = "";
     dialog.stdout.setEncoding("utf8");
     dialog.stdout.on("data", data => { if (result.length < 100_000) result += data; });
-    dialog.stderr.on("data", () => {});
-    const timer = setTimeout(() => dialog.kill(), 5 * 60_000);
+    let stderrBuffer = "";
+    let dialogReason = null;
+    let shown = false;
+    const startupTimer = setTimeout(() => { if (!shown) {dialogReason = "dialog_start_failed"; dialog.kill();} }, 15_000);
+    dialog.stderr.setEncoding("utf8");
+    dialog.stderr.on("data", chunk => {
+      stderrBuffer = (stderrBuffer + chunk).slice(-4096);
+      const lines = stderrBuffer.split(/\r?\n/); stderrBuffer = lines.pop() || "";
+      for (const line of lines) {
+        const event = parseDialogEvent(line);
+        if (!event) continue; // Raw stderr is never persisted or shown.
+        shown ||= event.presentation === "shown";
+        if (shown || event.presentation === "failed") clearTimeout(startupTimer);
+        dialogReason = event.reason;
+        state(event.presentation === "shown" ? "waiting" : "unavailable", event);
+      }
+    });
+    const timer = setTimeout(() => {dialogReason = "confirmation_timeout"; dialog.kill();}, 5 * 60_000);
     const closeDialog = () => dialog.kill();
     signal?.addEventListener("abort", closeDialog, { once: true });
     if (signal?.aborted) closeDialog();
     process.once("exit", closeDialog);
-    dialog.on("error", () => resolve({ action: "cancel", content: null }));
+    dialog.on("error", () => resolve({ action:"cancel", content:null, reason:"dialog_start_failed" }));
     dialog.on("close", () => {
-      clearTimeout(timer); process.off("exit", closeDialog);
+      clearTimeout(timer); clearTimeout(startupTimer); process.off("exit", closeDialog);
       signal?.removeEventListener("abort", closeDialog);
-      try { resolve(JSON.parse(result)); } catch { resolve({ action: "cancel", content: null }); }
+      try { resolve(JSON.parse(result)); } catch { resolve({ action:"cancel", content:null, reason:dialogReason || (shown ? "dialog_closed" : "dialog_start_failed") }); }
     });
     dialog.stdin.end(JSON.stringify({ ...form, target: process.env.TSA_SNS_CONFIRMATION_TARGET || "SNS投稿" }), "utf8");
   });
-  const server = startConfirmationRelay({ ...config, env: { ...process.env, ...config.env }, showDialog, state });
+  const reviewAudit = value => {
+    try {if (statePath) writeFileSync(join(dirname(statePath), "browser-review-state.json"), JSON.stringify({...value, updatedAt:new Date().toISOString()}), "utf8");} catch { /* No protocol change on an advisory state write failure. */ }
+  };
+  reviewAudit({reviewRequests:0, reviewResponses:0, reviewOutcome:null, reviewer:"unknown"});
+  const server = startConfirmationRelay({ ...config, env: { ...process.env, ...config.env }, showDialog, state, reviewAudit });
   server.on("error", () => { state("unavailable"); process.exitCode = 1; });
 }

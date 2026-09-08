@@ -57,8 +57,10 @@ Use the compact Bridge job input as complete. Run a fresh, non-resumed `codex ex
 
 The local page has one month selector and one 実行 button. It enqueues a local request; it does not launch another CLI worker or console. Wait for operator action after any login, MFA, CAPTCHA or permission issue; report the observed condition without inferring an unverified cause.
 
-## Browser confirmation (Bridge 1.9.74)
+## Browser confirmation (Bridge 1.9.75)
 
-Browser confirmation is not a prerequisite for a normal run. Do not display or request a form proactively. Only when the browser actually requests its own confirmation, the Bridge displays the original form to the human operator. Wait for the same pending tool call to return. Never answer the form yourself or treat the execution button as the browser's confirmation response. A denial, cancellation, timeout, unsupported form or unavailable dialog stops the job for operator action; do not bypass it or switch routes to avoid it. Login, MFA and CAPTCHA still require the operator. The local screen and unified monitor display pending confirmation. A reported browser_access result alone is not proof of carrier-site rejection or a missing logged-in browser.
+Proceed automatically with the authorized carrier/month acquisition. Codex's automatic safety-review requests go unchanged to Codex; they are not requests for the operator to click a Bridge form. Never manufacture approval or bypass a review refusal.
 
-First discover the current Chrome inventory with the supplied CUA API and reuse the official signed-in tabs. Do not infer browser_access from an ordinary selector/transport failure or from an unobserved possibility; report execution_failed when a technical failure remains unexplained. The relay merely handles a real browser-originated form if one occurs.
+Only an actual supported human-input form is hosted by the Bridge. A received request is not evidence that a dialog is visible: describe a form as displayed only after its shown acknowledgment. Browser authentication challenges remain with the official browser/Codex handler. Wait for the same pending call; do not answer a human form yourself. Actual login, MFA, CAPTCHA, permission refusal, or unavailable required input stops the job. Distinguish technical display failure from human cancellation and timeout.
+
+First discover the current Chrome inventory with the supplied CUA API and reuse the official signed-in tabs. Do not infer browser_access from an ordinary selector/transport failure or an unobserved possibility; use execution_failed for unexplained technical failures. A browser_access result alone does not establish carrier-site rejection or a missing signed-in browser.

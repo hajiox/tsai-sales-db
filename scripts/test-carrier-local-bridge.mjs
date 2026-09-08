@@ -56,9 +56,13 @@ test('carrier invocation enables human relay and exposes only bounded confirmati
  const s=readFileSync(new URL('../tools/tsa-codex-bridge/bridge.mjs',import.meta.url),'utf8');
  const fn=s.slice(s.indexOf('async function runCarrierCodex('),s.indexOf('async function executeJob('));
  assert.match(fn,/snsConfirmation: \{statePath:confirmationStatePath/);
- assert.match(fn,/onBrowserConfirmation\?\.\(status\)/);
+ assert.match(fn,/onBrowserConfirmation\?\.\(status, details\)/);
  assert.match(fn,/\["waiting", "accepted", "cancelled", "unavailable"\]/);
- const pending=carrierMonitorPayload({status:'running',browserConfirmation:'waiting',summary:'private'});
+ const pending=carrierMonitorPayload({status:'running',browserConfirmation:'waiting',browserConfirmationDetails:{presentation:'shown'},summary:'private'});
  assert.match(pending.currentStep,/確認画面/);assert.match(pending.operatorWaitReason,/回答待ち/);assert.equal(pending.status,'running');
  assert.equal(carrierMonitorPayload({status:'running',browserConfirmation:'accepted'}).operatorWaitReason,null);
+ for (const details of [undefined,{presentation:'requested'},{presentation:'unknown',reason:'private'}]) {
+  const unshown=carrierMonitorPayload({status:'running',browserConfirmation:'waiting',browserConfirmationDetails:details});
+  assert.match(unshown.currentStep,/未確認/);assert.equal(unshown.operatorWaitReason,null);assert.doesNotMatch(JSON.stringify(unshown),/private|回答してください/);
+ }
 });
