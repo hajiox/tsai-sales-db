@@ -223,22 +223,48 @@ function Get-TrustedHeadlessBridgeProcesses {
         $updatedAt -lt (Get-Date).ToUniversalTime().AddMinutes(-2)
       ) { continue }
       $candidate = Get-CimInstance Win32_Process -Filter "ProcessId = $statePid" -ErrorAction SilentlyContinue
-      if ($candidate -and $candidate.Name -eq "node.exe") { $trusted += $candidate }
+      if ($candidate -and $candidate.Name -eq "node.exe" -and $candidate.CreationDate -and $candidate.CreationDate.ToUniversalTime() -le $updatedAt.AddSeconds(5)) { $trusted += $candidate }
     } catch {
       # A partial advisory state is ignored; command-line discovery remains active.
     }
   }
   return @($trusted)
 }
+function Test-BridgeProcessEntryPoint($Candidate, [int]$InstallerPid = $PID) {
+  if (-not $Candidate -or [int]$Candidate.ProcessId -eq $InstallerPid -or -not $Candidate.CommandLine) { return $false }
+  $processName = [string]$Candidate.Name
+  if ($processName -notin @("node.exe", "powershell.exe", "pwsh.exe")) { return $false }
+  # Accept only the actual script argument, never text embedded in -Command or a diagnostic command.
+  $argumentTokens = @([regex]::Matches([string]$Candidate.CommandLine, '"[^"\r\n]*"|[^\s"]+') | ForEach-Object { $_.Value.Trim('"') })
+  if ($argumentTokens.Count -lt 2) { return $false }
+  if ([System.IO.Path]::GetFileName($argumentTokens[0]) -ine $processName) { return $false }
+  if ($processName -eq "node.exe") {
+    return [string]::Equals($argumentTokens[1], $bridgePath, [System.StringComparison]::OrdinalIgnoreCase)
+  }
+  for ($argumentIndex = 1; $argumentIndex -lt $argumentTokens.Count; $argumentIndex++) {
+    $argument = $argumentTokens[$argumentIndex]
+    if ($argument.StartsWith("-") -and (
+      "-Command".StartsWith($argument, [System.StringComparison]::OrdinalIgnoreCase) -or
+      "-EncodedCommand".StartsWith($argument, [System.StringComparison]::OrdinalIgnoreCase) -or
+      $argument -ieq "-ec" -or $argument -ieq "-CommandWithArgs"
+    )) { return $false }
+    if ($argument -ieq "-File") {
+      if ($argumentIndex + 1 -ge $argumentTokens.Count) { return $false }
+      $scriptArgument = $argumentTokens[$argumentIndex + 1]
+      return (
+        [string]::Equals($scriptArgument, $startScriptPath, [System.StringComparison]::OrdinalIgnoreCase) -or
+        [string]::Equals($scriptArgument, $headlessStartScriptPath, [System.StringComparison]::OrdinalIgnoreCase)
+      )
+    }
+  }
+  return $false
+}
 function Get-BridgeProcesses {
-  $processes = @(Get-CimInstance Win32_Process | Where-Object {
-    $_.CommandLine -and (
-      $_.CommandLine.IndexOf($startScriptPath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
-      $_.CommandLine.IndexOf($headlessStartScriptPath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
-      $_.CommandLine.IndexOf($bridgePath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
-    )
-  })
+  $processes = @(Get-CimInstance Win32_Process | Where-Object { Test-BridgeProcessEntryPoint $_ })
   foreach ($trustedHeadless in @(Get-TrustedHeadlessBridgeProcesses)) {
+    # A readable non-matching command line overrides advisory PID metadata.
+    if ([int]$trustedHeadless.ProcessId -eq $PID) { continue }
+    if ($trustedHeadless.CommandLine -and -not (Test-BridgeProcessEntryPoint $trustedHeadless)) { continue }
     if (@($processes | Where-Object { [int]$_.ProcessId -eq [int]$trustedHeadless.ProcessId }).Count -eq 0) {
       $processes += $trustedHeadless
     }
@@ -394,7 +420,7 @@ try {
     }
   }
 
-  foreach ($process in @($bridgeProcesses | Sort-Object { if ($_.Name -like "powershell*") { 0 } else { 1 } })) {
+  foreach ($process in @($bridgeProcesses | Sort-Object { if ($_.Name -in @("powershell.exe", "pwsh.exe")) { 0 } else { 1 } })) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
   }
   if ($bridgeProcesses.Count -gt 0) { Start-Sleep -Seconds 2 }
@@ -431,7 +457,7 @@ try {
   }
   $remainingBridgeProcesses = @(Get-BridgeProcesses)
   if ($remainingBridgeProcesses.Count -gt 0) {
-    throw "既存Bridgeを安全に停止できませんでした。"
+    throw "既存Bridgeを安全に停止できませんでした。残存: $(@($remainingBridgeProcesses | ForEach-Object { '{0}/{1}' -f $_.ProcessId, $_.Name }) -join ', ')"
   }
   Stop-VerifiedMonitor -AckPath $legacyMonitorAckPath -AllowedScripts @($monitorPath)
   Stop-VerifiedMonitor -AckPath $unifiedMonitorAckPath -AllowedScripts @(
