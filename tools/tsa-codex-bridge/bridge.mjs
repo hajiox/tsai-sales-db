@@ -35,7 +35,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.73";
+const VERSION = "1.9.74";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -277,19 +277,33 @@ async function main() {
   releaseLock();
 }
 
-async function runCarrierCodex({prompt, workDir, resultPath, schemaPath, addDirs = [], onPid}) {
+async function runCarrierCodex({prompt, workDir, resultPath, schemaPath, addDirs = [], onPid, onBrowserConfirmation}) {
+  const confirmationStatePath = join(workDir, "browser-confirmation-state.json");
+  rmSync(confirmationStatePath, {force:true});
+  let lastConfirmationStatus = null;
+  const pollConfirmation = () => {
+    let status;
+    try {status = JSON.parse(readFileSync(confirmationStatePath, "utf8")).status;} catch {return;}
+    if (!["waiting", "accepted", "cancelled", "unavailable"].includes(status) || status === lastConfirmationStatus) return;
+    lastConfirmationStatus = status;
+    onBrowserConfirmation?.(status);
+    updateDesktopMonitor(currentJobId, carrierMonitorPayload({status:"running", browserConfirmation:status}));
+  };
   const args = buildIsolatedCodexArgs(resultPath, [workDir, ...addDirs], {
     schema: schemaPath, model: "gpt-6-astra", reasoningEffort: "medium",
+    snsConfirmation: {statePath:confirmationStatePath, target:"ヤマト・佐川 出荷CSV取得"},
     cwd: workDir, focusedContext: true, ephemeral: true,
   });
   // Use $tsa-carrier-shipment-csv. Prompt, schema and paths are produced by the trusted local module.
-  const child = await spawnSkillCodex(CARRIER_TASK_KEY, prompt, args, {
+  const carrierPrompt = prompt + "\nAUTOMATIC EXECUTION: The selected carrier/month CSV acquisition is already authorized. Reuse the signed-in Chrome tabs and perform the ordinary navigation, filtering, download and validation automatically; do not ask the operator to perform those steps or approve them again. First discover the current browser state using await cua.getState(); and follow the returned API. A confirmation dialog is not a prerequisite. Only if the browser actually emits a permission form will the Bridge show it and wait for the human response to that same call. Never fabricate or answer such a form yourself. Stop for an actually observed login, MFA, CAPTCHA, permission refusal or request that cannot be fulfilled automatically; never label a generic tool/navigation error or an unobserved possibility as browser_access. Use execution_failed for an unexplained technical failure, preserving the fixed output schema. Do not infer carrier-site rejection from absent evidence.";
+  const child = await spawnSkillCodex(CARRIER_TASK_KEY, carrierPrompt, args, {
     cwd: workDir, env: {...process.env, CODEX_HOME: config.codexHome},
     windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
   });
   onPid?.(child.pid);
   // Usage is observed by spawnSkillCodex. Never save customer-bearing CLI transcripts.
   child.stderr.resume();
+  const confirmationTimer = setInterval(pollConfirmation, 250);
   const timer = setInterval(() => {
     writeBridgeState();
     publishDesktopMonitorHeartbeat();
@@ -305,6 +319,8 @@ async function runCarrierCodex({prompt, workDir, resultPath, schemaPath, addDirs
       summary: "終了待ちのためBridgeを占有しています。プロセス状態を確認してください",
     }));
     clearInterval(timer);
+    clearInterval(confirmationTimer);
+    pollConfirmation();
     onPid?.(null);
   }
 }
@@ -6379,7 +6395,9 @@ function prepareSkillControlledPrompt(taskKey, prompt) {
     "- Never read, search, summarize, or resume any app Chat, prior Codex task/thread, conversation history, transcript, rollout, or saved session.",
     "- Use only the compact job input below and the dedicated Skill resources it explicitly requires.",
     "- Do not read general development notes, repository history, unrelated Skills, or broad operational documentation. Load only the named Skill and the exact references it requires.",
-    "- Authentication stop rule: after observing login, MFA, CAPTCHA, account selection, or permission UI once, do not refresh, retry authentication, or explore alternate routes in a loop. Return waiting_for_user immediately.",
+    taskKey === CARRIER_TASK_KEY
+      ? "- Automatic carrier execution: the operator already authorized this fixed period. Execute ordinary permitted browser work without additional conversational confirmation. Return needs_operator only for an observed login/MFA/CAPTCHA/account ambiguity/permission block, never a hypothetical one. Wait for an actually pending browser confirmation call; never bypass a denial or retry authentication in a loop."
+      : "- Authentication stop rule: after observing login, MFA, CAPTCHA, account selection, or permission UI once, do not refresh, retry authentication, or explore alternate routes in a loop. Return waiting_for_user immediately.",
     "",
     promptText,
   ].join("\n");

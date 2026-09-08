@@ -42,3 +42,34 @@ assert.deepEqual(states.slice(0, 2), ["waiting", "accepted"]);
 input.end();
 await new Promise(resolve => server.once("close", resolve));
 console.log("SNS browser confirmation: schema validation, fail-closed forms, pending approval, and stdio continuation passed");
+// Cancellation, denial, timeout and unfamiliar forms must never manufacture approval.
+assert.deepEqual(await requestBrowserConfirmation({mode:'form',requestedSchema:schema},async()=>({action:'accept',content:{decision:'deny'}})),{action:'accept',content:{decision:'deny'}});
+assert.equal((await requestBrowserConfirmation({mode:'form',requestedSchema:schema},async()=>({action:'cancel',content:null}))).action,'cancel');
+for(const malformed of [{type:'object',properties:[],required:[]},{type:'object',properties:{decision:{type:'boolean'}},required:'decision'},{type:'object',properties:{decision:{type:'boolean'}},required:['absent']},{type:'object',properties:{decision:{type:'boolean',const:true}}},{type:'object',properties:{},oneOf:[]}]){
+ assert.equal((await requestBrowserConfirmation({requestedSchema:malformed},()=>{throw Error('must not display')})).action,'cancel');
+}
+const abortedController=new AbortController();
+const abortWait=requestBrowserConfirmation({requestedSchema:schema},()=>new Promise(()=>{}),abortedController.signal);
+abortedController.abort();assert.equal((await abortWait).action,'cancel');
+assert.equal((await requestBrowserConfirmation({requestedSchema:schema},()=>new Promise(()=>{}),undefined,10)).action,'cancel');
+
+const cancelInput=new PassThrough();const cancelOutput=new PassThrough();let cancelWire='';cancelOutput.on('data',d=>{cancelWire+=d});
+let signalShown;const cancelShown=new Promise(resolve=>{signalShown=resolve});
+const cancelPeer=`const rl=require('readline').createInterface({input:process.stdin});rl.on('line',s=>{const x=JSON.parse(s);if(x.method==='tools/call'){process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:999,method:'elicitation/create',params:{mode:'form',requestedSchema:${JSON.stringify(schema)}}})+'\\n')}else if(x.id===999){process.stdout.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/cancel-result',params:x.result})+'\\n')}})`;
+const cancelServer=startConfirmationRelay({command:process.execPath,args:['-e',cancelPeer],env:process.env,input:cancelInput,output:cancelOutput,showDialog:async()=>{signalShown();return new Promise(()=>{})}});
+cancelInput.write(JSON.stringify({jsonrpc:'2.0',id:77,method:'tools/call',params:{}})+'\n');await cancelShown;
+cancelInput.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/cancelled',params:{requestId:77}})+'\n');
+await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('parent tool cancellation was not relayed')),2000);const check=()=>{if(cancelWire.includes('notifications/cancel-result')){clearTimeout(timer);cancelOutput.off('data',check);resolve()}};cancelOutput.on('data',check);check()});
+assert(cancelWire.includes('"action":"cancel"'));assert(!cancelWire.includes('"allow_once"'));
+cancelInput.end();await new Promise(resolve=>cancelServer.once('close',resolve));
+console.log('Browser confirmation: denial preserved, cancellation, timeout, unknown schemas and parent tools/call cancellation passed');
+// A normal browser call flows through automatically without inventing a form.
+const autoInput=new PassThrough();const autoOutput=new PassThrough();let autoWire='';let autoForms=0;const autoStates=[];
+autoOutput.on('data',d=>{autoWire+=d});
+const autoPeer=`require('readline').createInterface({input:process.stdin}).on('line',s=>{const x=JSON.parse(s);if(x.method==='tools/call')process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:x.id,result:{content:[{type:'text',text:'normal-operation-completed'}]}})+'\\n')})`;
+const autoServer=startConfirmationRelay({command:process.execPath,args:['-e',autoPeer],env:process.env,input:autoInput,output:autoOutput,state:s=>autoStates.push(s),showDialog:async()=>{autoForms++;throw Error('normal operation must not ask')}});
+autoInput.write(JSON.stringify({jsonrpc:'2.0',id:88,method:'tools/call',params:{name:'js'}})+'\n');
+await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('ordinary operation failed')),2000);const check=()=>{if(autoWire.includes('normal-operation-completed')){clearTimeout(timer);autoOutput.off('data',check);resolve()}};autoOutput.on('data',check);check()});
+assert.equal(autoForms,0);assert.equal(autoStates.includes('waiting'),false);
+autoInput.end();await new Promise(resolve=>autoServer.once('close',resolve));
+console.log('Normal browser operation passes through automatically with zero forms and zero waiting states');

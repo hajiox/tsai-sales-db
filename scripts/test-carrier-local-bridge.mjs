@@ -24,7 +24,7 @@ test('integration is same worker, fixed Astra medium, no cloud local IDs or sepa
  assert.match(s,/currentJobId: currentJobIsLocal \? null : currentJobId/);
  assert.match(s,/lastDesktopTerminalState\?\.taskKey === CARRIER_TASK_KEY \? null/);
  assert.match(s,/if \(currentJobIsLocal\) return \{ok:true\}/);
- assert.match(s,/spawnSkillCodex\(CARRIER_TASK_KEY, prompt, args/);
+ assert.match(s,/spawnSkillCodex\(CARRIER_TASK_KEY, carrierPrompt, args/);
  assert.match(s,/schema: schemaPath, model: "gpt-6-astra", reasoningEffort: "medium"/);
 });
 import { EventEmitter } from 'node:events';
@@ -51,4 +51,14 @@ test('CLI arguments preserve isolated focused execution while overriding stale m
   const args=build('result.json',[],options);assert.equal(args[args.indexOf('--model')+1],'gpt-6-astra');assert.ok(args.includes('model_reasoning_effort="medium"'));
   if(options.focusedContext){assert.ok(args.includes('--ignore-user-config'));assert.ok(args.includes('--ephemeral'));assert.ok(args.includes('mcp_fixture=true'));}
  }
+});
+test('carrier invocation enables human relay and exposes only bounded confirmation state',()=>{
+ const s=readFileSync(new URL('../tools/tsa-codex-bridge/bridge.mjs',import.meta.url),'utf8');
+ const fn=s.slice(s.indexOf('async function runCarrierCodex('),s.indexOf('async function executeJob('));
+ assert.match(fn,/snsConfirmation: \{statePath:confirmationStatePath/);
+ assert.match(fn,/onBrowserConfirmation\?\.\(status\)/);
+ assert.match(fn,/\["waiting", "accepted", "cancelled", "unavailable"\]/);
+ const pending=carrierMonitorPayload({status:'running',browserConfirmation:'waiting',summary:'private'});
+ assert.match(pending.currentStep,/確認画面/);assert.match(pending.operatorWaitReason,/回答待ち/);assert.equal(pending.status,'running');
+ assert.equal(carrierMonitorPayload({status:'running',browserConfirmation:'accepted'}).operatorWaitReason,null);
 });

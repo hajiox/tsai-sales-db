@@ -21,9 +21,13 @@ export async function loadCarrierAdapter(appDir, executionMode) {
 export function carrierMonitorPayload(state = {}) {
   const statuses = {queued:'running', running:'running', completed:'completed', needs_operator:'waiting_for_user', failed:'failed', cancelled:'cancelled'};
   const status = statuses[state.status] || 'running';
+  if (status === 'running' && state.browserConfirmation === 'waiting') return {
+    status:'running', progress:10, currentStep:'Bridgeのブラウザー確認画面で回答してください',
+    operatorWaitReason:'ブラウザー確認への回答待ち。回答後に同じ処理を続行します', summary:'',
+  };
   // Fixed labels prevent source data or raw AI/browser errors reaching the shared monitor.
   const labels = {running:'出荷CSVを確認・取得・取り込み中', completed:'出荷CSV取り込み完了', waiting_for_user:'出荷画面で停止理由を確認して実行してください', failed:'出荷CSV処理に失敗しました。出荷画面で確認してください', cancelled:'出荷CSV処理を中止しました'};
-  return {status, progress: Number.isFinite(state.progress) ? Math.max(0,Math.min(100,state.progress)) : (status === 'running' ? 5 : 100), currentStep:labels[status], summary: status === 'running' ? '' : labels[status]};
+  return {status, progress: Number.isFinite(state.progress) ? Math.max(0,Math.min(100,state.progress)) : (status === 'running' ? 5 : 100), currentStep:labels[status], operatorWaitReason:null, summary: status === 'running' ? '' : labels[status]};
 }
 
 // A watchdog request is not proof of process exit. Keep the same worker occupied

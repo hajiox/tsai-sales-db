@@ -5,14 +5,14 @@ description: Download, name, validate, archive, and import the previous month's 
 
 # TSA Carrier Shipment CSV
 
-Run the monthly carrier export as a lossless, local-first workflow. Keep customer data on this PC and the approved network archive.
+The fixed carrier/month acquisition is already authorized. Automatically perform ordinary navigation, period filtering, download, archiving and validation; do not hand those steps back to the operator or request redundant confirmation. Run the monthly carrier export as a lossless, local-first workflow. Keep customer data on this PC and the approved network archive.
 
 ## Guardrails
 
 - Target the previous calendar month in Japan time unless the user explicitly supplies another period.
 - Reuse a complete, validated archive before opening either carrier site.
 - Use the logged-in Chrome session only for navigation and downloads. Never inspect or record cookies, tokens, signed URLs, credentials, or customer rows.
-- Stop in an operator-waiting state for login, account selection, MFA, CAPTCHA, permission prompts, or an ambiguous export mapping. Do not retry these conditions in a loop.
+- Stop in an operator-waiting state only for an actually observed login, account ambiguity, MFA, CAPTCHA, permission request/refusal, or an ambiguous export mapping. Do not retry these conditions in a loop.
 - Never print names, addresses, phone numbers, tracking numbers, order numbers, or CSV row contents.
 - Do not upload raw CSV files to TSA/Vercel or any external service. Import only into `C:\作業用\yamato-analytics` through its local endpoint.
 - Do not silently accept a truncated export. Yamato chunks must contain at most 1000 data rows; Sagawa chunks must contain at most 2000 data rows.
@@ -56,3 +56,9 @@ The scripts deliberately emit filenames, hashes, schema counts, date ranges, and
 Use the compact Bridge job input as complete. Run a fresh, non-resumed `codex exec` only for missing downloads. Never open, read, search, or reuse app Chats, previous tasks, saved sessions, or development history. The TSA interactive Bridge owns the CLI process and runs this task serially with its other browser jobs. Use Astra (gpt-6-astra), medium reasoning. The local carrier application owns archive validation, SQLite import, locking and alerts; do not duplicate these actions inside the AI phase.
 
 The local page has one month selector and one 実行 button. It enqueues a local request; it does not launch another CLI worker or console. Wait for operator action after any login, MFA, CAPTCHA or permission issue; report the observed condition without inferring an unverified cause.
+
+## Browser confirmation (Bridge 1.9.74)
+
+Browser confirmation is not a prerequisite for a normal run. Do not display or request a form proactively. Only when the browser actually requests its own confirmation, the Bridge displays the original form to the human operator. Wait for the same pending tool call to return. Never answer the form yourself or treat the execution button as the browser's confirmation response. A denial, cancellation, timeout, unsupported form or unavailable dialog stops the job for operator action; do not bypass it or switch routes to avoid it. Login, MFA and CAPTCHA still require the operator. The local screen and unified monitor display pending confirmation. A reported browser_access result alone is not proof of carrier-site rejection or a missing logged-in browser.
+
+First discover the current Chrome inventory with the supplied CUA API and reuse the official signed-in tabs. Do not infer browser_access from an ordinary selector/transport failure or from an unobserved possibility; report execution_failed when a technical failure remains unexplained. The relay merely handles a real browser-originated form if one occurs.
