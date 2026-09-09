@@ -35,7 +35,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.75";
+const VERSION = "1.9.76";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -5179,6 +5179,7 @@ function buildRecipeSnsPublishTargetPrompt({ publishSkillText, platformReference
     "TSA has already held this job until its scheduled time. Publish now through the ordinary official posting UI; do not use a platform-native scheduler.",
     "TSA SCOPE RECORD: TASK_JSON.operatorAuthorization records the authenticated administrator's requested platform, account, fixed content, image, link, and cleanup boundary. It locks job scope but must never be described as a user-authored Chat message or as action-time Browser confirmation.",
     "EXECUTION SURFACE: this is a fresh codex exec with a Bridge-hosted browser confirmation dialog. The administrator requested publication of the locked content, including its exact image upload and final submit. Continue through final publication and result verification; do not ask for redundant conversational approval. If the browser itself requires confirmation, the Bridge shows its form and returns the human response to the same pending tool call. Wait for that call; never answer the form yourself, bypass a denial, or switch upload routes after a security refusal. If confirmation is cancelled, unavailable, or times out, return blocked with the actual reason. Ordinary chooser/selector timeouts are technical failures, not proof that permission or another Codex task is required.",
+    "PUBLICATION COMPLETION CONTRACT: this job requests publication, not a draft or a preview. Pre-submit verification is your own comparison of the visible composer with the locked values, not a request for the operator to approve again. Do not stop merely because execution is noninteractive or because a confirmation might be required. Proceed with ordinary authorized actions. Report waiting_for_user only for an observed authentication/account/permission obstacle or an actual unfinished browser confirmation, and include the observed reason. Never fabricate, suppress, or automatically answer a browser security request. If publication is uncertain, report that uncertainty without resubmitting.",
     "Use exactly the target's fixed post_text, story_text, link_url, and image_path. For Instagram Story, set link_url with the Link sticker rather than placing the URL in text.",
     "Before final submit, verify the visible account, text, image, and link. Submit at most once unless the UI clearly proves the click did not submit.",
     "If the visible account differs, use the official switcher once to select only the exact already-signed-in expected_account, then visibly recheck it before composing. Never add or log into an account. For login, MFA, CAPTCHA, missing target account, failed account verification, permission, or unavailable official Story route, return blocked without retrying authentication.",

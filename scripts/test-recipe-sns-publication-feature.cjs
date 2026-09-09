@@ -133,3 +133,8 @@ const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
 assert.equal(version.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);
 
 console.log(`Recipe SNS publication feature and Bridge ${bridgeVersion} contracts verified.`);
+
+assert.match(bridge, /PUBLICATION COMPLETION CONTRACT/);
+assert.match(skill, /投稿前確認はAIが画面と確定値を照合する工程/);
+assert.doesNotMatch(skill, /`executionSurface` が `headless_codex_exec`/);
+assert.match(skill, /確認画面をAIで操作したり、自動で同意したりしない/);
