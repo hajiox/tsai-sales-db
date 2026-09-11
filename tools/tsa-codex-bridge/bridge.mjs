@@ -38,7 +38,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.84";
+const VERSION = "1.9.85";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -5265,7 +5265,6 @@ async function executeRecipeSnsPublishTarget({
     reasoningEffort: parameters.reasoningEffort,
     cwd: workDir,
     focusedContext: true,
-    userAuthorizedBrowser: true,
     ephemeral: true,
   });
   const stageStart = 10 + Math.floor((index / total) * 80);
@@ -6530,16 +6529,10 @@ function buildIsolatedCodexArgs(outputFile, writableDirectories, options = {}) {
     "--skip-git-repo-check",
     "--cd", workingDirectory,
   ];
-  // SNS publication carries an exact, action-time authorization and has a visible
-  // Bridge relay for any CUA confirmation that still requires a person. Automatic
-  // review dismisses the file-upload permission before that relay can receive it,
-  // so this one path uses the ordinary user-reviewed policy without auto review.
-  // Other headless browser jobs retain their existing automatic review behavior.
-  if (options.userAuthorizedBrowser) {
-    args.push("--sandbox", "workspace-write", "-c", 'approval_policy="never"');
-  } else if (!options.sandbox) {
-    args.push("--approve-for-me");
-  }
+  // Headless browser jobs need automatic review for ordinary MCP tool calls.
+  // Protected browser actions that still require a person remain fail-closed and
+  // are reported as waiting_for_user; the Bridge never manufactures approval.
+  if (!options.sandbox) args.push("--approve-for-me");
   if (options.minimalContext || options.focusedContext) {
     args.push(
       "--ignore-user-config",
