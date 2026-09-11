@@ -1,5 +1,7 @@
 export const RECIPE_SNS_INTERACTIVE_APPROVAL_MESSAGE =
   "Bridgeのブラウザー確認が完了しませんでした。公開状態を確認し、未投稿の媒体だけをTSAから再実行してください。";
+export const RECIPE_SNS_AUTO_REVIEW_DECLINED_MESSAGE =
+  "Codexのブラウザー自動審査が操作を拒否したため、この媒体は未投稿です。Bridgeの診断記録を確認してください。";
 
 const BROWSER_APPROVAL_WAIT_PATTERN =
   /browser security check was unavailable|permission request was dismissed before a decision was made/i;
@@ -25,5 +27,16 @@ export function normalizeRecipeSnsPublishStop({ platform, status, evidence, mess
       : "Chromeのブラウザー確認が中止または未完了となったため、投稿結果の確認が必要です。",
     message: RECIPE_SNS_INTERACTIVE_APPROVAL_MESSAGE,
     approvalWait: true,
+  };
+}
+
+export function normalizeRecipeSnsReviewStop(row, reviewState) {
+  if (!row || ["published", "already_published"].includes(row.status)) return row;
+  if (reviewState?.reviewOutcome !== "declined") return row;
+  return {
+    ...row,
+    status: "blocked",
+    evidence: "Codexの厳格なブラウザー自動審査が対象操作を拒否し、公開前に停止しました。",
+    message: RECIPE_SNS_AUTO_REVIEW_DECLINED_MESSAGE,
   };
 }

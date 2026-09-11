@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  RECIPE_SNS_AUTO_REVIEW_DECLINED_MESSAGE,
   RECIPE_SNS_INTERACTIVE_APPROVAL_MESSAGE,
   isRecipeSnsInteractiveApprovalWait,
+  normalizeRecipeSnsReviewStop,
   normalizeRecipeSnsPublishStop,
 } from "../tools/tsa-codex-bridge/recipe-sns-publish-policy.mjs";
 
@@ -45,5 +47,16 @@ for (let run = 0; run < 20; run += 1) {
     approvalWait: false,
   });
 }
+
+const failedRow = { platform: "instagram_story", status: "failed", evidence: "upload failed", message: "stopped" };
+assert.deepEqual(normalizeRecipeSnsReviewStop(failedRow, { reviewOutcome: "declined" }), {
+  ...failedRow,
+  status: "blocked",
+  evidence: "Codexの厳格なブラウザー自動審査が対象操作を拒否し、公開前に停止しました。",
+  message: RECIPE_SNS_AUTO_REVIEW_DECLINED_MESSAGE,
+});
+assert.equal(normalizeRecipeSnsReviewStop(failedRow, { reviewOutcome: "accepted" }), failedRow);
+const publishedRow = { ...failedRow, status: "published" };
+assert.equal(normalizeRecipeSnsReviewStop(publishedRow, { reviewOutcome: "declined" }), publishedRow);
 
 console.log("recipe SNS publish approval policy: 20 repeat runs passed");

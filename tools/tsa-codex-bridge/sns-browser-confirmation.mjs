@@ -27,11 +27,23 @@ export function reviewResponseSummary(message) {
   };
 }
 
+export function reviewRequestSummary(params) {
+  const metadata = [params?._meta, params?.meta].find(value => value && typeof value === "object") || {};
+  return {
+    lastRequestType: typeof metadata.codex_request_type === "string" ? metadata.codex_request_type.slice(0, 80) : null,
+    lastApprovalKind: typeof metadata.codex_approval_kind === "string" ? metadata.codex_approval_kind.slice(0, 80) : null,
+    lastStrictAutoReview: metadata.codex_strict_auto_review === true,
+    lastRequiresUserInput: metadata.codex_requires_user_input === true,
+  };
+}
+
 export function shouldHostConfirmation(params) {
   const metadata = [params?._meta, params?.meta].filter(value => value && typeof value === "object");
-  // Security reviews belong to the CLI's existing reviewer. Authentication brokers
-  // require their native host; neither is a generic human form we may replace.
-  if (metadata.some(meta => meta.codex_request_type === "approval_request" || meta.codex_strict_auto_review === true || meta.codex_approval_kind === "browser_auth")) return false;
+  // Strict security reviews stay with the CLI reviewer. A browser-auth form that
+  // explicitly requires user input is a real interactive browser form and must be
+  // relayed to this desktop host; URL-mode authentication remains with its native host.
+  if (metadata.some(meta => meta.codex_request_type === "approval_request" || meta.codex_strict_auto_review === true)) return false;
+  if (!["form", "openai/form"].includes(params?.mode || "form")) return false;
   return metadata.some(meta => meta.codex_requires_user_input === true);
 }
 
@@ -99,7 +111,7 @@ export function startConfirmationRelay({ command, args, env, input = process.std
   const clientLines = createInterface({ input });
   const serverLines = createInterface({ input: server.stdout });
   const reviewIds = new Set();
-  const review = {reviewRequests:0, reviewResponses:0, reviewOutcome:null, reviewer:"unknown"};
+  const review = {reviewRequests:0, reviewResponses:0, reviewOutcome:null, reviewer:"unknown", lastRequestType:null, lastApprovalKind:null, lastStrictAutoReview:false, lastRequiresUserInput:false};
   const emitReviewAudit = () => {try {reviewAudit({...review});} catch { /* Advisory observation must not alter the security protocol. */ }};
   const activeToolCalls = new Set();
   let active = false;
@@ -132,7 +144,7 @@ export function startConfirmationRelay({ command, args, env, input = process.std
     let message;
     try { message = JSON.parse(line); } catch { return; }
     if (message.method === "elicitation/create" && message.id !== undefined && isSecurityReview(message.params) && !reviewIds.has(message.id)) {
-      reviewIds.add(message.id); review.reviewRequests++; emitReviewAudit();
+      reviewIds.add(message.id); review.reviewRequests++; Object.assign(review, reviewRequestSummary(message.params)); emitReviewAudit();
     }
     if (message.id !== undefined && !message.method) activeToolCalls.delete(message.id);
     if (message.method === "notifications/cancelled" && message.params?.requestId === activeRequest?.id) activeRequest.controller.abort();
@@ -215,7 +227,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const reviewAudit = value => {
     try {if (statePath) writeFileSync(join(dirname(statePath), "browser-review-state.json"), JSON.stringify({...value, updatedAt:new Date().toISOString()}), "utf8");} catch { /* No protocol change on an advisory state write failure. */ }
   };
-  reviewAudit({reviewRequests:0, reviewResponses:0, reviewOutcome:null, reviewer:"unknown"});
+  reviewAudit({reviewRequests:0, reviewResponses:0, reviewOutcome:null, reviewer:"unknown", lastRequestType:null, lastApprovalKind:null, lastStrictAutoReview:false, lastRequiresUserInput:false});
   const server = startConfirmationRelay({ ...config, env: { ...process.env, ...config.env }, showDialog, state, reviewAudit });
   server.on("error", () => { state("unavailable"); process.exitCode = 1; });
 }

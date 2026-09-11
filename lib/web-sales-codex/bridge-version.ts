@@ -1,4 +1,4 @@
-export const REQUIRED_TSA_CODEX_BRIDGE_VERSION = "1.9.78";
+export const REQUIRED_TSA_CODEX_BRIDGE_VERSION = "1.9.79";
 
 const RETIRED_LEGACY_WORKER_IDS = new Set([
   "tsa-office-01-headless",

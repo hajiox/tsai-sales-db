@@ -31,6 +31,7 @@ $requiredSourceFiles = @(
   "bridge.mjs",
   "carrier-local-job.mjs",
   "codex-run-guard.mjs",
+  "codex-event-log.mjs",
   "download-artifact-recovery.mjs",
   "ec-profit-artifact-policy.mjs",
   "qoo10-official-sales.mjs",

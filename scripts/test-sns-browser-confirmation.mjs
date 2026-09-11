@@ -73,14 +73,17 @@ await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('or
 assert.equal(autoForms,0);assert.equal(autoStates.includes('waiting'),false);
 autoInput.end();await new Promise(resolve=>autoServer.once('close',resolve));
 console.log('Normal browser operation passes through automatically with zero forms and zero waiting states');
-import { parseDialogEvent, shouldHostConfirmation, reviewResponseSummary } from '../tools/tsa-codex-bridge/sns-browser-confirmation.mjs';
+import { parseDialogEvent, shouldHostConfirmation, reviewRequestSummary, reviewResponseSummary } from '../tools/tsa-codex-bridge/sns-browser-confirmation.mjs';
 assert.deepEqual(parseDialogEvent('TSA_BROWSER_CONFIRMATION_EVENT {"presentation":"shown","reason":"","message":"private"}'),{presentation:'shown',reason:null});
 assert.equal(parseDialogEvent('raw sensitive stderr'),null);
-for(const metadata of [{codex_request_type:'approval_request'},{codex_strict_auto_review:true,codex_requires_user_input:true},{codex_approval_kind:'browser_auth',codex_requires_user_input:true}]) {
+for(const metadata of [{codex_request_type:'approval_request'},{codex_strict_auto_review:true,codex_requires_user_input:true}]) {
  assert.equal(shouldHostConfirmation({_meta:metadata}),false);assert.equal(shouldHostConfirmation({meta:metadata}),false);
 }
+assert.equal(shouldHostConfirmation({mode:'form',_meta:{codex_approval_kind:'browser_auth',codex_requires_user_input:true}}),true);
+assert.equal(shouldHostConfirmation({mode:'url',_meta:{codex_approval_kind:'browser_auth',codex_requires_user_input:true}}),false);
 assert.equal(shouldHostConfirmation({_meta:{codex_requires_user_input:true}}),true);
 assert.equal(shouldHostConfirmation({}),false);
+assert.deepEqual(reviewRequestSummary({_meta:{codex_request_type:'approval_request',codex_approval_kind:'mcp_tool_call',codex_strict_auto_review:true,codex_requires_user_input:true}}),{lastRequestType:'approval_request',lastApprovalKind:'mcp_tool_call',lastStrictAutoReview:true,lastRequiresUserInput:true});
 const failureReasons=[];
 await requestBrowserConfirmation({requestedSchema:schema},()=>new Promise(()=>{}),undefined,10,r=>failureReasons.push(r));
 await requestBrowserConfirmation({requestedSchema:schema},async()=>({action:'cancel',content:null,reason:'mutex_busy'}),undefined,100,r=>failureReasons.push(r));
@@ -98,7 +101,7 @@ const waitReview=needle=>new Promise((resolve,reject)=>{const timer=setTimeout((
 reviewInput.write('{"jsonrpc":"2.0","id":44,"method":"tools/call","params":{}}\n');await waitReview(reviewRequest);
 assert(reviewWire.includes(reviewRequest+'\n'));reviewInput.write(reviewResponse+'\n');await waitReview('notifications/review-returned');
 const returned=reviewWire.split('\n').filter(Boolean).map(line=>JSON.parse(line)).find(x=>x.method==='notifications/review-returned');
-assert.equal(returned.params.raw,reviewResponse);assert.deepEqual(reviewAudits.at(-1),{reviewRequests:1,reviewResponses:1,reviewOutcome:'accepted',reviewer:'auto_review'});assert.equal(reviewForms,0);assert.equal(reviewStates.includes('waiting'),false);
+assert.equal(returned.params.raw,reviewResponse);assert.deepEqual(reviewAudits.at(-1),{reviewRequests:1,reviewResponses:1,reviewOutcome:'accepted',reviewer:'auto_review',lastRequestType:'approval_request',lastApprovalKind:'mcp_tool_call',lastStrictAutoReview:true,lastRequiresUserInput:false});assert.equal(reviewForms,0);assert.equal(reviewStates.includes('waiting'),false);
 reviewInput.end();await new Promise(resolve=>reviewServer.once('close',resolve));
 console.log('Strict security-review request and reviewer metadata response preserved byte-for-byte; no dialog or waiting state; diagnostic reasons verified');
 

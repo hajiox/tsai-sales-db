@@ -24,6 +24,7 @@
     "test:ec-product-registration-migration": "node scripts/dry-run-ec-product-registration-migration.cjs",
     "apply:ec-product-registration-migration": "node scripts/apply-ec-product-registration-migration.cjs",
     "test:sns-browser-confirmation": "node scripts/test-sns-browser-confirmation.mjs",
+    "test:codex-event-log": "node scripts/test-codex-event-log.mjs",
     "test:analysis-version-selection": "node --experimental-strip-types scripts/test-analysis-version-selection.mjs",
     "test:monitor-result-sync": "node scripts/test-monitor-result-sync.cjs",
     "test:bridge-monitor": "node scripts/test-bridge-monitor.cjs",
