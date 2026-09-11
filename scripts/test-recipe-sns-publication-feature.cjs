@@ -87,6 +87,8 @@ assert.match(installer, /"recipe-sns-publish-result\.schema\.json"/);
 assert.match(installer, /Copy-Item[^\n]*recipe-sns-publish-result\.schema\.json/);
 assert.match(installer, /"recipe-sns-publish-policy\.mjs"/);
 assert.match(installer, /Copy-Item[^\n]*recipe-sns-publish-policy\.mjs/);
+assert.match(installer, /"codex-event-log\.mjs"/);
+assert.match(installer, /Copy-Item[^\n]*codex-event-log\.mjs/);
 assert.equal(schema.properties.platforms.maxItems, 4);
 assert.match(imageServer, /platform\.id}\.jpg/);
 assert.match(imageServer, /contentType: "image\/jpeg"/);

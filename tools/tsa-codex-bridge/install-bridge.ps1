@@ -484,6 +484,7 @@ try {
 Copy-Item -LiteralPath (Join-Path $sourceDir "carrier-local-job.mjs") -Destination (Join-Path $installDir "carrier-local-job.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "codex-run-guard.mjs") -Destination (Join-Path $installDir "codex-run-guard.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "codex-event-log.mjs") -Destination (Join-Path $installDir "codex-event-log.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "download-artifact-recovery.mjs") -Destination (Join-Path $installDir "download-artifact-recovery.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-profit-artifact-policy.mjs") -Destination (Join-Path $installDir "ec-profit-artifact-policy.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "qoo10-official-sales.mjs") -Destination (Join-Path $installDir "qoo10-official-sales.mjs") -Force
