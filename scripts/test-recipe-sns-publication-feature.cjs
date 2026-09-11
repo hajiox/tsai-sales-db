@@ -62,7 +62,7 @@ assert.match(bridge, /await cua\.getState\(\)/);
 assert.match(bridge, /cua\.createBrowserTab\(\\"chrome\\"/);
 assert.match(bridge, /do not acquire or modify any existing operator-owned SNS tab/);
 assert.match(bridge, /browser_start_url/);
-assert.match(bridge, /requests the exact pre-submit operations/);
+assert.match(bridge, /specifically authorizes transmitting the contents of local image file/);
 assert.doesNotMatch(bridge, /BEGIN_CHROME_CONTROL_SKILL|resolveChromeControlSkillBundle/);
 assert.match(bridge, /for \(const \[index, platform\] of parameters\.targets\.entries\(\)\)/);
 assert.match(bridge, /targets: \[platform\]/);

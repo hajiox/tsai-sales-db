@@ -76,9 +76,10 @@ console.log('Normal browser operation passes through automatically with zero for
 import { parseDialogEvent, shouldHostConfirmation, reviewRequestSummary, reviewResponseSummary } from '../tools/tsa-codex-bridge/sns-browser-confirmation.mjs';
 assert.deepEqual(parseDialogEvent('TSA_BROWSER_CONFIRMATION_EVENT {"presentation":"shown","reason":"","message":"private"}'),{presentation:'shown',reason:null});
 assert.equal(parseDialogEvent('raw sensitive stderr'),null);
-for(const metadata of [{codex_request_type:'approval_request'},{codex_strict_auto_review:true,codex_requires_user_input:true}]) {
+for(const metadata of [{codex_request_type:'approval_request'},{codex_strict_auto_review:true}]) {
  assert.equal(shouldHostConfirmation({_meta:metadata}),false);assert.equal(shouldHostConfirmation({meta:metadata}),false);
 }
+assert.equal(shouldHostConfirmation({mode:'form',_meta:{codex_request_type:'approval_request',codex_strict_auto_review:true,codex_requires_user_input:true}}),true);
 assert.equal(shouldHostConfirmation({mode:'form',_meta:{codex_approval_kind:'browser_auth',codex_requires_user_input:true}}),true);
 assert.equal(shouldHostConfirmation({mode:'url',_meta:{codex_approval_kind:'browser_auth',codex_requires_user_input:true}}),false);
 assert.equal(shouldHostConfirmation({_meta:{codex_requires_user_input:true}}),true);

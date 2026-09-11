@@ -39,10 +39,10 @@ export function reviewRequestSummary(params) {
 
 export function shouldHostConfirmation(params) {
   const metadata = [params?._meta, params?.meta].filter(value => value && typeof value === "object");
-  // Strict security reviews stay with the CLI reviewer. A browser-auth form that
-  // explicitly requires user input is a real interactive browser form and must be
-  // relayed to this desktop host; URL-mode authentication remains with its native host.
-  if (metadata.some(meta => meta.codex_request_type === "approval_request" || meta.codex_strict_auto_review === true)) return false;
+  // Automatic security reviews stay with the CLI reviewer. A form explicitly marked
+  // as requiring user input must reach the desktop operator even when the same request
+  // also carries strict-review metadata; forwarding it to noninteractive codex exec
+  // would dismiss the form before the person can answer it.
   if (!["form", "openai/form"].includes(params?.mode || "form")) return false;
   return metadata.some(meta => meta.codex_requires_user_input === true);
 }
