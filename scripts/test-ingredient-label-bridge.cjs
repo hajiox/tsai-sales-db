@@ -20,7 +20,7 @@ assert.match(bridge, /reasoningEffort:\s*"medium"/);
 assert.match(bridge, /ephemeral:\s*true/);
 assert.match(bridge, /minimalContext:\s*true/);
 assert.match(bridge, /sandbox:\s*"read-only"/);
-assert.match(bridge, /if \(!options\.sandbox\) args\.push\("--approve-for-me"\)/);
+assert.match(bridge, /else if \(!options\.sandbox\)[\s\S]{0,80}"--approve-for-me"/);
 assert.match(bridge, /Use \$generate-aizu-ingredient-label/);
 assert.match(bridge, /ingredient-label-ai-import/);
 assert.match(route, /buildIngredientLabelSourceSnapshot/);
