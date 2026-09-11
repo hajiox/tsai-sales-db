@@ -15,6 +15,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   RECIPE_SNS_PLATFORMS,
   type RecipeSnsGenerationView,
   type RecipeSnsPlatform,
@@ -90,6 +100,12 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [pollRevision, setPollRevision] = useState(0);
+  const [pendingPublish, setPendingPublish] = useState<{
+    targets: RecipeSnsPlatform[];
+    scheduledAt: string | null;
+    targetLabels: string;
+    action: string;
+  } | null>(null);
 
   const loadHistory = useCallback(async () => {
     const response = await fetch(`/api/recipe/${recipeId}/sns-publications`, { cache: "no-store" });
@@ -154,10 +170,13 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
     }
     const targetLabels = targets.map((target) => `${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === target)?.label}: ${accounts[target]}`).join("\n");
     const action = mode === "schedule" ? `${formatDate(scheduledAt!)}に予約` : "今すぐ公開";
-    if (!window.confirm([
-      `${targetLabels}へ${action}します。投稿文・画像・投稿先アカウントを確定してよろしいですか？`,
-      "この実行で公開直後に本文・画像・リンクの不一致が確認された場合は、その不完全投稿だけを削除候補として止め、対話中のCodexで確認後に削除します。",
-    ].join("\n\n"))) return;
+    setPendingPublish({ targets, scheduledAt, targetLabels, action });
+  }
+
+  async function confirmPublish() {
+    if (!pendingPublish || !canPublish || submitting) return;
+    const { targets, scheduledAt } = pendingPublish;
+    setPendingPublish(null);
     setSubmitting(targets.length === RECIPE_SNS_PLATFORMS.length ? "all" : targets[0]);
     try {
       const response = await fetch(`/api/recipe/${recipeId}/sns-publications`, {
@@ -208,7 +227,34 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
   }
 
   return (
-    <div className="mt-5 border-y border-gray-200 bg-gray-50 px-3 py-4 sm:px-4">
+    <>
+      <AlertDialog open={Boolean(pendingPublish)} onOpenChange={(open) => { if (!open) setPendingPublish(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>SNS投稿を確定</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <p className="whitespace-pre-line text-sm font-medium text-gray-900">
+                  {pendingPublish ? `${pendingPublish.targetLabels}へ${pendingPublish.action}します。` : ""}
+                </p>
+                <p>投稿文・画像・投稿先アカウントを確認してください。</p>
+                <p>公開直後に本文・画像・リンクの不一致が見つかった場合は、その不完全投稿だけを削除候補として止め、対話中のCodexで確認後に削除します。</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(submitting)}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={Boolean(submitting)}
+              onClick={() => void confirmPublish()}
+              className="bg-gray-950 text-white hover:bg-black"
+            >
+              {mode === "schedule" ? "予約を確定" : "投稿を確定"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <div className="mt-5 border-y border-gray-200 bg-gray-50 px-3 py-4 sm:px-4">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -383,6 +429,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
           </div>
         ))}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

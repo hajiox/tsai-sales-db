@@ -37,6 +37,9 @@ for (const text of ["今すぐ投稿", "日時予約", "全SNSへ投稿", "全SN
   assert.ok(panel.includes(text), `missing SNS publish UI: ${text}`);
 }
 assert.match(panel, /RECIPE_SNS_PLATFORMS\.map/);
+assert.match(panel, /<AlertDialog open=\{Boolean\(pendingPublish\)\}/);
+assert.match(panel, /"投稿を確定"/);
+assert.doesNotMatch(panel.slice(panel.indexOf("async function publish"), panel.indexOf("async function cancelPublication")), /window\.confirm/);
 assert.match(panel, /1媒体で止まっても残りは続行/);
 assert.match(panel, /不完全投稿だけを削除候補として止め/);
 assert.match(panel, /cleanupMalformedOwnAttemptAuthorized: true/);
