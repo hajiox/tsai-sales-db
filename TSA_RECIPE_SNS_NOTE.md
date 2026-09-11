@@ -191,3 +191,9 @@
 - SNS投稿契約テストへページ内確認と`publish`処理内の`window.confirm`不使用を追加。Bridge側のブラウザー確認中継と最終公開ポリシーは維持する。
 - Bridge 1.9.81で、人の回答必須フォームと厳格レビューの両方のメタデータを持つブラウザー確認も事務所PCへ中継する。回答必須でない自動レビューはCodexへそのまま渡し、固定画像の送信先・アカウント・ローカルパスを媒体別セッションの利用者依頼へ明記する。
 - Bridge 1.9.82で、添付ボタン操作・chooser取得と固定パス1件の`setFiles`を別々のCUA呼出しへ分離。画像送信の審査対象へ他のクリックを混ぜず、確認要求が発生した場合も同じchooserを保持したまま中継できるようにした。
+
+## 2026-09-11 Chrome DevTools常駐接続によるSNS投稿（Bridge 1.9.86）
+- SNS投稿だけをCodex Computer Useのfile chooser経路からChrome DevTools MCP 1.9.0へ変更。Bridgeの隔離`codex exec`へ許可済みのページ操作と`upload_file`だけを明示登録し、指定画像の添付から最終公開、公開結果確認まで続行する。
+- 媒体別セッションがChromeへ個別接続するとリモートデバッグ許可が毎回表示されるため、既存のChrome DevTools CLI daemonへ接続するローカルMCP relayを追加。X、Instagram、IGストーリー、Threadsは同じ常駐接続を共有し、各セッションは自分で開いた一時ページだけをpageId指定で操作する。
+- SNS投稿画像と実行ファイルを`C:\作業用\.tsa-codex-bridge\recipe-sns-publish`以下へ置き、relayは現在の媒体ジョブフォルダ外のローカルパスを拒否する。他のEC更新、CSV取得、広告費、配送BridgeのCUA経路は変更しない。
+- 実機で隔離`codex exec`→relay→常駐Chrome DevTools daemon→`upload_file`を実行し、テストページ上のファイル名表示と一時ページの閉鎖を確認。ジョブ領域外ファイルの拒否も確認した。

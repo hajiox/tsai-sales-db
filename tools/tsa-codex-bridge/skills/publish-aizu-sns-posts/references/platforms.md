@@ -1,4 +1,4 @@
-# 公式SNS操作経路（2026-08-31確認）
+# 公式SNS操作経路（2026-09-11更新）
 
 この資料は操作の候補であり、固定セレクタではない。画面上の現在の意味と対象アカウントを優先する。
 
@@ -24,7 +24,7 @@
 - Web版に作成経路が見つからない場合、ログイン済みの公式Meta Business Suiteを使用する。Meta Business SuiteはIGストーリー投稿の明示承認済み公式経路であり、別媒体として扱わない。
 - 他の媒体セッションやユーザー操作と競合しないよう、既存Meta Business Suiteタブは取得せず、同じログイン済みChromeプロファイルで公式Meta Business Suiteの一時タブを1枚だけ開く。
 - 「シェア先」の初期状態ではFacebookページとInstagramが同時選択される場合がある。Facebookページを外し、選択済み表示がInstagramの指定アカウントだけであることを確認する。
-- 2026-08-31実機確認: 「写真・動画を追加」は公式Chrome制御のfile chooserを返し、1080x1920のJPEGを設定できた。file chooserを返さずOSファイル選択だけを要求する場合に限り、非対話Bridgeでは迂回せず `blocked` とする。
+- 「写真・動画を追加」はChrome DevTools MCPの `upload_file` 対象とする。最新snapshotに実体のfile inputがあればそのuidを優先し、固定済み1080x1920 JPEGを1枚だけ設定する。画像プレビューを確認できなければ `blocked` とする。
 - 画面上部の「リンクを追加」はFacebook専用であり、「リンクはFacebookストーリーズにのみ表示されます」と案内される。Instagramの指定アカウントだけを選ぶと無効になるため、IGリンクには使わない。
 - `link_url` は「編集」→「スタンプ」→「リンク」または accessible name `Create link sticker` から開くリンクスタンプへ設定する。テキスト欄へURLを貼らない。
 - `story_text` は「編集」→「テキスト」→「テキストを追加」から設定する。追加直後の選択中に安全領域へドラッグし、欠けや画像外へのはみ出しがないことをスクリーンショットで確認する。
@@ -37,11 +37,11 @@
 - 公式ホスト: `https://www.threads.com/`
 - 対象アカウント: `TASK_JSON.platforms.*.expected_account`。`aizubrandhall` または `satou.masahiko` のうち指定されたものだけ。
 - 確認済み表示: `新規スレッド`、`メディアを添付`、`投稿`
-- file chooser待機Promiseは作成と同時に`.then(...).catch(...)`で結果化し、未処理rejectを発生させない。タイムアウト後は最新画面を確認し、別の正規添付経路が明確な場合だけ1回試す。タイムアウトだけで拡張機能の権限不足と断定しない。
-- `setFiles` が安全確認未完了または判断前終了を返した場合、拒否・中止後は再試行しない。画像未設定・未投稿を確認し、Bridgeの確認画面での承認待ちとして停止する。
+- 最新snapshotで実体のfile inputを探し、そのuidへ `upload_file` を1回実行する。実体入力が見えない場合だけ、公式の「メディアを添付」をchooser起動要素として1回使う。失敗後に別ツールやOSファイル選択へ切り替えない。
+- `upload_file` 後に新しいsnapshotまたはscreenshotで画像プレビューが1枚あることを確認する。ページクラッシュ、入力消失、画像未設定の場合は再投稿せず `blocked` とする。
 - Instagramへの同時共有や投稿オプションは変更しない。
 - 既存Threadsタブは取得せず、同じログイン済みChromeプロファイルで公式Threadsの一時タブを1枚だけ開く。
 
-## 2026-09-07 添付経路と確認
+## 2026-09-11 添付経路
 
-最新AX状態の可視添付ボタンをtab.clickで押して公式file chooserをREPLへ保持し、その呼出しを完了する。次の独立したCUA呼出しで固定画像1件の`setFiles`だけを実行する。ブラウザーの確認要求はBridgeが表示し、回答後に同じ処理が続く。単なるchooserタイムアウトを権限拒否と混同しない。Threadsで自動リンクカードが添付ボタンを隠す場合は、本文URLを保持して自動カードだけ外す。
+SNS BridgeはCodex Computer Useのfile chooserを使わず、既存Chromeへ1回だけ接続した常駐Chrome DevTools daemonをBridge内のMCP relay経由で共有し、`upload_file` を使う。媒体別セッションの開始ごとにChromeへ再接続しない。BridgeがMCPへ公開するローカル領域は対象媒体のジョブフォルダだけで、filePathは固定済み画像の絶対パス1件に限定する。Threadsで自動リンクカードが添付ボタンを隠す場合は、本文URLを保持して自動カードだけ外す。

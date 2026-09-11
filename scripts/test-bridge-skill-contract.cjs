@@ -12,6 +12,7 @@ const sourceFiles = (directory) => fs.readdirSync(directory, { withFileTypes: tr
 const contract = JSON.parse(read("tools", "tsa-codex-bridge", "skill-contract.json"));
 const bridge = read("tools", "tsa-codex-bridge", "bridge.mjs");
 const installer = read("tools", "tsa-codex-bridge", "install-bridge.ps1");
+const chromeRelay = read("tools", "tsa-codex-bridge", "chrome-devtools-daemon-relay.mjs");
 const taskTypes = read("lib", "web-sales-codex", "types.ts");
 
 const expectedTasks = {
@@ -121,9 +122,19 @@ assert.match(argBuilder, /"--ignore-rules"/);
 assert.match(argBuilder, /"--disable", "apps"/);
 assert.match(argBuilder, /options\.minimalContext.*"--disable", "plugins"/);
 assert.match(argBuilder, /options\.focusedContext[\s\S]*"--disable", "plugins"/);
+assert.match(argBuilder, /options\.chromeDevtools/);
+assert.match(argBuilder, /appendChromeDevtoolsMcpArgs\(args, config\.codexHome, options\.chromeDevtools\)/);
 assert.match(argBuilder, /appendUnifiedCuaMcpArgs\(args, config\.codexHome, options\.snsConfirmation\)/);
 assert.match(argBuilder, /if \(!options\.sandbox\) args\.push\("--approve-for-me"\)/);
 assert.match(argBuilder, /mcp_servers\.cua_repl\.enabled_tools/);
+assert.match(argBuilder, /mcp_servers\.chrome_devtools\.enabled_tools/);
+assert.match(argBuilder, /--workspace=/);
+assert.match(argBuilder, /"upload_file"/);
+assert.match(chromeRelay, /--autoConnect/);
+assert.match(chromeRelay, /startDaemon/);
+assert.match(chromeRelay, /sendCommand/);
+assert.match(chromeRelay, /outside the SNS job workspace/);
+assert.match(installer, /chrome-devtools-daemon-relay\.mjs/);
 assert.match(argBuilder, /BROWSER_USE_AVAILABLE_BACKENDS: "chrome"/);
 assert.match(argBuilder, /options\.ephemeral.*"--ephemeral"/);
 assert.match(bridge, /Do not read general development notes, repository history, unrelated Skills/);
