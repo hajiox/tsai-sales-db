@@ -50,7 +50,7 @@ test('CLI arguments preserve isolated focused execution while overriding stale m
  for(const options of [{},{model:'gpt-5.6-sol',reasoningEffort:'ultra',focusedContext:true,ephemeral:true},{focusedContext:true,userAuthorizedBrowser:true,ephemeral:true}]){
   const args=build('result.json',[],options);assert.equal(args[args.indexOf('--model')+1],'gpt-6-astra');assert.ok(args.includes('model_reasoning_effort="medium"'));
   if(options.focusedContext){assert.ok(args.includes('--ignore-user-config'));assert.ok(args.includes('--ephemeral'));assert.ok(args.includes('mcp_fixture=true'));}
-  if(options.userAuthorizedBrowser){assert.ok(!args.includes('--approve-for-me'));assert.equal(args[args.indexOf('--ask-for-approval')+1],'never');assert.equal(args[args.indexOf('--sandbox')+1],'workspace-write');}
+  if(options.userAuthorizedBrowser){assert.ok(!args.includes('--approve-for-me'));assert.ok(!args.includes('--ask-for-approval'));assert.ok(args.includes('approval_policy="never"'));assert.equal(args[args.indexOf('--sandbox')+1],'workspace-write');}
  }
 });
 test('carrier invocation enables human relay and exposes only bounded confirmation state',()=>{

@@ -3,8 +3,8 @@
 ## 2026-09-11 SNS投稿デバッグ経路のBridge反映
 
 - Xの実機デバッグで、指定アカウント、固定本文、固定画像を通常のCUA MCPから設定し、公開URLまで確認した。AXの可視添付ボタンからfile chooserを取得し、次の独立呼出しで`chooserOutcome.chooser.setFiles`を実行する経路が成功した。
-- Bridge 1.9.83では、SNS投稿だけ`--approve-for-me`を外した。自動レビューが画像送信確認を回答前に破棄していたため、認証済みTSA管理者の実行直前承認を持つSNSジョブは`--ask-for-approval never --sandbox workspace-write`で起動し、CUAが本人回答を要求するフォームだけ既存のBridge確認画面へ中継する。
-- Skillのchooser保持方法を実機の永続REPL挙動へ合わせ、ブロック内の別名変数を使わないよう修正した。契約テスト、確認リレー試験、CLI引数試験、focused ESLintを通過した。残る3媒体はBridge 1.9.83の本番実行で確認する。
+- Bridge 1.9.84では、SNS投稿だけ`--approve-for-me`を外した。自動レビューが画像送信確認を回答前に破棄していたため、認証済みTSA管理者の実行直前承認を持つSNSジョブは`--sandbox workspace-write -c approval_policy="never"`で起動し、CUAが本人回答を要求するフォームだけ既存のBridge確認画面へ中継する。1.9.83で指定した対話CLI専用引数は`codex exec`がブラウザー開始前に拒否したため、対応する設定上書きへ修正した。
+- Skillのchooser保持方法を実機の永続REPL挙動へ合わせ、ブロック内の別名変数を使わないよう修正した。契約テスト、確認リレー試験、CLI引数試験、focused ESLintを通過した。残る3媒体はBridge 1.9.84の本番実行で確認する。
 
 ## 2026-09-11 ImageGen参照と不足画像の自動復旧
 

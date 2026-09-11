@@ -38,7 +38,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.83";
+const VERSION = "1.9.84";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -6536,7 +6536,7 @@ function buildIsolatedCodexArgs(outputFile, writableDirectories, options = {}) {
   // so this one path uses the ordinary user-reviewed policy without auto review.
   // Other headless browser jobs retain their existing automatic review behavior.
   if (options.userAuthorizedBrowser) {
-    args.push("--ask-for-approval", "never", "--sandbox", "workspace-write");
+    args.push("--sandbox", "workspace-write", "-c", 'approval_policy="never"');
   } else if (!options.sandbox) {
     args.push("--approve-for-me");
   }
