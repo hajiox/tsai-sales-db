@@ -1,6 +1,6 @@
 export const RECIPE_SNS_MODEL = "gpt-6-astra";
 export const RECIPE_SNS_REASONING_EFFORT = "medium";
-export const RECIPE_SNS_RULES_VERSION = "2026-09-02.3";
+export const RECIPE_SNS_RULES_VERSION = "2026-09-11.1";
 
 export const RECIPE_SNS_WRITING_TONES = [
   {
@@ -146,6 +146,7 @@ export type RecipeSnsGenerationView = {
   id: string;
   jobId: string;
   status: "pending" | "completed" | "failed";
+  failureReason: string | null;
   sourceImageId: string | null;
   sourceImageUrl: string;
   sourceImageRole: "portrait" | "gallery";

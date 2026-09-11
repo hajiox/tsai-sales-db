@@ -2,6 +2,8 @@
 
 The bridge runs on the office Windows PC and claims allow-listed TSA jobs over outbound HTTPS. Four role-specific workers share the durable queue: one interactive Chrome worker, two browserless AI-generation workers, and one browserless analysis worker. All stream progress back to TSA and upload execution artifacts.
 
+- 2026-09-11: Bridge 1.9.78 fixes recipe SNS ImageGen references and recovery. Each generation session uses the Bridge-attached conversation image instead of passing a local path into ImageGen, retries one failed media call once, and the Bridge retries the whole isolated generation session once when the exact image count is still short. Successful outputs remain exact-count and creation-order validated. TSA now shows the actual Astra model, preserves the failure reason, and stops rendering failed images as still generating.
+
 ## Runtime
 
 - Browserless jobs continue before Windows login through three S4U tasks: `TSA Codex Bridge (AI 1)`, `TSA Codex Bridge (AI 2)`, and `TSA Codex Bridge (Analysis)`.

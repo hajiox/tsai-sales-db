@@ -98,6 +98,7 @@ function parseImageVariants(value: unknown) {
 function toGenerationView(
   row: Record<string, unknown>,
   jobStatus?: string,
+  jobErrorMessage?: unknown,
 ): RecipeSnsGenerationView {
   const rawPosts = row.posts;
   const sourceSnapshot = asObject(row.source_snapshot);
@@ -109,6 +110,7 @@ function toGenerationView(
     id: String(row.id || ""),
     jobId: String(row.job_id || ""),
     status,
+    failureReason: status === "failed" ? compactMessage(jobErrorMessage) : null,
     sourceImageId: row.source_image_id ? String(row.source_image_id) : null,
     sourceImageUrl: String(row.source_image_url || ""),
     sourceImageRole: String(row.source_image_role || "gallery") as "portrait" | "gallery",
@@ -169,14 +171,21 @@ export async function GET(
     const filteredJobs = (jobs || []).filter((row) => String(asObject(row.parameters).recipeId || "") === recipeId);
     const active = filteredJobs.find((row) => ACTIVE_STATUSES.includes(String(row.status) as CodexJobStatus));
     const selected = requestedJobId ? filteredJobs[0] : active || filteredJobs[0];
-    const jobStatuses = new Map(filteredJobs.map((row) => [String(row.id), String(row.status)]));
+    const jobDetails = new Map(filteredJobs.map((row) => [String(row.id), {
+      status: String(row.status),
+      errorMessage: row.error_message,
+    }]));
     return NextResponse.json({
       ok: true,
       job: selected ? toJobView(selected as Record<string, unknown>) : null,
-      generations: (rows || []).map((row) => toGenerationView(
-        row as Record<string, unknown>,
-        jobStatuses.get(String(row.job_id)),
-      )),
+      generations: (rows || []).map((row) => {
+        const jobDetail = jobDetails.get(String(row.job_id));
+        return toGenerationView(
+          row as Record<string, unknown>,
+          jobDetail?.status,
+          jobDetail?.errorMessage,
+        );
+      }),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({

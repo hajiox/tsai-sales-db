@@ -35,7 +35,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.77";
+const VERSION = "1.9.78";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4475,8 +4475,8 @@ function validateRecipeSnsGenerateJobParameters(input) {
   }
   if (String(parameters.model || "") !== "gpt-6-astra"
     || String(parameters.reasoningEffort || "") !== "medium"
-    || !/^2026-09-02\..+$/.test(String(parameters.rulesVersion || ""))) {
-    throw new Error("SNS素材生成はGPT-5.6 Sol / medium / 2026-09-02.*ルール専用です");
+    || !/^2026-(?:09-02|09-11)\..+$/.test(String(parameters.rulesVersion || ""))) {
+    throw new Error("SNS素材生成はGPT-6 Astra / medium / 対応ルール専用です");
   }
   const productLpUrl = String(sourceSnapshot.productLpUrl || "").trim();
   if (productLpUrl) {
@@ -4639,6 +4639,7 @@ function isAllowedRecipeSnsLocalCommand(event) {
 
 async function executeRecipeSnsGenerateJob(job) {
   const parameters = validateRecipeSnsGenerateJobParameters(job.parameters);
+  const generationRetryAttempt = Number(job.recipeSnsGenerationRetryAttempt || 0);
   const skill = join(config.codexHome, "skills", "generate-aizu-sns-assets", "SKILL.md");
   if (!existsSync(skill)) throw new Error("SNS素材生成Skillが見つかりません。Bridgeを再インストールしてください");
   if (!existsSync(RECIPE_SNS_RESULT_SCHEMA)) throw new Error("SNS素材生成スキーマが見つかりません");
@@ -4648,6 +4649,8 @@ async function executeRecipeSnsGenerateJob(job) {
   const outputFile = join(workDir, "recipe-sns-result.json");
   const jsonlLog = join(workDir, "recipe-sns-events.jsonl");
   mkdirSync(workDir, { recursive: true });
+  rmSync(outputFile, { force: true });
+  rmSync(jsonlLog, { force: true });
   const sourceImagePath = await downloadRecipeSnsSourceImage(parameters.sourceImageUrl, workDir);
   const requestedPlatformIds = parameters.targetPlatform
     ? [parameters.targetPlatform]
@@ -4668,9 +4671,13 @@ async function executeRecipeSnsGenerateJob(job) {
 
   await updateJob(job.id, {
     status: "running",
-    progress: 8,
-    currentStep: `${recipeSnsImageModeLabel(parameters.imageMode)}の生成準備をしています`,
-    message: "巨大な過去Chatや外部サイトを使わず、専用Skill、固定済み商品情報、元画像1枚だけを使います",
+    progress: generationRetryAttempt > 0 ? 70 : 8,
+    currentStep: generationRetryAttempt > 0
+      ? "不足したImageGen画像を新規セッションで再生成しています"
+      : `${recipeSnsImageModeLabel(parameters.imageMode)}の生成準備をしています`,
+    message: generationRetryAttempt > 0
+      ? "最初のセッションで画像数が不足したため、固定済み入力のまま1回だけ自動再試行します"
+      : "巨大な過去Chatや外部サイトを使わず、専用Skill、固定済み商品情報、元画像1枚だけを使います",
     eventType: "recipe_sns_packet_ready",
     payload: {
       generationId: parameters.generationId,
@@ -4680,6 +4687,7 @@ async function executeRecipeSnsGenerateJob(job) {
       imageMode: parameters.imageMode,
       writingTone: parameters.writingTone,
       targetPlatform: parameters.targetPlatform,
+      generationRetryAttempt,
       chatHistoryLoaded: false,
       freshNonResumedSession: true,
       ephemeralSession: true,
@@ -4697,7 +4705,8 @@ async function executeRecipeSnsGenerateJob(job) {
     parameters.targetPlatform
       ? `Regenerate only ${parameters.targetPlatform}. Do not create output for any other platform.`
       : "Create one distinct Japanese post for each platform and follow TASK_JSON.imageMode exactly.",
-    "For creative or arrange mode, the single attached image is the exact product reference. Use the built-in image generation tool exactly once per platform listed in TASK_JSON.targetPlatforms and return its saved absolute path without moving or copying the file.",
+    "For creative or arrange mode, the single image attached to this task is the exact product reference. For every image generation call, use that conversation image with num_last_images_to_include: 1; never pass referenced_image_paths or a local filesystem path.",
+    "Create one successful image per platform in TASK_JSON.targetPlatforms order. If and only if image generation returns a technical error or no image, retry that same platform once immediately. Never retry a successful platform, and never exceed two attempts for one platform.",
     "For normal mode, do not call image generation and return source=original with an empty file_path for each requested platform.",
     "Return only JSON matching the required schema.",
     "TASK_JSON:",
@@ -4721,7 +4730,7 @@ async function executeRecipeSnsGenerateJob(job) {
 
   let stdoutBuffer = "";
   let stderr = "";
-  let progress = 15;
+  let progress = generationRetryAttempt > 0 ? 72 : 15;
   let lastProgressSent = 0;
   let prohibitedActivity = null;
   let codexThreadId = null;
@@ -4735,7 +4744,7 @@ async function executeRecipeSnsGenerateJob(job) {
       status: "running",
       progress,
       currentStep: parameters.imageMode === "normal"
-        ? "Solが媒体別の投稿文を作成しています"
+        ? "Astraが媒体別の投稿文を作成しています"
         : `ImageGenが${recipeSnsImageModeLabel(parameters.imageMode)}画像を媒体別に作成しています`,
       message: `専用の新規Bridgeセッションで処理中です（経過${elapsedMinutes}分）`,
       eventType: "recipe_sns_progress_heartbeat",
@@ -4772,8 +4781,8 @@ async function executeRecipeSnsGenerateJob(job) {
           status: "running",
           progress,
           currentStep: parameters.imageMode === "normal"
-            ? "GPT-5.6 Solが媒体別のSNS投稿文を分析しています"
-            : `GPT-5.6 SolとImageGenが${recipeSnsImageModeLabel(parameters.imageMode)}素材を作成しています`,
+            ? "GPT-6 Astraが媒体別のSNS投稿文を分析しています"
+            : `GPT-6 AstraとImageGenが${recipeSnsImageModeLabel(parameters.imageMode)}素材を作成しています`,
           message: mapped.message,
           eventType: "recipe_sns_progress",
           payload: mapped.payload,
@@ -4799,7 +4808,7 @@ async function executeRecipeSnsGenerateJob(job) {
     throw new Error(`SNS素材生成で禁止された外部・コマンド操作を検出しました: ${prohibitedActivity}`);
   }
   if (exitCode !== 0 || !existsSync(outputFile)) {
-    throw new Error(stderr || `GPT-5.6 SolのSNS素材生成に失敗しました (exit ${exitCode})`);
+    throw new Error(stderr || `GPT-6 AstraのSNS素材生成に失敗しました (exit ${exitCode})`);
   }
 
   let result;
@@ -4827,9 +4836,29 @@ async function executeRecipeSnsGenerateJob(job) {
   if (parameters.imageMode !== "normal" && !generatedThreadRoot) {
     throw new Error("ImageGenの実行セッションを確認できません");
   }
-  const generatedImagePaths = parameters.imageMode === "normal"
-    ? []
-    : listRecipeSnsGeneratedImages(generatedThreadRoot, requestedPlatformIds.length);
+  let generatedImagePaths = [];
+  if (parameters.imageMode !== "normal") {
+    try {
+      generatedImagePaths = listRecipeSnsGeneratedImages(generatedThreadRoot, requestedPlatformIds.length);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (generationRetryAttempt < 1 && message.startsWith("ImageGenの生成画像数が一致しません")) {
+        await updateJob(job.id, {
+          status: "running",
+          progress: 68,
+          currentStep: "ImageGen画像が不足したため自動再試行します",
+          message: "固定済み商品情報と元画像を変えず、新規Bridgeセッションで1回だけ再生成します",
+          eventType: "recipe_sns_generation_retry",
+          payload: { reason: message, attempt: 2, maxAttempts: 2 },
+        });
+        return executeRecipeSnsGenerateJob({
+          ...job,
+          recipeSnsGenerationRetryAttempt: generationRetryAttempt + 1,
+        });
+      }
+      throw error;
+    }
+  }
   if (parameters.imageMode === "normal") {
     const uploaded = await uploadArtifact(job.id, sourceImagePath, "screenshot");
     if (!uploaded?.id) throw new Error("通常リサイズ用の元画像をTSAへ転送できませんでした");

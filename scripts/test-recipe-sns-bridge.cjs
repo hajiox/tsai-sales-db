@@ -32,7 +32,7 @@ const validator = bridge.slice(
 );
 assert.match(validator, /parameters\.model \|\| ""\) !== "gpt-6-astra"/);
 assert.match(validator, /parameters\.reasoningEffort \|\| ""\) !== "medium"/);
-assert.match(validator, /\^2026-09-02\\\.\.\+\$/);
+assert.match(validator, /09-02\|09-11/);
 assert.match(validator, /sourceSnapshot\.recipeId/);
 assert.match(validator, /sourceSnapshot\.variationKey/);
 assert.match(validator, /sourceSnapshot\.writingTone/);
@@ -129,6 +129,11 @@ assert.match(handler, /buildIsolatedCodexArgs/);
 assert.match(handler, /minimalContext: true/);
 assert.match(handler, /ephemeral: true/);
 assert.match(handler, /images: parameters\.imageMode === "normal" \? \[\] : \[sourceImagePath\]/);
+assert.match(handler, /num_last_images_to_include: 1/);
+assert.match(handler, /never pass referenced_image_paths/);
+assert.match(handler, /generationRetryAttempt < 1/);
+assert.match(handler, /recipe_sns_generation_retry/);
+assert.match(handler, /recipeSnsGenerationRetryAttempt: generationRetryAttempt \+ 1/);
 assert.match(handler, /requestedPlatformIds/);
 assert.match(handler, /RECIPE_SNS_TARGET_RESULT_SCHEMA/);
 assert.match(handler, /targetPlatform: parameters\.targetPlatform/);
@@ -166,6 +171,9 @@ assert.doesNotMatch(postSkill, /一人称は「俺」/);
 for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
 assert.match(skill, /`file_path`は空文字/);
 assert.match(skill, /`Get-ChildItem`、`Copy-Item`を含むファイル操作を行わない/);
+assert.match(skill, /`num_last_images_to_include: 1`/);
+assert.match(skill, /`referenced_image_paths` やローカルファイルパスを渡さない/);
+assert.match(skill, /1媒体最大2回/);
 
 function assertStrictObjectSchemas(value, location = "$") {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;

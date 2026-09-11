@@ -71,6 +71,12 @@ function formatGenerationDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatModelName(value: string) {
+  if (value === "gpt-6-astra") return "GPT-6 Astra";
+  if (value === "gpt-5.6-sol") return "GPT-5.6 Sol";
+  return value;
+}
+
 function clonePosts(generation: RecipeSnsGenerationView | null) {
   if (!generation?.posts) return null;
   return Object.fromEntries(RECIPE_SNS_PLATFORMS.map((platform) => {
@@ -386,8 +392,15 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
               </span>
               <span>訴求軸: {selectedGeneration.variationKey}</span>
             </div>
-            <span>GPT-5.6 Sol / {selectedGeneration.reasoningEffort}</span>
+            <span>{formatModelName(selectedGeneration.model)} / {selectedGeneration.reasoningEffort}</span>
           </div>
+
+          {selectedGeneration.status === "failed" && selectedGeneration.failureReason ? (
+            <div className="mt-3 flex items-start gap-2 border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{selectedGeneration.failureReason}</span>
+            </div>
+          ) : null}
 
           <RecipeSnsPublishPanel
             recipeId={recipeId}
@@ -452,6 +465,10 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={variant.url} alt={`${platform.label}用の${recipeSnsImageModeLabel(selectedGeneration.imageMode)}画像`} className="h-full w-full object-cover" />
                       </a>
+                    ) : selectedGeneration.status === "failed" ? (
+                      <div className="flex min-h-48 items-center justify-center bg-amber-50 text-xs text-amber-700">
+                        <AlertTriangle className="mr-2 h-4 w-4" />画像を生成できませんでした
+                      </div>
                     ) : (
                       <div className="flex min-h-48 items-center justify-center bg-gray-100 text-xs text-gray-400">
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />画像生成中
@@ -521,7 +538,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                         </div>
                       ) : (
                         <div className="flex min-h-36 items-center justify-center text-center text-xs text-gray-400">
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />Solが投稿文を作成しています
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />Astraが投稿文を作成しています
                         </div>
                       )}
                     </div>
