@@ -108,6 +108,8 @@ assert.match(skill, /リンク.*スタンプ|リンク.*ステッカー/);
 assert.match(skill, /同じ失敗経路を反復しない/);
 assert.match(skill, /投稿ボタンは媒体ごとに最大1回/);
 assert.match(skill, /chooserOutcomePromise = tab\.playwright\.waitForEvent\("filechooser", \{ timeoutMs: 10000 \}\)\.then/);
+assert.match(skill, /pendingImageChooser = chooserOutcome\.chooser/);
+assert.match(skill, /2回目の独立した `cua_repl\.js`/);
 assert.match(skill, /input\[type="file"\]/);
 assert.match(skill, /tab\.click\(AX番号\)/);
 assert.match(skill, /待機失敗を未処理のままにしてブラウザー接続を失わない/);
