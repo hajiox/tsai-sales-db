@@ -114,6 +114,11 @@ assert.match(skill, /同じ失敗経路を反復しない/);
 assert.match(skill, /Xだけは上記の決定的な未送信条件/);
 assert.match(skill, /最大45秒/);
 assert.match(skill, /合計2回を超えて押さない/);
+assert.match(skill, /複数行編集欄へ `fill` で本文全体を一括入力しない/);
+assert.match(skill, /各行を `type_text`/);
+assert.match(skill, /`press_key Enter` 1回/);
+assert.match(skill, /data-block="true"/);
+assert.match(skill, /URLと後続ハッシュタグが別行/);
 assert.match(skill, /`chrome_devtools` MCPだけ/);
 assert.match(skill, /`list_pages` を1回実行/);
 assert.match(skill, /`new_page` で1枚だけ開き/);
@@ -143,6 +148,10 @@ assert.match(platformReference, /「編集」→「スタンプ」→「リン�
 assert.match(platformReference, /右側プレビューで装飾が見えない場合/);
 assert.match(platformReference, /失敗後に別ツールやOSファイル選択へ切り替えない/);
 assert.match(platformReference, /進捗表示が消えて「ポストする」が有効/);
+assert.match(platformReference, /複数行本文を`fill`すると改行が消え/);
+assert.match(platformReference, /`type_text`/);
+assert.match(platformReference, /`press_key Enter`/);
+assert.match(platformReference, /`data-block="true"`/);
 assert.match(platformReference, /小さな1行表示や全体表示で読めない文字/);
 
 const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
