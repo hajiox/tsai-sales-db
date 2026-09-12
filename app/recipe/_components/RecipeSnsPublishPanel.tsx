@@ -70,7 +70,14 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function statusLabel(status: RecipeSnsPublicationView["status"]) {
+function statusLabel(publication: RecipeSnsPublicationView) {
+  const { status } = publication;
+  if (status === "needs_review") {
+    const completed = publication.platformResults.filter((result) => (
+      result.status === "published" || result.status === "already_published"
+    )).length;
+    if (completed > 0 && completed < publication.targets.length) return "一部失敗";
+  }
   return {
     scheduled: "予約済み",
     queued: "実行待ち",
@@ -363,7 +370,7 @@ export default function RecipeSnsPublishPanel({ recipeId, generation, posts, dis
               <div key={publication.id} className="px-3 py-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded px-2 py-1 text-[10px] font-bold ${statusClass(publication.status)}`}>{statusLabel(publication.status)}</span>
+                    <span className={`rounded px-2 py-1 text-[10px] font-bold ${statusClass(publication.status)}`}>{statusLabel(publication)}</span>
                     <span className="text-xs font-bold text-gray-800">
                       {publication.targets.map((target) => `${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === target)?.label}: ${publication.expectedAccounts?.[target] || RECIPE_SNS_EXPECTED_ACCOUNTS[target]}`).join("・")}
                     </span>
