@@ -119,6 +119,9 @@ assert.match(skill, /各行を `type_text`/);
 assert.match(skill, /`press_key Enter` 1回/);
 assert.match(skill, /data-block="true"/);
 assert.match(skill, /URLと後続ハッシュタグが別行/);
+assert.match(skill, /必ず`wait_for`をtimeout 45000/);
+assert.match(skill, /同じ固定本文が入力欄に残る間はプロフィールへ移動しない/);
+assert.match(skill, /2回目の判断前にプロフィールへ移動すると下書きが破棄/);
 assert.match(skill, /`chrome_devtools` MCPだけ/);
 assert.match(skill, /`list_pages` を1回実行/);
 assert.match(skill, /`new_page` で1枚だけ開き/);
@@ -152,6 +155,8 @@ assert.match(platformReference, /複数行本文を`fill`すると改行が消�
 assert.match(platformReference, /`type_text`/);
 assert.match(platformReference, /`press_key Enter`/);
 assert.match(platformReference, /`data-block="true"`/);
+assert.match(platformReference, /必ず`wait_for`をtimeout 45000/);
+assert.match(platformReference, /プロフィール確認は入力欄消去、成功表示、または2回目の待機完了後/);
 assert.match(platformReference, /小さな1行表示や全体表示で読めない文字/);
 
 const bridgeVersion = bridge.match(/const VERSION = "([^"]+)"/)?.[1];
