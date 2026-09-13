@@ -18,7 +18,7 @@
 ## Instagram
 
 - 公式ホスト: `https://www.instagram.com/`
-- 対象アカウント: `TASK_JSON.platforms.*.expected_account`。`aizubrandhall` または `satou.masahiko` のうち指定されたものだけ。
+- 対象アカウント: `TASK_JSON.platforms.*.expected_account`。`aizubrandhall` または `aizubrand_ec` のうち指定されたものだけ。
 - 通常投稿は作成メニューの `投稿` を使う。
 - `リール動画`、ライブ、他アカウントへの同時シェアは選ばない。
 

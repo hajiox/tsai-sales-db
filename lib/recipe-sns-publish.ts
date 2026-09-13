@@ -22,7 +22,7 @@ export const RECIPE_SNS_EXPECTED_ACCOUNTS: Record<RecipeSnsPlatform, string> = {
 
 export const RECIPE_SNS_ACCOUNT_OPTIONS: Record<RecipeSnsPlatform, readonly string[]> = {
   x: ["@Aizu_Brand_Kan", "@karasugike1", "@hajiox"],
-  instagram: ["aizubrandhall", "satou.masahiko"],
+  instagram: ["aizubrandhall", "aizubrand_ec"],
   instagram_story: ["aizubrandhall", "satou.masahiko"],
   threads: ["aizubrandhall", "satou.masahiko"],
 };
