@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { InventoryQrCode } from "@/components/brand-store/InventoryQrDialog";
 import { toast } from "sonner";
 import { inventoryFiscalLabel, currentInventoryFiscalYear } from "@/lib/inventory-fiscal";
-import { inventoryFormulaErrors, type InventoryWorkbook, type InventoryCell } from "@/lib/food-store-inventory";
+import { inventoryFormulaErrors, isInventoryAmountCell, type InventoryWorkbook, type InventoryCell } from "@/lib/food-store-inventory";
 
 type Inventory = { id: string; fiscal_year: number; inventory_date: string; status: "draft" | "completed"; revision: number; source_filename: string; workbook: InventoryWorkbook; updated_at: string };
 type Change = { sheet: string; address: string; value: InventoryCell["value"]; formula?: string };
@@ -90,7 +90,9 @@ export default function FoodStoreInventoryPage() {
           if (cell.value === null && !cell.formula) continue;
           const errorCodes: Record<string, number> = { "#REF!": 23, "#VALUE!": 15, "#NAME?": 29, "#DIV/0!": 7, "#N/A": 42 };
           const code = typeof cell.value === "string" ? errorCodes[cell.value] : undefined;
-          target[address] = { t: code !== undefined ? "e" : typeof cell.value === "number" ? "n" : typeof cell.value === "boolean" ? "b" : "s", v: code ?? cell.value ?? "", ...(cell.formula ? { f: cell.formula.replace(/^=/, "") } : {}), ...(cell.format ? { z: cell.format } : {}) };
+          const rawFormula = cell.formula?.replace(/^=/, "");
+          const formula = rawFormula && isInventoryAmountCell(source, address) && !/^ROUNDDOWN\(/i.test(rawFormula) ? `ROUNDDOWN(${rawFormula},0)` : rawFormula;
+          target[address] = { t: code !== undefined ? "e" : typeof cell.value === "number" ? "n" : typeof cell.value === "boolean" ? "b" : "s", v: code ?? cell.value ?? "", ...(formula ? { f: formula } : {}), ...(isInventoryAmountCell(source, address) ? { z: "#,##0" } : cell.format ? { z: cell.format } : {}) };
         }
         target["!cols"] = Array.from({ length: source.cols }, (_, index) => ({ wch: index === 0 ? 42 : index === 4 ? 28 : 18 }));
         XLSX.utils.book_append_sheet(book, target, source.name);

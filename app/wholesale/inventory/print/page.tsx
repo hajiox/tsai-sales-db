@@ -1,4 +1,5 @@
 "use client";
+import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Loader2, Printer } from "lucide-react";
@@ -162,7 +163,7 @@ export default function WholesaleInventoryPrintPage() {
                 <tbody>
                   {activeItems.map((item, index) => {
                     const stockValue = item.wholesale_price !== null && item.quantity !== null
-                      ? inventoryScaledValue(item.wholesale_price, item.quantity) / 100_000
+                      ? truncateInventoryYen(inventoryScaledValue(item.wholesale_price, item.quantity) / 100_000)
                       : null;
                     return (
                       <tr key={item.id} className="break-inside-avoid">
@@ -296,9 +297,9 @@ function normalizeItem(value: any): InventoryItem {
 
 function inventoryValue(items: InventoryItem[]) {
   return items.reduce(
-    (sum, item) => sum + inventoryScaledValue(item.wholesale_price || 0, item.quantity || 0),
+    (sum, item) => sum + truncateInventoryYen(inventoryScaledValue(item.wholesale_price || 0, item.quantity || 0) / 100_000),
     0,
-  ) / 100_000;
+  );
 }
 
 function inventoryScaledValue(cost: number, quantity: number) {

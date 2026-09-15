@@ -1,4 +1,5 @@
 "use client";
+import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -81,7 +82,7 @@ export default function WholesaleOtherStoresInventoryPage() {
     [items],
   );
   const inventoryValue = useMemo(
-    () => items.reduce((sum, item) => sum + numberValue(item.inventory_value), 0),
+    () => items.reduce((sum, item) => sum + truncateInventoryYen(numberValue(item.inventory_value)), 0),
     [items],
   );
 
@@ -219,7 +220,7 @@ export default function WholesaleOtherStoresInventoryPage() {
           numberValue(item.inventory_quantity),
           numberValue(item.cost_rate),
           numberValue(item.cost_unit),
-          numberValue(item.inventory_value),
+          truncateInventoryYen(numberValue(item.inventory_value)),
           item.note,
         ]),
         [],
@@ -473,7 +474,7 @@ function InventoryItemRow({
         label={`原価単価 ${Math.round(numberValue(item.cost_rate) * 100)}%`}
         value={formatYen(numberValue(item.cost_unit))}
       />
-      <Metric label="棚卸原価" value={formatYen(numberValue(item.inventory_value))} strong tone="green" />
+      <Metric label="棚卸原価" value={formatYen(truncateInventoryYen(numberValue(item.inventory_value)))} strong tone="green" />
       <label className="relative col-span-2 md:col-span-1">
         <span className="mb-1 block text-[11px] font-semibold text-slate-400 md:sr-only">備考</span>
         <Input

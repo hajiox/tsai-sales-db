@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     if (!id) return NextResponse.json({ success: true, histories, inventory: null });
     const { data: inventory, error: readError } = await client.from("food_store_closing_inventories").select("id,fiscal_year,inventory_date,status,revision,source_filename,workbook,updated_at").eq("id", id).single();
     if (readError) throw new Error(readError.message);
-    return NextResponse.json({ success: true, histories, inventory });
+    return NextResponse.json({ success: true, histories, inventory: { ...inventory, workbook: recalculateInventory(inventory.workbook, true) } });
   } catch (error) { return failure(error, 500); }
 }
 
@@ -89,13 +89,13 @@ export async function PATCH(request: Request) {
         const format = sheet.cells[change.address]?.format;
         sheet.cells[change.address] = { value: change.value, ...(change.formula ? { formula: change.formula } : {}), ...(format ? { format } : {}) };
       }
-      updates.workbook = recalculateInventory(workbook);
+      updates.workbook = recalculateInventory(workbook, true);
     } else if (body.action === "complete") updates.status = "completed";
     else if (body.action === "reopen") updates.status = "draft";
     else throw new Error("操作が不正です");
     const { data, error: updateError } = await client.from("food_store_closing_inventories").update(updates).eq("id", body.id).eq("revision", body.revision).select("id,revision,status,workbook,updated_at").maybeSingle();
     if (updateError) throw new Error(updateError.message);
     if (!data) return failure(new Error("同時更新がありました。再読み込みしてください"), 409);
-    return NextResponse.json({ success: true, inventory: data });
+    return NextResponse.json({ success: true, inventory: { ...data, workbook: recalculateInventory(data.workbook, true) } });
   } catch (error) { return failure(error); }
 }

@@ -5,7 +5,7 @@ function load(name) {
   const file = path.join(__dirname, '..', 'lib', name + '.ts');
   const output = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
-  new Function('module', 'exports', 'require', output)(module, module.exports, (name) => name.startsWith('./food-store-inventory') ? load(name.slice(2)) : require(name));
+  new Function('module', 'exports', 'require', output)(module, module.exports, (name) => name.startsWith('./food-store-inventory') || name === './inventory-total' ? load(name.slice(2)) : require(name));
   return module.exports;
 }
 module.exports = { load };

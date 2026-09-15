@@ -21,6 +21,12 @@ async function main() {
   assert.equal(actual.status, 200);
   assert.equal(actual.data.inventory.workbook.sheets.length, expectedSheets);
   assert.equal(actual.data.inventory.fiscal_year, 2026);
+  const { load } = require('./food-store-inventory-loader.cjs');
+  const { isInventoryAmountCell } = load('food-store-inventory');
+  for (const sheet of actual.data.inventory.workbook.sheets) for (const [address,cell] of Object.entries(sheet.cells)) {
+    if (isInventoryAmountCell(sheet,address) && typeof cell.value === 'number') assert.ok(Number.isInteger(cell.value),`${sheet.name}!${address}: amount must be integer yen`);
+  }
+  assert.equal(actual.data.inventory.workbook.sheets.find(s=>s.name==='道の駅食材在庫').cells.D59.value,857476);
   if (!production) {
     const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
     await client.connect();

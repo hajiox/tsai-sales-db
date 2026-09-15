@@ -1,4 +1,5 @@
 "use client";
+import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -111,18 +112,18 @@ export default function BrandStoreInventoryPage() {
     [items, saveStates],
   );
   const inventoryValue = useMemo(
-    () => items.reduce((sum, item) => sum + (item.wholesale_price ?? 0) * (item.quantity ?? 0), 0),
+    () => items.reduce((sum, item) => sum + truncateInventoryYen((item.wholesale_price ?? 0) * (item.quantity ?? 0)), 0),
     [items],
   );
   const inventoryTaxIncludedValue = useMemo(
     () => items.reduce(
-      (sum, item) => sum + (taxIncludedYen(item.wholesale_price, item.tax_rate) ?? 0) * (item.quantity ?? 0),
+      (sum, item) => sum + truncateInventoryYen((taxIncludedYen(item.wholesale_price, item.tax_rate) ?? 0) * (item.quantity ?? 0)),
       0,
     ),
     [items],
   );
   const retailValue = useMemo(
-    () => items.reduce((sum, item) => sum + (item.selling_price ?? 0) * (item.quantity ?? 0), 0),
+    () => items.reduce((sum, item) => sum + truncateInventoryYen((item.selling_price ?? 0) * (item.quantity ?? 0)), 0),
     [items],
   );
   const filteredItems = useMemo(() => {
@@ -355,9 +356,9 @@ export default function BrandStoreInventoryPage() {
         item.wholesale_price ?? "",
         taxIncludedYen(item.wholesale_price, item.tax_rate) ?? "",
         item.quantity ?? "",
-        item.wholesale_price !== null && item.quantity !== null ? item.wholesale_price * item.quantity : "",
+        item.wholesale_price !== null && item.quantity !== null ? truncateInventoryYen(item.wholesale_price * item.quantity) : "",
         item.wholesale_price !== null && item.quantity !== null
-          ? (taxIncludedYen(item.wholesale_price, item.tax_rate) ?? 0) * item.quantity
+          ? truncateInventoryYen((taxIncludedYen(item.wholesale_price, item.tax_rate) ?? 0) * item.quantity)
           : "",
         item.note,
       ]),
@@ -653,7 +654,7 @@ function InventoryItemCard({
   onSave: (updates: Record<string, unknown>) => void;
   onDelete: () => void;
 }) {
-  const stockValue = (item.wholesale_price ?? 0) * (item.quantity ?? 0);
+  const stockValue = truncateInventoryYen((item.wholesale_price ?? 0) * (item.quantity ?? 0));
   const taxIncludedUnitPrice = taxIncludedYen(item.wholesale_price, item.tax_rate);
   const taxIncludedStockValue = (taxIncludedUnitPrice ?? 0) * (item.quantity ?? 0);
   const [manualEditOpen, setManualEditOpen] = useState(false);
@@ -760,7 +761,7 @@ function InventoryItemCard({
             備考
             <span className="text-right font-normal leading-4 text-emerald-700">
               税別 {formatYen(stockValue)}
-              <span className="block text-slate-500">税込 {formatYen(taxIncludedStockValue)}</span>
+              <span className="block text-slate-500">税込 {formatYen(truncateInventoryYen(taxIncludedStockValue))}</span>
             </span>
           </span>
           <Textarea

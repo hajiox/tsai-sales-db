@@ -1,4 +1,5 @@
 "use client";
+import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -97,7 +98,7 @@ export default function ManufacturingInventoryPage() {
     [activeItems, editingCompletion, saveStates],
   );
   const inventoryValue = useMemo(
-    () => activeItems.reduce((sum, item) => sum + (item.tax_included_cost ?? 0) * (item.stock_count ?? 0), 0),
+    () => activeItems.reduce((sum, item) => sum + truncateInventoryYen((item.tax_included_cost ?? 0) * (item.stock_count ?? 0)), 0),
     [activeItems],
   );
   const filteredItems = useMemo(() => {
@@ -323,7 +324,7 @@ export default function ManufacturingInventoryPage() {
         item.unit_quantity ?? "",
         item.tax_included_cost ?? "",
         item.stock_count ?? "",
-        item.tax_included_cost !== null && item.stock_count !== null ? roundCost(item.tax_included_cost * item.stock_count) : "",
+        item.tax_included_cost !== null && item.stock_count !== null ? truncateInventoryYen(item.tax_included_cost * item.stock_count) : "",
         item.note,
       ]),
     ];
@@ -526,7 +527,7 @@ function ManufacturingItemCard({ item, saveState, onChange, onSave, onDelete }: 
   onSave: (updates: Record<string, unknown>) => void;
   onDelete: () => void;
 }) {
-  const stockValue = (item.tax_included_cost ?? 0) * (item.stock_count ?? 0);
+  const stockValue = truncateInventoryYen((item.tax_included_cost ?? 0) * (item.stock_count ?? 0));
   const unitLabel = item.item_type === "ingredient" ? "入数 (g)" : "入数";
   const changeUnitQuantity = (value: string) => {
     const unitQuantity = nullablePositiveNumber(value);

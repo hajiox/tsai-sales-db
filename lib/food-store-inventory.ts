@@ -1,3 +1,4 @@
+import { truncateInventoryYen } from "./inventory-total";
 export type InventoryCell = { value: string | number | boolean | null; formula?: string; format?: string };
 export type InventorySheet = { name: string; rows: number; cols: number; cells: Record<string, InventoryCell> };
 export type InventoryWorkbook = { sheets: InventorySheet[] };
@@ -24,7 +25,15 @@ export function validateInventoryWorkbook(input: unknown): asserts input is Inve
 }
 
 // The supplied workbook uses references, multiplication and SUM only. No eval or external links.
-export function recalculateInventory(input: InventoryWorkbook): InventoryWorkbook {
+export function isInventoryAmountCell(sheet: InventorySheet, address: string): boolean {
+  const row = Number(address.slice(1));
+  return [1, 2].some(headerRow => {
+    const label = String(sheet.cells[address[0] + headerRow]?.value ?? "");
+    return row > headerRow && /^金額(?:$|[（(])/.test(label);
+  });
+}
+
+export function recalculateInventory(input: InventoryWorkbook, truncateAmounts = false): InventoryWorkbook {
   validateInventoryWorkbook(input);
   const book = structuredClone(input);
   const completed = new Set<string>();
@@ -33,10 +42,16 @@ export function recalculateInventory(input: InventoryWorkbook): InventoryWorkboo
     const cell = sheet.cells[address];
     if (!cell) return null;
     const key = `${sheet.name}!${address}`;
-    if (!cell.formula || completed.has(key)) return cell.value;
+    if (completed.has(key)) return cell.value;
+    if (!cell.formula) {
+      if (truncateAmounts && isInventoryAmountCell(sheet, address) && typeof cell.value === "number") cell.value = truncateInventoryYen(cell.value);
+      return cell.value;
+    }
     if (active.has(key)) return "#REF!";
     active.add(key);
-    const formula = cell.formula.replace(/^=/, "");
+    const rawFormula = cell.formula.replace(/^=/, "");
+    const roundedFormula = /^ROUNDDOWN\((.*),\s*0\)$/i.exec(rawFormula);
+    const formula = roundedFormula ? roundedFormula[1] : rawFormula;
     const ref = (text: string): InventoryCell["value"] => {
       const match = /^(?:(?:'((?:[^']|'')+)'|([^!]+))!)?\$?([A-Z])\$?([1-9]\d*)$/.exec(text.trim());
       if (!match) return "#NAME?";
@@ -64,6 +79,7 @@ export function recalculateInventory(input: InventoryWorkbook): InventoryWorkboo
       const error = [left, right].find(v => typeof v === "string" && v.startsWith("#"));
       result = error ?? ((left === null || typeof left === "number") && (right === null || typeof right === "number") ? Number(left) * Number(right) : "#VALUE!");
     } else result = ref(formula);
+    if (typeof result === "number" && (roundedFormula || (truncateAmounts && isInventoryAmountCell(sheet, address)))) result = truncateInventoryYen(result);
     cell.value = result;
     active.delete(key);
     completed.add(key);

@@ -1,4 +1,5 @@
 "use client";
+import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Loader2, Printer } from "lucide-react";
@@ -62,7 +63,7 @@ export default function WholesaleOtherStoresInventoryPrintPage() {
     [items],
   );
   const inventoryValue = useMemo(
-    () => items.reduce((sum, item) => sum + numberValue(item.inventory_value), 0),
+    () => items.reduce((sum, item) => sum + truncateInventoryYen(numberValue(item.inventory_value)), 0),
     [items],
   );
 
@@ -175,7 +176,7 @@ export default function WholesaleOtherStoresInventoryPrintPage() {
                       </PrintCell>
                       <PrintCell align="right">{formatYen(numberValue(item.cost_unit))}</PrintCell>
                       <PrintCell align="right" strong>
-                        {formatYen(numberValue(item.inventory_value))}
+                        {formatYen(truncateInventoryYen(numberValue(item.inventory_value)))}
                       </PrintCell>
                       <PrintCell>{item.note}</PrintCell>
                     </tr>

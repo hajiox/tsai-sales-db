@@ -1,4 +1,5 @@
 "use client";
+import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -467,7 +468,7 @@ export default function WholesaleInventoryPage() {
         item.wholesale_price ?? "",
         item.quantity ?? "",
         item.wholesale_price !== null && item.quantity !== null
-          ? inventoryScaledValue(item.wholesale_price, item.quantity) / 100_000
+          ? truncateInventoryYen(inventoryScaledValue(item.wholesale_price, item.quantity) / 100_000)
           : "",
         item.note,
       ]);
@@ -1032,7 +1033,7 @@ function InventoryItemCard({
   const [taxDraft, setTaxDraft] = useState<WholesaleInventoryTaxRate>(item.tax_rate);
   const stockValue = item.wholesale_price === null || item.quantity === null
     ? null
-    : Math.round(inventoryScaledValue(item.wholesale_price, item.quantity) / 100_000);
+    : truncateInventoryYen(inventoryScaledValue(item.wholesale_price, item.quantity) / 100_000);
 
   const openEditor = () => {
     setNameDraft(item.product_name);
@@ -1385,9 +1386,9 @@ function normalizeItem(value: any): InventoryItem {
 
 function inventoryValue(items: InventoryItem[]) {
   const scaledTotal = items.reduce((sum, item) => (
-    sum + inventoryScaledValue(item.wholesale_price || 0, item.quantity || 0)
+    sum + truncateInventoryYen(inventoryScaledValue(item.wholesale_price || 0, item.quantity || 0) / 100_000)
   ), 0);
-  return scaledTotal / 100_000;
+  return scaledTotal;
 }
 
 function inventoryScaledValue(wholesalePrice: number, quantity: number) {
