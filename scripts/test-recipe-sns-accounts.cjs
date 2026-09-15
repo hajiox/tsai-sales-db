@@ -20,6 +20,10 @@ const worker = new Function("RECIPE_SNS_PLATFORM_RULES", "normalizeRecipeSnsPubl
   Object.fromEntries(sns.RECIPE_SNS_PLATFORMS.map((p) => [p.id, { ...p, maxLength: 10000 }])), (entry) => entry, "approval",
 );
 assert.deepEqual(worker.options, policy.RECIPE_SNS_ACCOUNT_OPTIONS, "UI/API and worker must use identical account allowlists");
+assert.deepEqual(policy.RECIPE_SNS_ACCOUNT_OPTIONS.instagram_story, policy.RECIPE_SNS_ACCOUNT_OPTIONS.instagram, "Instagram and Story share the renamed account");
+assert.equal(policy.normalizeRecipeSnsPublishAccounts({ instagram_story: "@AIZUBRAND_EC" }).instagram_story, "aizubrand_ec");
+assert.throws(() => policy.normalizeRecipeSnsPublishAccounts({ instagram_story: "satou.masahiko" }), /許可/);
+assert.equal(policy.normalizeRecipeSnsPublishAccounts({ threads: "satou.masahiko" }).threads, "satou.masahiko");
 assert.deepEqual(policy.normalizeRecipeSnsPublishAccounts(undefined), policy.RECIPE_SNS_EXPECTED_ACCOUNTS);
 for (const invalid of [null, [], "hajiox", { x: "unknown" }, { instagram: "hajiox" }, { x: "" }, { facebook: "satou.masahiko" }]) {
   assert.throws(() => policy.normalizeRecipeSnsPublishAccounts(invalid));

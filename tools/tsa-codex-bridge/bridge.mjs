@@ -38,7 +38,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.90";
+const VERSION = "1.9.91";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -112,7 +112,7 @@ const RECIPE_SNS_PUBLISH_EXPECTED_ACCOUNTS = Object.freeze({
 const RECIPE_SNS_PUBLISH_ACCOUNT_OPTIONS = {
   x: ["@Aizu_Brand_Kan", "@karasugike1", "@hajiox"],
   instagram: ["aizubrandhall", "aizubrand_ec"],
-  instagram_story: ["aizubrandhall", "satou.masahiko"],
+  instagram_story: ["aizubrandhall", "aizubrand_ec"],
   threads: ["aizubrandhall", "satou.masahiko"],
 };
 const RECIPE_SNS_PUBLISH_STATUSES = new Set(["published", "already_published", "blocked", "failed"]);

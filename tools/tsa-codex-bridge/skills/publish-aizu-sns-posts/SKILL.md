@@ -27,7 +27,7 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 - TSAの投稿依頼は下書き作成ではなく、指定した画像の添付・最終投稿・公開検証までの実行依頼である。`TASK_JSON.operatorAuthorization` の一致を確認したら、その範囲の通常操作を進める。`executionSurface` の名前や「確認が必要かもしれない」という推測だけで停止しない。
 - 本文を要約、翻訳、SEO調整、追記、省略、言い換えしない。
 - 画像の加工、差し替え、順序変更をしない。
-- 投稿先は対象媒体の `TASK_JSON.platforms.*.expected_account` に固定する。許可候補はXが `@Aizu_Brand_Kan`・`@karasugike1`・`@hajiox`、Instagramが `aizubrandhall`・`aizubrand_ec`、IGストーリー・Threadsが `aizubrandhall`・`satou.masahiko`。候補の中でも指定された1アカウントだけに投稿する。大小文字と先頭 `@` の差だけは同一とみなす。
+- 投稿先は対象媒体の `TASK_JSON.platforms.*.expected_account` に固定する。許可候補はXが `@Aizu_Brand_Kan`・`@karasugike1`・`@hajiox`、Instagram・IGストーリーが `aizubrandhall`・`aizubrand_ec`、Threadsが `aizubrandhall`・`satou.masahiko`。候補の中でも指定された1アカウントだけに投稿する。大小文字と先頭 `@` の差だけは同一とみなす。
 - 現在のアカウントが異なる場合は、公式のアカウント切替一覧に表示されたログイン済みの指定アカウントだけを1回選択し、切替後のハンドルを画面で再確認する。対象がない、対応が不明、切替後も一致しない場合は `blocked`。別の許可候補へ代替投稿せず、アカウント追加・ログイン・ログアウトは行わない。未保存の異なる下書きがある場合はそのタブで切り替えない。
 
 ## Bridge内で完結する実行

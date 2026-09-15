@@ -24,6 +24,8 @@
 
 ## IGストーリー
 
+- 対象アカウント: `TASK_JSON.platforms.instagram_story.expected_account`。`aizubrandhall` または `aizubrand_ec` のうち指定されたものだけ。Instagramと同じ変更後のアカウント名を使用する。
+
 - 2026-08-31実機確認: Instagram Webの「新しい投稿」には `投稿`、`ライブ動画`、`広告`だけが表示され、ストーリー作成経路はなかった。この状態では公式Meta Business Suiteのストーリー作成画面を使用する。
 - Web版に作成経路が見つからない場合、ログイン済みの公式Meta Business Suiteを使用する。Meta Business SuiteはIGストーリー投稿の明示承認済み公式経路であり、別媒体として扱わない。
 - 他の媒体セッションやユーザー操作と競合しないよう、既存Meta Business Suiteタブは取得せず、同じログイン済みChromeプロファイルで公式Meta Business Suiteの一時タブを1枚だけ開く。
