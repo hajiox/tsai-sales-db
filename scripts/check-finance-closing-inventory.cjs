@@ -35,6 +35,24 @@ async function main() {
     857476, 134756, 120863,
   ];
   assert.deepEqual(report.rows.map(r => r.amount), expected);
+  const brandEx = i => Math.round(Number(i.selling_price || 0) * .7 * 100) / 100 * Number(i.quantity || 0);
+  const expectedExcluded = [expected[0],
+    ...['ingredient', 'material'].map(type => manufacturing.items.filter(i => i.item_type === type).reduce((s, i) => {
+      const rate = i.tax_rate ?? (i.item_type === 'material' || ['本みりん','本料理清酒','HEIKO OPPシート #25 100×100 無地'].includes(String(i.item_name).normalize('NFKC').trim()) ? 10 : 8);
+      return s + truncate(Number(i.tax_included_cost || 0) * Number(i.stock_count || 0) * 100 / (100 + rate));
+    }, 0)), expected[3],
+    partner.items.reduce((s, i) => s + truncate(Number(i.inventory_value || 0) * 100 / 108), 0),
+    793960, 122506, 109876,
+  ];
+  const expectedIncluded = [brand.items.reduce((s, i) => s + truncate(brandEx(i) * (100 + Number(i.tax_rate)) / 100), 0), expected[1], expected[2],
+    warehouse.items.filter(i => i.review_status !== 'excluded').reduce((s, i) => s + truncate(Math.round(Number(i.wholesale_price || 0) * 100) * Math.round(Number(i.quantity || 0) * 1000) / 100000 * (100 + Number(i.tax_rate)) / 100), 0),
+    expected[4], ...expected.slice(5),
+  ];
+  assert.deepEqual(report.rows.map(r => r.amountExcluded), expectedExcluded);
+  assert.deepEqual(report.rows.map(r => r.amountIncluded), expectedIncluded);
+  assert.equal(report.totalExcluded, expectedExcluded.reduce((a,b)=>a+b,0));
+  assert.equal(report.totalIncluded, expectedIncluded.reduce((a,b)=>a+b,0));
+  console.log(JSON.stringify({taxExcluded:report.totalExcluded,taxIncluded:report.totalIncluded,validation:'All 8 categories independently reconciled in both tax bases'}));
   console.log(JSON.stringify({ fiscalYear: report.fiscalYear, amounts: report.rows.map(r => ({ label: r.label, amount: r.amount, status: r.status })), total: report.total, validation: 'source API amounts match; auth and missing-year checks passed' }));
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'tsa-finance-inventory-'));
   const browser = await puppeteer.launch({ headless: true });
@@ -56,7 +74,8 @@ async function main() {
     assert.ok(fs.existsSync(target), 'Excel downloaded');
     const book = XLSX.readFile(target);
     assert.equal(book.SheetNames.length, 9);
-    assert.equal(book.Sheets['決算棚卸し一覧'].F15.v, report.total);
+    assert.equal(book.Sheets['決算棚卸し一覧'].F15.v, report.totalExcluded);
+    assert.equal(book.Sheets['決算棚卸し一覧'].G15.v, report.totalIncluded);
     await page.screenshot({ path: path.join(directory, 'desktop.png'), fullPage: true });
     await page.setViewport({ width: 390, height: 844 });
     await page.screenshot({ path: path.join(directory, 'mobile.png'), fullPage: true });

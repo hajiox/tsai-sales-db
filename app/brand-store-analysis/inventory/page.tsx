@@ -1,4 +1,5 @@
 "use client";
+import { inventoryTaxAmounts, inventoryTaxUnitPrices } from "@/lib/inventory-tax";
 import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useState } from "react";
@@ -33,7 +34,6 @@ import {
 import {
   type BrandStoreTaxRate,
   normalizeBrandStoreTaxRate,
-  taxIncludedYen,
 } from "@/lib/brand-store-tax";
 import { brandStoreInventoryPrice } from "@/lib/brand-store-inventory-price";
 
@@ -117,7 +117,7 @@ export default function BrandStoreInventoryPage() {
   );
   const inventoryTaxIncludedValue = useMemo(
     () => items.reduce(
-      (sum, item) => sum + truncateInventoryYen((taxIncludedYen(item.wholesale_price, item.tax_rate) ?? 0) * (item.quantity ?? 0)),
+      (sum, item) => sum + (inventoryTaxAmounts(item.wholesale_price, item.quantity, "excluded", item.tax_rate).included ?? 0),
       0,
     ),
     [items],
@@ -344,7 +344,7 @@ export default function BrandStoreInventoryPage() {
     }
   };
 
-  const downloadCsv = () => {
+  const downloadCsv = async (format: "csv" | "xlsx" = "csv") => {
     if (!inventory) return;
     const rows = [
       ["商品名", "販売価格（税別）", "税区分", "税率", "棚卸単価（税別・7掛）", "税込単価", "個数", "棚卸原価（税別）", "棚卸原価（税込）", "備考"],
@@ -354,15 +354,26 @@ export default function BrandStoreInventoryPage() {
         item.tax_rate === 8 ? "食品" : "標準",
         `${item.tax_rate}%`,
         item.wholesale_price ?? "",
-        taxIncludedYen(item.wholesale_price, item.tax_rate) ?? "",
+        inventoryTaxUnitPrices(item.wholesale_price, "excluded", item.tax_rate).included ?? "",
         item.quantity ?? "",
         item.wholesale_price !== null && item.quantity !== null ? truncateInventoryYen(item.wholesale_price * item.quantity) : "",
         item.wholesale_price !== null && item.quantity !== null
-          ? truncateInventoryYen((taxIncludedYen(item.wholesale_price, item.tax_rate) ?? 0) * item.quantity)
+          ? inventoryTaxAmounts(item.wholesale_price, item.quantity, "excluded", item.tax_rate).included
           : "",
         item.note,
       ]),
     ];
+    if (format === "xlsx") {
+      try {
+        const XLSX = await import("xlsx");
+        const book = XLSX.utils.book_new(), sheet = XLSX.utils.aoa_to_sheet(rows);
+        sheet["!cols"] = rows[0].map((_, i) => ({ wch: i === 0 || i === 1 ? 38 : 22 }));
+        sheet["!autofilter"] = { ref: XLSX.utils.encode_range({ r: 0, c: 0 }, { r: rows.length - 1, c: rows[0].length - 1 }) };
+        XLSX.utils.book_append_sheet(book, sheet, "決算棚卸し");
+        XLSX.writeFile(book, `ブランド館_決算棚卸し_${inventory.fiscal_year}年度.xlsx`);
+      } catch { toast.error("Excel出力に失敗しました"); }
+      return;
+    }
     const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -398,7 +409,7 @@ export default function BrandStoreInventoryPage() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <InventoryQrCode className="h-16 w-16 sm:h-20 sm:w-20" />
             <Button
               size="icon"
@@ -410,9 +421,10 @@ export default function BrandStoreInventoryPage() {
               <FileSpreadsheet className="h-4 w-4" />
             </Button>
             {inventory && (
-              <Button size="icon" variant="outline" className="h-10 w-10" title="CSV出力" onClick={downloadCsv}>
+              <><Button size="icon" variant="outline" className="h-10 w-10" title="CSV出力" onClick={() => void downloadCsv()}>
                 <Download className="h-4 w-4" />
               </Button>
+              <Button variant="outline" title="Excel出力" onClick={() => void downloadCsv("xlsx")}>Excel出力</Button></>
             )}
             <Button className="h-10 gap-1.5 bg-slate-900 px-3 hover:bg-slate-800" onClick={openCreateDialog} disabled={generating}>
               <CalendarRange className="h-4 w-4" />
@@ -466,7 +478,7 @@ export default function BrandStoreInventoryPage() {
           <section className="grid grid-cols-2 gap-y-3 rounded-lg border border-slate-200 bg-white py-3 shadow-sm md:grid-cols-4 md:divide-x md:divide-slate-200">
             <SummaryValue label="入力済み" value={`${completedCount}/${items.length}`} />
             <SummaryValue label="棚卸原価（税別・7掛）" value={formatYen(inventoryValue)} />
-            <SummaryValue label="税込参考" value={formatYen(inventoryTaxIncludedValue)} />
+            <SummaryValue label="棚卸原価（税込）" value={formatYen(inventoryTaxIncludedValue)} />
             <SummaryValue label="販売価格計" value={formatYen(retailValue)} />
           </section>
 
@@ -655,8 +667,8 @@ function InventoryItemCard({
   onDelete: () => void;
 }) {
   const stockValue = truncateInventoryYen((item.wholesale_price ?? 0) * (item.quantity ?? 0));
-  const taxIncludedUnitPrice = taxIncludedYen(item.wholesale_price, item.tax_rate);
-  const taxIncludedStockValue = (taxIncludedUnitPrice ?? 0) * (item.quantity ?? 0);
+  const taxIncludedUnitPrice = inventoryTaxUnitPrices(item.wholesale_price, "excluded", item.tax_rate).included;
+  const taxIncludedStockValue = inventoryTaxAmounts(item.wholesale_price, item.quantity, "excluded", item.tax_rate).included ?? 0;
   const [manualEditOpen, setManualEditOpen] = useState(false);
   const [manualNameDraft, setManualNameDraft] = useState(item.product_name);
   const [manualPriceDraft, setManualPriceDraft] = useState(

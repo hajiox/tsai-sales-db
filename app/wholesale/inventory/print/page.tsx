@@ -1,4 +1,5 @@
 "use client";
+import { warehouseInventoryTax, inventoryTaxAmounts, inventoryTaxUnitPrices, sumInventoryTax } from "@/lib/inventory-tax";
 import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useState } from "react";
@@ -124,8 +125,8 @@ export default function WholesaleInventoryPrintPage() {
               <div className="mt-3 grid grid-cols-4 gap-px overflow-hidden border border-slate-300 bg-slate-300">
                 <SummaryCell label="対象品目" value={`${activeItems.length.toLocaleString()}品目`} />
                 <SummaryCell label="確認済み" value={`${confirmedItems.length.toLocaleString()}品目`} />
-                <SummaryCell label="確定原価合計" value={formatYen(confirmedValue)} />
-                <SummaryCell label="要確認込み原価" value={formatYen(totalValue)} />
+                <SummaryCell label="確定原価合計" value={`税別 ${formatYen(confirmedValue)} ／ 税込 ${formatYen(sumInventoryTax(confirmedItems, warehouseInventoryTax).included)}`} />
+                <SummaryCell label="要確認込み原価" value={`税別 ${formatYen(totalValue)} ／ 税込 ${formatYen(sumInventoryTax(activeItems, warehouseInventoryTax).included)}`} />
               </div>
               <div className="mt-2 flex flex-wrap justify-between gap-x-5 gap-y-1 text-[11px] text-slate-500">
                 <span>原価は販売価格（税別）の70%</span>
@@ -154,9 +155,9 @@ export default function WholesaleInventoryPrintPage() {
                     <PrintHeader align="center">税率</PrintHeader>
                     <PrintHeader align="right">販売価格<br />税別</PrintHeader>
                     <PrintHeader align="right">販売価格<br />税込</PrintHeader>
-                    <PrintHeader align="right">原価<br />税別・7掛</PrintHeader>
+                    <PrintHeader align="right">原価7掛<br />税別／税込</PrintHeader>
                     <PrintHeader align="right">在庫数</PrintHeader>
-                    <PrintHeader align="right">棚卸原価</PrintHeader>
+                    <PrintHeader align="right">棚卸原価<br />税別／税込</PrintHeader>
                     <PrintHeader>備考・状態</PrintHeader>
                   </tr>
                 </thead>
@@ -174,9 +175,9 @@ export default function WholesaleInventoryPrintPage() {
                         <PrintCell align="right">
                           {formatYen(retailPriceInclTaxFromExcluded(item.retail_price_excl_tax, item.tax_rate))}
                         </PrintCell>
-                        <PrintCell align="right">{formatYen(item.wholesale_price)}</PrintCell>
+                        <PrintCell align="right">{formatYen(item.wholesale_price)}<br />{formatYen(inventoryTaxUnitPrices(item.wholesale_price, "excluded", item.tax_rate).included)}</PrintCell>
                         <PrintCell align="right">{formatQuantity(item.quantity)}</PrintCell>
-                        <PrintCell align="right" strong>{formatYen(stockValue)}</PrintCell>
+                        <PrintCell align="right" strong>{formatYen(stockValue)}<br />{formatYen(warehouseInventoryTax(item).included)}</PrintCell>
                         <PrintCell>
                           <div>{item.note || ""}</div>
                           {item.review_status === "needs_review" && (
@@ -193,7 +194,7 @@ export default function WholesaleInventoryPrintPage() {
                       原価合計（要確認を含む）
                     </td>
                     <td className="border border-slate-400 px-2 py-2 text-right tabular-nums">
-                      {formatYen(totalValue)}
+                      税別 {formatYen(totalValue)}<br />税込 {formatYen(sumInventoryTax(activeItems, warehouseInventoryTax).included)}
                     </td>
                     <td className="border border-slate-400 px-2 py-2" />
                   </tr>

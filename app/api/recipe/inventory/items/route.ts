@@ -82,6 +82,12 @@ export async function PATCH(request: Request) {
     if (currentError) throw currentError;
 
     const updates: Record<string, unknown> = {};
+    if (Object.prototype.hasOwnProperty.call(body, "taxRate")) {
+      if (typeof body.taxRate !== "number" || ![0, 8, 10].includes(body.taxRate)) {
+        return NextResponse.json({ success: false, error: "税率は0・8・10%から選択してください" }, { status: 400 });
+      }
+      updates.tax_rate = body.taxRate;
+    }
     let effectiveUnitQuantity = toNullableNumber(current.unit_quantity);
     if (Object.prototype.hasOwnProperty.call(body, "unitQuantity")) {
       const value = nullablePositiveNumber(body.unitQuantity);

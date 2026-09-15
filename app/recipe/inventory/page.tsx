@@ -1,4 +1,5 @@
 "use client";
+import { manufacturingInventoryTax, manufacturingTaxRate, inventoryTaxAmounts, inventoryTaxUnitPrices, sumInventoryTax } from "@/lib/inventory-tax";
 import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -47,6 +48,7 @@ type InventoryItem = {
   id: string;
   inventory_id: string;
   item_type: ItemType;
+  tax_rate?: number | null;
   source_id: string | null;
   item_name: string;
   source_unit_text: string | null;
@@ -101,6 +103,7 @@ export default function ManufacturingInventoryPage() {
     () => activeItems.reduce((sum, item) => sum + truncateInventoryYen((item.tax_included_cost ?? 0) * (item.stock_count ?? 0)), 0),
     [activeItems],
   );
+  const inventoryTax = useMemo(() => sumInventoryTax(activeItems, manufacturingInventoryTax), [activeItems]);
   const filteredItems = useMemo(() => {
     const keyword = normalizeSearch(search);
     return activeItems.filter((item) => {
@@ -247,6 +250,7 @@ export default function ManufacturingInventoryPage() {
         savedFields.base_unit_quantity = savedItem.base_unit_quantity;
       }
       if (Object.prototype.hasOwnProperty.call(updates, "stockCount")) savedFields.stock_count = savedItem.stock_count;
+      if (Object.prototype.hasOwnProperty.call(updates, "taxRate")) savedFields.tax_rate = savedItem.tax_rate;
       if (Object.prototype.hasOwnProperty.call(updates, "note")) savedFields.note = savedItem.note;
       updateItemLocal(id, savedFields);
       setSaveStates((current) => ({ ...current, [id]: "saved" }));
@@ -314,20 +318,34 @@ export default function ManufacturingInventoryPage() {
     }
   };
 
-  const downloadCsv = () => {
+  const downloadCsv = async (format: "csv" | "xlsx" = "csv") => {
     if (!inventory) return;
     const rows = [
-      ["区分", "品名", "入数", "税込単価（原価）", "個数", "棚卸原価", "備考"],
+      ["区分", "品名", "入数", "単価（税別）", "単価（税込）", "税率（%）", "個数", "棚卸原価（税別）", "棚卸原価（税込）", "備考"],
       ...items.map((item) => [
         item.item_type === "ingredient" ? "食材" : "資材",
         item.item_name,
         item.unit_quantity ?? "",
+        inventoryTaxUnitPrices(item.tax_included_cost, "included", manufacturingTaxRate(item)).excluded ?? "",
         item.tax_included_cost ?? "",
+        manufacturingTaxRate(item),
         item.stock_count ?? "",
-        item.tax_included_cost !== null && item.stock_count !== null ? truncateInventoryYen(item.tax_included_cost * item.stock_count) : "",
+        manufacturingInventoryTax(item).excluded ?? "",
+        manufacturingInventoryTax(item).included ?? "",
         item.note,
       ]),
     ];
+    if (format === "xlsx") {
+      try {
+        const XLSX = await import("xlsx");
+        const book = XLSX.utils.book_new(), sheet = XLSX.utils.aoa_to_sheet(rows);
+        sheet["!cols"] = rows[0].map((_, i) => ({ wch: i === 0 || i === 1 ? 38 : 22 }));
+        sheet["!autofilter"] = { ref: XLSX.utils.encode_range({ r: 0, c: 0 }, { r: rows.length - 1, c: rows[0].length - 1 }) };
+        XLSX.utils.book_append_sheet(book, sheet, "決算棚卸し");
+        XLSX.writeFile(book, `製造棚卸し_${inventory.fiscal_year}年度.xlsx`);
+      } catch { toast.error("Excel出力に失敗しました"); }
+      return;
+    }
     const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -349,7 +367,7 @@ export default function ManufacturingInventoryPage() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur md:px-6">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <Link href="/recipe/database" className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-slate-600 hover:bg-slate-100" title="材料データベースへ戻る">
               <ArrowLeft className="h-5 w-5" />
@@ -361,12 +379,13 @@ export default function ManufacturingInventoryPage() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <ManufacturingInventoryQrCode className="h-16 w-16 sm:h-20 sm:w-20" />
             {inventory && (
-              <Button size="icon" variant="outline" className="h-10 w-10" title="CSV出力" onClick={downloadCsv}>
+              <><Button size="icon" variant="outline" className="h-10 w-10" title="CSV出力" onClick={() => void downloadCsv()}>
                 <Download className="h-4 w-4" />
               </Button>
+              <Button variant="outline" title="Excel出力" onClick={() => void downloadCsv("xlsx")}>Excel出力</Button></>
             )}
             <Button className="h-10 bg-slate-900 px-3 hover:bg-slate-800" disabled={generating} onClick={openCreateDialog}>
               <CalendarRange className="h-4 w-4" />
@@ -404,9 +423,9 @@ export default function ManufacturingInventoryPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-3 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-white py-3 shadow-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-white py-3 shadow-sm">
               <SummaryValue label="入力済み" value={`${completedCount.toLocaleString()}/${activeItems.length.toLocaleString()}`} />
-              <SummaryValue label="棚卸原価" value={formatYen(inventoryValue)} />
+              <SummaryValue label="棚卸原価（税別）" value={formatYen(inventoryTax.excluded)} /><SummaryValue label="棚卸原価（税込）" value={formatYen(inventoryValue)} />
               <SummaryValue label="登録品目" value={`${activeItems.length.toLocaleString()}件`} />
             </div>
 
@@ -578,7 +597,7 @@ function ManufacturingItemCard({ item, saveState, onChange, onSave, onDelete }: 
       </label>
 
       <label className="mt-3 block md:mt-0">
-        <span className="mb-1 block text-xs font-semibold text-slate-500">税込単価（原価）</span>
+        <span className="mb-1 block text-xs font-semibold text-slate-500">税込単価（原価）・税率{manufacturingTaxRate(item)}%</span>
         <div className="relative">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">¥</span>
           <Input
@@ -593,6 +612,8 @@ function ManufacturingItemCard({ item, saveState, onChange, onSave, onDelete }: 
             placeholder="未入力"
           />
         </div>
+        <span className="mt-1 block text-xs text-slate-600">税別 {formatYen(inventoryTaxUnitPrices(item.tax_included_cost, "included", manufacturingTaxRate(item)).excluded)}</span>
+        <select aria-label={`${item.item_name}の税率`} className="mt-1 rounded border p-1 text-xs" value={manufacturingTaxRate(item)} onChange={event => { const rate = Number(event.target.value); onChange({ tax_rate: rate }); onSave({ taxRate: rate }); }}><option value={8}>8%</option><option value={10}>10%</option><option value={0}>非課税・0%</option></select>
       </label>
 
       <label className="mt-3 block md:mt-0">
@@ -613,7 +634,7 @@ function ManufacturingItemCard({ item, saveState, onChange, onSave, onDelete }: 
       <div className="mt-3 md:mt-0">
         <label className="block">
           <span className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-500">
-            備考<span className="font-normal text-emerald-700">棚卸原価 {formatYen(stockValue)}</span>
+            備考<span className="font-normal text-emerald-700">棚卸原価 税別{formatYen(manufacturingInventoryTax(item).excluded)} ／ 税込{formatYen(stockValue)}</span>
           </span>
           <Textarea value={item.note} onChange={(event) => onChange({ note: event.target.value })} onBlur={(event) => onSave({ note: event.currentTarget.value })} className="min-h-[48px] resize-none text-sm" rows={1} placeholder="備考" />
         </label>
@@ -675,8 +696,8 @@ function roundCost(value: number) {
   return Math.round(value * 1000) / 1000;
 }
 
-function formatYen(value: number) {
-  if (!Number.isFinite(value)) return "-";
+function formatYen(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "-";
   return `¥${value.toLocaleString("ja-JP", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 

@@ -1,4 +1,5 @@
 "use client";
+import { partnerInventoryTax, inventoryTaxAmounts, inventoryTaxUnitPrices, sumInventoryTax } from "@/lib/inventory-tax";
 import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -188,6 +189,7 @@ export default function WholesaleOtherStoresInventoryPage() {
     }
   };
 
+  const inventoryTax = sumInventoryTax(items, partnerInventoryTax);
   const downloadExcel = async () => {
     if (!inventory) return;
     setExporting(true);
@@ -204,13 +206,17 @@ export default function WholesaleOtherStoresInventoryPage() {
           "商品コード",
           "商品名",
           "7月販売数",
-          "7月売上高",
-          "7月平均販売単価",
+          "7月売上高（税込）",
+          "7月平均販売単価（税込）",
           "他社在庫数",
           "原価率",
-          "原価単価",
-          "棚卸原価",
+          "原価単価（税込）",
+          "棚卸原価（税込）",
           "備考",
+          "原価単価（税別）",
+          "棚卸原価（税別）",
+          "平均販売単価（税別）",
+          "7月売上高（税別）",
         ],
         ...items.map((item) => [
           item.product_code,
@@ -223,6 +229,10 @@ export default function WholesaleOtherStoresInventoryPage() {
           numberValue(item.cost_unit),
           truncateInventoryYen(numberValue(item.inventory_value)),
           item.note,
+          inventoryTaxUnitPrices(item.cost_unit, "included", 8).excluded ?? "",
+          partnerInventoryTax(item).excluded ?? "",
+          inventoryTaxUnitPrices(item.average_selling_price, "included", 8).excluded ?? "",
+          inventoryTaxAmounts(item.sales_amount, 1, "included", 8).excluded ?? "",
         ]),
         [],
         [
@@ -235,7 +245,8 @@ export default function WholesaleOtherStoresInventoryPage() {
           "",
           "",
           inventoryValue,
-          "",
+          "", "", inventoryTax.excluded, "",
+          items.reduce((sum, item) => sum + (inventoryTaxAmounts(item.sales_amount, 1, "included", 8).excluded ?? 0), 0),
         ],
       ];
       const sheet = XLSX.utils.aoa_to_sheet(rows);
@@ -250,8 +261,9 @@ export default function WholesaleOtherStoresInventoryPage() {
         { wch: 14 },
         { wch: 16 },
         { wch: 28 },
+        { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 22 },
       ];
-      sheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }];
+      sheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 13 } }];
       applyExcelFormats(sheet, items.length);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, sheet, "他社");
@@ -382,7 +394,7 @@ export default function WholesaleOtherStoresInventoryPage() {
                 sub={`${inventory.source_sale_row_count.toLocaleString()}明細`}
               />
               <SummaryValue label="他社在庫数" value={formatQuantity(inventoryQuantity)} />
-              <SummaryValue label="棚卸原価" value={formatYen(inventoryValue)} tone="green" />
+              <SummaryValue label="棚卸原価（税込）" value={formatYen(inventoryValue)} sub={`税別 ${formatYen(inventoryTax.excluded)}・税率8%`} tone="green" />
             </section>
 
             <section className="sticky top-[65px] z-20 border-y border-slate-200 bg-slate-100 py-2">
@@ -401,9 +413,9 @@ export default function WholesaleOtherStoresInventoryPage() {
               <span>商品</span>
               <span className="text-right">7月販売数</span>
               <span className="text-right">他社在庫数</span>
-              <span className="text-right">平均販売単価</span>
-              <span className="text-right">原価単価</span>
-              <span className="text-right">棚卸原価</span>
+              <span className="text-right">平均販売単価 税別／税込</span>
+              <span className="text-right">原価単価 税別／税込</span>
+              <span className="text-right">棚卸原価 税別／税込</span>
               <span>備考</span>
             </div>
 
@@ -470,12 +482,12 @@ function InventoryItemRow({
       </div>
       <Metric label="7月販売数" value={formatQuantity(numberValue(item.sold_quantity))} />
       <Metric label="他社在庫数" value={formatQuantity(numberValue(item.inventory_quantity))} strong />
-            <Metric label="平均販売単価" value={formatYen(numberValue(item.average_selling_price))} />
+            <Metric label="平均販売単価" value={`税別 ${formatYen(inventoryTaxUnitPrices(item.average_selling_price, "included", 8).excluded ?? 0)} ／ 税込 ${formatYen(numberValue(item.average_selling_price))}`} />
       <Metric
         label={`原価単価 ${Math.round(numberValue(item.cost_rate) * 100)}%`}
-        value={formatYen(numberValue(item.cost_unit))}
+        value={`税別 ${formatYen(inventoryTaxUnitPrices(item.cost_unit, "included", 8).excluded ?? 0)} ／ 税込 ${formatYen(numberValue(item.cost_unit))}`}
       />
-      <Metric label="棚卸原価" value={formatYen(truncateInventoryYen(numberValue(item.inventory_value)))} strong tone="green" />
+      <Metric label="棚卸原価" value={`税別 ${formatYen(partnerInventoryTax(item).excluded ?? 0)} ／ 税込 ${formatYen(truncateInventoryYen(numberValue(item.inventory_value)))}`} strong tone="green" />
       <label className="relative col-span-2 md:col-span-1">
         <span className="mb-1 block text-[11px] font-semibold text-slate-400 md:sr-only">備考</span>
         <Input
@@ -506,7 +518,7 @@ function Metric({
   return (
     <div className="min-w-0 text-right">
       <div className="text-[11px] font-semibold text-slate-400 md:hidden">{label}</div>
-      <div className={`truncate tabular-nums ${strong ? "font-bold" : "font-semibold"} ${
+      <div className={`whitespace-normal break-words tabular-nums ${strong ? "font-bold" : "font-semibold"} ${
         tone === "green" ? "text-emerald-700" : "text-slate-800"
       }`}>
         {value}
@@ -529,12 +541,12 @@ function SummaryValue({
   return (
     <div className="min-w-0 bg-white p-3 md:p-4">
       <div className="text-xs font-semibold text-slate-500">{label}</div>
-      <div className={`mt-1 truncate text-lg font-bold tabular-nums md:text-xl ${
+      <div className={`mt-1 break-words text-lg font-bold tabular-nums md:text-xl ${
         tone === "green" ? "text-emerald-700" : "text-slate-900"
       }`}>
         {value}
       </div>
-      {sub && <div className="mt-1 truncate text-xs text-slate-400">{sub}</div>}
+      {sub && <div className="mt-1 break-words text-xs text-slate-400">{sub}</div>}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import { partnerInventoryTax, inventoryTaxAmounts, inventoryTaxUnitPrices, sumInventoryTax } from "@/lib/inventory-tax";
 import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useState } from "react";
@@ -126,7 +127,7 @@ export default function WholesaleOtherStoresInventoryPrintPage() {
                   value={formatQuantity(numberValue(inventory.source_total_quantity))}
                 />
                 <SummaryCell label="他社在庫数" value={formatQuantity(inventoryQuantity)} />
-                <SummaryCell label="棚卸原価" value={formatYen(inventoryValue)} />
+                <SummaryCell label="棚卸原価" value={`税別 ${formatYen(sumInventoryTax(items, partnerInventoryTax).excluded)} ／ 税込 ${formatYen(inventoryValue)}`} />
               </div>
               <div className="mt-2 flex flex-wrap justify-between gap-x-5 gap-y-1 text-[11px] text-slate-500">
                 <span>{inventory.fiscal_year}年7月の通常卸実績 / OEM除外</span>
@@ -155,9 +156,9 @@ export default function WholesaleOtherStoresInventoryPrintPage() {
                     <PrintHeader>商品名</PrintHeader>
                     <PrintHeader align="right">7月<br />販売数</PrintHeader>
                     <PrintHeader align="right">他社<br />在庫数</PrintHeader>
-                    <PrintHeader align="right">平均<br />販売単価</PrintHeader>
-                    <PrintHeader align="right">原価単価<br />70%</PrintHeader>
-                    <PrintHeader align="right">棚卸原価</PrintHeader>
+                    <PrintHeader align="right">平均販売単価<br />税別／税込</PrintHeader>
+                    <PrintHeader align="right">原価単価70%<br />税別／税込</PrintHeader>
+                    <PrintHeader align="right">棚卸原価<br />税別／税込</PrintHeader>
                     <PrintHeader>備考</PrintHeader>
                   </tr>
                 </thead>
@@ -172,11 +173,11 @@ export default function WholesaleOtherStoresInventoryPrintPage() {
                         {formatQuantity(numberValue(item.inventory_quantity))}
                       </PrintCell>
                       <PrintCell align="right">
-                        {formatYen(numberValue(item.average_selling_price))}
+                        {formatYen(inventoryTaxUnitPrices(item.average_selling_price, "included", 8).excluded ?? 0)}<br />{formatYen(numberValue(item.average_selling_price))}
                       </PrintCell>
-                      <PrintCell align="right">{formatYen(numberValue(item.cost_unit))}</PrintCell>
+                      <PrintCell align="right">{formatYen(inventoryTaxUnitPrices(item.cost_unit, "included", 8).excluded ?? 0)}<br />{formatYen(numberValue(item.cost_unit))}</PrintCell>
                       <PrintCell align="right" strong>
-                        {formatYen(truncateInventoryYen(numberValue(item.inventory_value)))}
+                        {formatYen(partnerInventoryTax(item).excluded ?? 0)}<br />{formatYen(truncateInventoryYen(numberValue(item.inventory_value)))}
                       </PrintCell>
                       <PrintCell>{item.note}</PrintCell>
                     </tr>
@@ -192,7 +193,7 @@ export default function WholesaleOtherStoresInventoryPrintPage() {
                     </td>
                     <td colSpan={2} className="border border-slate-400" />
                     <td className="border border-slate-400 px-2 py-2 text-right tabular-nums">
-                      {formatYen(inventoryValue)}
+                      税別 {formatYen(sumInventoryTax(items, partnerInventoryTax).excluded)}<br />税込 {formatYen(inventoryValue)}
                     </td>
                     <td className="border border-slate-400" />
                   </tr>

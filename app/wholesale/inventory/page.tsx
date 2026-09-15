@@ -1,4 +1,5 @@
 "use client";
+import { warehouseInventoryTax, inventoryTaxAmounts, inventoryTaxUnitPrices, sumInventoryTax } from "@/lib/inventory-tax";
 import { truncateInventoryYen } from "@/lib/inventory-total";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -454,12 +455,14 @@ export default function WholesaleInventoryPage() {
     setFile(nextFile);
   };
 
+  const confirmedTax = sumInventoryTax(items.filter(item => item.review_status === "confirmed"), warehouseInventoryTax);
+  const provisionalTax = sumInventoryTax(items.filter(item => item.review_status !== "excluded"), warehouseInventoryTax);
   const downloadExcel = async () => {
     if (!inventory) return;
     setExporting(true);
     try {
       const XLSX = await import("xlsx");
-      const rows = items.map((item, index) => [
+      const rows = items.filter(item => item.review_status !== "excluded").map((item, index) => [
         index + 1,
         item.product_name,
         item.tax_rate,
@@ -471,14 +474,16 @@ export default function WholesaleInventoryPage() {
           ? truncateInventoryYen(inventoryScaledValue(item.wholesale_price, item.quantity) / 100_000)
           : "",
         item.note,
+        inventoryTaxUnitPrices(item.wholesale_price, "excluded", item.tax_rate).included ?? "",
+        warehouseInventoryTax(item).included ?? "",
       ]);
       const sheet = XLSX.utils.aoa_to_sheet([
         ["卸販売 決算棚卸し（倉庫）"],
         ["決算年度", `${inventory.fiscal_year}年度`],
         ["棚卸日", inventory.inventory_date],
         ["取込ファイル", inventory.source_file_name || ""],
-        ["確定原価合計", confirmedValue],
-        ["要確認込み原価合計", provisionalValue],
+        ["確定原価合計（税別）", confirmedValue, "税込", confirmedTax.included],
+        ["要確認込み原価合計（税別）", provisionalValue, "税込", provisionalTax.included],
         [],
         [
           "No.",
@@ -488,8 +493,10 @@ export default function WholesaleInventoryPage() {
           "販売価格（税込）",
           "原価（税別）",
           "在庫数",
-          "棚卸原価",
+          "棚卸原価（税別）",
           "備考",
+          "原価（税込）",
+          "棚卸原価（税込）",
         ],
         ...rows,
       ]);
@@ -503,9 +510,10 @@ export default function WholesaleInventoryPage() {
         { wch: 12 },
         { wch: 16 },
         { wch: 34 },
+        { wch: 19 }, { wch: 20 },
       ];
-      sheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
-      sheet["!autofilter"] = { ref: `A8:I${rows.length + 8}` };
+      sheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 10 } }];
+      sheet["!autofilter"] = { ref: `A8:K${rows.length + 8}` };
       sheet["!rows"] = [{ hpt: 24 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 }, { hpt: 18 }, { hpt: 8 }, { hpt: 24 }];
       sheet["!margins"] = {
         left: 0.25,
@@ -521,14 +529,14 @@ export default function WholesaleInventoryPage() {
         fitToHeight: 0,
         paperSize: 9,
       };
-      for (const address of ["B5", "B6"]) {
+      for (const address of ["B5", "B6", "D5", "D6"]) {
         const cell = sheet[address];
-        if (cell?.t === "n") cell.z = "#,##0.00";
+        if (cell?.t === "n") cell.z = "#,##0";
       }
       for (let row = 1; row < rows.length + 9; row += 1) {
-        for (const column of [3, 4, 5, 7]) {
+        for (const column of [3, 4, 5, 7, 9, 10]) {
           const cell = sheet[XLSX.utils.encode_cell({ r: row, c: column })];
-          if (cell?.t === "n") cell.z = "#,##0.00";
+          if (cell?.t === "n") cell.z = [7, 10].includes(column) ? "#,##0" : "#,##0.######";
         }
         const quantityCell = sheet[XLSX.utils.encode_cell({ r: row, c: 6 })];
         if (quantityCell?.t === "n") quantityCell.z = "#,##0.###";
@@ -720,14 +728,14 @@ export default function WholesaleInventoryPage() {
                 sub={`CSV ${inventory.source_row_count.toLocaleString()}行 / セット ${inventory.set_row_count.toLocaleString()}件除外`}
               />
               <SummaryValue
-                label="確定原価合計"
+                label="確定原価合計（税別）"
                 value={formatYen(confirmedValue)}
-                sub="確認済み・税別7掛"
+                sub={`税込 ${formatYen(confirmedTax.included)}・税別7掛原価`}
               />
               <SummaryValue
-                label="要確認込み原価"
+                label="要確認込み原価（税別）"
                 value={formatYen(provisionalValue)}
-                sub="除外品を含まない・税別"
+                sub={`税込 ${formatYen(provisionalTax.included)}・除外品を含まない`}
               />
               <SummaryValue
                 label="要確認"
@@ -990,7 +998,7 @@ export default function WholesaleInventoryPage() {
                 <span>{formatYen(retailPriceInclTaxFromExcluded(manualRetailPrice, manualTaxRate))}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-500">原価（税別・7掛）</span>
+                <span className="text-slate-500">原価（税別）／税込 {formatYen(inventoryTaxUnitPrices(wholesaleInventoryPrice(manualRetailPrice, manualTaxRate), "excluded", manualTaxRate).included)}</span>
                 <span className="text-emerald-700">{formatYen(wholesaleInventoryPrice(manualRetailPrice, manualTaxRate))}</span>
               </div>
             </div>
@@ -1110,7 +1118,7 @@ function InventoryItemCard({
         </div>
 
         <div>
-          <span className="mb-1 block text-xs font-semibold text-slate-500">原価（税別・7掛）</span>
+          <span className="mb-1 block text-xs font-semibold text-slate-500">原価（税別・7掛）／税込 {formatYen(inventoryTaxUnitPrices(item.wholesale_price, "excluded", item.tax_rate).included)}</span>
           <div className="flex min-h-11 items-center justify-end rounded-md border border-slate-200 bg-slate-50 px-3 font-bold tabular-nums text-emerald-700">
             {formatYen(item.wholesale_price)}
           </div>
@@ -1119,7 +1127,7 @@ function InventoryItemCard({
         <label className="block">
           <span className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-500">
             在庫数
-            {stockValue !== null && <span className="font-normal text-emerald-700">{formatYen(stockValue)}</span>}
+            {stockValue !== null && <span className="font-normal text-emerald-700">税別 {formatYen(stockValue)} ／ 税込 {formatYen(warehouseInventoryTax(item).included)}</span>}
           </span>
           <Input
             value={item.quantity ?? ""}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Download, Save, Upload, Printer, Copy, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InventoryQrCode } from "@/components/brand-store/InventoryQrDialog";
+import { foodRowTax, foodSheetTax } from "@/lib/food-store-inventory-tax";
 import { toast } from "sonner";
 import { inventoryFiscalLabel, currentInventoryFiscalYear } from "@/lib/inventory-fiscal";
 import { inventoryFormulaErrors, isInventoryAmountCell, type InventoryWorkbook, type InventoryCell } from "@/lib/food-store-inventory";
@@ -85,7 +86,7 @@ export default function FoodStoreInventoryPage() {
       const XLSX = await import("xlsx");
       const book = XLSX.utils.book_new();
       for (const source of inventory.workbook.sheets) {
-        const target: import("xlsx").WorkSheet = { "!ref": `A1:${String.fromCharCode(64 + source.cols)}${source.rows}` };
+        const target: import("xlsx").WorkSheet = { "!ref": XLSX.utils.encode_range({ r: 0, c: 0 }, { r: source.rows - 1, c: source.cols + 1 }) };
         for (const [address, cell] of Object.entries(source.cells)) {
           if (cell.value === null && !cell.formula) continue;
           const errorCodes: Record<string, number> = { "#REF!": 23, "#VALUE!": 15, "#NAME?": 29, "#DIV/0!": 7, "#N/A": 42 };
@@ -94,7 +95,13 @@ export default function FoodStoreInventoryPage() {
           const formula = rawFormula && isInventoryAmountCell(source, address) && !/^ROUNDDOWN\(/i.test(rawFormula) ? `ROUNDDOWN(${rawFormula},0)` : rawFormula;
           target[address] = { t: code !== undefined ? "e" : typeof cell.value === "number" ? "n" : typeof cell.value === "boolean" ? "b" : "s", v: code ?? cell.value ?? "", ...(formula ? { f: formula } : {}), ...(isInventoryAmountCell(source, address) ? { z: "#,##0" } : cell.format ? { z: cell.format } : {}) };
         }
-        target["!cols"] = Array.from({ length: source.cols }, (_, index) => ({ wch: index === 0 ? 42 : index === 4 ? 28 : 18 }));
+        for (let row = 1; row <= source.rows; row++) {
+          const tax = foodRowTax(inventory.workbook, source, row);
+          for (const [offset, value] of (row === 1 ? ["棚卸金額（税別）", "棚卸金額（税込）"] : [tax.excluded, tax.included]).entries()) {
+            if (value !== null) target[XLSX.utils.encode_cell({ r: row - 1, c: source.cols + offset })] = { t: typeof value === "number" ? "n" : "s", v: value, z: "#,##0" };
+          }
+        }
+        target["!cols"] = Array.from({ length: source.cols + 2 }, (_, index) => ({ wch: index === 0 ? 42 : index === 4 ? 28 : 18 }));
         XLSX.utils.book_append_sheet(book, target, source.name);
       }
       XLSX.writeFile(book, `食のブランド館_決算棚卸し_${inventory.fiscal_year}年度.xlsx`);
@@ -136,16 +143,16 @@ export default function FoodStoreInventoryPage() {
       {errors.length > 0 && <div role="status" className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3 text-sm">計算エラー {errors.length}件：{errors.map(item => `${item.sheet} ${item.address} (${item.error})`).join("、")}。元Excelの参照切れもそのまま表示しています。</div>}
       <label className="inventory-controls block sm:hidden text-sm">シート<select className="block mt-2 p-3 rounded-lg border bg-white w-full" value={sheetIndex} onChange={e => setSheetIndex(Number(e.target.value))}>{inventory.workbook.sheets.map((item, index) => <option key={item.name} value={index}>{item.name}</option>)}</select></label>
       <div className="inventory-controls hidden sm:flex flex-wrap gap-2" role="tablist" aria-label="棚卸しシート">{inventory.workbook.sheets.map((item, index) => <button key={item.name} role="tab" aria-selected={index === sheetIndex} onClick={() => setSheetIndex(index)} className={`rounded-lg px-3 py-2 text-sm border ${index === sheetIndex ? "bg-slate-800 text-white" : "bg-white text-slate-700"}`}>{item.name}</button>)}</div>
-      <h2 className="text-lg font-semibold">{sheet.name}</h2>
+      <h2 className="text-lg font-semibold">{sheet.name}</h2><p className="text-sm text-slate-600">税別・税込を併記しています。{sheet.name === "合計" ? "3シートの合計" : foodSheetTax(sheet) ? `税率${foodSheetTax(sheet)!.rate}%・合計は元Excelと同じシート単位の税換算（明細の税込合算と端数差が出る場合があります）` : "税率を特定できません。元シートの税計算式を確認してください。"}</p>
       <p className="inventory-controls text-xs text-slate-500">{inventory.status === "draft" ? "セルを押して編集し、保存してください。金額と合計は保存時に計算されます。" : "確定済みです。修正する場合は「編集に戻す」を押してください。"}　取込元：{inventory.source_filename}</p>
       {dirty && <p className="inventory-controls text-amber-700 text-sm">未保存の変更があります。金額・合計は保存後に更新されます。</p>}
-      <div className="inventory-table overflow-auto border rounded-lg bg-white"><table className="w-full border-collapse text-sm"><thead><tr><th className="bg-slate-100 p-2 border w-10">行</th>{Array.from({ length: sheet.cols }, (_, i) => <th className="bg-slate-100 border p-2" key={i}>{String.fromCharCode(65 + i)}</th>)}</tr></thead><tbody>{Array.from({ length: sheet.rows }, (_, row) => <tr key={row} className={row % 2 ? "bg-slate-50/60" : ""}><th className="bg-slate-100 border p-2 text-xs text-slate-500">{row + 1}</th>{Array.from({ length: sheet.cols }, (_, col) => {
+      <div className="inventory-table overflow-auto border rounded-lg bg-white"><table className="w-full border-collapse text-sm"><thead><tr><th className="bg-slate-100 p-2 border w-10">行</th>{Array.from({ length: sheet.cols }, (_, i) => <th className="bg-slate-100 border p-2" key={i}>{String.fromCharCode(65 + i)}</th>)}<th className="border p-2 bg-slate-100">棚卸金額（税別）</th><th className="border p-2 bg-slate-100">棚卸金額（税込）</th></tr></thead><tbody>{Array.from({ length: sheet.rows }, (_, row) => <tr key={row} className={row % 2 ? "bg-slate-50/60" : ""}><th className="bg-slate-100 border p-2 text-xs text-slate-500">{row + 1}</th>{Array.from({ length: sheet.cols }, (_, col) => {
         const address = String.fromCharCode(65 + col) + (row + 1);
         const cell = sheet.cells[address];
         const change = changes[`${sheet.name}!${address}`];
         const visible = change ? (change.formula || display(change)) : display(cell);
         return <td key={address} className={`border p-0 ${change ? "bg-amber-50" : ""} ${col === 0 ? "min-w-64" : "min-w-28"}`}><button className={`block w-full px-3 py-2.5 min-h-10 whitespace-pre-wrap ${typeof (change || cell)?.value === "number" || cell?.formula ? "text-right tabular-nums" : "text-left"} ${String(cell?.value).startsWith("#") ? "text-red-600" : ""}`} disabled={busy || inventory.status === "completed"} title={cell?.formula || `${sheet.name} ${address}`} onClick={() => { const c = change || cell; setEditor({ sheet: sheet.name, address, text: c?.formula || String(c?.value ?? ""), type: c?.formula ? "formula" : typeof c?.value === "number" ? "number" : typeof c?.value === "boolean" ? "boolean" : (col === 1 || col === 2) && row > 1 && c?.value == null ? "number" : "text" }); }}>{visible || "\u00a0"}</button></td>;
-      })}</tr>)}</tbody></table></div>
+      })}{[foodRowTax(inventory.workbook, sheet, row + 1).excluded, foodRowTax(inventory.workbook, sheet, row + 1).included].map((amount, i) => <td key={`tax-${i}`} className="border px-3 py-2 text-right tabular-nums whitespace-nowrap">{amount === null ? "—" : `${amount.toLocaleString("ja-JP")}円`}</td>)}</tr>)}</tbody></table></div>
     </>}
     {editor && <div className="inventory-controls fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><section role="dialog" aria-modal="true" aria-label="セル編集" className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4"><h2 className="font-semibold">{editor.sheet}・{editor.address}</h2><label className="block text-sm">入力形式<select className="border rounded p-2 ml-2" value={editor.type} onChange={e => setEditor({ ...editor, type: e.target.value })}><option value="text">文字</option><option value="number">数値</option><option value="formula">計算式</option><option value="boolean">真偽値</option></select></label><textarea aria-label="セル内容" autoFocus className="border rounded p-3 w-full" rows={3} value={editor.text} onChange={e => setEditor({ ...editor, text: e.target.value })}/>{editor.type === "formula" && <p className="text-xs text-slate-500">セル参照、掛け算、SUMの範囲合計に対応。例：=B3*C3、=SUM(D3:D20)</p>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditor(null)}>キャンセル</Button><Button onClick={applyEdit}>変更を反映</Button></div></section></div>}
     {createMode && <div className="inventory-controls fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><section role="dialog" aria-modal="true" aria-label="年度棚卸し作成" className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4"><h2 className="font-semibold">{createMode === "import" ? "Excelから棚卸しを登録" : "保存済みの内容を翌年度へ複製"}</h2><p className="text-sm text-slate-600">既存年度は上書きしません。文言・数量・単価・計算式をそのまま保存します。</p><label className="block">決算年度<input type="number" min={2000} max={2100} className="border rounded p-2 ml-3 w-28" value={year} onChange={e => { setYear(Number(e.target.value)); setDate(`${e.target.value}-07-31`); }}/></label><label className="block">棚卸日<input type="date" className="border rounded p-2 ml-3" value={date} onChange={e => setDate(e.target.value)}/></label>{createMode === "import" && <input aria-label="取込Excel" type="file" accept=".xlsx" onChange={e => setFile(e.target.files?.[0] || null)}/>}<div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setCreateMode(null)}>キャンセル</Button><Button disabled={busy} onClick={() => void create()}>{busy ? "保存中" : "登録"}</Button></div></section></div>}

@@ -23,7 +23,7 @@ const warehouse = source([{ wholesale_price: 1.234, quantity: 2.3456 }, { wholes
 assert.equal(summarizeInventorySource('warehouse', warehouse)[0].amount, 2);
 const manufacturing = source([{ item_type: 'ingredient', tax_included_cost: 1.93, stock_count: 1.5 }, { item_type: 'ingredient', tax_included_cost: 1.93, stock_count: 1.5 }, { item_type: 'material', tax_included_cost: 5, stock_count: 2 }]);
 assert.deepEqual(summarizeInventorySource('manufacturing', manufacturing).map(r => r.amount), [4, 10]);
-assert.equal(summarizeInventorySource('manufacturing', manufacturing)[0].details[1][1], 1.93);
+assert.equal(summarizeInventorySource('manufacturing', manufacturing)[0].details[1][2], 1.93);
 const partner = source([{ cost_unit: 9, inventory_quantity: 2, inventory_value: 17.9 }]);
 assert.equal(summarizeInventorySource('partner', partner)[0].amount, 17, 'use saved partner value');
 const food = { inventory: header, items: [], workbook: { sheets: [
@@ -42,10 +42,10 @@ assert.ok(summarizeInventorySource('food', broken).every(r => r.amount === null 
 const workbook = buildClosingInventoryExcel(report);
 const reread = XLSX.read(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
 assert.equal(reread.SheetNames.length, 9);
-assert.equal(reread.Sheets['決算棚卸し一覧'].F15.v, report.total);
+assert.equal(reread.Sheets['決算棚卸し一覧'].F15.v, report.totalExcluded);
 assert.equal(reread.Sheets['決算棚卸し一覧'].F15.f, 'SUM(F7:F14)');
 assert.equal(reread.Sheets['1_店舗商品'].A7.v, '=literal name');
 assert.equal(reread.Sheets['1_店舗商品'].A7.f, undefined);
-assert.equal(reread.Sheets['2_製造・食材'].B7.v, 1.93);
+assert.equal(reread.Sheets['2_製造・食材'].C7.v, 1.93);
 console.log('PASS: 8 categories, owning-screen rounding, exclusions, missing values, original partner values, no double-counting, formula errors, Excel roundtrip and literal text');
 module.exports = { load };
