@@ -38,7 +38,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.92";
+const VERSION = "1.9.93";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4625,18 +4625,36 @@ function renderRecipeSnsImage({ inputPath, outputPath, platform, imageMode, over
   }
 }
 
-function isAllowedRecipeSnsLocalCommand(event) {
-  const command = String(event?.item?.command || "").toLowerCase().replace(/\\{2,}/g, "\\");
+function isAllowedRecipeSnsLocalCommand(event, allowedCommands = new Set()) {
+  const id = event?.item?.id;
+  // CLI completion events can omit command; trust only a checked start in this job.
+  if (!event?.item?.command) {
+    return event?.type === "item.completed" && Boolean(id) && allowedCommands.has(id);
+  }
+  let command = String(event.item.command).toLowerCase().replace(/\\{2,}/g, "\\").replace(/\\/g, "/");
   const prohibited = /remove-item|move-item|invoke-|start-process|curl|wget|git\s|npm\s|node\s|python\s|\brm\b|\bdel\b|set-content|add-content|out-file|new-item/i;
   const hasShellSeparator = /[;&|`\r\n]/.test(command);
-  const imagegenSkill = resolve(config.codexHome, "skills", ".system", "imagegen", "SKILL.md").toLowerCase();
+  const imagegenSkill = resolve(config.codexHome, "skills", ".system", "imagegen", "SKILL.md").toLowerCase().replace(/\\/g, "/");
+  const shellPaths = ["pwsh.exe", "powershell.exe",
+    resolve(process.env.SystemRoot || "C:/Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    resolve(process.env.ProgramFiles || "C:/Program Files", "PowerShell", "7", "pwsh.exe")
+  ].map((value) => value.toLowerCase().replace(/\\/g, "/"));
+  const wrapper = command.match(/^(?:"([^"]+)"|([^\s"]+))\s+-command\s+"([\s\S]*)"$/);
+  if (wrapper) {
+    if (!shellPaths.includes(wrapper[1] || wrapper[2])) return false;
+    command = wrapper[3];
+  }
   const escapedImagegenSkill = imagegenSkill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const readsImagegenSkill = new RegExp(
-    `get-content\\s+(?:(?:-raw|-literalpath)\\s+)*['"]${escapedImagegenSkill}['"](?:\\s+(?:-raw|-literalpath))*\\s*["']?$`,
+    `^get-content\\s+(?:(?:-raw|-literalpath)\\s+)*(['"])${escapedImagegenSkill}\\1(?:\\s+-raw)*\\s*$`,
     "i",
   ).test(command)
     && !hasShellSeparator
     && !prohibited.test(command);
+  if (id) {
+    if (readsImagegenSkill) allowedCommands.add(id);
+    else allowedCommands.delete(id);
+  }
   return readsImagegenSkill;
 }
 
@@ -4735,6 +4753,7 @@ async function executeRecipeSnsGenerateJob(job) {
   let stdoutBuffer = "";
   let stderr = "";
   let progress = generationRetryAttempt > 0 ? 72 : 15;
+  const allowedSnsCommands = new Set();
   let lastProgressSent = 0;
   let prohibitedActivity = null;
   let codexThreadId = null;
@@ -4770,7 +4789,7 @@ async function executeRecipeSnsGenerateJob(job) {
         if (/^[0-9a-f-]{20,80}$/i.test(candidate)) codexThreadId = candidate;
       }
       const itemType = String(event?.item?.type || "");
-      if (itemType === "command_execution" && !isAllowedRecipeSnsLocalCommand(event)) {
+      if (itemType === "command_execution" && !isAllowedRecipeSnsLocalCommand(event, allowedSnsCommands)) {
         const commandType = String(event?.item?.command || "").match(/\b(get-[a-z]+|copy-item)\b/i)?.[1] || "other";
         prohibitedActivity = `${itemType}:${commandType}`;
       }

@@ -73,6 +73,17 @@ const commandGuard = new Function(
   `${guardSource}; return isAllowedRecipeSnsLocalCommand;`,
 )(path.resolve, path.sep, { codexHome });
 const imagegenSkillPath = path.resolve(codexHome, "skills", ".system", "imagegen", "SKILL.md");
+const allowedCommands = new Set();
+const realShell = path.resolve(process.env.SystemRoot || "C:/Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+const startedRead = { type: "item.started", item: { id: "read-1", command: `"${realShell.replaceAll("\\", "\\\\")}" -Command "Get-Content -LiteralPath '${imagegenSkillPath.replaceAll("\\", "/")}'"` } };
+assert.equal(commandGuard(startedRead, allowedCommands), true);
+assert.equal(commandGuard({ type: "item.completed", item: { id: "read-1" } }, allowedCommands), true);
+assert.equal(commandGuard({ type: "item.completed", item: { id: "other" } }, allowedCommands), false);
+assert.equal(commandGuard({ type: "item.completed", item: { id: "read-1" } }, new Set()), false);
+assert.equal(commandGuard({ item: { command: `evil.exe -Command "Get-Content '${imagegenSkillPath}'"` } }), false);
+assert.equal(commandGuard({ item: { command: `Get-Content '${imagegenSkillPath}' -Raw $(Get-Content secret)` } }), false);
+assert.equal(commandGuard({ type: "item.completed", item: { id: "read-1", command: "Get-Content 'secret'" } }, allowedCommands), false);
+assert.equal(commandGuard({ type: "item.completed", item: { id: "read-1" } }, allowedCommands), false);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath}' -Raw"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -Raw '${imagegenSkillPath}'"` } }, workDir), true);
 assert.equal(commandGuard({ item: { command: `pwsh.exe -Command "Get-Content -LiteralPath '${imagegenSkillPath.replaceAll("\\", "\\\\")}' -Raw"` } }, workDir), true);
