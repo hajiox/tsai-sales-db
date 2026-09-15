@@ -12,7 +12,7 @@ import { CategoryRankingCard } from "@/components/food-store/CategoryRankingCard
 import { ProductRankingCard } from "@/components/food-store/ProductRankingCard"
 import { ProductSalesTable } from "@/components/food-store/ProductSalesTable"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, Package, Settings, Link, Target } from "lucide-react"
+import { TrendingUp, Package, Settings, Link, Target, ClipboardList } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import ClientOnly from '@/components/common/ClientOnly' // ver.11 (2025-08-19 JST) - client-only charts
@@ -321,6 +321,7 @@ function FoodStoreAnalysisContent() {
            <SelectContent>{monthOptions.map(month => <SelectItem key={month} value={String(month)}>{month}月</SelectItem>)}</SelectContent>
          </Select>
          <Button onClick={() => setShowImportModal(true)}>CSV読込</Button>
+         <Button variant="outline" onClick={() => router.push('/food-store-analysis/inventory')}><ClipboardList className="h-4 w-4 mr-2" />決算棚卸し</Button>
          <Button variant="destructive" onClick={handleDeleteMonth} disabled={!data || loading}>月削除</Button>
        </div>
        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex">

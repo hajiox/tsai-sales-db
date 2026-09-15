@@ -9,18 +9,18 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 
 const INVENTORY_PATH = "/brand-store-analysis/inventory";
 
-export function InventoryQrCode({ className = "" }: { className?: string }) {
+export function InventoryQrCode({ className = "", path = INVENTORY_PATH }: { className?: string; path?: string }) {
   const [imageUrl, setImageUrl] = useState("");
 
   useEffect(() => {
-    const inventoryUrl = `${window.location.origin}${INVENTORY_PATH}`;
+    const inventoryUrl = `${window.location.origin}${path}`;
     QRCode.toDataURL(inventoryUrl, {
       width: 320,
       margin: 1,
       errorCorrectionLevel: "M",
       color: { dark: "#0f172a", light: "#ffffff" },
     }).then(setImageUrl).catch(() => setImageUrl(""));
-  }, []);
+  }, [path]);
 
   return (
     <div

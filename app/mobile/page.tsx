@@ -75,6 +75,14 @@ const mobileActions: MobileAction[] = [
     iconBackgroundClassName: "bg-violet-100",
   },
   {
+    title: "食のブランド館棚卸し",
+    label: "決算棚卸し",
+    href: "/food-store-analysis/inventory",
+    icon: Store,
+    iconClassName: "text-emerald-700",
+    iconBackgroundClassName: "bg-emerald-100",
+  },
+  {
     title: "製造棚卸し",
     label: "食材・資材",
     href: "/recipe/inventory",
